@@ -144,7 +144,7 @@ jobs:
             *)
               # Tier 1 controllers (Grid/Variables/Special/RenderDcc) have no
               # external data assets.
-              echo "(no external assets for $name)"
+              echo "(no external assets for ${{ inputs.controller }})"
               ;;
           esac
 
