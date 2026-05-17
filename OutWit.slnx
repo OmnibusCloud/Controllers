@@ -10,4 +10,8 @@
   <Folder Name="/Special/">
     <Project Path="Special/OutWit.Controller.Special/OutWit.Controller.Special.csproj" />
   </Folder>
+  <Folder Name="/Matrices/">
+    <Project Path="Matrices/OutWit.Controller.Matrices/OutWit.Controller.Matrices.csproj" />
+    <Project Path="Matrices/OutWit.Controller.Matrices.Model/OutWit.Controller.Matrices.Model.csproj" />
+  </Folder>
 </Solution>
