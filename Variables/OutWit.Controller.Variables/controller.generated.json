@@ -1,0 +1,15 @@
+{
+"name": "Variables",
+"version": "1.0.1",
+"description": "Core variable types and collections for the WitEngine runtime.",
+"authors": [ "OutWit" ],
+"copyright": "Copyright 2025 OutWit",
+"projectUrl": "",
+"repositoryUrl": "",
+"license": "MIT",
+"tags": [ "variables", "types", "collections", "core" ],
+"features": [ "primitive-types", "collections", "ranges", "tuples" ],
+"useCases": [ "Variable declarations", "Type-safe data storage", "Range generation" ],
+"runtimeTargets": [  ],
+"dependencies": {  }
+}
