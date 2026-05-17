@@ -4,10 +4,32 @@
     <ControllerBuildInfoSourcePath Condition="'$(ControllerBuildInfoSourcePath)' == ''">$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\ControllerBuildInfo.g.cs</ControllerBuildInfoSourcePath>
   </PropertyGroup>
 
+  <!-- Default metadata for ControllerDataAsset items (Step 6 of the asset-architecture work).
+       Authors only need to set Include + Uri + Sha256; the rest pick up sensible defaults
+       matching the AssetEntry defaults in OutWit.Engine.Assets. -->
+  <ItemDefinitionGroup>
+    <ControllerDataAsset>
+      <RuntimeIdentifier>any</RuntimeIdentifier>
+      <Uri></Uri>
+      <Sha256></Sha256>
+      <Size>0</Size>
+      <ExtractTo>.</ExtractTo>
+      <Required>true</Required>
+    </ControllerDataAsset>
+  </ItemDefinitionGroup>
+
   <Target Name="GenerateControllerBuildArtifacts" BeforeTargets="BeforeCompile">
     <Error Condition="'$(ControllerName)' == ''" Text="ControllerName must be defined in the project file." />
     <Error Condition="'$(Version)' == ''" Text="Version must be defined in the project file." />
     <Error Condition="'$(Description)' == ''" Text="Description must be defined in the project file." />
+
+    <!-- Validate ControllerDataAsset items: every declared asset needs Uri + Sha256.
+         The Identity!='' guard skips the validation when the ItemGroup is empty
+         (MSBuild metadata-batched tasks fire once with empty values in that case). -->
+    <Error Condition="'%(ControllerDataAsset.Identity)' != '' AND '%(ControllerDataAsset.Uri)' == ''"
+           Text="ControllerDataAsset '%(ControllerDataAsset.Identity)' must have a Uri metadata value." />
+    <Error Condition="'%(ControllerDataAsset.Identity)' != '' AND '%(ControllerDataAsset.Sha256)' == ''"
+           Text="ControllerDataAsset '%(ControllerDataAsset.Identity)' must have a Sha256 metadata value." />
 
     <ItemGroup>
       <_ControllerAuthor Include="$(Authors)" Condition="'$(Authors)' != ''" />
@@ -23,6 +45,7 @@
       <_ControllerUseCasesJson>@(_ControllerUseCase->'&quot;%(Identity)&quot;', ', ')</_ControllerUseCasesJson>
       <_ControllerDependenciesJson>@(ControllerDependency->'&quot;%(Identity)&quot;: &quot;%(MinimumVersion)&quot;', ', ')</_ControllerDependenciesJson>
       <_ControllerRuntimeTargetsJson>@(ControllerRuntimeTarget->'{ &quot;rid&quot;: &quot;%(Rid)&quot;, &quot;os&quot;: &quot;%(Os)&quot;, &quot;architecture&quot;: &quot;%(Architecture)&quot; }', ', ')</_ControllerRuntimeTargetsJson>
+      <_ControllerDataAssetsJson>@(ControllerDataAsset->'{ &quot;id&quot;: &quot;%(Identity)&quot;, &quot;runtimeIdentifier&quot;: &quot;%(RuntimeIdentifier)&quot;, &quot;uri&quot;: &quot;%(Uri)&quot;, &quot;sha256&quot;: &quot;%(Sha256)&quot;, &quot;size&quot;: %(Size), &quot;extractTo&quot;: &quot;%(ExtractTo)&quot;, &quot;required&quot;: %(Required) }', ', ')</_ControllerDataAssetsJson>
     </PropertyGroup>
 
     <ItemGroup>
@@ -54,7 +77,8 @@
       <_ControllerManifestLines Include="  &quot;features&quot;: [ $(_ControllerFeaturesJson) ]," />
       <_ControllerManifestLines Include="  &quot;useCases&quot;: [ $(_ControllerUseCasesJson) ]," />
       <_ControllerManifestLines Include="  &quot;runtimeTargets&quot;: [ $(_ControllerRuntimeTargetsJson) ]," />
-      <_ControllerManifestLines Include="  &quot;dependencies&quot;: { $(_ControllerDependenciesJson) }" />
+      <_ControllerManifestLines Include="  &quot;dependencies&quot;: { $(_ControllerDependenciesJson) }," />
+      <_ControllerManifestLines Include="  &quot;dataAssets&quot;: [ $(_ControllerDataAssetsJson) ]" />
       <_ControllerManifestLines Include="}" />
     </ItemGroup>
 
