@@ -18,7 +18,7 @@
 	<Import Project="..\..\Build\OutWit.Controller.Manifest.targets" />
 
 	<ItemGroup>
-		<PackageReference Include="OutWit.Engine.Data" Version="1.0.*" />
+		<PackageReference Include="OutWit.Engine.Data" Version="1.1.*" />
 		<ProjectReference Include="..\OutWit.Controller.Grid.Model\OutWit.Controller.Grid.Model.csproj" />
 	</ItemGroup>
 
