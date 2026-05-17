@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ControllerName>Matrices</ControllerName>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <Description>Matrix and vector operations including sparse representations and Gustavson multiplication.</Description>
     <Authors>OutWit</Authors>
     <Copyright>Copyright 2025 OutWit</Copyright>
@@ -53,35 +53,26 @@
     <None Include="build\OutWit.Controller.Matrices.targets" Pack="true" PackagePath="build\" />
   </ItemGroup>
 
-  <!-- Step 10a pilot — declare rowMatrix.smat as an external data asset to
-       end-to-end test the asset resolver pipeline (NuGet → manifest →
-       gh-release://-resolver → cache → extract). The file is also currently
-       embedded in Matrices.dll as a resource; both routes coexist during this
-       pilot. Step 10b will remove the embedded copy and migrate Matrices code
-       to load from the external file. -->
+  <!-- Step 10b — both benchmark matrices are external data assets.
+       The Matrices.dll no longer embeds them via Properties.Resources;
+       at runtime WitActivityAdapterMatrixGustavsonMultiply reads the
+       files from <module-dir>/Resources/. OutWit.Engine.Assets'
+       ResolveControllerAssetsTask stages them there during build. -->
   <ItemGroup>
     <ControllerDataAsset Include="rowMatrix">
       <RuntimeIdentifier>any</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/matrices-v1.0.2/rowMatrix.smat</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/matrices-v1.0.3/rowMatrix.smat</Uri>
       <Sha256>bc2dc4d1e5bd6e3ba1a9e89f50d0ee5de72c11a1054d1707103ecfa492f84246</Sha256>
       <Size>98333</Size>
       <ExtractTo>Resources/</ExtractTo>
     </ControllerDataAsset>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Update="Properties\Resources.Designer.cs">
-      <DesignTime>True</DesignTime>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Update="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
+    <ControllerDataAsset Include="largeMatrix">
+      <RuntimeIdentifier>any</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/matrices-v1.0.3/largeMatrix.smat</Uri>
+      <Sha256>51d15c6e388278cd3fb3bbf170f3ed7255f57e7d7cdc4ac923057577e7e408dd</Sha256>
+      <Size>50593817</Size>
+      <ExtractTo>Resources/</ExtractTo>
+    </ControllerDataAsset>
   </ItemGroup>
 
 	<ItemGroup>

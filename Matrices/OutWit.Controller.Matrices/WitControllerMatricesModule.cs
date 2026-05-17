@@ -4,7 +4,6 @@ using OutWit.Common.Plugins.Abstractions.Attributes;
 using OutWit.Controller.Matrices.Activities;
 using OutWit.Controller.Matrices.Adapters;
 using OutWit.Controller.Matrices.Collections;
-using OutWit.Controller.Matrices.Properties;
 using OutWit.Controller.Matrices.Variables;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
@@ -40,8 +39,6 @@ namespace OutWit.Controller.Matrices
             services.AddActivityAdapter<WitActivityVectorSparseCollection, WitActivityAdapterVectorSparseCollection>();
             
             services.AddActivityAdapter<WitActivityMatrixGustavsonMultiply, WitActivityAdapterMatrixGustavsonMultiply>();
-
-            services.AddResources<Resources>();
         }
     }
 }

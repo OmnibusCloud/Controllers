@@ -23,6 +23,15 @@ namespace OutWit.Controller.Matrices.Adapters
 
         private const string UNIT = "gustavson-op@v1";
 
+        // Benchmark dataset filenames. The matching ControllerDataAsset entries
+        // in the csproj declare them as external assets; OutWit.Engine.Assets
+        // stages them into <controller-module-dir>/Resources/ at build time.
+        // Previously embedded as Properties.Resources but inflated the DLL to
+        // ~50 MB — now loaded from disk on demand.
+        private const string ROW_MATRIX_FILENAME = "rowMatrix.smat";
+        private const string LARGE_MATRIX_FILENAME = "largeMatrix.smat";
+        private const string RESOURCES_DIRECTORY_NAME = "Resources";
+
         #endregion
 
         #region Constructors
@@ -115,23 +124,44 @@ namespace OutWit.Controller.Matrices.Adapters
         {
             IWitVector<double>? row = null;
             WitMatrixSparse<double>? matrix = null;
-            
+
             if (!string.IsNullOrEmpty(options.DatasetPath) && Directory.Exists(options.DatasetPath))
             {
-                var rowFilePath = Path.Combine(options.DatasetPath, $"{nameof(Properties.Resources.rowMatrix)}.smat");
+                var rowFilePath = Path.Combine(options.DatasetPath, ROW_MATRIX_FILENAME);
                 if(File.Exists(rowFilePath))
                     row = File.ReadAllBytes(rowFilePath).FromMemoryPackBytes<WitMatrixSparse<double>>().GetRow(0);
-                
-                var matrixFilePath =
-                    Path.Combine(options.DatasetPath, $"{nameof(Properties.Resources.largeMatrix)}.smat");
+
+                var matrixFilePath = Path.Combine(options.DatasetPath, LARGE_MATRIX_FILENAME);
                 if (File.Exists(matrixFilePath))
                     matrix = File.ReadAllBytes(matrixFilePath).FromMemoryPackBytes<WitMatrixSparse<double>>();
             }
 
-            row ??= Properties.Resources.rowMatrix.FromMemoryPackBytes<WitMatrixSparse<double>>().GetRow(0);
-            matrix ??= Properties.Resources.largeMatrix.FromMemoryPackBytes<WitMatrixSparse<double>>();
-            
+            row ??= LoadModuleResource(ROW_MATRIX_FILENAME).FromMemoryPackBytes<WitMatrixSparse<double>>().GetRow(0);
+            matrix ??= LoadModuleResource(LARGE_MATRIX_FILENAME).FromMemoryPackBytes<WitMatrixSparse<double>>();
+
             return (row, matrix);
+        }
+
+        // Loads a benchmark dataset from the controller's module Resources/ dir
+        // next to the assembly. OutWit.Engine.Assets stages these files during
+        // build (asset resolver fetches them from the controller's GitHub Release
+        // and extracts into <consumer-output>/@Controllers/<Cfg>/matrices.module/Resources/).
+        private static byte[] LoadModuleResource(string filename)
+        {
+            var assemblyDir = Path.GetDirectoryName(typeof(WitActivityAdapterMatrixGustavsonMultiply).Assembly.Location);
+            if (string.IsNullOrEmpty(assemblyDir))
+                throw new InvalidOperationException(
+                    "Cannot resolve the Matrices controller assembly location for module-resource loading.");
+
+            var path = Path.Combine(assemblyDir, RESOURCES_DIRECTORY_NAME, filename);
+            if (!File.Exists(path))
+                throw new FileNotFoundException(
+                    $"Matrices controller resource '{filename}' not found at '{path}'. " +
+                    "The file should have been staged by OutWit.Engine.Assets' " +
+                    "ResolveControllerAssetsTask during consumer build.",
+                    path);
+
+            return File.ReadAllBytes(path);
         }
 
         protected override double EstimateWork(WitActivityMatrixGustavsonMultiply activity, IWitVariablesCollection pool)

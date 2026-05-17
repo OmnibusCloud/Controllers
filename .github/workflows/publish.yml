@@ -158,9 +158,11 @@ jobs:
 
           case "${{ env.PROJECT }}" in
             OutWit.Controller.Matrices)
-              # Tier-2 pilot — ship rowMatrix.smat as external asset.
-              # Step 10b will add largeMatrix.smat here once we externalise it.
+              # Step 10b — both benchmark matrices are external assets.
+              # The files live in the source repo at Resources/ and are
+              # uploaded as attachments on the matrices-v<version> release.
               cp Matrices/OutWit.Controller.Matrices/Resources/rowMatrix.smat dist/
+              cp Matrices/OutWit.Controller.Matrices/Resources/largeMatrix.smat dist/
               ;;
             OutWit.Controller.Render)
               # TODO Step 12 — fetch Blender + FFmpeg per platform.
