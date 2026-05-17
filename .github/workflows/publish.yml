@@ -116,11 +116,18 @@ jobs:
           echo "  version = $version"
           echo "  tag     = $tag_prefix-v$version"
 
+      # SolutionDir is referenced by controller csprojs (PostBuild + PackZip
+      # targets stage into $(SolutionDir)@Controllers/ and $(SolutionDir)@Zips/).
+      # When MSBuild builds a single csproj instead of the whole slnx,
+      # $(SolutionDir) defaults to '*Undefined*' and the paths corrupt. Pass
+      # it explicitly using the runner's workspace root (trailing slash required).
       - name: Build
-        run: dotnet build "${{ steps.paths.outputs.csproj }}" -c Release -p:ContinuousIntegrationBuild=true
+        shell: bash
+        run: dotnet build "${{ steps.paths.outputs.csproj }}" -c Release -p:ContinuousIntegrationBuild=true -p:SolutionDir="${GITHUB_WORKSPACE}/"
 
       - name: Pack
-        run: dotnet pack "${{ steps.paths.outputs.csproj }}" -c Release --no-build
+        shell: bash
+        run: dotnet pack "${{ steps.paths.outputs.csproj }}" -c Release --no-build -p:SolutionDir="${GITHUB_WORKSPACE}/"
 
       - name: Collect nupkg / snupkg
         id: collect
