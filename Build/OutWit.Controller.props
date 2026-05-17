@@ -1,0 +1,80 @@
+<!--
+    Build/OutWit.Controller.props
+    Imported manually by each controller's main csproj. Provides the standard
+    Tier-2 controller-packaging shape plus shared org-level metadata. Per-
+    controller csprojs only need to specify ControllerName, Version,
+    Description, PackageTags, ControllerFeatures, ControllerUseCases, and any
+    ControllerDataAsset items.
+
+    Usage:
+
+      <Project Sdk="Microsoft.NET.Sdk">
+        <Import Project="..\..\Build\OutWit.Controller.props" />
+        <PropertyGroup>
+          <ControllerName>Foo</ControllerName>
+          <Version>1.0.0</Version>
+          ...
+        </PropertyGroup>
+        ...
+        <Import Project="..\..\Build\OutWit.Controller.targets" />
+      </Project>
+-->
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <!-- PackageId inherits the csproj filename by default
+         (OutWit.Controller.<Name>.csproj -> OutWit.Controller.<Name>),
+         no override needed here. -->
+    <Authors>OutWit</Authors>
+    <Company>OutWit</Company>
+    <Copyright>Copyright 2025 OutWit</Copyright>
+    <PackageProjectUrl>https://witengine.io/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/OmnibusCloud/Controllers</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>WitEngine-logo.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- Tier-2 controller packaging: content-only nupkg shape.
+         The DLL is NOT a runtime ref for consumers — it ships in content/module/
+         and the consumer-side build/.targets copies it to @Controllers/<Cfg>/.
+         lib/<tfm>/_._ marker is written by ControllerPackModuleContents to keep
+         NuGet's framework-compatibility check happy. -->
+    <IsPackable>true</IsPackable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);ControllerPackModuleContents</TargetsForTfmSpecificContentInPackage>
+
+    <!-- Auto-pack on Release; symbols off because the package has no lib/. -->
+    <GeneratePackageOnBuild Condition=" '$(Configuration)' == 'Release' ">true</GeneratePackageOnBuild>
+    <IncludeSymbols>false</IncludeSymbols>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <!-- Common runtime dependencies every controller takes.
+       Engine.Assets.MSBuild flows transitively to consumers (PrivateAssets=none
+       + IncludeAssets=build;buildTransitive) so the ResolveControllerAssetsTask
+       UsingTask reaches the consumer's build. -->
+  <ItemGroup>
+    <PackageReference Include="OutWit.Engine.Data" Version="1.1.*" />
+    <PackageReference Include="OutWit.Engine.Assets.MSBuild" Version="1.0.*">
+      <PrivateAssets>none</PrivateAssets>
+      <IncludeAssets>build; buildTransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- LICENSE / WitEngine-logo / README ship in the nupkg root.
+       They must exist next to the controller csproj. -->
+  <ItemGroup>
+    <None Include="LICENSE"             Pack="true" PackagePath="\" />
+    <None Include="WitEngine-logo.png"  Pack="true" PackagePath="\" />
+    <None Include="README.md"           Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

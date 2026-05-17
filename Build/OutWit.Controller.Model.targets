@@ -1,0 +1,33 @@
+<!--
+    Build/OutWit.Controller.Model.targets
+    Imported manually by each Controller Model csproj after its
+    OutWit.Controller.Model.props import + per-Model PropertyGroup.
+    Stages the built Model.dll into the parent controller's .module/ folder
+    so the WitEngine-style controller layout still works for local builds /
+    integration tests, even though the Model's primary distribution is via
+    the published NuGet (lib/<tfm>/).
+-->
+<Project>
+
+  <!-- Derived from <ControllerName> set in the per-Model csproj PropertyGroup
+       (must run AFTER it — that's why this is in .targets, not .props). -->
+  <PropertyGroup>
+    <ControllerModuleName>$(ControllerName.ToLowerInvariant()).module</ControllerModuleName>
+    <ControllerModuleOutputDir>$(SolutionDir)@Controllers\$(Configuration)\$(ControllerModuleName)\</ControllerModuleOutputDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ModelModuleFile Include="$(TargetDir)$(TargetName).dll" />
+    <ModelModuleFile Include="$(TargetDir)$(TargetName).dll.config" Condition="Exists('$(TargetDir)$(TargetName).dll.config')" />
+    <ModelModuleFile Include="$(TargetDir)$(TargetName).deps.json" />
+    <ModelModuleFile Include="$(TargetDir)**\$(TargetName).resources.dll" />
+  </ItemGroup>
+
+  <Target Name="ModelPostBuild" AfterTargets="PostBuildEvent">
+    <Copy SourceFiles="@(ModelModuleFile)"
+          DestinationFolder="$(ControllerModuleOutputDir)"
+          SkipUnchangedFiles="true"
+          OverwriteReadOnlyFiles="true" />
+  </Target>
+
+</Project>
