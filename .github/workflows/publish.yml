@@ -1,29 +1,64 @@
-name: Publish Package
-run-name: "Publish Package: ${{ inputs.project }}"
+name: Publish
+run-name: "Publish: ${{ inputs.project }}"
+
+# Unified publish workflow for everything in this repo.
+#
+# Supports three project shapes via the same pipeline:
+#
+#   * Controllers   (OutWit.Controller.<Name>)
+#       Tier-2 controllers may also produce a GitHub Release with attached
+#       data assets (rowMatrix.smat for Matrices today; Blender / FFmpeg
+#       per platform for Render later). Asset prep is keyed off the project
+#       name — controllers without external assets are no-op for that step.
+#
+#   * Models        (OutWit.Controller.<Name>.Model)
+#       Regular library NuGets. No GH Release.
+#
+#   * Tools         (OutWit.Controller.Pack)
+#       Global .NET tools. No GH Release.
 
 on:
   workflow_dispatch:
     inputs:
       project:
-        description: 'Project to publish (equals .csproj base name)'
+        description: 'Project to publish (.csproj base name)'
         required: true
         type: choice
         options:
+          # Controllers
+          - OutWit.Controller.Grid
+          - OutWit.Controller.Variables
+          - OutWit.Controller.Special
+          - OutWit.Controller.Matrices
+          - OutWit.Controller.Render
+          - OutWit.Controller.Render.Dcc
+          # Models
+          - OutWit.Controller.Grid.Model
+          - OutWit.Controller.Variables.Model
+          - OutWit.Controller.Matrices.Model
+          - OutWit.Controller.Render.Model
+          - OutWit.Controller.Render.Dcc.Model
+          # Tools
           - OutWit.Controller.Pack
       pushToNuGet:
-        description: 'Push to nuget.org'
+        description: 'Push nupkg + snupkg to nuget.org'
         type: boolean
         required: true
         default: true
       pushToGitHubPackages:
-        description: 'Push to GitHub Packages'
+        description: 'Push nupkg to GitHub Packages'
+        type: boolean
+        required: true
+        default: true
+      createGitHubRelease:
+        description: 'Create GitHub Release with prepared assets (no-op for projects without external assets)'
         type: boolean
         required: true
         default: true
 
 permissions:
-  contents: read
-  packages: write
+  contents: write   # action-gh-release needs to create tags + releases
+  packages: write   # GitHub Packages push
 
 jobs:
   publish:
@@ -47,52 +82,136 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      # Find csproj by name (mirrors the WitEngine publish.yml pattern).
+      # Also extracts Version and computes a tag prefix used for GH Release
+      # naming. The tag-prefix transform turns OutWit.Controller.Render.Dcc
+      # into 'renderdcc' (matches the existing manual matrices-v1.0.0 tag
+      # convention).
       - name: Resolve project path
         id: paths
         shell: bash
         run: |
           name="${{ env.PROJECT }}"
-          lib=$(find . -name "$name.csproj" -type f | head -1)
-          if [ -z "$lib" ]; then
-            echo "Project '$name.csproj' not found"
+          csproj=$(find . -name "$name.csproj" -type f | head -1)
+          if [ -z "$csproj" ]; then
+            echo "ERROR: csproj not found for project '$name'"
             exit 1
           fi
-          echo "libCsproj=$lib" >> $GITHUB_OUTPUT
-          echo "Resolved: $lib"
+
+          version=$(grep -oP '<Version>\K[^<]+' "$csproj" | head -1)
+          if [ -z "$version" ]; then
+            echo "ERROR: <Version> not found in $csproj"
+            exit 1
+          fi
+
+          # OutWit.Controller.Foo -> foo; OutWit.Controller.Render.Dcc -> renderdcc
+          tag_prefix=$(echo "$name" | sed 's/^OutWit\.Controller\.//' | tr -d '.' | tr '[:upper:]' '[:lower:]')
+
+          echo "csproj=$csproj"        >> $GITHUB_OUTPUT
+          echo "version=$version"      >> $GITHUB_OUTPUT
+          echo "tag=$tag_prefix-v$version" >> $GITHUB_OUTPUT
+
+          echo "Resolved:"
+          echo "  csproj  = $csproj"
+          echo "  version = $version"
+          echo "  tag     = $tag_prefix-v$version"
 
       - name: Build
-        run: dotnet build "${{ steps.paths.outputs.libCsproj }}" -c Release -p:ContinuousIntegrationBuild=true
+        run: dotnet build "${{ steps.paths.outputs.csproj }}" -c Release -p:ContinuousIntegrationBuild=true
 
       - name: Pack
-        run: dotnet pack "${{ steps.paths.outputs.libCsproj }}" -c Release --no-build
+        run: dotnet pack "${{ steps.paths.outputs.csproj }}" -c Release --no-build
 
-      - name: Collect packages
+      - name: Collect nupkg / snupkg
         id: collect
         shell: bash
         run: |
           mkdir -p NuGet
-          find . -path "*/bin/Release/*.nupkg" -exec cp {} NuGet/ \;
-          find . -path "*/bin/Release/*.snupkg" -exec cp {} NuGet/ \; 2>/dev/null || true
+          find . -path "*/bin/Release/${{ env.PROJECT }}.${{ steps.paths.outputs.version }}.nupkg"  -exec cp {} NuGet/ \;
+          find . -path "*/bin/Release/${{ env.PROJECT }}.${{ steps.paths.outputs.version }}.snupkg" -exec cp {} NuGet/ \; 2>/dev/null || true
 
           hasNupkg=false
           hasSnupkg=false
-
-          if ls NuGet/*.nupkg 1> /dev/null 2>&1; then
-            hasNupkg=true
-          fi
-
-          if ls NuGet/*.snupkg 1> /dev/null 2>&1; then
-            hasSnupkg=true
-          fi
-
-          echo "hasNupkg=$hasNupkg" >> $GITHUB_OUTPUT
+          if ls NuGet/*.nupkg  > /dev/null 2>&1; then hasNupkg=true; fi
+          if ls NuGet/*.snupkg > /dev/null 2>&1; then hasSnupkg=true; fi
+          echo "hasNupkg=$hasNupkg"   >> $GITHUB_OUTPUT
           echo "hasSnupkg=$hasSnupkg" >> $GITHUB_OUTPUT
 
-          echo "Collected packages:"
-          ls -la NuGet/ || echo "No packages found"
+          echo "Collected:"
+          ls -la NuGet/ || echo "  (none)"
+
+      # Per-controller asset preparation. Each Tier-2 controller has its own
+      # logic for producing the binary blobs that go in the GitHub Release.
+      # Models and tools fall through the *) branch (no-op).
+      - name: Prepare assets
+        id: assets
+        shell: bash
+        run: |
+          mkdir -p dist
+
+          case "${{ env.PROJECT }}" in
+            OutWit.Controller.Matrices)
+              # Tier-2 pilot — ship rowMatrix.smat as external asset.
+              # Step 10b will add largeMatrix.smat here once we externalise it.
+              cp Matrices/OutWit.Controller.Matrices/Resources/rowMatrix.smat dist/
+              ;;
+            OutWit.Controller.Render)
+              # TODO Step 12 — fetch Blender + FFmpeg per platform.
+              echo "Render asset prep not yet implemented."
+              ;;
+            *)
+              echo "(no external assets for ${{ env.PROJECT }})"
+              ;;
+          esac
+
+          hasAssets=false
+          if ls dist/* > /dev/null 2>&1; then hasAssets=true; fi
+          echo "hasAssets=$hasAssets" >> $GITHUB_OUTPUT
+
+          if [ "$hasAssets" = "true" ]; then
+            echo "Prepared assets:"
+            ls -la dist/
+            echo ""
+            echo "SHA256:"
+            sha256sum dist/*
+
+            # Markdown release body matching the manual-release look.
+            {
+              echo "Automated release for **${{ env.PROJECT }}** v${{ steps.paths.outputs.version }}."
+              echo ""
+              echo "Published by the publish workflow (commit \`${{ github.sha }}\`)."
+              echo ""
+              echo "## Assets"
+              echo ""
+              echo "| File | Size | SHA256 |"
+              echo "| --- | --- | --- |"
+              for f in dist/*; do
+                fname=$(basename "$f")
+                size=$(stat --printf="%s" "$f")
+                sha=$(sha256sum "$f" | awk '{print $1}')
+                if   [ "$size" -lt 1024 ];               then size_h="${size} B";
+                elif [ "$size" -lt $((1024*1024)) ];     then size_h="$((size/1024)) KB";
+                elif [ "$size" -lt $((1024*1024*1024)) ]; then size_h="$((size/1024/1024)) MB";
+                else                                          size_h="$((size/1024/1024/1024)) GB";
+                fi
+                echo "| \`${fname}\` | ${size_h} | \`${sha}\` |"
+              done
+            } > dist-release-body.md
+          fi
+
+      - name: Create GitHub Release
+        if: inputs.createGitHubRelease && steps.assets.outputs.hasAssets == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.paths.outputs.tag }}
+          name: "${{ env.PROJECT }} v${{ steps.paths.outputs.version }}"
+          body_path: dist-release-body.md
+          files: dist/*
+          fail_on_unmatched_files: true
+          make_latest: legacy
 
       - name: Add GitHub Packages source
-        if: github.event.inputs.pushToGitHubPackages == 'true'
+        if: inputs.pushToGitHubPackages
         run: >
           dotnet nuget add source
           --username ${{ github.actor }}
@@ -101,25 +220,28 @@ jobs:
           --name github
           "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
 
-      - name: Push to nuget.org (.nupkg)
-        if: github.event.inputs.pushToNuGet == 'true' && steps.collect.outputs.hasNupkg == 'true'
+      - name: Push nupkg to nuget.org
+        if: inputs.pushToNuGet && steps.collect.outputs.hasNupkg == 'true'
         shell: bash
         run: dotnet nuget push NuGet/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
-      - name: Push symbols to nuget.org (.snupkg)
-        if: github.event.inputs.pushToNuGet == 'true' && steps.collect.outputs.hasSnupkg == 'true'
+      - name: Push snupkg to nuget.org
+        if: inputs.pushToNuGet && steps.collect.outputs.hasSnupkg == 'true'
         shell: bash
         run: dotnet nuget push NuGet/*.snupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
-      - name: Push to GitHub Packages (.nupkg)
-        if: github.event.inputs.pushToGitHubPackages == 'true' && steps.collect.outputs.hasNupkg == 'true'
+      - name: Push nupkg to GitHub Packages
+        if: inputs.pushToGitHubPackages && steps.collect.outputs.hasNupkg == 'true'
         shell: bash
         run: dotnet nuget push NuGet/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source github --skip-duplicate
 
-      - name: Upload NuGet artifacts
-        if: steps.collect.outputs.hasNupkg == 'true'
+      - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECT }}-nuget
-          path: NuGet/*
+          name: ${{ env.PROJECT }}-v${{ steps.paths.outputs.version }}
+          path: |
+            NuGet/*
+            dist/*
+            dist-release-body.md
+          if-no-files-found: ignore
           retention-days: 7
