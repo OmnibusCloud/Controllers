@@ -158,7 +158,35 @@ jobs:
             echo ""
             echo "SHA256:"
             sha256sum dist/*
-            sha256sum dist/* > dist-sha256.txt
+
+            # Build a markdown body that matches the look of manually-authored
+            # controller-asset releases.
+            {
+              echo "Automated release for **${{ inputs.controller }}** v${{ steps.paths.outputs.version }}."
+              echo ""
+              echo "Published by the publish-controller workflow (commit \`${{ github.sha }}\`)."
+              echo ""
+              echo "## Assets"
+              echo ""
+              echo "| File | Size | SHA256 |"
+              echo "| --- | --- | --- |"
+              for f in dist/*; do
+                fname=$(basename "$f")
+                size=$(stat --printf="%s" "$f")
+                sha=$(sha256sum "$f" | awk '{print $1}')
+                # Size: pretty-print as KB/MB/GB
+                if   [ "$size" -lt 1024 ];               then size_h="${size} B";
+                elif [ "$size" -lt $((1024*1024)) ];     then size_h="$((size/1024)) KB";
+                elif [ "$size" -lt $((1024*1024*1024)) ]; then size_h="$((size/1024/1024)) MB";
+                else                                          size_h="$((size/1024/1024/1024)) GB";
+                fi
+                echo "| \`${fname}\` | ${size_h} | \`${sha}\` |"
+              done
+            } > dist-release-body.md
+
+            echo ""
+            echo "Release body:"
+            cat dist-release-body.md
           else
             echo "(no assets for this controller)"
           fi
@@ -168,11 +196,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.paths.outputs.tag }}
-          name: ${{ inputs.controller }} ${{ steps.paths.outputs.version }}
-          body_path: dist-sha256.txt
+          name: "${{ inputs.controller }} controller assets v${{ steps.paths.outputs.version }}"
+          body_path: dist-release-body.md
           files: dist/*
           fail_on_unmatched_files: true
-          make_latest: false
+          # 'legacy' = GitHub default (most recent release is Latest, modulated
+          # by the repo's pre-release setting). Matches the badge behaviour of
+          # manually-authored releases on this repo.
+          make_latest: legacy
 
       - name: Push nupkg to nuget.org
         if: inputs.pushToNuGet && steps.collect.outputs.hasNupkg == 'true'
