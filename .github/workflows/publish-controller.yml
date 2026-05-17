@@ -1,0 +1,196 @@
+name: Publish Controller
+run-name: "Publish Controller: ${{ inputs.controller }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      controller:
+        description: 'Controller to publish'
+        required: true
+        type: choice
+        options:
+          - Grid
+          - Variables
+          - Special
+          - Matrices
+          - Render
+          - RenderDcc
+      pushToNuGet:
+        description: 'Push nupkg to nuget.org (controllers need consumer-side targets first — leave false until Step 11 lands)'
+        type: boolean
+        required: true
+        default: false
+      createGitHubRelease:
+        description: 'Create GitHub Release with prepared assets (skip for tier-1 controllers without external assets)'
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write   # action-gh-release needs to create tags + releases
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Different controllers live under different csproj paths. RenderDcc and
+      # Render share the Render/ folder. Tag naming uses the lowercase controller
+      # name + "-v" + version, e.g. matrices-v1.0.1.
+      - name: Resolve controller paths
+        id: paths
+        shell: bash
+        run: |
+          name="${{ inputs.controller }}"
+          case "$name" in
+            RenderDcc)
+              csproj="Render/OutWit.Controller.Render.Dcc/OutWit.Controller.Render.Dcc.csproj"
+              tag_prefix="renderdcc"
+              pkg_id="OutWit.Controller.Render.Dcc"
+              ;;
+            Render)
+              csproj="Render/OutWit.Controller.Render/OutWit.Controller.Render.csproj"
+              tag_prefix="render"
+              pkg_id="OutWit.Controller.Render"
+              ;;
+            *)
+              csproj="$name/OutWit.Controller.$name/OutWit.Controller.$name.csproj"
+              tag_prefix=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+              pkg_id="OutWit.Controller.$name"
+              ;;
+          esac
+
+          if [ ! -f "$csproj" ]; then
+            echo "ERROR: csproj not found: $csproj"
+            exit 1
+          fi
+
+          version=$(grep -oP '<Version>\K[^<]+' "$csproj" | head -1)
+          if [ -z "$version" ]; then
+            echo "ERROR: <Version> not found in $csproj"
+            exit 1
+          fi
+
+          echo "csproj=$csproj"           >> $GITHUB_OUTPUT
+          echo "tag=$tag_prefix-v$version" >> $GITHUB_OUTPUT
+          echo "version=$version"          >> $GITHUB_OUTPUT
+          echo "pkg_id=$pkg_id"            >> $GITHUB_OUTPUT
+
+          echo "Resolved:"
+          echo "  csproj  = $csproj"
+          echo "  pkg_id  = $pkg_id"
+          echo "  version = $version"
+          echo "  tag     = $tag_prefix-v$version"
+
+      - name: Build
+        run: dotnet build "${{ steps.paths.outputs.csproj }}" -c Release -p:ContinuousIntegrationBuild=true
+
+      - name: Pack
+        run: dotnet pack "${{ steps.paths.outputs.csproj }}" -c Release --no-build
+
+      - name: Collect nupkg / snupkg
+        id: collect
+        shell: bash
+        run: |
+          mkdir -p NuGet
+          find . -path "*/bin/Release/${{ steps.paths.outputs.pkg_id }}.${{ steps.paths.outputs.version }}.nupkg" -exec cp {} NuGet/ \;
+          find . -path "*/bin/Release/${{ steps.paths.outputs.pkg_id }}.${{ steps.paths.outputs.version }}.snupkg" -exec cp {} NuGet/ \; 2>/dev/null || true
+
+          hasNupkg=false
+          hasSnupkg=false
+          if ls NuGet/*.nupkg  > /dev/null 2>&1; then hasNupkg=true; fi
+          if ls NuGet/*.snupkg > /dev/null 2>&1; then hasSnupkg=true; fi
+          echo "hasNupkg=$hasNupkg"   >> $GITHUB_OUTPUT
+          echo "hasSnupkg=$hasSnupkg" >> $GITHUB_OUTPUT
+
+          echo "Collected:"
+          ls -la NuGet/ || echo "  (none)"
+
+      # Per-controller asset preparation. Each tier-2 controller has its own way
+      # of producing the binary blobs that go in the GitHub Release. Inline
+      # cases for now; future controllers extend the case block.
+      - name: Prepare assets
+        id: assets
+        shell: bash
+        run: |
+          mkdir -p dist
+
+          case "${{ inputs.controller }}" in
+            Matrices)
+              # Tier 2 pilot — ship rowMatrix.smat as external asset.
+              # Step 10b will add largeMatrix.smat here once we externalise it.
+              cp Matrices/OutWit.Controller.Matrices/Resources/rowMatrix.smat dist/
+              ;;
+            Render)
+              # TODO Step 12 — fetch Blender + FFmpeg per platform, bundle into
+              # per-platform zips.
+              echo "Render asset prep not yet implemented."
+              ;;
+            *)
+              # Tier 1 controllers (Grid/Variables/Special/RenderDcc) have no
+              # external data assets.
+              echo "(no external assets for $name)"
+              ;;
+          esac
+
+          hasAssets=false
+          if ls dist/* > /dev/null 2>&1; then hasAssets=true; fi
+          echo "hasAssets=$hasAssets" >> $GITHUB_OUTPUT
+
+          if [ "$hasAssets" = "true" ]; then
+            echo "Prepared assets:"
+            ls -la dist/
+            echo ""
+            echo "SHA256:"
+            sha256sum dist/*
+            sha256sum dist/* > dist-sha256.txt
+          else
+            echo "(no assets for this controller)"
+          fi
+
+      - name: Create GitHub Release
+        if: inputs.createGitHubRelease == true && steps.assets.outputs.hasAssets == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.paths.outputs.tag }}
+          name: ${{ inputs.controller }} ${{ steps.paths.outputs.version }}
+          body_path: dist-sha256.txt
+          files: dist/*
+          fail_on_unmatched_files: true
+          make_latest: false
+
+      - name: Push nupkg to nuget.org
+        if: inputs.pushToNuGet == true && steps.collect.outputs.hasNupkg == 'true'
+        shell: bash
+        run: dotnet nuget push NuGet/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Push snupkg to nuget.org
+        if: inputs.pushToNuGet == true && steps.collect.outputs.hasSnupkg == 'true'
+        shell: bash
+        run: dotnet nuget push NuGet/*.snupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.controller }}-v${{ steps.paths.outputs.version }}
+          path: |
+            NuGet/*
+            dist/*
+            dist-sha256.txt
+          if-no-files-found: ignore
+          retention-days: 7

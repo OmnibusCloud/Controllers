@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
    <ControllerName>Matrices</ControllerName>
-	<Version>1.0.1</Version>
+	<Version>1.0.2</Version>
 	<Description>Matrix and vector operations including sparse representations and Gustavson multiplication.</Description>
 	<Authors>OutWit</Authors>
 	<Copyright>Copyright 2025 OutWit</Copyright>
@@ -31,7 +31,7 @@
   <ItemGroup>
     <ControllerDataAsset Include="rowMatrix">
       <RuntimeIdentifier>any</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/matrices-v1.0.0/rowMatrix.smat</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/matrices-v1.0.2/rowMatrix.smat</Uri>
       <Sha256>bc2dc4d1e5bd6e3ba1a9e89f50d0ee5de72c11a1054d1707103ecfa492f84246</Sha256>
       <Size>98333</Size>
       <ExtractTo>Resources/</ExtractTo>
