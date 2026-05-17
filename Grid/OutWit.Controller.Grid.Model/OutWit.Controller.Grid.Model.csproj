@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="OutWit.Common" Version="1.3.2" />
+        <PackageReference Include="OutWit.Common.MemoryPack" Version="1.1.4" />
+        <PackageReference Include="OutWit.Engine.Interfaces" Version="1.0.*" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <GridModuleFiles Include="$(TargetDir)$(TargetName).dll" />
+        <GridModuleFiles Include="$(TargetDir)$(TargetName).dll.config" Condition="Exists('$(TargetDir)$(TargetName).dll.config')" />
+        <GridModuleFiles Include="$(TargetDir)$(TargetName).deps.json" />
+        <GridModuleFiles Include="$(TargetDir)**\$(TargetName).resources.dll" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Remove="Builders\**" />
+      <EmbeddedResource Remove="Builders\**" />
+      <None Remove="Builders\**" />
+    </ItemGroup>
+
+    <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+        <Copy SourceFiles="@(GridModuleFiles)" DestinationFolder="$(SolutionDir)@Controllers\$(Configuration)\grid.module\" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+    </Target>
+
+</Project>

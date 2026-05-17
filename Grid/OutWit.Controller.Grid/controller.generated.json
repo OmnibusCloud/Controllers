@@ -1,0 +1,15 @@
+{
+"name": "Grid",
+"version": "1.0.2",
+"description": "Dense grid layout computation with ForEach support.",
+"authors": [ "OutWit" ],
+"copyright": "Copyright 2025 OutWit",
+"projectUrl": "",
+"repositoryUrl": "",
+"license": "MIT",
+"tags": [ "grid", "layout" ],
+"features": [ "grid-foreach" ],
+"useCases": [ "Grid iteration", "Layout computation" ],
+"runtimeTargets": [  ],
+"dependencies": {  }
+}

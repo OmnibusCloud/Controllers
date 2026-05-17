@@ -1,2 +1,6 @@
 <Solution>
+  <Folder Name="/Grid/">
+    <Project Path="Grid/OutWit.Controller.Grid/OutWit.Controller.Grid.csproj" />
+    <Project Path="Grid/OutWit.Controller.Grid.Model/OutWit.Controller.Grid.Model.csproj" />
+  </Folder>
 </Solution>

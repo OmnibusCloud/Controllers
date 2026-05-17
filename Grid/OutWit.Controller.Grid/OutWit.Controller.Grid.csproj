@@ -1,0 +1,59 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	   <TargetFramework>net10.0</TargetFramework>
+	  <Nullable>enable</Nullable>
+	  <LangVersion>latest</LangVersion>
+   <ControllerName>Grid</ControllerName>
+	  <Version>1.0.2</Version>
+	  <Description>Dense grid layout computation with ForEach support.</Description>
+	  <Authors>OutWit</Authors>
+	  <Copyright>Copyright 2025 OutWit</Copyright>
+	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+	  <PackageTags>grid;layout</PackageTags>
+	  <ControllerFeatures>grid-foreach</ControllerFeatures>
+	  <ControllerUseCases>Grid iteration;Layout computation</ControllerUseCases>
+  </PropertyGroup>
+
+	<Import Project="..\..\Build\OutWit.Controller.Manifest.targets" />
+
+	<ItemGroup>
+		<PackageReference Include="OutWit.Engine.Data" Version="1.0.*" />
+		<ProjectReference Include="..\OutWit.Controller.Grid.Model\OutWit.Controller.Grid.Model.csproj" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+	<ItemGroup>
+		<GridModuleFiles Include="$(TargetDir)$(TargetName).dll" />
+		<GridModuleFiles Include="$(TargetDir)$(TargetName).dll.config" Condition="Exists('$(TargetDir)$(TargetName).dll.config')" />
+		<GridModuleFiles Include="$(TargetDir)$(TargetName).deps.json" />
+		<GridModuleFiles Include="$(TargetDir)**\$(TargetName).resources.dll" />
+      <GridModuleFiles Include="$(ControllerManifestOutputPath)" />
+	</ItemGroup>
+
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<Copy SourceFiles="@(GridModuleFiles)" DestinationFolder="$(SolutionDir)@Controllers\$(Configuration)\grid.module\" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+	</Target>
+
+	<Target Name="PackZip" AfterTargets="PostBuild">
+		<MakeDir Directories="$(SolutionDir)@Zips\$(Configuration)\" />
+		<ZipDirectory SourceDirectory="$(SolutionDir)@Controllers\$(Configuration)\grid.module\"
+		              DestinationFile="$(SolutionDir)@Zips\$(Configuration)\grid.zip"
+		              Overwrite="true" />
+	</Target>
+
+</Project>
