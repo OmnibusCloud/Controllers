@@ -7,4 +7,7 @@
     <Project Path="Variables/OutWit.Controller.Variables/OutWit.Controller.Variables.csproj" />
     <Project Path="Variables/OutWit.Controller.Variables.Model/OutWit.Controller.Variables.Model.csproj" />
   </Folder>
+  <Folder Name="/Special/">
+    <Project Path="Special/OutWit.Controller.Special/OutWit.Controller.Special.csproj" />
+  </Folder>
 </Solution>
