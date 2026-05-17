@@ -164,7 +164,7 @@ jobs:
           fi
 
       - name: Create GitHub Release
-        if: inputs.createGitHubRelease == true && steps.assets.outputs.hasAssets == 'true'
+        if: inputs.createGitHubRelease && steps.assets.outputs.hasAssets == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.paths.outputs.tag }}
@@ -175,12 +175,12 @@ jobs:
           make_latest: false
 
       - name: Push nupkg to nuget.org
-        if: inputs.pushToNuGet == true && steps.collect.outputs.hasNupkg == 'true'
+        if: inputs.pushToNuGet && steps.collect.outputs.hasNupkg == 'true'
         shell: bash
         run: dotnet nuget push NuGet/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Push snupkg to nuget.org
-        if: inputs.pushToNuGet == true && steps.collect.outputs.hasSnupkg == 'true'
+        if: inputs.pushToNuGet && steps.collect.outputs.hasSnupkg == 'true'
         shell: bash
         run: dotnet nuget push NuGet/*.snupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
