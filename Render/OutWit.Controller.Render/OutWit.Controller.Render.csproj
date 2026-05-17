@@ -1,0 +1,204 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<LangVersion>latest</LangVersion>
+        <WitEngineRoot Condition="'$(SolutionDir)' != ''">$(SolutionDir)</WitEngineRoot>
+		<WitEngineRoot Condition="'$(WitEngineRoot)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\..\'))</WitEngineRoot>
+		<RenderModuleOutputDir>$(WitEngineRoot)@Controllers\$(Configuration)\render.module\</RenderModuleOutputDir>
+		<RenderZipOutputDir>$(WitEngineRoot)@Zips\$(Configuration)\</RenderZipOutputDir>
+     <RenderScriptsOutputDir>$(WitEngineRoot)@Scripts\$(Configuration)\</RenderScriptsOutputDir>
+        <RenderBenchmarkPrerequisitesDir>$(WitEngineRoot)@Prerequisites\benchmark\render\</RenderBenchmarkPrerequisitesDir>
+        <RenderBlenderPrerequisitesDir>$(WitEngineRoot)@Prerequisites\blender\</RenderBlenderPrerequisitesDir>
+		<RenderFfmpegPrerequisitesDir>$(WitEngineRoot)@Prerequisites\ffmpeg\</RenderFfmpegPrerequisitesDir>
+     <ControllerName>Render</ControllerName>
+       <Version>1.15.0</Version>
+		<Description>Distributed rendering via Blender CLI and ffmpeg for .blend scene blobs, bootstrap typed-scene inputs, stills, tiled stills with overlap-aware tile options, runtime diagnostics, unified/frame/video/tiled preflight validation, frame sequences, and MP4 output.</Description>
+		<Authors>OutWit</Authors>
+		<Copyright>Copyright 2025 OutWit</Copyright>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageTags>render;blender;ffmpeg;cycles;distributed-rendering;3d;video;typed-scene</PackageTags>
+		<ControllerFeatures>render-split;render-split-tiles;render-frame;render-collect;render-collect-still;render-collect-tiles;render-build-blend;render-build-blend-from-refs;render-encode-video;render-runtime-diagnostics;render-preflight;render-preflight-frames;render-preflight-video;render-preflight-unified;frame-based-distribution;tile-options;tile-overlap;tiled-still;mp4-output;typed-scene-bootstrap</ControllerFeatures>
+		<ControllerUseCases>Distributed animation rendering;Frame sequence rendering;Tiled still rendering;MP4 video rendering;Bootstrap typed-scene rendering;Cloud render farm</ControllerUseCases>
+	</PropertyGroup>
+
+	<Import Project="..\..\Build\OutWit.Controller.Manifest.targets" />
+
+	<ItemGroup>
+		<PackageReference Include="OutWit.Engine.Data" Version="1.1.*" />
+		<ProjectReference Include="..\OutWit.Controller.Render.Model\OutWit.Controller.Render.Model.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Update="Properties\Resources.Designer.cs">
+			<DesignTime>True</DesignTime>
+			<AutoGen>True</AutoGen>
+			<DependentUpon>Resources.resx</DependentUpon>
+		</Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Update="Properties\Resources.resx">
+			<Generator>ResXFileCodeGenerator</Generator>
+			<LastGenOutput>Resources.Designer.cs</LastGenOutput>
+		</EmbeddedResource>
+	</ItemGroup>
+
+	<ItemGroup>
+		<ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+		<ControllerRuntimeTarget Include="win-x64">
+			<Rid>win-x64</Rid>
+			<Os>windows</Os>
+			<Architecture>x64</Architecture>
+		</ControllerRuntimeTarget>
+		<ControllerRuntimeTarget Include="linux-x64">
+			<Rid>linux-x64</Rid>
+			<Os>linux</Os>
+			<Architecture>x64</Architecture>
+		</ControllerRuntimeTarget>
+		<ControllerRuntimeTarget Include="osx-arm64">
+			<Rid>osx-arm64</Rid>
+			<Os>macos</Os>
+			<Architecture>arm64</Architecture>
+		</ControllerRuntimeTarget>
+	</ItemGroup>
+
+ <ItemGroup>
+      <RenderStaticModuleFiles Include="$(ControllerManifestOutputPath)" />
+     <RenderBundledScriptFiles Include="$(ProjectDir)Scripts\*.wit" />
+     <UpToDateCheckInput Include="@(RenderBundledScriptFiles)" Set="RenderBundledScripts" />
+		<UpToDateCheckBuilt Include="@(RenderBundledScriptFiles->'$(RenderScriptsOutputDir)%(Filename)%(Extension)')" Set="RenderBundledScripts" />
+		<RenderStaticModuleFiles Include="$(RenderBenchmarkPrerequisitesDir)benchmark_scene.blend" Condition="Exists('$(RenderBenchmarkPrerequisitesDir)benchmark_scene.blend')" />
+		<RenderStaticModuleFiles Include="$(RenderBenchmarkPrerequisitesDir)benchmark_scene_still.blend" Condition="Exists('$(RenderBenchmarkPrerequisitesDir)benchmark_scene_still.blend')" />
+		<RenderStaticModuleFiles Include="$(RenderBenchmarkPrerequisitesDir)benchmark_scene_video.blend" Condition="Exists('$(RenderBenchmarkPrerequisitesDir)benchmark_scene_video.blend')" />
+		<RenderStaticModuleFiles Include="$(ProjectDir)benchmarks\create_benchmark.py" />
+		<RenderStaticModuleFiles Include="$(ProjectDir)benchmarks\create_benchmark_still.py" Condition="Exists('$(ProjectDir)benchmarks\create_benchmark_still.py')" />
+		<RenderStaticModuleFiles Include="$(ProjectDir)benchmarks\create_benchmark_video.py" Condition="Exists('$(ProjectDir)benchmarks\create_benchmark_video.py')" />
+	</ItemGroup>
+
+	<ItemGroup>
+        <RenderBlenderFiles Include="$(RenderBlenderPrerequisitesDir)windows-x64\**\*">
+			<RuntimeTargetDir>windows-x64\</RuntimeTargetDir>
+		</RenderBlenderFiles>
+      <RenderBlenderFiles Include="$(RenderBlenderPrerequisitesDir)linux-x64\**\*">
+			<RuntimeTargetDir>linux-x64\</RuntimeTargetDir>
+		</RenderBlenderFiles>
+        <RenderBlenderFiles Include="$(RenderBlenderPrerequisitesDir)macos-arm64\**\*">
+			<RuntimeTargetDir>macos-arm64\</RuntimeTargetDir>
+		</RenderBlenderFiles>
+	</ItemGroup>
+
+	<ItemGroup>
+		<RenderFfmpegFiles Include="$(RenderFfmpegPrerequisitesDir)windows-x64\**\*">
+			<RuntimeTargetDir>windows-x64\</RuntimeTargetDir>
+		</RenderFfmpegFiles>
+		<RenderFfmpegFiles Include="$(RenderFfmpegPrerequisitesDir)linux-x64\**\*">
+			<RuntimeTargetDir>linux-x64\</RuntimeTargetDir>
+		</RenderFfmpegFiles>
+		<RenderFfmpegFiles Include="$(RenderFfmpegPrerequisitesDir)macos-arm64\**\*">
+			<RuntimeTargetDir>macos-arm64\</RuntimeTargetDir>
+		</RenderFfmpegFiles>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Services\Dcc\" />
+	</ItemGroup>
+
+	<!-- Prerequisite validation is gated: in WitEngine the Blender/FFmpeg/benchmark
+	     blobs live in $(WitEngineRoot)@Prerequisites (which is gitignored, present
+	     only on the developer's machine). In the omnibuscloud/Controllers parallel-
+	     sources copy those folders aren't expected. Build with
+	     -p:RenderEnforcePrerequisites=true to require them (matches the original
+	     WitEngine behaviour). Default false here so a fresh clone of the new repo
+	     compiles the .NET sources cleanly without first staging hundreds of MB of
+	     binaries — the binary distribution story for Render is a Phase 2 concern. -->
+	<PropertyGroup>
+		<RenderEnforcePrerequisites Condition="'$(RenderEnforcePrerequisites)' == ''">false</RenderEnforcePrerequisites>
+	</PropertyGroup>
+
+	<Target Name="ValidateRenderPrerequisites" BeforeTargets="PostBuild" Condition="'$(RenderEnforcePrerequisites)' == 'true'">
+      <Error Condition="!Exists('$(RenderBlenderPrerequisitesDir)windows-x64')" Text="Render prerequisite missing: $(RenderBlenderPrerequisitesDir)windows-x64" />
+		<Error Condition="!Exists('$(RenderBlenderPrerequisitesDir)linux-x64')" Text="Render prerequisite missing: $(RenderBlenderPrerequisitesDir)linux-x64" />
+		<Error Condition="!Exists('$(RenderBlenderPrerequisitesDir)macos-arm64')" Text="Render prerequisite missing: $(RenderBlenderPrerequisitesDir)macos-arm64" />
+		<Error Condition="!Exists('$(RenderFfmpegPrerequisitesDir)windows-x64')" Text="Render prerequisite missing: $(RenderFfmpegPrerequisitesDir)windows-x64" />
+		<Error Condition="!Exists('$(RenderFfmpegPrerequisitesDir)linux-x64')" Text="Render prerequisite missing: $(RenderFfmpegPrerequisitesDir)linux-x64" />
+		<Error Condition="!Exists('$(RenderFfmpegPrerequisitesDir)macos-arm64')" Text="Render prerequisite missing: $(RenderFfmpegPrerequisitesDir)macos-arm64" />
+       <Error Condition="!Exists('$(RenderBenchmarkPrerequisitesDir)benchmark_scene.blend')" Text="Render benchmark prerequisite missing: $(RenderBenchmarkPrerequisitesDir)benchmark_scene.blend" />
+		<Error Condition="!Exists('$(RenderBenchmarkPrerequisitesDir)benchmark_scene_still.blend')" Text="Render benchmark prerequisite missing: $(RenderBenchmarkPrerequisitesDir)benchmark_scene_still.blend" />
+		<Error Condition="!Exists('$(RenderBenchmarkPrerequisitesDir)benchmark_scene_video.blend')" Text="Render benchmark prerequisite missing: $(RenderBenchmarkPrerequisitesDir)benchmark_scene_video.blend" />
+	</Target>
+
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+      <MakeDir Directories="$(RenderModuleOutputDir)" />
+      <MakeDir Directories="$(RenderScriptsOutputDir)" />
+      <RemoveDir Directories="$(RenderModuleOutputDir)blender" ContinueOnError="true" />
+     <RemoveDir Directories="$(RenderModuleOutputDir)ffmpeg" ContinueOnError="true" />
+        <ItemGroup>
+			<RenderOutputModuleFiles Include="$(TargetDir)$(TargetName).dll" />
+			<RenderOutputModuleFiles Include="$(TargetDir)$(TargetName).dll.config" Condition="Exists('$(TargetDir)$(TargetName).dll.config')" />
+			<RenderOutputModuleFiles Include="$(TargetDir)$(TargetName).deps.json" />
+			<RenderOutputModuleFiles Include="$(TargetDir)OutWit.Controller.Render.Model.dll" Condition="Exists('$(TargetDir)OutWit.Controller.Render.Model.dll')" />
+			<RenderOutputModuleFiles Include="$(TargetDir)OutWit.Controller.Render.Model.deps.json" Condition="Exists('$(TargetDir)OutWit.Controller.Render.Model.deps.json')" />
+			<RenderOutputModuleFiles Include="$(TargetDir)**\$(TargetName).resources.dll" />
+		</ItemGroup>
+		<Copy SourceFiles="@(RenderOutputModuleFiles);@(RenderStaticModuleFiles)" DestinationFolder="$(RenderModuleOutputDir)" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+     <Copy SourceFiles="@(RenderBundledScriptFiles)" DestinationFolder="$(RenderScriptsOutputDir)" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+     <Copy SourceFiles="@(RenderBlenderFiles)" DestinationFiles="@(RenderBlenderFiles->'$(RenderModuleOutputDir)blender\%(RuntimeTargetDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+       <Copy SourceFiles="@(RenderFfmpegFiles)" DestinationFiles="@(RenderFfmpegFiles->'$(RenderModuleOutputDir)ffmpeg\%(RuntimeTargetDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+	</Target>
+
+	<Target Name="PackZip" AfterTargets="PostBuild">
+        <PropertyGroup>
+                <RenderPackZipToken>$([System.Guid]::NewGuid().ToString('N'))</RenderPackZipToken>
+				<RenderPackZipWorkDir>$(IntermediateOutputPath)zip-staging\$(RenderPackZipToken)\</RenderPackZipWorkDir>
+				<RenderWinStageDir>$(RenderPackZipWorkDir)windows-x64\</RenderWinStageDir>
+			<RenderLinuxStageDir>$(RenderPackZipWorkDir)linux-x64\</RenderLinuxStageDir>
+			<RenderMacStageDir>$(RenderPackZipWorkDir)macos-arm64\</RenderMacStageDir>
+			<RenderWinZipTempFile>$(RenderPackZipWorkDir)render-win-x64.build.zip</RenderWinZipTempFile>
+			<RenderLinuxZipTempFile>$(RenderPackZipWorkDir)render-linux-x64.build.zip</RenderLinuxZipTempFile>
+			<RenderMacZipTempFile>$(RenderPackZipWorkDir)render-osx-arm64.build.zip</RenderMacZipTempFile>
+			<RenderWinZipFinalFile>$(RenderZipOutputDir)render-win-x64.zip</RenderWinZipFinalFile>
+			<RenderLinuxZipFinalFile>$(RenderZipOutputDir)render-linux-x64.zip</RenderLinuxZipFinalFile>
+			<RenderMacZipFinalFile>$(RenderZipOutputDir)render-osx-arm64.zip</RenderMacZipFinalFile>
+		</PropertyGroup>
+
+        <MakeDir Directories="$(RenderPackZipWorkDir);$(RenderWinStageDir);$(RenderLinuxStageDir);$(RenderMacStageDir)" />
+		<MakeDir Directories="$(RenderZipOutputDir)" />
+
+		<ItemGroup>
+         <RenderPackModuleFiles Include="$(RenderModuleOutputDir)**\*" Exclude="$(RenderModuleOutputDir)ffmpeg\**\*;$(RenderModuleOutputDir)blender\**\*" />
+          <WindowsZipBlenderFiles Include="$(RenderBlenderPrerequisitesDir)windows-x64\**\*" />
+			<LinuxZipBlenderFiles Include="$(RenderBlenderPrerequisitesDir)linux-x64\**\*" />
+			<MacZipBlenderFiles Include="$(RenderBlenderPrerequisitesDir)macos-arm64\**\*" />
+			<WindowsZipFfmpegFiles Include="$(RenderFfmpegPrerequisitesDir)windows-x64\**\*" />
+			<LinuxZipFfmpegFiles Include="$(RenderFfmpegPrerequisitesDir)linux-x64\**\*" />
+			<MacZipFfmpegFiles Include="$(RenderFfmpegPrerequisitesDir)macos-arm64\**\*" />
+		</ItemGroup>
+
+        <Copy SourceFiles="@(RenderPackModuleFiles)" DestinationFiles="@(RenderPackModuleFiles->'$(RenderWinStageDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+		<Copy SourceFiles="@(RenderPackModuleFiles)" DestinationFiles="@(RenderPackModuleFiles->'$(RenderLinuxStageDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+		<Copy SourceFiles="@(RenderPackModuleFiles)" DestinationFiles="@(RenderPackModuleFiles->'$(RenderMacStageDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+
+		<Copy SourceFiles="@(WindowsZipBlenderFiles)" DestinationFiles="@(WindowsZipBlenderFiles->'$(RenderWinStageDir)blender\windows-x64\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+		<Copy SourceFiles="@(LinuxZipBlenderFiles)" DestinationFiles="@(LinuxZipBlenderFiles->'$(RenderLinuxStageDir)blender\linux-x64\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+		<Copy SourceFiles="@(MacZipBlenderFiles)" DestinationFiles="@(MacZipBlenderFiles->'$(RenderMacStageDir)blender\macos-arm64\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+
+		<Copy SourceFiles="@(WindowsZipFfmpegFiles)" DestinationFiles="@(WindowsZipFfmpegFiles->'$(RenderWinStageDir)ffmpeg\windows-x64\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+		<Copy SourceFiles="@(LinuxZipFfmpegFiles)" DestinationFiles="@(LinuxZipFfmpegFiles->'$(RenderLinuxStageDir)ffmpeg\linux-x64\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+		<Copy SourceFiles="@(MacZipFfmpegFiles)" DestinationFiles="@(MacZipFfmpegFiles->'$(RenderMacStageDir)ffmpeg\macos-arm64\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+
+		<Delete Files="$(RenderWinZipFinalFile);$(RenderLinuxZipFinalFile);$(RenderMacZipFinalFile)" ContinueOnError="true" />
+
+		<ZipDirectory SourceDirectory="$(RenderWinStageDir)" DestinationFile="$(RenderWinZipTempFile)" Overwrite="true" />
+		<ZipDirectory SourceDirectory="$(RenderLinuxStageDir)" DestinationFile="$(RenderLinuxZipTempFile)" Overwrite="true" />
+		<ZipDirectory SourceDirectory="$(RenderMacStageDir)" DestinationFile="$(RenderMacZipTempFile)" Overwrite="true" />
+
+        <Copy SourceFiles="$(RenderWinZipTempFile)" DestinationFiles="$(RenderWinZipFinalFile)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" />
+		<Copy SourceFiles="$(RenderLinuxZipTempFile)" DestinationFiles="$(RenderLinuxZipFinalFile)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" />
+		<Copy SourceFiles="$(RenderMacZipTempFile)" DestinationFiles="$(RenderMacZipFinalFile)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" />
+     <RemoveDir Directories="$(RenderPackZipWorkDir)" ContinueOnError="true" />
+	</Target>
+
+</Project>

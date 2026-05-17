@@ -1,0 +1,4 @@
+Job:RenderPreflightVideo(RenderOptions:options, VideoOptions:video)
+{
+    RenderPreflightVideo:result = Render.PreflightVideo(options, video);
+}

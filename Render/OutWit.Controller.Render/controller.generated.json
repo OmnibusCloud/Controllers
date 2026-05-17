@@ -1,0 +1,15 @@
+{
+"name": "Render",
+"version": "1.15.0",
+"description": "Distributed rendering via Blender CLI and ffmpeg for .blend scene blobs, bootstrap typed-scene inputs, stills, tiled stills with overlap-aware tile options, runtime diagnostics, unified/frame/video/tiled preflight validation, frame sequences, and MP4 output.",
+"authors": [ "OutWit" ],
+"copyright": "Copyright 2025 OutWit",
+"projectUrl": "",
+"repositoryUrl": "",
+"license": "MIT",
+"tags": [ "render", "blender", "ffmpeg", "cycles", "distributed-rendering", "3d", "video", "typed-scene" ],
+"features": [ "render-split", "render-split-tiles", "render-frame", "render-collect", "render-collect-still", "render-collect-tiles", "render-build-blend", "render-build-blend-from-refs", "render-encode-video", "render-runtime-diagnostics", "render-preflight", "render-preflight-frames", "render-preflight-video", "render-preflight-unified", "frame-based-distribution", "tile-options", "tile-overlap", "tiled-still", "mp4-output", "typed-scene-bootstrap" ],
+"useCases": [ "Distributed animation rendering", "Frame sequence rendering", "Tiled still rendering", "MP4 video rendering", "Bootstrap typed-scene rendering", "Cloud render farm" ],
+"runtimeTargets": [ { "rid": "win-x64", "os": "windows", "architecture": "x64" }, { "rid": "linux-x64", "os": "linux", "architecture": "x64" }, { "rid": "osx-arm64", "os": "macos", "architecture": "arm64" } ],
+"dependencies": { "Variables": "1.0.0" }
+}

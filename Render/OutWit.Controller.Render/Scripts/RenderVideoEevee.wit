@@ -1,0 +1,11 @@
+Job:RenderVideoEevee(RenderSceneRef:scene, Int:startFrame, Int:endFrame, RenderOptions:options, VideoOptions:video)
+{
+    Blob:blend = Render.BuildBlendFromRefs(scene);
+    RenderTaskCollection:tasks = Render.Split(blend, startFrame, endFrame, options);
+
+    RenderResultCollection:rendered = Grid.ForEach(task in tasks)
+        => Render.Frame.Eevee(task);
+
+    BlobCollection:frames = Render.Collect(rendered, options);
+    Blob:result = Render.EncodeVideo(frames, video);
+}

@@ -1,0 +1,4 @@
+Job:RenderBlenderVersion()
+{
+    String:result = Render.BlenderVersion();
+}

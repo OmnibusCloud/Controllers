@@ -1,0 +1,4 @@
+Job:RenderRuntimeDiagnostics()
+{
+    RenderRuntimeDiagnostics:result = Render.RuntimeDiagnostics();
+}

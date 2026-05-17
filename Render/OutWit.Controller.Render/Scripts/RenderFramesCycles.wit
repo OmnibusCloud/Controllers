@@ -1,0 +1,10 @@
+Job:RenderFramesCycles(RenderSceneRef:scene, Int:startFrame, Int:endFrame, RenderOptions:options)
+{
+    Blob:blend = Render.BuildBlendFromRefs(scene);
+    RenderTaskCollection:tasks = Render.Split(blend, startFrame, endFrame, options);
+
+    RenderResultCollection:rendered = Grid.ForEach(task in tasks)
+        => Render.Frame.Cycles(task);
+
+    BlobCollection:result = Render.Collect(rendered, options);
+}

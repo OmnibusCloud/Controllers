@@ -1,0 +1,12 @@
+Job:RenderDccSceneStill(DccScene:scene, Int:frame, RenderOptions:options)
+{
+    Blob:blend = Render.BuildBlendFromDccScene(scene);
+    Render.ClearScene(scene);
+
+    RenderTaskCollection:tasks = Render.Split(blend, frame, frame, options);
+
+    RenderResultCollection:rendered = Grid.ForEach(task in tasks)
+        => Render.Frame(task);
+
+    Blob:result = Render.CollectStill(rendered, options);
+}

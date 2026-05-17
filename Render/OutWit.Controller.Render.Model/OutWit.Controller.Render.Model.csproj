@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<LangVersion>latest</LangVersion>
+        <WitEngineRoot Condition="'$(SolutionDir)' != ''">$(SolutionDir)</WitEngineRoot>
+		<WitEngineRoot Condition="'$(WitEngineRoot)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\..\'))</WitEngineRoot>
+		<RenderModuleOutputDir>$(WitEngineRoot)@Controllers\$(Configuration)\render.module\</RenderModuleOutputDir>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="OutWit.Common" Version="1.3.2" />
+		<PackageReference Include="OutWit.Common.MemoryPack" Version="1.1.4" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<RenderModelModuleFiles Include="$(TargetDir)$(TargetName).dll" />
+		<RenderModelModuleFiles Include="$(TargetDir)$(TargetName).dll.config" Condition="Exists('$(TargetDir)$(TargetName).dll.config')" />
+		<RenderModelModuleFiles Include="$(TargetDir)$(TargetName).deps.json" />
+	</ItemGroup>
+
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+     <MakeDir Directories="$(RenderModuleOutputDir)" />
+		<Copy SourceFiles="@(RenderModelModuleFiles)" DestinationFolder="$(RenderModuleOutputDir)" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+	</Target>
+
+</Project>

@@ -14,4 +14,10 @@
     <Project Path="Matrices/OutWit.Controller.Matrices/OutWit.Controller.Matrices.csproj" />
     <Project Path="Matrices/OutWit.Controller.Matrices.Model/OutWit.Controller.Matrices.Model.csproj" />
   </Folder>
+  <Folder Name="/Render/">
+    <Project Path="Render/OutWit.Controller.Render/OutWit.Controller.Render.csproj" />
+    <Project Path="Render/OutWit.Controller.Render.Model/OutWit.Controller.Render.Model.csproj" />
+    <Project Path="Render/OutWit.Controller.Render.Dcc/OutWit.Controller.Render.Dcc.csproj" />
+    <Project Path="Render/OutWit.Controller.Render.Dcc.Model/OutWit.Controller.Render.Dcc.Model.csproj" />
+  </Folder>
 </Solution>

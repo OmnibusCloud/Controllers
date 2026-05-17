@@ -1,0 +1,5 @@
+Job:RenderValidateBlend(RenderSceneRef:scene)
+{
+    Blob:blend = Render.BuildBlendFromRefs(scene);
+    String:result = Render.ValidateBlend(blend);
+}

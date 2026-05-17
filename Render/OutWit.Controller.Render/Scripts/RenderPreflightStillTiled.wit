@@ -1,0 +1,4 @@
+Job:RenderPreflightStillTiled(Int:tilesX, Int:tilesY, RenderOptions:options, TileOptions:tileOptions)
+{
+    RenderPreflightStillTiled:result = Render.PreflightStillTiled(tilesX, tilesY, options, tileOptions);
+}

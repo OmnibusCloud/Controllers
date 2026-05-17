@@ -1,0 +1,4 @@
+Job:RenderPreflightFrames(Int:startFrame, Int:endFrame, RenderOptions:options)
+{
+    RenderPreflightFrames:result = Render.PreflightFrames(startFrame, endFrame, options);
+}

@@ -1,0 +1,12 @@
+Job:RenderDccSceneStillTiled(DccScene:scene, Int:frame, Int:tilesX, Int:tilesY, RenderOptions:options, TileOptions:tileOptions)
+{
+    Blob:blend = Render.BuildBlendFromDccScene(scene);
+    Render.ClearScene(scene);
+
+    RenderTaskCollection:tasks = Render.SplitTiles(blend, frame, tilesX, tilesY, options, tileOptions);
+
+    RenderResultCollection:rendered = Grid.ForEach(task in tasks)
+        => Render.Frame(task);
+
+    Blob:result = Render.CollectTiles(rendered, options, tileOptions);
+}

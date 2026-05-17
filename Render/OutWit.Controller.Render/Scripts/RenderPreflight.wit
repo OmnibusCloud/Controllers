@@ -1,0 +1,4 @@
+Job:RenderPreflight(Int:frame, Int:startFrame, Int:endFrame, Int:tilesX, Int:tilesY, RenderOptions:options, TileOptions:tileOptions, VideoOptions:video)
+{
+    RenderPreflight:result = Render.Preflight(frame, startFrame, endFrame, tilesX, tilesY, options, tileOptions, video);
+}
