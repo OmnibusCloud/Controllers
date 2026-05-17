@@ -22,6 +22,22 @@
     <ProjectReference Include="..\OutWit.Controller.Matrices.Model\OutWit.Controller.Matrices.Model.csproj" />
   </ItemGroup>
 
+  <!-- Step 10a pilot — declare rowMatrix.smat as an external data asset to
+       end-to-end test the asset resolver pipeline (NuGet → manifest →
+       gh-release://-resolver → cache → extract). The file is also currently
+       embedded in Matrices.dll as a resource; both routes coexist during this
+       pilot. Step 10b will remove the embedded copy and migrate Matrices code
+       to load from the external file. -->
+  <ItemGroup>
+    <ControllerDataAsset Include="rowMatrix">
+      <RuntimeIdentifier>any</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/matrices-v1.0.0/rowMatrix.smat</Uri>
+      <Sha256>bc2dc4d1e5bd6e3ba1a9e89f50d0ee5de72c11a1054d1707103ecfa492f84246</Sha256>
+      <Size>98333</Size>
+      <ExtractTo>Resources/</ExtractTo>
+    </ControllerDataAsset>
+  </ItemGroup>
+
   <ItemGroup>
     <Compile Update="Properties\Resources.Designer.cs">
       <DesignTime>True</DesignTime>
