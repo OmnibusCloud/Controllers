@@ -4,22 +4,53 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-   <ControllerName>Matrices</ControllerName>
-	<Version>1.0.2</Version>
-	<Description>Matrix and vector operations including sparse representations and Gustavson multiplication.</Description>
-	<Authors>OutWit</Authors>
-	<Copyright>Copyright 2025 OutWit</Copyright>
-	<PackageLicenseExpression>MIT</PackageLicenseExpression>
-	<PackageTags>matrices;vectors;linear-algebra;sparse</PackageTags>
-	<ControllerFeatures>dense-matrix;sparse-matrix;dense-vector;sparse-vector;gustavson-multiply</ControllerFeatures>
-	<ControllerUseCases>Linear algebra;Sparse matrix multiplication;Scientific computing</ControllerUseCases>
+    <ControllerName>Matrices</ControllerName>
+    <Version>1.0.2</Version>
+    <Description>Matrix and vector operations including sparse representations and Gustavson multiplication.</Description>
+    <Authors>OutWit</Authors>
+    <Copyright>Copyright 2025 OutWit</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>matrices;vectors;linear-algebra;sparse;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>dense-matrix;sparse-matrix;dense-vector;sparse-vector;gustavson-multiply</ControllerFeatures>
+    <ControllerUseCases>Linear algebra;Sparse matrix multiplication;Scientific computing</ControllerUseCases>
+
+    <!-- Tier 2 controller packaging:
+         - Don't include build output in lib/ — the DLLs aren't a runtime
+           dependency of the consumer; they ship as content under content/module/
+           and the consumer's build/.targets copies them to @Controllers/.
+         - NoPackageAnalysis suppresses NuGet's "you're packing oddly" warnings.
+         - TargetsForTfmSpecificContentInPackage hooks PackModuleContents into
+           NuGet's per-tfm content gathering. -->
+    <IsPackable>true</IsPackable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackMatricesModuleContents</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
 
-	<Import Project="..\..\Build\OutWit.Controller.Manifest.targets" />
+  <Import Project="..\..\Build\OutWit.Controller.Manifest.targets" />
 
   <ItemGroup>
     <PackageReference Include="OutWit.Engine.Data" Version="1.1.*" />
+    <!-- Build-time task package: registers <ResolveControllerAssets> which the
+         consumer-side targets file invokes. The Engine.Assets.MSBuild package
+         is itself marked DevelopmentDependency, so by default 'build' assets
+         are excluded for consumers. We force them ON so the consumer gets the
+         <UsingTask> registration when it PackageReferences this controller. -->
+    <PackageReference Include="OutWit.Engine.Assets.MSBuild" Version="1.0.*">
+      <PrivateAssets>none</PrivateAssets>
+      <IncludeAssets>build; buildTransitive</IncludeAssets>
+    </PackageReference>
+    <!-- Matrices.Model is published as its own NuGet package — consumers
+         resolve it transitively. The Model DLL still appears in this
+         controller's content/module/ folder (so the runtime layout under
+         @Controllers/matrices.module/ has it), but on the dependency-graph
+         side it flows as a proper <dependency> in the nuspec. -->
     <ProjectReference Include="..\OutWit.Controller.Matrices.Model\OutWit.Controller.Matrices.Model.csproj" />
+  </ItemGroup>
+
+  <!-- Consumer-side .targets (auto-imported via NuGet's build/<PackageId>.targets convention). -->
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.Matrices.targets" Pack="true" PackagePath="build\" />
   </ItemGroup>
 
   <!-- Step 10a pilot — declare rowMatrix.smat as an external data asset to
@@ -70,6 +101,31 @@
 		<ZipDirectory SourceDirectory="$(SolutionDir)@Controllers\$(Configuration)\matrices.module\"
 		              DestinationFile="$(SolutionDir)@Zips\$(Configuration)\matrices.zip"
 		              Overwrite="true" />
+	</Target>
+
+	<!-- Hook into NuGet's per-TFM content gathering — collects the .module/
+	     contents (which the PostBuild target above just staged) and packs them
+	     under content/module/ in the nupkg. The consumer's build/.targets then
+	     fans them out to its @Controllers/<Config>/matrices.module/.
+
+	     Also writes an empty lib/<tfm>/_._ marker so NuGet considers the
+	     package compatible with net10.0 consumers (without IncludeBuildOutput
+	     there's otherwise no framework-specific content at all and NuGet
+	     refuses to install). This is the standard analyzer/build-tool pattern. -->
+	<Target Name="PackMatricesModuleContents" DependsOnTargets="PostBuild;PackZip">
+		<PropertyGroup>
+			<_MatricesEmptyLibMarker>$(IntermediateOutputPath)_._</_MatricesEmptyLibMarker>
+		</PropertyGroup>
+		<WriteLinesToFile File="$(_MatricesEmptyLibMarker)" Lines="" Overwrite="true" />
+		<ItemGroup>
+			<_PackedMatricesModuleFiles Include="$(SolutionDir)@Controllers\$(Configuration)\matrices.module\**\*" />
+			<TfmSpecificPackageFile Include="@(_PackedMatricesModuleFiles)">
+				<PackagePath>content/module/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
+			</TfmSpecificPackageFile>
+			<TfmSpecificPackageFile Include="$(_MatricesEmptyLibMarker)">
+				<PackagePath>lib/$(TargetFramework)/_._</PackagePath>
+			</TfmSpecificPackageFile>
+		</ItemGroup>
 	</Target>
 
 </Project>

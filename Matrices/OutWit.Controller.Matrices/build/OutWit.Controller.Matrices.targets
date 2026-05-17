@@ -1,0 +1,50 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Matrices NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+
+      Lifecycle:
+        1. Copy this package's content/module/*  →  $(OutputPath)@Controllers\<Cfg>\matrices.module\
+           so the controller runtime can find Matrices.dll, its Model dll, the
+           manifest, and any non-external resources.
+        2. Invoke ResolveControllerAssets (from OutWit.Engine.Assets.MSBuild,
+           which is a transitive PackageReference) to fetch any tier-2 external
+           assets declared in controller.json. For Matrices that is currently
+           rowMatrix.smat from a GitHub Release.
+
+      Tier-1 controllers without external assets only need the first target;
+      they reuse this same template shape with the second target trimmed
+      (or it no-ops cleanly because their controller.json has empty dataAssets[]).
+  -->
+
+  <PropertyGroup>
+    <_OutWitMatricesModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitMatricesModulePackageContent>
+    <_OutWitMatricesModuleOutputDir>$(OutputPath)@Controllers\$(Configuration)\matrices.module\</_OutWitMatricesModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyMatricesModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitMatricesModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitMatricesFiles Include="$(_OutWitMatricesModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitMatricesFiles)"
+        DestinationFiles="@(_OutWitMatricesFiles->'$(_OutWitMatricesModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Matrices: staged module to '$(_OutWitMatricesModuleOutputDir)'." />
+  </Target>
+
+  <Target Name="OutWitResolveMatricesAssets"
+          AfterTargets="OutWitCopyMatricesModule"
+          Condition="Exists('$(_OutWitMatricesModuleOutputDir)controller.json')">
+    <ResolveControllerAssetsTask
+        ManifestPath="$(_OutWitMatricesModuleOutputDir)controller.json"
+        OutputPath="$(OutputPath)@Controllers\$(Configuration)\" />
+  </Target>
+
+</Project>
