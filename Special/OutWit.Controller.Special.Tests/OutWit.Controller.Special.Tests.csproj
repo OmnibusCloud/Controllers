@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	  <TargetFramework>net10.0</TargetFramework>
+	  <Nullable>enable</Nullable>
+	  <LangVersion>latest</LangVersion>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
+		<PackageReference Include="NUnit" Version="4.5.1" />
+		<PackageReference Include="NUnit3TestAdapter" Version="6.1.0" />
+		<PackageReference Include="NUnit.Analyzers" Version="4.12.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="coverlet.collector" Version="8.0.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="OutWit.Common.NUnit" Version="1.1.2" />
+		<PackageReference Include="OutWit.Engine.Sdk" Version="1.1.*" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\OutWit.Controller.Special\OutWit.Controller.Special.csproj" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+	<ItemGroup>
+       <ControllerFiles Include="$(SolutionDir)@Controllers\$(Configuration)\**\*" />
+		<ControllerFiles Remove="$(SolutionDir)@Controllers\$(Configuration)\render.module\**\*" />
+		<ControllerFiles Remove="$(SolutionDir)@Controllers\$(Configuration)\renderdcc.module\**\*" />
+	</ItemGroup>
+
+	<Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+      <Copy SourceFiles="@(ControllerFiles)" DestinationFiles="@(ControllerFiles->'$(TargetDir)@Controllers\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+	</Target>
+
+</Project>

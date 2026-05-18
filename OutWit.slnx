@@ -2,23 +2,28 @@
   <Folder Name="/Grid/">
     <Project Path="Grid/OutWit.Controller.Grid/OutWit.Controller.Grid.csproj" />
     <Project Path="Grid/OutWit.Controller.Grid.Model/OutWit.Controller.Grid.Model.csproj" />
+    <Project Path="Grid/OutWit.Controller.Grid.Tests/OutWit.Controller.Grid.Tests.csproj" />
   </Folder>
   <Folder Name="/Variables/">
     <Project Path="Variables/OutWit.Controller.Variables/OutWit.Controller.Variables.csproj" />
     <Project Path="Variables/OutWit.Controller.Variables.Model/OutWit.Controller.Variables.Model.csproj" />
+    <Project Path="Variables/OutWit.Controller.Variables.Tests/OutWit.Controller.Variables.Tests.csproj" />
   </Folder>
   <Folder Name="/Special/">
     <Project Path="Special/OutWit.Controller.Special/OutWit.Controller.Special.csproj" />
+    <Project Path="Special/OutWit.Controller.Special.Tests/OutWit.Controller.Special.Tests.csproj" />
   </Folder>
   <Folder Name="/Matrices/">
     <Project Path="Matrices/OutWit.Controller.Matrices/OutWit.Controller.Matrices.csproj" />
     <Project Path="Matrices/OutWit.Controller.Matrices.Model/OutWit.Controller.Matrices.Model.csproj" />
+    <Project Path="Matrices/OutWit.Controller.Matrices.Tests/OutWit.Controller.Matrices.Tests.csproj" />
   </Folder>
   <Folder Name="/Render/">
     <Project Path="Render/OutWit.Controller.Render/OutWit.Controller.Render.csproj" />
     <Project Path="Render/OutWit.Controller.Render.Model/OutWit.Controller.Render.Model.csproj" />
     <Project Path="Render/OutWit.Controller.Render.Dcc/OutWit.Controller.Render.Dcc.csproj" />
     <Project Path="Render/OutWit.Controller.Render.Dcc.Model/OutWit.Controller.Render.Dcc.Model.csproj" />
+    <Project Path="Render/OutWit.Controller.Render.Dcc.Model.Tests/OutWit.Controller.Render.Dcc.Model.Tests.csproj" />
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="Tools/OutWit.Controller.Pack/OutWit.Controller.Pack.csproj" />
