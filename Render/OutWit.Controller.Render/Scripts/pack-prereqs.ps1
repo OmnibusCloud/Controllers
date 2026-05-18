@@ -95,17 +95,23 @@ $ErrorActionPreference = 'Stop'
 
 # ---- Defaults ---------------------------------------------------------------
 
+# Script lives at Controllers/Render/OutWit.Controller.Render/Scripts/.
+# Defaults resolve relative to that:
+#   ..\..\..\..\..\OutWit\WitEngine\@Prerequisites   - sibling WitEngine repo
+#   ..\..\..\dist\render-v<Version>                  - Controllers/dist
+#   ..\OutWit.Controller.Render.csproj               - the parent csproj
+
 if (-not $Prerequisites) {
-    $Prerequisites = Resolve-Path (Join-Path $PSScriptRoot '..\..\..\OutWit\WitEngine\@Prerequisites') -ErrorAction SilentlyContinue
+    $Prerequisites = Resolve-Path (Join-Path $PSScriptRoot '..\..\..\..\..\OutWit\WitEngine\@Prerequisites') -ErrorAction SilentlyContinue
     if (-not $Prerequisites) {
-        $Prerequisites = Join-Path $PSScriptRoot '..\..\..\OutWit\WitEngine\@Prerequisites'
+        $Prerequisites = Join-Path $PSScriptRoot '..\..\..\..\..\OutWit\WitEngine\@Prerequisites'
     }
 }
 if (-not $Output) {
-    $Output = Join-Path $PSScriptRoot "..\dist\render-v$Version"
+    $Output = Join-Path $PSScriptRoot "..\..\..\dist\render-v$Version"
 }
 if (-not $Csproj) {
-    $Csproj = Resolve-Path (Join-Path $PSScriptRoot '..\Render\OutWit.Controller.Render\OutWit.Controller.Render.csproj')
+    $Csproj = Resolve-Path (Join-Path $PSScriptRoot '..\OutWit.Controller.Render.csproj')
 }
 
 Write-Host "Render prereqs packer" -ForegroundColor Cyan
