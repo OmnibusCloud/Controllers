@@ -153,14 +153,15 @@ namespace OutWit.Controller.Matrices.Tests.Activities
             Assert.That(() => WitEngineSdk.Instance.Compile(script), Throws.InstanceOf<WitEngineActivityParsingException<WitActivityMatrixGustavsonMultiply>>());
         }
 
-        // SDK retrieves matrix-multiply outputs from the activity result
-        // pool with a different concrete type than the full engine wraps
-        // them in — the IWitVector<double> InstanceOf assertion that
-        // succeeds under the full engine fails here. Ignored until the
-        // SDK matches the engine's result-shape contract. The same
-        // assertion in WitActivityVectorTests etc. passes, so this is
-        // specific to the matrix-multiply pipeline.
-        [Test, Ignore("SDK matrix-multiply result type differs from full engine; under investigation.")]
+        // SDK strips Wit type wrappers when extracting activity results
+        // from the variable pool: expected IWitVector<double>, got the
+        // underlying double[]. Full WitEngine preserves the wrappers.
+        // Either SDK should match full-engine wrapping behavior, or the
+        // assertion needs to accept either shape. The matrix-multiply
+        // pipeline is the only one in this test suite that surfaces this
+        // because it's the only one that round-trips a custom Wit-type
+        // collection through the SDK's serializer.
+        [Test, Ignore("SDK unwraps IWitVector<double> to double[]; SDK serializer needs to preserve Wit-type wrappers like the full engine.")]
         public async Task ProcessingTest()
         {
             var matrix1 = MatrixUtils.RandomMatrix(10, 7);
@@ -196,8 +197,8 @@ namespace OutWit.Controller.Matrices.Tests.Activities
             }
         }
 
-        // Same SDK result-shape divergence as ProcessingTest above.
-        [Test, Ignore("SDK matrix-multiply result type differs from full engine; under investigation.")]
+        // Same SDK-vs-full-engine result-shape divergence as ProcessingTest.
+        [Test, Ignore("SDK unwraps IWitVector<double> to double[]; SDK serializer needs to preserve Wit-type wrappers like the full engine.")]
         public async Task ProcessingLoopTest()
         {
             var matrix1 = MatrixUtils.RandomMatrix(10, 7);
