@@ -24,6 +24,7 @@
     <Project Path="Render/OutWit.Controller.Render.Dcc/OutWit.Controller.Render.Dcc.csproj" />
     <Project Path="Render/OutWit.Controller.Render.Dcc.Model/OutWit.Controller.Render.Dcc.Model.csproj" />
     <Project Path="Render/OutWit.Controller.Render.Dcc.Model.Tests/OutWit.Controller.Render.Dcc.Model.Tests.csproj" />
+    <Project Path="Render/OutWit.Controller.Render.Tests/OutWit.Controller.Render.Tests.csproj" />
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="Tools/OutWit.Controller.Pack/OutWit.Controller.Pack.csproj" />

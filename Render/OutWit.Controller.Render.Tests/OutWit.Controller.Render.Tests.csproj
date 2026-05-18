@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
+    <PackageReference Include="NUnit" Version="4.5.1" />
+    <PackageReference Include="NUnit3TestAdapter" Version="6.1.0" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.12.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" Version="8.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="OutWit.Common.NUnit" Version="1.1.2" />
+    <PackageReference Include="OutWit.Engine.Sdk" Version="1.1.*" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.Render\OutWit.Controller.Render.csproj" />
+    <ProjectReference Include="..\OutWit.Controller.Render.Model\OutWit.Controller.Render.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ControllerFiles Include="$(SolutionDir)@Controllers\$(Configuration)\**\*" />
+    <!-- Render production scripts (RenderStill.wit, RenderFrames.wit, etc.) live in the
+         Render controller source tree and are read by RenderProductionScriptBlenderTests
+         via RenderTestAssetPaths.FindBundledScriptsPath() which walks up looking for
+         "@Scripts/$(Configuration)". Stage them into the test bin so the walker finds them. -->
+    <RenderScriptFiles Include="..\OutWit.Controller.Render\Scripts\*.wit" />
+  </ItemGroup>
+
+  <Target Name="PreBuild" BeforeTargets="BeforeBuild">
+    <Copy SourceFiles="@(ControllerFiles)" DestinationFiles="@(ControllerFiles->'$(TargetDir)@Controllers\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+    <Copy SourceFiles="@(RenderScriptFiles)" DestinationFiles="@(RenderScriptFiles->'$(TargetDir)@Scripts\$(Configuration)\%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+  </Target>
+
+</Project>

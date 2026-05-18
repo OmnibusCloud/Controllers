@@ -151,4 +151,31 @@
 
   <Import Project="..\..\Build\OutWit.Controller.targets" />
 
+  <!-- Local-dev convenience: when @Prerequisites/benchmark/render/*.blend exists at the
+       solution root (the same set that ResolveControllerAssetsTask would extract for
+       a consumer installing the published nupkg), stage them into the module bin so
+       integration tests can find them at module root. This is the local equivalent of
+       running pack-render-prereqs; published consumers get the same layout via the
+       asset resolver. Skipped silently when @Prerequisites/benchmark is absent. -->
+  <PropertyGroup>
+    <!-- Resolved relative to the csproj so this works for "dotnet build csproj"
+         as well as IDE / .slnx builds (the latter sets $(SolutionDir) but the
+         former does not). The render controller lives at
+         Controllers/Render/OutWit.Controller.Render, so two parents up is the
+         repo root that owns @Prerequisites. -->
+    <RenderPrereqsRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\@Prerequisites'))</RenderPrereqsRoot>
+  </PropertyGroup>
+
+  <Target Name="StageBenchmarkPrereqsIntoModule"
+          AfterTargets="ControllerPostBuild"
+          Condition="Exists('$(RenderPrereqsRoot)\benchmark\render')">
+    <ItemGroup>
+      <RenderBenchmarkPrereqFile Include="$(RenderPrereqsRoot)\benchmark\render\*.blend" />
+    </ItemGroup>
+    <Copy SourceFiles="@(RenderBenchmarkPrereqFile)"
+          DestinationFolder="$(ControllerModuleOutputDir)"
+          SkipUnchangedFiles="true"
+          OverwriteReadOnlyFiles="true" />
+  </Target>
+
 </Project>

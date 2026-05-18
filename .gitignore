@@ -59,6 +59,17 @@ artifacts/
 @Zips/
 dist/
 
+# Local-only test fixtures: large .blend scenes, golden renders,
+# blender / ffmpeg runtime binaries. Tests `Assert.Ignore` when
+# these are missing — CI stays green, but a local dev with these
+# folders populated can run the full Render.Tests suite. See
+# Render/OutWit.Controller.Render.Tests/README.md for layout.
+@Prerequisites/
+@Data/
+
+# Per-project test output (NUnit/MSTest trx files, coverage reports)
+TestResults/
+
 # Auto-generated files by Visual Studio
 *.dbmdl
 *.pdb
