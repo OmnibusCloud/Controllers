@@ -26,9 +26,9 @@
 
     <!-- PackageId inherits the csproj filename by default
          (OutWit.Controller.<Name>.Model.csproj -> OutWit.Controller.<Name>.Model). -->
-    <Authors>OutWit</Authors>
+    <Authors>Dmitry Ratner</Authors>
     <Company>OutWit</Company>
-    <Copyright>Copyright 2025 OutWit</Copyright>
+    <Copyright>Copyright © $([System.DateTime]::UtcNow.Year) Dmitry Ratner</Copyright>
     <PackageProjectUrl>https://witengine.io/</PackageProjectUrl>
     <RepositoryUrl>https://github.com/OmnibusCloud/Controllers</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
