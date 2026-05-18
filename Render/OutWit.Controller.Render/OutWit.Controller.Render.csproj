@@ -168,7 +168,10 @@
 
   <Target Name="StageBenchmarkPrereqsIntoModule"
           AfterTargets="ControllerPostBuild"
-          Condition="Exists('$(RenderPrereqsRoot)\benchmark\render')">
+          Condition="'$(Configuration)' != 'Release' And Exists('$(RenderPrereqsRoot)\benchmark\render')">
+    <!-- Debug-only: skipped on Release so 'dotnet pack' never inlines benchmark
+         scenes into the nupkg's content/module/ (published consumers fetch them
+         via the asset resolver from the gh-release URL declared above). -->
     <ItemGroup>
       <RenderBenchmarkPrereqFile Include="$(RenderPrereqsRoot)\benchmark\render\*.blend" />
     </ItemGroup>
