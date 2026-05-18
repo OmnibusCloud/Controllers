@@ -546,6 +546,128 @@ namespace OutWit.Controller.Grid.Tests
             }
         }
 
+        [Test]
+        public void ForEachIncludesReferencedHostVariablesInPoolTest()
+        {
+            // Positive case for the scope-filter: when the transformer references
+            // one outer-scope variable by name, that one must be present in each
+            // per-task pool. Other declared-but-unreferenced outer variables
+            // must still be filtered out.
+            var manager = new MockNodesManager();
+            var controllersPath = FindControllersPath()
+                                  ?? throw new DirectoryNotFoundException("@Controllers directory not found");
+
+            WitEngineSdk.Instance.Reload(Guid.NewGuid(), manager, false, null, controllersPath);
+
+            try
+            {
+                var script = """
+                             Job:TestJob()
+                             {
+                                 Object:kept = Object("kept-value");
+                                 Object:dropped1 = Object("dropped-value-1");
+                                 Object:dropped2 = Object("dropped-value-2");
+
+                                 Grid.ForEach(item in [10, 20]) => Trace(kept);
+                             }
+                             """;
+                var job = WitEngineSdk.Instance.Compile(script);
+                var task = WitEngineSdk.Instance.ScheduleProcessing(job);
+
+                var resetEvent = new AutoResetEvent(false);
+                task.ProcessingFinished += (_, __) => resetEvent.Set();
+                task.Run();
+                resetEvent.WaitOne();
+
+                Assert.That(task.Status?.Result, Is.EqualTo(WitProcessingResult.Completed));
+                Assert.That(manager.LastBatchRequests, Is.Not.Null);
+                Assert.That(manager.LastBatchRequests, Is.Not.Empty);
+
+                foreach (var request in manager.LastBatchRequests!)
+                {
+                    var variableNames = request.Pool.Select(me => me.Name).ToArray();
+
+                    Assert.Multiple(() =>
+                    {
+                        Assert.That(variableNames, Contains.Item("item"),
+                            "Iteration variable 'item' must always be in the pool.");
+                        Assert.That(variableNames, Contains.Item("kept"),
+                            "Transformer references 'kept' — scope filter must keep it.");
+                        Assert.That(variableNames, Does.Not.Contain("dropped1"),
+                            "'dropped1' is declared but not referenced — scope filter must drop it.");
+                        Assert.That(variableNames, Does.Not.Contain("dropped2"),
+                            "'dropped2' is declared but not referenced — scope filter must drop it.");
+                    });
+                }
+            }
+            finally
+            {
+                WitEngineSdk.Instance.Reload(Guid.NewGuid(), new MockNodesManager(), false, null, controllersPath);
+            }
+        }
+
+        [Test]
+        public void ForEachWalksArrayParameterForReferencesTest()
+        {
+            // Exercises the recursive walker path for arrays-of-references:
+            // Zip's Values property is IWitParameter[], so each Zip(a, b, c)
+            // parses as an array of references. The walker must descend into
+            // the array, collect every IWitReference name, and let all of
+            // them through the pool filter while still dropping any unreferenced
+            // sibling host variables.
+            var manager = new MockNodesManager();
+            var controllersPath = FindControllersPath()
+                                  ?? throw new DirectoryNotFoundException("@Controllers directory not found");
+
+            WitEngineSdk.Instance.Reload(Guid.NewGuid(), manager, false, null, controllersPath);
+
+            try
+            {
+                var script = """
+                             Job:TestJob()
+                             {
+                                 IntCollection:c1 = Int.Range(0, 3);
+                                 IntCollection:c2 = Int.Range(10, 13);
+                                 IntCollection:unused = Int.Range(100, 103);
+
+                                 TupleCollection:result = Grid.ForEach(item in [10, 20]) => Zip(c1, c2);
+                             }
+                             """;
+                var job = WitEngineSdk.Instance.Compile(script);
+                var task = WitEngineSdk.Instance.ScheduleProcessing(job);
+
+                var resetEvent = new AutoResetEvent(false);
+                task.ProcessingFinished += (_, __) => resetEvent.Set();
+                task.Run();
+                resetEvent.WaitOne();
+
+                Assert.That(task.Status?.Result, Is.EqualTo(WitProcessingResult.Completed),
+                    $"Job did not complete cleanly: {task.Status?.Message}");
+                Assert.That(manager.LastBatchRequests, Is.Not.Null);
+                Assert.That(manager.LastBatchRequests, Is.Not.Empty);
+
+                foreach (var request in manager.LastBatchRequests!)
+                {
+                    var variableNames = request.Pool.Select(me => me.Name).ToArray();
+
+                    Assert.Multiple(() =>
+                    {
+                        Assert.That(variableNames, Contains.Item("item"));
+                        Assert.That(variableNames, Contains.Item("c1"),
+                            "Zip(c1, c2) — walker must descend into Values[] and find c1.");
+                        Assert.That(variableNames, Contains.Item("c2"),
+                            "Zip(c1, c2) — walker must descend into Values[] and find c2.");
+                        Assert.That(variableNames, Does.Not.Contain("unused"),
+                            "'unused' is declared but not referenced — filter must drop it.");
+                    });
+                }
+            }
+            finally
+            {
+                WitEngineSdk.Instance.Reload(Guid.NewGuid(), new MockNodesManager(), false, null, controllersPath);
+            }
+        }
+
         private static string? FindControllersPath()
         {
             var dir = AppContext.BaseDirectory;
