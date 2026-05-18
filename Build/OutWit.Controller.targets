@@ -87,7 +87,18 @@
     </PropertyGroup>
     <WriteLinesToFile File="$(_EmptyLibMarker)" Lines="" Overwrite="true" />
     <ItemGroup>
-      <_PackedModuleFile Include="$(ControllerModuleOutputDir)**\*" />
+      <!-- Resources/ is excluded from the published nupkg by convention.
+           For Tier-2 controllers whose Resources/ holds external assets
+           (declared as <ControllerDataAsset>) those bytes already ship via
+           the matching GitHub Release and would be redundant inside the
+           nupkg — duplicating them here would have ballooned Matrices'
+           nupkg from 56KB to 41MB. For Tier-1 controllers (no external
+           assets) Resources/ is currently empty in source so nothing
+           changes. If a controller ever needs to ship inline resources,
+           it should opt in explicitly via a per-csproj <None Pack="true">
+           item rather than relying on the convention staging path. -->
+      <_PackedModuleFile Include="$(ControllerModuleOutputDir)**\*"
+                         Exclude="$(ControllerModuleOutputDir)Resources\**" />
       <TfmSpecificPackageFile Include="@(_PackedModuleFile)">
         <PackagePath>content/module/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
       </TfmSpecificPackageFile>
