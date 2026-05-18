@@ -23,5 +23,7 @@
   <Folder Name="/Tools/">
     <Project Path="Tools/OutWit.Controller.Pack/OutWit.Controller.Pack.csproj" />
     <Project Path="Tools/OutWit.Controller.Pack.Tests/OutWit.Controller.Pack.Tests.csproj" />
+    <Project Path="Tools/OutWit.Controller.Assets.Pack/OutWit.Controller.Assets.Pack.csproj" />
+    <Project Path="Tools/OutWit.Controller.Assets.Pack.Tests/OutWit.Controller.Assets.Pack.Tests.csproj" />
   </Folder>
 </Solution>

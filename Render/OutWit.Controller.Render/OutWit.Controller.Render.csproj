@@ -64,6 +64,8 @@
       <Sha256>a88bf3b06c00c3671e8771e1723996c0bd6b145fccc073ffb80f87085be657ad</Sha256>
       <Size>422542714</Size>
       <ExtractTo>blender/windows-x64/</ExtractTo>
+      <PackSource>blender/windows-x64</PackSource>
+      <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="blender-linux-x64">
       <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
@@ -71,6 +73,8 @@
       <Sha256>b9c50827f4225661bc0bd797313019ca1b237614acbb33a72785a25b0b19a59d</Sha256>
       <Size>713058475</Size>
       <ExtractTo>blender/linux-x64/</ExtractTo>
+      <PackSource>blender/linux-x64</PackSource>
+      <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="blender-osx-arm64">
       <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
@@ -78,6 +82,8 @@
       <Sha256>36e438f32a09edc6f31c005d43c214f4949f64011bba96a9030dc0d33b6669c6</Sha256>
       <Size>307634282</Size>
       <ExtractTo>blender/macos-arm64/</ExtractTo>
+      <PackSource>blender/macos-arm64</PackSource>
+      <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
 
     <ControllerDataAsset Include="ffmpeg-win-x64">
@@ -86,6 +92,8 @@
       <Sha256>794228c90b4ecc51391ab56325b575d502751b53f08459e8ab6818ad7944da8d</Sha256>
       <Size>257347010</Size>
       <ExtractTo>ffmpeg/windows-x64/</ExtractTo>
+      <PackSource>ffmpeg/windows-x64</PackSource>
+      <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="ffmpeg-linux-x64">
       <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
@@ -93,6 +101,8 @@
       <Sha256>b7b0f701bcad83319464872e8d6f9d20f7c3e66ab07cfb7ae16d566be7882c55</Sha256>
       <Size>220763221</Size>
       <ExtractTo>ffmpeg/linux-x64/</ExtractTo>
+      <PackSource>ffmpeg/linux-x64</PackSource>
+      <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="ffmpeg-osx-arm64">
       <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
@@ -100,6 +110,8 @@
       <Sha256>00e925890a72e0a843e3e55ac5ca45eb7dd172f0105d9a74b88a15a2f0c4bc89</Sha256>
       <Size>82042941</Size>
       <ExtractTo>ffmpeg/macos-arm64/</ExtractTo>
+      <PackSource>ffmpeg/macos-arm64</PackSource>
+      <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
 
     <ControllerDataAsset Include="benchmark-scene">
@@ -108,6 +120,8 @@
       <Sha256>70bf04eb4323c085ec9a354126a49c5f476c5d301246f6f47d0e9a4addd296af</Sha256>
       <Size>124563</Size>
       <ExtractTo>.</ExtractTo>
+      <PackSource>benchmark/render/benchmark_scene.blend</PackSource>
+      <PackKind>single-file</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="benchmark-scene-still">
       <RuntimeIdentifier>any</RuntimeIdentifier>
@@ -115,6 +129,8 @@
       <Sha256>70bf04eb4323c085ec9a354126a49c5f476c5d301246f6f47d0e9a4addd296af</Sha256>
       <Size>124563</Size>
       <ExtractTo>.</ExtractTo>
+      <PackSource>benchmark/render/benchmark_scene_still.blend</PackSource>
+      <PackKind>single-file</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="benchmark-scene-video">
       <RuntimeIdentifier>any</RuntimeIdentifier>
@@ -122,6 +138,8 @@
       <Sha256>5b29fe72000f2706022a2416980fe025ce109b780cdf15dc60aad9c9ae64160c</Sha256>
       <Size>126205</Size>
       <ExtractTo>.</ExtractTo>
+      <PackSource>benchmark/render/benchmark_scene_video.blend</PackSource>
+      <PackKind>single-file</PackKind>
     </ControllerDataAsset>
   </ItemGroup>
 

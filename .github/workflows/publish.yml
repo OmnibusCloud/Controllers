@@ -165,8 +165,11 @@ jobs:
               cp Matrices/OutWit.Controller.Matrices/Resources/largeMatrix.smat dist/
               ;;
             OutWit.Controller.Render)
-              # TODO Step 12 — fetch Blender + FFmpeg per platform.
-              echo "Render asset prep not yet implemented."
+              # Render Tier-2: author publishes the GitHub Release locally
+              # using outwit-assets-pack BEFORE triggering this workflow.
+              # The release must already exist with the 9 expected artifacts;
+              # this case-branch only verifies that, it does not upload.
+              echo "(Render assets are author-uploaded via outwit-assets-pack; verifying release...)"
               ;;
             *)
               echo "(no external assets for ${{ env.PROJECT }})"
@@ -218,6 +221,45 @@ jobs:
           files: dist/*
           fail_on_unmatched_files: true
           make_latest: legacy
+
+      # Render (and any future Tier-2 controller that author-uploads its
+      # release) ships a nupkg whose controller.json references gh-release://
+      # URIs. If the release tag doesn't exist or any expected asset is
+      # missing, the published nupkg is broken for every consumer. Fail
+      # loudly BEFORE the nuget.org push so we never end up in that state.
+      - name: Verify Tier-2 release assets exist (Render)
+        if: inputs.pushToNuGet && env.PROJECT == 'OutWit.Controller.Render'
+        shell: bash
+        run: |
+          set -e
+          tag="${{ steps.paths.outputs.tag }}"
+          expected=(
+            blender-windows-x64.zip
+            blender-linux-x64.zip
+            blender-macos-arm64.zip
+            ffmpeg-windows-x64.zip
+            ffmpeg-linux-x64.zip
+            ffmpeg-macos-arm64.zip
+            benchmark_scene.blend
+            benchmark_scene_still.blend
+            benchmark_scene_video.blend
+          )
+          missing=0
+          for asset in "${expected[@]}"; do
+            url="https://github.com/${{ github.repository }}/releases/download/${tag}/${asset}"
+            code=$(curl -s -L -o /dev/null -w "%{http_code}" "$url")
+            if [ "$code" = "200" ]; then
+              echo "  OK   $asset"
+            else
+              echo "  FAIL $asset  (HTTP $code at $url)"
+              missing=$((missing+1))
+            fi
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo ""
+            echo "::error::$missing asset(s) missing on release '$tag'. Run outwit-assets-pack --push-release locally first."
+            exit 1
+          fi
 
       - name: Add GitHub Packages source
         if: inputs.pushToGitHubPackages

@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <PackageId>OutWit.Controller.Assets.Pack</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Dmitry Ratner</Authors>
+    <Company>OutWit</Company>
+    <Copyright>Copyright © $([System.DateTime]::UtcNow.Year) Dmitry Ratner</Copyright>
+    <PackageProjectUrl>https://witengine.io/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/OmnibusCloud/Controllers</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>WitEngine-logo.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <Description>CLI for Tier-2 controller authors. Reads a controller csproj's ControllerDataAsset declarations, packs the matching @Prerequisites contents as zip / single-file artifacts, computes SHA256, rewrites the csproj with the new SHA/Size/Uri, and (optionally) creates or updates the matching GitHub Release with all assets uploaded. Author-side counterpart to OutWit.Engine.Assets.MSBuild's ResolveControllerAssetsTask.</Description>
+    <PackageTags>witengine;controllers;packaging;tier-2;github-release;witcloud;dotnet-tool</PackageTags>
+
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>outwit-assets-pack</ToolCommandName>
+    <RootNamespace>OutWit.Controller.Assets.Pack</RootNamespace>
+    <AssemblyName>outwit-assets-pack</AssemblyName>
+
+    <GeneratePackageOnBuild Condition=" '$(Configuration)' == 'Release' ">true</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommandLineParser" Version="2.9.1" />
+    <PackageReference Include="OutWit.Common.CommandLine" Version="1.0.*" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.201">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE"            Pack="true" PackagePath="\" />
+    <None Include="..\..\WitEngine-logo.png" Pack="true" PackagePath="\" />
+    <None Include="README.md"                Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
