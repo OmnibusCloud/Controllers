@@ -493,16 +493,7 @@ namespace OutWit.Controller.Grid.Tests
             Assert.That(job.Variables["collection"].Value, Is.EqualTo(new object[] { 10, 20, 30 }));
         }
 
-        // SDK plugin-loader collision (FileLoadException) was fixed in
-        // OutWit.Common.Plugins 1.1.7 + WitEngine.Sdk 1.1.1. The test now
-        // reaches the runtime, but a second SDK gap surfaces: when ForEach
-        // batches activities for node execution, SDK packs the *entire*
-        // outer-scope variable pool into each WitNodeTaskRequest. Full
-        // WitEngine performs scope analysis and only sends variables the
-        // batch's activities actually reference. This optimisation is what
-        // the test asserts ('scene' and 'options' must not be in the
-        // payload). Needs SDK-side improvement in batch processing.
-        [Test, Ignore("SDK batch payload skips variable-scope filtering; full engine sends only referenced variables.")]
+        [Test]
         public void ForEachDoesNotSendUnrelatedOuterPoolVariablesToNodesTest()
         {
             var manager = new MockNodesManager();
