@@ -13,13 +13,7 @@ namespace OutWit.Controller.Matrices.Tests.Benchmark
             WitEngineNodeSdk.Instance.Reload(false);
         }
 
-        // Loads rowMatrix.smat via the adapter's own resource resolver,
-        // which expects <assembly-dir>/Resources/<file>. Under the closed
-        // engine that path resolves through the controller-loader; the
-        // SDK loads modules with a different working dir, so the file is
-        // not visible at the expected location. Ignored until the SDK's
-        // module-resource-resolution path matches the full engine's.
-        [Test, Ignore("SDK module-resource path resolution differs from full engine; asset not found.")]
+        [Test]
         public async Task SparseGustavsonBenchmarkTest()
         {
             var result =

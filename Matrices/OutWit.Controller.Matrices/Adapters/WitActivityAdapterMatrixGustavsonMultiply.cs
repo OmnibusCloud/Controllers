@@ -142,26 +142,58 @@ namespace OutWit.Controller.Matrices.Adapters
             return (row, matrix);
         }
 
-        // Loads a benchmark dataset from the controller's module Resources/ dir
-        // next to the assembly. OutWit.Engine.Assets stages these files during
-        // build (asset resolver fetches them from the controller's GitHub Release
-        // and extracts into <consumer-output>/@Controllers/<Cfg>/matrices.module/Resources/).
+        // Loads a benchmark dataset from the controller's module Resources/ dir.
+        // OutWit.Engine.Assets stages these files during build:
+        //   - Tier-2 NuGet consumer path: ResolveControllerAssetsTask fetches
+        //     from the controller's GitHub Release and extracts into
+        //     <consumer-output>/@Controllers/<Cfg>/matrices.module/Resources/.
+        //   - In-solution ProjectReference path (tests): shared
+        //     OutWit.Controller.targets stages the source Resources/ folder
+        //     into @Controllers/<Cfg>/matrices.module/Resources/ at build time.
+        //
+        // The probe-walk handles both scenarios uniformly. Cannot use
+        // typeof(...).Assembly.Location alone — under ProjectReference the
+        // adapter DLL is loaded from the test's bin (where AssemblyLoadContext
+        // serves the project copy), not from @Controllers/matrices.module/.
+        // Same multi-root pattern Render's RenderBenchmarkHelper uses.
         private static byte[] LoadModuleResource(string filename)
         {
+            foreach (var root in EnumerateModuleRoots())
+            {
+                var path = Path.Combine(root, RESOURCES_DIRECTORY_NAME, filename);
+                if (File.Exists(path))
+                    return File.ReadAllBytes(path);
+            }
+
+            throw new FileNotFoundException(
+                $"Matrices controller resource '{filename}' not found in any candidate " +
+                $"module location. Searched: " +
+                string.Join(", ", EnumerateModuleRoots()) +
+                ". The file should have been staged into matrices.module/Resources/ " +
+                "either by ResolveControllerAssetsTask (consumer build) or by the " +
+                "shared OutWit.Controller.targets PostBuild (in-solution build).");
+        }
+
+        private static IEnumerable<string> EnumerateModuleRoots()
+        {
+            // The adapter's own assembly location — works in the normal product
+            // case where the engine plugin loader loaded Matrices.dll from
+            // @Controllers/<Cfg>/matrices.module/ directly.
             var assemblyDir = Path.GetDirectoryName(typeof(WitActivityAdapterMatrixGustavsonMultiply).Assembly.Location);
-            if (string.IsNullOrEmpty(assemblyDir))
-                throw new InvalidOperationException(
-                    "Cannot resolve the Matrices controller assembly location for module-resource loading.");
+            if (!string.IsNullOrEmpty(assemblyDir))
+                yield return assemblyDir;
 
-            var path = Path.Combine(assemblyDir, RESOURCES_DIRECTORY_NAME, filename);
-            if (!File.Exists(path))
-                throw new FileNotFoundException(
-                    $"Matrices controller resource '{filename}' not found at '{path}'. " +
-                    "The file should have been staged by OutWit.Engine.Assets' " +
-                    "ResolveControllerAssetsTask during consumer build.",
-                    path);
-
-            return File.ReadAllBytes(path);
+            // Walk up from AppContext.BaseDirectory looking for a staged
+            // @Controllers/<Cfg>/matrices.module/ folder. This covers the
+            // in-solution ProjectReference test case where Assembly.Location
+            // points at the test bin, not at the module folder.
+            var dir = AppContext.BaseDirectory;
+            while (!string.IsNullOrEmpty(dir))
+            {
+                yield return Path.Combine(dir, "@Controllers", "Debug", "matrices.module");
+                yield return Path.Combine(dir, "@Controllers", "Release", "matrices.module");
+                dir = Path.GetDirectoryName(dir);
+            }
         }
 
         protected override double EstimateWork(WitActivityMatrixGustavsonMultiply activity, IWitVariablesCollection pool)
