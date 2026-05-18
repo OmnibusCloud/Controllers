@@ -1,0 +1,43 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Grid NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+
+      Tier-1 controller: no external data assets. Only step is to copy this
+      package's content/module/* into $(OutputPath)@Controllers\<Cfg>\grid.module\
+      so the controller runtime can find Grid.dll, its Model dll, and the manifest.
+      The ResolveControllerAssetsTask call still fires but no-ops cleanly because
+      controller.json declares an empty dataAssets[].
+  -->
+
+  <PropertyGroup>
+    <_OutWitGridModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitGridModulePackageContent>
+    <_OutWitGridModuleOutputDir>$(OutputPath)@Controllers\$(Configuration)\grid.module\</_OutWitGridModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyGridModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitGridModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitGridFiles Include="$(_OutWitGridModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitGridFiles)"
+        DestinationFiles="@(_OutWitGridFiles->'$(_OutWitGridModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Grid: staged module to '$(_OutWitGridModuleOutputDir)'." />
+  </Target>
+
+  <Target Name="OutWitResolveGridAssets"
+          AfterTargets="OutWitCopyGridModule"
+          Condition="Exists('$(_OutWitGridModuleOutputDir)controller.json')">
+    <ResolveControllerAssetsTask
+        ManifestPath="$(_OutWitGridModuleOutputDir)controller.json"
+        OutputPath="$(OutputPath)@Controllers\$(Configuration)\" />
+  </Target>
+
+</Project>

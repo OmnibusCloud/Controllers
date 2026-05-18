@@ -1,29 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="..\..\Build\OutWit.Controller.props" />
+
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
-    <WitEngineRoot Condition="'$(SolutionDir)' != ''">$(SolutionDir)</WitEngineRoot>
-    <WitEngineRoot Condition="'$(WitEngineRoot)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\..\'))</WitEngineRoot>
-    <RenderDccModuleOutputDir>$(WitEngineRoot)@Controllers\$(Configuration)\renderdcc.module\</RenderDccModuleOutputDir>
-    <RenderDccZipOutputDir>$(WitEngineRoot)@Zips\$(Configuration)\</RenderDccZipOutputDir>
     <ControllerName>RenderDcc</ControllerName>
-    <Version>1.0.2</Version>
-    <Description>Host-only neutral DCC scene validation and .blend build bootstrap activities that sit upstream of the render controller.</Description>
-    <Authors>OutWit</Authors>
-    <Copyright>Copyright 2025 OutWit</Copyright>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageTags>render;dcc;3dsmax;scene-build;host-only</PackageTags>
+    <Version>1.0.3</Version>
+    <Description>Host-only neutral DCC scene validation and .blend build bootstrap activities that sit upstream of the OutWit.Controller.Render controller.</Description>
+    <PackageTags>render;dcc;3dsmax;scene-build;host-only;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>dcc-build-blend-from-scene;dcc-contract-validation</ControllerFeatures>
     <ControllerUseCases>DCC scene import;Neutral scene validation;Upstream blend generation bootstrap</ControllerUseCases>
   </PropertyGroup>
 
-  <Import Project="..\..\Build\OutWit.Controller.Manifest.targets" />
-
   <ItemGroup>
-    <PackageReference Include="OutWit.Engine.Data" Version="1.1.*" />
     <ProjectReference Include="..\OutWit.Controller.Render.Dcc.Model\OutWit.Controller.Render.Dcc.Model.csproj" />
   </ItemGroup>
 
@@ -32,27 +20,21 @@
     <ControllerDependency Include="Render" MinimumVersion="1.15.0" />
   </ItemGroup>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <ItemGroup>
-      <RenderDccModuleFiles Include="$(TargetDir)$(TargetName).dll" />
-      <RenderDccModuleFiles Include="$(TargetDir)$(TargetName).dll.config" Condition="Exists('$(TargetDir)$(TargetName).dll.config')" />
-      <RenderDccModuleFiles Include="$(TargetDir)$(TargetName).deps.json" />
-      <RenderDccModuleFiles Include="$(TargetDir)OutWit.Controller.Render.Dcc.Model.dll" Condition="Exists('$(TargetDir)OutWit.Controller.Render.Dcc.Model.dll')" />
-      <RenderDccModuleFiles Include="$(TargetDir)OutWit.Controller.Render.Dcc.Model.deps.json" Condition="Exists('$(TargetDir)OutWit.Controller.Render.Dcc.Model.deps.json')" />
-      <RenderDccModuleFiles Include="$(TargetDir)**\$(TargetName).resources.dll" />
-      <RenderDccModuleFiles Include="$(ControllerManifestOutputPath)" />
-      <RenderDccModuleFiles Include="$(ProjectDir)README.md" Condition="Exists('$(ProjectDir)README.md')" />
-    </ItemGroup>
+  <!-- The DCC Model.dll's primary home is render.module/ (it ships there via
+       Render.Dcc.Model.csproj's PostBuild), but RenderDcc-the-controller's
+       own .module folder needs it at runtime too — bundle it alongside
+       Render.Dcc.dll so the consumer's renderdcc.module/ is self-contained. -->
+  <ItemGroup>
+    <ControllerModuleFile Include="$(TargetDir)OutWit.Controller.Render.Dcc.Model.dll" Condition="Exists('$(TargetDir)OutWit.Controller.Render.Dcc.Model.dll')" />
+    <ControllerModuleFile Include="$(TargetDir)OutWit.Controller.Render.Dcc.Model.deps.json" Condition="Exists('$(TargetDir)OutWit.Controller.Render.Dcc.Model.deps.json')" />
+  </ItemGroup>
 
-    <MakeDir Directories="$(RenderDccModuleOutputDir)" />
-    <Copy SourceFiles="@(RenderDccModuleFiles)" DestinationFolder="$(RenderDccModuleOutputDir)" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
-  </Target>
+  <!-- Consumer-side build/.targets — ships in the nupkg's build/ folder
+       and auto-imports into any csproj that PackageReferences this. -->
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.Render.Dcc.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
 
-  <Target Name="PackZip" AfterTargets="PostBuild">
-    <MakeDir Directories="$(RenderDccZipOutputDir)" />
-    <ZipDirectory SourceDirectory="$(RenderDccModuleOutputDir)"
-                  DestinationFile="$(RenderDccZipOutputDir)render-dcc.zip"
-                  Overwrite="true" />
-  </Target>
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
 
 </Project>

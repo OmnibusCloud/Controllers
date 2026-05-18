@@ -1,0 +1,41 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Special NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+
+      Tier-1 controller: no external data assets. Only step is to copy this
+      package's content/module/* into $(OutputPath)@Controllers\<Cfg>\special.module\
+      so the controller runtime can find Special.dll and the manifest.
+  -->
+
+  <PropertyGroup>
+    <_OutWitSpecialModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitSpecialModulePackageContent>
+    <_OutWitSpecialModuleOutputDir>$(OutputPath)@Controllers\$(Configuration)\special.module\</_OutWitSpecialModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopySpecialModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitSpecialModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitSpecialFiles Include="$(_OutWitSpecialModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitSpecialFiles)"
+        DestinationFiles="@(_OutWitSpecialFiles->'$(_OutWitSpecialModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Special: staged module to '$(_OutWitSpecialModuleOutputDir)'." />
+  </Target>
+
+  <Target Name="OutWitResolveSpecialAssets"
+          AfterTargets="OutWitCopySpecialModule"
+          Condition="Exists('$(_OutWitSpecialModuleOutputDir)controller.json')">
+    <ResolveControllerAssetsTask
+        ManifestPath="$(_OutWitSpecialModuleOutputDir)controller.json"
+        OutputPath="$(OutputPath)@Controllers\$(Configuration)\" />
+  </Target>
+
+</Project>

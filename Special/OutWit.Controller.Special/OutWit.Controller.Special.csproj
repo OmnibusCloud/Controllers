@@ -1,24 +1,19 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.props" />
 
   <PropertyGroup>
-	  <TargetFramework>net10.0</TargetFramework>
-	  <Nullable>enable</Nullable>
-	  <LangVersion>latest</LangVersion>
     <ControllerName>Special</ControllerName>
-    <Version>1.0.1</Version>
-    <Description>Control flow activities: loops, conditionals, parallel execution, timers, and diagnostics.</Description>
-    <Authors>OutWit</Authors>
-    <Copyright>Copyright 2025 OutWit</Copyright>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageTags>control-flow;loops;parallel;diagnostics</PackageTags>
+    <Version>1.0.2</Version>
+    <Description>Control flow activities for the WitEngine runtime — loops, conditionals, parallel execution, timers, and diagnostics.</Description>
+    <PackageTags>control-flow;loops;parallel;diagnostics;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>if;loop;foreach;parallel-foreach;parallel-invoke;timer;trace;delayed</ControllerFeatures>
     <ControllerUseCases>Workflow control flow;Parallel processing;Diagnostics</ControllerUseCases>
   </PropertyGroup>
 
-  <Import Project="..\..\Build\OutWit.Controller.Manifest.targets" />
-
+  <!-- Runtime dependency on the Variables controller, surfaced in controller.json. -->
   <ItemGroup>
-    <PackageReference Include="OutWit.Engine.Data" Version="1.1.*" />
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -36,28 +31,12 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <!-- Consumer-side build/.targets — ships in the nupkg's build/ folder
+       and auto-imports into any csproj that PackageReferences this. -->
   <ItemGroup>
-    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
-    <SpecialModuleFiles Include="$(TargetDir)$(TargetName).dll" />
-    <SpecialModuleFiles Include="$(TargetDir)$(TargetName).dll.config" Condition="Exists('$(TargetDir)$(TargetName).dll.config')" />
-    <SpecialModuleFiles Include="$(TargetDir)$(TargetName).deps.json" />
-    <SpecialModuleFiles Include="$(TargetDir)**\$(TargetName).resources.dll" />
-    <SpecialModuleFiles Include="$(ControllerManifestOutputPath)" />
+    <None Include="build\OutWit.Controller.Special.targets" Pack="true" PackagePath="build\" />
   </ItemGroup>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Copy
-            SourceFiles="@(SpecialModuleFiles)"
-            DestinationFolder="$(SolutionDir)@Controllers\$(Configuration)\special.module\"
-            SkipUnchangedFiles="true"
-            OverwriteReadOnlyFiles="true" />
-  </Target>
-
-  <Target Name="PackZip" AfterTargets="PostBuild">
-    <MakeDir Directories="$(SolutionDir)@Zips\$(Configuration)\" />
-    <ZipDirectory SourceDirectory="$(SolutionDir)@Controllers\$(Configuration)\special.module\"
-                  DestinationFile="$(SolutionDir)@Zips\$(Configuration)\special.zip"
-                  Overwrite="true" />
-  </Target>
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
 
 </Project>

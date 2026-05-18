@@ -1,0 +1,41 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Render.Dcc NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+
+      Tier-1 controller: no external data assets. Only step is to copy this
+      package's content/module/* into $(OutputPath)@Controllers\<Cfg>\renderdcc.module\
+      so the controller runtime can find Render.Dcc.dll, its Model dll, and the manifest.
+  -->
+
+  <PropertyGroup>
+    <_OutWitRenderDccModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitRenderDccModulePackageContent>
+    <_OutWitRenderDccModuleOutputDir>$(OutputPath)@Controllers\$(Configuration)\renderdcc.module\</_OutWitRenderDccModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyRenderDccModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitRenderDccModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitRenderDccFiles Include="$(_OutWitRenderDccModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitRenderDccFiles)"
+        DestinationFiles="@(_OutWitRenderDccFiles->'$(_OutWitRenderDccModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Render.Dcc: staged module to '$(_OutWitRenderDccModuleOutputDir)'." />
+  </Target>
+
+  <Target Name="OutWitResolveRenderDccAssets"
+          AfterTargets="OutWitCopyRenderDccModule"
+          Condition="Exists('$(_OutWitRenderDccModuleOutputDir)controller.json')">
+    <ResolveControllerAssetsTask
+        ManifestPath="$(_OutWitRenderDccModuleOutputDir)controller.json"
+        OutputPath="$(OutputPath)@Controllers\$(Configuration)\" />
+  </Target>
+
+</Project>

@@ -1,32 +1,26 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <Nullable>enable</Nullable>
-        <LangVersion>latest</LangVersion>
-    </PropertyGroup>
+  <Import Project="..\..\Build\OutWit.Controller.Model.props" />
 
-    <ItemGroup>
-        <PackageReference Include="OutWit.Common" Version="1.3.2" />
-        <PackageReference Include="OutWit.Common.MemoryPack" Version="1.1.4" />
-        <PackageReference Include="OutWit.Engine.Interfaces" Version="1.1.*" />
-    </ItemGroup>
+  <PropertyGroup>
+    <ControllerName>Grid</ControllerName>
+    <Version>1.0.0</Version>
+    <Description>Shared task and allocator types for the OutWit.Controller.Grid controller — host-side in adapters, node-side in distributed batch processing.</Description>
+    <PackageTags>grid;layout;foreach;witengine;witcloud;controller;data-types</PackageTags>
+  </PropertyGroup>
 
-    <ItemGroup>
-        <GridModuleFiles Include="$(TargetDir)$(TargetName).dll" />
-        <GridModuleFiles Include="$(TargetDir)$(TargetName).dll.config" Condition="Exists('$(TargetDir)$(TargetName).dll.config')" />
-        <GridModuleFiles Include="$(TargetDir)$(TargetName).deps.json" />
-        <GridModuleFiles Include="$(TargetDir)**\$(TargetName).resources.dll" />
-    </ItemGroup>
+  <!-- Grid.Model also needs OutWit.Engine.Interfaces on top of the common Model deps. -->
+  <ItemGroup>
+    <PackageReference Include="OutWit.Engine.Interfaces" Version="1.1.*" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <Compile Remove="Builders\**" />
-      <EmbeddedResource Remove="Builders\**" />
-      <None Remove="Builders\**" />
-    </ItemGroup>
+  <!-- Builders subtree is host-only and excluded from the published Model assembly. -->
+  <ItemGroup>
+    <Compile Remove="Builders\**" />
+    <EmbeddedResource Remove="Builders\**" />
+    <None Remove="Builders\**" />
+  </ItemGroup>
 
-    <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-        <Copy SourceFiles="@(GridModuleFiles)" DestinationFolder="$(SolutionDir)@Controllers\$(Configuration)\grid.module\" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
-    </Target>
+  <Import Project="..\..\Build\OutWit.Controller.Model.targets" />
 
 </Project>
