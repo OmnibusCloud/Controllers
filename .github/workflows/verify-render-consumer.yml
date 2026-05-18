@@ -1,0 +1,136 @@
+name: Verify Render consumer
+run-name: "Verify Render v${{ inputs.version }}"
+
+# Manual end-to-end verification of a published OutWit.Controller.Render
+# package. Creates a throw-away consumer csproj that PackageReferences the
+# specified version, runs dotnet build, and asserts that every one of the
+# nine ControllerDataAssets (Blender + FFmpeg per RID + 3 benchmark scenes)
+# landed in @Controllers/Debug/render.module/ where the runtime expects it.
+#
+# Trust boundary check: the consumer pulls everything from nuget.org +
+# the render-v<version> GitHub Release. No local @Prerequisites paths,
+# no manual file copies — exactly what an end-user / WitCloud server
+# experiences after a fresh install.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'OutWit.Controller.Render version to verify (e.g. 1.15.1). Use * for latest.'
+        required: false
+        default: '*'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Stage throw-away consumer project
+        run: |
+          mkdir -p /tmp/render-consumer
+          cd /tmp/render-consumer
+          cat > Consumer.csproj <<EOF
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFramework>net10.0</TargetFramework>
+              <Nullable>enable</Nullable>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="OutWit.Controller.Render" Version="${{ inputs.version }}" />
+            </ItemGroup>
+          </Project>
+          EOF
+          cat > Program.cs <<'EOF'
+          Console.WriteLine("render-consumer-verify");
+          EOF
+          echo "Consumer.csproj:"
+          cat Consumer.csproj
+
+      - name: Build (triggers ResolveControllerAssetsTask -> fetches all 9 assets)
+        working-directory: /tmp/render-consumer
+        run: dotnet build Consumer.csproj -c Debug -v normal
+
+      - name: Show resolved module layout
+        run: |
+          MODULE=/tmp/render-consumer/bin/Debug/net10.0/@Controllers/Debug/render.module
+          echo "Module dir: $MODULE"
+          echo ""
+          echo "Top-level contents:"
+          ls -la "$MODULE" || { echo "render.module/ missing"; exit 1; }
+          echo ""
+          echo "blender/:"
+          ls "$MODULE/blender" || echo "(blender/ missing)"
+          echo ""
+          echo "ffmpeg/:"
+          ls "$MODULE/ffmpeg" || echo "(ffmpeg/ missing)"
+
+      - name: Assert nine expected artifacts
+        run: |
+          set -e
+          MODULE=/tmp/render-consumer/bin/Debug/net10.0/@Controllers/Debug/render.module
+
+          check() {
+            local what="$1" path="$2"
+            if [ -f "$path" ]; then
+              echo "  OK   $what  ($path)"
+            else
+              echo "  FAIL $what  ($path)"
+              return 1
+            fi
+          }
+
+          echo ""
+          echo "Asserting .NET runtime parts:"
+          check "render dll"          "$MODULE/OutWit.Controller.Render.dll"
+          check "render model dll"    "$MODULE/OutWit.Controller.Render.Model.dll"
+          check "controller.json"     "$MODULE/controller.json"
+
+          echo ""
+          echo "Asserting Blender per RID:"
+          check "blender windows-x64" "$MODULE/blender/windows-x64/blender.exe"
+          check "blender linux-x64"   "$MODULE/blender/linux-x64/blender"
+          check "blender macos-arm64" "$MODULE/blender/macos-arm64/Blender.app/Contents/MacOS/Blender"
+
+          echo ""
+          echo "Asserting FFmpeg per RID:"
+          check "ffmpeg windows-x64"  "$MODULE/ffmpeg/windows-x64/ffmpeg.exe"
+          check "ffmpeg linux-x64"    "$MODULE/ffmpeg/linux-x64/ffmpeg"
+          check "ffmpeg macos-arm64"  "$MODULE/ffmpeg/macos-arm64/ffmpeg"
+
+          echo ""
+          echo "Asserting benchmark scenes:"
+          check "benchmark"           "$MODULE/benchmark_scene.blend"
+          check "benchmark still"     "$MODULE/benchmark_scene_still.blend"
+          check "benchmark video"     "$MODULE/benchmark_scene_video.blend"
+
+          echo ""
+          echo "All 9 ControllerDataAssets resolved + extracted correctly."
+
+      # Optional smoke tests — bare ubuntu may lack libs Blender needs (libgl, ...),
+      # so a non-zero exit doesn't fail the workflow. FFmpeg is more self-contained
+      # and a real failure here means the binary itself is broken in the zip.
+      - name: Smoke test (linux ffmpeg --version)
+        continue-on-error: true
+        run: |
+          set -e
+          FFMPEG=/tmp/render-consumer/bin/Debug/net10.0/@Controllers/Debug/render.module/ffmpeg/linux-x64/ffmpeg
+          chmod +x "$FFMPEG"
+          "$FFMPEG" -version | head -3
+
+      - name: Smoke test (linux blender --version, best-effort)
+        continue-on-error: true
+        run: |
+          set -e
+          BLENDER=/tmp/render-consumer/bin/Debug/net10.0/@Controllers/Debug/render.module/blender/linux-x64/blender
+          chmod +x "$BLENDER"
+          "$BLENDER" --version || echo "(blender exit non-zero — likely missing system libs on bare ubuntu, ignore)"

@@ -1,0 +1,51 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Render NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+
+      Tier-2 controller with per-platform external assets (Blender + FFmpeg
+      for win-x64 / linux-x64 / osx-arm64, plus three benchmark .blend files).
+
+      ResolveForAllPlatforms="true" is critical here: the typical consumer of
+      this package is a WitCloud-style server that distributes per-platform
+      binaries to worker nodes via WitRPC. The server needs every platform's
+      Blender + FFmpeg in its render.module/ folder, not just the host's RID,
+      so it can answer worker requests for any platform.
+
+      Without this flag the task would default to fetching only the current
+      host's RID-matching assets — which is the right default for end-user
+      packages but wrong for distribution-host packages like Render.
+  -->
+
+  <PropertyGroup>
+    <_OutWitRenderModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitRenderModulePackageContent>
+    <_OutWitRenderModuleOutputDir>$(OutputPath)@Controllers\$(Configuration)\render.module\</_OutWitRenderModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyRenderModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitRenderModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitRenderFiles Include="$(_OutWitRenderModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitRenderFiles)"
+        DestinationFiles="@(_OutWitRenderFiles->'$(_OutWitRenderModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Render: staged module to '$(_OutWitRenderModuleOutputDir)'." />
+  </Target>
+
+  <Target Name="OutWitResolveRenderAssets"
+          AfterTargets="OutWitCopyRenderModule"
+          Condition="Exists('$(_OutWitRenderModuleOutputDir)controller.json')">
+    <ResolveControllerAssetsTask
+        ManifestPath="$(_OutWitRenderModuleOutputDir)controller.json"
+        OutputPath="$(OutputPath)@Controllers\$(Configuration)\"
+        ResolveForAllPlatforms="true" />
+  </Target>
+
+</Project>
