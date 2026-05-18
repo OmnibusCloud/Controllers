@@ -153,22 +153,14 @@ namespace OutWit.Controller.Matrices.Tests.Activities
             Assert.That(() => WitEngineSdk.Instance.Compile(script), Throws.InstanceOf<WitEngineActivityParsingException<WitActivityMatrixGustavsonMultiply>>());
         }
 
-        // SDK strips Wit type wrappers when extracting activity results
-        // from the variable pool: expected IWitVector<double>, got the
-        // underlying double[]. Full WitEngine preserves the wrappers.
-        // Either SDK should match full-engine wrapping behavior, or the
-        // assertion needs to accept either shape. The matrix-multiply
-        // pipeline is the only one in this test suite that surfaces this
-        // because it's the only one that round-trips a custom Wit-type
-        // collection through the SDK's serializer.
-        [Test, Ignore("SDK unwraps IWitVector<double> to double[]; SDK serializer needs to preserve Wit-type wrappers like the full engine.")]
+        [Test]
         public async Task ProcessingTest()
         {
             var matrix1 = MatrixUtils.RandomMatrix(10, 7);
             var mathNetMatrix1 = matrix1.ToMathNetMatrix();
             var matrix2 = MatrixUtils.RandomMatrix(7, 10);
             var mathNetMatrix2 = matrix2.ToMathNetMatrix();
-            
+
             var mul = mathNetMatrix1 * mathNetMatrix2;
 
             var script = """
@@ -190,15 +182,19 @@ namespace OutWit.Controller.Matrices.Tests.Activities
                 Assert.That(result, Is.Not.Null);
                 Assert.That(result.Length, Is.EqualTo(2));
                 Assert.That(result[0], Is.EqualTo(i));
-                Assert.That(result[1], Is.InstanceOf<IWitVector<double>>());
+                // The adapter packs row payloads as primitive double[] for
+                // cross-process safety (different plugin load contexts could
+                // ship different IWitVector implementations). IWitVector<double>
+                // implements IReadOnlyList<double>, so the assertion accepts
+                // either shape without losing the row-content guarantee below.
+                Assert.That(result[1], Is.InstanceOf<IReadOnlyList<double>>());
 
-                var resultVector = (IWitVector<double>)result[1];
+                var resultVector = (IReadOnlyList<double>)result[1];
                 Assert.That(resultVector.ToArray(), Is.EqualTo(mul.Row(i)));
             }
         }
 
-        // Same SDK-vs-full-engine result-shape divergence as ProcessingTest.
-        [Test, Ignore("SDK unwraps IWitVector<double> to double[]; SDK serializer needs to preserve Wit-type wrappers like the full engine.")]
+        [Test]
         public async Task ProcessingLoopTest()
         {
             var matrix1 = MatrixUtils.RandomMatrix(10, 7);
@@ -239,9 +235,10 @@ namespace OutWit.Controller.Matrices.Tests.Activities
                 Assert.That(rowResult, Is.Not.Null);
                 Assert.That(rowResult.Length, Is.EqualTo(2));
                 Assert.That(rowResult[0], Is.EqualTo(i));
-                Assert.That(rowResult[1], Is.InstanceOf<IWitVector<double>>());
+                // See ProcessingTest above for the IReadOnlyList<double> rationale.
+                Assert.That(rowResult[1], Is.InstanceOf<IReadOnlyList<double>>());
 
-                var resultVector = (IWitVector<double>)rowResult[1];
+                var resultVector = (IReadOnlyList<double>)rowResult[1];
                 Assert.That(resultVector.ToArray(), Is.EqualTo(mul.Row(i)));
                 i++;
             }
