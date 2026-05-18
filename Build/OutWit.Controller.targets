@@ -39,6 +39,34 @@
           OverwriteReadOnlyFiles="true" />
   </Target>
 
+  <!-- Convention: any file under <ProjectDir>/Resources/ at build time gets
+       staged into <module>/Resources/ with the same relative path. This is
+       what makes ProjectReference-based test scenarios complete — the
+       adapter's runtime resource loader can find the file at
+       <assembly-dir>/Resources/<file> just like it would after a consumer
+       installed the published nupkg + ran ResolveControllerAssetsTask.
+
+       For Tier-2 controllers, the same files are also declared as
+       <ControllerDataAsset> (with gh-release:// Uri) so published consumers
+       fetch them from a GitHub Release rather than carrying them inline.
+       Local dev / in-solution tests use this staging path; consumers use
+       the asset resolver. Both end up with the same on-disk layout.
+
+       Skipped silently when the controller has no Resources/ folder. -->
+  <ItemGroup>
+    <ControllerSourceResourceFile Include="$(ProjectDir)Resources\**\*"
+                                  Condition="Exists('$(ProjectDir)Resources')" />
+  </ItemGroup>
+
+  <Target Name="ControllerStageSourceResources"
+          AfterTargets="ControllerPostBuild"
+          Condition="@(ControllerSourceResourceFile->Count()) &gt; 0">
+    <Copy SourceFiles="@(ControllerSourceResourceFile)"
+          DestinationFiles="@(ControllerSourceResourceFile->'$(ControllerModuleOutputDir)Resources\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          OverwriteReadOnlyFiles="true" />
+  </Target>
+
   <!-- Zips the staged module dir into $(SolutionDir)@Zips/<Cfg>/<name>.zip.
        Used by the BlobCacheService path on WitCloud server-side. -->
   <Target Name="ControllerPackZip" AfterTargets="ControllerPostBuild">

@@ -40,7 +40,7 @@
 	</ItemGroup>
 
 
-	<Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+	<Target Name="PreBuild" BeforeTargets="BeforeBuild">
       <Copy SourceFiles="@(ControllerFiles)" DestinationFiles="@(ControllerFiles->'$(TargetDir)@Controllers\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
 	</Target>
 
