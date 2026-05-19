@@ -1,0 +1,114 @@
+<!--
+    Build/OutWit.Controller.Tests.props
+
+    Shared test-project boilerplate for controller test csprojs. Import this
+    near the top of OutWit.Controller.<Name>.Tests.csproj and the rest of the
+    csproj only needs to declare:
+
+      1. <ProjectReference> to the controller under test.
+
+      2. <ProjectReference ReferenceOutputAssembly="false" Private="false"> to
+         every controller this test's runtime needs (each [WitPluginDependency]
+         on the controller under test). These build-only references trigger
+         each dependency's ControllerPostBuild to populate
+         $(SolutionDir)@Controllers/<Cfg>/<name>.module/ BEFORE this target
+         globs that directory.
+
+      3. Optional: <ExcludedControllerModule Include="render.module" /> items
+         to skip specific modules during the test-bin staging copy (Tier-1
+         tests typically exclude render.module / renderdcc.module to keep
+         the test build lean).
+
+      4. Any per-test extras: extra <PackageReference>, additional
+         <ProjectReference Include="..." />, custom targets, etc.
+
+    Renders three groups of settings:
+
+    A. SDK boilerplate (TargetFramework, Nullable, LangVersion, IsPackable=false,
+       IsTestProject=true) that every controller test csproj sets identically.
+
+    B. The full set of common test PackageReferences (Microsoft.NET.Test.Sdk,
+       NUnit suite, OutWit.Common.NUnit, OutWit.Engine.Sdk floating 1.1.*).
+
+    C. The PreBuild staging target that copies the populated
+       @Controllers\<Cfg>\ tree (minus @(ExcludedControllerModule) items) into
+       the test bin's @Controllers\ subfolder. The discovery happens INSIDE
+       the target so that ProjectReference-triggered builds of sibling
+       controllers populate @Controllers\ before the glob runs.
+
+    A self-resolving fallback for $(SolutionDir) (walks up to find OutWit.slnx)
+    is set on import so direct `dotnet test ./X.Tests.csproj` works without a
+    prior `dotnet build OutWit.slnx`. The legacy solution-build path also works
+    unchanged (MSBuild's pre-set $(SolutionDir) takes precedence over the
+    fallback).
+
+    Render.Dcc.Model.Tests deliberately does NOT import this — it's a pure
+    data-model test project that doesn't drive a runtime engine. The
+    Tools/*.Tests projects also stay on their own minimal csprojs.
+-->
+<Project>
+
+  <PropertyGroup>
+    <SolutionDir Condition="'$(SolutionDir)' == '' Or '$(SolutionDir)' == '*Undefined*'">$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory), 'OutWit.slnx'))\</SolutionDir>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
+    <PackageReference Include="NUnit" Version="4.5.1" />
+    <PackageReference Include="NUnit3TestAdapter" Version="6.1.0" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.12.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" Version="8.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="OutWit.Common.NUnit" Version="1.1.2" />
+    <PackageReference Include="OutWit.Engine.Sdk" Version="1.1.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <!-- Stage every controller module from $(SolutionDir)@Controllers\<Cfg>\
+       into the test bin's @Controllers\ subfolder so the SDK can find sibling
+       modules at test runtime.
+
+       Discovery (Include) is INSIDE the target rather than at project-evaluation
+       time so the glob runs AFTER ProjectReference-triggered builds have
+       populated @Controllers\. With the old file-level ItemGroup pattern the
+       glob ran at evaluation, before sibling controllers were built, and
+       silently picked up an empty directory.
+
+       Per-csproj <ExcludedControllerModule Include="render.module"/> items
+       drive the Remove step. -->
+  <Target Name="OutWitStageControllersForTests"
+          BeforeTargets="BeforeBuild"
+          DependsOnTargets="ResolveProjectReferences">
+    <!-- DependsOnTargets="ResolveProjectReferences" forces all <ProjectReference>
+         builds to complete first. Without it, our target fires before sibling
+         controllers' ControllerPostBuild has populated @Controllers\<Cfg>\, so
+         the glob below picks up an empty list. -->
+    <ItemGroup>
+      <_StagedControllerFile Include="$(SolutionDir)@Controllers\$(Configuration)\**\*" />
+      <_StagedControllerFile Remove="$(SolutionDir)@Controllers\$(Configuration)\%(ExcludedControllerModule.Identity)\**\*"
+                              Condition="'@(ExcludedControllerModule)' != ''" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_StagedControllerFile)"
+          DestinationFiles="@(_StagedControllerFile->'$(TargetDir)@Controllers\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          OverwriteReadOnlyFiles="true" />
+  </Target>
+
+</Project>

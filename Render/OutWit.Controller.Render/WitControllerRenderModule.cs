@@ -17,7 +17,17 @@ namespace OutWit.Controller.Render;
 /// </summary>
 [WitPluginManifest(ControllerBuildInfo.NAME, Version = ControllerBuildInfo.VERSION)]
 [WitPluginDependency("Variables", MinimumVersion = "1.0.0")]
-[WitPluginDependency("Grid", MinimumVersion = "1.0.0")]
+// NB: Grid is also a runtime dependency of this controller's bundled scripts
+// (every multi-frame Render script uses Grid.ForEach to dispatch Render.Frame),
+// declared in the csproj as <ControllerDependency Include="Grid"> so the
+// manifest emits it for consumer-side NuGet / asset resolution. It is
+// intentionally NOT added here as a [WitPluginDependency] because that
+// attribute is enforced uniformly on both host- and node-side plugin loaders,
+// and Grid is host-only (IWitControllerHost only). Declaring it would cause
+// WitEngineNodeSdk to fail validation: it can't find a node-side Grid plugin
+// since Grid doesn't implement IWitControllerNode. The host-side WitEngineSdk
+// resolves Grid via script parsing (Grid.ForEach activity lookup) at job
+// compile time, not via plugin-dependency attribute.
 public class WitControllerRenderModule : WitPluginBase, IWitControllerNode, IWitControllerHost
 {
     #region Initialization

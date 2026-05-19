@@ -22,6 +22,17 @@
 <Project>
 
   <PropertyGroup>
+    <!-- Solution-relative paths in OutWit.Controller.targets (ControllerPostBuild,
+         ControllerPackZip, etc.) used to assume $(SolutionDir) was set by
+         `dotnet build OutWit.slnx`. Agent-driven workflows invoke
+         `dotnet build ./X.csproj` or `dotnet test ./X.Tests.csproj` directly
+         where $(SolutionDir) is undefined and the @Controllers / @Zips
+         staging paths collapse next to the csproj. Resolve the solution root
+         explicitly by walking up to OutWit.slnx so both invocation styles work. -->
+    <SolutionDir Condition="'$(SolutionDir)' == '' Or '$(SolutionDir)' == '*Undefined*'">$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory), 'OutWit.slnx'))\</SolutionDir>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

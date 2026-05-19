@@ -1,27 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
-    <PackageReference Include="NUnit" Version="4.5.1" />
-    <PackageReference Include="NUnit3TestAdapter" Version="6.1.0" />
-    <PackageReference Include="NUnit.Analyzers" Version="4.12.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="coverlet.collector" Version="8.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="OutWit.Common.NUnit" Version="1.1.2" />
-    <PackageReference Include="OutWit.Engine.Sdk" Version="1.1.*" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.6" />
   </ItemGroup>
 
@@ -30,12 +11,26 @@
     <ProjectReference Include="..\OutWit.Controller.Render.Model\OutWit.Controller.Render.Model.csproj" />
   </ItemGroup>
 
+  <!-- Build-only references to controllers Render declares as runtime dependencies
+       via [WitPluginDependency]. ReferenceOutputAssembly=false means these projects
+       get built (so their PostBuild populates @Controllers/<Cfg>/<name>.module/) but
+       their DLLs do not get pulled into the test project's compile output. -->
   <ItemGroup>
-    <Using Include="NUnit.Framework" />
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <!-- Render.Tests deliberately keeps render.module/ — it is the system under test.
+       renderdcc.module/ is a separate controller with its own (pending migration)
+       test project; excluded so a prior `dotnet build OutWit.slnx` that populated
+       it into @Controllers\ does not bloat the test bin here. -->
+  <ItemGroup>
+    <ExcludedControllerModule Include="renderdcc.module" />
   </ItemGroup>
 
   <ItemGroup>
-    <ControllerFiles Include="$(SolutionDir)@Controllers\$(Configuration)\**\*" />
     <!-- Render production scripts (RenderStill.wit, RenderFrames.wit, etc.) live in the
          Render controller source tree and are read by RenderProductionScriptBlenderTests
          via RenderTestAssetPaths.FindBundledScriptsPath() which walks up looking for
@@ -43,9 +38,11 @@
     <RenderScriptFiles Include="..\OutWit.Controller.Render\Scripts\*.wit" />
   </ItemGroup>
 
-  <Target Name="PreBuild" BeforeTargets="BeforeBuild">
-    <Copy SourceFiles="@(ControllerFiles)" DestinationFiles="@(ControllerFiles->'$(TargetDir)@Controllers\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
-    <Copy SourceFiles="@(RenderScriptFiles)" DestinationFiles="@(RenderScriptFiles->'$(TargetDir)@Scripts\$(Configuration)\%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+  <Target Name="OutWitStageRenderScriptsForTests" BeforeTargets="BeforeBuild">
+    <Copy SourceFiles="@(RenderScriptFiles)"
+          DestinationFiles="@(RenderScriptFiles->'$(TargetDir)@Scripts\$(Configuration)\%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          OverwriteReadOnlyFiles="true" />
   </Target>
 
 </Project>

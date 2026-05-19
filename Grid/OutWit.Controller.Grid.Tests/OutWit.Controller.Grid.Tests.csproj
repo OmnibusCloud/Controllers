@@ -1,45 +1,28 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
-	<ItemGroup>
-		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
-		<PackageReference Include="NUnit" Version="4.5.1" />
-		<PackageReference Include="NUnit3TestAdapter" Version="6.1.0" />
-		<PackageReference Include="NUnit.Analyzers" Version="4.12.0">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="coverlet.collector" Version="8.0.0">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="OutWit.Common.NUnit" Version="1.1.2" />
-		<PackageReference Include="OutWit.Engine.Sdk" Version="1.1.*" />
-	</ItemGroup>
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
 
   <ItemGroup>
-	  <ProjectReference Include="..\..\Special\OutWit.Controller.Special\OutWit.Controller.Special.csproj" />
-	  <ProjectReference Include="..\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj" />
+    <!-- Special is also pulled in here because some Grid tests script-compose
+         Grid.ForEach with Special activities (Trace, etc.); its compile output
+         is actually used. Grid itself is the system under test. -->
+    <ProjectReference Include="..\..\Special\OutWit.Controller.Special\OutWit.Controller.Special.csproj" />
+    <ProjectReference Include="..\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj" />
   </ItemGroup>
 
+  <!-- Build-only references to controllers Grid declares as runtime dependencies
+       via [WitPluginDependency]. ReferenceOutputAssembly=false means these projects
+       get built (so their PostBuild populates @Controllers/<Cfg>/<name>.module/) but
+       their DLLs do not get pulled into the test project's compile output. -->
   <ItemGroup>
-    <Using Include="NUnit.Framework" />
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
-	<ItemGroup>
-       <ControllerFiles Include="$(SolutionDir)@Controllers\$(Configuration)\**\*" />
-		<ControllerFiles Remove="$(SolutionDir)@Controllers\$(Configuration)\render.module\**\*" />
-		<ControllerFiles Remove="$(SolutionDir)@Controllers\$(Configuration)\renderdcc.module\**\*" />
-	</ItemGroup>
-
-	<Target Name="PreBuild" BeforeTargets="BeforeBuild">
-      <Copy SourceFiles="@(ControllerFiles)" DestinationFiles="@(ControllerFiles->'$(TargetDir)@Controllers\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
-	</Target>
+  <!-- Tier-1 test: skip the heavy Render runtime modules. -->
+  <ItemGroup>
+    <ExcludedControllerModule Include="render.module" />
+    <ExcludedControllerModule Include="renderdcc.module" />
+  </ItemGroup>
 
 </Project>
