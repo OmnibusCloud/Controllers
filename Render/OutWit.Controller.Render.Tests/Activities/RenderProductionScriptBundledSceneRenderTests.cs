@@ -117,7 +117,7 @@ internal sealed class RenderProductionScriptBundledSceneRenderTests : RenderProd
             1,
             2,
             2,
-            CreateOptions(),
+            CreateOptions(width: 256, height: 256),
             CreateTileOptions());
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
@@ -129,7 +129,7 @@ internal sealed class RenderProductionScriptBundledSceneRenderTests : RenderProd
         Assert.That(File.Exists(storedPath), Is.True);
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderSceneStillTiled", RenderEngine.Cycles, 64, 64);
+        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderSceneStillTiled", RenderEngine.Cycles, 256, 256);
     }
 
     [Test]
@@ -144,7 +144,7 @@ internal sealed class RenderProductionScriptBundledSceneRenderTests : RenderProd
             1,
             2,
             2,
-            CreateOptions(),
+            CreateOptions(width: 256, height: 256),
             CreateTileOptions(4, TileBlendMode.AlphaBlend));
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
@@ -156,7 +156,7 @@ internal sealed class RenderProductionScriptBundledSceneRenderTests : RenderProd
         Assert.That(File.Exists(storedPath), Is.True);
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderSceneStillTiledOverlap", RenderEngine.Cycles, 64, 64);
+        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderSceneStillTiledOverlap", RenderEngine.Cycles, 256, 256);
     }
 
     [Test]
@@ -172,7 +172,7 @@ internal sealed class RenderProductionScriptBundledSceneRenderTests : RenderProd
             1,
             2,
             2,
-            CreateOptions(),
+            CreateOptions(width: 256, height: 256),
             CreateTileOptions());
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
@@ -184,7 +184,7 @@ internal sealed class RenderProductionScriptBundledSceneRenderTests : RenderProd
         Assert.That(File.Exists(storedPath), Is.True);
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderSceneStillTiledLarge", RenderEngine.Cycles, 64, 64);
+        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderSceneStillTiledLarge", RenderEngine.Cycles, 256, 256);
     }
 
     [Test]
@@ -200,7 +200,7 @@ internal sealed class RenderProductionScriptBundledSceneRenderTests : RenderProd
             1,
             2,
             2,
-            CreateOptions(),
+            CreateOptions(width: 256, height: 256),
             CreateTileOptions(4, TileBlendMode.AlphaBlend));
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
@@ -212,7 +212,7 @@ internal sealed class RenderProductionScriptBundledSceneRenderTests : RenderProd
         Assert.That(File.Exists(storedPath), Is.True);
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderSceneStillTiledLargeOverlap", RenderEngine.Cycles, 64, 64);
+        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderSceneStillTiledLargeOverlap", RenderEngine.Cycles, 256, 256);
     }
 
     [Test]

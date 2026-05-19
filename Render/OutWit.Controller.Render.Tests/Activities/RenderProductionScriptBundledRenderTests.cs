@@ -37,7 +37,7 @@ internal sealed class RenderProductionScriptBundledRenderTests : RenderProductio
             job,
             CreateSceneRef(sceneBlobId),
             1,
-            CreateOptions());
+            CreateOptions(width: 256, height: 256));
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
 
@@ -50,9 +50,7 @@ internal sealed class RenderProductionScriptBundledRenderTests : RenderProductio
             m_blobService.GetStoredPath(blobId.Value),
             m_solutionRoot!,
             "RenderStill",
-            RenderEngine.Cycles,
-            64,
-            64);
+            RenderEngine.Cycles, 256, 256);
     }
 
     [Test]
@@ -191,7 +189,7 @@ internal sealed class RenderProductionScriptBundledRenderTests : RenderProductio
             1,
             2,
             2,
-            CreateOptions(),
+            CreateOptions(width: 256, height: 256),
             CreateTileOptions());
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
@@ -203,7 +201,7 @@ internal sealed class RenderProductionScriptBundledRenderTests : RenderProductio
         Assert.That(File.Exists(storedPath), Is.True);
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderStillTiled", RenderEngine.Cycles, 64, 64);
+        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderStillTiled", RenderEngine.Cycles, 256, 256);
     }
 
     [Test]
@@ -219,7 +217,7 @@ internal sealed class RenderProductionScriptBundledRenderTests : RenderProductio
             1,
             2,
             2,
-            CreateOptions(),
+            CreateOptions(width: 256, height: 256),
             CreateTileOptions(4, TileBlendMode.AlphaBlend));
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
@@ -231,7 +229,7 @@ internal sealed class RenderProductionScriptBundledRenderTests : RenderProductio
         Assert.That(File.Exists(storedPath), Is.True);
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderStillTiledOverlap", RenderEngine.Cycles, 64, 64);
+        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderStillTiledOverlap", RenderEngine.Cycles, 256, 256);
     }
 
     [TestCase("RenderStillTiledCycles.wit", RenderEngine.Cycles)]

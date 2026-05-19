@@ -10,9 +10,9 @@ namespace OutWit.Controller.Render.Tests.Utils;
 ///
 /// Workflow:
 /// 1. Every test run writes the actual output to
-///    <c>@Output/GoldenCandidates/&lt;testKey&gt;_&lt;engine&gt;_&lt;WxH&gt;.png</c>
-///    plus a side-by-side <c>..._diff.png</c> visualisation (actual | golden |
-///    amplified-diff) so the operator can inspect what changed at a glance.
+///    <c>@Output/GoldenCandidates/&lt;testKey&gt;_&lt;engine&gt;_&lt;WxH&gt;.png</c>.
+///    When a golden exists, also writes a side-by-side <c>..._diff.png</c>
+///    (actual | golden | amplified diff) so a mismatch is easy to read.
 /// 2. The first time a test runs there is no golden — the assert reports
 ///    Ignore with the candidate path; the operator eyeballs the candidate and,
 ///    if it looks right, copies it to <c>@Prerequisites/render-golden/</c> (or
@@ -20,6 +20,9 @@ namespace OutWit.Controller.Render.Tests.Utils;
 /// 3. Subsequent runs compare against the golden using mean-absolute RGB
 ///    difference with a per-engine tolerance (Cycles is stochastic so the
 ///    band is wider; Eevee / GreasePencil are tighter).
+///
+/// Render tests author renders at 256x256 — large enough to inspect natively,
+/// small enough to keep test runtime modest.
 /// </summary>
 internal static class RenderGoldenFileAssert
 {
@@ -40,11 +43,6 @@ internal static class RenderGoldenFileAssert
     // tone shift becomes visible in the side-by-side image.
     private const int DIFF_AMPLIFICATION = 5;
 
-    // Render tests run at 64x64 for speed. That is unreadable to a human, so
-    // every candidate gets an upscaled-by-nearest-neighbor _preview / _diff
-    // companion for visual inspection. Promote copies the native-res file.
-    private const int PREVIEW_UPSCALE = 8;
-
     #endregion
 
     #region Functions
@@ -63,7 +61,6 @@ internal static class RenderGoldenFileAssert
         var candidateDir = Path.Combine(solutionRoot, CANDIDATE_ROOT_SUBPATH.Replace('/', Path.DirectorySeparatorChar));
         var goldenPath = Path.Combine(goldenDir, filename);
         var candidatePath = Path.Combine(candidateDir, filename);
-        var previewPath = Path.Combine(candidateDir, $"{baseName}_preview.png");
         var diffPath = Path.Combine(candidateDir, $"{baseName}_diff.png");
 
         if (!File.Exists(actualPath))
@@ -71,7 +68,6 @@ internal static class RenderGoldenFileAssert
 
         Directory.CreateDirectory(candidateDir);
         File.Copy(actualPath, candidatePath, overwrite: true);
-        WriteUpscaledPreview(actualPath, previewPath);
 
         if (ShouldUpdateGoldens())
         {
@@ -172,44 +168,21 @@ internal static class RenderGoldenFileAssert
             }
         }
 
-        // Composite: [actual | golden | diff] with an 8px black gutter
-        // between panels, upscaled by PREVIEW_UPSCALE so the diff is readable
-        // at the typical 64x64 render size.
+        // Composite: [actual | golden | diff] at native resolution with an
+        // 8px black gutter between panels. Renders are 256x256 now — wide
+        // enough to read directly without upscaling.
         const int gutter = 8;
-        var panelW = w * PREVIEW_UPSCALE;
-        var panelH = h * PREVIEW_UPSCALE;
-        var compositeWidth = panelW * 3 + gutter * 2;
-        using var actualUp = UpscaleNearestNeighbor(actual);
-        using var goldenUp = UpscaleNearestNeighbor(golden);
-        using var diffUp = UpscaleNearestNeighbor(diff);
-        using var composite = new Image<Rgba32>(compositeWidth, panelH, new Rgba32(0, 0, 0, 255));
+        var compositeWidth = w * 3 + gutter * 2;
+        using var composite = new Image<Rgba32>(compositeWidth, h, new Rgba32(0, 0, 0, 255));
         composite.Mutate(ctx =>
         {
-            ctx.DrawImage(actualUp, new Point(0, 0), 1f);
-            ctx.DrawImage(goldenUp, new Point(panelW + gutter, 0), 1f);
-            ctx.DrawImage(diffUp, new Point((panelW + gutter) * 2, 0), 1f);
+            ctx.DrawImage(actual, new Point(0, 0), 1f);
+            ctx.DrawImage(golden, new Point(w + gutter, 0), 1f);
+            ctx.DrawImage(diff, new Point((w + gutter) * 2, 0), 1f);
         });
 
         Directory.CreateDirectory(Path.GetDirectoryName(diffPath)!);
         composite.SaveAsPng(diffPath);
-    }
-
-    private static void WriteUpscaledPreview(string actualPath, string previewPath)
-    {
-        using var actual = Image.Load<Rgba32>(actualPath);
-        using var upscaled = UpscaleNearestNeighbor(actual);
-        Directory.CreateDirectory(Path.GetDirectoryName(previewPath)!);
-        upscaled.SaveAsPng(previewPath);
-    }
-
-    private static Image<Rgba32> UpscaleNearestNeighbor(Image<Rgba32> source)
-    {
-        var clone = source.Clone();
-        clone.Mutate(ctx => ctx.Resize(
-            source.Width * PREVIEW_UPSCALE,
-            source.Height * PREVIEW_UPSCALE,
-            KnownResamplers.NearestNeighbor));
-        return clone;
     }
 
     private static bool ShouldUpdateGoldens()

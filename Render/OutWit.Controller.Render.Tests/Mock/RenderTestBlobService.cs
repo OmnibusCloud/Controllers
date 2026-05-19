@@ -7,7 +7,7 @@ internal sealed class RenderTestBlobService : IWitBlobService
     #region Fields
 
     private readonly Dictionary<Guid, string> m_blobPaths = new();
-    private readonly string m_storagePath;
+    private string m_storagePath;
 
     #endregion
 
@@ -54,6 +54,18 @@ internal sealed class RenderTestBlobService : IWitBlobService
     #endregion
 
     #region Functions
+
+    /// <summary>
+    /// Swap to a fresh storage path and clear the in-memory blob registry.
+    /// Lets a long-lived service instance be reused across [SetUp]s without
+    /// re-registering itself in the engine's DI container.
+    /// </summary>
+    public void Reset(string storagePath)
+    {
+        m_storagePath = storagePath;
+        Directory.CreateDirectory(m_storagePath);
+        m_blobPaths.Clear();
+    }
 
     public Guid RegisterExistingFile(string path)
     {

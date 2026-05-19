@@ -76,18 +76,13 @@ internal abstract class RenderProductionScriptBlenderTestsBase
         m_cubeDioramaBlendPath = RenderTestAssetPaths.GetCubeDioramaScenePath(m_solutionRoot);
         // cube_diorama existence is checked per-test (only ~3 tests need it) so the rest
         // of the fixture stays runnable when @Data/cube_diorama is absent locally.
-    }
 
-    protected void RequireCubeDiorama()
-    {
-        if (m_cubeDioramaBlendPath == null || !File.Exists(m_cubeDioramaBlendPath))
-            Assert.Ignore($"Cube Diorama scene not found at {m_cubeDioramaBlendPath}");
-    }
-
-    [SetUp]
-    public void SetUp()
-    {
-        m_blobStoragePath = Path.Combine(Path.GetTempPath(), $"witcloud_render_blobtest_{Guid.NewGuid():N}");
+        // Build the blob service + engine once per fixture. The blob service
+        // is reused across all tests in the fixture and only resets its storage
+        // path per [SetUp] — that lets us keep the engine's DI container intact
+        // instead of reloading every controller plugin for each test, which
+        // used to dominate test time at ~4s/test of plugin reload overhead.
+        m_blobStoragePath = Path.Combine(Path.GetTempPath(), $"witcloud_render_blobtest_init_{Guid.NewGuid():N}");
         m_blobService = new RenderTestBlobService(m_blobStoragePath);
 
         WitEngineNodeSdk.Instance.Reload(
@@ -105,6 +100,24 @@ internal abstract class RenderProductionScriptBlenderTestsBase
                 services.AddSingleton<IWitBlobService>(m_blobService);
                 services.AddSingleton<IWitNodesManager>(new RenderTestNodesManager(WitEngineNodeSdk.Instance));
             });
+    }
+
+    protected void RequireCubeDiorama()
+    {
+        if (m_cubeDioramaBlendPath == null || !File.Exists(m_cubeDioramaBlendPath))
+            Assert.Ignore($"Cube Diorama scene not found at {m_cubeDioramaBlendPath}");
+    }
+
+    [SetUp]
+    public void SetUp()
+    {
+        var previousStoragePath = m_blobStoragePath;
+        m_blobStoragePath = Path.Combine(Path.GetTempPath(), $"witcloud_render_blobtest_{Guid.NewGuid():N}");
+        m_blobService.Reset(m_blobStoragePath);
+
+        // Drop the OneTimeSetUp's bootstrap storage dir on the first [SetUp].
+        if (previousStoragePath != null && Directory.Exists(previousStoragePath) && previousStoragePath.Contains("witcloud_render_blobtest_init_"))
+            Directory.Delete(previousStoragePath, recursive: true);
     }
 
     [TearDown]
@@ -136,15 +149,18 @@ internal abstract class RenderProductionScriptBlenderTestsBase
         };
     }
 
-    protected static RenderOptionsData CreateOptions(RenderEngine engine = RenderEngine.Cycles)
+    protected static RenderOptionsData CreateOptions(
+        RenderEngine engine = RenderEngine.Cycles,
+        int width = 64,
+        int height = 64)
     {
         return new RenderOptionsData
         {
             Format = RenderFormat.PNG,
             Engine = engine,
             Samples = 4,
-            ResolutionX = 64,
-            ResolutionY = 64
+            ResolutionX = width,
+            ResolutionY = height
         };
     }
 

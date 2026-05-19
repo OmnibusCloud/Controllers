@@ -95,8 +95,8 @@ public class BlenderRunnerIntegrationTests
             Format = RenderFormat.PNG,
             Engine = RenderEngine.Cycles,
             Samples = 4,
-            ResolutionX = 64,
-            ResolutionY = 64
+            ResolutionX = 256,
+            ResolutionY = 256
         };
 
         var outputBase = Path.Combine(m_outputDir, "render_");
@@ -107,7 +107,7 @@ public class BlenderRunnerIntegrationTests
 
         var solutionRoot = RenderTestAssetPaths.FindSolutionRoot()
                            ?? throw new DirectoryNotFoundException("Solution root not found for golden-file validation.");
-        RenderGoldenFileAssert.AssertImageMatches(renderedPath, solutionRoot, "RenderDirectStill", RenderEngine.Cycles, 64, 64);
+        RenderGoldenFileAssert.AssertImageMatches(renderedPath, solutionRoot, "RenderDirectStill", RenderEngine.Cycles, 256, 256);
     }
 
     [Test]
@@ -124,14 +124,14 @@ public class BlenderRunnerIntegrationTests
             Format = RenderFormat.PNG,
             Engine = RenderEngine.Cycles,
             Samples = 4,
-            ResolutionX = 64,
-            ResolutionY = 64
+            ResolutionX = 256,
+            ResolutionY = 256
         };
 
         var outputBase = Path.Combine(m_outputDir, "benchmark_");
         var renderedPath = await m_runner.RenderFrameAsync(benchmarkBlendPath, 1, outputBase, options);
 
-        RenderGoldenFileAssert.AssertImageMatches(renderedPath, solutionRoot, "BenchmarkScene", RenderEngine.Cycles, 64, 64);
+        RenderGoldenFileAssert.AssertImageMatches(renderedPath, solutionRoot, "BenchmarkScene", RenderEngine.Cycles, 256, 256);
     }
 
     [Test]
