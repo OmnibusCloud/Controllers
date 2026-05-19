@@ -11,6 +11,7 @@ namespace OutWit.Controller.Render.Activities;
 /// Current implementation validates an existing .blend blob reference and returns it unchanged.
 /// </summary>
 [Activity("Render.BuildBlendFromRefs")]
+[RequiresResources(RequiresLocalAccess = true)]
 [MemoryPackable]
 public sealed partial class WitActivityRenderBuildBlendFromRefs : WitActivityFunction
 {

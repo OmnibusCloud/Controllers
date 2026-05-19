@@ -11,6 +11,7 @@ namespace OutWit.Controller.Render.Activities;
 /// Host-side activity for the first production RenderVideo path.
 /// </summary>
 [Activity("Render.EncodeVideo")]
+[RequiresResources(RequiresLocalAccess = true)]
 [MemoryPackable]
 public sealed partial class WitActivityRenderEncodeVideo : WitActivityFunction
 {

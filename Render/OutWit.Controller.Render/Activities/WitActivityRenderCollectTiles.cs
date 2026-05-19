@@ -10,6 +10,7 @@ namespace OutWit.Controller.Render.Activities;
 /// Collects tile render results and stitches them into a final still image.
 /// </summary>
 [Activity("Render.CollectTiles")]
+[RequiresResources(RequiresLocalAccess = true)]
 [MemoryPackable]
 public sealed partial class WitActivityRenderCollectTiles : WitActivityFunction
 {

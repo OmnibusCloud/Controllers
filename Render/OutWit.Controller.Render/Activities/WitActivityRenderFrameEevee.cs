@@ -13,7 +13,7 @@ namespace OutWit.Controller.Render.Activities;
 [Activity("Render.Frame.Eevee")]
 [CanRunInParallelOnClientAttribute(false)]
 [RequiresOs(Platform = "Windows,Linux,OSX")]
-[RequiresResources(MinRamMb = 4096, MinTempStorageMb = 10240)]
+[RequiresResources(MinRamMb = 4096, MinTempStorageMb = 10240, RequiresLocalAccess = true)]
 [MemoryPackable]
 public sealed partial class WitActivityRenderFrameEevee : WitActivityFunction, IRenderFrameActivity
 {

@@ -12,6 +12,7 @@ namespace OutWit.Controller.Render.Activities;
 [Activity("Render.ValidateBlend")]
 [CanRunInParallelOnClient(true)]
 [RequiresOs(Platform = "Windows,Linux,OSX")]
+[RequiresResources(RequiresLocalAccess = true)]
 [MemoryPackable]
 public sealed partial class WitActivityRenderValidateBlend : WitActivityFunction
 {

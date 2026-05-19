@@ -71,6 +71,32 @@ public class BlenderRunnerTests
         var requirement = (Engine.Data.Attributes.RequiresResourcesAttribute)attributes[0];
         Assert.That(requirement.MinRamMb, Is.GreaterThanOrEqualTo(4096));
         Assert.That(requirement.MinTempStorageMb, Is.GreaterThanOrEqualTo(10240));
+        Assert.That(requirement.RequiresLocalAccess, Is.True,
+            "Render.Frame writes a Python script + rendered output to the local temp/cache dir, so it must declare RequiresLocalAccess.");
+    }
+
+    [TestCase(typeof(OutWit.Controller.Render.Activities.WitActivityRenderFrame))]
+    [TestCase(typeof(OutWit.Controller.Render.Activities.WitActivityRenderFrameCycles))]
+    [TestCase(typeof(OutWit.Controller.Render.Activities.WitActivityRenderFrameEevee))]
+    [TestCase(typeof(OutWit.Controller.Render.Activities.WitActivityRenderFrameGreasePencil))]
+    [TestCase(typeof(OutWit.Controller.Render.Activities.WitActivityRenderBuildBlendFromRefs))]
+    [TestCase(typeof(OutWit.Controller.Render.Activities.WitActivityRenderValidateBlend))]
+    [TestCase(typeof(OutWit.Controller.Render.Activities.WitActivityRenderSplitTiles))]
+    [TestCase(typeof(OutWit.Controller.Render.Activities.WitActivityRenderCollectTiles))]
+    [TestCase(typeof(OutWit.Controller.Render.Activities.WitActivityRenderEncodeVideo))]
+    public void RenderActivityDeclaresRequiresLocalAccessTest(Type activityType)
+    {
+        // Activities listed here invoke Blender / ffmpeg with a temp Python or
+        // command script, or stage intermediate output files on disk during
+        // execution. The scheduler must refuse to dispatch them to nodes
+        // whose user has denied filesystem access (IsLocalAccessAllowed=false).
+        var attributes = activityType.GetCustomAttributes(typeof(Engine.Data.Attributes.RequiresResourcesAttribute), false);
+        Assert.That(attributes, Has.Length.EqualTo(1),
+            $"{activityType.Name} must carry [RequiresResources(RequiresLocalAccess = true)] — it writes temp files at runtime.");
+
+        var requirement = (Engine.Data.Attributes.RequiresResourcesAttribute)attributes[0];
+        Assert.That(requirement.RequiresLocalAccess, Is.True,
+            $"{activityType.Name} should declare RequiresLocalAccess = true.");
     }
 
     [Test]

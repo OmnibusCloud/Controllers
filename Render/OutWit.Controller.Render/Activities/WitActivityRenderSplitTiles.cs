@@ -10,6 +10,7 @@ namespace OutWit.Controller.Render.Activities;
 /// Splits a still render into tile tasks for distributed execution.
 /// </summary>
 [Activity("Render.SplitTiles")]
+[RequiresResources(RequiresLocalAccess = true)]
 [MemoryPackable]
 public sealed partial class WitActivityRenderSplitTiles : WitActivityFunction
 {

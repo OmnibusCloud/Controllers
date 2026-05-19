@@ -11,6 +11,7 @@ namespace OutWit.Controller.Render.Dcc.Activities;
 /// Current implementation validates the neutral DCC contract and reserves the build boundary for future .blend generation.
 /// </summary>
 [Activity("Render.BuildBlendFromDccScene")]
+[RequiresResources(RequiresLocalAccess = true)]
 [MemoryPackable]
 public sealed partial class WitActivityRenderBuildBlendFromDccScene : WitActivityFunction
 {
