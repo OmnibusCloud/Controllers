@@ -1,10 +1,10 @@
 # OutWit.Controller.Special
 
-A WitEngine controller that provides control flow and execution management activities.
+An OmnibusCloud controller that provides control flow and execution management activities.
 
 ## Overview
 
-This controller adds programming constructs like loops, conditionals, parallel execution, and debugging utilities to WitEngine jobs. It enables complex workflow logic within distributed computing tasks.
+This controller adds programming constructs like loops, conditionals, parallel execution, and debugging utilities to OmnibusCloud jobs. It enables complex workflow logic within distributed computing tasks.
 
 ## Dependencies
 

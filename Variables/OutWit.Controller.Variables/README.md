@@ -1,10 +1,10 @@
 # OutWit.Controller.Variables
 
-A core WitEngine controller that provides basic variable types and operations for the distributed computing system.
+A core OmnibusCloud controller that provides basic variable types and operations for the distributed computing system.
 
 ## Overview
 
-This controller is a fundamental building block for WitEngine. It provides all primitive variable types, collections, and basic operations needed to work with data in WitEngine jobs.
+This controller is a fundamental building block for OmnibusCloud. It provides all primitive variable types, collections, and basic operations needed to work with data in OmnibusCloud jobs.
 
 ## Dependencies
 

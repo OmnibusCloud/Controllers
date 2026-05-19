@@ -1,6 +1,6 @@
 # OutWit.Controller.Render
 
-Distributed rendering controller for WitCloud. Current scope is a frame-based `.blend` rendering flow using Blender CLI across multiple compute nodes, with first-release engine-family support for `Cycles`, `Eevee` / `Eevee Next`, and `Grease Pencil`.
+Distributed rendering controller for OmnibusCloud. Current scope is a frame-based `.blend` rendering flow using Blender CLI across multiple compute nodes, with first-release engine-family support for `Cycles`, `Eevee` / `Eevee Next`, and `Grease Pencil`.
 
 The upstream neutral DCC scene import/build boundary now lives in the separate host-only `OutWit.Controller.Render.Dcc` controller so this controller can remain focused on prepared `.blend` validation, preflight, rendering, collection, and encoding.
 

@@ -1,12 +1,12 @@
 # Controller Author Guide
 
-A practical guide to writing a new WitEngine controller — from `dotnet new` to a published NuGet package. Built around the six production controllers in this repo (Variables, Special, Grid, Matrices, Render.Dcc, Render); cites real file paths and line numbers so you can read the actual code alongside.
+A practical guide to writing a new OmnibusCloud controller — from `dotnet new` to a published NuGet package. Built around the six production controllers in this repo (Variables, Special, Grid, Matrices, Render.Dcc, Render); cites real file paths and line numbers so you can read the actual code alongside.
 
 ## What you'll need to know
 
 This guide assumes you understand:
 
-- The basics of [WitEngine concepts](../README.md#concepts) (controller, activity, adapter, model, Tier 1 vs Tier 2). Read the README first if those are new.
+- The basics of [OmnibusCloud concepts](../README.md#concepts) (controller, activity, adapter, model, Tier 1 vs Tier 2). Read the README first if those are new.
 - C# 12 / .NET 10, NuGet, and MSBuild conventions (targets, items, item metadata).
 - That the runtime is closed-source: a controller is a self-contained module loaded *by* the engine, never the other way round.
 
@@ -46,7 +46,7 @@ Every controller in this repo is a **pair of NuGet packages** that ship together
 
 The `.Model` package is **optional** — Special doesn't have one because its control-flow activities don't cross the host↔node WitRPC boundary and there are no shared types worth their own nupkg. All the other production controllers carry one. Rule of thumb: split into a `.Model` if any DTOs **(a)** cross the host↔node boundary (must be MemoryPackable + self-contained) or **(b)** are useful to external tooling without taking the controller as a runtime dep.
 
-At build time the shared `Build/` MSBuild logic stitches both projects into a single **module** directory that the WitEngine runtime loads:
+At build time the shared `Build/` MSBuild logic stitches both projects into a single **module** directory that the OmnibusCloud runtime loads:
 
 ```
 @Controllers/<Cfg>/<name>.module/
@@ -156,7 +156,7 @@ public sealed class WitControllerFooModule : WitPluginBase, IWitControllerNode, 
 ```
 
 Three interfaces decide where the controller runs:
-- `IWitControllerHost` — runs on the WitCloud orchestrator (jobs, scheduling, scripts).
+- `IWitControllerHost` — runs on the OmnibusCloud orchestrator (jobs, scheduling, scripts).
 - `IWitControllerNode` — runs on worker nodes (executes activities).
 - Both — most controllers; activities run on either side.
 
@@ -713,7 +713,7 @@ The shared MSBuild logic runs in this order at every controller build:
 4. **`ControllerPostBuild`** (AfterTargets=`PostBuildEvent`) — copies the controller's DLL + `.deps.json` + `controller.json` + any locale-resource DLLs into `$(SolutionDir)@Controllers/$(Configuration)/<name>.module/`.
 5. **`ControllerStageSourceResources`** (AfterTargets=`ControllerPostBuild`) — copies `<csproj>/Resources/**` into `<module>/Resources/`. Skipped silently when the folder doesn't exist.
 6. **Companion `ModelPostBuild`** in the `.Model` csproj — copies the Model DLL into the SAME `<module>` directory.
-7. **`ControllerPackZip`** (AfterTargets=`ControllerPostBuild`) — zips `$(ControllerModuleOutputDir)` into `$(SolutionDir)@Zips/$(Configuration)/<name>.zip`. The zip is used by the WitCloud server's BlobCacheService.
+7. **`ControllerPackZip`** (AfterTargets=`ControllerPostBuild`) — zips `$(ControllerModuleOutputDir)` into `$(SolutionDir)@Zips/$(Configuration)/<name>.zip`. The zip is used by the OmnibusCloud server's BlobCacheService.
 8. **`ControllerPackModuleContents`** (runs during `dotnet pack`) — packages the staged module (minus `Resources/`) into the nupkg's `content/module/` + writes an empty `lib/<tfm>/_._` marker so NuGet considers the package framework-compatible.
 
 Final on-disk layout after a Release build of the full solution:
@@ -770,7 +770,7 @@ OutWit.Controller.Render.<version>.nupkg
 4. Pushes to GitHub Packages with `pushToGitHubPackages: true` (default).
 5. Creates the GitHub Release tag (`<name.lower-no-dots>-v<version>`) with `createGitHubRelease: true`.
 
-For Path-A distribution this is fully automated. For Path-B (third-party authors without nuget.org rights), use [`outwit-controller-pack`](../Tools/OutWit.Controller.Pack/README.md) to produce a self-contained zip that gets uploaded through the WitCloud admin UI.
+For Path-A distribution this is fully automated. For Path-B (third-party authors without nuget.org rights), use [`outwit-controller-pack`](../Tools/OutWit.Controller.Pack/README.md) to produce a self-contained zip that gets uploaded through the OmnibusCloud admin UI.
 
 ---
 

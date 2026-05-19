@@ -1,10 +1,10 @@
 # OutWit.Controller.Matrices
 
-A WitEngine controller that provides matrix and vector operations optimized for distributed computing.
+An OmnibusCloud controller that provides matrix and vector operations optimized for distributed computing.
 
 ## Overview
 
-This controller adds support for dense and sparse matrix/vector types along with operations commonly used in scientific computing, machine learning, and data processing. Operations are designed to work efficiently with the WitEngine distributed computing infrastructure.
+This controller adds support for dense and sparse matrix/vector types along with operations commonly used in scientific computing, machine learning, and data processing. Operations are designed to work efficiently with the OmnibusCloud distributed computing infrastructure.
 
 ## Dependencies
 
@@ -135,7 +135,7 @@ The `MatrixGustavsonMultiply` activity includes built-in benchmarking support:
 - Measures operations per second
 - Uses embedded test datasets for consistent benchmarking across nodes
 
-This allows WitEngine to optimally distribute matrix operations based on node performance.
+This allows OmnibusCloud to optimally distribute matrix operations based on node performance.
 
 ## Project Structure
 

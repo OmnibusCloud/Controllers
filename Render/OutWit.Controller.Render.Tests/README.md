@@ -25,16 +25,7 @@ Tests that need real Blender scenes / golden frames / native runtime binaries lo
 | `@Prerequisites/ffmpeg/` | `FfmpegRunnerTests`, `RenderEncodeVideoTests` | ~1.4 GB |
 | `@Data/cube_diorama/` | `BlenderRunnerCubeDioramaDiagnosticsTests` | ~22 MB |
 
-All of these live alongside an identical layout in the sibling `WitEngine` repo (`WitEngine/@Prerequisites/`, `WitEngine/@Data/`) — they are the same fixture set, separately staged here so the Controllers repo can be cloned and tested independently of WitEngine.
-
-Quick bootstrap (when you also have the WitEngine repo checked out at `../OutWit/WitEngine`):
-
-```powershell
-# from Controllers repo root
-$src = '..\..\OutWit\WitEngine'
-robocopy "$src\@Prerequisites" .\@Prerequisites /E /XO
-robocopy "$src\@Data\cube_diorama" .\@Data\cube_diorama /E /XO
-```
+An identical fixture set is staged in the upstream (closed-source) OmnibusCloud runtime repo, separately staged here so the Controllers repo can be cloned and tested independently. Drop your own copies of these files into `@Prerequisites/` / `@Data/` to unlock the corresponding tests; without them the integration tests `Assert.Ignore` gracefully.
 
 ## Without prerequisites
 

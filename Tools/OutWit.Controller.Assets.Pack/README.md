@@ -27,7 +27,7 @@ For the `OutWit.Controller.Render` controller after replacing Blender:
 #    with the new Blender install trees.
 # 2. Pack + update csproj + push release in one command:
 outwit-assets-pack Render/OutWit.Controller.Render/OutWit.Controller.Render.csproj \
-    --prerequisites C:/Workspace/OutWit/WitEngine/@Prerequisites \
+    --prerequisites /path/to/@Prerequisites \
     --version 1.15.2 \
     --apply \
     --push-release

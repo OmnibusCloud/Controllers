@@ -1,6 +1,6 @@
 # OutWit.Controller.Render.Dcc
 
-Host-only upstream DCC build controller for WitCloud. Accepts a neutral `DccScene` payload, validates the scene contract, generates a Blender Python scene script for the supported DCC subset, and invokes Blender headlessly to produce a `.blend` file blob. Stays separate from `OutWit.Controller.Render`, which owns the downstream `.blend` validation, preflight, rendering, collection, and encoding stages.
+Host-only upstream DCC build controller for OmnibusCloud. Accepts a neutral `DccScene` payload, validates the scene contract, generates a Blender Python scene script for the supported DCC subset, and invokes Blender headlessly to produce a `.blend` file blob. Stays separate from `OutWit.Controller.Render`, which owns the downstream `.blend` validation, preflight, rendering, collection, and encoding stages.
 
 ## Dependencies
 

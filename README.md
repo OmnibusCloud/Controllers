@@ -1,18 +1,18 @@
 # OutWit Controllers
 
-Open-source SDK and reference implementations of WitEngine controllers.
+Open-source SDK and reference implementations of OmnibusCloud controllers.
 Distributed via [nuget.org](https://www.nuget.org/profiles/dmitrat) as a set
 of consumable NuGet packages. Each controller demonstrates a distinct
-slice of WitEngine's distributed-compute capabilities — basic types,
+slice of OmnibusCloud's distributed-compute capabilities — basic types,
 distributed iteration, control flow, linear algebra, distributed
 rendering — and serves as a working template for authors writing their
 own controllers.
 
 > [!NOTE]
-> The WitEngine runtime itself, and the WitCloud server that orchestrates
-> distributed jobs across worker nodes, are closed-source. This repository
-> publishes only the controllers and their associated authoring tools, all
-> under the MIT license, so third parties can build on the same surface.
+> The OmnibusCloud runtime and orchestrator that distribute jobs across
+> worker nodes are closed-source. This repository publishes only the
+> controllers and their associated authoring tools, all under the MIT
+> license, so third parties can build on the same surface.
 
 ---
 
@@ -69,7 +69,7 @@ bin/Debug/net10.0/@Controllers/Debug/
     benchmark_scene_video.blend
 ```
 
-The `@Controllers/` layout is what the WitEngine runtime expects.
+The `@Controllers/` layout is what the OmnibusCloud runtime expects.
 
 ---
 
@@ -79,7 +79,7 @@ The `@Controllers/` layout is what the WitEngine runtime expects.
 
 A controller is a self-contained capability — a set of activities and
 variable types — packaged as a `.module/` directory loadable by the
-WitEngine runtime. A controller declares itself in a `controller.json`
+OmnibusCloud runtime. A controller declares itself in a `controller.json`
 manifest that's bundled inside its NuGet package's `content/module/`.
 
 ### Activity vs. Adapter vs. Model
@@ -118,7 +118,7 @@ Two ways a controller reaches an end-user environment:
 - **Path B — third-party contributor**.  Authors who don't have nuget.org
   publish rights pack their built controller into a self-contained zip
   using [`outwit-controller-pack`](Tools/OutWit.Controller.Pack/README.md)
-  and upload it through the WitCloud admin UI for review. The Pack tool
+  and upload it through the OmnibusCloud admin UI for review. The Pack tool
   defaults to refusing external `<ControllerDataAsset>` URIs — everything
   must be inlined in the zip — unless the author explicitly opts in.
 
@@ -225,7 +225,7 @@ time is roughly:
 4. `Build/OutWit.Controller.targets` stages the controller's outputs
    into `$(SolutionDir)@Controllers/<Cfg>/<name>.module/`, produces an
    `@Zips/<Cfg>/<name>.zip` (used by the BlobCacheService path on
-   WitCloud server-side), and packs the staged module dir into the
+   the OmnibusCloud server side), and packs the staged module dir into the
    nupkg's `content/module/` plus a `lib/<tfm>/_._` marker (so NuGet
    considers the package framework-compatible).
 5. The consumer-side `build/OutWit.Controller.<Name>.targets` ships
@@ -261,7 +261,7 @@ for the full reference.
 The **Path-B contributor** tool. Reads a built `<name>.module/` directory,
 validates the manifest, refuses external asset URIs by default
 (everything must be inlined in the zip), and produces a single
-self-contained `.zip` ready for upload through the WitCloud admin UI.
+self-contained `.zip` ready for upload through the OmnibusCloud admin UI.
 
 ```sh
 dotnet tool install -g OutWit.Controller.Pack
@@ -288,9 +288,10 @@ controller through nuget.org in a single `dotnet build`, then runs
 
 ## Related packages
 
-The engine runtime, parser, and the WitCloud server are closed-source.
-The data layer and the assets infrastructure are published openly so
-controllers and their tooling can build on the same surface.
+The engine runtime, parser, and orchestrator components of OmnibusCloud
+are closed-source. The data layer and the assets infrastructure are
+published openly so controllers and their tooling can build on the same
+surface.
 
 | Package                            | Role                                                                                  |
 | ---------------------------------- | ------------------------------------------------------------------------------------- |
@@ -331,14 +332,14 @@ The runtime split is intentional:
   }
   ```
 
-  This is how a third-party author validates that WitEngine will actually
-  load and run their controller, without needing access to the full
-  closed engine sources.
+  This is how a third-party author validates that OmnibusCloud will
+  actually load and run their controller, without needing access to the
+  full closed engine sources.
 
 ### SDK consumer limits
 
 `OutWit.Engine.Sdk` is dev-time only and runs with intentionally tight
-limits. The production WitEngine / WitCloud orchestrator lifts them:
+limits. The production OmnibusCloud orchestrator lifts them:
 
 | Limit                  | SDK value |
 | ---------------------- | --------- |
@@ -361,14 +362,12 @@ structured.
 
 For Path-B distribution (you don't have nuget.org publish rights):
 build your controller, pack it with `outwit-controller-pack`, and
-upload the produced zip through the WitCloud admin UI. An admin will
-review it and approve for the runtime to load.
+upload the produced zip through the OmnibusCloud admin UI. An admin
+will review it and approve for the runtime to load.
 
 ---
 
 ## License
 
 MIT — see [LICENSE](LICENSE). All controllers and authoring tools in this
-repository are released under MIT. The WitEngine runtime, the WitCloud
-server, and the OmnibusCloud commercial portal are separate non-public
-products with their own licensing.
+repository are released under MIT.

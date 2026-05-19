@@ -1,10 +1,10 @@
 # OutWit.Controller.Grid
 
-A WitEngine controller that provides distributed computing capabilities across multiple nodes.
+An OmnibusCloud controller that provides distributed computing capabilities across multiple nodes.
 
 ## Overview
 
-This controller enables workload distribution across multiple compute nodes in the WitCloud network. It handles task partitioning, node selection based on capabilities and benchmarks, and result aggregation.
+This controller enables workload distribution across multiple compute nodes in the OmnibusCloud network. It handles task partitioning, node selection based on capabilities and benchmarks, and result aggregation.
 
 ## Dependencies
 
@@ -152,7 +152,7 @@ Activities used with Grid.ForEach should:
 
 ## SDK Limitations
 
-When using the SDK version of WitEngine:
+When using the dev-time OmnibusCloud SDK:
 - Only local execution is supported (MAX_NODES = 1)
 - Grid.ForEach will execute sequentially on the local machine
-- Use the full WitEngine for actual distributed computing
+- Use the full OmnibusCloud runtime for actual distributed computing
