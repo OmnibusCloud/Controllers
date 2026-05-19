@@ -652,23 +652,46 @@ This is the pattern any controller with distributed activities must use to valid
 
 #### Test csproj boilerplate
 
-Every test project needs the PreBuild step that stages `$(SolutionDir)@Controllers/$(Configuration)/*` into `$(TargetDir)@Controllers/`, so the SDK can find sibling modules at test runtime:
+Test csprojs import [`Build/OutWit.Controller.Tests.props`](../Build/OutWit.Controller.Tests.props), which carries the standard SDK boilerplate (target framework, nullable, IsPackable=false, IsTestProject=true), the common test PackageReferences (Microsoft.NET.Test.Sdk, NUnit suite, OutWit.Common.NUnit, OutWit.Engine.Sdk), and the staging target that copies the populated `$(SolutionDir)@Controllers/<Cfg>/` tree into the test bin's `@Controllers/`. A minimal test csproj looks like:
 
 ```xml
-<ItemGroup>
-  <ControllerFiles Include="$(SolutionDir)@Controllers\$(Configuration)\**\*" />
-  <ControllerFiles Remove="$(SolutionDir)@Controllers\$(Configuration)\render.module\**\*" />
-  <ControllerFiles Remove="$(SolutionDir)@Controllers\$(Configuration)\renderdcc.module\**\*" />
-</ItemGroup>
+<Project Sdk="Microsoft.NET.Sdk">
 
-<Target Name="PreBuild" BeforeTargets="BeforeBuild">
-  <Copy SourceFiles="@(ControllerFiles)"
-        DestinationFiles="@(ControllerFiles->'$(TargetDir)@Controllers\%(RecursiveDir)%(Filename)%(Extension)')"
-        SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
-</Target>
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.Foo\OutWit.Controller.Foo.csproj" />
+  </ItemGroup>
+
+  <!-- Build-only references to every controller this test's runtime needs (each
+       [WitPluginDependency] on the controller under test plus any controller
+       its bundled scripts dispatch into via Grid.ForEach etc.).
+       ReferenceOutputAssembly=false means MSBuild builds these projects (so their
+       ControllerPostBuild populates @Controllers/<Cfg>/<name>.module/) but does
+       not pull their DLLs into the test project's compile output. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <!-- Optional: skip specific modules during the test-bin staging copy if a
+       prior `dotnet build OutWit.slnx` populated heavy modules you don't need
+       in this test. Item-driven so the shared target honors it. -->
+  <ItemGroup>
+    <ExcludedControllerModule Include="render.module" />
+    <ExcludedControllerModule Include="renderdcc.module" />
+  </ItemGroup>
+
+</Project>
 ```
 
-Tier-1 test projects exclude `render.module` and `renderdcc.module` because the heavy native binaries are unnecessary and would slow the test build pointlessly. Tier-2 (Render) keeps them.
+Two patterns to keep in mind:
+
+- **The build-only ProjectReferences (`ReferenceOutputAssembly="false"`) are load-bearing.** They make the cross-controller build dependency explicit at the MSBuild level. Without them, `dotnet test ./X.Tests.csproj` (without a prior `dotnet build OutWit.slnx`) would only build the controller-under-test — sibling modules wouldn't be populated in `@Controllers/<Cfg>/`, the staging target would copy nothing, and the test runtime would fail with "unresolved dependency". With them, MSBuild builds each sibling controller's `ControllerPostBuild` before the staging target runs.
+
+- **`ExcludedControllerModule` items drop specific modules** from the test-bin staging copy. Tier-1 tests typically exclude `render.module` and `renderdcc.module` so a developer who ran `dotnet build OutWit.slnx` first doesn't drag the heavyweight native runtimes into the lean test bin. The items don't prevent the sibling builds (those are gated by ProjectReferences), they only filter the final staging step.
+
+Render.Dcc.Model.Tests (a pure data-model test) and the `Tools/*.Tests` projects do NOT import `OutWit.Controller.Tests.props` — they don't need controller staging at all.
 
 #### Asset-path resolvers
 
