@@ -116,13 +116,10 @@ public class BlenderRunnerTests
     [TestCase(RenderEngine.GreasePencil, "BLENDER_EEVEE_NEXT")]
     public void BlenderRunnerMapsRenderEngineToExpectedBlenderArgumentTest(RenderEngine engine, string expectedArgument)
     {
-        var method = typeof(BlenderRunner).GetMethod(
-            "GetBlenderEngineArgument",
-            BindingFlags.Static | BindingFlags.NonPublic);
-
-        Assert.That(method, Is.Not.Null, "Blender engine argument mapping helper was not found.");
-
-        var actualArgument = method!.Invoke(null, [engine]) as string;
+        // The argument-mapping helper was extracted from BlenderRunner into the
+        // pure static BlenderRenderArgsBuilder class. Call it directly — no
+        // reflection — since the helper is now internal-public surface.
+        var actualArgument = BlenderRenderArgsBuilder.GetBlenderEngineArgument(engine);
 
         Assert.That(actualArgument, Is.EqualTo(expectedArgument));
     }
