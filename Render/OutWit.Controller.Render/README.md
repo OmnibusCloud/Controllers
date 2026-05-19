@@ -4,8 +4,6 @@ Distributed rendering controller for WitCloud. Current scope is a frame-based `.
 
 The upstream neutral DCC scene import/build boundary now lives in the separate host-only `OutWit.Controller.Render.Dcc` controller so this controller can remain focused on prepared `.blend` validation, preflight, rendering, collection, and encoding.
 
-The canonical frozen public API reference for the first production version lives in `@Docs/Active/Render/RenderControllerApiFreeze.md`.
-
 ## Benchmark assets
 
 Canonical benchmark assets for node-side render benchmarks live under `@Prerequisites/benchmark/render/` so the exact same `.blend` files can be versioned and packaged for every machine.

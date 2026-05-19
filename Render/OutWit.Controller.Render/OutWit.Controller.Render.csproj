@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+    <ControllerDependency Include="Grid" MinimumVersion="1.0.0" />
     <ControllerRuntimeTarget Include="win-x64">
       <Rid>win-x64</Rid>
       <Os>windows</Os>

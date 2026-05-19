@@ -17,6 +17,7 @@ namespace OutWit.Controller.Render;
 /// </summary>
 [WitPluginManifest(ControllerBuildInfo.NAME, Version = ControllerBuildInfo.VERSION)]
 [WitPluginDependency("Variables", MinimumVersion = "1.0.0")]
+[WitPluginDependency("Grid", MinimumVersion = "1.0.0")]
 public class WitControllerRenderModule : WitPluginBase, IWitControllerNode, IWitControllerHost
 {
     #region Initialization
