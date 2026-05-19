@@ -156,12 +156,19 @@ Job:ReturnExample(Int:input)
 
 ```
 OutWit.Controller.Special/
-  Activities/          - Activity definitions
-  Adapters/            - Activity adapters (parsing and processing)
-  Properties/          - Localized resources
-  Utils/               - Helper utilities
-  WitControllerSpecialModule.cs - Plugin entry point
+  Activities/          - Activity DTOs (WitActivitySpecialIf, WitActivitySpecialLoop, ...)
+                       Note: Invoke/ParallelInvoke DTOs live in OutWit.Engine.Data —
+                       this controller ships only the adapters for them.
+  Adapters/            - Activity adapters — parse params + run the work
+  Interfaces/          - Internal marker interface shared across adapters
+  Utils/               - Exception-message helpers (ExceptionsUtils)
+  Properties/          - Localized error strings (Resources.resx)
+  build/               - Consumer-side MSBuild .targets shipped inside the nupkg
+  WitControllerSpecialModule.cs - Plugin entry point (DI registrations)
 ```
+
+This controller has no companion Model package — control-flow activities don't
+carry shared DTOs.
 
 ## Creating Custom Control Flow Activities
 
