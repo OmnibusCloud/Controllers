@@ -141,7 +141,7 @@ internal sealed class RenderProductionScriptCubeDioramaTests : RenderProductionS
         var tileOptions = CreateTileOptions(8, TileBlendMode.CenterPriorityCrop);
         var outputDirectory = Path.Combine(
             m_solutionRoot!,
-            "@Publish",
+            "@Output",
             "LiveTestOutputs",
             "LocalRenderStillTiledCubeDioramaDiagnostics",
             $"{DateTime.UtcNow:yyyy-MM-dd-HH-mm-ss}_{Guid.NewGuid():N}");

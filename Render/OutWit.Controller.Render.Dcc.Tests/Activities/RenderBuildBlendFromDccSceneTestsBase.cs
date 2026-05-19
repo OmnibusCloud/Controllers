@@ -114,7 +114,7 @@ internal abstract class RenderBuildBlendFromDccSceneTestsBase
 
     protected static string? FindLatestExportedDccSceneJsonPath(string solutionRoot, string sceneName)
     {
-        var candidateRoot = Path.Combine(solutionRoot, "@Publish", "Temp", "candidate_validate_smoke");
+        var candidateRoot = Path.Combine(solutionRoot, "@Output", "Temp", "candidate_validate_smoke");
         if (!Directory.Exists(candidateRoot))
             return null;
 

@@ -59,7 +59,7 @@ public sealed class BlenderRunnerCubeDioramaDiagnosticsTests
     {
         m_outputDir = Path.Combine(
             m_solutionRoot,
-            "@Publish",
+            "@Output",
             "LiveTestOutputs",
             "LocalBlender",
             $"cube_diorama_{DateTime.UtcNow:yyyy-MM-dd-HH-mm-ss}");

@@ -15,7 +15,7 @@ namespace OutWit.Controller.Render.Dcc.Tests.Activities;
 /// real exported Tarrasque scene that probe what makes a meaningful render:
 /// camera substitution, light boosting, mesh transform identity, texture
 /// removal, scaled translations, point vs spot vs sun lights, etc. All these
-/// are <c>[Explicit]</c>/conditional (gated on @Publish artefacts) and skip
+/// are <c>[Explicit]</c>/conditional (gated on @Output artefacts) and skip
 /// when those artefacts are absent. Owns the Investigation* scene-mutation
 /// helpers since they exist only to support these experiments.
 /// </summary>
@@ -31,7 +31,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     #region Tests
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -41,7 +41,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -93,7 +93,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithBoostedLightsThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -103,7 +103,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -156,7 +156,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithKnownGoodCameraAndBoostedLightsThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -166,7 +166,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -220,7 +220,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithFlatMaterialsAndBoostedLightsThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -230,7 +230,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -284,7 +284,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithIdentityMeshTransformsAndKnownGoodCameraLightThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -294,7 +294,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -350,7 +350,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithIdentityMeshScaleAndKnownGoodCameraLightThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -360,7 +360,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -416,7 +416,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithKnownGoodCameraAndKnownGoodLightDataOnExportedLightNodeThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -426,7 +426,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -481,7 +481,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithExportedCameraAndKnownGoodLightThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -491,7 +491,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -545,7 +545,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithScaledExportedCameraAndLightTranslationsThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -555,7 +555,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -609,7 +609,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithExportedCameraTranslationAndKnownGoodRotationThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -619,7 +619,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -674,7 +674,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithKnownGoodCameraAndScaledExportedLightTranslationThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -684,7 +684,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -740,7 +740,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithScaledExportedCameraTranslationAndKnownGoodRotationThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -750,7 +750,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -806,7 +806,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithKnownGoodCameraAndBoostedPointLightsThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -816,7 +816,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -871,7 +871,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithKnownGoodCameraAndBoostedExportedLightDataOnKnownGoodLightNodeThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -881,7 +881,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -936,7 +936,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithKnownGoodCameraAndBoostedExportedPointLightDataOnKnownGoodLightNodeThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -946,7 +946,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -1002,7 +1002,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithoutTexturesAndWithBoostedLightsThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -1012,7 +1012,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -1066,7 +1066,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithKnownGoodCameraAndLightButOriginalTexturesThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -1076,7 +1076,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -1130,7 +1130,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithKnownGoodCameraAndBoostedFirstExportedPointLightOnExportedNodeThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -1140,7 +1140,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -1197,7 +1197,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithKnownGoodCameraAndBoostedFirstExportedPointLightOnExportedNodeWithOriginalTexturesThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -1207,7 +1207,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -1263,7 +1263,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithKnownGoodCameraAndBoostedWideSpotLightsThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -1273,7 +1273,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");
@@ -1328,7 +1328,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
     }
 
     [Test]
-    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Publish\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
+    [Explicit("Requires a previously exported local realistic 3ds Max dcc-scene.json under @Output\\Temp\\candidate_validate_smoke and packaged Blender runtime.")]
     public async Task ExportedTarrasqueDccSceneJsonWithKnownGoodCameraAndVeryStrongLightsThenRenderStillLocallyProducesMeaningfullyLitImageTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
@@ -1338,7 +1338,7 @@ internal sealed class RenderBuildBlendFromDccSceneTarrasqueInvestigationTests : 
                            ?? throw new DirectoryNotFoundException("Solution root not found.");
         var sceneJsonPath = FindLatestExportedDccSceneJsonPath(solutionRoot, "TarrasqueTextured");
         if (sceneJsonPath == null)
-            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Publish\\Temp\\candidate_validate_smoke.");
+            Assert.Ignore("No exported TarrasqueTextured dcc-scene.json was found under @Output\\Temp\\candidate_validate_smoke.");
 
         var controllersPath = RenderTestAssetPaths.FindControllersPath()
                               ?? throw new DirectoryNotFoundException("@Controllers directory not found");

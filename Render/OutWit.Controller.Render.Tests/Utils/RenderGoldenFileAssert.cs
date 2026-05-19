@@ -10,7 +10,7 @@ namespace OutWit.Controller.Render.Tests.Utils;
 ///
 /// Workflow:
 /// 1. Every test run writes the actual output to
-///    <c>@Publish/GoldenCandidates/&lt;testKey&gt;_&lt;engine&gt;_&lt;WxH&gt;.png</c>
+///    <c>@Output/GoldenCandidates/&lt;testKey&gt;_&lt;engine&gt;_&lt;WxH&gt;.png</c>
 ///    plus a side-by-side <c>..._diff.png</c> visualisation (actual | golden |
 ///    amplified-diff) so the operator can inspect what changed at a glance.
 /// 2. The first time a test runs there is no golden — the assert reports
@@ -28,7 +28,7 @@ internal static class RenderGoldenFileAssert
     private const string UPDATE_ENVIRONMENT_VARIABLE = "WIT_RENDER_UPDATE_GOLDENS";
 
     private const string GOLDEN_ROOT_SUBPATH = "@Prerequisites/render-golden";
-    private const string CANDIDATE_ROOT_SUBPATH = "@Publish/GoldenCandidates";
+    private const string CANDIDATE_ROOT_SUBPATH = "@Output/GoldenCandidates";
 
     // Tolerances are mean absolute per-channel difference in the 0..255 range.
     // Cycles uses path tracing with 4 samples in tests — very stochastic.

@@ -54,12 +54,12 @@ project.fragment.lock.json
 artifacts/
 
 # Local build artifacts: staged controller modules, packed zips,
-# pack-render-prereqs output, and the @Publish/GoldenCandidates/
+# pack-render-prereqs output, and the @Output/GoldenCandidates/
 # folder where every Render.Tests run stages its actual render output +
 # side-by-side diff for visual inspection. Not part of source.
 @Controllers/
 @Zips/
-@Publish/
+@Output/
 dist/
 
 # Local-only test fixtures: large .blend scenes, golden renders,
