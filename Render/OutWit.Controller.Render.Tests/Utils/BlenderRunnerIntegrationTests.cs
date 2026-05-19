@@ -107,8 +107,7 @@ public class BlenderRunnerIntegrationTests
 
         var solutionRoot = RenderTestAssetPaths.FindSolutionRoot()
                            ?? throw new DirectoryNotFoundException("Solution root not found for golden-file validation.");
-        var goldenPath = RenderTestAssetPaths.GetGoldenRenderStillFramePath(solutionRoot);
-        RenderGoldenFileAssert.AssertMatchesOrUpdate(renderedPath, goldenPath, "Direct Blender render frame 1");
+        RenderGoldenFileAssert.AssertImageMatches(renderedPath, solutionRoot, "RenderDirectStill", RenderEngine.Cycles, 64, 64);
     }
 
     [Test]
@@ -132,8 +131,7 @@ public class BlenderRunnerIntegrationTests
         var outputBase = Path.Combine(m_outputDir, "benchmark_");
         var renderedPath = await m_runner.RenderFrameAsync(benchmarkBlendPath, 1, outputBase, options);
 
-        var goldenPath = RenderTestAssetPaths.GetGoldenBenchmarkFramePath(solutionRoot);
-        RenderGoldenFileAssert.AssertMatchesOrUpdate(renderedPath, goldenPath, "Benchmark scene frame 1");
+        RenderGoldenFileAssert.AssertImageMatches(renderedPath, solutionRoot, "BenchmarkScene", RenderEngine.Cycles, 64, 64);
     }
 
     [Test]

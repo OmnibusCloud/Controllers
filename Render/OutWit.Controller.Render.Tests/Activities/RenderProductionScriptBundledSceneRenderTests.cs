@@ -129,8 +129,7 @@ internal sealed class RenderProductionScriptBundledSceneRenderTests : RenderProd
         Assert.That(File.Exists(storedPath), Is.True);
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        var goldenPath = RenderTestAssetPaths.GetGoldenRenderStillFramePath(m_solutionRoot!);
-        RenderGoldenFileAssert.AssertMatchesOrUpdate(storedPath, goldenPath, "RenderSceneStillTiled frame 1");
+        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderSceneStillTiled", RenderEngine.Cycles, 64, 64);
     }
 
     [Test]
@@ -157,8 +156,7 @@ internal sealed class RenderProductionScriptBundledSceneRenderTests : RenderProd
         Assert.That(File.Exists(storedPath), Is.True);
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        var goldenPath = RenderTestAssetPaths.GetGoldenRenderStillFramePath(m_solutionRoot!);
-        RenderGoldenFileAssert.AssertMatchesOrUpdate(storedPath, goldenPath, "RenderSceneStillTiled overlap frame 1");
+        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderSceneStillTiledOverlap", RenderEngine.Cycles, 64, 64);
     }
 
     [Test]
@@ -186,8 +184,7 @@ internal sealed class RenderProductionScriptBundledSceneRenderTests : RenderProd
         Assert.That(File.Exists(storedPath), Is.True);
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        var goldenPath = RenderTestAssetPaths.GetGoldenRenderStillFramePath(m_solutionRoot!);
-        RenderGoldenFileAssert.AssertMatchesOrUpdate(storedPath, goldenPath, "RenderSceneStillTiledLarge frame 1");
+        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderSceneStillTiledLarge", RenderEngine.Cycles, 64, 64);
     }
 
     [Test]
@@ -215,8 +212,7 @@ internal sealed class RenderProductionScriptBundledSceneRenderTests : RenderProd
         Assert.That(File.Exists(storedPath), Is.True);
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        var goldenPath = RenderTestAssetPaths.GetGoldenRenderStillFramePath(m_solutionRoot!);
-        RenderGoldenFileAssert.AssertMatchesOrUpdate(storedPath, goldenPath, "RenderSceneStillTiledLarge overlap frame 1");
+        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderSceneStillTiledLargeOverlap", RenderEngine.Cycles, 64, 64);
     }
 
     [Test]

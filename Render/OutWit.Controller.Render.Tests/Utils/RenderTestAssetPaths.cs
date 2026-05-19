@@ -8,7 +8,6 @@ internal static class RenderTestAssetPaths
 
     private const string BLENDER_ROOT_SUBPATH = "@Prerequisites/blender";
     private const string BENCHMARK_ROOT_SUBPATH = "@Prerequisites/benchmark/render";
-    private const string GOLDEN_ROOT_SUBPATH = "@Prerequisites/render-golden";
     private const string TEST_SCENE_SUBPATH = "@Prerequisites/test_scene.blend";
     private const string CUBE_DIORAMA_SCENE_SUBPATH = "@Data/cube_diorama/cube_diorama.blend";
     private const string BENCHMARK_SCENE_SUBPATH = "@Prerequisites/benchmark/render/benchmark_scene.blend";
@@ -98,21 +97,6 @@ internal static class RenderTestAssetPaths
     public static string GetBenchmarkRootPath(string solutionRoot)
     {
         return Path.Combine(solutionRoot, BENCHMARK_ROOT_SUBPATH.Replace('/', Path.DirectorySeparatorChar));
-    }
-
-    public static string GetGoldenBenchmarkFramePath(string solutionRoot)
-    {
-        return Path.Combine(solutionRoot, GOLDEN_ROOT_SUBPATH.Replace('/', Path.DirectorySeparatorChar), "benchmark-frame-0001.png");
-    }
-
-    public static string GetGoldenRenderStillFramePath(string solutionRoot)
-    {
-        return Path.Combine(solutionRoot, GOLDEN_ROOT_SUBPATH.Replace('/', Path.DirectorySeparatorChar), "renderstill-frame-0001.png");
-    }
-
-    public static string GetGoldenRenderVideoPath(string solutionRoot)
-    {
-        return Path.Combine(solutionRoot, GOLDEN_ROOT_SUBPATH.Replace('/', Path.DirectorySeparatorChar), "rendervideo-frames-0001-0003.mp4");
     }
 
     public static string GetTestScenePath(string solutionRoot)

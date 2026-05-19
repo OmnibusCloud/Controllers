@@ -43,3 +43,26 @@ Tests that need an asset call `Assert.Ignore("<asset> not found at <path>")` ins
 ```powershell
 dotnet test Render/OutWit.Controller.Render.Tests/OutWit.Controller.Render.Tests.csproj --logger "console;verbosity=normal" | Select-String 'Skipped'
 ```
+
+## Golden-file workflow
+
+Image-output tests call `RenderGoldenFileAssert.AssertImageMatches(...)` with the test key, render engine, and resolution. The helper:
+
+1. **Always stages a candidate** at `@Publish/GoldenCandidates/<testKey>_<Engine>_<WxH>.png` plus a side-by-side `..._diff.png` (actual | golden | amplified diff) so a failed comparison shows _what_ changed.
+2. **Compares with tolerance** — mean absolute per-channel RGB difference, with a per-engine band (Cycles is stochastic so the tolerance is wider; Eevee / GreasePencil are tighter). SHA-256 is intentionally **not** used: Cycles 4-sample renders never match byte-for-byte across GPU/CPU/driver.
+3. **Skips when golden is missing** (`Assert.Ignore`) with a clear pointer to the candidate path.
+
+First-time approval:
+
+```powershell
+dotnet test ...                        # populates @Publish/GoldenCandidates/
+# Eyeball each candidate. If correct:
+$env:WIT_RENDER_UPDATE_GOLDENS = '1'
+dotnet test ...                        # auto-promotes candidates to @Prerequisites/render-golden/
+Remove-Item Env:\WIT_RENDER_UPDATE_GOLDENS
+dotnet test ...                        # verifies against the promoted goldens
+```
+
+Re-baselining an existing golden after an intentional renderer change: the same `WIT_RENDER_UPDATE_GOLDENS=1` flow — it overwrites existing goldens, not just missing ones.
+
+`@Publish/` is gitignored; `@Prerequisites/render-golden/` is gitignored as part of the prerequisites set (each developer / CI runner maintains its own approved goldens).

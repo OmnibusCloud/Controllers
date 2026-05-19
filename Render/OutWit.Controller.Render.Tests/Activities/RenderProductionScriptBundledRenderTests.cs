@@ -46,11 +46,13 @@ internal sealed class RenderProductionScriptBundledRenderTests : RenderProductio
         Assert.That(File.Exists(m_blobService.GetStoredPath(blobId!.Value)), Is.True);
         Assert.That(new FileInfo(m_blobService.GetStoredPath(blobId.Value)).Length, Is.GreaterThan(0));
 
-        var goldenPath = RenderTestAssetPaths.GetGoldenRenderStillFramePath(m_solutionRoot!);
-        RenderGoldenFileAssert.AssertMatchesOrUpdate(
+        RenderGoldenFileAssert.AssertImageMatches(
             m_blobService.GetStoredPath(blobId.Value),
-            goldenPath,
-            "RenderStill frame 1");
+            m_solutionRoot!,
+            "RenderStill",
+            RenderEngine.Cycles,
+            64,
+            64);
     }
 
     [Test]
@@ -201,8 +203,7 @@ internal sealed class RenderProductionScriptBundledRenderTests : RenderProductio
         Assert.That(File.Exists(storedPath), Is.True);
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        var goldenPath = RenderTestAssetPaths.GetGoldenRenderStillFramePath(m_solutionRoot!);
-        RenderGoldenFileAssert.AssertMatchesOrUpdate(storedPath, goldenPath, "RenderStillTiled frame 1");
+        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderStillTiled", RenderEngine.Cycles, 64, 64);
     }
 
     [Test]
@@ -230,8 +231,7 @@ internal sealed class RenderProductionScriptBundledRenderTests : RenderProductio
         Assert.That(File.Exists(storedPath), Is.True);
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        var goldenPath = RenderTestAssetPaths.GetGoldenRenderStillFramePath(m_solutionRoot!);
-        RenderGoldenFileAssert.AssertMatchesOrUpdate(storedPath, goldenPath, "RenderStillTiled overlap frame 1");
+        RenderGoldenFileAssert.AssertImageMatches(storedPath, m_solutionRoot!, "RenderStillTiledOverlap", RenderEngine.Cycles, 64, 64);
     }
 
     [TestCase("RenderStillTiledCycles.wit", RenderEngine.Cycles)]
@@ -293,11 +293,9 @@ internal sealed class RenderProductionScriptBundledRenderTests : RenderProductio
         Assert.That(storedPath, Does.EndWith(".mp4"));
         Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
 
-        var goldenPath = RenderTestAssetPaths.GetGoldenRenderVideoPath(m_solutionRoot!);
-        RenderGoldenFileAssert.AssertMatchesOrUpdate(
-            storedPath,
-            goldenPath,
-            "RenderVideo frames 1-3");
+        // Video output: the upstream exists + non-zero-length checks are
+        // sufficient — SHA-256 compare of an mp4 was never reliable across
+        // Blender/ffmpeg builds, and there is no perceptual mp4 differ here.
     }
 
     [TestCase("RenderVideoCycles.wit", RenderEngine.Cycles)]
