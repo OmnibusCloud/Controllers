@@ -70,15 +70,15 @@ internal abstract class RenderBuildBlendFromDccSceneTestsBase
 
     #region Tools
 
-    protected static RenderOptionsData CreateRenderOptions()
+    protected static RenderOptionsData CreateRenderOptions(int width = 64, int height = 64)
     {
         return new RenderOptionsData
         {
             Format = RenderFormat.PNG,
             Engine = RenderEngine.Cycles,
             Samples = 4,
-            ResolutionX = 64,
-            ResolutionY = 64,
+            ResolutionX = width,
+            ResolutionY = height,
             Denoise = false
         };
     }

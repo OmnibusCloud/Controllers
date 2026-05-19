@@ -105,10 +105,47 @@ internal sealed class RenderBuildBlendFromDccSceneCoreTests : RenderBuildBlendFr
         scene.Materials[0].TextureSlots.Clear();
         scene.ImageAssets.Clear();
         scene.AttachedFiles.Clear();
+        // CreateValidScene places the mesh node at translation (1, 2, 3) with
+        // a horizontal triangle (normal +Z). The default camera fixture lives
+        // at (5, -5, 3) — same Z as the triangle — so it ends up edge-on and
+        // the triangle is invisible. Reset the mesh node to origin so the
+        // camera looks down on the triangle at an angle and actually sees a
+        // lit surface. Also add the standard point light (the test's
+        // "with point light" wording in the assertion below was aspirational —
+        // the original setup had no light at all).
+        scene.Nodes[0].LocalTransform.Translation = new DccVector3Data();
+        // The triangle in CreateValidScene sits in the local z=0 plane with
+        // normal +Z. Rotate the node -90° around X so the triangle stands
+        // vertical (XZ plane) with normal +Y — the side that faces the
+        // camera positioned at +Y below.
+        scene.Nodes[0].LocalTransform.Rotation = new DccQuaternionData
+        {
+            X = -0.7071067811865476d,
+            Y = 0d,
+            Z = 0d,
+            W = 0.7071067811865476d
+        };
         scene.Cameras.Add(DccRenderTestData.CreateCamera());
-        scene.Nodes.Add(DccRenderTestData.CreateCameraNode());
+        // The script generator applies CAMERA_LIGHT_LOCAL_AXIS_CORRECTION
+        // (a -90° X rotation) to camera + light objects. That correction
+        // rotates Blender's default camera forward (-Z) to -Y. So a camera
+        // with identity export rotation at (0, +10, 0) ends up looking
+        // back along -Y at the origin where the triangle stands.
+        var cameraNode = DccRenderTestData.CreateCameraNode();
+        cameraNode.LocalTransform.Translation = new DccVector3Data { X = 0d, Y = 10d, Z = 0d };
+        cameraNode.LocalTransform.Rotation = new DccQuaternionData { W = 1d };
+        scene.Nodes.Add(cameraNode);
+        scene.Lights.Add(DccRenderTestData.CreateLight());
+        // Move the light to the same +Y side as the camera so it actually
+        // illuminates the face the camera sees. The default fixture puts the
+        // light at (4, -4, 6) which is fine for the more elaborate test
+        // scenes elsewhere but ends up on the wrong side of our minimal
+        // single-triangle setup.
+        var lightNode = DccRenderTestData.CreateLightNode();
+        lightNode.LocalTransform.Translation = new DccVector3Data { X = 3d, Y = 5d, Z = 4d };
+        scene.Nodes.Add(lightNode);
 
-        var status = await hostEngine.ScheduleAndWaitAsync(job, scene, 1, CreateRenderOptions());
+        var status = await hostEngine.ScheduleAndWaitAsync(job, scene, 1, CreateRenderOptions(256, 256));
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
 
@@ -123,8 +160,11 @@ internal sealed class RenderBuildBlendFromDccSceneCoreTests : RenderBuildBlendFr
             Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
         });
 
-        AssertImageContainsMeaningfullyLitPixels(storedPath,
-            "Synthetic DCC still render with point light");
+        var solutionRoot = RenderTestAssetPaths.FindSolutionRoot()
+                           ?? throw new DirectoryNotFoundException("Solution root not found for golden-file validation.");
+        RenderGoldenFileAssert.AssertImageMatches(
+            storedPath, solutionRoot,
+            "BuildBlendFromDccSceneThenRenderStill", RenderEngine.Cycles, 256, 256);
     }
 
     [Test]
