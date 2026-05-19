@@ -26,7 +26,7 @@ namespace OutWit.Controller.Variables.Model
 
         public override string ToString()
         {
-            return $"#{Alpha:X2}{Red:X2}{Green:X2}{Blue:X2}"; ;
+            return $"#{Alpha:X2}{Red:X2}{Green:X2}{Blue:X2}";
         }
 
         #endregion

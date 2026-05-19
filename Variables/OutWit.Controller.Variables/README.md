@@ -40,15 +40,16 @@ The controller provides the following variable types:
 | DateTimeOffset | `DateTimeOffset` | Date/time with timezone |
 | TimeSpan | `TimeSpan` | Duration/interval |
 | Guid | `Guid` | Globally unique identifier |
-| Color | `Color` | RGBA color value |
-| Object | `Object` | Generic object container |
+| Color | `Color` | RGBA color value (8-bit channels, serialised as `#AARRGGBB`) |
+| Blob | `Blob` | Reference to a binary blob managed by `IWitBlobService` (used by Render/Matrices for large payloads) |
+| Object | `Object` | Generic object container — any MemoryPack-serialisable payload |
 | Tuple | `Tuple` | Key-value pair |
 | Array | `Array` | Generic array |
-| ProcessingOptions | `ProcessingOptions` | Distributed processing configuration |
+| ProcessingOptions | `ProcessingOptions` | Distributed processing configuration (used by Grid.ForEach + others) |
 
 ### Collections
 
-Each primitive type has a corresponding collection type (e.g., `IntCollection`, `StringCollection`).
+Every primitive and complex type above (except `Array`, `ProcessingOptions`) has a matching `<Type>Collection` — `IntCollection`, `StringCollection`, `BlobCollection`, `ObjectCollection`, `TupleCollection`, etc.
 
 ## Activities
 
@@ -119,12 +120,19 @@ Job:DistributedExample()
 
 ```
 OutWit.Controller.Variables/
-  Variables/           - Variable type definitions
-  Collections/         - Collection type definitions  
-  Activities/          - Activity definitions
-  Adapters/            - Activity adapters (parsing and processing)
-  Properties/          - Localized resources
-  WitControllerVariablesModule.cs - Plugin entry point
+  Variables/           - Variable type wrappers (WitVariableInteger, WitVariableColor, ...)
+  Collections/         - Collection wrappers (WitVariableIntegerCollection, ...)
+  Activities/          - Activity DTOs (WitActivityInteger, WitActivityIntegerRange, ...)
+  Adapters/            - Activity adapters — parse params + run the work
+  Interfaces/          - Internal marker interfaces shared across this controller's adapters
+  Utils/               - Exception-message helpers (ExceptionsUtils)
+  Properties/          - Localized error strings (Resources.resx)
+  build/               - Consumer-side MSBuild .targets shipped inside the nupkg
+  WitControllerVariablesModule.cs - Plugin entry point (DI registrations)
+
+OutWit.Controller.Variables.Model/
+  WitColor.cs          - Shared RGBA value type
+  Utils/               - VariablesUtils (hex parsing helpers)
 ```
 
 ## Creating Custom Variable Types
