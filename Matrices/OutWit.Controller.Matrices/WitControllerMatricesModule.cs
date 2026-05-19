@@ -11,6 +11,7 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.Matrices
 {
     [WitPluginManifest(ControllerBuildInfo.NAME, Version = ControllerBuildInfo.VERSION)]
+    [WitPluginDependency("Variables", MinimumVersion = "1.0.0")]
     public class WitControllerMatricesModule : WitPluginBase, IWitControllerNode, IWitControllerHost
     {
         public override void Initialize(IServiceCollection services)

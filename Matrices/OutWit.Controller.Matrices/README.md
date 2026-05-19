@@ -35,106 +35,96 @@ This controller adds support for dense and sparse matrix/vector types along with
 
 ## Activities
 
-### Matrix Information
-
-| Activity | Description | Example |
-|----------|-------------|---------|
-| `MatrixRowCount(matrix)` | Get number of rows | `Int:rows = MatrixRowCount(m);` |
-| `MatrixColumnCount(matrix)` | Get number of columns | `Int:cols = MatrixColumnCount(m);` |
-
-### Row/Column Access
-
-| Activity | Description |
-|----------|-------------|
-| `MatrixGetRow(matrix, index)` | Get single row as vector |
-| `MatrixGetRows(matrix, startIndex, count)` | Get multiple rows |
-| `MatrixGetColumn(matrix, index)` | Get single column as vector |
-| `MatrixGetColumns(matrix, startIndex, count)` | Get multiple columns |
-
-### Matrix Operations
-
-| Activity | Description |
-|----------|-------------|
-| `MatrixGustavsonMultiply(rowIndex, rowVector, matrix)` | Sparse row-by-matrix multiplication using Gustavson algorithm |
+> Script names use dot notation for grouped operations — `Matrix.RowCount`, not `MatrixRowCount`. The Gustavson operation lives at the top level as `GustavsonMultiply`.
 
 ### Constructors
 
-| Activity | Description |
-|----------|-------------|
-| `Matrix(data)` | Create dense matrix |
-| `MatrixSparse(data)` | Create sparse matrix |
-| `Vector(data)` | Create dense vector |
-| `VectorSparse(data)` | Create sparse vector |
-| `VectorCollection(vectors)` | Create vector collection |
-| `VectorSparseCollection(vectors)` | Create sparse vector collection |
+| Activity | Signature | Description |
+|----------|-----------|-------------|
+| `Matrix` | `Matrix(rows, cols, data)` or `Matrix(data)` | Create dense matrix |
+| `MatrixSparse` | `MatrixSparse(rows, cols, data)` or `MatrixSparse(data)` | Create sparse matrix from tuple data (`[rowIndex, columns]` rows OR `[row, col, value]` elements) |
+| `Vector` | `Vector(data)` | Create dense vector |
+| `VectorSparse` | `VectorSparse(data)` | Create sparse vector |
+| `VectorCollection` | `VectorCollection(vectors)` | Wrap dense vectors |
+| `VectorSparseCollection` | `VectorSparseCollection(vectors)` | Wrap sparse vectors |
+
+### Matrix Information
+
+| Activity | Signature |
+|----------|-----------|
+| `Matrix.RowCount` | `Matrix.RowCount(matrix) -> Int` |
+| `Matrix.ColumnCount` | `Matrix.ColumnCount(matrix) -> Int` |
+
+### Row/Column Access
+
+| Activity | Signature |
+|----------|-----------|
+| `Matrix.GetRow` | `Matrix.GetRow(matrix, index) -> Vector or VectorSparse` |
+| `Matrix.GetRows` | `Matrix.GetRows(matrix, startIndex, count) -> VectorCollection / VectorSparseCollection` |
+| `Matrix.GetColumn` | `Matrix.GetColumn(matrix, index) -> Vector or VectorSparse` |
+| `Matrix.GetColumns` | `Matrix.GetColumns(matrix, startIndex, count) -> VectorCollection / VectorSparseCollection` |
+
+### Sparse Operations
+
+| Activity | Signature |
+|----------|-----------|
+| `GustavsonMultiply` | `GustavsonMultiply(rowIndex, rowVector, matrix) -> VectorSparse` |
+
+Annotated `[CanRunInParallelOnClient(true)]` — safe to schedule in parallel branches of the same job.
 
 ## Usage Examples
 
-### Basic Matrix Operations
+These examples assume `matrix` and `vector` variables have already been populated upstream (e.g. by another activity that produces them, or by job parameters). Matrices ships sample `.smat` files via the consumer build's asset resolver into `<module>/Resources/`; how a consumer surfaces those into a typed `MatrixSparse` is application-specific.
+
+### Reading dimensions and rows
 
 ```
-Job:MatrixExample()
+Job:Inspect(MatrixSparse:matrix)
 {
-    MatrixSparse:matrix = LoadMatrix("input.smat");
-    
-    Int:rows = MatrixRowCount(matrix);
-    Int:cols = MatrixColumnCount(matrix);
-    
-    Trace("Matrix size: " + rows + "x" + cols, false);
-    
-    VectorSparse:firstRow = MatrixGetRow(matrix, 0);
+    Int:rows = Matrix.RowCount(matrix);
+    Int:cols = Matrix.ColumnCount(matrix);
+
+    VectorSparse:firstRow = Matrix.GetRow(matrix, 0);
 }
 ```
 
-### Processing Matrix Rows
+### Iterating rows
 
 ```
-Job:ProcessRows()
+Job:ProcessRows(MatrixSparse:matrix)
 {
-    MatrixSparse:matrix = LoadMatrix("data.smat");
-    Int:rowCount = MatrixRowCount(matrix);
+    Int:rowCount = Matrix.RowCount(matrix);
     IntCollection:indices = IntRange(0, rowCount);
-    
+
     VectorSparseCollection:results;
-    
-    results = ForEach(idx in indices) => MatrixGetRow(matrix, idx);
+    results = ForEach(idx in indices) => Matrix.GetRow(matrix, idx);
 }
 ```
 
-### Distributed Matrix Multiplication
+### Distributed sparse multiply (A × B, row-parallel)
 
 ```
-Job:DistributedMultiply()
+Job:DistributedMultiply(MatrixSparse:A, MatrixSparse:B)
 {
-    MatrixSparse:A = LoadMatrix("A.smat");
-    MatrixSparse:B = LoadMatrix("B.smat");
-    
-    Int:rows = MatrixRowCount(A);
+    Int:rows = Matrix.RowCount(A);
     IntCollection:rowIndices = IntRange(0, rows);
-    
-    ~ Distribute row-by-matrix multiplication across nodes ~
+
+    ~ One Gustavson row-multiply per remote node, results collected as sparse rows ~
     VectorSparseCollection:resultRows;
-    
-    resultRows = Grid.ForEach(idx in rowIndices) => 
-        MatrixGustavsonMultiply(idx, MatrixGetRow(A, idx), B);
+    resultRows = Grid.ForEach(idx in rowIndices) =>
+        GustavsonMultiply(idx, Matrix.GetRow(A, idx), B);
 }
 ```
 
-### Gustavson Sparse Matrix Multiplication
+`resultRows` is a per-row sparse-vector collection. There's no built-in "reassemble into a single sparse matrix" activity — most consumers continue processing rows in distributed form or aggregate externally.
 
-The `MatrixGustavsonMultiply` activity implements the Gustavson algorithm for sparse matrix multiplication. It is optimized for:
-- Sparse matrices with low fill-in
-- Row-wise parallel processing
-- Memory-efficient computation
+### Gustavson row multiply, single-machine
 
 ```
-Job:GustavsonExample()
+Job:GustavsonExample(MatrixSparse:matrix)
 {
-    MatrixSparse:matrix = LoadMatrix("sparse.smat");
-    VectorSparse:row = MatrixGetRow(matrix, 0);
-    
-    VectorSparse:result;
-    result = MatrixGustavsonMultiply(0, row, matrix);
+    VectorSparse:row = Matrix.GetRow(matrix, 0);
+    VectorSparse:result = GustavsonMultiply(0, row, matrix);
 }
 ```
 
@@ -151,13 +141,25 @@ This allows WitEngine to optimally distribute matrix operations based on node pe
 
 ```
 OutWit.Controller.Matrices/
-  Variables/           - Matrix and vector variable types
-  Collections/         - Vector collection types
-  Activities/          - Matrix operation activities
-  Adapters/            - Activity adapters with processing and benchmarking
-  Properties/          - Localized resources
-  WitControllerMatricesModule.cs - Plugin entry point
+  Variables/           - Matrix and vector variable wrappers
+  Collections/         - Vector collection wrappers
+  Activities/          - Activity DTOs (Matrix.RowCount, Matrix.GetRow, GustavsonMultiply, ...)
+  Adapters/            - Activity adapters — parse + execute + benchmark hooks
+  Interfaces/          - Internal marker interface shared across adapters
+  Utils/               - Exception-message helpers
+  Resources/           - .smat sample data files auto-staged into <module>/Resources/
+                       (Tier-2: also declared as ControllerDataAsset for GH-release fetch)
+  build/               - Consumer-side MSBuild .targets shipped inside the nupkg
+  WitControllerMatricesModule.cs - Plugin entry point (DI registrations)
+
+OutWit.Controller.Matrices.Model/
+  WitMatrix.cs, WitMatrixSparse.cs    - Dense + CSR sparse matrix types
+  WitVector.cs, WitVectorSparse.cs    - Dense + sparse vector types
+  Interfaces/                          - IWitMatrix<T>, IWitVector<T>, etc.
+  Math/                                - SparseGustavson algorithm
 ```
+
+The Matrices controller depends on `Variables 1.0.0+` for `Int`, `Double`, `IntCollection`, etc.
 
 ## Data Model (OutWit.Controller.Matrices.Model)
 
