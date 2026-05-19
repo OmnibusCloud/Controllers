@@ -30,19 +30,10 @@
     <ExcludedControllerModule Include="renderdcc.module" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Render production scripts (RenderStill.wit, RenderFrames.wit, etc.) live in the
-         Render controller source tree and are read by RenderProductionScriptBlenderTests
-         via RenderTestAssetPaths.FindBundledScriptsPath() which walks up looking for
-         "@Scripts/$(Configuration)". Stage them into the test bin so the walker finds them. -->
-    <RenderScriptFiles Include="..\OutWit.Controller.Render\Scripts\*.wit" />
-  </ItemGroup>
-
-  <Target Name="OutWitStageRenderScriptsForTests" BeforeTargets="BeforeBuild">
-    <Copy SourceFiles="@(RenderScriptFiles)"
-          DestinationFiles="@(RenderScriptFiles->'$(TargetDir)@Scripts\$(Configuration)\%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true"
-          OverwriteReadOnlyFiles="true" />
-  </Target>
+  <!-- Bundled Render scripts (RenderStill.wit, RenderFrames.wit, etc.) are staged
+       to $(SolutionDir)@Scripts/$(Configuration)/ by the Render controller's
+       StageBundledScriptsAtSolutionRoot target. RenderTestAssetPaths.FindBundledScriptsPath()
+       walks up from AppContext.BaseDirectory and finds that solution-level location;
+       no per-test bin staging required here. -->
 
 </Project>

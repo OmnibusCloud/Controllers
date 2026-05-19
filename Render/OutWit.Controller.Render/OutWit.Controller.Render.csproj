@@ -182,4 +182,22 @@
           OverwriteReadOnlyFiles="true" />
   </Target>
 
+  <!-- Stage bundled .wit scripts to $(SolutionDir)@Scripts/$(Configuration)/ so test
+       projects (Render.Tests, Render.Dcc.Tests) can find them via FindSolutionRoot
+       or a walker without each carrying its own copy logic. Scripts ship inside
+       the controller's content/module/Scripts/ via the normal pack output; this
+       solution-level staging is a dev-time convenience for local-build test runs. -->
+  <ItemGroup>
+    <RenderBundledScript Include="Scripts\*.wit" />
+  </ItemGroup>
+
+  <Target Name="StageBundledScriptsAtSolutionRoot"
+          AfterTargets="ControllerPostBuild"
+          Condition="@(RenderBundledScript-&gt;Count()) &gt; 0">
+    <Copy SourceFiles="@(RenderBundledScript)"
+          DestinationFiles="@(RenderBundledScript-&gt;'$(SolutionDir)@Scripts\$(Configuration)\%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          OverwriteReadOnlyFiles="true" />
+  </Target>
+
 </Project>

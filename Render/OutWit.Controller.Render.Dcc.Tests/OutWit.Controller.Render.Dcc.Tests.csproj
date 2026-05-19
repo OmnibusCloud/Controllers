@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.5" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.Render.Dcc\OutWit.Controller.Render.Dcc.csproj" />
+    <ProjectReference Include="..\OutWit.Controller.Render.Dcc.Model\OutWit.Controller.Render.Dcc.Model.csproj" />
+    <ProjectReference Include="..\OutWit.Controller.Render.Model\OutWit.Controller.Render.Model.csproj" />
+  </ItemGroup>
+
+  <!-- Build-only references to controllers Render.Dcc declares as runtime
+       dependencies via [WitPluginDependency] plus the controllers needed
+       at script-parse time (Render itself for the downstream rendering
+       pipeline that these animation tests exercise after BuildBlendFromDccScene).
+       ReferenceOutputAssembly=false means MSBuild builds these (so their
+       ControllerPostBuild populates @Controllers/<Cfg>/<name>.module/) but does
+       not pull their DLLs into the test project's compile output. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\OutWit.Controller.Render\OutWit.Controller.Render.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+</Project>
