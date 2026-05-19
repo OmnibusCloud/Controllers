@@ -168,9 +168,7 @@ namespace OutWit.Controller.Grid.Adapters
                 Keyword = activity.Keyword,
                 Collection = activity.Collection,
                 Options = optionsReference
-            }
-                .WithReturnReference(activity.ReturnReference)
-                .WithTransformer(activity.Transformer);
+            };
         }
 
         private static bool ResolveClientParallelPolicy(IReadOnlyList<WitGridTask> tasks)

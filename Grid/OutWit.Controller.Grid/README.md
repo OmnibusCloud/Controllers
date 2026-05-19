@@ -8,8 +8,7 @@ This controller enables workload distribution across multiple compute nodes in t
 
 ## Dependencies
 
-- `OutWit.Controller.Variables` (version 1.0.0 or higher)
-- `OutWit.Controller.Special` (version 1.0.0 or higher)
+- `OutWit.Controller.Variables` (version 1.0.0 or higher) — for `Int` / `IntCollection` / `ProcessingOptions` types.
 
 ## Activities
 
@@ -68,13 +67,12 @@ Job:ConfiguredDistribution()
 ### Processing Matrix Rows
 
 ```
-Job:MatrixProcessing()
+Job:MatrixProcessing(MatrixSparse:matrix)
 {
-    MatrixSparse:matrix = LoadMatrix("data.smat");
-    IntCollection:rowIndices = IntRange(0, MatrixRowCount(matrix));
+    IntCollection:rowIndices = IntRange(0, Matrix.RowCount(matrix));
     VectorSparseCollection:processedRows;
-    
-    processedRows = Grid.ForEach(idx in rowIndices) => ProcessRow(matrix, idx);
+
+    processedRows = Grid.ForEach(idx in rowIndices) => Matrix.GetRow(matrix, idx);
 }
 ```
 
@@ -106,13 +104,22 @@ Nodes pull tasks from a central queue. Best for:
 
 ```
 OutWit.Controller.Grid/
-  Activities/          - Grid activity definitions
-  Adapters/            - Activity adapters
-  Builders/            - Task building utilities
-  Utils/               - Processing and exception utilities
-  Properties/          - Localized resources
-  WitControllerSpecialGrid.cs - Plugin entry point
+  Activities/          - Grid.ForEach DTO (single activity surface)
+  Adapters/            - WitActivityAdapterGridForEach — scheduling + dispatch
+  Builders/            - WitGridTaskBuilder — per-task variable scoping + work estimate
+  Interfaces/          - Internal marker interface shared with adapters
+  Utils/               - Exception-message helpers
+  Properties/          - Localized error strings (Resources.resx)
+  build/               - Consumer-side MSBuild .targets shipped inside the nupkg
+  WitControllerGridModule.cs - Plugin entry point (DI registrations)
+
+OutWit.Controller.Grid.Model/
+  WitGridTask.cs            - Per-task (activity + variables + estimated work)
+  WitGridTaskGroup.cs       - A node's queue of tasks + rate / ETA accounting
+  WitGridTaskAllocator.cs   - LPT-greedy schedule + "minimize node count" heuristic
 ```
+
+The Grid.ForEach activity itself is **not** MemoryPack-serialised — Grid is host-only (only `IWitControllerHost`, not `IWitControllerNode`), so the activity stays on the host and only its inner transformer crosses the wire per task. See the comment on `WitActivityGridForEach` for the design rationale.
 
 ## Architecture
 

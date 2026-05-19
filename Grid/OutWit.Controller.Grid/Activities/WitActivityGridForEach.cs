@@ -6,6 +6,13 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Grid.Activities
 {
+    // Intentionally not [MemoryPackable] / partial / sealed: Grid is a host-only
+    // controller (the module class implements IWitControllerHost only), so the
+    // Grid.ForEach activity never crosses the host↔node WitRPC boundary. What
+    // crosses is the inner transformer activity, cloned + scoped per task by
+    // WitGridTaskBuilder; that transformer brings its own [MemoryPackable]
+    // contract. Adding MemoryPack here would impose constraints the type
+    // doesn't actually need.
     [Activity("Grid.ForEach")]
     public class WitActivityGridForEach : WitActivityTransform
     {

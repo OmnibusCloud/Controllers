@@ -10,6 +10,7 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.Grid
 {
     [WitPluginManifest(ControllerBuildInfo.NAME, Version = ControllerBuildInfo.VERSION)]
+    [WitPluginDependency("Variables", MinimumVersion = "1.0.0")]
     public class WitControllerGridModule : WitPluginBase, IWitControllerHost
     {
         public override void Initialize(IServiceCollection services)
