@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>RenderDcc</ControllerName>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Description>Host-only neutral DCC scene validation and .blend build bootstrap activities that sit upstream of the OutWit.Controller.Render controller.</Description>
     <PackageTags>render;dcc;3dsmax;scene-build;host-only;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>dcc-build-blend-from-scene;dcc-contract-validation</ControllerFeatures>

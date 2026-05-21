@@ -5,7 +5,7 @@
       Auto-imported into any csproj that PackageReferences this controller.
 
       Lifecycle:
-        1. Copy this package's content/module/*  →  $(OutputPath)@Controllers\<Cfg>\matrices.module\
+        1. Copy this package's content/module/*  →  $(OutputPath)@Controllers\matrices.module\
            so the controller runtime can find Matrices.dll, its Model dll, the
            manifest, and any non-external resources.
         2. Invoke ResolveControllerAssets (from OutWit.Engine.Assets.MSBuild,
@@ -16,11 +16,17 @@
       Tier-1 controllers without external assets only need the first target;
       they reuse this same template shape with the second target trimmed
       (or it no-ops cleanly because their controller.json has empty dataAssets[]).
+
+      Path note: $(OutputPath) already encodes Debug/Release via
+      bin/<Configuration>/<tfm>/, so no extra $(Configuration) sub-folder is
+      needed. WitEngine's loader reads $(AppContext.BaseDirectory)/@Controllers/
+      directly — the flat layout matches that without any post-restore copy
+      step on the consumer side.
   -->
 
   <PropertyGroup>
     <_OutWitMatricesModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitMatricesModulePackageContent>
-    <_OutWitMatricesModuleOutputDir>$(OutputPath)@Controllers\$(Configuration)\matrices.module\</_OutWitMatricesModuleOutputDir>
+    <_OutWitMatricesModuleOutputDir>$(OutputPath)@Controllers\matrices.module\</_OutWitMatricesModuleOutputDir>
   </PropertyGroup>
 
   <Target Name="OutWitCopyMatricesModule"
@@ -44,7 +50,7 @@
           Condition="Exists('$(_OutWitMatricesModuleOutputDir)controller.json')">
     <ResolveControllerAssetsTask
         ManifestPath="$(_OutWitMatricesModuleOutputDir)controller.json"
-        OutputPath="$(OutputPath)@Controllers\$(Configuration)\" />
+        OutputPath="$(OutputPath)@Controllers\" />
   </Target>
 
 </Project>

@@ -20,7 +20,7 @@
 
   <PropertyGroup>
     <_OutWitRenderModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitRenderModulePackageContent>
-    <_OutWitRenderModuleOutputDir>$(OutputPath)@Controllers\$(Configuration)\render.module\</_OutWitRenderModuleOutputDir>
+    <_OutWitRenderModuleOutputDir>$(OutputPath)@Controllers\render.module\</_OutWitRenderModuleOutputDir>
   </PropertyGroup>
 
   <Target Name="OutWitCopyRenderModule"
@@ -44,7 +44,7 @@
           Condition="Exists('$(_OutWitRenderModuleOutputDir)controller.json')">
     <ResolveControllerAssetsTask
         ManifestPath="$(_OutWitRenderModuleOutputDir)controller.json"
-        OutputPath="$(OutputPath)@Controllers\$(Configuration)\"
+        OutputPath="$(OutputPath)@Controllers\"
         ResolveForAllPlatforms="true" />
   </Target>
 

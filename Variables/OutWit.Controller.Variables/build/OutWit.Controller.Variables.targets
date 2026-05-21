@@ -5,13 +5,13 @@
       Auto-imported into any csproj that PackageReferences this controller.
 
       Tier-1 controller: no external data assets. Only step is to copy this
-      package's content/module/* into $(OutputPath)@Controllers\<Cfg>\variables.module\
+      package's content/module/* into $(OutputPath)@Controllers\variables.module\
       so the controller runtime can find Variables.dll, its Model dll, and the manifest.
   -->
 
   <PropertyGroup>
     <_OutWitVariablesModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitVariablesModulePackageContent>
-    <_OutWitVariablesModuleOutputDir>$(OutputPath)@Controllers\$(Configuration)\variables.module\</_OutWitVariablesModuleOutputDir>
+    <_OutWitVariablesModuleOutputDir>$(OutputPath)@Controllers\variables.module\</_OutWitVariablesModuleOutputDir>
   </PropertyGroup>
 
   <Target Name="OutWitCopyVariablesModule"
@@ -35,7 +35,7 @@
           Condition="Exists('$(_OutWitVariablesModuleOutputDir)controller.json')">
     <ResolveControllerAssetsTask
         ManifestPath="$(_OutWitVariablesModuleOutputDir)controller.json"
-        OutputPath="$(OutputPath)@Controllers\$(Configuration)\" />
+        OutputPath="$(OutputPath)@Controllers\" />
   </Target>
 
 </Project>

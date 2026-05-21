@@ -5,15 +5,20 @@
       Auto-imported into any csproj that PackageReferences this controller.
 
       Tier-1 controller: no external data assets. Only step is to copy this
-      package's content/module/* into $(OutputPath)@Controllers\<Cfg>\grid.module\
+      package's content/module/* into $(OutputPath)@Controllers\grid.module\
       so the controller runtime can find Grid.dll, its Model dll, and the manifest.
       The ResolveControllerAssetsTask call still fires but no-ops cleanly because
       controller.json declares an empty dataAssets[].
+
+      $(OutputPath) already encodes Debug/Release via bin/<Configuration>/<tfm>/,
+      so no extra $(Configuration) sub-folder is needed. WitEngine's loader
+      reads $(AppContext.BaseDirectory)/@Controllers/ directly — the flat
+      layout matches that without any post-restore copy step on the consumer.
   -->
 
   <PropertyGroup>
     <_OutWitGridModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitGridModulePackageContent>
-    <_OutWitGridModuleOutputDir>$(OutputPath)@Controllers\$(Configuration)\grid.module\</_OutWitGridModuleOutputDir>
+    <_OutWitGridModuleOutputDir>$(OutputPath)@Controllers\grid.module\</_OutWitGridModuleOutputDir>
   </PropertyGroup>
 
   <Target Name="OutWitCopyGridModule"
@@ -37,7 +42,7 @@
           Condition="Exists('$(_OutWitGridModuleOutputDir)controller.json')">
     <ResolveControllerAssetsTask
         ManifestPath="$(_OutWitGridModuleOutputDir)controller.json"
-        OutputPath="$(OutputPath)@Controllers\$(Configuration)\" />
+        OutputPath="$(OutputPath)@Controllers\" />
   </Target>
 
 </Project>

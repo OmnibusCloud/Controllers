@@ -5,13 +5,13 @@
       Auto-imported into any csproj that PackageReferences this controller.
 
       Tier-1 controller: no external data assets. Only step is to copy this
-      package's content/module/* into $(OutputPath)@Controllers\<Cfg>\renderdcc.module\
+      package's content/module/* into $(OutputPath)@Controllers\renderdcc.module\
       so the controller runtime can find Render.Dcc.dll, its Model dll, and the manifest.
   -->
 
   <PropertyGroup>
     <_OutWitRenderDccModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitRenderDccModulePackageContent>
-    <_OutWitRenderDccModuleOutputDir>$(OutputPath)@Controllers\$(Configuration)\renderdcc.module\</_OutWitRenderDccModuleOutputDir>
+    <_OutWitRenderDccModuleOutputDir>$(OutputPath)@Controllers\renderdcc.module\</_OutWitRenderDccModuleOutputDir>
   </PropertyGroup>
 
   <Target Name="OutWitCopyRenderDccModule"
@@ -35,7 +35,7 @@
           Condition="Exists('$(_OutWitRenderDccModuleOutputDir)controller.json')">
     <ResolveControllerAssetsTask
         ManifestPath="$(_OutWitRenderDccModuleOutputDir)controller.json"
-        OutputPath="$(OutputPath)@Controllers\$(Configuration)\" />
+        OutputPath="$(OutputPath)@Controllers\" />
   </Target>
 
 </Project>

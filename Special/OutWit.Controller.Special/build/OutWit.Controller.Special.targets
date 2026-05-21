@@ -5,13 +5,13 @@
       Auto-imported into any csproj that PackageReferences this controller.
 
       Tier-1 controller: no external data assets. Only step is to copy this
-      package's content/module/* into $(OutputPath)@Controllers\<Cfg>\special.module\
+      package's content/module/* into $(OutputPath)@Controllers\special.module\
       so the controller runtime can find Special.dll and the manifest.
   -->
 
   <PropertyGroup>
     <_OutWitSpecialModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitSpecialModulePackageContent>
-    <_OutWitSpecialModuleOutputDir>$(OutputPath)@Controllers\$(Configuration)\special.module\</_OutWitSpecialModuleOutputDir>
+    <_OutWitSpecialModuleOutputDir>$(OutputPath)@Controllers\special.module\</_OutWitSpecialModuleOutputDir>
   </PropertyGroup>
 
   <Target Name="OutWitCopySpecialModule"
@@ -35,7 +35,7 @@
           Condition="Exists('$(_OutWitSpecialModuleOutputDir)controller.json')">
     <ResolveControllerAssetsTask
         ManifestPath="$(_OutWitSpecialModuleOutputDir)controller.json"
-        OutputPath="$(OutputPath)@Controllers\$(Configuration)\" />
+        OutputPath="$(OutputPath)@Controllers\" />
   </Target>
 
 </Project>

@@ -5,7 +5,7 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>Render</ControllerName>
-    <Version>1.15.2</Version>
+    <Version>1.15.3</Version>
     <Description>Distributed rendering via Blender CLI and ffmpeg for .blend scene blobs, bootstrap typed-scene inputs, stills, tiled stills with overlap-aware tile options, runtime diagnostics, unified/frame/video/tiled preflight validation, frame sequences, and MP4 output.</Description>
     <PackageTags>render;blender;ffmpeg;cycles;distributed-rendering;3d;video;typed-scene;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>render-split;render-split-tiles;render-frame;render-collect;render-collect-still;render-collect-tiles;render-build-blend;render-build-blend-from-refs;render-encode-video;render-runtime-diagnostics;render-preflight;render-preflight-frames;render-preflight-video;render-preflight-unified;frame-based-distribution;tile-options;tile-overlap;tiled-still;mp4-output;typed-scene-bootstrap</ControllerFeatures>
