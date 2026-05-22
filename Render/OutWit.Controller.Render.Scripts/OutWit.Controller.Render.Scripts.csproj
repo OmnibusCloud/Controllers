@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.props" />
+
+  <PropertyGroup>
+    <ControllerName>Render</ControllerName>
+    <Version>1.0.0</Version>
+    <Description>Bundled .wit scripts for the OutWit.Controller.Render controller — RenderFrames, RenderStill, RenderSceneFrames, RenderPreflight, and the 30+ other render orchestration scripts that WitCloud's ScriptSeeder reads from @Scripts/ on startup.</Description>
+    <PackageTags>render;scripts;witengine;witcloud;controller</PackageTags>
+  </PropertyGroup>
+
+  <!-- Source of truth lives next to the Render controller. Pack as content
+       so consumers receive content/scripts/*.wit on restore; the matching
+       consumer-side build/.targets stages them into bin/@Scripts/.
+
+       Excludes RenderDcc*.wit — those scripts ship in the sibling
+       OutWit.Controller.Render.Dcc.Scripts package so consumers can pull
+       Render-without-Dcc or both, and the two packages never double-ship
+       the same file. -->
+  <ItemGroup>
+    <None Include="..\OutWit.Controller.Render\Scripts\*.wit"
+          Exclude="..\OutWit.Controller.Render\Scripts\RenderDcc*.wit"
+          Pack="true"
+          PackagePath="content/scripts/" />
+
+    <None Include="build\OutWit.Controller.Render.Scripts.targets"
+          Pack="true"
+          PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.targets" />
+
+</Project>

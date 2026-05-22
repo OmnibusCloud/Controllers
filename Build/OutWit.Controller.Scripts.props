@@ -1,0 +1,82 @@
+<!--
+    Build/OutWit.Controller.Scripts.props
+    Imported manually by each Controller Scripts csproj. Scripts packages
+    are content-only nupkgs that ship the bundled .wit scripts associated
+    with a controller. Per-Scripts csprojs only need ControllerName,
+    Version, Description, PackageTags, and the <None Include="..."> items
+    that point at the .wit files to pack.
+
+    Why a separate package per scripts set, not bundled inside the
+    controller nupkg:
+      - Scripts call controller methods by name through the WitEngine
+        runtime, not by typed reference; they have no managed dependency
+        on the controller DLL.
+      - Many scripts span multiple controllers (e.g. RenderFrames.wit
+        requires Render+Grid+Variables), so picking a "primary"
+        controller to bundle them into is arbitrary.
+      - Scripts and controllers have different change cadences; a
+        script bug fix shouldn't force a controller binary rebuild.
+
+    Usage:
+
+      <Project Sdk="Microsoft.NET.Sdk">
+        <Import Project="..\..\Build\OutWit.Controller.Scripts.props" />
+        <PropertyGroup>
+          <ControllerName>Foo</ControllerName>
+          <Version>1.0.0</Version>
+          <Description>Bundled .wit scripts for the Foo controller.</Description>
+          <PackageTags>scripts;witengine;witcloud;foo</PackageTags>
+        </PropertyGroup>
+        <ItemGroup>
+          <None Include="..\OutWit.Controller.Foo\Scripts\*.wit"
+                Pack="true"
+                PackagePath="content/scripts/" />
+        </ItemGroup>
+        <Import Project="..\..\Build\OutWit.Controller.Scripts.targets" />
+      </Project>
+-->
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- PackageId inherits the csproj filename by default
+         (OutWit.Controller.<Name>.Scripts.csproj -> OutWit.Controller.<Name>.Scripts). -->
+    <Authors>Dmitry Ratner</Authors>
+    <Company>OutWit</Company>
+    <Copyright>Copyright © $([System.DateTime]::UtcNow.Year) Dmitry Ratner</Copyright>
+    <PackageProjectUrl>https://witengine.io/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/OmnibusCloud/Controllers</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>WitEngine-logo.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- Content-only nupkg shape, mirroring the Tier-2 controller packaging:
+         no managed lib, just content/scripts/*.wit. lib/<tfm>/_._ marker is
+         written by ScriptsPackContents to keep NuGet's framework-compatibility
+         check happy. -->
+    <IsPackable>true</IsPackable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);ScriptsPackContents</TargetsForTfmSpecificContentInPackage>
+
+    <GeneratePackageOnBuild Condition=" '$(Configuration)' == 'Release' ">true</GeneratePackageOnBuild>
+    <IncludeSymbols>false</IncludeSymbols>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <!-- LICENSE / WitEngine-logo / README ship in the nupkg root.
+       They must exist at the solution root (one level above the
+       Scripts csproj's parent folder). -->
+  <ItemGroup>
+    <None Include="..\..\LICENSE"             Pack="true" PackagePath="\" />
+    <None Include="..\..\WitEngine-logo.png"  Pack="true" PackagePath="\" />
+    <None Include="..\..\README.md"           Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

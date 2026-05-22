@@ -1,0 +1,33 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Matrices.Scripts NuGet
+      package. Auto-imported into any csproj that PackageReferences this
+      scripts pack.
+
+      Copies content/scripts/*.wit into the consumer's $(OutputPath)@Scripts/
+      flat layout (no $(Configuration) sub-folder).
+  -->
+
+  <PropertyGroup>
+    <_OutWitMatricesScriptsContent>$(MSBuildThisFileDirectory)..\content\scripts\</_OutWitMatricesScriptsContent>
+    <_OutWitMatricesScriptsOutputDir>$(OutputPath)@Scripts\</_OutWitMatricesScriptsOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyMatricesScripts"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitMatricesScriptsContent)')">
+    <ItemGroup>
+      <_OutWitMatricesScriptFiles Include="$(_OutWitMatricesScriptsContent)*.wit" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitMatricesScriptFiles)"
+        DestinationFiles="@(_OutWitMatricesScriptFiles->'$(_OutWitMatricesScriptsOutputDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Matrices.Scripts: staged @(_OutWitMatricesScriptFiles->Count()) script(s) to '$(_OutWitMatricesScriptsOutputDir)'." />
+  </Target>
+
+</Project>

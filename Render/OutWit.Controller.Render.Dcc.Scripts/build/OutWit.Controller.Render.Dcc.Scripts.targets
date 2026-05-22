@@ -1,0 +1,33 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Render.Dcc.Scripts
+      NuGet package. Auto-imported into any csproj that PackageReferences
+      this scripts pack.
+
+      Copies content/scripts/*.wit into the consumer's $(OutputPath)@Scripts/
+      flat layout (no $(Configuration) sub-folder).
+  -->
+
+  <PropertyGroup>
+    <_OutWitRenderDccScriptsContent>$(MSBuildThisFileDirectory)..\content\scripts\</_OutWitRenderDccScriptsContent>
+    <_OutWitRenderDccScriptsOutputDir>$(OutputPath)@Scripts\</_OutWitRenderDccScriptsOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyRenderDccScripts"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitRenderDccScriptsContent)')">
+    <ItemGroup>
+      <_OutWitRenderDccScriptFiles Include="$(_OutWitRenderDccScriptsContent)*.wit" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitRenderDccScriptFiles)"
+        DestinationFiles="@(_OutWitRenderDccScriptFiles->'$(_OutWitRenderDccScriptsOutputDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Render.Dcc.Scripts: staged @(_OutWitRenderDccScriptFiles->Count()) script(s) to '$(_OutWitRenderDccScriptsOutputDir)'." />
+  </Target>
+
+</Project>

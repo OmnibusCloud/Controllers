@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.props" />
+
+  <PropertyGroup>
+    <ControllerName>Render.Dcc</ControllerName>
+    <Version>1.0.0</Version>
+    <Description>Bundled .wit scripts for the OutWit.Controller.Render.Dcc controller — typed-scene Render DCC orchestration (RenderDccSceneFrames, RenderDccSceneStill, RenderDccSceneStillTiled, RenderDccSceneVideo).</Description>
+    <PackageTags>render-dcc;scripts;typed-scene;witengine;witcloud;controller</PackageTags>
+  </PropertyGroup>
+
+  <!-- DCC scripts currently live next to the Render controller (no separate
+       Render.Dcc/Scripts/ source dir exists yet). Source-of-truth co-location
+       can move to Render.Dcc/Scripts/ later — for now, glob just the
+       RenderDcc*.wit files from the Render controller's Scripts/ folder. -->
+  <ItemGroup>
+    <None Include="..\OutWit.Controller.Render\Scripts\RenderDcc*.wit"
+          Pack="true"
+          PackagePath="content/scripts/" />
+
+    <None Include="build\OutWit.Controller.Render.Dcc.Scripts.targets"
+          Pack="true"
+          PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.targets" />
+
+</Project>

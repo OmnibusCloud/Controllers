@@ -1,0 +1,35 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Render.Scripts NuGet
+      package. Auto-imported into any csproj that PackageReferences this
+      scripts pack.
+
+      Copies the .wit scripts shipped in this nupkg's content/scripts/
+      folder into the consumer's $(OutputPath)@Scripts/ — flat layout
+      (no $(Configuration) sub-folder), matching what WitCloud's
+      ScriptSeeder + ProcessingDistributedTests expect.
+  -->
+
+  <PropertyGroup>
+    <_OutWitRenderScriptsContent>$(MSBuildThisFileDirectory)..\content\scripts\</_OutWitRenderScriptsContent>
+    <_OutWitRenderScriptsOutputDir>$(OutputPath)@Scripts\</_OutWitRenderScriptsOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyRenderScripts"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitRenderScriptsContent)')">
+    <ItemGroup>
+      <_OutWitRenderScriptFiles Include="$(_OutWitRenderScriptsContent)*.wit" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitRenderScriptFiles)"
+        DestinationFiles="@(_OutWitRenderScriptFiles->'$(_OutWitRenderScriptsOutputDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Render.Scripts: staged @(_OutWitRenderScriptFiles->Count()) script(s) to '$(_OutWitRenderScriptsOutputDir)'." />
+  </Target>
+
+</Project>

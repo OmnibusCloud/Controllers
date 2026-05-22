@@ -16,14 +16,17 @@
   <Folder Name="/Matrices/">
     <Project Path="Matrices/OutWit.Controller.Matrices/OutWit.Controller.Matrices.csproj" />
     <Project Path="Matrices/OutWit.Controller.Matrices.Model/OutWit.Controller.Matrices.Model.csproj" />
+    <Project Path="Matrices/OutWit.Controller.Matrices.Scripts/OutWit.Controller.Matrices.Scripts.csproj" />
     <Project Path="Matrices/OutWit.Controller.Matrices.Tests/OutWit.Controller.Matrices.Tests.csproj" />
   </Folder>
   <Folder Name="/Render/">
     <Project Path="Render/OutWit.Controller.Render/OutWit.Controller.Render.csproj" />
     <Project Path="Render/OutWit.Controller.Render.Model/OutWit.Controller.Render.Model.csproj" />
+    <Project Path="Render/OutWit.Controller.Render.Scripts/OutWit.Controller.Render.Scripts.csproj" />
     <Project Path="Render/OutWit.Controller.Render.Dcc/OutWit.Controller.Render.Dcc.csproj" />
     <Project Path="Render/OutWit.Controller.Render.Dcc.Model/OutWit.Controller.Render.Dcc.Model.csproj" />
     <Project Path="Render/OutWit.Controller.Render.Dcc.Model.Tests/OutWit.Controller.Render.Dcc.Model.Tests.csproj" />
+    <Project Path="Render/OutWit.Controller.Render.Dcc.Scripts/OutWit.Controller.Render.Dcc.Scripts.csproj" />
     <Project Path="Render/OutWit.Controller.Render.Dcc.Tests/OutWit.Controller.Render.Dcc.Tests.csproj" />
     <Project Path="Render/OutWit.Controller.Render.Tests/OutWit.Controller.Render.Tests.csproj" />
   </Folder>

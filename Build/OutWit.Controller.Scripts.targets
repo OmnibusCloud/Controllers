@@ -1,0 +1,33 @@
+<!--
+    Build/OutWit.Controller.Scripts.targets
+    Imported manually by each Controller Scripts csproj after its
+    props import + per-Scripts PropertyGroup + None Include items.
+
+    Writes an empty lib/<tfm>/_._ marker so NuGet considers the package
+    framework-compatible with consumer projects (necessary because
+    IncludeBuildOutput=false leaves lib/ otherwise empty). The .wit files
+    themselves are packed via the per-csproj <None Pack="true"
+    PackagePath="content/scripts/"> items.
+
+    The consumer-side per-package build/.targets (one per scripts package)
+    copies content/scripts/*.wit into the consumer's
+    $(OutputPath)@Scripts/ folder. We can't put a shared consumer-side
+    target here because it has to be packed with a specific filename
+    matching the package id, so each Scripts csproj declares its own
+    build/<PackageId>.targets file via <None Pack="true" PackagePath="build/">.
+-->
+<Project>
+
+  <Target Name="ScriptsPackContents">
+    <PropertyGroup>
+      <_EmptyLibMarker>$(IntermediateOutputPath)_._</_EmptyLibMarker>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_EmptyLibMarker)" Lines="" Overwrite="true" />
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(_EmptyLibMarker)">
+        <PackagePath>lib/$(TargetFramework)/_._</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
+
+</Project>

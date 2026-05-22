@@ -1,0 +1,13 @@
+Job:GustavsonMultiplyServerOnly(Matrix:matrix1, Matrix:matrix2)
+{
+    Int:rowCount = Matrix.RowCount(matrix1);
+    Int:columnCount = Matrix.ColumnCount(matrix2);
+    IntCollection:rowIndices = Int.Range(0, rowCount);
+    VectorCollection:rows = Matrix.GetRows(matrix1);
+    
+    TupleCollection:tasks = Zip(rowIndices, rows);
+    
+    TupleCollection:result = Transform.ForEach(task in tasks) => GustavsonMultiply(task.Item1, task.Item2, matrix2);
+    
+    MatrixSparse:resultMatrix = MatrixSparse(rowCount, columnCount, result);
+}
