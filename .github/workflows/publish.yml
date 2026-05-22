@@ -38,6 +38,10 @@ on:
           - OutWit.Controller.Matrices.Model
           - OutWit.Controller.Render.Model
           - OutWit.Controller.Render.Dcc.Model
+          # Scripts (content-only nupkgs that ship bundled .wit scripts)
+          - OutWit.Controller.Matrices.Scripts
+          - OutWit.Controller.Render.Scripts
+          - OutWit.Controller.Render.Dcc.Scripts
           # Tools
           - OutWit.Controller.Pack
       pushToNuGet:
