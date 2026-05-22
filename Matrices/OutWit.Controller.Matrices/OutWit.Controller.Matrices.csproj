@@ -25,14 +25,14 @@
   <ItemGroup>
     <ControllerDataAsset Include="rowMatrix">
       <RuntimeIdentifier>any</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/matrices-v1.0.4/rowMatrix.smat</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/matrices-v1.0.5/rowMatrix.smat</Uri>
       <Sha256>bc2dc4d1e5bd6e3ba1a9e89f50d0ee5de72c11a1054d1707103ecfa492f84246</Sha256>
       <Size>98333</Size>
       <ExtractTo>Resources/</ExtractTo>
     </ControllerDataAsset>
     <ControllerDataAsset Include="largeMatrix">
       <RuntimeIdentifier>any</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/matrices-v1.0.4/largeMatrix.smat</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/matrices-v1.0.5/largeMatrix.smat</Uri>
       <Sha256>51d15c6e388278cd3fb3bbf170f3ed7255f57e7d7cdc4ac923057577e7e408dd</Sha256>
       <Size>50593817</Size>
       <ExtractTo>Resources/</ExtractTo>

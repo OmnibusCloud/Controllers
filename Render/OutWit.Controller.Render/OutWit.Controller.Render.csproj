@@ -61,7 +61,7 @@
   <ItemGroup>
     <ControllerDataAsset Include="blender-win-x64">
       <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.2/blender-windows-x64.zip</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.3/blender-windows-x64.zip</Uri>
       <Sha256>8d97449730a5cf6958e38738665252f4aba65abfa448f77de012e207e1e3344a</Sha256>
       <Size>429597391</Size>
       <ExtractTo>blender/windows-x64/</ExtractTo>
@@ -70,7 +70,7 @@
     </ControllerDataAsset>
     <ControllerDataAsset Include="blender-linux-x64">
       <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.2/blender-linux-x64.zip</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.3/blender-linux-x64.zip</Uri>
       <Sha256>09d319069c4f18d4f6b5b94bbcd70e6ac1d848b76a4399eba7e9db5c95051fe6</Sha256>
       <Size>725310934</Size>
       <ExtractTo>blender/linux-x64/</ExtractTo>
@@ -79,7 +79,7 @@
     </ControllerDataAsset>
     <ControllerDataAsset Include="blender-osx-arm64">
       <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.2/blender-macos-arm64.zip</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.3/blender-macos-arm64.zip</Uri>
       <Sha256>dc9b943a952a03d422c8ab63b13a465d332d56234f500c0e339dec5089686c36</Sha256>
       <Size>313964582</Size>
       <ExtractTo>blender/macos-arm64/</ExtractTo>
@@ -89,7 +89,7 @@
 
     <ControllerDataAsset Include="ffmpeg-win-x64">
       <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.2/ffmpeg-windows-x64.zip</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.3/ffmpeg-windows-x64.zip</Uri>
       <Sha256>9223e5be21782e83803f4ebfb60a70937de6ce8727d8e736de7497742bb4950d</Sha256>
       <Size>262349048</Size>
       <ExtractTo>ffmpeg/windows-x64/</ExtractTo>
@@ -98,7 +98,7 @@
     </ControllerDataAsset>
     <ControllerDataAsset Include="ffmpeg-linux-x64">
       <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.2/ffmpeg-linux-x64.zip</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.3/ffmpeg-linux-x64.zip</Uri>
       <Sha256>c1482743094d86d439e952492c3c8b8b1d953a7a311eff0b80ca68c6f535b86a</Sha256>
       <Size>225468685</Size>
       <ExtractTo>ffmpeg/linux-x64/</ExtractTo>
@@ -107,7 +107,7 @@
     </ControllerDataAsset>
     <ControllerDataAsset Include="ffmpeg-osx-arm64">
       <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.2/ffmpeg-macos-arm64.zip</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.3/ffmpeg-macos-arm64.zip</Uri>
       <Sha256>b1b959f2de65b0b75ce10177a9f9073da66e622adac12c69c83e2fec7189e115</Sha256>
       <Size>85982988</Size>
       <ExtractTo>ffmpeg/macos-arm64/</ExtractTo>
@@ -117,7 +117,7 @@
 
     <ControllerDataAsset Include="benchmark-scene">
       <RuntimeIdentifier>any</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.2/benchmark_scene.blend</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.3/benchmark_scene.blend</Uri>
       <Sha256>70bf04eb4323c085ec9a354126a49c5f476c5d301246f6f47d0e9a4addd296af</Sha256>
       <Size>124563</Size>
       <ExtractTo>.</ExtractTo>
@@ -126,7 +126,7 @@
     </ControllerDataAsset>
     <ControllerDataAsset Include="benchmark-scene-still">
       <RuntimeIdentifier>any</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.2/benchmark_scene_still.blend</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.3/benchmark_scene_still.blend</Uri>
       <Sha256>70bf04eb4323c085ec9a354126a49c5f476c5d301246f6f47d0e9a4addd296af</Sha256>
       <Size>124563</Size>
       <ExtractTo>.</ExtractTo>
@@ -135,7 +135,7 @@
     </ControllerDataAsset>
     <ControllerDataAsset Include="benchmark-scene-video">
       <RuntimeIdentifier>any</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.2/benchmark_scene_video.blend</Uri>
+      <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.3/benchmark_scene_video.blend</Uri>
       <Sha256>5b29fe72000f2706022a2416980fe025ce109b780cdf15dc60aad9c9ae64160c</Sha256>
       <Size>126205</Size>
       <ExtractTo>.</ExtractTo>
