@@ -5,7 +5,7 @@ run-name: "Verify Render v${{ inputs.version }}"
 # package. Creates a throw-away consumer csproj that PackageReferences the
 # specified version, runs dotnet build, and asserts that every one of the
 # nine ControllerDataAssets (Blender + FFmpeg per RID + 3 benchmark scenes)
-# landed in @Controllers/Debug/render.module/ where the runtime expects it.
+# landed in @Controllers/render.module/ where the runtime expects it.
 #
 # Trust boundary check: the consumer pulls everything from nuget.org +
 # the render-v<version> GitHub Release. No local @Prerequisites paths,
@@ -62,7 +62,7 @@ jobs:
 
       - name: Show resolved module layout
         run: |
-          MODULE=/tmp/render-consumer/bin/Debug/net10.0/@Controllers/Debug/render.module
+          MODULE=/tmp/render-consumer/bin/Debug/net10.0/@Controllers/render.module
           echo "Module dir: $MODULE"
           echo ""
           echo "Top-level contents:"
@@ -77,7 +77,7 @@ jobs:
       - name: Assert nine expected artifacts
         run: |
           set -e
-          MODULE=/tmp/render-consumer/bin/Debug/net10.0/@Controllers/Debug/render.module
+          MODULE=/tmp/render-consumer/bin/Debug/net10.0/@Controllers/render.module
 
           check() {
             local what="$1" path="$2"
@@ -123,7 +123,7 @@ jobs:
         continue-on-error: true
         run: |
           set -e
-          FFMPEG=/tmp/render-consumer/bin/Debug/net10.0/@Controllers/Debug/render.module/ffmpeg/linux-x64/ffmpeg
+          FFMPEG=/tmp/render-consumer/bin/Debug/net10.0/@Controllers/render.module/ffmpeg/linux-x64/ffmpeg
           chmod +x "$FFMPEG"
           "$FFMPEG" -version | head -3
 
@@ -131,6 +131,6 @@ jobs:
         continue-on-error: true
         run: |
           set -e
-          BLENDER=/tmp/render-consumer/bin/Debug/net10.0/@Controllers/Debug/render.module/blender/linux-x64/blender
+          BLENDER=/tmp/render-consumer/bin/Debug/net10.0/@Controllers/render.module/blender/linux-x64/blender
           chmod +x "$BLENDER"
           "$BLENDER" --version || echo "(blender exit non-zero — likely missing system libs on bare ubuntu, ignore)"
