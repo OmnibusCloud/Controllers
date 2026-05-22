@@ -4,10 +4,15 @@
 
   <PropertyGroup>
     <ControllerName>Matrices</ControllerName>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Description>Bundled .wit scripts for the OutWit.Controller.Matrices controller — Gustavson sparse matrix multiplication (GustavsonMultiplyServerOnly + GustavsonMultiplyDistributed).</Description>
     <PackageTags>matrices;scripts;gustavson;sparse-matrix;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
+
+  <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md). -->
+  <ItemGroup>
+    <PackageReference Include="OutWit.Controller.Matrices" Version="[1.0.3, 2.0.0)" />
+  </ItemGroup>
 
   <ItemGroup>
     <None Include="..\OutWit.Controller.Matrices\Scripts\*.wit"
