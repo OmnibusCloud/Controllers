@@ -1,0 +1,179 @@
+name: Verify Scripts consumer
+run-name: "Verify ${{ inputs.package }} v${{ inputs.version }}"
+
+# Manual end-to-end verification of a published Scripts NuGet package.
+# Creates a throw-away consumer csproj that PackageReferences the
+# specified version, runs dotnet build, and asserts that the staged
+# bin/Debug/net10.0/@Scripts/*.wit layout matches what WitCloud's
+# ScriptSeeder + the BundledScripts tests expect.
+#
+# Mirrors verify-render-consumer.yml in spirit: pulls everything from
+# nuget.org, exercises the consumer-side build/.targets that ships in
+# each Scripts package, and validates the on-disk shape end users see.
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Which Scripts package to verify'
+        required: true
+        type: choice
+        options:
+          - OutWit.Controller.Matrices.Scripts
+          - OutWit.Controller.Render.Scripts
+          - OutWit.Controller.Render.Dcc.Scripts
+      version:
+        description: 'Package version to verify (e.g. 1.0.0). Use * for latest.'
+        required: false
+        default: '*'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Stage throw-away consumer project
+        run: |
+          mkdir -p /tmp/scripts-consumer
+          cd /tmp/scripts-consumer
+          cat > Consumer.csproj <<EOF
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFramework>net10.0</TargetFramework>
+              <Nullable>enable</Nullable>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="${{ inputs.package }}" Version="${{ inputs.version }}" />
+            </ItemGroup>
+          </Project>
+          EOF
+          cat > Program.cs <<'EOF'
+          Console.WriteLine("scripts-consumer-verify");
+          EOF
+          echo "Consumer.csproj:"
+          cat Consumer.csproj
+
+      - name: Build (triggers OutWitCopy*Scripts -> stages content/scripts/*.wit)
+        working-directory: /tmp/scripts-consumer
+        run: dotnet build Consumer.csproj -c Debug -v normal
+
+      - name: Show staged @Scripts/ contents
+        run: |
+          SCRIPTS=/tmp/scripts-consumer/bin/Debug/net10.0/@Scripts
+          echo "Scripts dir: $SCRIPTS"
+          if [ ! -d "$SCRIPTS" ]; then
+            echo "::error::@Scripts/ directory missing — consumer-side build/.targets did not run"
+            exit 1
+          fi
+          ls -la "$SCRIPTS"
+          echo ""
+          echo "Total .wit files: $(ls "$SCRIPTS"/*.wit 2>/dev/null | wc -l)"
+
+      # Per-package assertion of the expected .wit set. Lists are kept
+      # in sync with each package's csproj <None Include="..."/> glob
+      # filter (see Build/OutWit.Controller.Scripts.props consumers).
+      - name: Assert expected scripts present
+        run: |
+          set -e
+          SCRIPTS=/tmp/scripts-consumer/bin/Debug/net10.0/@Scripts
+
+          check() {
+            local name="$1"
+            local path="$SCRIPTS/$name"
+            if [ ! -f "$path" ]; then
+              echo "  FAIL  $name"
+              return 1
+            fi
+            if [ ! -s "$path" ]; then
+              echo "  EMPTY $name"
+              return 1
+            fi
+            echo "  OK    $name"
+          }
+
+          case "${{ inputs.package }}" in
+            OutWit.Controller.Matrices.Scripts)
+              echo "Expecting 2 Gustavson scripts:"
+              check "GustavsonMultiplyDistributed.wit"
+              check "GustavsonMultiplyServerOnly.wit"
+              EXPECTED=2
+              ;;
+            OutWit.Controller.Render.Dcc.Scripts)
+              echo "Expecting 4 RenderDcc scene scripts:"
+              check "RenderDccSceneFrames.wit"
+              check "RenderDccSceneStill.wit"
+              check "RenderDccSceneStillTiled.wit"
+              check "RenderDccSceneVideo.wit"
+              EXPECTED=4
+              ;;
+            OutWit.Controller.Render.Scripts)
+              echo "Expecting 32 Render*.wit scripts (excluding RenderDcc*):"
+              check "RenderBlenderVersion.wit"
+              check "RenderFrames.wit"
+              check "RenderFramesCycles.wit"
+              check "RenderFramesEevee.wit"
+              check "RenderFramesGreasePencil.wit"
+              check "RenderPreflight.wit"
+              check "RenderPreflightFrames.wit"
+              check "RenderPreflightStill.wit"
+              check "RenderPreflightStillTiled.wit"
+              check "RenderPreflightVideo.wit"
+              check "RenderRuntimeDiagnostics.wit"
+              check "RenderSceneFrames.wit"
+              check "RenderSceneFramesLarge.wit"
+              check "RenderSceneStill.wit"
+              check "RenderSceneStillLarge.wit"
+              check "RenderSceneStillTiled.wit"
+              check "RenderSceneStillTiledLarge.wit"
+              check "RenderSceneVideo.wit"
+              check "RenderSceneVideoLarge.wit"
+              check "RenderStill.wit"
+              check "RenderStillCycles.wit"
+              check "RenderStillEevee.wit"
+              check "RenderStillGreasePencil.wit"
+              check "RenderStillTiled.wit"
+              check "RenderStillTiledCycles.wit"
+              check "RenderStillTiledEevee.wit"
+              check "RenderStillTiledGreasePencil.wit"
+              check "RenderValidateBlend.wit"
+              check "RenderVideo.wit"
+              check "RenderVideoCycles.wit"
+              check "RenderVideoEevee.wit"
+              check "RenderVideoGreasePencil.wit"
+              EXPECTED=32
+
+              # Anti-leak check: Render.Scripts must NOT carry RenderDcc files
+              # (those live in OutWit.Controller.Render.Dcc.Scripts; the
+              # parent package's csproj has Exclude="...\RenderDcc*.wit").
+              echo ""
+              echo "Anti-leak: RenderDcc*.wit must NOT be present in Render.Scripts:"
+              if ls "$SCRIPTS"/RenderDcc*.wit 2>/dev/null; then
+                echo "::error::Render.Scripts unexpectedly contains RenderDcc*.wit files — the package's <None Include='...' Exclude='...RenderDcc*.wit'/> filter is broken."
+                exit 1
+              fi
+              echo "  OK    no RenderDcc*.wit found"
+              ;;
+            *)
+              echo "::error::Unknown package: ${{ inputs.package }}"
+              exit 1
+              ;;
+          esac
+
+          ACTUAL=$(ls "$SCRIPTS"/*.wit 2>/dev/null | wc -l)
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Expected $EXPECTED .wit file(s), found $ACTUAL. Either the package shipped extras or the expected list above is stale."
+            exit 1
+          fi
+
+          echo ""
+          echo "All $EXPECTED expected script(s) staged + non-empty + no leaks."
