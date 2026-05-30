@@ -117,7 +117,10 @@ jobs:
           # bump that doesn't change the binary assets keeps pointing at the
           # existing release, so we never re-upload unchanged assets. Falls back
           # to the version-derived tag for projects with no asset URIs.
-          asset_tag=$(grep -oP 'gh-release://[^/]+/[^/]+/\K[^/]+' "$csproj" | head -1)
+          # `|| true`: grep exits 1 when a controller has no gh-release:// URIs
+          # (Tier-1: Grid/Special/Variables/Render.Dcc). Under the runner's
+          # `set -euo pipefail` that non-match would otherwise abort the step.
+          asset_tag=$(grep -oP 'gh-release://[^/]+/[^/]+/\K[^/]+' "$csproj" | head -1 || true)
           if [ -z "$asset_tag" ]; then asset_tag="$tag_prefix-v$version"; fi
 
           echo "csproj=$csproj"        >> $GITHUB_OUTPUT
