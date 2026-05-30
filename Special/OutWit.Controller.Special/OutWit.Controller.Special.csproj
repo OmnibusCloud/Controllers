@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Special</ControllerName>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Description>Control flow activities for the WitEngine runtime — loops, conditionals, parallel execution, timers, and diagnostics.</Description>
     <PackageTags>control-flow;loops;parallel;diagnostics;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>if;loop;foreach;parallel-foreach;parallel-invoke;timer;trace;delayed</ControllerFeatures>

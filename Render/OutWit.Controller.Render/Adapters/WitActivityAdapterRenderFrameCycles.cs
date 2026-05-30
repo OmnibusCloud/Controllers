@@ -12,8 +12,9 @@ internal sealed class WitActivityAdapterRenderFrameCycles : WitActivityAdapterRe
     public WitActivityAdapterRenderFrameCycles(
         IWitProcessingManager processingManager,
         IWitBlobService blobService,
+        IWitTempStorage tempStorage,
         ILogger logger)
-        : base(processingManager, blobService, logger)
+        : base(processingManager, blobService, tempStorage, logger)
     {
     }
 

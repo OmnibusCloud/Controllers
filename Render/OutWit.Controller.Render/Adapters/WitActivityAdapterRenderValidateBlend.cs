@@ -17,10 +17,12 @@ internal sealed class WitActivityAdapterRenderValidateBlend : WitActivityAdapter
     public WitActivityAdapterRenderValidateBlend(
         IWitProcessingManager processingManager,
         IWitBlobService blobService,
+        IWitTempStorage tempStorage,
         ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        TempStorage = tempStorage;
     }
 
     #endregion
@@ -31,7 +33,7 @@ internal sealed class WitActivityAdapterRenderValidateBlend : WitActivityAdapter
         IWitBenchmarkOptions? options,
         global::System.Threading.CancellationToken cancellationToken)
     {
-        var runner = RenderBenchmarkHelper.TryCreateBlenderRunner(Logger);
+        var runner = RenderBenchmarkHelper.TryCreateBlenderRunner(Logger, TempStorage);
         if (runner == null)
         {
             Logger.LogWarning("Render.ValidateBlend benchmark skipped because Blender is unavailable.");
@@ -95,7 +97,7 @@ internal sealed class WitActivityAdapterRenderValidateBlend : WitActivityAdapter
 
     private BlenderRunner GetBlenderRunner()
     {
-        var runner = RenderBenchmarkHelper.TryCreateBlenderRunner(Logger);
+        var runner = RenderBenchmarkHelper.TryCreateBlenderRunner(Logger, TempStorage);
         if (runner == null)
             throw new global::System.InvalidOperationException("Blender is not available in the current render controller runtime.");
 
@@ -107,6 +109,8 @@ internal sealed class WitActivityAdapterRenderValidateBlend : WitActivityAdapter
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IWitTempStorage TempStorage { get; }
 
     #endregion
 }

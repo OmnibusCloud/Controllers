@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.Render.Model;
+using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Render.Utils;
 
@@ -22,6 +23,7 @@ public sealed class BlenderRunner
 
     private readonly string m_blenderPath;
     private readonly ILogger m_logger;
+    private readonly IWitTempStorage m_tempStorage;
 
     #endregion
 
@@ -32,10 +34,15 @@ public sealed class BlenderRunner
     /// </summary>
     /// <param name="blenderDir">Directory containing the Blender installation.</param>
     /// <param name="logger">Logger instance.</param>
-    public BlenderRunner(string blenderDir, ILogger logger)
+    /// <param name="tempStorage">
+    /// Temp storage for transient scripts. When null, falls back to the system
+    /// temp directory so existing callers (and tests) are unaffected.
+    /// </param>
+    public BlenderRunner(string blenderDir, ILogger logger, IWitTempStorage? tempStorage = null)
     {
         m_blenderPath = RenderBinaryResolver.ResolveBlenderPath(blenderDir);
         m_logger = logger;
+        m_tempStorage = tempStorage ?? new WitTempStorageDefault(Path.GetTempPath());
 
         if (!File.Exists(m_blenderPath))
             logger.LogWarning("Blender executable not found at {BlenderPath}", m_blenderPath);
@@ -180,7 +187,7 @@ public sealed class BlenderRunner
     public async Task<RenderValidateBlendData> ValidateBlendDetailedAsync(string blendFilePath, CancellationToken cancellationToken = default)
     {
         var pythonLines = BlenderValidationScript.BuildScript(blendFilePath);
-        var scriptPath = Path.Combine(Path.GetTempPath(), $"outwit_validate_blend_{Guid.NewGuid():N}.py");
+        var scriptPath = Path.Combine(m_tempStorage.RootPath, $"outwit_validate_blend_{Guid.NewGuid():N}.py");
         await File.WriteAllLinesAsync(scriptPath, pythonLines, cancellationToken);
 
         (int exitCode, string stdout, string stderr) validationProcessResult;
@@ -233,6 +240,8 @@ public sealed class BlenderRunner
     internal string BlenderExecutablePath => m_blenderPath;
 
     internal ILogger Logger => m_logger;
+
+    internal IWitTempStorage TempStorage => m_tempStorage;
 
     #endregion
 

@@ -17,10 +17,12 @@ internal sealed class WitActivityAdapterRenderBuildBlendFromRefs : WitActivityAd
     public WitActivityAdapterRenderBuildBlendFromRefs(
         IWitProcessingManager processingManager,
         IWitBlobService blobService,
+        IWitTempStorage tempStorage,
         ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        TempStorage = tempStorage;
     }
 
     #endregion
@@ -62,7 +64,7 @@ internal sealed class WitActivityAdapterRenderBuildBlendFromRefs : WitActivityAd
 
             if (RequiresAttachmentPathRemap(scene))
             {
-                var blenderRunner = RenderBenchmarkHelper.TryCreateBlenderRunner(Logger)
+                var blenderRunner = RenderBenchmarkHelper.TryCreateBlenderRunner(Logger, TempStorage)
                                     ?? throw new InvalidOperationException("Blender is required to rewrite attachment-backed dependency paths in the working scene copy.");
                 await BlenderSceneAttachmentRemapHelper.RemapAttachmentPathsInPlaceAsync(
                     blenderRunner,
@@ -153,6 +155,8 @@ internal sealed class WitActivityAdapterRenderBuildBlendFromRefs : WitActivityAd
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IWitTempStorage TempStorage { get; }
 
     #endregion
 }

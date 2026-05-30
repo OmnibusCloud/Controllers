@@ -47,11 +47,11 @@ internal static class RenderBenchmarkHelper
 
     #region Functions
 
-    public static BlenderRunner? TryCreateBlenderRunner(ILogger logger)
+    public static BlenderRunner? TryCreateBlenderRunner(ILogger logger, IWitTempStorage? tempStorage = null)
     {
         var controllerAssemblyPath = typeof(WitControllerRenderModule).Assembly.Location;
         var blenderDir = RenderBinaryResolver.ResolveBlenderRoot(controllerAssemblyPath);
-        var runner = new BlenderRunner(blenderDir, logger);
+        var runner = new BlenderRunner(blenderDir, logger, tempStorage);
         return runner.IsAvailable ? runner : null;
     }
 

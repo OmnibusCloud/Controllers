@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Variables</ControllerName>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Description>Core variable types and collections for the WitEngine runtime — primitives, ranges, tuples, and typed collections.</Description>
     <PackageTags>variables;types;collections;ranges;tuples;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>primitive-types;collections;ranges;tuples</ControllerFeatures>

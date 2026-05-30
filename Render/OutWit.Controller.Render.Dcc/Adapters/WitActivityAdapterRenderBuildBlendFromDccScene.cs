@@ -16,10 +16,12 @@ internal sealed class WitActivityAdapterRenderBuildBlendFromDccScene : WitActivi
     public WitActivityAdapterRenderBuildBlendFromDccScene(
         IWitProcessingManager processingManager,
         IWitBlobService blobService,
+        IWitTempStorage tempStorage,
         ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        TempStorage = tempStorage;
     }
 
     #endregion
@@ -51,7 +53,8 @@ internal sealed class WitActivityAdapterRenderBuildBlendFromDccScene : WitActivi
             buildInput,
             BlobService,
             Logger,
-            ProcessingManager.CancellationToken(status.JobId));
+            ProcessingManager.CancellationToken(status.JobId),
+            TempStorage);
 
         Guid outputBlobId;
         try
@@ -75,6 +78,8 @@ internal sealed class WitActivityAdapterRenderBuildBlendFromDccScene : WitActivi
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IWitTempStorage TempStorage { get; }
 
     #endregion
 }

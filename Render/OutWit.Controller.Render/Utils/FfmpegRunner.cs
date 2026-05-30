@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.Render.Model;
+using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Render.Utils;
 
@@ -14,16 +15,18 @@ public sealed class FfmpegRunner
     private readonly string m_ffmpegPath;
     private readonly string m_ffprobePath;
     private readonly ILogger m_logger;
+    private readonly IWitTempStorage m_tempStorage;
 
     #endregion
 
     #region Constructors
 
-    public FfmpegRunner(string ffmpegDir, ILogger logger)
+    public FfmpegRunner(string ffmpegDir, ILogger logger, IWitTempStorage? tempStorage = null)
     {
         m_ffmpegPath = RenderBinaryResolver.ResolveFfmpegPath(ffmpegDir);
         m_ffprobePath = RenderBinaryResolver.ResolveFfprobePath(ffmpegDir);
         m_logger = logger;
+        m_tempStorage = tempStorage ?? new WitTempStorageDefault(Path.GetTempPath());
 
         if (!File.Exists(m_ffmpegPath))
             logger.LogWarning("ffmpeg executable not found at {FfmpegPath}", m_ffmpegPath);
@@ -127,7 +130,7 @@ public sealed class FfmpegRunner
     internal async Task<RenderRawImage> DecodeImageToRgbaAsync(string inputPath, CancellationToken cancellationToken = default)
     {
         var imageInfo = await GetImageInfoAsync(inputPath, cancellationToken);
-        var rawPath = Path.Combine(Path.GetTempPath(), $"witcloud_ffmpeg_decode_{Guid.NewGuid():N}.rgba");
+        var rawPath = Path.Combine(m_tempStorage.RootPath, $"witcloud_ffmpeg_decode_{Guid.NewGuid():N}.rgba");
 
         try
         {
@@ -165,7 +168,7 @@ public sealed class FfmpegRunner
         RenderFormat format,
         CancellationToken cancellationToken = default)
     {
-        var rawPath = Path.Combine(Path.GetTempPath(), $"witcloud_ffmpeg_encode_{Guid.NewGuid():N}.rgba");
+        var rawPath = Path.Combine(m_tempStorage.RootPath, $"witcloud_ffmpeg_encode_{Guid.NewGuid():N}.rgba");
 
         try
         {

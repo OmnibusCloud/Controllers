@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>RenderDcc</ControllerName>
-    <Version>1.0.4</Version>
+    <Version>1.0.5</Version>
     <Description>Host-only neutral DCC scene validation and .blend build bootstrap activities that sit upstream of the OutWit.Controller.Render controller.</Description>
     <PackageTags>render;dcc;3dsmax;scene-build;host-only;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>dcc-build-blend-from-scene;dcc-contract-validation</ControllerFeatures>
@@ -13,6 +13,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OutWit.Controller.Render.Dcc.Model\OutWit.Controller.Render.Dcc.Model.csproj" />
+  </ItemGroup>
+
+  <!-- Direct reference so IWitTempStorage (Engine.Interfaces 1.1.3) is visible;
+       the transitive pull via Engine.Data would otherwise pin 1.1.2. -->
+  <ItemGroup>
+    <PackageReference Include="OutWit.Engine.Interfaces" Version="1.1.*" />
   </ItemGroup>
 
   <ItemGroup>

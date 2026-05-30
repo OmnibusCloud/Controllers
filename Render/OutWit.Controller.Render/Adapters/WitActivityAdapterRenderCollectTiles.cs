@@ -16,10 +16,12 @@ internal sealed class WitActivityAdapterRenderCollectTiles : WitActivityAdapterF
     public WitActivityAdapterRenderCollectTiles(
         IWitProcessingManager processingManager,
         IWitBlobService blobService,
+        IWitTempStorage tempStorage,
         ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        TempStorage = tempStorage;
     }
 
     #endregion
@@ -63,7 +65,7 @@ internal sealed class WitActivityAdapterRenderCollectTiles : WitActivityAdapterF
         if (sorted.Count == 0)
             throw new InvalidOperationException("No tile render results to collect");
 
-        var workingDir = Path.Combine(Path.GetTempPath(), "witcloud_render_tiles", status.JobId.ToString("N"), Guid.NewGuid().ToString("N"));
+        var workingDir = Path.Combine(TempStorage.RootPath, "witcloud_render_tiles", status.JobId.ToString("N"), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workingDir);
 
         try
@@ -134,7 +136,7 @@ internal sealed class WitActivityAdapterRenderCollectTiles : WitActivityAdapterF
     {
         var controllerAssemblyPath = typeof(WitControllerRenderModule).Assembly.Location;
         var ffmpegDir = RenderBinaryResolver.ResolveFfmpegRoot(controllerAssemblyPath);
-        var runner = new FfmpegRunner(ffmpegDir, Logger);
+        var runner = new FfmpegRunner(ffmpegDir, Logger, TempStorage);
         if (!runner.IsAvailable)
             throw new InvalidOperationException($"ffmpeg not found in controller module at '{ffmpegDir}'. Ensure the render controller module includes the ffmpeg portable installation.");
 
@@ -405,6 +407,8 @@ internal sealed class WitActivityAdapterRenderCollectTiles : WitActivityAdapterF
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IWitTempStorage TempStorage { get; }
 
     #endregion
 }

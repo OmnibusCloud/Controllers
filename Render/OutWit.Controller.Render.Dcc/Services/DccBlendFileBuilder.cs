@@ -15,9 +15,11 @@ internal static class DccBlendFileBuilder
         DccSceneBuildInput buildInput,
         IWitBlobService blobService,
         ILogger logger,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IWitTempStorage? tempStorage = null)
     {
-        var workDirectory = Path.Combine(Path.GetTempPath(), $"outwit_render_dcc_build_{Guid.NewGuid():N}");
+        var tempRoot = (tempStorage ?? new WitTempStorageDefault(Path.GetTempPath())).RootPath;
+        var workDirectory = Path.Combine(tempRoot, $"outwit_render_dcc_build_{Guid.NewGuid():N}");
         Directory.CreateDirectory(workDirectory);
 
         await MaterializeAttachmentsAsync(workDirectory, buildInput, blobService);

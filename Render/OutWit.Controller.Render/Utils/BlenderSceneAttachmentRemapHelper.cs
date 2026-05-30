@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.Render.Model;
+using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Render.Utils;
 
@@ -52,8 +53,9 @@ internal static class BlenderSceneAttachmentRemapHelper
         if (attachmentMappings.Count == 0)
             return;
 
-        var mappingPath = Path.Combine(Path.GetTempPath(), $"outwit_attachment_remap_{Guid.NewGuid():N}.json");
-        var scriptPath = Path.Combine(Path.GetTempPath(), $"outwit_attachment_remap_{Guid.NewGuid():N}.py");
+        var tempRoot = blenderRunner.TempStorage.RootPath;
+        var mappingPath = Path.Combine(tempRoot, $"outwit_attachment_remap_{Guid.NewGuid():N}.json");
+        var scriptPath = Path.Combine(tempRoot, $"outwit_attachment_remap_{Guid.NewGuid():N}.py");
 
         try
         {

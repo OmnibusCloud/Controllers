@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Grid</ControllerName>
-    <Version>1.0.4</Version>
+    <Version>1.0.5</Version>
     <Description>Dense grid layout computation with ForEach support for the WitEngine runtime.</Description>
     <PackageTags>grid;layout;foreach;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>grid-foreach</ControllerFeatures>

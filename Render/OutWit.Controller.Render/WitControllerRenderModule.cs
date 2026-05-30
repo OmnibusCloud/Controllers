@@ -37,6 +37,11 @@ public class WitControllerRenderModule : WitPluginBase, IWitControllerNode, IWit
         // Register a no-op IWitBlobService if none is provided by the host.
         services.TryAddSingleton<IWitBlobService, NullBlobService>();
 
+        // Temp storage: the host (cloud client) registers an IWitTempStorage rooted
+        // at the operator-configured temp directory. When absent (host-side engine,
+        // tests), fall back to the system temp directory so behaviour is unchanged.
+        services.TryAddSingleton<IWitTempStorage>(_ => new WitTempStorageDefault(Path.GetTempPath()));
+
         // Activities
         services.AddActivityAdapter<WitActivityRenderSplit, WitActivityAdapterRenderSplit>();
         services.AddActivityAdapter<WitActivityRenderSplitTiles, WitActivityAdapterRenderSplitTiles>();

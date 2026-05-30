@@ -29,10 +29,12 @@ internal abstract class WitActivityAdapterRenderFrameBase<TActivity> : WitActivi
     protected WitActivityAdapterRenderFrameBase(
         IWitProcessingManager processingManager,
         IWitBlobService blobService,
+        IWitTempStorage tempStorage,
         ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        TempStorage = tempStorage;
     }
 
     #endregion
@@ -70,7 +72,7 @@ internal abstract class WitActivityAdapterRenderFrameBase<TActivity> : WitActivi
 
         var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
         var blendPath = await BlobService.GetLocalPathAsync(task.SceneBlobId);
-        var outputDir = CreateRenderOutputDirectory(status.JobId, task.TaskIndex);
+        var outputDir = CreateRenderOutputDirectory(TempStorage, status.JobId, task.TaskIndex);
         string? renderedPath = null;
 
         try
@@ -135,7 +137,7 @@ internal abstract class WitActivityAdapterRenderFrameBase<TActivity> : WitActivi
         }
 
         var renderOptions = RenderBenchmarkHelper.CreateBenchmarkRenderOptions(BenchmarkEngine);
-        var outputDir = Path.Combine(Path.GetTempPath(), $"witcloud_benchmark_{Guid.NewGuid():N}");
+        var outputDir = Path.Combine(TempStorage.RootPath, $"witcloud_benchmark_{Guid.NewGuid():N}");
         Directory.CreateDirectory(outputDir);
 
         try
@@ -203,7 +205,7 @@ internal abstract class WitActivityAdapterRenderFrameBase<TActivity> : WitActivi
         var controllerAssemblyPath = typeof(WitControllerRenderModule).Assembly.Location;
         var blenderDir = RenderBinaryResolver.ResolveBlenderRoot(controllerAssemblyPath);
 
-        m_blenderRunner = new BlenderRunner(blenderDir, Logger);
+        m_blenderRunner = new BlenderRunner(blenderDir, Logger, TempStorage);
 
         if (!m_blenderRunner.IsAvailable)
             throw new InvalidOperationException(
@@ -305,7 +307,7 @@ internal abstract class WitActivityAdapterRenderFrameBase<TActivity> : WitActivi
 
         var controllerAssemblyPath = typeof(WitControllerRenderModule).Assembly.Location;
         var ffmpegDir = RenderBinaryResolver.ResolveFfmpegRoot(controllerAssemblyPath);
-        m_ffmpegRunner = new FfmpegRunner(ffmpegDir, Logger);
+        m_ffmpegRunner = new FfmpegRunner(ffmpegDir, Logger, TempStorage);
         if (!m_ffmpegRunner.IsAvailable)
             throw new InvalidOperationException($"ffmpeg not found in controller module at '{ffmpegDir}'. Ensure the render controller module includes the ffmpeg portable installation.");
 
@@ -333,10 +335,10 @@ internal abstract class WitActivityAdapterRenderFrameBase<TActivity> : WitActivi
         return (int)Math.Round((task.EffectiveRenderMaxY - task.EffectiveRenderMinY) * height, MidpointRounding.AwayFromZero);
     }
 
-    private static string CreateRenderOutputDirectory(Guid jobId, int taskIndex)
+    private static string CreateRenderOutputDirectory(IWitTempStorage tempStorage, Guid jobId, int taskIndex)
     {
         var outputDir = Path.Combine(
-            Path.GetTempPath(),
+            tempStorage.RootPath,
             "witcloud_render",
             jobId.ToString("N"),
             $"task_{taskIndex:D6}");
@@ -429,6 +431,8 @@ internal abstract class WitActivityAdapterRenderFrameBase<TActivity> : WitActivi
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IWitTempStorage TempStorage { get; }
 
     #endregion
 }
