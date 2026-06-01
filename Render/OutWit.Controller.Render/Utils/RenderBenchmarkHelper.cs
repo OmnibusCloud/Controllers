@@ -34,6 +34,28 @@ internal static class RenderBenchmarkHelper
 
     private const int BENCHMARK_RESOLUTION = 128;
     private const int BENCHMARK_SAMPLES = 8;
+
+    // Node render-benchmark calibration (see @Docs/Active/plan-render-benchmark-redesign.md).
+    // Measured on RTX 3080 Ti + Ryzen 9 5950X: 256px @ 128 spp on a 3×3 sphere grid is the
+    // compute-bound threshold where the GPU beats even a strong 16-core CPU (~2.3×). 128px/64spp
+    // was overhead-bound (GPU underutilised → lost to CPU), so do not lower these without
+    // re-checking GPU≫CPU on real hardware.
+    private const int BENCHMARK_RENDER_RESOLUTION = 256;
+    private const int BENCHMARK_RENDER_SAMPLES = 128;
+    private const int BENCHMARK_RENDER_GRID = 3;
+    private const int BENCHMARK_RENDER_MAX_BOUNCES = 8;
+    private const int BENCHMARK_RENDER_WARMUP_FRAMES = 1;
+    private const int BENCHMARK_RENDER_MAX_FRAMES = 24;
+    private static readonly TimeSpan BENCHMARK_RENDER_FALLBACK_TARGET = TimeSpan.FromSeconds(1.5);
+
+    public const string CUSTOM_RENDER_DEVICE = "render-device";
+    public const string CUSTOM_RENDER_BACKEND = "render-backend";
+    public const string CUSTOM_AVAILABLE_BACKENDS = "available-backends";
+    public const string CUSTOM_RENDER_RESOLUTION = "render-resolution";
+    public const string CUSTOM_RENDER_SAMPLES = "render-samples";
+    public const string CUSTOM_RENDER_FRAMES = "render-frames";
+    public const string CUSTOM_RENDER_SECONDS = "render-seconds";
+
     private const int BENCHMARK_STILL_FRAME = 1;
     private const int BENCHMARK_VIDEO_START_FRAME = 1;
     private const int BENCHMARK_VIDEO_END_FRAME = 16;
@@ -174,6 +196,49 @@ internal static class RenderBenchmarkHelper
         };
     }
 
+    /// <summary>
+    /// Runs the redesigned node render benchmark: one Blender process renders a procedural
+    /// compute-bound scene with in-process render-only timing (see <see cref="BlenderBenchmarkScript"/>),
+    /// so the resulting <see cref="WitBenchmarkResult.Rate"/> is real render throughput
+    /// (pixel-samples/second) rather than Blender startup speed. The device actually used is
+    /// recorded in <see cref="WitBenchmarkResult.Custom"/>.
+    /// </summary>
+    public static async Task<WitBenchmarkResult> MeasureRenderAsync(
+        BlenderRunner runner,
+        RenderEngine engine,
+        IWitBenchmarkOptions? options,
+        string unit,
+        string? datasetId,
+        CancellationToken cancellationToken)
+    {
+        IWitBenchmarkOptions benchmarkOptions = options ?? WitBenchmarkOptions.Default;
+        var target = benchmarkOptions.MinDuration <= TimeSpan.Zero
+            ? BENCHMARK_RENDER_FALLBACK_TARGET
+            : benchmarkOptions.MinDuration;
+        var warmupFrames = Math.Max(BENCHMARK_RENDER_WARMUP_FRAMES, benchmarkOptions.WarmupIterations);
+
+        var data = await runner.RunBenchmarkRenderAsync(
+            engine,
+            samples: BENCHMARK_RENDER_SAMPLES,
+            resolution: BENCHMARK_RENDER_RESOLUTION,
+            gridSize: BENCHMARK_RENDER_GRID,
+            maxBounces: BENCHMARK_RENDER_MAX_BOUNCES,
+            warmupFrames: warmupFrames,
+            targetSeconds: target.TotalSeconds,
+            maxFrames: BENCHMARK_RENDER_MAX_FRAMES,
+            cancellationToken);
+
+        return new WitBenchmarkResult
+        {
+            Rate = data.ComputeRate(),
+            Unit = unit,
+            Elapsed = TimeSpan.FromSeconds(data.RenderSeconds),
+            Iterations = data.FramesRendered,
+            DatasetId = datasetId,
+            Custom = BuildRenderCustom(data)
+        };
+    }
+
     public static WitBenchmarkResult CreateUnavailableResult(string unit, string? datasetId)
     {
         return new WitBenchmarkResult
@@ -183,6 +248,27 @@ internal static class RenderBenchmarkHelper
             Elapsed = TimeSpan.Zero,
             Iterations = 0,
             DatasetId = datasetId
+        };
+    }
+
+    private static IReadOnlyDictionary<string, string> BuildRenderCustom(RenderBenchmarkRunData data)
+    {
+        // Cycles reports a concrete compute backend (GPU/CPU). Eevee / Grease Pencil are GPU
+        // rasterizers with no Cycles-style device split, so label them GPU.
+        var device = data.UsesGpu || data.Engine != RenderEngine.Cycles ? "GPU" : "CPU";
+
+        return new Dictionary<string, string>
+        {
+            [CUSTOM_RENDER_DEVICE] = device,
+            [CUSTOM_RENDER_BACKEND] = data.SelectedRenderBackend?.ToString()
+                ?? (string.IsNullOrWhiteSpace(data.RawBackend) ? "unknown" : data.RawBackend!),
+            [CUSTOM_AVAILABLE_BACKENDS] = data.AvailableRenderBackends.Length > 0
+                ? string.Join(",", data.AvailableRenderBackends)
+                : "none",
+            [CUSTOM_RENDER_RESOLUTION] = $"{data.ResolutionX}x{data.ResolutionY}",
+            [CUSTOM_RENDER_SAMPLES] = data.Samples.ToString(),
+            [CUSTOM_RENDER_FRAMES] = data.FramesRendered.ToString(),
+            [CUSTOM_RENDER_SECONDS] = data.RenderSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
         };
     }
 

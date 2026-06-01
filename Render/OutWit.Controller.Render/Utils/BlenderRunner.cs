@@ -213,6 +213,67 @@ public sealed class BlenderRunner
     }
 
     /// <summary>
+    /// Runs the node render benchmark in a single Blender process: builds a procedural
+    /// compute-bound scene, warms up, then times only the render loop (see
+    /// <see cref="BlenderBenchmarkScript"/>). The returned timing excludes process spawn,
+    /// scene load and GPU-context init, so the rate reflects real render throughput rather
+    /// than Blender startup speed.
+    /// </summary>
+    internal async Task<RenderBenchmarkRunData> RunBenchmarkRenderAsync(
+        RenderEngine engine,
+        int samples,
+        int resolution,
+        int gridSize,
+        int maxBounces,
+        int warmupFrames,
+        double targetSeconds,
+        int maxFrames,
+        CancellationToken cancellationToken = default)
+    {
+        var pythonLines = BlenderBenchmarkScript.BuildScript(
+            engine, samples, resolution, gridSize, maxBounces, warmupFrames, targetSeconds, maxFrames);
+
+        var scriptPath = Path.Combine(m_tempStorage.RootPath, $"outwit_benchmark_{Guid.NewGuid():N}.py");
+        await File.WriteAllLinesAsync(scriptPath, pythonLines, cancellationToken);
+
+        try
+        {
+            var args = $"-b --python-exit-code 1 --python \"{scriptPath}\"";
+            var (exitCode, stdout, stderr) = await RunProcessAsync(args, cancellationToken);
+            var invocation = ParseInvocationResult(exitCode, stdout, stderr);
+            LogInvocationDiagnostics(invocation);
+
+            EnsureSuccessfulRender(invocation);
+
+            var timing = BlenderBenchmarkScript.ParseResult(stdout);
+            if (timing == null)
+                throw new InvalidOperationException(
+                    "Benchmark render completed but produced no timing markers. " +
+                    $"stdout tail: {Tail(stdout, 500)}");
+
+            return new RenderBenchmarkRunData
+            {
+                Engine = engine,
+                Samples = samples,
+                ResolutionX = resolution,
+                ResolutionY = resolution,
+                FramesRendered = timing.Value.Frames,
+                RenderSeconds = timing.Value.RenderSeconds,
+                SelectedRenderBackend = invocation.SelectedRenderBackend,
+                RawBackend = ParseMarker(stdout, SELECTED_BACKEND_PREFIX),
+                AvailableRenderBackends = ParseAvailableRenderBackends(stdout),
+                SelectionMessage = invocation.SelectionMessage,
+                UsesGpu = IsGpuBackend(invocation.SelectedRenderBackend)
+            };
+        }
+        finally
+        {
+            try { File.Delete(scriptPath); }
+            catch { /* best effort */ }
+        }
+    }
+
+    /// <summary>
     /// Probes the local Blender runtime for available and selected render backends.
     /// </summary>
     internal async Task<RenderDeviceDiagnostics> GetDeviceDiagnosticsAsync(CancellationToken cancellationToken = default)
@@ -529,6 +590,14 @@ public sealed class BlenderRunner
         }
 
         return null;
+    }
+
+    private static string Tail(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+            return value ?? string.Empty;
+
+        return value[^maxLength..];
     }
 
     private static string? FindRenderedFile(string outputBasePath, int frame, RenderFormat format)

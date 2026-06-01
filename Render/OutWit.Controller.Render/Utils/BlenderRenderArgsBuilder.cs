@@ -26,11 +26,16 @@ internal static class BlenderRenderArgsBuilder
     {
         if (engine != RenderEngine.Cycles)
         {
+            // Blender renamed the EEVEE engine id across versions: 4.2–4.x use 'BLENDER_EEVEE_NEXT',
+            // 5.x (the bundled runtime) uses 'BLENDER_EEVEE'. Pick whichever the running Blender
+            // actually exposes so Eevee / Grease Pencil work regardless of bundled version.
+            var preferred = GetBlenderEngineArgument(engine);
             return
             [
-                $"scene.render.engine = '{GetBlenderEngineArgument(engine)}'",
+                "_engine_keys = bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items.keys()",
+                $"scene.render.engine = '{preferred}' if '{preferred}' in _engine_keys else ('BLENDER_EEVEE' if 'BLENDER_EEVEE' in _engine_keys else '{preferred}')",
                 "print('OUTWIT_RENDER_AVAILABLE=')",
-                $"print('OUTWIT_RENDER_BACKEND={GetBlenderEngineArgument(engine)}')",
+                "print('OUTWIT_RENDER_BACKEND=' + scene.render.engine)",
                 $"print('OUTWIT_RENDER_MESSAGE=Using {GetRenderEngineDisplayName(engine)} render path')"
             ];
         }

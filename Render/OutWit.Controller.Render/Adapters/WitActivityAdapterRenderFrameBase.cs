@@ -127,53 +127,27 @@ internal abstract class WitActivityAdapterRenderFrameBase<TActivity> : WitActivi
                 RenderBenchmarkHelper.FRAME_UNIT,
                 FrameBenchmarkDatasetId);
 
-        var benchmarkBlend = FindBenchmarkScene();
-        if (benchmarkBlend == null)
-        {
-            Logger.LogWarning("Benchmark scene not found — returning zero rate for {ActivityName}", GetActivityName());
-            return RenderBenchmarkHelper.CreateUnavailableResult(
-                RenderBenchmarkHelper.FRAME_UNIT,
-                FrameBenchmarkDatasetId);
-        }
+        // The render benchmark no longer needs a shipped .blend — it generates a procedural
+        // compute-bound scene in-process and times only the render loop (amortising and
+        // excluding Blender startup). See @Docs/Active/plan-render-benchmark-redesign.md.
+        var result = await RenderBenchmarkHelper.MeasureRenderAsync(
+            runner,
+            BenchmarkEngine,
+            options,
+            unit: RenderBenchmarkHelper.FRAME_UNIT,
+            datasetId: FrameBenchmarkDatasetId,
+            cancellationToken: cancellationToken);
 
-        var renderOptions = RenderBenchmarkHelper.CreateBenchmarkRenderOptions(BenchmarkEngine);
-        var outputDir = Path.Combine(TempStorage.RootPath, $"witcloud_benchmark_{Guid.NewGuid():N}");
-        Directory.CreateDirectory(outputDir);
+        Logger.LogInformation(
+            "{ActivityName} benchmark: {Rate:F0} {Unit} on {Device} ({Frames} frames, render-only {Elapsed})",
+            GetActivityName(),
+            result.Rate,
+            RenderBenchmarkHelper.FRAME_UNIT,
+            result.Custom != null && result.Custom.TryGetValue(RenderBenchmarkHelper.CUSTOM_RENDER_DEVICE, out var device) ? device : "unknown",
+            result.Iterations,
+            result.Elapsed);
 
-        try
-        {
-            double totalPixels = renderOptions.ResolutionX * renderOptions.ResolutionY * renderOptions.Samples;
-            var invocationIndex = 0;
-
-            var result = await RenderBenchmarkHelper.MeasureAsync(
-                options,
-                unit: RenderBenchmarkHelper.FRAME_UNIT,
-                datasetId: FrameBenchmarkDatasetId,
-                action: async ct =>
-                {
-                    invocationIndex++;
-                    var outputBase = Path.Combine(outputDir, $"bench_{invocationIndex:D4}_");
-                    await runner.RenderFrameAsync(benchmarkBlend, 1, outputBase, renderOptions, ct);
-                },
-                cancellationToken: cancellationToken,
-                rateFactory: (iterations, elapsed) => elapsed.TotalSeconds > 0
-                    ? totalPixels * iterations / elapsed.TotalSeconds
-                    : 0,
-                maxIterations: 3);
-
-            Logger.LogInformation("{ActivityName} benchmark: {Rate:F0} {Unit} ({Elapsed})",
-                GetActivityName(),
-                result.Rate,
-                RenderBenchmarkHelper.FRAME_UNIT,
-                result.Elapsed);
-
-            return result;
-        }
-        finally
-        {
-            try { Directory.Delete(outputDir, recursive: true); }
-            catch { }
-        }
+        return result;
     }
 
     #endregion
@@ -213,11 +187,6 @@ internal abstract class WitActivityAdapterRenderFrameBase<TActivity> : WitActivi
                 "Ensure the render controller module includes the Blender portable installation.");
 
         return m_blenderRunner;
-    }
-
-    private static string? FindBenchmarkScene()
-    {
-        return RenderBenchmarkHelper.FindBenchmarkScene();
     }
 
     private async Task<NormalizedTileOutputData> NormalizeRenderedTileOutputAsync(
