@@ -74,32 +74,10 @@ internal sealed class WitActivityAdapterRenderSplitTiles : WitActivityAdapterFun
 
         var (outputWidth, outputHeight) = await ResolveOutputResolutionAsync(sceneId, options, status.JobId);
 
-        ValidateTileOptions(tileOptions, outputWidth, outputHeight, tilesX, tilesY);
+        RenderTileTaskBuilder.ValidateTileOptions(tileOptions, outputWidth, outputHeight, tilesX, tilesY);
 
-        var tasks = new List<RenderTaskData>(tilesX * tilesY);
-        var taskIndex = 0;
-
-        for (var y = 0; y < tilesY; y++)
-        {
-            for (var x = 0; x < tilesX; x++)
-            {
-                tasks.Add(new RenderTaskData
-                {
-                    SceneBlobId = sceneId,
-                    Frame = frame,
-                    TileMinX = x / (float)tilesX,
-                    TileMaxX = (x + 1) / (float)tilesX,
-                    TileMinY = y / (float)tilesY,
-                    TileMaxY = (y + 1) / (float)tilesY,
-                    RenderMinX = CalculateRenderMinX(x, tilesX, tileOptions, outputWidth),
-                    RenderMaxX = CalculateRenderMaxX(x, tilesX, tileOptions, outputWidth),
-                    RenderMinY = CalculateRenderMinY(y, tilesY, tileOptions, outputHeight),
-                    RenderMaxY = CalculateRenderMaxY(y, tilesY, tileOptions, outputHeight),
-                    TaskIndex = taskIndex++,
-                    Options = (RenderOptionsData)options.Clone()
-                });
-            }
-        }
+        var tasks = RenderTileTaskBuilder.BuildTileTasks(
+            sceneId, frame, tilesX, tilesY, options, tileOptions, outputWidth, outputHeight);
 
         Logger.LogInformation("Render.SplitTiles: generated {Count} tile tasks for frame {Frame} using grid {TilesX}x{TilesY}",
             tasks.Count, frame, tilesX, tilesY);
@@ -137,40 +115,6 @@ internal sealed class WitActivityAdapterRenderSplitTiles : WitActivityAdapterFun
             throw new InvalidOperationException($"Blender not found in controller module at '{blenderDir}'. Ensure the render controller module includes the Blender portable installation.");
 
         return m_blenderRunner;
-    }
-
-    private static float CalculateRenderMinX(int tileX, int tilesX, TileOptionsData tileOptions, int outputWidth)
-    {
-        return Math.Max(0f, tileX / (float)tilesX - tileOptions.OverlapPx / (float)outputWidth);
-    }
-
-    private static float CalculateRenderMaxX(int tileX, int tilesX, TileOptionsData tileOptions, int outputWidth)
-    {
-        return Math.Min(1f, (tileX + 1) / (float)tilesX + tileOptions.OverlapPx / (float)outputWidth);
-    }
-
-    private static float CalculateRenderMinY(int tileY, int tilesY, TileOptionsData tileOptions, int outputHeight)
-    {
-        return Math.Max(0f, tileY / (float)tilesY - tileOptions.OverlapPx / (float)outputHeight);
-    }
-
-    private static float CalculateRenderMaxY(int tileY, int tilesY, TileOptionsData tileOptions, int outputHeight)
-    {
-        return Math.Min(1f, (tileY + 1) / (float)tilesY + tileOptions.OverlapPx / (float)outputHeight);
-    }
-
-    private static void ValidateTileOptions(TileOptionsData tileOptions, int outputWidth, int outputHeight, int tilesX, int tilesY)
-    {
-        if (tileOptions.OverlapPx < 0)
-            throw new InvalidOperationException($"TileOptions.OverlapPx must be >= 0, got {tileOptions.OverlapPx}.");
-
-        var coreTileWidth = Math.Max(1, outputWidth / tilesX);
-        var coreTileHeight = Math.Max(1, outputHeight / tilesY);
-        if (tileOptions.OverlapPx >= coreTileWidth || tileOptions.OverlapPx >= coreTileHeight)
-        {
-            throw new InvalidOperationException(
-                $"TileOptions.OverlapPx must be smaller than the core tile size. Got {tileOptions.OverlapPx}px for tile size {coreTileWidth}x{coreTileHeight}.");
-        }
     }
 
     #endregion

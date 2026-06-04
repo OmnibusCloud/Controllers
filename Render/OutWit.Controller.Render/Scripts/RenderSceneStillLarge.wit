@@ -2,10 +2,10 @@ Job:RenderSceneStillLarge(RenderSceneRef:scene, Int:frame, RenderOptions:options
 {
     Blob:blend = Render.BuildBlendFromRefs(scene);
 
-    RenderTaskCollection:tasks = Render.Split(blend, frame, frame, options);
+    RenderTaskBatchCollection:tasks = Render.SplitBatched(blend, frame, frame, options);
 
-    RenderResultCollection:rendered = Grid.ForEach(task in tasks)
-        => Render.Frame(task);
+    RenderResultBatchCollection:rendered = Grid.ForEach(task in tasks)
+        => Render.FrameBatch(task);
 
     Blob:result = Render.CollectStill(rendered, options);
 }

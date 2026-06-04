@@ -116,6 +116,58 @@ public sealed class BlenderRunner
     }
 
     /// <summary>
+    /// Persistent-batch render: load the .blend ONCE and render every task in the chunk inside a
+    /// SINGLE Blender process (a Python loop over the tasks — frame_set + per-task border + write_still)
+    /// rather than spawning Blender per frame. This amortises Blender startup + scene load across the
+    /// chunk (a large speed-up, and what lets Eevee/Grease Pencil balance correctly). GPU→CPU fallback
+    /// is applied at the batch level, mirroring <see cref="RenderFrameAsync"/>.
+    /// </summary>
+    public async Task<IReadOnlyList<RenderBatchFrameResult>> RenderFrameBatchAsync(
+        string blendFilePath,
+        IReadOnlyList<RenderTaskData> tasks,
+        string outputDir,
+        RenderOptionsData options,
+        CancellationToken cancellationToken = default)
+    {
+        if (tasks.Count == 0)
+            return Array.Empty<RenderBatchFrameResult>();
+
+        m_logger.LogInformation("Blender batch render: {Count} tasks (frames {First}..{Last}) from {BlendFile}",
+            tasks.Count, tasks[0].Frame, tasks[tasks.Count - 1].Frame, blendFilePath);
+
+        var result = await RunBatchAttemptAsync(blendFilePath, tasks, outputDir, options, forceCpuFallback: false, cancellationToken);
+
+        if (ShouldRetryWithCpuFallback(result))
+        {
+            m_logger.LogWarning(
+                "Blender batch render failed on auto-selected GPU backend {RenderDevice}; retrying the whole batch on CPU. Message: {Message}",
+                result.SelectedRenderBackend,
+                result.SelectionMessage ?? "No backend selection message reported");
+
+            foreach (var task in tasks)
+                DeleteRenderedOutputs(BatchTaskOutputBase(outputDir, task), task.Frame, options.Format);
+
+            result = await RunBatchAttemptAsync(blendFilePath, tasks, outputDir, options, forceCpuFallback: true, cancellationToken);
+        }
+
+        EnsureSuccessfulRender(result);
+
+        var outputs = new List<RenderBatchFrameResult>(tasks.Count);
+        foreach (var task in tasks)
+        {
+            var renderedPath = FindRenderedFile(BatchTaskOutputBase(outputDir, task), task.Frame, options.Format);
+            if (renderedPath == null)
+                throw new InvalidOperationException(
+                    $"Blender batch completed but output file not found for task {task.TaskIndex} (frame {task.Frame}) in '{outputDir}'.");
+
+            outputs.Add(new RenderBatchFrameResult(task, renderedPath));
+        }
+
+        m_logger.LogInformation("Blender batch render complete: {Count} files in {OutputDir}", outputs.Count, outputDir);
+        return outputs;
+    }
+
+    /// <summary>
     /// Gets the Blender version string.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -364,6 +416,101 @@ public sealed class BlenderRunner
         args.Append($" -f {frame}");
 
         return args.ToString();
+    }
+
+    private static string BatchTaskOutputBase(string outputDir, RenderTaskData task)
+    {
+        // Unique per TASK (not just per frame — tiles share a frame): "<dir>/t000042_". The batch
+        // Python bakes the 4-digit frame onto this base (write_still does not), so the written file is
+        // "t000042_<frame:0000>.ext" and FindRenderedFile / DeleteRenderedOutputs locate it from this base.
+        return Path.Combine(outputDir, $"t{task.TaskIndex:D6}_");
+    }
+
+    private async Task<RenderBlenderInvocationResult> RunBatchAttemptAsync(
+        string blendFilePath,
+        IReadOnlyList<RenderTaskData> tasks,
+        string outputDir,
+        RenderOptionsData options,
+        bool forceCpuFallback,
+        CancellationToken cancellationToken)
+    {
+        // A chunk loop can be hundreds of Python lines, so write it to a temp script and pass
+        // --python <file> (not the inline --python-expr the single-frame path uses) to stay well
+        // clear of any command-line length limit.
+        var pythonLines = BuildBatchPythonLines(outputDir, options, tasks, forceCpuFallback);
+        var scriptPath = Path.Combine(m_tempStorage.RootPath, $"outwit_render_batch_{Guid.NewGuid():N}.py");
+        await File.WriteAllLinesAsync(scriptPath, pythonLines, cancellationToken);
+
+        try
+        {
+            var args = $"-b \"{blendFilePath}\" -E {BlenderRenderArgsBuilder.GetBlenderEngineArgument(options.Engine)} --python-exit-code 1 --python \"{scriptPath}\"";
+            m_logger.LogDebug("Blender batch args: {Args}", args);
+            return await RunBlenderAsync(args, cancellationToken);
+        }
+        finally
+        {
+            try { File.Delete(scriptPath); }
+            catch { /* best effort */ }
+        }
+    }
+
+    private static List<string> BuildBatchPythonLines(
+        string outputDir,
+        RenderOptionsData options,
+        IReadOnlyList<RenderTaskData> tasks,
+        bool forceCpuFallback)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+
+        var lines = new List<string>
+        {
+            "import bpy",
+            "scene = bpy.context.scene"
+        };
+
+        // Configure device / image output / engine / resolution ONCE — the scene is loaded once.
+        lines.AddRange(BlenderRenderArgsBuilder.BuildDeviceConfigurationPython(options.Engine, forceCpuFallback));
+        lines.AddRange(BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(options.Format));
+        lines.AddRange(BlenderRenderArgsBuilder.BuildViewLayerRecoveryPython());
+        lines.AddRange(BlenderRenderArgsBuilder.BuildEngineConfigurationPython(options));
+
+        if (options.ResolutionX > 0)
+            lines.Add($"scene.render.resolution_x = {options.ResolutionX}");
+        if (options.ResolutionY > 0)
+            lines.Add($"scene.render.resolution_y = {options.ResolutionY}");
+        if (options.ResolutionX > 0 || options.ResolutionY > 0)
+            lines.Add("scene.render.resolution_percentage = 100");
+
+        // Render each task in-process: set frame, set per-task border, point the output at the
+        // task's unique base, write_still.
+        foreach (var task in tasks)
+        {
+            lines.Add($"scene.frame_set({task.Frame})");
+
+            if (!task.IsFullFrame)
+            {
+                lines.Add("scene.render.use_border = True");
+                lines.Add("scene.render.use_crop_to_border = True");
+                lines.Add($"scene.render.border_min_x = {task.EffectiveRenderMinX.ToString(inv)}");
+                lines.Add($"scene.render.border_max_x = {task.EffectiveRenderMaxX.ToString(inv)}");
+                lines.Add($"scene.render.border_min_y = {task.EffectiveRenderMinY.ToString(inv)}");
+                lines.Add($"scene.render.border_max_y = {task.EffectiveRenderMaxY.ToString(inv)}");
+            }
+            else
+            {
+                lines.Add("scene.render.use_border = False");
+                lines.Add("scene.render.use_crop_to_border = False");
+            }
+
+            // write_still writes to the LITERAL filepath (it does not append the frame number the way
+            // the `-f` CLI animation render does). Bake the 4-digit frame into the path so the written
+            // file is exactly what FindRenderedFile / DeleteRenderedOutputs look for: "<base><frame:0000>.<ext>".
+            var filePath = $"{BatchTaskOutputBase(outputDir, task)}{task.Frame:D4}".Replace("\\", "/");
+            lines.Add($"scene.render.filepath = r\"{filePath}\"");
+            lines.Add("bpy.ops.render.render(write_still=True)");
+        }
+
+        return lines;
     }
 
     private async Task<RenderBlenderInvocationResult> RunRenderAttemptAsync(

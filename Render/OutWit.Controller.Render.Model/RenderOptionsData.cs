@@ -42,6 +42,14 @@ public partial class RenderOptionsData : ModelBase
     /// </summary>
     public bool Denoise { get; set; }
 
+    /// <summary>
+    /// Persistent-batch chunk size: how many frames/tiles Render.SplitBatched groups into one chunk
+    /// (each chunk renders in a single Blender process). 0 = use the per-engine default (Render.Split
+    /// derives it from <see cref="Engine"/>). Declared last so the wire format stays backward
+    /// compatible — callers (plugin/SDK) that don't set it deserialize to 0 and get the default.
+    /// </summary>
+    public int BatchSize { get; set; }
+
     #endregion
 
     #region ModelBase
@@ -56,7 +64,8 @@ public partial class RenderOptionsData : ModelBase
                && Samples == other.Samples
                && ResolutionX == other.ResolutionX
                && ResolutionY == other.ResolutionY
-               && Denoise == other.Denoise;
+               && Denoise == other.Denoise
+               && BatchSize == other.BatchSize;
     }
 
     public override ModelBase Clone()
@@ -68,7 +77,8 @@ public partial class RenderOptionsData : ModelBase
             Samples = Samples,
             ResolutionX = ResolutionX,
             ResolutionY = ResolutionY,
-            Denoise = Denoise
+            Denoise = Denoise,
+            BatchSize = BatchSize
         };
     }
 

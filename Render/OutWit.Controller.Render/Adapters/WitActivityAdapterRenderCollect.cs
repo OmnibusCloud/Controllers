@@ -50,7 +50,7 @@ internal sealed class WitActivityAdapterRenderCollect :
         IWitActivityStatus? activityStatus,
         WitProcessingStatus status)
     {
-        if (!pool.TryGetCollection(activity.Results, out IReadOnlyList<RenderResultData?>? results) || results == null)
+        if (!OutWit.Controller.Render.Utils.RenderResultFlattener.TryFlatten(pool, activity.Results, out var results) || results == null)
             throw new InvalidOperationException("Failed to get RenderResultCollection parameter 'results'");
 
         if (!pool.TryGetValue(activity.Options, out RenderOptionsData? options))

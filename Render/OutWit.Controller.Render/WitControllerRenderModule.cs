@@ -45,10 +45,16 @@ public class WitControllerRenderModule : WitPluginBase, IWitControllerNode, IWit
         // Activities
         services.AddActivityAdapter<WitActivityRenderSplit, WitActivityAdapterRenderSplit>();
         services.AddActivityAdapter<WitActivityRenderSplitTiles, WitActivityAdapterRenderSplitTiles>();
+        services.AddActivityAdapter<WitActivityRenderSplitBatched, WitActivityAdapterRenderSplitBatched>();
+        services.AddActivityAdapter<WitActivityRenderSplitTilesBatched, WitActivityAdapterRenderSplitTilesBatched>();
         services.AddActivityAdapter<WitActivityRenderFrame, WitActivityAdapterRenderFrame>();
         services.AddActivityAdapter<WitActivityRenderFrameCycles, WitActivityAdapterRenderFrameCycles>();
         services.AddActivityAdapter<WitActivityRenderFrameEevee, WitActivityAdapterRenderFrameEevee>();
         services.AddActivityAdapter<WitActivityRenderFrameGreasePencil, WitActivityAdapterRenderFrameGreasePencil>();
+        services.AddActivityAdapter<WitActivityRenderFrameBatch, WitActivityAdapterRenderFrameBatch>();
+        services.AddActivityAdapter<WitActivityRenderFrameBatchCycles, WitActivityAdapterRenderFrameBatchCycles>();
+        services.AddActivityAdapter<WitActivityRenderFrameBatchEevee, WitActivityAdapterRenderFrameBatchEevee>();
+        services.AddActivityAdapter<WitActivityRenderFrameBatchGreasePencil, WitActivityAdapterRenderFrameBatchGreasePencil>();
         services.AddActivityAdapter<WitActivityRenderCollect, WitActivityAdapterRenderCollect>();
         services.AddActivityAdapter<WitActivityRenderCollectStill, WitActivityAdapterRenderCollectStill>();
         services.AddActivityAdapter<WitActivityRenderCollectTiles, WitActivityAdapterRenderCollectTiles>();
@@ -71,6 +77,8 @@ public class WitControllerRenderModule : WitPluginBase, IWitControllerNode, IWit
         services.AddVariable<WitVariableRenderSceneRef>();
         services.AddVariable<WitVariableRenderTask>();
         services.AddVariable<WitVariableRenderResult>();
+        services.AddVariable<WitVariableRenderTaskBatch>();
+        services.AddVariable<WitVariableRenderResultBatch>();
         services.AddVariable<WitVariableRenderPreflight>();
         services.AddVariable<WitVariableRenderPreflightFrames>();
         services.AddVariable<WitVariableRenderPreflightStillTiled>();
@@ -78,6 +86,8 @@ public class WitControllerRenderModule : WitPluginBase, IWitControllerNode, IWit
         services.AddVariable<WitVariableRenderRuntimeDiagnostics>();
         services.AddCollection<WitVariableRenderTaskCollection>();
         services.AddCollection<WitVariableRenderResultCollection>();
+        services.AddCollection<WitVariableRenderTaskBatchCollection>();
+        services.AddCollection<WitVariableRenderResultBatchCollection>();
     }
 
     #endregion

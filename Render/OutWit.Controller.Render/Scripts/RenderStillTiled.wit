@@ -1,10 +1,10 @@
 Job:RenderStillTiled(RenderSceneRef:scene, Int:frame, Int:tilesX, Int:tilesY, RenderOptions:options, TileOptions:tileOptions)
 {
     Blob:blend = Render.BuildBlendFromRefs(scene);
-    RenderTaskCollection:tasks = Render.SplitTiles(blend, frame, tilesX, tilesY, options, tileOptions);
+    RenderTaskBatchCollection:tasks = Render.SplitTilesBatched(blend, frame, tilesX, tilesY, options, tileOptions);
 
-    RenderResultCollection:rendered = Grid.ForEach(task in tasks)
-        => Render.Frame(task);
+    RenderResultBatchCollection:rendered = Grid.ForEach(task in tasks)
+        => Render.FrameBatch(task);
 
     Blob:result = Render.CollectTiles(rendered, options, tileOptions);
 }

@@ -5,8 +5,8 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>Render</ControllerName>
-    <Version>1.0.0</Version>
-    <Description>Shared render and scene data types used by the OutWit.Controller.Render controller — host-side in adapters, node-side in distributed batch processing.</Description>
+    <Version>1.1.0</Version>
+    <Description>Shared render and scene data types used by the OutWit.Controller.Render controller — host-side in adapters, node-side in distributed batch processing. Adds persistent-batch chunk types (RenderTaskBatchData, RenderResultBatchData) and RenderOptions.BatchSize.</Description>
     <PackageTags>render;scene;blender;witengine;witcloud;controller;data-types</PackageTags>
   </PropertyGroup>
 

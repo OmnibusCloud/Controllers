@@ -3,10 +3,10 @@ Job:RenderDccSceneFrames(DccScene:scene, Int:startFrame, Int:endFrame, RenderOpt
     Blob:blend = Render.BuildBlendFromDccScene(scene);
     Render.ClearScene(scene);
 
-    RenderTaskCollection:tasks = Render.Split(blend, startFrame, endFrame, options);
+    RenderTaskBatchCollection:tasks = Render.SplitBatched(blend, startFrame, endFrame, options);
 
-    RenderResultCollection:rendered = Grid.ForEach(task in tasks)
-        => Render.Frame(task);
+    RenderResultBatchCollection:rendered = Grid.ForEach(task in tasks)
+        => Render.FrameBatch(task);
 
     BlobCollection:result = Render.Collect(rendered, options);
 }
