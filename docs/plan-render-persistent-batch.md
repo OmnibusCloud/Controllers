@@ -1,7 +1,20 @@
 # Plan — Render persistent-batch (one Blender process per chunk)
 
-Status: **DESIGN AGREED, not yet implemented** (2026-06-04). Target: `OutWit.Controller.Render` **1.18.0**.
+Status: **SHIPPED** (2026-06-04). `OutWit.Controller.Render` **1.18.2** (1.18.0/1.18.1 superseded).
 Owner: Dmitry + Claude.
+
+> **Revision — macOS fix (1.18.2).** The first implementation (1.18.0/1.18.1) rendered a chunk via a
+> Python loop calling `bpy.ops.render.render(write_still=True)` in one process. That crashed headless
+> Blender on **macOS** (exit 134, `NSException`) — the render operator's file-save touches Cocoa. Live
+> distribution tests against the deployed server caught it (two Cycles frame jobs failed on the Apple
+> Silicon node; the benchmark's `write_still=False` render is fine, which is why the node still
+> benchmarked). **Fix (D1):** FrameBatch now renders each contiguous frame chunk via Blender's
+> command-line **animation render** (`-s START -e END -a`) — the GUI-free path that is macOS-safe and
+> loads the scene once, using the *same* per-engine config as the working single-frame `-f` path (so
+> Cycles / Eevee / Grease-Pencil behave identically). Tiles can't vary the border across an animation,
+> so **tiled stills reverted to the per-tile path** (`Render.SplitTiles` + `Render.Frame`); tile
+> batching is deferred. `Render.SplitTilesBatched` remains registered but unused. Verified by 28 real
+> Windows renders (all 3 engines via `-a`) + live macOS re-test.
 
 ## 1. Problem
 

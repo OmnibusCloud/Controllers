@@ -4,8 +4,8 @@
 
   <PropertyGroup>
     <ControllerName>Render</ControllerName>
-    <Version>1.1.0</Version>
-    <Description>Bundled .wit scripts for the OutWit.Controller.Render controller — RenderFrames, RenderStill, RenderSceneFrames, RenderPreflight, and the 30+ other render orchestration scripts that WitCloud's ScriptSeeder reads from @Scripts/ on startup. Distributed-render scripts now use the persistent-batch path (Render.SplitBatched / Render.SplitTilesBatched + Render.FrameBatch) so each node renders its whole chunk in one Blender process.</Description>
+    <Version>1.1.1</Version>
+    <Description>Bundled .wit scripts for the OutWit.Controller.Render controller — RenderFrames, RenderStill, RenderSceneFrames, RenderPreflight, and the 30+ other render orchestration scripts that WitCloud's ScriptSeeder reads from @Scripts/ on startup. Frame-distribution scripts use the persistent-batch path (Render.SplitBatched + Render.FrameBatch, one Blender process per contiguous frame chunk); tiled stills render per-tile (Render.SplitTiles + Render.Frame).</Description>
     <PackageTags>render;scripts;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
 

@@ -38,26 +38,23 @@ public class RenderProductionScriptsCompileTests
     }
 
     [Test]
-    public void AllProductionScriptsUseBatchedSplitTest()
+    public void FrameScriptsUseBatchedSplitTest()
     {
-        // After the persistent-batch migration no bundled distributed-render script should still use the
-        // per-frame Render.Split / Render.SplitTiles + Render.Frame path; they must all be batched.
+        // Persistent-batch applies to FRAME distribution: no bundled script may still use the bare
+        // per-frame splitter Render.Split( — frames go through Render.SplitBatched + Render.FrameBatch.
+        // Tiled stills intentionally stay on the per-tile path (Render.SplitTiles + Render.Frame): the
+        // CLI animation render that makes FrameBatch macOS-safe cannot vary the border per frame, so
+        // Render.Split( (exact, not SplitTiles/SplitBatched) must appear in ZERO bundled scripts.
         var offenders = new List<string>();
         foreach (var path in EnumerateBundledScripts())
         {
             var text = File.ReadAllText(path);
-            var name = Path.GetFileName(path);
-
-            var usesPerFrameSplit = System.Text.RegularExpressions.Regex.IsMatch(text, @"Render\.Split\s*\(")
-                                    || System.Text.RegularExpressions.Regex.IsMatch(text, @"Render\.SplitTiles\s*\(");
-            var usesPerFrameRender = System.Text.RegularExpressions.Regex.IsMatch(text, @"=>\s*Render\.Frame\b");
-
-            if (usesPerFrameSplit || usesPerFrameRender)
-                offenders.Add(name);
+            if (System.Text.RegularExpressions.Regex.IsMatch(text, @"Render\.Split\s*\("))
+                offenders.Add(Path.GetFileName(path));
         }
 
         Assert.That(offenders, Is.Empty,
-            $"Scripts still on the per-frame (non-batched) path: {string.Join(", ", offenders)}");
+            $"Frame scripts still use the per-frame Render.Split (must be Render.SplitBatched): {string.Join(", ", offenders)}");
     }
 
     #endregion
