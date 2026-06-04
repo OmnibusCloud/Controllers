@@ -73,7 +73,7 @@ public sealed class RenderBenchmarkRenderIntegrationTests
         var custom = result.Custom!;
         Assert.That(custom.ContainsKey(RenderBenchmarkHelper.CUSTOM_RENDER_DEVICE), Is.True);
         Assert.That(custom[RenderBenchmarkHelper.CUSTOM_RENDER_DEVICE], Is.AnyOf("GPU", "CPU"));
-        Assert.That(custom[RenderBenchmarkHelper.CUSTOM_RENDER_RESOLUTION], Is.EqualTo("256x256"));
+        Assert.That(custom[RenderBenchmarkHelper.CUSTOM_RENDER_RESOLUTION], Is.EqualTo("512x512"));
         Assert.That(custom[RenderBenchmarkHelper.CUSTOM_RENDER_SAMPLES], Is.EqualTo("128"));
         Assert.That(custom[RenderBenchmarkHelper.CUSTOM_RENDER_FRAMES], Is.EqualTo(result.Iterations.ToString()));
 

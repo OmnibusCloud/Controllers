@@ -21,10 +21,12 @@ internal static class RenderBenchmarkHelper
     public const string PREFLIGHT_VIDEO_UNIT = "video-preflights@v1";
     public const string PREFLIGHT_UNIT = "unified-preflights@v1";
 
-    public const string STILL_BENCHMARK_SCENE_DATASET = "benchmark-still@v1";
-    public const string STILL_BENCHMARK_SCENE_CYCLES_DATASET = "benchmark-still-cycles@v1";
-    public const string STILL_BENCHMARK_SCENE_EEVEE_DATASET = "benchmark-still-eevee@v1";
-    public const string STILL_BENCHMARK_SCENE_GREASE_PENCIL_DATASET = "benchmark-still-grease-pencil@v1";
+    // @v2 = the heavier 512px / 4×4-grid render-benchmark scene (see BENCHMARK_RENDER_* below);
+    // bumped from @v1 so a v2-scene rate is never mislabeled as a v1 rate after this controller ships.
+    public const string STILL_BENCHMARK_SCENE_DATASET = "benchmark-still@v2";
+    public const string STILL_BENCHMARK_SCENE_CYCLES_DATASET = "benchmark-still-cycles@v2";
+    public const string STILL_BENCHMARK_SCENE_EEVEE_DATASET = "benchmark-still-eevee@v2";
+    public const string STILL_BENCHMARK_SCENE_GREASE_PENCIL_DATASET = "benchmark-still-grease-pencil@v2";
     public const string VIDEO_BENCHMARK_SCENE_DATASET = "benchmark-video@v1";
     public const string RUNTIME_DIAGNOSTICS_DATASET = "runtime-diagnostics@v1";
     public const string PREFLIGHT_FRAMES_DATASET = "preflight-frames@v1";
@@ -35,18 +37,39 @@ internal static class RenderBenchmarkHelper
     private const int BENCHMARK_RESOLUTION = 128;
     private const int BENCHMARK_SAMPLES = 8;
 
-    // Node render-benchmark calibration (see @Docs/Active/plan-render-benchmark-redesign.md).
-    // Measured on RTX 3080 Ti + Ryzen 9 5950X: 256px @ 128 spp on a 3×3 sphere grid is the
-    // compute-bound threshold where the GPU beats even a strong 16-core CPU (~2.3×). 128px/64spp
-    // was overhead-bound (GPU underutilised → lost to CPU), so do not lower these without
-    // re-checking GPU≫CPU on real hardware.
-    private const int BENCHMARK_RENDER_RESOLUTION = 256;
+    // Node render-benchmark calibration (see @Docs/Active/plan-render-benchmark-redesign.md
+    // and WitCloud/@Docs/plan-2026-06-04-render-and-client-issues.md §B).
+    //
+    // v1 (256px @ 128 spp, 3×3 grid) was calibrated only on RTX 3080 Ti + Ryzen 9 5950X vs an
+    // Ubuntu RTX 1080 Ti — there it ordered discrete GPUs correctly (3080 Ti > 1080 Ti) and beat
+    // CPU. But once an Apple M4 (integrated, unified-memory) joined, the scene proved too LIGHT to
+    // separate integrated from discrete: the Cycles rate INVERTED vs reality (bench Mac 11.58M >
+    // Linux 8.35M, yet a real Cycles lava video ran ~17% FASTER on the 1080 Ti). A discrete GPU's
+    // per-frame FIXED cost (PCIe scene upload + kernel launch + BVH build) is what 256px fails to
+    // amortize, so the M4's no-PCIe unified path over-scores. v2 raises the per-frame compute so
+    // the discrete GPU's raw throughput + memory bandwidth dominate that fixed cost:
+    //   • resolution 256 → 512  (4× pixels → saturates the GPU, amortizes launch/upload)
+    //   • grid       3   → 4    (9 → 16 subdiv-4 icospheres → heavier BVH, memory-bandwidth signal)
+    //   • samples/bounces unchanged (don't compound weak-node cost on both axes at once)
+    // The still-scene dataset ids are bumped @v1 → @v2 so a v2-scene rate is never mislabeled
+    // as a v1 rate. NOTE: the allocator weights by Rate alone (it does not gate on DatasetId), and
+    // ComputeRate scales with resX·resY, so a v2 node reports a ~4× larger absolute Rate than a v1
+    // node for the same hardware — v1 and v2 nodes must therefore not be mixed in one job (update
+    // all clients together). Same-version ratios are unaffected, which is the property Grid needs.
+    // Weak CPU-only nodes pay ~4× on their single Cycles benchmark frame (the adaptive loop still
+    // renders ≥1) — acceptable for a one-time probe.
+    // PENDING: re-verify the Mac/Linux/Windows ordering on the 3-machine cluster after deploy;
+    // tune these constants + rebuild if the integrated/discrete order is still off.
+    private const int BENCHMARK_RENDER_RESOLUTION = 512;
     private const int BENCHMARK_RENDER_SAMPLES = 128;
-    private const int BENCHMARK_RENDER_GRID = 3;
+    private const int BENCHMARK_RENDER_GRID = 4;
     private const int BENCHMARK_RENDER_MAX_BOUNCES = 8;
     private const int BENCHMARK_RENDER_WARMUP_FRAMES = 1;
     private const int BENCHMARK_RENDER_MAX_FRAMES = 24;
-    private static readonly TimeSpan BENCHMARK_RENDER_FALLBACK_TARGET = TimeSpan.FromSeconds(1.5);
+    // Raised 1.5 → 3.0 s: a 512px frame is ~4× heavier, so a strong GPU would otherwise complete
+    // only 1 frame inside a 1.5 s budget. 3 s lets fast nodes average over a few frames; weak nodes
+    // still break after their first frame (already past budget), so their cost is unchanged.
+    private static readonly TimeSpan BENCHMARK_RENDER_FALLBACK_TARGET = TimeSpan.FromSeconds(3.0);
 
     public const string CUSTOM_RENDER_DEVICE = "render-device";
     public const string CUSTOM_RENDER_BACKEND = "render-backend";

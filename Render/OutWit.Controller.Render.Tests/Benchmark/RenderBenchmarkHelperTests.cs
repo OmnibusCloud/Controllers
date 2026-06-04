@@ -9,9 +9,9 @@ public sealed class RenderBenchmarkHelperTests
 {
     #region Tests
 
-    [TestCase(RenderEngine.Cycles, "benchmark-still-cycles@v1")]
-    [TestCase(RenderEngine.Eevee, "benchmark-still-eevee@v1")]
-    [TestCase(RenderEngine.GreasePencil, "benchmark-still-grease-pencil@v1")]
+    [TestCase(RenderEngine.Cycles, "benchmark-still-cycles@v2")]
+    [TestCase(RenderEngine.Eevee, "benchmark-still-eevee@v2")]
+    [TestCase(RenderEngine.GreasePencil, "benchmark-still-grease-pencil@v2")]
     public void GetFrameBenchmarkDatasetIdReturnsEngineSpecificDatasetTest(RenderEngine engine, string expectedDatasetId)
     {
         var datasetId = (string?)RenderBenchmarkHelperType
@@ -41,6 +41,21 @@ public sealed class RenderBenchmarkHelperTests
             Assert.That(options.ResolutionY, Is.GreaterThan(0));
             Assert.That(options.Denoise, Is.False);
         });
+    }
+
+    [TestCase("BENCHMARK_RENDER_RESOLUTION", 512)]
+    [TestCase("BENCHMARK_RENDER_GRID", 4)]
+    [TestCase("BENCHMARK_RENDER_SAMPLES", 128)]
+    [TestCase("BENCHMARK_RENDER_MAX_BOUNCES", 8)]
+    public void RenderBenchmarkCalibrationConstantsAreV2ValuesTest(string constName, int expected)
+    {
+        // Locks the v2 calibration (heavier 512px / 4×4-grid scene) chosen to stop the 256px
+        // scene under-rating discrete GPUs vs an integrated M4 — see RenderBenchmarkHelper's
+        // BENCHMARK_RENDER_* comment. A revert to the v1 values must fail loudly here.
+        var field = RenderBenchmarkHelperType.GetField(constName, BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.That(field, Is.Not.Null, $"Calibration constant {constName} not found.");
+        Assert.That(field!.GetValue(null), Is.EqualTo(expected));
     }
 
     [Test]

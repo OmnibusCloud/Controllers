@@ -56,13 +56,13 @@ public class RenderBenchmarkIntegrationTests
 
     public static IEnumerable<TestCaseData> BenchmarkCases()
     {
-        yield return new TestCaseData("Render.Frame", "render-pixels@v1", "benchmark-still@v1");
-        yield return new TestCaseData("Render.Frame.Cycles", "render-pixels@v1", "benchmark-still-cycles@v1");
-        yield return new TestCaseData("Render.Frame.Eevee", "render-pixels@v1", "benchmark-still-eevee@v1");
-        yield return new TestCaseData("Render.Frame.GreasePencil", "render-pixels@v1", "benchmark-still-grease-pencil@v1");
+        yield return new TestCaseData("Render.Frame", "render-pixels@v1", "benchmark-still@v2");
+        yield return new TestCaseData("Render.Frame.Cycles", "render-pixels@v1", "benchmark-still-cycles@v2");
+        yield return new TestCaseData("Render.Frame.Eevee", "render-pixels@v1", "benchmark-still-eevee@v2");
+        yield return new TestCaseData("Render.Frame.GreasePencil", "render-pixels@v1", "benchmark-still-grease-pencil@v2");
         yield return new TestCaseData("Render.BlenderVersion", "version-checks@v1", "runtime-diagnostics@v1");
         yield return new TestCaseData("Render.RuntimeDiagnostics", "runtime-diagnostics@v1", "runtime-diagnostics@v1");
-        yield return new TestCaseData("Render.ValidateBlend", "blend-validations@v1", "benchmark-still@v1");
+        yield return new TestCaseData("Render.ValidateBlend", "blend-validations@v1", "benchmark-still@v2");
         yield return new TestCaseData("Render.PreflightFrames", "frame-preflights@v1", "preflight-frames@v1");
         yield return new TestCaseData("Render.PreflightStillTiled", "tiled-preflights@v1", "tiled-still@v1");
         yield return new TestCaseData("Render.PreflightVideo", "video-preflights@v1", "preflight-video@v1");

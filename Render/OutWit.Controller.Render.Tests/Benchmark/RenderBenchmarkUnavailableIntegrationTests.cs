@@ -1,6 +1,8 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using OutWit.Engine.Data.Benchmark;
 using OutWit.Engine.Sdk;
 using OutWit.Controller.Render.Tests.Utils;
+using OutWit.Controller.Render.Utils;
 
 namespace OutWit.Controller.Render.Tests.Benchmark;
 
@@ -34,8 +36,18 @@ public sealed class RenderBenchmarkUnavailableIntegrationTests
     #region Tests
 
     [Test]
-    public async Task RenderFrameCyclesBenchmarkReturnsUnavailableResultWhenStillBenchmarkAssetsAreMissingTest()
+    public async Task RenderFrameCyclesBenchmarkIsAssetIndependentWhenStillBenchmarkAssetsAreMissingTest()
     {
+        // Since the 1.16.0 redesign the render-frame benchmark generates its compute-bound scene
+        // in-process (see BlenderBenchmarkScript) and no longer reads a shipped .blend — so removing
+        // the legacy benchmark .blend assets must NOT make it unavailable; it still produces a real
+        // rate. (It does depend on the Blender binary; the unavailable-when-Blender-absent path is
+        // covered by RunBenchmark's runner.IsAvailable guard.) Skip when Blender is absent (e.g. CI
+        // without the prerequisite), since asset-independence is only observable when it can render.
+        var blenderDir = RenderTestAssetPaths.ResolveBlenderDir(m_solutionRoot);
+        if (blenderDir == null || !new BlenderRunner(blenderDir, NullLogger.Instance).IsAvailable)
+            Assert.Ignore("Blender prerequisite not available for this OS/architecture.");
+
         var paths = new[]
         {
             RenderTestAssetPaths.GetBenchmarkScenePath(m_solutionRoot),
@@ -50,11 +62,10 @@ public sealed class RenderBenchmarkUnavailableIntegrationTests
 
             Assert.Multiple(() =>
             {
-                Assert.That(result.Rate, Is.EqualTo(0));
-                Assert.That(result.Iterations, Is.EqualTo(0));
-                Assert.That(result.Elapsed, Is.EqualTo(TimeSpan.Zero));
+                Assert.That(result.Rate, Is.GreaterThan(0), "Procedural render benchmark must still produce a rate without the shipped .blend assets.");
+                Assert.That(result.Iterations, Is.GreaterThan(0));
                 Assert.That(result.Unit, Is.EqualTo("render-pixels@v1"));
-                Assert.That(result.DatasetId, Is.EqualTo("benchmark-still-cycles@v1"));
+                Assert.That(result.DatasetId, Is.EqualTo("benchmark-still-cycles@v2"));
             });
         });
     }
