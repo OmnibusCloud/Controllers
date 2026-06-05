@@ -1,6 +1,6 @@
 # Plan — Render persistent-batch (one Blender process per chunk)
 
-Status: **SHIPPED** (2026-06-04). `OutWit.Controller.Render` **1.18.2** (1.18.0/1.18.1 superseded).
+Status: **SHIPPED + LIVE-VERIFIED** (2026-06-05). `OutWit.Controller.Render` **1.18.3** (1.18.0/1.18.1/1.18.2 superseded — see §8/§9). All three engines + tiles confirmed on the live macOS+Linux+Windows fleet; balance validated at production scale.
 Owner: Dmitry + Claude.
 
 > **Revision — macOS fix (1.18.2).** The first implementation (1.18.0/1.18.1) rendered a chunk via a
@@ -148,3 +148,50 @@ in one process; `Render.CollectTiles` stitches as today. Same chunk-size policy.
    Eevee split to de-invert and big speedup from single scene-load).
 7. Bump controller 1.18.0; push; publish; bump WitCloud ref; redeploy with UI.
 ```
+
+## 8. As-shipped corrections (1.18.1 → 1.18.3)
+
+The plan above is as-built EXCEPT the render mechanism, which changed twice after live testing:
+
+- **1.18.0 was unusable** — published before `Render.Model 1.1.0`, so its `>= 1.1.0` dep was
+  unresolvable. Re-cut as **1.18.1** (publish Model + Scripts first, then the controller).
+- **macOS NSException (→ 1.18.2 → 1.18.3, the important one).** The first `Render.FrameBatch`
+  rendered a chunk with an in-process Python loop calling `bpy.ops.render.render(write_still=True)`.
+  Live distribution tests caught it: on the Apple-Silicon node every Cycles frame job died with
+  `exit 134 / libc++abi NSException` — the render-operator's file-save touches Cocoa headless on
+  macOS. (The benchmark's `write_still=False` render is fine, so the node still benchmarked → only
+  FrameBatch crashed; 28 Windows-only local renders never saw it.) **Fix (D1, user-chosen):**
+  `RenderFrameBatchAsync` now renders each contiguous frame chunk via Blender's command-line
+  **animation render** `-s START -e END -a -o "<dir>/f_"` — the GUI-free path (macOS-safe), scene
+  loaded once, SAME per-engine config as the working single-frame `-f` path (so Cycles / Eevee /
+  Grease-Pencil behave identically; GP = Eevee Next). The CLI render cannot vary the border across an
+  animation, so **tiled stills reverted to per-tile** (`Render.SplitTiles` + `Render.Frame`);
+  `Render.SplitTilesBatched` stays registered but unused. Shipped **1.18.3** (a `;` in the 1.18.2
+  controller `<Description>` split the generated controller.json — MSBuild treats `;` as the item
+  separator; fixed in `Build/OutWit.Controller.Manifest.targets` by escaping `;`→`%3B`).
+
+Verified: 28 real Windows renders (all 3 engines via `-a`) + live re-test on the macOS fleet
+(Cycles / Eevee / Grease-Pencil frames + tiled) all green.
+
+## 9. Balance — validated at production scale
+
+The whole motive was the Eevee/GP allocation inversion. Conclusion: **the render-only benchmark is
+the right signal at render-bound scale, and persistent-batch makes it predictive — no benchmark
+change needed.**
+
+- **Why batching fixes it:** at chunk K>1 the per-chunk scene-load is amortised across K frames in one
+  process, so the per-frame wall is render-dominated and the render-only Rate predicts it.
+- **Render-bound, 3 nodes** — 1080p / 256 spp / 200-frame canonical wave (chunk=5): makespan 16m56s,
+  per-node finishes within ~8% of each other; allocation tracked the Cycles benchmark (real per-frame
+  throughput ≈ benchmark ratio).
+- **Render-bound, 4 nodes** (added an RTX-class node) — same job: makespan 11m24s; allocation
+  15:12:8:5 chunks (3080Ti : new : M4 : 1080Ti); finishes span ~1m41s on an ~11-min job — tight,
+  despite the fleet being geo-distributed (Mac in the US, the rest in Israel) and one node running a
+  local test suite concurrently. The new node slotted in by benchmark with zero manual tuning.
+- **Small / cheap scale is the only soft spot (acceptable):** below the Cycles chunking threshold
+  (`clamp(ceil(frames/48),1,8)` ⇒ chunk=1 under 48 frames) batching does NOT engage, so each frame
+  pays full Blender spawn + scene load. There the per-frame wall is platform-bound (process spawn /
+  disk), which the GPU render-only benchmark can't predict → mild inversion (e.g. a Windows node with
+  a fast GPU but slow spawn looks faster than it renders). Cheap previews are quick anyway, so this is
+  left as-is; the lever if ever needed is lowering the Cycles `TARGET` so it batches earlier (trades
+  balance granularity). NOT changed.
