@@ -39,6 +39,11 @@
     </ItemGroup>
 
     <PropertyGroup>
+      <!-- Description is free text and may contain ';' — MSBuild's item separator. Inlined raw into an
+           item Include it splits the manifest line in two (invalid JSON: a newline inside the string).
+           Escape ';' to '%3B' here (a property is not list-split), so the Include is a single item and
+           WriteLinesToFile emits a literal ';'. (Tags/features/useCases ARE ';'-lists, so they stay raw.) -->
+      <_ControllerDescriptionEscaped>$(Description.Replace(';', '%3B'))</_ControllerDescriptionEscaped>
       <_ControllerAuthorsJson>@(_ControllerAuthor->'&quot;%(Identity)&quot;', ', ')</_ControllerAuthorsJson>
       <_ControllerTagsJson>@(_ControllerTag->'&quot;%(Identity)&quot;', ', ')</_ControllerTagsJson>
       <_ControllerFeaturesJson>@(_ControllerFeature->'&quot;%(Identity)&quot;', ', ')</_ControllerFeaturesJson>
@@ -67,7 +72,7 @@
       <_ControllerManifestLines Include="  &quot;name&quot;: &quot;$(ControllerName)&quot;," />
       <_ControllerManifestLines Include="  &quot;assemblyName&quot;: &quot;$(AssemblyName)&quot;," />
       <_ControllerManifestLines Include="  &quot;version&quot;: &quot;$(Version)&quot;," />
-      <_ControllerManifestLines Include="  &quot;description&quot;: &quot;$(Description)&quot;," />
+      <_ControllerManifestLines Include="  &quot;description&quot;: &quot;$(_ControllerDescriptionEscaped)&quot;," />
       <_ControllerManifestLines Include="  &quot;authors&quot;: [ $(_ControllerAuthorsJson) ]," />
       <_ControllerManifestLines Include="  &quot;copyright&quot;: &quot;$(Copyright)&quot;," />
       <_ControllerManifestLines Include="  &quot;projectUrl&quot;: &quot;$(PackageProjectUrl)&quot;," />
