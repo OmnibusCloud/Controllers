@@ -396,7 +396,7 @@ public sealed class BlenderRunner
         };
 
         pythonLines.AddRange(BlenderRenderArgsBuilder.BuildDeviceConfigurationPython(options.Engine, forceCpuFallback));
-        pythonLines.AddRange(BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(options.Format));
+        pythonLines.AddRange(BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(options));
         pythonLines.AddRange(BlenderRenderArgsBuilder.BuildViewLayerRecoveryPython());
 
         pythonLines.AddRange(BlenderRenderArgsBuilder.BuildEngineConfigurationPython(options));
@@ -481,7 +481,7 @@ public sealed class BlenderRunner
         };
 
         pythonLines.AddRange(BlenderRenderArgsBuilder.BuildDeviceConfigurationPython(options.Engine, forceCpuFallback));
-        pythonLines.AddRange(BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(options.Format));
+        pythonLines.AddRange(BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(options));
         pythonLines.AddRange(BlenderRenderArgsBuilder.BuildViewLayerRecoveryPython());
         pythonLines.AddRange(BlenderRenderArgsBuilder.BuildEngineConfigurationPython(options));
 

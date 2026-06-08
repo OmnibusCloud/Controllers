@@ -153,14 +153,50 @@ internal static class BlenderRenderArgsBuilder
         return pythonLines;
     }
 
-    public static IReadOnlyList<string> BuildImageOutputConfigurationPython(RenderFormat format)
+    public static IReadOnlyList<string> BuildImageOutputConfigurationPython(RenderOptionsData options)
     {
-        return format switch
+        var lines = new List<string>();
+
+        // Colour channels. Default reproduces legacy behaviour: force RGB for PNG/JPEG, leave EXR to the
+        // scene. RGBA enables alpha output (transparent renders / compositing).
+        var colorMode = options.ColorMode switch
         {
-            RenderFormat.PNG => ["scene.render.image_settings.color_mode = 'RGB'"],
-            RenderFormat.JPEG => ["scene.render.image_settings.color_mode = 'RGB'"],
-            _ => []
+            RenderColorMode.RGB => "RGB",
+            RenderColorMode.RGBA => "RGBA",
+            _ => options.Format is RenderFormat.PNG or RenderFormat.JPEG ? "RGB" : null
         };
+        if (colorMode is not null)
+            lines.Add($"scene.render.image_settings.color_mode = '{colorMode}'");
+
+        // Film/world transparency. Default leaves the scene's own setting untouched.
+        switch (options.FilmTransparent)
+        {
+            case RenderFilmTransparency.Transparent:
+                lines.Add("scene.render.film_transparent = True");
+                break;
+            case RenderFilmTransparency.Opaque:
+                lines.Add("scene.render.film_transparent = False");
+                break;
+        }
+
+        // Bit depth. Default leaves the scene/format default untouched. Guarded because not every depth is
+        // valid for every format and Blender raises on an unsupported value.
+        var colorDepth = options.ColorDepth switch
+        {
+            RenderColorDepth.Eight => "8",
+            RenderColorDepth.Sixteen => "16",
+            RenderColorDepth.ThirtyTwo => "32",
+            _ => null
+        };
+        if (colorDepth is not null)
+        {
+            lines.Add("try:");
+            lines.Add($"    scene.render.image_settings.color_depth = '{colorDepth}'");
+            lines.Add("except (TypeError, ValueError):");
+            lines.Add("    pass");
+        }
+
+        return lines;
     }
 
     public static IReadOnlyList<string> BuildViewLayerRecoveryPython()

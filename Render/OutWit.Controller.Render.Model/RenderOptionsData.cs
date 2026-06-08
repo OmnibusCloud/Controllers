@@ -50,6 +50,26 @@ public partial class RenderOptionsData : ModelBase
     /// </summary>
     public int BatchSize { get; set; }
 
+    /// <summary>
+    /// Output colour channels. <see cref="RenderColorMode.Default"/> reproduces legacy behaviour
+    /// (RGB for PNG/JPEG, scene default for EXR). Declared after <see cref="BatchSize"/> so the wire
+    /// format stays backward compatible — old callers deserialize to Default and render as before.
+    /// </summary>
+    public RenderColorMode ColorMode { get; set; } = RenderColorMode.Default;
+
+    /// <summary>
+    /// Whether the film/world background is rendered transparent.
+    /// <see cref="RenderFilmTransparency.Default"/> leaves the scene's own setting untouched. Appended
+    /// for wire back-compat.
+    /// </summary>
+    public RenderFilmTransparency FilmTransparent { get; set; } = RenderFilmTransparency.Default;
+
+    /// <summary>
+    /// Output bit depth. <see cref="RenderColorDepth.Default"/> leaves the scene/format default
+    /// untouched. Appended for wire back-compat.
+    /// </summary>
+    public RenderColorDepth ColorDepth { get; set; } = RenderColorDepth.Default;
+
     #endregion
 
     #region ModelBase
@@ -65,7 +85,10 @@ public partial class RenderOptionsData : ModelBase
                && ResolutionX == other.ResolutionX
                && ResolutionY == other.ResolutionY
                && Denoise == other.Denoise
-               && BatchSize == other.BatchSize;
+               && BatchSize == other.BatchSize
+               && ColorMode == other.ColorMode
+               && FilmTransparent == other.FilmTransparent
+               && ColorDepth == other.ColorDepth;
     }
 
     public override ModelBase Clone()
@@ -78,7 +101,10 @@ public partial class RenderOptionsData : ModelBase
             ResolutionX = ResolutionX,
             ResolutionY = ResolutionY,
             Denoise = Denoise,
-            BatchSize = BatchSize
+            BatchSize = BatchSize,
+            ColorMode = ColorMode,
+            FilmTransparent = FilmTransparent,
+            ColorDepth = ColorDepth
         };
     }
 

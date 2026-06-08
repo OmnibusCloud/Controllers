@@ -58,6 +58,70 @@ public class BlenderRunnerTests
 
     #endregion
 
+    #region Image Output (scene fidelity) Tests
+
+    [Test]
+    public void ImageOutputDefaultPngForcesRgbTest()
+    {
+        var lines = BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(
+            new RenderOptionsData { Format = RenderFormat.PNG });
+
+        // Legacy behaviour preserved: default options still force RGB for PNG, nothing else.
+        Assert.That(lines, Is.EqualTo(new[] { "scene.render.image_settings.color_mode = 'RGB'" }));
+    }
+
+    [Test]
+    public void ImageOutputDefaultExrLeavesSceneTest()
+    {
+        var lines = BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(
+            new RenderOptionsData { Format = RenderFormat.EXR });
+
+        // Legacy behaviour preserved: EXR is left to the scene (no overrides).
+        Assert.That(lines, Is.Empty);
+    }
+
+    [Test]
+    public void ImageOutputRgbaEnablesAlphaTest()
+    {
+        var lines = BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(
+            new RenderOptionsData { Format = RenderFormat.PNG, ColorMode = RenderColorMode.RGBA });
+
+        Assert.That(lines, Does.Contain("scene.render.image_settings.color_mode = 'RGBA'"));
+        Assert.That(lines, Has.None.Contains("'RGB'"));
+    }
+
+    [Test]
+    public void ImageOutputFilmTransparencyIsHonoredTest()
+    {
+        var transparent = BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(
+            new RenderOptionsData { Format = RenderFormat.PNG, FilmTransparent = RenderFilmTransparency.Transparent });
+        var opaque = BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(
+            new RenderOptionsData { Format = RenderFormat.PNG, FilmTransparent = RenderFilmTransparency.Opaque });
+        var legacy = BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(
+            new RenderOptionsData { Format = RenderFormat.PNG });
+
+        Assert.That(transparent, Does.Contain("scene.render.film_transparent = True"));
+        Assert.That(opaque, Does.Contain("scene.render.film_transparent = False"));
+        // Default must NOT touch the scene's film_transparent.
+        Assert.That(legacy, Has.None.Contains("film_transparent"));
+    }
+
+    [Test]
+    public void ImageOutputColorDepthIsGuardedTest()
+    {
+        var lines = BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(
+            new RenderOptionsData { Format = RenderFormat.PNG, ColorDepth = RenderColorDepth.Sixteen });
+
+        Assert.That(lines, Does.Contain("    scene.render.image_settings.color_depth = '16'"));
+        Assert.That(lines, Does.Contain("try:"));
+
+        var legacy = BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(
+            new RenderOptionsData { Format = RenderFormat.PNG });
+        Assert.That(legacy, Has.None.Contains("color_depth"));
+    }
+
+    #endregion
+
     #region Requirement Attribute Tests
 
     [Test]
