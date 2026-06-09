@@ -88,7 +88,23 @@ namespace OutWit.Controller.Grid.Adapters
                 IReadOnlyList<Task<(IWitProcessingStatus, IReadOnlyList<IWitVariable>)>> groupTasks
                     = groups.Select(group => NodesManager.Process(group, status.JobId, canRunInParallelOnClient)).ToList();
 
-                await Task.WhenAll(groupTasks);
+                // Wait for the distributed groups, but honour cancellation: a node renders its whole batch
+                // before reporting, so without this the ForEach would block until the slowest in-flight
+                // batch returns even after the job is cancelled (job hangs mid-progress). On cancel this
+                // throws OperationCanceled -> the engine finalizes the job as Cancelled; the abandoned
+                // group tasks complete in the background (the node finishes its current task) and are
+                // ignored. Cancellation is generic distribution control, not render-specific.
+                var allGroups = Task.WhenAll(groupTasks);
+                try
+                {
+                    await allGroups.WaitAsync(ProcessingManager.CancellationToken(status.JobId));
+                }
+                catch (OperationCanceledException)
+                {
+                    // Observe the orphaned groups' eventual completion so it isn't an unobserved exception.
+                    _ = allGroups.ContinueWith(t => { _ = t.Exception; }, TaskScheduler.Default);
+                    throw;
+                }
 
                 foreach (var task in groupTasks)
                 {
