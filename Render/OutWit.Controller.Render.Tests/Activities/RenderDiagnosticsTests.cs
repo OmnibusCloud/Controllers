@@ -198,18 +198,21 @@ public sealed class RenderDiagnosticsTests
         Assert.That(job.Variables["info"], Is.Not.Null);
     }
 
-    [TestCase("RenderStillCycles.wit", "Render.Frame.Cycles(task)")]
-    [TestCase("RenderStillEevee.wit", "Render.Frame.Eevee(task)")]
-    [TestCase("RenderStillGreasePencil.wit", "Render.Frame.GreasePencil(task)")]
-    [TestCase("RenderFramesCycles.wit", "Render.Frame.Cycles(task)")]
-    [TestCase("RenderFramesEevee.wit", "Render.Frame.Eevee(task)")]
-    [TestCase("RenderFramesGreasePencil.wit", "Render.Frame.GreasePencil(task)")]
+    // Full-frame scripts render persistent-batch chunks since Render 1.18.0 (SplitBatched +
+    // Render.FrameBatch — one Blender process per chunk); tiled stills legitimately stay on the
+    // per-tile Render.Frame path (the CLI animation render cannot vary the border per frame).
+    [TestCase("RenderStillCycles.wit", "Render.FrameBatch.Cycles(task)")]
+    [TestCase("RenderStillEevee.wit", "Render.FrameBatch.Eevee(task)")]
+    [TestCase("RenderStillGreasePencil.wit", "Render.FrameBatch.GreasePencil(task)")]
+    [TestCase("RenderFramesCycles.wit", "Render.FrameBatch.Cycles(task)")]
+    [TestCase("RenderFramesEevee.wit", "Render.FrameBatch.Eevee(task)")]
+    [TestCase("RenderFramesGreasePencil.wit", "Render.FrameBatch.GreasePencil(task)")]
     [TestCase("RenderStillTiledCycles.wit", "Render.Frame.Cycles(task)")]
     [TestCase("RenderStillTiledEevee.wit", "Render.Frame.Eevee(task)")]
     [TestCase("RenderStillTiledGreasePencil.wit", "Render.Frame.GreasePencil(task)")]
-    [TestCase("RenderVideoCycles.wit", "Render.Frame.Cycles(task)")]
-    [TestCase("RenderVideoEevee.wit", "Render.Frame.Eevee(task)")]
-    [TestCase("RenderVideoGreasePencil.wit", "Render.Frame.GreasePencil(task)")]
+    [TestCase("RenderVideoCycles.wit", "Render.FrameBatch.Cycles(task)")]
+    [TestCase("RenderVideoEevee.wit", "Render.FrameBatch.Eevee(task)")]
+    [TestCase("RenderVideoGreasePencil.wit", "Render.FrameBatch.GreasePencil(task)")]
     public void BundledEngineSpecificRenderScriptUsesExpectedFrameActivityTest(string scriptFileName, string expectedActivityCall)
     {
         var scriptsPath = RenderTestAssetPaths.FindBundledScriptsPath()
