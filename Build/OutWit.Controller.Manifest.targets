@@ -39,11 +39,14 @@
     </ItemGroup>
 
     <PropertyGroup>
-      <!-- Description is free text and may contain ';' — MSBuild's item separator. Inlined raw into an
-           item Include it splits the manifest line in two (invalid JSON: a newline inside the string).
-           Escape ';' to '%3B' here (a property is not list-split), so the Include is a single item and
-           WriteLinesToFile emits a literal ';'. (Tags/features/useCases ARE ';'-lists, so they stay raw.) -->
-      <_ControllerDescriptionEscaped>$(Description.Replace(';', '%3B'))</_ControllerDescriptionEscaped>
+      <!-- Scalar free-text fields are inlined as JSON string values, so they must be JSON-escaped or a
+           literal '"' / '\' silently corrupts controller.json (the 1.18.2 ';' incident was only the
+           first symptom). Escape order is load-bearing: '\' -> '\\' FIRST (so the backslashes we add
+           next aren't re-escaped), then '"' -> '\"'. Finally ';' -> '%3B' (MSBuild's item separator —
+           inlined raw into an item Include a ';' splits the line in two; '%3B' survives as a literal ';'
+           through WriteLinesToFile). Tags/features/useCases ARE ';'-lists so they keep raw ';'. -->
+      <_ControllerDescriptionEscaped>$(Description.Replace('\', '\\').Replace('"', '\"').Replace(';', '%3B'))</_ControllerDescriptionEscaped>
+      <_ControllerCopyrightEscaped>$(Copyright.Replace('\', '\\').Replace('"', '\"').Replace(';', '%3B'))</_ControllerCopyrightEscaped>
       <_ControllerAuthorsJson>@(_ControllerAuthor->'&quot;%(Identity)&quot;', ', ')</_ControllerAuthorsJson>
       <_ControllerTagsJson>@(_ControllerTag->'&quot;%(Identity)&quot;', ', ')</_ControllerTagsJson>
       <_ControllerFeaturesJson>@(_ControllerFeature->'&quot;%(Identity)&quot;', ', ')</_ControllerFeaturesJson>
@@ -74,7 +77,7 @@
       <_ControllerManifestLines Include="  &quot;version&quot;: &quot;$(Version)&quot;," />
       <_ControllerManifestLines Include="  &quot;description&quot;: &quot;$(_ControllerDescriptionEscaped)&quot;," />
       <_ControllerManifestLines Include="  &quot;authors&quot;: [ $(_ControllerAuthorsJson) ]," />
-      <_ControllerManifestLines Include="  &quot;copyright&quot;: &quot;$(Copyright)&quot;," />
+      <_ControllerManifestLines Include="  &quot;copyright&quot;: &quot;$(_ControllerCopyrightEscaped)&quot;," />
       <_ControllerManifestLines Include="  &quot;projectUrl&quot;: &quot;$(PackageProjectUrl)&quot;," />
       <_ControllerManifestLines Include="  &quot;repositoryUrl&quot;: &quot;$(RepositoryUrl)&quot;," />
       <_ControllerManifestLines Include="  &quot;license&quot;: &quot;$(PackageLicenseExpression)&quot;," />
