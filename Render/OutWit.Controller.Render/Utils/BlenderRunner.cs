@@ -550,6 +550,7 @@ public sealed class BlenderRunner
         };
 
         process.Start();
+        ProcessTreeGuard.AttachToParentLifetime(process, m_logger);
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);

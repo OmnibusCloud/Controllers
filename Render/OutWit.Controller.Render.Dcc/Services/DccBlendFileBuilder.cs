@@ -135,6 +135,7 @@ internal static class DccBlendFileBuilder
 
         using var process = new Process { StartInfo = startInfo };
         process.Start();
+        OutWit.Controller.Render.Utils.ProcessTreeGuard.AttachToParentLifetime(process, logger);
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);

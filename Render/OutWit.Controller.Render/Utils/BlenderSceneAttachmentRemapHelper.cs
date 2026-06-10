@@ -76,6 +76,7 @@ internal static class BlenderSceneAttachmentRemapHelper
             };
 
             process.Start();
+            ProcessTreeGuard.AttachToParentLifetime(process, blenderRunner.Logger);
             var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
             var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
             await process.WaitForExitAsync(cancellationToken);
