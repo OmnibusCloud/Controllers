@@ -450,6 +450,11 @@ The script grammar binds positional parameters in DSL syntax (`Render.Frame(task
 - Composite with children + condition: [`Special/.../Activities/WitActivitySpecialIf.cs`](../Special/OutWit.Controller.Special/Activities/WitActivitySpecialIf.cs).
 - Distributed-iteration composite: [`Grid/.../Activities/WitActivityGridForEach.cs`](../Grid/OutWit.Controller.Grid/Activities/WitActivityGridForEach.cs).
 
+> **`Grid.ForEach` result-ordering contract:** results arrive in **allocation/completion order**,
+> not source-collection order. If your consumer needs to map results back to inputs, carry an index
+> (or other key) inside each task's payload — the render scripts do exactly this with frame numbers.
+> Never zip results positionally against the source collection.
+
 ### Reference: variables
 
 Variable wrapper contracts:

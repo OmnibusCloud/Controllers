@@ -13,6 +13,16 @@ namespace OutWit.Controller.Grid.Activities
     // WitGridTaskBuilder; that transformer brings its own [MemoryPackable]
     // contract. Adding MemoryPack here would impose constraints the type
     // doesn't actually need.
+    /// <summary>
+    /// Distributed iteration: dispatches the inner transformer over the source collection across
+    /// the assigned nodes.
+    /// </summary>
+    /// <remarks>
+    /// <b>Result-ordering contract:</b> results arrive in ALLOCATION/COMPLETION order, NOT in
+    /// source-collection order. A consumer that needs to map results back to inputs must carry an
+    /// index (or other key) inside each task's payload — exactly what the render scripts do with
+    /// frame numbers. Do not zip results positionally against the source collection.
+    /// </remarks>
     [Activity("Grid.ForEach")]
     public class WitActivityGridForEach : WitActivityTransform
     {
