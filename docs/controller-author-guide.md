@@ -483,9 +483,9 @@ Across the production controllers, these folder names appear and have specific m
 | **`Resources/`** | **Data files staged into `<module>/Resources/`** — [`Build/OutWit.Controller.targets:56-68`](../Build/OutWit.Controller.targets#L56-L68) | **yes** |
 | `Interfaces/` | Per-controller marker interfaces (Variables, Special use these) | no |
 | `Utils/` | Helpers (`BlenderRunner.cs`, etc.) | no |
-| `Services/` | Service classes (Render only) | no |
+| `Services/` | Service classes (Render.Dcc only — DCC scene validation + `.blend` build services; Render's own `Services/` folder is empty as of 2026-06) | no |
 | `Builders/` | Builder pattern helpers (Grid only) | no |
-| `Scripts/` | `.wit` script files (Render only — 36 of them) | no; staged by test csproj explicitly |
+| `Scripts/` | `.wit` script files (Render — 36, incl. the `RenderDcc*.wit` set; Matrices — 2). Shipped to consumers via the companion `*.Scripts` content-only NuGets (see [ADR 001](adr-001-script-controller-version-compatibility.md)) | no; Render copies them to `$(SolutionDir)@Scripts/<Cfg>/` via its own `StageBundledScriptsAtSolutionRoot` target |
 | `benchmarks/` | Python scripts that regenerate benchmark scenes (Render only) | no; author-side regeneration only |
 
 ### Reference: the manifest (`controller.json`)
@@ -537,7 +537,7 @@ For binaries and large assets that don't belong in source control or NuGet feeds
 <ItemGroup>
   <ControllerDataAsset Include="blender-win-x64">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.2/blender-windows-x64.zip</Uri>
+    <Uri>gh-release://OmnibusCloud/Controllers/render-v1.15.3/blender-windows-x64.zip</Uri>
     <Sha256>8d97449730a5cf6958e38738665252f4aba65abfa448f77de012e207e1e3344a</Sha256>
     <Size>429597391</Size>
     <ExtractTo>blender/windows-x64/</ExtractTo>
@@ -560,10 +560,10 @@ The fields:
 `outwit-assets-pack` regenerates a Tier-2 controller's asset set in one command: bumps version, repacks zips, computes SHAs, updates the csproj, creates the GitHub Release with everything uploaded. See [its README](../Tools/OutWit.Controller.Assets.Pack/README.md).
 
 **GitHub Release tag convention**: the publish workflow ([`.github/workflows/publish.yml:107-108`](../.github/workflows/publish.yml#L107-L108)) computes the tag as `<ControllerName.lower-no-dots>-v<Version>`:
-- `OutWit.Controller.Render` v1.15.2 → tag `render-v1.15.2`
-- `OutWit.Controller.Render.Dcc` v1.0.3 → tag `renderdcc-v1.0.3`
+- `OutWit.Controller.Render` v1.15.3 → tag `render-v1.15.3`
+- `OutWit.Controller.Render.Dcc` v1.0.5 → tag `renderdcc-v1.0.5`
 
-The tag is **hand-written into each `<ControllerDataAsset Uri>`**. When bumping `<Version>` manually, you must also update every Uri. Tools like `outwit-assets-pack --version` handle the rewrite; bare version bumps drift silently.
+The tag is **hand-written into each `<ControllerDataAsset Uri>`**. When bumping `<Version>` manually, you must also update every Uri. Tools like `outwit-assets-pack --version` handle the rewrite; bare version bumps drift silently. (Asset URIs may also stay deliberately pinned to an older release tag when the assets themselves are unchanged — Render 1.18.x still points all its asset URIs at `render-v1.15.3`.)
 
 #### Built-in URI schemes
 

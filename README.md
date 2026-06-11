@@ -173,7 +173,10 @@ canonical minimal Model shape.
 │   ├── OutWit.Controller.targets        # PostBuild + pack module + zip
 │   ├── OutWit.Controller.Manifest.targets  # controller.json emitter + validators
 │   ├── OutWit.Controller.Model.props    # Model csproj boilerplate
-│   └── OutWit.Controller.Model.targets  # Model PostBuild (stages into parent .module/)
+│   ├── OutWit.Controller.Model.targets  # Model PostBuild (stages into parent .module/)
+│   ├── OutWit.Controller.Scripts.props  # Scripts csproj boilerplate (content-only .wit nupkgs)
+│   ├── OutWit.Controller.Scripts.targets # Scripts pack (lib marker; .wit files go to content/scripts/)
+│   └── OutWit.Controller.Tests.props    # Shared test-project boilerplate + module staging
 │
 ├── Variables/                       # Tier-1 controller (primitives + collections)
 │   ├── OutWit.Controller.Variables/         # Activities + adapters + manifest
@@ -182,13 +185,16 @@ canonical minimal Model shape.
 ├── Special/                         # Tier-1 controller (control flow)
 ├── Grid/                            # Tier-1 controller (distributed ForEach)
 ├── Matrices/                        # Tier-2 controller (linear algebra + sparse, ships .smat data)
-│   └── OutWit.Controller.Matrices/Resources/  # The .smat asset sources
+│   ├── OutWit.Controller.Matrices/Resources/  # The .smat asset sources
+│   └── OutWit.Controller.Matrices.Scripts/    # Bundled .wit scripts (content-only nupkg)
 │
 ├── Render/
 │   ├── OutWit.Controller.Render/            # Tier-2 controller (Blender + FFmpeg pipeline)
 │   ├── OutWit.Controller.Render.Model/
+│   ├── OutWit.Controller.Render.Scripts/    # Bundled .wit render scripts (content-only nupkg)
 │   ├── OutWit.Controller.Render.Dcc/        # Tier-1 host-only DCC bootstrap
-│   └── OutWit.Controller.Render.Dcc.Model/
+│   ├── OutWit.Controller.Render.Dcc.Model/
+│   └── OutWit.Controller.Render.Dcc.Scripts/ # Bundled RenderDcc*.wit scripts (content-only nupkg)
 │
 ├── Tools/
 │   ├── OutWit.Controller.Pack/              # Path-B author tool: pack module/ -> contributor zip
@@ -198,7 +204,8 @@ canonical minimal Model shape.
 │
 ├── .github/workflows/
 │   ├── publish.yml                          # Unified publish pipeline (any controller / model / tool)
-│   └── verify-render-consumer.yml           # Cold-build smoke test of the published Render package
+│   ├── verify-render-consumer.yml           # Cold-build smoke test of the published Render package
+│   └── verify-scripts-consumer.yml          # Cold-build smoke test of a published Scripts package
 │
 ├── OutWit.slnx                              # Solution file (SLNX format, .NET 10)
 ├── LICENSE                                  # MIT
@@ -278,6 +285,7 @@ See [Tools/OutWit.Controller.Pack/README.md](Tools/OutWit.Controller.Pack/README
 | ----------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------- |
 | [`publish.yml`](.github/workflows/publish.yml)                       | `workflow_dispatch`             | Publish any project. Tier-2 controllers (Render) have a release-assets-exist guard before the nuget.org push. |
 | [`verify-render-consumer.yml`](.github/workflows/verify-render-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference the published Render package, assert every external asset materialised. |
+| [`verify-scripts-consumer.yml`](.github/workflows/verify-scripts-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference a published Scripts package, assert the staged `@Scripts/*.wit` layout matches what WitCloud's ScriptSeeder expects. |
 
 A separate external smoke test lives outside this repo at
 `@Verify/ControllerConsumerCheck/` and consumes every published
