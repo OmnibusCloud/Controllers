@@ -78,6 +78,8 @@ public sealed class FfmpegRunnerTests
 
     [TestCase(VideoFormat.Mp4H265, "video_h265.mp4")]
     [TestCase(VideoFormat.WebMVp9, "video_vp9.webm")]
+    [TestCase(VideoFormat.MovProres422Hq, "video_prores422hq.mov")]
+    [TestCase(VideoFormat.MovProres4444, "video_prores4444.mov")]
     public async Task EncodeVideoSupportsContainerPresetsTest(VideoFormat format, string fileName)
     {
         var solutionRoot = RenderTestAssetPaths.FindSolutionRoot();
@@ -114,6 +116,8 @@ public sealed class FfmpegRunnerTests
             Assert.That(FfmpegRunner.GetVideoFileName(VideoFormat.Mp4H264), Is.EqualTo("render.mp4"));
             Assert.That(FfmpegRunner.GetVideoFileName(VideoFormat.Mp4H265), Is.EqualTo("render.mp4"));
             Assert.That(FfmpegRunner.GetVideoFileName(VideoFormat.WebMVp9), Is.EqualTo("render.webm"));
+            Assert.That(FfmpegRunner.GetVideoFileName(VideoFormat.MovProres422Hq), Is.EqualTo("render.mov"));
+            Assert.That(FfmpegRunner.GetVideoFileName(VideoFormat.MovProres4444), Is.EqualTo("render.mov"));
         });
     }
 

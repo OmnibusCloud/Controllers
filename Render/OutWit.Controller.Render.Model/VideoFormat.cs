@@ -12,5 +12,13 @@ public enum VideoFormat
     Default,
     Mp4H264,
     Mp4H265,
-    WebMVp9
+    WebMVp9,
+
+    /// <summary>QuickTime ProRes 422 HQ — the editing/grading intermediate standard. Quality is
+    /// fixed by the ProRes profile; <see cref="VideoOptionsData.ConstantRateFactor"/> is ignored.</summary>
+    MovProres422Hq,
+
+    /// <summary>QuickTime ProRes 4444 — carries an ALPHA channel (transparent video for overlays)
+    /// when the rendered frames have one (RGBA + transparent film). CRF is ignored.</summary>
+    MovProres4444
 }

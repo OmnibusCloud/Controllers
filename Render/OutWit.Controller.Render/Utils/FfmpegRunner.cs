@@ -46,7 +46,12 @@ public sealed class FfmpegRunner
     /// <summary>File name for the encoded deliverable, per container preset.</summary>
     public static string GetVideoFileName(VideoFormat format)
     {
-        return format == VideoFormat.WebMVp9 ? "render.webm" : "render.mp4";
+        return format switch
+        {
+            VideoFormat.WebMVp9 => "render.webm",
+            VideoFormat.MovProres422Hq or VideoFormat.MovProres4444 => "render.mov",
+            _ => "render.mp4"
+        };
     }
 
     public async Task EncodeVideoAsync(
@@ -239,11 +244,15 @@ public sealed class FfmpegRunner
     {
         // Default = the legacy MP4/H.264 path. yuv420p keeps maximum player compatibility for the
         // MP4 presets; -tag:v hvc1 makes H.265 MP4s recognizable to Apple players; VP9 uses -b:v 0
-        // so -crf acts as true constant-quality mode.
+        // so -crf acts as true constant-quality mode. The ProRes presets (prores_ks is a native
+        // ffmpeg encoder) fix quality by PROFILE and ignore CRF: 422 HQ = the editing/grading
+        // intermediate; 4444 keeps the ALPHA channel when the input frames carry one.
         var codecArgs = options.Format switch
         {
             VideoFormat.Mp4H265 => $"-c:v libx265 -pix_fmt yuv420p -tag:v hvc1 -crf {options.ConstantRateFactor}",
             VideoFormat.WebMVp9 => $"-c:v libvpx-vp9 -pix_fmt yuv420p -b:v 0 -crf {options.ConstantRateFactor}",
+            VideoFormat.MovProres422Hq => "-c:v prores_ks -profile:v 3 -pix_fmt yuv422p10le",
+            VideoFormat.MovProres4444 => "-c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le",
             _ => $"-c:v libx264 -pix_fmt yuv420p -crf {options.ConstantRateFactor}"
         };
 
