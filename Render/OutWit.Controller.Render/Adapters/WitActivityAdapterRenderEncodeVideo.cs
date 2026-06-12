@@ -11,12 +11,6 @@ namespace OutWit.Controller.Render.Adapters;
 
 internal sealed class WitActivityAdapterRenderEncodeVideo : WitActivityAdapterFunction<WitActivityRenderEncodeVideo>
 {
-    #region Constants
-
-    private const string OUTPUT_FILE_NAME = "render.mp4";
-
-    #endregion
-
     #region Constructors
 
     public WitActivityAdapterRenderEncodeVideo(
@@ -94,9 +88,9 @@ internal sealed class WitActivityAdapterRenderEncodeVideo : WitActivityAdapterFu
                 File.Copy(localPaths[index], destinationPath, overwrite: true);
             }
 
-            var outputFilePath = Path.Combine(workingDir, OUTPUT_FILE_NAME);
+            var outputFilePath = Path.Combine(workingDir, FfmpegRunner.GetVideoFileName(options.Format));
             var inputPattern = Path.Combine(workingDir, $"frame_%04d{extension}");
-            await GetFfmpegRunner().EncodeMp4Async(inputPattern, outputFilePath, options, ProcessingManager.CancellationToken(status.JobId));
+            await GetFfmpegRunner().EncodeVideoAsync(inputPattern, outputFilePath, options, ProcessingManager.CancellationToken(status.JobId));
 
             var outputBlobId = await BlobService.UploadFileAsync(outputFilePath);
             if (!pool.TrySetValue(activity.ReturnReference, outputBlobId))

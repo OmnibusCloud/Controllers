@@ -67,13 +67,54 @@ public sealed class FfmpegRunnerTests
         }
 
         var outputPath = Path.Combine(m_testDir, "video.mp4");
-        await runner.EncodeMp4Async(
+        await runner.EncodeVideoAsync(
             Path.Combine(m_testDir, "frame_%04d.png"),
             outputPath,
             new VideoOptionsData { FrameRate = 24, ConstantRateFactor = 23 });
 
         Assert.That(File.Exists(outputPath), Is.True);
         Assert.That(new FileInfo(outputPath).Length, Is.GreaterThan(0));
+    }
+
+    [TestCase(VideoFormat.Mp4H265, "video_h265.mp4")]
+    [TestCase(VideoFormat.WebMVp9, "video_vp9.webm")]
+    public async Task EncodeVideoSupportsContainerPresetsTest(VideoFormat format, string fileName)
+    {
+        var solutionRoot = RenderTestAssetPaths.FindSolutionRoot();
+        if (solutionRoot == null)
+            Assert.Ignore("Solution root not found");
+
+        var ffmpegDir = Path.Combine(solutionRoot, "@Prerequisites", "ffmpeg");
+        var runner = new FfmpegRunner(ffmpegDir, NullLogger.Instance);
+        if (!runner.IsAvailable)
+            Assert.Ignore($"ffmpeg not found at {ffmpegDir}");
+
+        // libx265 rejects tiny pictures ("Image size is too small (2x2)") — synthesize 64x64
+        // frames through the runner itself instead of the 2x2 test PNG.
+        var raw = new RenderRawImage { Width = 64, Height = 64, PixelBytes = new byte[64 * 64 * 4] };
+        for (var index = 1; index <= 3; index++)
+            await runner.EncodeRgbaImageAsync(raw, Path.Combine(m_testDir, $"frame_{index:D4}.png"), RenderFormat.PNG);
+
+        var outputPath = Path.Combine(m_testDir, fileName);
+        await runner.EncodeVideoAsync(
+            Path.Combine(m_testDir, "frame_%04d.png"),
+            outputPath,
+            new VideoOptionsData { FrameRate = 24, ConstantRateFactor = 30, Format = format });
+
+        Assert.That(File.Exists(outputPath), Is.True);
+        Assert.That(new FileInfo(outputPath).Length, Is.GreaterThan(0));
+    }
+
+    [Test]
+    public void GetVideoFileNameMatchesContainerTest()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(FfmpegRunner.GetVideoFileName(VideoFormat.Default), Is.EqualTo("render.mp4"));
+            Assert.That(FfmpegRunner.GetVideoFileName(VideoFormat.Mp4H264), Is.EqualTo("render.mp4"));
+            Assert.That(FfmpegRunner.GetVideoFileName(VideoFormat.Mp4H265), Is.EqualTo("render.mp4"));
+            Assert.That(FfmpegRunner.GetVideoFileName(VideoFormat.WebMVp9), Is.EqualTo("render.webm"));
+        });
     }
 
     [Test]

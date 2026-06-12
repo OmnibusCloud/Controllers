@@ -63,7 +63,10 @@ internal static class RenderPreflightEvaluator
         if (tileOptions.BlendMode == TileBlendMode.AlphaBlend && !diagnostics.FfprobeAvailable)
             issues.Add("Packaged ffprobe runtime is required for alpha-blend tiled stitching.");
 
-        if (options.Format == RenderFormat.EXR)
+        // Allowlist, not an EXR-only block: the ffmpeg stitch/crop pipeline is verified for the
+        // 8-bit PNG/JPEG path only — the newer formats (TIFF/WEBP) stay gated here until the
+        // stitcher is exercised with them (they are fully supported in Still and Frames).
+        if (options.Format is not (RenderFormat.PNG or RenderFormat.JPEG))
             issues.Add("Tiled still collection currently supports PNG and JPEG only.");
 
         if (tileOptions.OverlapPx < 0)
@@ -118,7 +121,9 @@ internal static class RenderPreflightEvaluator
         if (video.ConstantRateFactor is < 0 or > 51)
             issues.Add($"VideoOptions.ConstantRateFactor must be between 0 and 51, got {video.ConstantRateFactor}.");
 
-        if (options.Format == RenderFormat.EXR)
+        // Intermediate frame format for the encode step — keep the verified PNG/JPEG allowlist
+        // (the frames are not the deliverable here; the encoded video is).
+        if (options.Format is not (RenderFormat.PNG or RenderFormat.JPEG))
             issues.Add("Video rendering currently supports PNG and JPEG frame formats only.");
 
         return new RenderPreflightVideoData

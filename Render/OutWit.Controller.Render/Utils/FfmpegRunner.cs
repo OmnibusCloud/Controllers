@@ -43,7 +43,13 @@ public sealed class FfmpegRunner
 
     #region Functions
 
-    public async Task EncodeMp4Async(
+    /// <summary>File name for the encoded deliverable, per container preset.</summary>
+    public static string GetVideoFileName(VideoFormat format)
+    {
+        return format == VideoFormat.WebMVp9 ? "render.webm" : "render.mp4";
+    }
+
+    public async Task EncodeVideoAsync(
         string inputPattern,
         string outputFilePath,
         VideoOptionsData options,
@@ -231,7 +237,17 @@ public sealed class FfmpegRunner
 
     private static string BuildEncodeArgs(string inputPattern, string outputFilePath, VideoOptionsData options)
     {
-        return $"-y -framerate {options.FrameRate} -i \"{inputPattern}\" -c:v libx264 -pix_fmt yuv420p -crf {options.ConstantRateFactor} \"{outputFilePath}\"";
+        // Default = the legacy MP4/H.264 path. yuv420p keeps maximum player compatibility for the
+        // MP4 presets; -tag:v hvc1 makes H.265 MP4s recognizable to Apple players; VP9 uses -b:v 0
+        // so -crf acts as true constant-quality mode.
+        var codecArgs = options.Format switch
+        {
+            VideoFormat.Mp4H265 => $"-c:v libx265 -pix_fmt yuv420p -tag:v hvc1 -crf {options.ConstantRateFactor}",
+            VideoFormat.WebMVp9 => $"-c:v libvpx-vp9 -pix_fmt yuv420p -b:v 0 -crf {options.ConstantRateFactor}",
+            _ => $"-c:v libx264 -pix_fmt yuv420p -crf {options.ConstantRateFactor}"
+        };
+
+        return $"-y -framerate {options.FrameRate} -i \"{inputPattern}\" {codecArgs} \"{outputFilePath}\"";
     }
 
     private static string BuildStitchArgs(

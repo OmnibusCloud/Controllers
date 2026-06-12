@@ -25,10 +25,16 @@ public partial class VideoOptionsData : ModelBase
     public int FrameRate { get; set; } = DEFAULT_FRAME_RATE;
 
     /// <summary>
-    /// H.264 CRF quality setting used by ffmpeg/libx264.
+    /// CRF quality setting passed to the ffmpeg encoder (libx264/libx265/libvpx-vp9).
     /// Lower values mean higher quality and larger output.
     /// </summary>
     public int ConstantRateFactor { get; set; } = DEFAULT_CONSTANT_RATE_FACTOR;
+
+    /// <summary>
+    /// Container + codec preset. APPENDED after ConstantRateFactor (wire order is append-only);
+    /// <see cref="VideoFormat.Default"/> keeps the legacy MP4/H.264 behaviour for old payloads.
+    /// </summary>
+    public VideoFormat Format { get; set; } = VideoFormat.Default;
 
     #endregion
 
@@ -40,7 +46,8 @@ public partial class VideoOptionsData : ModelBase
             return false;
 
         return FrameRate == other.FrameRate
-               && ConstantRateFactor == other.ConstantRateFactor;
+               && ConstantRateFactor == other.ConstantRateFactor
+               && Format == other.Format;
     }
 
     public override ModelBase Clone()
@@ -48,7 +55,8 @@ public partial class VideoOptionsData : ModelBase
         return new VideoOptionsData
         {
             FrameRate = FrameRate,
-            ConstantRateFactor = ConstantRateFactor
+            ConstantRateFactor = ConstantRateFactor,
+            Format = Format
         };
     }
 

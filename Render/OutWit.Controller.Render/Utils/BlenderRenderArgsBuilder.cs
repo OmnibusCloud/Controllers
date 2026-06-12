@@ -157,16 +157,25 @@ internal static class BlenderRenderArgsBuilder
     {
         var lines = new List<string>();
 
-        // Colour channels. Default reproduces legacy behaviour: force RGB for PNG/JPEG, leave EXR to the
-        // scene. RGBA enables alpha output (transparent renders / compositing).
+        // Colour channels. Default reproduces legacy behaviour: force RGB for the 8-bit formats,
+        // leave EXR to the scene. RGBA enables alpha output (transparent renders / compositing).
+        // Guarded like color_depth: not every mode is valid for every format (JPEG cannot carry
+        // alpha) and Blender raises on an unsupported value.
         var colorMode = options.ColorMode switch
         {
             RenderColorMode.RGB => "RGB",
             RenderColorMode.RGBA => "RGBA",
-            _ => options.Format is RenderFormat.PNG or RenderFormat.JPEG ? "RGB" : null
+            _ => options.Format is RenderFormat.PNG or RenderFormat.JPEG or RenderFormat.TIFF or RenderFormat.WEBP
+                ? "RGB"
+                : null
         };
         if (colorMode is not null)
-            lines.Add($"scene.render.image_settings.color_mode = '{colorMode}'");
+        {
+            lines.Add("try:");
+            lines.Add($"    scene.render.image_settings.color_mode = '{colorMode}'");
+            lines.Add("except (TypeError, ValueError):");
+            lines.Add("    pass");
+        }
 
         // Film/world transparency. Default leaves the scene's own setting untouched.
         switch (options.FilmTransparent)
@@ -251,6 +260,8 @@ internal static class BlenderRenderArgsBuilder
             RenderFormat.PNG => "PNG",
             RenderFormat.EXR => "OPEN_EXR",
             RenderFormat.JPEG => "JPEG",
+            RenderFormat.TIFF => "TIFF",
+            RenderFormat.WEBP => "WEBP",
             _ => "PNG"
         };
     }
@@ -262,6 +273,8 @@ internal static class BlenderRenderArgsBuilder
             RenderFormat.PNG => ".png",
             RenderFormat.EXR => ".exr",
             RenderFormat.JPEG => ".jpg",
+            RenderFormat.TIFF => ".tif",
+            RenderFormat.WEBP => ".webp",
             _ => ".png"
         };
     }

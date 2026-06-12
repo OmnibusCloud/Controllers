@@ -67,7 +67,15 @@ public class BlenderRunnerTests
             new RenderOptionsData { Format = RenderFormat.PNG });
 
         // Legacy behaviour preserved: default options still force RGB for PNG, nothing else.
-        Assert.That(lines, Is.EqualTo(new[] { "scene.render.image_settings.color_mode = 'RGB'" }));
+        // The assignment is guarded (try/except) since 1.19.0 — not every mode is valid for every
+        // format and Blender raises on an unsupported value.
+        Assert.That(lines, Is.EqualTo(new[]
+        {
+            "try:",
+            "    scene.render.image_settings.color_mode = 'RGB'",
+            "except (TypeError, ValueError):",
+            "    pass"
+        }));
     }
 
     [Test]
@@ -86,7 +94,7 @@ public class BlenderRunnerTests
         var lines = BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(
             new RenderOptionsData { Format = RenderFormat.PNG, ColorMode = RenderColorMode.RGBA });
 
-        Assert.That(lines, Does.Contain("scene.render.image_settings.color_mode = 'RGBA'"));
+        Assert.That(lines, Does.Contain("    scene.render.image_settings.color_mode = 'RGBA'"));
         Assert.That(lines, Has.None.Contains("'RGB'"));
     }
 
