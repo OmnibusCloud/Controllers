@@ -58,6 +58,36 @@ public class BlenderRunnerTests
 
     #endregion
 
+    #region Format Mapping Tests
+
+    [TestCase(RenderFormat.PNG, "PNG", ".png")]
+    [TestCase(RenderFormat.EXR, "OPEN_EXR", ".exr")]
+    [TestCase(RenderFormat.JPEG, "JPEG", ".jpg")]
+    [TestCase(RenderFormat.TIFF, "TIFF", ".tif")]
+    [TestCase(RenderFormat.WEBP, "WEBP", ".webp")]
+    public void FormatMapsToBlenderTokenAndExtensionTest(RenderFormat format, string token, string extension)
+    {
+        Assert.That(BlenderRenderArgsBuilder.FormatToBlenderArg(format), Is.EqualTo(token));
+        Assert.That(BlenderRenderArgsBuilder.FormatToExtension(format), Is.EqualTo(extension));
+    }
+
+    [Test]
+    public void EveryRenderFormatHasExplicitMappingsTest()
+    {
+        // Guards against adding an enum member without wiring its mappings — the switch defaults
+        // would silently fall back to PNG, which is exactly the silent-wrong-format failure mode
+        // the curated format work removed.
+        foreach (var format in Enum.GetValues<RenderFormat>().Where(value => value != RenderFormat.PNG))
+        {
+            Assert.That(BlenderRenderArgsBuilder.FormatToBlenderArg(format), Is.Not.EqualTo("PNG"),
+                $"{format} fell through to the PNG default token");
+            Assert.That(BlenderRenderArgsBuilder.FormatToExtension(format), Is.Not.EqualTo(".png"),
+                $"{format} fell through to the PNG default extension");
+        }
+    }
+
+    #endregion
+
     #region Image Output (scene fidelity) Tests
 
     [Test]

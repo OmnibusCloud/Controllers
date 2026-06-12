@@ -76,11 +76,19 @@ public sealed class FfmpegRunnerTests
         Assert.That(new FileInfo(outputPath).Length, Is.GreaterThan(0));
     }
 
-    [TestCase(VideoFormat.Mp4H265, "video_h265.mp4")]
-    [TestCase(VideoFormat.WebMVp9, "video_vp9.webm")]
-    [TestCase(VideoFormat.MovProres422Hq, "video_prores422hq.mov")]
-    [TestCase(VideoFormat.MovProres4444, "video_prores4444.mov")]
-    public async Task EncodeVideoSupportsContainerPresetsTest(VideoFormat format, string fileName)
+    // "The result really is in the requested format": every preset is encoded with the real ffmpeg
+    // and the OUTPUT is probed — container (format_name), codec (codec_name) and, for ProRes 4444,
+    // the alpha-carrying pixel format.
+    [TestCase(VideoFormat.Default, "video_default.mp4", "h264", "mp4", null)]
+    [TestCase(VideoFormat.Mp4H264, "video_h264.mp4", "h264", "mp4", null)]
+    [TestCase(VideoFormat.Mp4H265, "video_h265.mp4", "hevc", "mp4", null)]
+    [TestCase(VideoFormat.WebMVp9, "video_vp9.webm", "vp9", "webm", null)]
+    // ProRes bit depths are the encoder's own (4444 stores 12-bit); the property that matters is
+    // the pixel-format FAMILY — 'yuva' proves the alpha channel survived into the deliverable.
+    [TestCase(VideoFormat.MovProres422Hq, "video_prores422hq.mov", "prores", "mov", "yuv422p")]
+    [TestCase(VideoFormat.MovProres4444, "video_prores4444.mov", "prores", "mov", "yuva444p")]
+    public async Task EncodeVideoSupportsContainerPresetsTest(
+        VideoFormat format, string fileName, string expectedCodec, string expectedContainer, string? expectedPixelFormat)
     {
         var solutionRoot = RenderTestAssetPaths.FindSolutionRoot();
         if (solutionRoot == null)
@@ -88,8 +96,8 @@ public sealed class FfmpegRunnerTests
 
         var ffmpegDir = Path.Combine(solutionRoot, "@Prerequisites", "ffmpeg");
         var runner = new FfmpegRunner(ffmpegDir, NullLogger.Instance);
-        if (!runner.IsAvailable)
-            Assert.Ignore($"ffmpeg not found at {ffmpegDir}");
+        if (!runner.IsAvailable || !runner.IsProbeAvailable)
+            Assert.Ignore($"ffmpeg/ffprobe not found at {ffmpegDir}");
 
         // libx265 rejects tiny pictures ("Image size is too small (2x2)") — synthesize 64x64
         // frames through the runner itself instead of the 2x2 test PNG.
@@ -105,6 +113,41 @@ public sealed class FfmpegRunnerTests
 
         Assert.That(File.Exists(outputPath), Is.True);
         Assert.That(new FileInfo(outputPath).Length, Is.GreaterThan(0));
+
+        var probe = await ProbeVideoAsync(ffmpegDir, outputPath);
+        Assert.That(probe.CodecName, Is.EqualTo(expectedCodec));
+        Assert.That(probe.FormatName, Does.Contain(expectedContainer));
+        if (expectedPixelFormat is not null)
+            Assert.That(probe.PixelFormat, Does.StartWith(expectedPixelFormat));
+    }
+
+    private static async Task<(string CodecName, string PixelFormat, string FormatName)> ProbeVideoAsync(
+        string ffmpegDir, string filePath)
+    {
+        var ffprobePath = RenderBinaryResolver.ResolveFfprobePath(ffmpegDir);
+        var args = "-v error -select_streams v:0 -show_entries stream=codec_name,pix_fmt " +
+                   $"-show_entries format=format_name -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"";
+
+        using var process = new System.Diagnostics.Process
+        {
+            StartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = ffprobePath,
+                Arguments = args,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            }
+        };
+        process.Start();
+        var stdout = await process.StandardOutput.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        Assert.That(process.ExitCode, Is.EqualTo(0), "ffprobe failed");
+
+        var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.That(lines, Has.Length.GreaterThanOrEqualTo(3), $"unexpected ffprobe output: {stdout}");
+        return (lines[0], lines[1], lines[2]);
     }
 
     [Test]

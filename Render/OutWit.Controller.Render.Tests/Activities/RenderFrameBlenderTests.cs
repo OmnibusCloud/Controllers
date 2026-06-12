@@ -77,6 +77,63 @@ public class RenderFrameBlenderTests
 
     #endregion
 
+    #region Output Format Tests
+
+    [TestCase(RenderFormat.PNG)]
+    [TestCase(RenderFormat.EXR)]
+    [TestCase(RenderFormat.JPEG)]
+    [TestCase(RenderFormat.TIFF)]
+    [TestCase(RenderFormat.WEBP)]
+    public async Task RenderFrameProducesRequestedFormatTest(RenderFormat format)
+    {
+        // "The requested format is what the file ACTUALLY is": a real 64x64 render per format,
+        // verified by extension AND by the file's magic bytes (not just trusting the name).
+        var runner = new BlenderRunner(m_blenderDir!, NullLogger.Instance);
+        Assert.That(runner.IsAvailable, Is.True);
+
+        var options = new RenderOptionsData
+        {
+            Format = format,
+            Engine = RenderEngine.Cycles,
+            Samples = 4,
+            ResolutionX = 64,
+            ResolutionY = 64
+        };
+
+        var outputBase = Path.Combine(m_outputDir, $"fmt_{format}_");
+        var renderedPath = await runner.RenderFrameAsync(m_blendPath!, 1, outputBase, options);
+
+        Assert.That(File.Exists(renderedPath), Is.True);
+        Assert.That(Path.GetExtension(renderedPath).ToLowerInvariant(),
+            Is.EqualTo(BlenderRenderArgsBuilder.FormatToExtension(format)));
+        AssertFileMagicMatchesFormat(renderedPath, format);
+    }
+
+    private static void AssertFileMagicMatchesFormat(string path, RenderFormat format)
+    {
+        var header = new byte[12];
+        using (var stream = File.OpenRead(path))
+            stream.ReadExactly(header, 0, header.Length);
+
+        var matches = format switch
+        {
+            RenderFormat.PNG => header[0] == 0x89 && header[1] == (byte)'P' && header[2] == (byte)'N' && header[3] == (byte)'G',
+            RenderFormat.JPEG => header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
+            RenderFormat.EXR => header[0] == 0x76 && header[1] == 0x2F && header[2] == 0x31 && header[3] == 0x01,
+            RenderFormat.TIFF => (header[0] == (byte)'I' && header[1] == (byte)'I' && header[2] == 0x2A && header[3] == 0x00)
+                                 || (header[0] == (byte)'M' && header[1] == (byte)'M' && header[2] == 0x00 && header[3] == 0x2A),
+            RenderFormat.WEBP => header[0] == (byte)'R' && header[1] == (byte)'I' && header[2] == (byte)'F' && header[3] == (byte)'F'
+                                 && header[8] == (byte)'W' && header[9] == (byte)'E' && header[10] == (byte)'B' && header[11] == (byte)'P',
+            _ => throw new ArgumentOutOfRangeException(nameof(format), format, null)
+        };
+
+        Assert.That(matches, Is.True,
+            $"{format} render at '{path}' does not carry the expected magic bytes: " +
+            string.Join(" ", header.Select(value => value.ToString("X2"))));
+    }
+
+    #endregion
+
     #region Split + Frame Pipeline Tests
 
     [Test]
