@@ -97,3 +97,6 @@ Migrations/
 # JetBrains Rider
 .idea/
 .idea_modules/
+
+# Internal working docs/plans live locally only — this is a public repo.
+@Archive/

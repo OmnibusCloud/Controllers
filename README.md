@@ -8,12 +8,6 @@ distributed iteration, control flow, linear algebra, distributed
 rendering — and serves as a working template for authors writing their
 own controllers.
 
-> [!NOTE]
-> The OmnibusCloud runtime and orchestrator that distribute jobs across
-> worker nodes are closed-source. This repository publishes only the
-> controllers and their associated authoring tools, all under the MIT
-> license, so third parties can build on the same surface.
-
 ---
 
 ## Published controllers
@@ -128,7 +122,8 @@ Two ways a controller reaches an end-user environment:
 
 > [!TIP]
 > See [`docs/controller-author-guide.md`](docs/controller-author-guide.md)
-> for a deep dive (under construction).
+> for the full walkthrough — from template to published package, with a
+> field-by-field reference of every metadata knob.
 
 Short version: copy one of the existing controller pairs as a template,
 adjust `ControllerName` / `Description` / `PackageTags` / activities, and
@@ -296,10 +291,7 @@ controller through nuget.org in a single `dotnet build`, then runs
 
 ## Related packages
 
-The engine runtime, parser, and orchestrator components of OmnibusCloud
-are closed-source. The data layer and the assets infrastructure are
-published openly so controllers and their tooling can build on the same
-surface.
+Controllers build on the published `OutWit.Engine.*` packages:
 
 | Package                            | Role                                                                                  |
 | ---------------------------------- | ------------------------------------------------------------------------------------- |
@@ -340,9 +332,9 @@ The runtime split is intentional:
   }
   ```
 
-  This is how a third-party author validates that OmnibusCloud will
-  actually load and run their controller, without needing access to the
-  full closed engine sources.
+  This is how a controller author validates that OmnibusCloud will
+  actually load and run their controller, without needing a full
+  OmnibusCloud deployment.
 
 ### SDK consumer limits
 
@@ -364,9 +356,9 @@ limits. The production OmnibusCloud orchestrator lifts them:
 Pull requests for new controllers, bug fixes, or doc improvements are
 welcome. For new controllers, follow the patterns in any existing
 controller — same shared Build/ imports, same Tests/ project layout,
-same `controller.json` shape. The author guide will eventually walk
-through this end to end; until then, see how Variables or Grid are
-structured.
+same `controller.json` shape. The
+[author guide](docs/controller-author-guide.md) walks through this end
+to end.
 
 For Path-B distribution (you don't have nuget.org publish rights):
 build your controller, pack it with `outwit-controller-pack`, and

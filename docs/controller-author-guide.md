@@ -8,7 +8,7 @@ This guide assumes you understand:
 
 - The basics of [OmnibusCloud concepts](../README.md#concepts) (controller, activity, adapter, model, Tier 1 vs Tier 2). Read the README first if those are new.
 - C# 12 / .NET 10, NuGet, and MSBuild conventions (targets, items, item metadata).
-- That the runtime is closed-source: a controller is a self-contained module loaded *by* the engine, never the other way round.
+- The plugin direction: a controller is a self-contained module loaded *by* the engine, never the other way round.
 
 If you want to skim before reading: the [Reference](#reference) section is a flat field-by-field walk through every metadata knob; the [step-by-step walkthrough](#walkthrough-from-template-to-published-package) shows how the knobs fit together for a brand-new controller.
 
@@ -791,7 +791,7 @@ A list of things that "just work by magic" or have known asymmetries. Workaround
 - **Runtime resource resolution is hand-rolled per controller.** Render's [`RenderBinaryResolver`](../Render/OutWit.Controller.Render/Utils/RenderBinaryResolver.cs) walks `assembly-dir/<sub>` then `@Controllers/Debug/<name>.module/<sub>` then `@Prerequisites/<sub>`. Other controllers re-invent similar walkers. There is no shared `IControllerResourceResolver` to import.
 - **Platform-folder magic strings.** `windows-x64`/`linux-x64`/`macos-arm64` (used in `<ExtractTo>` and `RenderBinaryResolver`) differ from .NET RID names (`win-x64`/`linux-x64`/`osx-arm64`) used in `<RuntimeIdentifier>`. The mapping is duplicated in resolver code; no enforcement.
 - **`features[]`** is treated as a public-API surface (additions are fine; removals are breaking) but is just a semicolon-split string with no tooling to detect drift. If consumers depend on a feature being present, you'll only find out when they break.
-- **`OutWit.Engine.Assets` (open-source) only reads `name`/`version`/`dataAssets[]` from the manifest.** Every other field is parsed-and-ignored. Consistency checks for `dependencies` or `runtimeTargets` would have to live in the closed `OutWit.Cloud.Data` side.
+- **`OutWit.Engine.Assets` only reads `name`/`version`/`dataAssets[]` from the manifest.** Every other field is parsed-and-ignored at build time. `dependencies` and `runtimeTargets` are enforced when the runtime loads the module, not at build.
 - **The `[Activity]` registration is explicit, not scan-based.** An activity not added in `Initialize` is invisible at runtime. There's no "you forgot to register this" error — the script just fails to parse with an unknown-activity error.
 
 ---

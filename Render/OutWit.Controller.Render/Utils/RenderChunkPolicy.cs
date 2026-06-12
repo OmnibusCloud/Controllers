@@ -10,7 +10,7 @@ namespace OutWit.Controller.Render.Utils;
 /// FEW LARGE chunks for the per-chunk scene-load to amortise and the render-only benchmark to become
 /// representative. <c>RenderOptions.BatchSize &gt; 0</c> overrides the default; the Blender plugin does
 /// not set it, so the per-engine default applies. Constants are starting points to validate on the
-/// live fleet (see Controllers/docs/plan-render-persistent-batch.md §4).
+/// live fleet.
 /// </summary>
 public static class RenderChunkPolicy
 {

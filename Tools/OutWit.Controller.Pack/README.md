@@ -18,7 +18,7 @@ outwit-controller-pack --module <module-dir> [--output <zip-path>]
 
 By default, the tool requires every `dataAssets[]` entry in the manifest to use a `file://` URI that resolves to an existing file inside the module directory — contributor zips bundle assets inline so the admin reviewer sees the exact bytes that will reach clients. Use `--allow-external-uris` to opt in to `https://` / `gh-release://` URIs (the receiving server must also be configured to permit them).
 
-See the upstream `controller-assets-architecture.md` design doc (in the closed-source OmnibusCloud runtime repo) for the Path A vs Path B distribution split and the full contributor workflow.
+See [Path A vs. Path B distribution](../../README.md#path-a-vs-path-b-distribution) in the repo README for the distribution split and the full contributor workflow.
 
 ## Source
 

@@ -141,7 +141,7 @@ internal abstract class WitActivityAdapterRenderFrameBatchBase<TActivity> : WitA
             return RenderBenchmarkHelper.CreateUnavailableResult(RenderBenchmarkHelper.FRAME_UNIT, FrameBenchmarkDatasetId);
 
         // Same render-only benchmark as Render.Frame — and now FAITHFUL, because FrameBatch executes
-        // exactly as the benchmark does (many frames in one process). See plan-render-persistent-batch.
+        // exactly as the benchmark does (many frames in one process).
         var result = await RenderBenchmarkHelper.MeasureRenderAsync(
             runner,
             BenchmarkEngine,

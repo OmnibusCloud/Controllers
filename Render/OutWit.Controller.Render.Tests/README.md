@@ -25,7 +25,7 @@ Tests that need real Blender scenes / golden frames / native runtime binaries lo
 | `@Prerequisites/ffmpeg/` | `FfmpegRunnerTests`, `RenderEncodeVideoTests` | ~1.4 GB |
 | `@Data/cube_diorama/` | `BlenderRunnerCubeDioramaDiagnosticsTests` | ~22 MB |
 
-An identical fixture set is staged in the upstream (closed-source) OmnibusCloud runtime repo, separately staged here so the Controllers repo can be cloned and tested independently. Drop your own copies of these files into `@Prerequisites/` / `@Data/` to unlock the corresponding tests; without them the integration tests `Assert.Ignore` gracefully.
+Drop your own copies of these files into `@Prerequisites/` / `@Data/` to unlock the corresponding tests; without them the integration tests `Assert.Ignore` gracefully.
 
 ## Without prerequisites
 
