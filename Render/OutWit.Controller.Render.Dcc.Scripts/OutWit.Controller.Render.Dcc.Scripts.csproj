@@ -4,8 +4,8 @@
 
   <PropertyGroup>
     <ControllerName>Render.Dcc</ControllerName>
-    <Version>1.0.1</Version>
-    <Description>Bundled .wit scripts for the OutWit.Controller.Render.Dcc controller — typed-scene Render DCC orchestration (RenderDccSceneFrames, RenderDccSceneStill, RenderDccSceneStillTiled, RenderDccSceneVideo).</Description>
+    <Version>1.1.0</Version>
+    <Description>Bundled .wit scripts for the OutWit.Controller.Render.Dcc controller — typed-scene Render DCC orchestration (RenderDccSceneFrames, RenderDccSceneStill, RenderDccSceneStillTiled, RenderDccSceneVideo, RenderDccSceneExportBlend).</Description>
     <PackageTags>render-dcc;scripts;typed-scene;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
 

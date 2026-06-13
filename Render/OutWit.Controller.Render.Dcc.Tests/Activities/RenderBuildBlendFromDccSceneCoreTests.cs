@@ -508,6 +508,67 @@ internal sealed class RenderBuildBlendFromDccSceneCoreTests : RenderBuildBlendFr
     }
 
     [Test]
+    public async Task BundledRenderDccSceneExportBlendScriptReturnsPackedBlendTest()
+    {
+        if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
+            Assert.Ignore("Packaged Blender runtime not found for bundled RenderDccSceneExportBlend integration test.");
+
+        var solutionRoot = RenderTestAssetPaths.FindSolutionRoot()
+                           ?? throw new DirectoryNotFoundException("Solution root not found.");
+        var controllersPath = RenderTestAssetPaths.FindControllersPath()
+                              ?? throw new DirectoryNotFoundException("@Controllers directory not found");
+        var scriptPath = Path.Combine(solutionRoot, "@Scripts", "Debug", "RenderDccSceneExportBlend.wit");
+        if (!File.Exists(scriptPath))
+            Assert.Ignore($"Bundled script was not found at {scriptPath}");
+
+        WitEngineSdk.Instance.Reload(
+            useIsolatedContext: false,
+            logger: null,
+            moduleFolder: controllersPath,
+            configureServices: services =>
+            {
+                services.AddSingleton<IWitBlobService>(m_blobService);
+                services.AddSingleton<IWitNodesManager>(new RenderDccTestNodesManager(WitEngineNodeSdk.Instance));
+            });
+        var hostEngine = WitEngineSdk.Instance;
+
+        var script = await File.ReadAllTextAsync(scriptPath);
+        var job = hostEngine.Compile(script);
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Materials[0].TextureSlots.Clear();
+        scene.ImageAssets.Clear();
+        scene.AttachedFiles.Clear();
+
+        // Export builds the .blend and returns its blob - no render activities run.
+        var status = await hostEngine.ScheduleAndWaitAsync(job, scene);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var resultBlobId = (Guid?)job.Variables["result"].Value;
+        Assert.That(resultBlobId, Is.Not.Null);
+
+        var storedPath = m_blobService.GetStoredPath(resultBlobId!.Value);
+        Assert.Multiple(() =>
+        {
+            Assert.That(File.Exists(storedPath), Is.True);
+            Assert.That(Path.GetExtension(storedPath), Is.EqualTo(".blend"));
+            Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(10000));
+        });
+
+        // Confirm a genuine .blend, not a stub: an uncompressed .blend starts with the "BLENDER"
+        // magic; Blender may also save it compressed (gzip or zstd), so accept those signatures too.
+        await using var blendStream = File.OpenRead(storedPath);
+        var header = new byte[7];
+        Assert.That(blendStream.Read(header, 0, header.Length), Is.EqualTo(header.Length));
+
+        var isUncompressed = System.Text.Encoding.ASCII.GetString(header) == "BLENDER";
+        var isGzip = header[0] == 0x1F && header[1] == 0x8B;
+        var isZstd = header[0] == 0x28 && header[1] == 0xB5 && header[2] == 0x2F && header[3] == 0xFD;
+        Assert.That(isUncompressed || isGzip || isZstd, Is.True,
+            $"Result is not a recognized .blend signature (first bytes: {BitConverter.ToString(header)}).");
+    }
+
+    [Test]
     public async Task BundledRenderDccSceneFramesScriptCompletesTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)

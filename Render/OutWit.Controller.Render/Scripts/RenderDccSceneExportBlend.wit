@@ -1,0 +1,5 @@
+Job:RenderDccSceneExportBlend(DccScene:scene)
+{
+    Blob:result = Render.BuildBlendFromDccScene(scene);
+    Render.ClearScene(scene);
+}
