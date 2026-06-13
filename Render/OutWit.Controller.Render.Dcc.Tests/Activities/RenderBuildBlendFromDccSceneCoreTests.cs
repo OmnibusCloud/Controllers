@@ -245,6 +245,80 @@ internal sealed class RenderBuildBlendFromDccSceneCoreTests : RenderBuildBlendFr
     }
 
     [Test]
+    public async Task BuildBlendFromDccSceneWithWorldEnvironmentLightsSceneWithoutLampsTest()
+    {
+        if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
+            Assert.Ignore("Packaged Blender runtime not found for RenderDcc world-environment integration test.");
+
+        var controllersPath = RenderTestAssetPaths.FindControllersPath()
+                              ?? throw new DirectoryNotFoundException("@Controllers directory not found");
+
+        WitEngineSdk.Instance.Reload(
+            useIsolatedContext: false,
+            logger: null,
+            moduleFolder: controllersPath,
+            configureServices: services =>
+            {
+                services.AddSingleton<IWitBlobService>(m_blobService);
+                services.AddSingleton<IWitNodesManager>(new RenderDccTestNodesManager(WitEngineNodeSdk.Instance));
+            });
+        var hostEngine = WitEngineSdk.Instance;
+
+        var script = """
+                     Job:BuildAndRender(DccScene:scene, Int:frame, RenderOptions:options)
+                     {
+                         Blob:blend = Render.BuildBlendFromDccScene(scene);
+                         RenderTaskCollection:tasks = Render.Split(blend, frame, frame, options);
+                         RenderResultCollection:rendered = Grid.ForEach(task in tasks)
+                             => Render.Frame(task);
+                         Blob:result = Render.CollectStill(rendered, options);
+                     }
+                     """;
+
+        var job = hostEngine.Compile(script);
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Materials[0].TextureSlots.Clear();
+        scene.ImageAssets.Clear();
+        scene.AttachedFiles.Clear();
+
+        // Bright world, and NO explicit lights — the only illumination is the world environment.
+        // A non-black render proves the world emits ambient light (so transmissive/reflective
+        // materials have an environment to refract/reflect).
+        scene.World = new DccWorldData
+        {
+            BackgroundColor = new DccColorData { R = 0.8d, G = 0.8d, B = 0.85d, A = 1d },
+            Strength = 2d
+        };
+
+        scene.Nodes[0].LocalTransform.Translation = new DccVector3Data();
+        scene.Nodes[0].LocalTransform.Rotation = new DccQuaternionData
+        {
+            X = -0.7071067811865476d,
+            Y = 0d,
+            Z = 0d,
+            W = 0.7071067811865476d
+        };
+        scene.Cameras.Add(DccRenderTestData.CreateCamera());
+        var cameraNode = DccRenderTestData.CreateCameraNode();
+        cameraNode.LocalTransform.Translation = new DccVector3Data { X = 0d, Y = 10d, Z = 0d };
+        cameraNode.LocalTransform.Rotation = new DccQuaternionData { W = 1d };
+        scene.Nodes.Add(cameraNode);
+
+        var status = await hostEngine.ScheduleAndWaitAsync(job, scene, 1, CreateRenderOptions(256, 256));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var resultBlobId = (Guid?)job.Variables["result"].Value;
+        Assert.That(resultBlobId, Is.Not.Null);
+
+        var storedPath = m_blobService.GetStoredPath(resultBlobId!.Value);
+        Assert.That(File.Exists(storedPath), Is.True);
+        Assert.That(new FileInfo(storedPath).Length, Is.GreaterThan(0));
+        // The only light is the world environment — a lit result proves the world emits ambient.
+        AssertImageContainsMeaningfullyLitPixels(storedPath, "world-environment-only render");
+    }
+
+    [Test]
     public async Task BuildBlendFromDccSceneThenRenderStillTiledCompletesTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)

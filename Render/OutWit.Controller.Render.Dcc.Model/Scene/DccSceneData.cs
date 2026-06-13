@@ -35,7 +35,9 @@ public partial class DccSceneData : ModelBase
                && ImageAssets.Count == other.ImageAssets.Count
                && ImageAssets.Zip(other.ImageAssets, (left, right) => left.Is(right, tolerance)).All(me => me)
                && AttachedFiles.Count == other.AttachedFiles.Count
-               && AttachedFiles.Zip(other.AttachedFiles, (left, right) => left.Is(right, tolerance)).All(me => me);
+               && AttachedFiles.Zip(other.AttachedFiles, (left, right) => left.Is(right, tolerance)).All(me => me)
+               && ((World == null && other.World == null)
+                   || (World != null && other.World != null && World.Is(other.World, tolerance)));
     }
 
     public override ModelBase Clone()
@@ -53,7 +55,8 @@ public partial class DccSceneData : ModelBase
             Lights = [.. Lights.Select(me => (DccLightData)me.Clone())],
             Materials = [.. Materials.Select(me => (DccMaterialData)me.Clone())],
             ImageAssets = [.. ImageAssets.Select(me => (DccImageAssetData)me.Clone())],
-            AttachedFiles = [.. AttachedFiles.Select(me => (RenderSceneAttachmentRefData)me.Clone())]
+            AttachedFiles = [.. AttachedFiles.Select(me => (RenderSceneAttachmentRefData)me.Clone())],
+            World = World == null ? null : (DccWorldData)World.Clone()
         };
     }
 
@@ -120,6 +123,13 @@ public partial class DccSceneData : ModelBase
     /// Blob-backed attachment materialization metadata.
     /// </summary>
     public List<RenderSceneAttachmentRefData> AttachedFiles { get; set; } = [];
+
+    /// <summary>
+    /// Optional world / environment. Null means no world (empty background, no ambient) — the
+    /// default. Set it to transfer a source-scene environment colour so transmissive and
+    /// reflective materials have something to refract / reflect.
+    /// </summary>
+    public DccWorldData? World { get; set; }
 
     #endregion
 }

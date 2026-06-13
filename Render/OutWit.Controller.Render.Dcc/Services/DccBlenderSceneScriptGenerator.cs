@@ -65,6 +65,7 @@ internal static class DccBlenderSceneScriptGenerator
             ""
         };
 
+        AppendWorldLines(lines, buildInput);
         AppendImageLines(lines, buildInput);
         DccBlenderMaterialEmitter.AppendMaterialLines(lines, buildInput);
         DccBlenderNodeEmitter.AppendMeshNodeLines(lines, buildInput);
@@ -74,6 +75,29 @@ internal static class DccBlenderSceneScriptGenerator
         AppendSceneCameraLine(lines, buildInput);
 
         return string.Join("\n", lines);
+    }
+
+    private static void AppendWorldLines(List<string> lines, DccSceneBuildInput buildInput)
+    {
+        var world = buildInput.Scene.World;
+        if (world == null)
+            return;
+
+        var color = world.BackgroundColor;
+
+        // Keep the empty-world behaviour (no ambient / black background) when the world is a pure
+        // black at full strength — that is indistinguishable from no world for rendering and keeps
+        // existing scenes unchanged. Only build a world node tree when it actually contributes.
+        if (color.R <= 0d && color.G <= 0d && color.B <= 0d)
+            return;
+
+        lines.Add("scene_world = bpy.data.worlds.new('World')");
+        lines.Add("scene.world = scene_world");
+        lines.Add("scene_world.use_nodes = True");
+        lines.Add("scene_world_background = scene_world.node_tree.nodes['Background']");
+        lines.Add($"scene_world_background.inputs['Color'].default_value = ({FormatDouble(color.R)}, {FormatDouble(color.G)}, {FormatDouble(color.B)}, 1.0)");
+        lines.Add($"scene_world_background.inputs['Strength'].default_value = {FormatDouble(world.Strength)}");
+        lines.Add(string.Empty);
     }
 
     private static void AppendImageLines(List<string> lines, DccSceneBuildInput buildInput)

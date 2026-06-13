@@ -85,6 +85,57 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsWorldBackgroundWhenSceneHasNonBlackWorldTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.World = new DccWorldData
+        {
+            BackgroundColor = new DccColorData { R = 0.2d, G = 0.3d, B = 0.4d, A = 1d },
+            Strength = 1.5d
+        };
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("scene.world = scene_world"));
+            Assert.That(script, Does.Contain("scene_world_background.inputs['Color'].default_value = (0.2, 0.3, 0.4, 1.0)"));
+            Assert.That(script, Does.Contain("scene_world_background.inputs['Strength'].default_value = 1.5"));
+        });
+    }
+
+    [Test]
+    public void CreateDoesNotEmitWorldWhenSceneHasNoWorldTest()
+    {
+        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("bpy.ops.wm.read_factory_settings(use_empty=True)"));
+            Assert.That(script, Does.Not.Contain("scene.world = scene_world"));
+        });
+    }
+
+    [Test]
+    public void CreateDoesNotEmitWorldForBlackWorldTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.World = new DccWorldData
+        {
+            BackgroundColor = new DccColorData { R = 0d, G = 0d, B = 0d, A = 1d },
+            Strength = 1d
+        };
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.That(script, Does.Not.Contain("scene.world = scene_world"));
+    }
+
+    [Test]
     public void CreateEmitsTransmissionAndIorForGlassMaterialTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
