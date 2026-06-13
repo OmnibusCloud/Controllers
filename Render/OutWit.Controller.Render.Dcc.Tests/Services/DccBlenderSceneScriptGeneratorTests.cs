@@ -85,6 +85,50 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsTransmissionAndIorForGlassMaterialTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Materials[0].Transmission = 1d;
+        scene.Materials[0].Ior = 1.5d;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("inputs['Transmission Weight'].default_value = 1.0"));
+            Assert.That(script, Does.Contain("inputs['IOR'].default_value = 1.5"));
+        });
+    }
+
+    [Test]
+    public void CreateDoesNotEmitTransmissionForOpaqueMaterialTest()
+    {
+        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.That(script, Does.Not.Contain("Transmission Weight"));
+    }
+
+    [Test]
+    public void CreateEmitsEmissionForSelfIlluminatingMaterialTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Materials[0].EmissionColor = new DccColorData { R = 1d, G = 0.5d, B = 0d, A = 1d };
+        scene.Materials[0].EmissionStrength = 5d;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("inputs['Emission Color'].default_value = (1.0, 0.5, 0.0, 1.0)"));
+            Assert.That(script, Does.Contain("inputs['Emission Strength'].default_value = 5.0"));
+        });
+    }
+
+    [Test]
     public void CreateEmitsSunLightConfigurationWhenSunLightNodeIsPresentTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

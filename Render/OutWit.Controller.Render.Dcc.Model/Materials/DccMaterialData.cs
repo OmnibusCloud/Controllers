@@ -39,7 +39,11 @@ public partial class DccMaterialData : ModelBase
                && NormalStrengthKeyframes.Count == other.NormalStrengthKeyframes.Count
                && NormalStrengthKeyframes.Zip(other.NormalStrengthKeyframes, (left, right) => left.Is(right, tolerance)).All(me => me)
                && TextureSlots.Count == other.TextureSlots.Count
-               && TextureSlots.Zip(other.TextureSlots, (left, right) => left.Is(right, tolerance)).All(me => me);
+               && TextureSlots.Zip(other.TextureSlots, (left, right) => left.Is(right, tolerance)).All(me => me)
+               && Transmission.Is(other.Transmission, tolerance)
+               && Ior.Is(other.Ior, tolerance)
+               && EmissionColor.Is(other.EmissionColor, tolerance)
+               && EmissionStrength.Is(other.EmissionStrength, tolerance);
     }
 
     public override ModelBase Clone()
@@ -62,7 +66,11 @@ public partial class DccMaterialData : ModelBase
             RoughnessKeyframes = [.. RoughnessKeyframes.Select(me => (DccScalarKeyframeData)me.Clone())],
             NormalStrength = NormalStrength,
             NormalStrengthKeyframes = [.. NormalStrengthKeyframes.Select(me => (DccScalarKeyframeData)me.Clone())],
-            TextureSlots = [.. TextureSlots.Select(me => (DccTextureSlotData)me.Clone())]
+            TextureSlots = [.. TextureSlots.Select(me => (DccTextureSlotData)me.Clone())],
+            Transmission = Transmission,
+            Ior = Ior,
+            EmissionColor = (DccColorData)EmissionColor.Clone(),
+            EmissionStrength = EmissionStrength
         };
     }
 
@@ -154,6 +162,28 @@ public partial class DccMaterialData : ModelBase
     /// Supported texture-slot bindings.
     /// </summary>
     public List<DccTextureSlotData> TextureSlots { get; set; } = [];
+
+    /// <summary>
+    /// Scalar light transmission (0 = opaque, 1 = fully refractive). Drives the Principled BSDF
+    /// transmission weight so refractive materials such as glass render correctly.
+    /// </summary>
+    public double Transmission { get; set; }
+
+    /// <summary>
+    /// Index of refraction for transmissive materials (e.g. ~1.45 for glass). Only meaningful when
+    /// <see cref="Transmission"/> is greater than zero.
+    /// </summary>
+    public double Ior { get; set; } = 1.45d;
+
+    /// <summary>
+    /// Emission color for self-illuminating materials.
+    /// </summary>
+    public DccColorData EmissionColor { get; set; } = new() { R = 0d, G = 0d, B = 0d, A = 1d };
+
+    /// <summary>
+    /// Emission strength (0 = no emission). Scales <see cref="EmissionColor"/> on the BSDF.
+    /// </summary>
+    public double EmissionStrength { get; set; }
 
     #endregion
 }

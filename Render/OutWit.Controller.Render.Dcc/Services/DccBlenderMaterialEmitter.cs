@@ -91,6 +91,23 @@ internal static class DccBlenderMaterialEmitter
                     AppendScalarTextureCombinationLines(lines, materialVariableName, "roughness", "Color");
             }
 
+            // Transmission / refraction (e.g. glass). Blender 4.0+/5.x Principled BSDF socket
+            // names: 'Transmission Weight' and 'IOR'. Only emitted when the material is actually
+            // transmissive so opaque materials keep the BSDF defaults.
+            if (material.Transmission > 0d)
+            {
+                lines.Add($"{materialVariableName}_bsdf.inputs['Transmission Weight'].default_value = {FormatDouble(material.Transmission)}");
+                lines.Add($"{materialVariableName}_bsdf.inputs['IOR'].default_value = {FormatDouble(material.Ior)}");
+            }
+
+            // Emission for self-illuminating materials.
+            if (material.EmissionStrength > 0d)
+            {
+                var emission = material.EmissionColor;
+                lines.Add($"{materialVariableName}_bsdf.inputs['Emission Color'].default_value = ({FormatDouble(emission.R)}, {FormatDouble(emission.G)}, {FormatDouble(emission.B)}, 1.0)");
+                lines.Add($"{materialVariableName}_bsdf.inputs['Emission Strength'].default_value = {FormatDouble(material.EmissionStrength)}");
+            }
+
             var opacityTexture = material.TextureSlots.FirstOrDefault(me => me.Slot == DccTextureSlotKind.Opacity);
             var usesOpacityControl = opacityTexture != null || material.Opacity != 1d || material.OpacityKeyframes.Count > 0;
             var requiresAlphaModeLines = material.AlphaMode != DccMaterialAlphaMode.Blend || usesOpacityControl;
