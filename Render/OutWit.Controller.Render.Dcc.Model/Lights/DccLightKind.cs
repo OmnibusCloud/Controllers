@@ -7,5 +7,6 @@ public enum DccLightKind
 {
     Point,
     Sun,
-    Spot
+    Spot,
+    Area
 }

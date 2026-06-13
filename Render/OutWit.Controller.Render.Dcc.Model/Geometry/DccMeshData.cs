@@ -24,6 +24,8 @@ public partial class DccMeshData : ModelBase
                && Normals.Zip(other.Normals, (left, right) => left.Is(right, tolerance)).All(me => me)
                && Uv0.Count == other.Uv0.Count
                && Uv0.Zip(other.Uv0, (left, right) => left.Is(right, tolerance)).All(me => me)
+               && Uv1.Count == other.Uv1.Count
+               && Uv1.Zip(other.Uv1, (left, right) => left.Is(right, tolerance)).All(me => me)
                && TriangleIndices.SequenceEqual(other.TriangleIndices)
                && MaterialIndices.SequenceEqual(other.MaterialIndices);
     }
@@ -37,6 +39,7 @@ public partial class DccMeshData : ModelBase
             Positions = [.. Positions.Select(me => (DccVector3Data)me.Clone())],
             Normals = [.. Normals.Select(me => (DccVector3Data)me.Clone())],
             Uv0 = [.. Uv0.Select(me => (DccVector2Data)me.Clone())],
+            Uv1 = [.. Uv1.Select(me => (DccVector2Data)me.Clone())],
             TriangleIndices = [.. TriangleIndices],
             MaterialIndices = [.. MaterialIndices]
         };
@@ -70,6 +73,11 @@ public partial class DccMeshData : ModelBase
     /// Primary UV set.
     /// </summary>
     public List<DccVector2Data> Uv0 { get; set; } = [];
+
+    /// <summary>
+    /// Optional secondary UV set (e.g. a lightmap/detail channel). Empty when the mesh has one set.
+    /// </summary>
+    public List<DccVector2Data> Uv1 { get; set; } = [];
 
     /// <summary>
     /// Flattened triangle index buffer.

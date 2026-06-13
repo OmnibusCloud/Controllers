@@ -38,21 +38,28 @@ internal static class DccBlenderNodeEmitter
 
             AppendMeshMaterialLines(lines, buildInput, node, mesh, meshVariableName);
 
-            if (mesh.Uv0.Count > 0)
-            {
-                lines.Add($"{meshVariableName}_uv_layer = {meshVariableName}.uv_layers.new(name='UVMap')");
-                lines.Add($"for polygon in {meshVariableName}.polygons:");
-                lines.Add($"    for loop_index in polygon.loop_indices:");
-                lines.Add($"        vertex_index = {meshVariableName}.loops[loop_index].vertex_index");
-                lines.Add($"        uv = {BuildVector2List(mesh.Uv0)}[vertex_index]");
-                lines.Add($"        {meshVariableName}_uv_layer.data[loop_index].uv = uv");
-            }
+            AppendMeshUvLayerLines(lines, meshVariableName, "UVMap", "uv_layer", mesh.Uv0);
+            AppendMeshUvLayerLines(lines, meshVariableName, "UVMap.001", "uv_layer_1", mesh.Uv1);
 
             AppendNodeAnimationLines(lines, objectVariableName, node);
             AppendNodeVisibilityAnimationLines(lines, objectVariableName, node);
             lines.Add($"objects_by_node_id[{ToPythonStringLiteral(node.Id)}] = {objectVariableName}");
             lines.Add(string.Empty);
         }
+    }
+
+    private static void AppendMeshUvLayerLines(List<string> lines, string meshVariableName, string uvLayerName, string variableSuffix, List<DccVector2Data> uvs)
+    {
+        if (uvs.Count == 0)
+            return;
+
+        var layerVariable = $"{meshVariableName}_{variableSuffix}";
+        lines.Add($"{layerVariable} = {meshVariableName}.uv_layers.new(name={ToPythonStringLiteral(uvLayerName)})");
+        lines.Add($"for polygon in {meshVariableName}.polygons:");
+        lines.Add($"    for loop_index in polygon.loop_indices:");
+        lines.Add($"        vertex_index = {meshVariableName}.loops[loop_index].vertex_index");
+        lines.Add($"        uv = {BuildVector2List(uvs)}[vertex_index]");
+        lines.Add($"        {layerVariable}.data[loop_index].uv = uv");
     }
 
     private static void AppendMeshNormalLines(List<string> lines, DccMeshData mesh, string meshVariableName)
@@ -93,6 +100,15 @@ internal static class DccBlenderNodeEmitter
             if (light.Kind == DccLightKind.Spot)
                 lines.Add($"{lightVariableName}.spot_size = math.radians({FormatDouble(light.SpotAngleDegrees)})");
 
+            if (light.Kind == DccLightKind.Area)
+            {
+                lines.Add($"{lightVariableName}.shape = 'RECTANGLE'");
+                lines.Add($"{lightVariableName}.size = {FormatDouble(light.AreaWidth > 0d ? light.AreaWidth : 1d)}");
+                lines.Add($"{lightVariableName}.size_y = {FormatDouble(light.AreaHeight > 0d ? light.AreaHeight : 1d)}");
+            }
+
+            lines.Add($"{lightVariableName}.use_shadow = {ToPythonBool(light.CastShadows)}");
+
             AppendLightSpotAngleAnimationLines(lines, lightVariableName, light);
 
             lines.Add($"{objectVariableName} = bpy.data.objects.new({ToPythonStringLiteral(node.Name)}, {lightVariableName})");
@@ -124,6 +140,13 @@ internal static class DccBlenderNodeEmitter
             {
                 lines.Add($"set_camera_vertical_fov({cameraVariableName}, {FormatDouble(camera.VerticalFovDegrees)})");
                 AppendCameraFovAnimationLines(lines, cameraVariableName, camera);
+            }
+
+            if (camera.EnableDepthOfField && camera.FocusDistance > 0d)
+            {
+                lines.Add($"{cameraVariableName}.dof.use_dof = True");
+                lines.Add($"{cameraVariableName}.dof.focus_distance = {FormatDouble(camera.FocusDistance)}");
+                lines.Add($"{cameraVariableName}.dof.aperture_fstop = {FormatDouble(camera.FStop > 0d ? camera.FStop : 2.8d)}");
             }
 
             lines.Add($"{objectVariableName} = bpy.data.objects.new({ToPythonStringLiteral(node.Name)}, {cameraVariableName})");

@@ -30,7 +30,10 @@ public partial class DccLightData : ModelBase
                && RangeKeyframes.Zip(other.RangeKeyframes, (left, right) => left.Is(right, tolerance)).All(me => me)
                && SpotAngleDegrees.Is(other.SpotAngleDegrees, tolerance)
                && SpotAngleKeyframes.Count == other.SpotAngleKeyframes.Count
-               && SpotAngleKeyframes.Zip(other.SpotAngleKeyframes, (left, right) => left.Is(right, tolerance)).All(me => me);
+               && SpotAngleKeyframes.Zip(other.SpotAngleKeyframes, (left, right) => left.Is(right, tolerance)).All(me => me)
+               && CastShadows.Is(other.CastShadows)
+               && AreaWidth.Is(other.AreaWidth, tolerance)
+               && AreaHeight.Is(other.AreaHeight, tolerance);
     }
 
     public override ModelBase Clone()
@@ -47,7 +50,10 @@ public partial class DccLightData : ModelBase
             Range = Range,
             RangeKeyframes = [.. RangeKeyframes.Select(me => (DccScalarKeyframeData)me.Clone())],
             SpotAngleDegrees = SpotAngleDegrees,
-            SpotAngleKeyframes = [.. SpotAngleKeyframes.Select(me => (DccScalarKeyframeData)me.Clone())]
+            SpotAngleKeyframes = [.. SpotAngleKeyframes.Select(me => (DccScalarKeyframeData)me.Clone())],
+            CastShadows = CastShadows,
+            AreaWidth = AreaWidth,
+            AreaHeight = AreaHeight
         };
     }
 
@@ -109,6 +115,21 @@ public partial class DccLightData : ModelBase
     /// Optional spot-angle keyframes for the first light-property animation slice.
     /// </summary>
     public List<DccScalarKeyframeData> SpotAngleKeyframes { get; set; } = [];
+
+    /// <summary>
+    /// Whether the light casts shadows (default true).
+    /// </summary>
+    public bool CastShadows { get; set; } = true;
+
+    /// <summary>
+    /// Area-light width (scene units). Only meaningful when <see cref="Kind"/> is Area.
+    /// </summary>
+    public double AreaWidth { get; set; } = 1d;
+
+    /// <summary>
+    /// Area-light height (scene units). Only meaningful when <see cref="Kind"/> is Area.
+    /// </summary>
+    public double AreaHeight { get; set; } = 1d;
 
     #endregion
 }

@@ -85,6 +85,87 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsDepthOfFieldWhenCameraEnablesItTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Cameras.Add(DccRenderTestData.CreateCamera());
+        scene.Nodes.Add(DccRenderTestData.CreateCameraNode());
+        var camera = scene.Cameras.Last();
+        camera.EnableDepthOfField = true;
+        camera.FocusDistance = 7.5d;
+        camera.FStop = 1.8d;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain(".dof.use_dof = True"));
+            Assert.That(script, Does.Contain(".dof.focus_distance = 7.5"));
+            Assert.That(script, Does.Contain(".dof.aperture_fstop = 1.8"));
+        });
+    }
+
+    [Test]
+    public void CreateEmitsAreaLightWithShapeAndShadowToggleTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        var light = DccRenderTestData.CreateLight();
+        light.Kind = DccLightKind.Area;
+        light.AreaWidth = 2d;
+        light.AreaHeight = 3d;
+        light.CastShadows = false;
+        scene.Lights.Add(light);
+        scene.Nodes.Add(DccRenderTestData.CreateLightNode());
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("type='AREA'"));
+            Assert.That(script, Does.Contain(".shape = 'RECTANGLE'"));
+            Assert.That(script, Does.Contain(".size = 2.0"));
+            Assert.That(script, Does.Contain(".size_y = 3.0"));
+            Assert.That(script, Does.Contain(".use_shadow = False"));
+        });
+    }
+
+    [Test]
+    public void CreateEmitsColorManagementWhenSpecifiedTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.RenderSettings.ViewTransform = "Standard";
+        scene.RenderSettings.Exposure = 1.5d;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("scene.view_settings.view_transform = 'Standard'"));
+            Assert.That(script, Does.Contain("scene.view_settings.exposure = 1.5"));
+        });
+    }
+
+    [Test]
+    public void CreateEmitsSecondUvLayerWhenMeshHasUv1Test()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        var mesh = scene.Meshes[0];
+        mesh.Uv1 = [.. mesh.Uv0.Select(uv => new DccVector2Data { X = uv.X, Y = uv.Y })];
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("uv_layers.new(name='UVMap')"));
+            Assert.That(script, Does.Contain("uv_layers.new(name='UVMap.001')"));
+        });
+    }
+
+    [Test]
     public void CreateAppliesSmoothCustomNormalsWhenMeshHasNormalsTest()
     {
         var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());

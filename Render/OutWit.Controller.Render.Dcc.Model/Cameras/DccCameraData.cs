@@ -27,7 +27,10 @@ public partial class DccCameraData : ModelBase
                && FarClip.Is(other.FarClip, tolerance)
                && FarClipKeyframes.Count == other.FarClipKeyframes.Count
                && FarClipKeyframes.Zip(other.FarClipKeyframes, (left, right) => left.Is(right, tolerance)).All(me => me)
-               && IsPerspective.Is(other.IsPerspective);
+               && IsPerspective.Is(other.IsPerspective)
+               && EnableDepthOfField.Is(other.EnableDepthOfField)
+               && FocusDistance.Is(other.FocusDistance, tolerance)
+               && FStop.Is(other.FStop, tolerance);
     }
 
     public override ModelBase Clone()
@@ -42,7 +45,10 @@ public partial class DccCameraData : ModelBase
             NearClipKeyframes = [.. NearClipKeyframes.Select(me => (DccScalarKeyframeData)me.Clone())],
             FarClip = FarClip,
             FarClipKeyframes = [.. FarClipKeyframes.Select(me => (DccScalarKeyframeData)me.Clone())],
-            IsPerspective = IsPerspective
+            IsPerspective = IsPerspective,
+            EnableDepthOfField = EnableDepthOfField,
+            FocusDistance = FocusDistance,
+            FStop = FStop
         };
     }
 
@@ -94,6 +100,23 @@ public partial class DccCameraData : ModelBase
     /// True when the camera is perspective.
     /// </summary>
     public bool IsPerspective { get; set; } = true;
+
+    /// <summary>
+    /// Enables depth of field. When false the camera renders fully in focus (default).
+    /// </summary>
+    public bool EnableDepthOfField { get; set; }
+
+    /// <summary>
+    /// Focus distance (scene units) for depth of field. Only meaningful when
+    /// <see cref="EnableDepthOfField"/> is true.
+    /// </summary>
+    public double FocusDistance { get; set; }
+
+    /// <summary>
+    /// Aperture f-stop for depth of field (smaller = shallower focus). Only meaningful when
+    /// <see cref="EnableDepthOfField"/> is true.
+    /// </summary>
+    public double FStop { get; set; } = 2.8d;
 
     #endregion
 }

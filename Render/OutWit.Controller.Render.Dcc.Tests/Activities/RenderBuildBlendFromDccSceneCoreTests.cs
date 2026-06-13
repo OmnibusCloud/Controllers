@@ -245,6 +245,90 @@ internal sealed class RenderBuildBlendFromDccSceneCoreTests : RenderBuildBlendFr
     }
 
     [Test]
+    public async Task BuildBlendFromDccSceneWithCameraDofAreaLightColorAndSecondUvRendersTest()
+    {
+        if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
+            Assert.Ignore("Packaged Blender runtime not found for RenderDcc camera-DOF/area-light/color/UV integration test.");
+
+        var controllersPath = RenderTestAssetPaths.FindControllersPath()
+                              ?? throw new DirectoryNotFoundException("@Controllers directory not found");
+
+        WitEngineSdk.Instance.Reload(
+            useIsolatedContext: false,
+            logger: null,
+            moduleFolder: controllersPath,
+            configureServices: services =>
+            {
+                services.AddSingleton<IWitBlobService>(m_blobService);
+                services.AddSingleton<IWitNodesManager>(new RenderDccTestNodesManager(WitEngineNodeSdk.Instance));
+            });
+        var hostEngine = WitEngineSdk.Instance;
+
+        var script = """
+                     Job:BuildAndRender(DccScene:scene, Int:frame, RenderOptions:options)
+                     {
+                         Blob:blend = Render.BuildBlendFromDccScene(scene);
+                         RenderTaskCollection:tasks = Render.Split(blend, frame, frame, options);
+                         RenderResultCollection:rendered = Grid.ForEach(task in tasks)
+                             => Render.Frame(task);
+                         Blob:result = Render.CollectStill(rendered, options);
+                     }
+                     """;
+
+        var job = hostEngine.Compile(script);
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Materials[0].TextureSlots.Clear();
+        scene.ImageAssets.Clear();
+        scene.AttachedFiles.Clear();
+
+        // Exercise every new Blender 5.1 API path at once: a second UV set, color management,
+        // an AREA light with a shadow toggle, and a depth-of-field camera. A wrong socket/attribute
+        // name in any of these fails the .blend build in Blender, failing this test.
+        scene.Meshes[0].Uv1 = [.. scene.Meshes[0].Uv0.Select(uv => new DccVector2Data { X = uv.X, Y = uv.Y })];
+        scene.RenderSettings.ViewTransform = "Standard";
+        scene.RenderSettings.Exposure = 0.5d;
+
+        scene.Nodes[0].LocalTransform.Translation = new DccVector3Data();
+        scene.Nodes[0].LocalTransform.Rotation = new DccQuaternionData
+        {
+            X = -0.7071067811865476d,
+            Y = 0d,
+            Z = 0d,
+            W = 0.7071067811865476d
+        };
+
+        var camera = DccRenderTestData.CreateCamera();
+        camera.EnableDepthOfField = true;
+        camera.FocusDistance = 10d;
+        camera.FStop = 2.0d;
+        scene.Cameras.Add(camera);
+        var cameraNode = DccRenderTestData.CreateCameraNode();
+        cameraNode.LocalTransform.Translation = new DccVector3Data { X = 0d, Y = 10d, Z = 0d };
+        cameraNode.LocalTransform.Rotation = new DccQuaternionData { W = 1d };
+        scene.Nodes.Add(cameraNode);
+
+        var light = DccRenderTestData.CreateLight();
+        light.Kind = DccLightKind.Area;
+        light.AreaWidth = 4d;
+        light.AreaHeight = 4d;
+        light.CastShadows = true;
+        scene.Lights.Add(light);
+        var lightNode = DccRenderTestData.CreateLightNode();
+        lightNode.LocalTransform.Translation = new DccVector3Data { X = 3d, Y = 5d, Z = 4d };
+        scene.Nodes.Add(lightNode);
+
+        var status = await hostEngine.ScheduleAndWaitAsync(job, scene, 1, CreateRenderOptions(256, 256));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var resultBlobId = (Guid?)job.Variables["result"].Value;
+        Assert.That(resultBlobId, Is.Not.Null);
+        var storedPath = m_blobService.GetStoredPath(resultBlobId!.Value);
+        Assert.That(File.Exists(storedPath), Is.True);
+        AssertImageContainsMeaningfullyLitPixels(storedPath, "camera-DOF/area-light/color/second-UV render");
+    }
+
+    [Test]
     public async Task BuildBlendFromDccSceneWithWorldEnvironmentLightsSceneWithoutLampsTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)

@@ -81,6 +81,7 @@ internal static class DccBlenderPythonFormatter
             DccLightKind.Point => "POINT",
             DccLightKind.Sun => "SUN",
             DccLightKind.Spot => "SPOT",
+            DccLightKind.Area => "AREA",
             _ => throw new ArgumentOutOfRangeException(nameof(lightKind), lightKind, null)
         };
     }

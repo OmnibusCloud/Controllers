@@ -65,6 +65,7 @@ internal static class DccBlenderSceneScriptGenerator
             ""
         };
 
+        AppendColorManagementLines(lines, buildInput);
         AppendWorldLines(lines, buildInput);
         AppendImageLines(lines, buildInput);
         DccBlenderMaterialEmitter.AppendMaterialLines(lines, buildInput);
@@ -75,6 +76,19 @@ internal static class DccBlenderSceneScriptGenerator
         AppendSceneCameraLine(lines, buildInput);
 
         return string.Join("\n", lines);
+    }
+
+    private static void AppendColorManagementLines(List<string> lines, DccSceneBuildInput buildInput)
+    {
+        var renderSettings = buildInput.Scene.RenderSettings;
+
+        // Only touch color management when the scene specifies it, so renders without it keep the
+        // generator/Blender default view transform.
+        if (!string.IsNullOrWhiteSpace(renderSettings.ViewTransform))
+            lines.Add($"scene.view_settings.view_transform = {ToPythonStringLiteral(renderSettings.ViewTransform)}");
+
+        if (renderSettings.Exposure != 0d)
+            lines.Add($"scene.view_settings.exposure = {FormatDouble(renderSettings.Exposure)}");
     }
 
     private static void AppendWorldLines(List<string> lines, DccSceneBuildInput buildInput)

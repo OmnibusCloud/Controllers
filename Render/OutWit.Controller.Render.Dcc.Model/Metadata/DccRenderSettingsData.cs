@@ -22,7 +22,9 @@ public partial class DccRenderSettingsData : ModelBase
                && FrameEnd.Is(other.FrameEnd)
                && Fps.Is(other.Fps)
                && TargetEngine.Is(other.TargetEngine)
-               && Samples.Is(other.Samples);
+               && Samples.Is(other.Samples)
+               && ViewTransform.Is(other.ViewTransform)
+               && Exposure.Is(other.Exposure, tolerance);
     }
 
     public override ModelBase Clone()
@@ -35,7 +37,9 @@ public partial class DccRenderSettingsData : ModelBase
             FrameEnd = FrameEnd,
             Fps = Fps,
             TargetEngine = TargetEngine,
-            Samples = Samples
+            Samples = Samples,
+            ViewTransform = ViewTransform,
+            Exposure = Exposure
         };
     }
 
@@ -77,6 +81,17 @@ public partial class DccRenderSettingsData : ModelBase
     /// Sample count.
     /// </summary>
     public int Samples { get; set; } = 64;
+
+    /// <summary>
+    /// Color-management view transform (e.g. "Standard", "Filmic", "AgX"). Empty leaves the
+    /// renderer default unchanged.
+    /// </summary>
+    public string ViewTransform { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Color-management exposure (stops). 0 leaves the default.
+    /// </summary>
+    public double Exposure { get; set; }
 
     #endregion
 }
