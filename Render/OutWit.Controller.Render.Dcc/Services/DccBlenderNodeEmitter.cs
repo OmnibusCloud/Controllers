@@ -28,6 +28,8 @@ internal static class DccBlenderNodeEmitter
 
             lines.Add($"{meshVariableName} = bpy.data.meshes.new({ToPythonStringLiteral(mesh.Name)})");
             lines.Add($"{meshVariableName}.from_pydata({BuildVector3List(mesh.Positions)}, [], [{string.Join(", ", faces)}])");
+            lines.Add($"{meshVariableName}.update()");
+            AppendMeshNormalLines(lines, mesh, meshVariableName);
             lines.Add($"{objectVariableName} = bpy.data.objects.new({ToPythonStringLiteral(node.Name)}, {meshVariableName})");
             lines.Add($"scene.collection.objects.link({objectVariableName})");
             lines.Add($"set_transform({objectVariableName}, {BuildTranslationTuple(node.LocalTransform)}, {BuildQuaternionTuple(node.LocalTransform)}, {BuildScaleTuple(node.LocalTransform)})");
@@ -51,6 +53,20 @@ internal static class DccBlenderNodeEmitter
             lines.Add($"objects_by_node_id[{ToPythonStringLiteral(node.Id)}] = {objectVariableName}");
             lines.Add(string.Empty);
         }
+    }
+
+    private static void AppendMeshNormalLines(List<string> lines, DccMeshData mesh, string meshVariableName)
+    {
+        // The DCC payload carries per-vertex normals (the exporter resolves them from the source
+        // smoothing groups). The mesh vertices are unwelded — one vertex per face corner — so a
+        // per-vertex custom-normal set reproduces the source hard/soft edges exactly. Without this
+        // Blender recomputes flat face normals and every curved surface renders faceted.
+        if (mesh.Normals.Count == 0 || mesh.Normals.Count != mesh.Positions.Count)
+            return;
+
+        lines.Add($"for polygon in {meshVariableName}.polygons:");
+        lines.Add("    polygon.use_smooth = True");
+        lines.Add($"{meshVariableName}.normals_split_custom_set_from_vertices({BuildVector3List(mesh.Normals)})");
     }
 
     public static void AppendLightNodeLines(List<string> lines, DccSceneBuildInput buildInput)

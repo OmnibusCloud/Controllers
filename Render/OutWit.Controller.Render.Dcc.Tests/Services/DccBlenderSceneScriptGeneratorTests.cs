@@ -85,6 +85,20 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateAppliesSmoothCustomNormalsWhenMeshHasNormalsTest()
+    {
+        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("polygon.use_smooth = True"));
+            Assert.That(script, Does.Contain(".normals_split_custom_set_from_vertices("));
+        });
+    }
+
+    [Test]
     public void CreateEmitsWorldBackgroundWhenSceneHasNonBlackWorldTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
