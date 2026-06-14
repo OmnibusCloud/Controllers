@@ -28,6 +28,8 @@ public partial class DccMeshData : ModelBase
                && Uv1.Zip(other.Uv1, (left, right) => left.Is(right, tolerance)).All(me => me)
                && Colors.Count == other.Colors.Count
                && Colors.Zip(other.Colors, (left, right) => left.Is(right, tolerance)).All(me => me)
+               && DeformationFrames.Count == other.DeformationFrames.Count
+               && DeformationFrames.Zip(other.DeformationFrames, (left, right) => left.Is(right, tolerance)).All(me => me)
                && TriangleIndices.SequenceEqual(other.TriangleIndices)
                && MaterialIndices.SequenceEqual(other.MaterialIndices);
     }
@@ -43,6 +45,7 @@ public partial class DccMeshData : ModelBase
             Uv0 = [.. Uv0.Select(me => (DccVector2Data)me.Clone())],
             Uv1 = [.. Uv1.Select(me => (DccVector2Data)me.Clone())],
             Colors = [.. Colors.Select(me => (DccColorData)me.Clone())],
+            DeformationFrames = [.. DeformationFrames.Select(me => (DccMeshDeformationFrameData)me.Clone())],
             TriangleIndices = [.. TriangleIndices],
             MaterialIndices = [.. MaterialIndices]
         };
@@ -87,6 +90,13 @@ public partial class DccMeshData : ModelBase
     /// mesh has no colour layer.
     /// </summary>
     public List<DccColorData> Colors { get; set; } = [];
+
+    /// <summary>
+    /// Optional baked deformation frames (per-frame vertex positions, each aligned with
+    /// <see cref="Positions"/>). Empty for static meshes. Carries skin/morph/cloth/sim deformation
+    /// as a vertex cache, applied in Blender as keyframed shape keys.
+    /// </summary>
+    public List<DccMeshDeformationFrameData> DeformationFrames { get; set; } = [];
 
     /// <summary>
     /// Flattened triangle index buffer.

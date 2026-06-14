@@ -46,6 +46,7 @@ internal static class DccBlenderNodeEmitter
             AppendMeshUvLayerLines(lines, meshVariableName, "UVMap", "uv_layer", mesh.Uv0);
             AppendMeshUvLayerLines(lines, meshVariableName, "UVMap.001", "uv_layer_1", mesh.Uv1);
             AppendMeshColorLayerLines(lines, meshVariableName, mesh.Colors);
+            AppendMeshDeformationLines(lines, objectVariableName, mesh);
 
             AppendNodeAnimationLines(lines, objectVariableName, node);
             AppendNodeVisibilityAnimationLines(lines, objectVariableName, node);
@@ -66,6 +67,43 @@ internal static class DccBlenderNodeEmitter
         lines.Add($"        vertex_index = {meshVariableName}.loops[loop_index].vertex_index");
         lines.Add($"        uv = {BuildVector2List(uvs)}[vertex_index]");
         lines.Add($"        {layerVariable}.data[loop_index].uv = uv");
+    }
+
+    private static void AppendMeshDeformationLines(List<string> lines, string objectVariableName, DccMeshData mesh)
+    {
+        if (mesh.DeformationFrames.Count == 0)
+            return;
+
+        // Baked vertex-cache deformation as keyframed shape keys: a Basis key (rest pose) plus one
+        // key per deformation frame. Each key's value is keyframed with CONSTANT interpolation - 0
+        // before, 1 at its frame, 0 after - so exactly the current frame's pose is shown and the
+        // keys never blend together.
+        lines.Add($"{objectVariableName}.shape_key_add(name='Basis')");
+
+        var frameIndex = 0;
+        foreach (var frame in mesh.DeformationFrames.OrderBy(me => me.Frame))
+        {
+            var keyVariable = $"{objectVariableName}_shapekey_{frameIndex}";
+            var positionsVariable = $"{keyVariable}_positions";
+
+            lines.Add($"{keyVariable} = {objectVariableName}.shape_key_add(name='Frame_{frame.Frame}')");
+            lines.Add($"{positionsVariable} = {BuildVector3List(frame.Positions)}");
+            lines.Add($"for shape_index in range(len({positionsVariable})):");
+            lines.Add($"    {keyVariable}.data[shape_index].co = {positionsVariable}[shape_index]");
+            lines.Add($"{keyVariable}.value = 0.0");
+            lines.Add($"{keyVariable}.keyframe_insert(data_path='value', frame={frame.Frame - 1})");
+            lines.Add($"{keyVariable}.value = 1.0");
+            lines.Add($"{keyVariable}.keyframe_insert(data_path='value', frame={frame.Frame})");
+            lines.Add($"{keyVariable}.value = 0.0");
+            lines.Add($"{keyVariable}.keyframe_insert(data_path='value', frame={frame.Frame + 1})");
+            lines.Add($"set_keyframe_interpolation({objectVariableName}.data.shape_keys, {keyVariable}.path_from_id('value'), {frame.Frame - 1}, 'CONSTANT')");
+            lines.Add($"set_keyframe_interpolation({objectVariableName}.data.shape_keys, {keyVariable}.path_from_id('value'), {frame.Frame}, 'CONSTANT')");
+            lines.Add($"set_keyframe_interpolation({objectVariableName}.data.shape_keys, {keyVariable}.path_from_id('value'), {frame.Frame + 1}, 'CONSTANT')");
+
+            frameIndex++;
+        }
+
+        lines.Add(string.Empty);
     }
 
     private static bool MaterialHasDisplacement(DccSceneBuildInput buildInput, DccNodeData node)

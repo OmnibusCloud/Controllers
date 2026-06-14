@@ -78,6 +78,43 @@ public sealed class DccMeshDataTests
     }
 
     [Test]
+    public void DeformationFramesRoundTripTest()
+    {
+        var original = DccModelTestData.CreateMesh();
+        original.DeformationFrames =
+        [
+            new DccMeshDeformationFrameData
+            {
+                Frame = 1,
+                Positions = [.. original.Positions.Select(me => (DccVector3Data)me.Clone())]
+            },
+            new DccMeshDeformationFrameData
+            {
+                Frame = 2,
+                Positions = [.. original.Positions.Select(me => new DccVector3Data { X = me.X + 1d, Y = me.Y, Z = me.Z })]
+            }
+        ];
+
+        var differentFrame = (DccMeshData)original.Clone();
+        differentFrame.DeformationFrames[1].Positions[0].X += 5d;
+
+        var clone = (DccMeshData)original.Clone();
+        var memoryPackClone = original.MemoryPackClone();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(original.Is(differentFrame), Is.False);
+            Assert.That(clone.DeformationFrames.Count, Is.EqualTo(2));
+            Assert.That(clone.DeformationFrames, Is.Not.SameAs(original.DeformationFrames));
+            Assert.That(clone.Is(original), Is.True);
+            Assert.That(memoryPackClone.DeformationFrames.Count, Is.EqualTo(2));
+            Assert.That(memoryPackClone.DeformationFrames[1].Frame, Is.EqualTo(2));
+            Assert.That(memoryPackClone.DeformationFrames[1].Positions.Count, Is.EqualTo(original.Positions.Count));
+            Assert.That(memoryPackClone.Is(original), Is.True);
+        });
+    }
+
+    [Test]
     public void MemoryPackCloneTest()
     {
         var original = DccModelTestData.CreateMesh();

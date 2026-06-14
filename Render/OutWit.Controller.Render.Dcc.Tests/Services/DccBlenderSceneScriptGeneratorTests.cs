@@ -236,6 +236,47 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsShapeKeyDeformationWhenMeshHasDeformationFramesTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        var mesh = scene.Meshes[0];
+        mesh.DeformationFrames =
+        [
+            new DccMeshDeformationFrameData
+            {
+                Frame = 1,
+                Positions = [.. mesh.Positions.Select(me => (DccVector3Data)me.Clone())]
+            },
+            new DccMeshDeformationFrameData
+            {
+                Frame = 2,
+                Positions = [.. mesh.Positions.Select(me => new DccVector3Data { X = me.X * 2d, Y = me.Y * 2d, Z = me.Z * 2d })]
+            }
+        ];
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("shape_key_add(name='Basis')"));
+            Assert.That(script, Does.Contain("shape_key_add(name='Frame_2')"));
+            Assert.That(script, Does.Contain("keyframe_insert(data_path='value', frame=2)"));
+            Assert.That(script, Does.Contain("'CONSTANT'"));
+        });
+    }
+
+    [Test]
+    public void CreateDoesNotEmitShapeKeysWhenMeshHasNoDeformationTest()
+    {
+        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.That(script, Does.Not.Contain("shape_key_add"));
+    }
+
+    [Test]
     public void CreateEmitsDisplacementNodeAndSubdivisionWhenMaterialHasDisplacementTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
