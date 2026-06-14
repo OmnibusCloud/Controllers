@@ -18,7 +18,9 @@ public partial class DccWorldData : ModelBase
     {
         return modelBase is DccWorldData other
                && BackgroundColor.Is(other.BackgroundColor, tolerance)
-               && Strength.Is(other.Strength, tolerance);
+               && Strength.Is(other.Strength, tolerance)
+               && EnvironmentImageId == other.EnvironmentImageId
+               && EnvironmentRotationDegrees.Is(other.EnvironmentRotationDegrees, tolerance);
     }
 
     public override ModelBase Clone()
@@ -26,7 +28,9 @@ public partial class DccWorldData : ModelBase
         return new DccWorldData
         {
             BackgroundColor = (DccColorData)BackgroundColor.Clone(),
-            Strength = Strength
+            Strength = Strength,
+            EnvironmentImageId = EnvironmentImageId,
+            EnvironmentRotationDegrees = EnvironmentRotationDegrees
         };
     }
 
@@ -40,9 +44,22 @@ public partial class DccWorldData : ModelBase
     public DccColorData BackgroundColor { get; set; } = new() { R = 0d, G = 0d, B = 0d, A = 1d };
 
     /// <summary>
-    /// World emission strength (scales the background as ambient light).
+    /// World emission strength (scales the background / environment as ambient light).
     /// </summary>
     public double Strength { get; set; } = 1d;
+
+    /// <summary>
+    /// Optional id of a <see cref="DccImageAssetData"/> used as an equirectangular environment
+    /// (HDRI) for the world. When set, the environment image drives the background and ambient
+    /// lighting instead of <see cref="BackgroundColor"/>. Null/empty = use the constant color.
+    /// </summary>
+    public string? EnvironmentImageId { get; set; }
+
+    /// <summary>
+    /// Z-axis rotation (degrees) applied to the environment image, so the HDRI can be oriented.
+    /// Ignored when <see cref="EnvironmentImageId"/> is not set.
+    /// </summary>
+    public double EnvironmentRotationDegrees { get; set; }
 
     #endregion
 }

@@ -97,6 +97,18 @@ internal static class DccBlenderSceneScriptGenerator
         if (world == null)
             return;
 
+        // Environment (HDRI) world: an equirectangular image drives the background and ambient
+        // light. Takes precedence over the constant background colour when an image is referenced.
+        var environmentImage = string.IsNullOrWhiteSpace(world.EnvironmentImageId)
+            ? null
+            : buildInput.Scene.ImageAssets.FirstOrDefault(me => me.Id == world.EnvironmentImageId);
+
+        if (environmentImage != null)
+        {
+            AppendEnvironmentWorldLines(lines, buildInput, world, environmentImage);
+            return;
+        }
+
         var color = world.BackgroundColor;
 
         // Keep the empty-world behaviour (no ambient / black background) when the world is a pure
@@ -111,6 +123,34 @@ internal static class DccBlenderSceneScriptGenerator
         lines.Add("scene_world_background = scene_world.node_tree.nodes['Background']");
         lines.Add($"scene_world_background.inputs['Color'].default_value = ({FormatDouble(color.R)}, {FormatDouble(color.G)}, {FormatDouble(color.B)}, 1.0)");
         lines.Add($"scene_world_background.inputs['Strength'].default_value = {FormatDouble(world.Strength)}");
+        lines.Add(string.Empty);
+    }
+
+    private static void AppendEnvironmentWorldLines(List<string> lines, DccSceneBuildInput buildInput, DccWorldData world, DccImageAssetData environmentImage)
+    {
+        var imagePath = ResolveImagePath(buildInput, environmentImage);
+
+        lines.Add("scene_world = bpy.data.worlds.new('World')");
+        lines.Add("scene.world = scene_world");
+        lines.Add("scene_world.use_nodes = True");
+        lines.Add("world_node_tree = scene_world.node_tree");
+        lines.Add("world_background = world_node_tree.nodes['Background']");
+        lines.Add("world_environment = world_node_tree.nodes.new('ShaderNodeTexEnvironment')");
+        lines.Add($"world_environment.image = bpy.data.images.load({ToPythonStringLiteral(imagePath)}, check_existing=True)");
+        lines.Add("world_node_tree.links.new(world_environment.outputs['Color'], world_background.inputs['Color'])");
+        lines.Add($"world_background.inputs['Strength'].default_value = {FormatDouble(world.Strength)}");
+
+        // Optional orientation of the environment image around the up axis.
+        if (Math.Abs(world.EnvironmentRotationDegrees) > 1e-6)
+        {
+            var radians = world.EnvironmentRotationDegrees * Math.PI / 180d;
+            lines.Add("world_tex_coord = world_node_tree.nodes.new('ShaderNodeTexCoord')");
+            lines.Add("world_mapping = world_node_tree.nodes.new('ShaderNodeMapping')");
+            lines.Add($"world_mapping.inputs['Rotation'].default_value[2] = {FormatDouble(radians)}");
+            lines.Add("world_node_tree.links.new(world_tex_coord.outputs['Generated'], world_mapping.inputs['Vector'])");
+            lines.Add("world_node_tree.links.new(world_mapping.outputs['Vector'], world_environment.inputs['Vector'])");
+        }
+
         lines.Add(string.Empty);
     }
 

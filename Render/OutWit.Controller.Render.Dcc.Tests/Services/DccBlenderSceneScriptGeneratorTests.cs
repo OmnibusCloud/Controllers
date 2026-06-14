@@ -201,6 +201,41 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsEnvironmentWorldWhenSceneHasEnvironmentImageTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.ImageAssets.Add(new DccImageAssetData
+        {
+            Id = "image:env",
+            Name = "Env",
+            SourcePath = "C:/hdri/studio.hdr",
+            RelativePath = "textures/studio.hdr"
+        });
+        scene.World = new DccWorldData
+        {
+            EnvironmentImageId = "image:env",
+            Strength = 2.5d,
+            EnvironmentRotationDegrees = 90d
+        };
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("scene.world = scene_world"));
+            Assert.That(script, Does.Contain("world_environment = world_node_tree.nodes.new('ShaderNodeTexEnvironment')"));
+            Assert.That(script, Does.Contain("world_environment.image = bpy.data.images.load("));
+            Assert.That(script, Does.Contain("world_node_tree.links.new(world_environment.outputs['Color'], world_background.inputs['Color'])"));
+            Assert.That(script, Does.Contain("world_background.inputs['Strength'].default_value = 2.5"));
+            // Rotation requested -> a mapping node is emitted.
+            Assert.That(script, Does.Contain("world_mapping"));
+            // The constant-colour background path must not run when an environment image drives the world.
+            Assert.That(script, Does.Not.Contain("scene_world_background.inputs['Color']"));
+        });
+    }
+
+    [Test]
     public void CreateDoesNotEmitWorldWhenSceneHasNoWorldTest()
     {
         var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
