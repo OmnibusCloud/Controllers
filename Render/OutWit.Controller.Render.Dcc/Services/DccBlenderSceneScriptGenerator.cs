@@ -66,6 +66,7 @@ internal static class DccBlenderSceneScriptGenerator
         };
 
         AppendColorManagementLines(lines, buildInput);
+        AppendMotionBlurLines(lines, buildInput);
         AppendWorldLines(lines, buildInput);
         AppendImageLines(lines, buildInput);
         DccBlenderMaterialEmitter.AppendMaterialLines(lines, buildInput);
@@ -89,6 +90,18 @@ internal static class DccBlenderSceneScriptGenerator
 
         if (renderSettings.Exposure != 0d)
             lines.Add($"scene.view_settings.exposure = {FormatDouble(renderSettings.Exposure)}");
+    }
+
+    private static void AppendMotionBlurLines(List<string> lines, DccSceneBuildInput buildInput)
+    {
+        var renderSettings = buildInput.Scene.RenderSettings;
+
+        // Only touch motion blur when the scene enables it, so default renders are unchanged.
+        if (!renderSettings.MotionBlur)
+            return;
+
+        lines.Add("scene.render.use_motion_blur = True");
+        lines.Add($"scene.render.motion_blur_shutter = {FormatDouble(renderSettings.MotionBlurShutter)}");
     }
 
     private static void AppendWorldLines(List<string> lines, DccSceneBuildInput buildInput)

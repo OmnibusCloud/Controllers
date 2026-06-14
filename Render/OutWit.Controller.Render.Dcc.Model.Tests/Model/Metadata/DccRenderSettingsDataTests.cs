@@ -41,6 +41,31 @@ public sealed class DccRenderSettingsDataTests
     }
 
     [Test]
+    public void MotionBlurRoundTripTest()
+    {
+        var original = DccModelTestData.CreateRenderSettings();
+        original.MotionBlur = true;
+        original.MotionBlurShutter = 0.25d;
+
+        var differentBlur = (DccRenderSettingsData)original.Clone();
+        differentBlur.MotionBlur = false;
+
+        var clone = (DccRenderSettingsData)original.Clone();
+        var memoryPackClone = original.MemoryPackClone();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(original.Is(differentBlur), Is.False);
+            Assert.That(clone.MotionBlur, Is.True);
+            Assert.That(clone.MotionBlurShutter, Is.EqualTo(0.25d));
+            Assert.That(clone.Is(original), Is.True);
+            Assert.That(memoryPackClone.MotionBlur, Is.True);
+            Assert.That(memoryPackClone.MotionBlurShutter, Is.EqualTo(0.25d));
+            Assert.That(memoryPackClone.Is(original), Is.True);
+        });
+    }
+
+    [Test]
     public void MemoryPackCloneTest()
     {
         var original = DccModelTestData.CreateRenderSettings();

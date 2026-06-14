@@ -236,6 +236,33 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsMotionBlurWhenEnabledTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.RenderSettings.MotionBlur = true;
+        scene.RenderSettings.MotionBlurShutter = 0.25d;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("scene.render.use_motion_blur = True"));
+            Assert.That(script, Does.Contain("scene.render.motion_blur_shutter = 0.25"));
+        });
+    }
+
+    [Test]
+    public void CreateDoesNotEmitMotionBlurWhenDisabledTest()
+    {
+        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.That(script, Does.Not.Contain("use_motion_blur"));
+    }
+
+    [Test]
     public void CreateEmitsVertexColorAttributeWhenMeshHasColorsTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

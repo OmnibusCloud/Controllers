@@ -24,7 +24,9 @@ public partial class DccRenderSettingsData : ModelBase
                && TargetEngine.Is(other.TargetEngine)
                && Samples.Is(other.Samples)
                && ViewTransform.Is(other.ViewTransform)
-               && Exposure.Is(other.Exposure, tolerance);
+               && Exposure.Is(other.Exposure, tolerance)
+               && MotionBlur == other.MotionBlur
+               && MotionBlurShutter.Is(other.MotionBlurShutter, tolerance);
     }
 
     public override ModelBase Clone()
@@ -39,7 +41,9 @@ public partial class DccRenderSettingsData : ModelBase
             TargetEngine = TargetEngine,
             Samples = Samples,
             ViewTransform = ViewTransform,
-            Exposure = Exposure
+            Exposure = Exposure,
+            MotionBlur = MotionBlur,
+            MotionBlurShutter = MotionBlurShutter
         };
     }
 
@@ -92,6 +96,17 @@ public partial class DccRenderSettingsData : ModelBase
     /// Color-management exposure (stops). 0 leaves the default.
     /// </summary>
     public double Exposure { get; set; }
+
+    /// <summary>
+    /// Whether motion blur is enabled for the render.
+    /// </summary>
+    public bool MotionBlur { get; set; }
+
+    /// <summary>
+    /// Motion-blur shutter (fraction of a frame the shutter is open). Blender default is 0.5.
+    /// Only applied when <see cref="MotionBlur"/> is true.
+    /// </summary>
+    public double MotionBlurShutter { get; set; } = 0.5d;
 
     #endregion
 }
