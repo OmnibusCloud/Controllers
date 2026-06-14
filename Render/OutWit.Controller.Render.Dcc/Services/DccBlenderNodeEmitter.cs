@@ -40,6 +40,7 @@ internal static class DccBlenderNodeEmitter
 
             AppendMeshUvLayerLines(lines, meshVariableName, "UVMap", "uv_layer", mesh.Uv0);
             AppendMeshUvLayerLines(lines, meshVariableName, "UVMap.001", "uv_layer_1", mesh.Uv1);
+            AppendMeshColorLayerLines(lines, meshVariableName, mesh.Colors);
 
             AppendNodeAnimationLines(lines, objectVariableName, node);
             AppendNodeVisibilityAnimationLines(lines, objectVariableName, node);
@@ -60,6 +61,21 @@ internal static class DccBlenderNodeEmitter
         lines.Add($"        vertex_index = {meshVariableName}.loops[loop_index].vertex_index");
         lines.Add($"        uv = {BuildVector2List(uvs)}[vertex_index]");
         lines.Add($"        {layerVariable}.data[loop_index].uv = uv");
+    }
+
+    private static void AppendMeshColorLayerLines(List<string> lines, string meshVariableName, List<DccColorData> colors)
+    {
+        if (colors.Count == 0)
+            return;
+
+        // Per-corner vertex colours as a BYTE_COLOR attribute (the conventional vertex-colour type).
+        var layerVariable = $"{meshVariableName}_color_layer";
+        lines.Add($"{layerVariable} = {meshVariableName}.color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')");
+        lines.Add($"for polygon in {meshVariableName}.polygons:");
+        lines.Add($"    for loop_index in polygon.loop_indices:");
+        lines.Add($"        vertex_index = {meshVariableName}.loops[loop_index].vertex_index");
+        lines.Add($"        color = {BuildColorList(colors)}[vertex_index]");
+        lines.Add($"        {layerVariable}.data[loop_index].color = color");
     }
 
     private static void AppendMeshNormalLines(List<string> lines, DccMeshData mesh, string meshVariableName)

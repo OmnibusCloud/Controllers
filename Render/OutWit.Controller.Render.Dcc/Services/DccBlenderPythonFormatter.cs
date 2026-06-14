@@ -63,6 +63,11 @@ internal static class DccBlenderPythonFormatter
         return $"[{string.Join(", ", values.Select(me => $"({FormatDouble(me.X)}, {FormatDouble(me.Y)}, {FormatDouble(me.Z)})"))}]";
     }
 
+    public static string BuildColorList(IReadOnlyList<DccColorData> values)
+    {
+        return $"[{string.Join(", ", values.Select(me => $"({FormatDouble(me.R)}, {FormatDouble(me.G)}, {FormatDouble(me.B)}, {FormatDouble(me.A)})"))}]";
+    }
+
     public static string GetBlenderInterpolationMode(DccKeyframeInterpolationMode interpolationMode)
     {
         return interpolationMode switch

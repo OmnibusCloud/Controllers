@@ -48,6 +48,36 @@ public sealed class DccMeshDataTests
     }
 
     [Test]
+    public void VertexColorsRoundTripTest()
+    {
+        var original = DccModelTestData.CreateMesh();
+        original.Colors =
+        [
+            new DccColorData { R = 1d, G = 0d, B = 0d, A = 1d },
+            new DccColorData { R = 0d, G = 1d, B = 0d, A = 1d },
+            new DccColorData { R = 0d, G = 0d, B = 1d, A = 0.5d }
+        ];
+
+        var differentColor = (DccMeshData)original.Clone();
+        differentColor.Colors[2].B = 0.25d;
+
+        var clone = (DccMeshData)original.Clone();
+        var memoryPackClone = original.MemoryPackClone();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(original.Is(differentColor), Is.False);
+            Assert.That(clone.Colors.Count, Is.EqualTo(3));
+            Assert.That(clone.Colors, Is.Not.SameAs(original.Colors));
+            Assert.That(clone.Is(original), Is.True);
+            Assert.That(memoryPackClone.Colors.Count, Is.EqualTo(3));
+            Assert.That(memoryPackClone.Colors[0].R, Is.EqualTo(1d));
+            Assert.That(memoryPackClone.Colors[2].A, Is.EqualTo(0.5d));
+            Assert.That(memoryPackClone.Is(original), Is.True);
+        });
+    }
+
+    [Test]
     public void MemoryPackCloneTest()
     {
         var original = DccModelTestData.CreateMesh();

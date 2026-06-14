@@ -236,6 +236,37 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsVertexColorAttributeWhenMeshHasColorsTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Meshes[0].Colors =
+        [
+            new DccColorData { R = 1d, G = 0d, B = 0d, A = 1d },
+            new DccColorData { R = 0d, G = 1d, B = 0d, A = 1d },
+            new DccColorData { R = 0d, G = 0d, B = 1d, A = 1d }
+        ];
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain(".color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')"));
+            Assert.That(script, Does.Contain(".data[loop_index].color = color"));
+        });
+    }
+
+    [Test]
+    public void CreateDoesNotEmitVertexColorAttributeWhenMeshHasNoColorsTest()
+    {
+        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.That(script, Does.Not.Contain("color_attributes.new"));
+    }
+
+    [Test]
     public void CreateDoesNotEmitWorldWhenSceneHasNoWorldTest()
     {
         var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
