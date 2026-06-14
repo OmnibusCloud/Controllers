@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using OutWit.Controller.Render.Dcc.Model;
 using OutWit.Controller.Render.Dcc.Services;
 using OutWit.Controller.Render.Dcc.Tests.Utils;
@@ -54,6 +55,77 @@ public sealed class DccSceneBuildInputFactoryTests
         var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
 
         Assert.That(exception!.Message, Does.Contain("triangle index"));
+    }
+
+    [Test]
+    public void CreateRejectsMismatchedVertexColorCountTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Meshes[0].Colors =
+        [
+            new DccColorData { R = 1d, G = 0d, B = 0d, A = 1d },
+            new DccColorData { R = 0d, G = 1d, B = 0d, A = 1d }
+        ];
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
+
+        Assert.That(exception!.Message, Does.Contain("vertex color count"));
+    }
+
+    [Test]
+    public void CreateRejectsMismatchedDeformationFramePositionCountTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Meshes[0].DeformationFrames =
+        [
+            new DccMeshDeformationFrameData
+            {
+                Frame = 1,
+                Positions =
+                [
+                    new DccVector3Data { X = 0d, Y = 0d, Z = 0d },
+                    new DccVector3Data { X = 1d, Y = 0d, Z = 0d }
+                ]
+            }
+        ];
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
+
+        Assert.That(exception!.Message, Does.Contain("position count must match the mesh vertex count"));
+    }
+
+    [Test]
+    public void CreateRejectsNonPositiveDeformationFrameTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Meshes[0].DeformationFrames =
+        [
+            new DccMeshDeformationFrameData
+            {
+                Frame = 0,
+                Positions = [.. scene.Meshes[0].Positions.Select(me => (DccVector3Data)me.Clone())]
+            }
+        ];
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
+
+        Assert.That(exception!.Message, Does.Contain("non-positive deformation frame"));
+    }
+
+    [Test]
+    public void CreateRejectsDuplicateDeformationFrameTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        var positions = scene.Meshes[0].Positions;
+        scene.Meshes[0].DeformationFrames =
+        [
+            new DccMeshDeformationFrameData { Frame = 1, Positions = [.. positions.Select(me => (DccVector3Data)me.Clone())] },
+            new DccMeshDeformationFrameData { Frame = 1, Positions = [.. positions.Select(me => (DccVector3Data)me.Clone())] }
+        ];
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
+
+        Assert.That(exception!.Message, Does.Contain("duplicate deformation frame"));
     }
 
     [Test]

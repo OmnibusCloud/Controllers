@@ -18,6 +18,26 @@ public sealed class DccSceneContractValidatorTests
     }
 
     [Test]
+    public void ValidateRejectsMissingEnvironmentImageAssetTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.World = new DccWorldData { EnvironmentImageId = "image:missing-hdri" };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneContractValidator.Validate(scene));
+
+        Assert.That(exception!.Message, Does.Contain("missing environment image asset"));
+    }
+
+    [Test]
+    public void ValidateAcceptsEnvironmentImageReferencingExistingAssetTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.World = new DccWorldData { EnvironmentImageId = "image:albedo" };
+
+        Assert.DoesNotThrow(() => DccSceneContractValidator.Validate(scene));
+    }
+
+    [Test]
     public void ValidateRejectsDuplicateMeshIdsTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

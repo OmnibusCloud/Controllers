@@ -734,6 +734,38 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         });
     }
 
+    [Test]
+    public void CreateEmitsSubdivisionForMultiMaterialMeshWithDisplacementTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Materials.Add(DccRenderTestData.CreateSecondaryMaterial());
+        DccRenderTestData.ApplyTwoTriangleQuadMesh(scene);
+        scene.ImageAssets.Add(new DccImageAssetData
+        {
+            Id = "image:displacement",
+            Name = "Displacement",
+            SourcePath = "C:/textures/displacement.png",
+            RelativePath = "textures/displacement.png",
+            AssetKind = "ImageAsset"
+        });
+        // Displacement lives on the per-face secondary material, reached via MaterialIndices rather
+        // than a node MaterialBindingId - the subdivision modifier must still be emitted.
+        scene.Materials[1].TextureSlots.Add(new DccTextureSlotData
+        {
+            Slot = DccTextureSlotKind.Displacement,
+            ImageAssetId = "image:displacement"
+        });
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("ShaderNodeDisplacement"));
+            Assert.That(script, Does.Contain("type='SUBSURF'"));
+        });
+    }
+
 
     #endregion
 }

@@ -108,11 +108,27 @@ internal static class DccBlenderNodeEmitter
 
     private static bool MaterialHasDisplacement(DccSceneBuildInput buildInput, DccNodeData node)
     {
+        var mesh = buildInput.MeshesById[node.MeshId!];
+
+        // Per-face materials (multi-material mesh) take precedence over a single node binding, matching
+        // AppendMeshMaterialLines - check every material the mesh actually uses for a displacement slot.
+        if (mesh.MaterialIndices.Count > 0)
+        {
+            return mesh.MaterialIndices.Distinct()
+                .Select(me => buildInput.Scene.Materials[me])
+                .Any(MaterialUsesDisplacement);
+        }
+
         if (string.IsNullOrWhiteSpace(node.MaterialBindingId))
             return false;
 
         var material = buildInput.Scene.Materials.FirstOrDefault(me => me.Id == node.MaterialBindingId);
-        return material != null && material.TextureSlots.Any(me => me.Slot == DccTextureSlotKind.Displacement);
+        return material != null && MaterialUsesDisplacement(material);
+    }
+
+    private static bool MaterialUsesDisplacement(DccMaterialData material)
+    {
+        return material.TextureSlots.Any(me => me.Slot == DccTextureSlotKind.Displacement);
     }
 
     private static void AppendSubdivisionModifierLines(List<string> lines, string objectVariableName)

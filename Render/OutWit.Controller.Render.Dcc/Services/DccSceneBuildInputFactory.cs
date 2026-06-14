@@ -83,6 +83,12 @@ internal static class DccSceneBuildInputFactory
                     $"Render.BuildBlendFromDccScene mesh '{mesh.Id}' uv count must match positions count when UVs are provided.");
             }
 
+            if (mesh.Colors.Count > 0 && mesh.Colors.Count != mesh.Positions.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Render.BuildBlendFromDccScene mesh '{mesh.Id}' vertex color count must match positions count when colors are provided.");
+            }
+
             if (mesh.TriangleIndices.Count % 3 != 0)
             {
                 throw new InvalidOperationException(
@@ -110,6 +116,31 @@ internal static class DccSceneBuildInputFactory
                 {
                     throw new InvalidOperationException(
                         $"Render.BuildBlendFromDccScene mesh '{mesh.Id}' contains an out-of-range material index '{materialIndex}'.");
+                }
+            }
+
+            // Baked deformation frames are applied as shape keys whose vertex array is the mesh's own
+            // vertex count - a frame with a different position count would index out of range (or
+            // leave a partial pose) in Blender, so reject the mismatch up front.
+            var seenDeformationFrames = new HashSet<int>();
+            foreach (var deformationFrame in mesh.DeformationFrames)
+            {
+                if (deformationFrame.Frame <= 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Render.BuildBlendFromDccScene mesh '{mesh.Id}' contains a non-positive deformation frame '{deformationFrame.Frame}'.");
+                }
+
+                if (deformationFrame.Positions.Count != mesh.Positions.Count)
+                {
+                    throw new InvalidOperationException(
+                        $"Render.BuildBlendFromDccScene mesh '{mesh.Id}' deformation frame '{deformationFrame.Frame}' position count must match the mesh vertex count.");
+                }
+
+                if (!seenDeformationFrames.Add(deformationFrame.Frame))
+                {
+                    throw new InvalidOperationException(
+                        $"Render.BuildBlendFromDccScene mesh '{mesh.Id}' contains duplicate deformation frame '{deformationFrame.Frame}'.");
                 }
             }
         }

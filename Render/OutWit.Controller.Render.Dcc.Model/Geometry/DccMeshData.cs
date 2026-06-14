@@ -86,6 +86,19 @@ public partial class DccMeshData : ModelBase
     public List<DccVector2Data> Uv1 { get; set; } = [];
 
     /// <summary>
+    /// Flattened triangle index buffer.
+    /// </summary>
+    public List<int> TriangleIndices { get; set; } = [];
+
+    /// <summary>
+    /// Flattened material indices per primitive group.
+    /// </summary>
+    public List<int> MaterialIndices { get; set; } = [];
+
+    // NOTE: keep new members AFTER the original ones — MemoryPack uses declaration order (no
+    // [MemoryPackOrder]), so trailing additions stay wire-compatible with older payloads.
+
+    /// <summary>
     /// Optional per-corner vertex colours (aligned with <see cref="Positions"/>). Empty when the
     /// mesh has no colour layer.
     /// </summary>
@@ -97,16 +110,6 @@ public partial class DccMeshData : ModelBase
     /// as a vertex cache, applied in Blender as keyframed shape keys.
     /// </summary>
     public List<DccMeshDeformationFrameData> DeformationFrames { get; set; } = [];
-
-    /// <summary>
-    /// Flattened triangle index buffer.
-    /// </summary>
-    public List<int> TriangleIndices { get; set; } = [];
-
-    /// <summary>
-    /// Flattened material indices per primitive group.
-    /// </summary>
-    public List<int> MaterialIndices { get; set; } = [];
 
     #endregion
 }

@@ -77,6 +77,14 @@ internal static class DccSceneContractValidator
         var materialIds = scene.Materials.Select(me => me.Id).ToHashSet(StringComparer.Ordinal);
         var imageIds = scene.ImageAssets.Select(me => me.Id).ToHashSet(StringComparer.Ordinal);
 
+        if (scene.World != null
+            && !string.IsNullOrWhiteSpace(scene.World.EnvironmentImageId)
+            && !imageIds.Contains(scene.World.EnvironmentImageId))
+        {
+            throw new InvalidOperationException(
+                $"Render.BuildBlendFromDccScene world references missing environment image asset '{scene.World.EnvironmentImageId}'.");
+        }
+
         foreach (var material in scene.Materials)
         {
             var seenTextureSlots = new HashSet<DccTextureSlotKind>();
