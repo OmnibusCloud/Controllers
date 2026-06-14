@@ -136,6 +136,10 @@ internal static class DccBlenderMaterialEmitter
             if (normalTexture != null)
                 AppendNormalTextureSlotLines(lines, material, materialVariableName, normalTexture);
 
+            var displacementTexture = material.TextureSlots.FirstOrDefault(me => me.Slot == DccTextureSlotKind.Displacement);
+            if (displacementTexture != null)
+                AppendDisplacementTextureSlotLines(lines, material, materialVariableName, displacementTexture);
+
             if (usesBaseColorControl)
                 AppendMaterialBaseColorAnimationLines(lines, materialVariableName, material);
 
@@ -237,6 +241,41 @@ internal static class DccBlenderMaterialEmitter
         lines.Add($"{normalStrengthSocketVariableName} = {normalMapVariableName}.inputs['Strength']");
         lines.Add($"{materialVariableName}_links.new({textureVariableName}.outputs['Color'], {normalMapVariableName}.inputs['Color'])");
         lines.Add($"{materialVariableName}_links.new({normalMapVariableName}.outputs['Normal'], {materialVariableName}_bsdf.inputs['Normal'])");
+    }
+
+    private static void AppendDisplacementTextureSlotLines(
+        List<string> lines,
+        DccMaterialData material,
+        string materialVariableName,
+        DccTextureSlotData textureSlot)
+    {
+        // Displacement map -> Displacement node -> Material Output 'Displacement' input, with true
+        // (geometry) displacement in Cycles. A Subdivision modifier is added to objects bound to a
+        // displacement material (see DccBlenderNodeEmitter) so there is geometry to displace.
+        var textureVariableName = $"texture_{materialVariableName}_displacement";
+        var displacementNodeVariableName = $"displacement_{materialVariableName}";
+        var outputNodeVariableName = $"output_{materialVariableName}";
+
+        lines.Add($"{textureVariableName} = {materialVariableName}_nodes.new('ShaderNodeTexImage')");
+        lines.Add($"{textureVariableName}.image = images_by_id[{ToPythonStringLiteral(textureSlot.ImageAssetId)}]");
+        AppendTextureVectorMappingLines(lines, materialVariableName, textureVariableName, "displacement", textureSlot);
+        lines.Add($"{textureVariableName}.image.colorspace_settings.name = 'Non-Color'");
+        lines.Add($"{displacementNodeVariableName} = {materialVariableName}_nodes.new('ShaderNodeDisplacement')");
+        lines.Add($"{displacementNodeVariableName}.inputs['Scale'].default_value = {FormatDouble(material.DisplacementScale)}");
+        lines.Add($"{materialVariableName}_links.new({textureVariableName}.outputs['Color'], {displacementNodeVariableName}.inputs['Height'])");
+        lines.Add($"{outputNodeVariableName} = {materialVariableName}_nodes['Material Output']");
+        lines.Add($"{materialVariableName}_links.new({displacementNodeVariableName}.outputs['Displacement'], {outputNodeVariableName}.inputs['Displacement'])");
+
+        // Enable real displacement. The property location moved across Blender versions
+        // (material.displacement_method in 4.1+, material.cycles.displacement_method earlier).
+        lines.Add("try:");
+        lines.Add($"    {materialVariableName}.displacement_method = 'DISPLACEMENT'");
+        lines.Add("except (AttributeError, TypeError):");
+        lines.Add("    pass");
+        lines.Add("try:");
+        lines.Add($"    {materialVariableName}.cycles.displacement_method = 'DISPLACEMENT'");
+        lines.Add("except (AttributeError, TypeError):");
+        lines.Add("    pass");
     }
 
     private static void AppendAlphaModeLines(List<string> lines, string materialVariableName, DccMaterialData material)

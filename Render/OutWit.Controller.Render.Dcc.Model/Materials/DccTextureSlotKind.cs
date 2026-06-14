@@ -9,5 +9,6 @@ public enum DccTextureSlotKind
     Opacity,
     Metallic,
     Roughness,
-    Normal
+    Normal,
+    Displacement
 }

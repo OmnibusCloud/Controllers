@@ -43,7 +43,8 @@ public partial class DccMaterialData : ModelBase
                && Transmission.Is(other.Transmission, tolerance)
                && Ior.Is(other.Ior, tolerance)
                && EmissionColor.Is(other.EmissionColor, tolerance)
-               && EmissionStrength.Is(other.EmissionStrength, tolerance);
+               && EmissionStrength.Is(other.EmissionStrength, tolerance)
+               && DisplacementScale.Is(other.DisplacementScale, tolerance);
     }
 
     public override ModelBase Clone()
@@ -70,7 +71,8 @@ public partial class DccMaterialData : ModelBase
             Transmission = Transmission,
             Ior = Ior,
             EmissionColor = (DccColorData)EmissionColor.Clone(),
-            EmissionStrength = EmissionStrength
+            EmissionStrength = EmissionStrength,
+            DisplacementScale = DisplacementScale
         };
     }
 
@@ -184,6 +186,13 @@ public partial class DccMaterialData : ModelBase
     /// Emission strength (0 = no emission). Scales <see cref="EmissionColor"/> on the BSDF.
     /// </summary>
     public double EmissionStrength { get; set; }
+
+    /// <summary>
+    /// Displacement height scale, applied to the Displacement texture slot (the
+    /// <see cref="DccTextureSlotKind.Displacement"/> map drives real geometry displacement). 0
+    /// leaves the displacement node's default scale.
+    /// </summary>
+    public double DisplacementScale { get; set; } = 1d;
 
     #endregion
 }

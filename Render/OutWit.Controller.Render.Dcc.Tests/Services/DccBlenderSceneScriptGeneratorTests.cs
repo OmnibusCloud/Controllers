@@ -236,6 +236,52 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsDisplacementNodeAndSubdivisionWhenMaterialHasDisplacementTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.ImageAssets.Add(new DccImageAssetData
+        {
+            Id = "image:displacement",
+            Name = "Displacement",
+            SourcePath = "C:/textures/displacement.png",
+            RelativePath = "textures/displacement.png",
+            AssetKind = "ImageAsset"
+        });
+        scene.Materials[0].DisplacementScale = 0.3d;
+        scene.Materials[0].TextureSlots.Add(new DccTextureSlotData
+        {
+            Slot = DccTextureSlotKind.Displacement,
+            ImageAssetId = "image:displacement"
+        });
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("ShaderNodeDisplacement"));
+            Assert.That(script, Does.Contain(".inputs['Scale'].default_value = 0.3"));
+            Assert.That(script, Does.Contain(".inputs['Displacement'])"));
+            Assert.That(script, Does.Contain("displacement_method = 'DISPLACEMENT'"));
+            Assert.That(script, Does.Contain("type='SUBSURF'"));
+        });
+    }
+
+    [Test]
+    public void CreateDoesNotEmitDisplacementOrSubdivisionWhenMaterialHasNoneTest()
+    {
+        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Not.Contain("ShaderNodeDisplacement"));
+            Assert.That(script, Does.Not.Contain("type='SUBSURF'"));
+        });
+    }
+
+    [Test]
     public void CreateEmitsMotionBlurWhenEnabledTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

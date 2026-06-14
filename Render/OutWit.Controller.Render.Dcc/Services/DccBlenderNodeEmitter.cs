@@ -38,6 +38,11 @@ internal static class DccBlenderNodeEmitter
 
             AppendMeshMaterialLines(lines, buildInput, node, mesh, meshVariableName);
 
+            // Give displacement-mapped objects geometry to displace (Cycles true displacement
+            // needs subdivided geometry).
+            if (MaterialHasDisplacement(buildInput, node))
+                AppendSubdivisionModifierLines(lines, objectVariableName);
+
             AppendMeshUvLayerLines(lines, meshVariableName, "UVMap", "uv_layer", mesh.Uv0);
             AppendMeshUvLayerLines(lines, meshVariableName, "UVMap.001", "uv_layer_1", mesh.Uv1);
             AppendMeshColorLayerLines(lines, meshVariableName, mesh.Colors);
@@ -61,6 +66,24 @@ internal static class DccBlenderNodeEmitter
         lines.Add($"        vertex_index = {meshVariableName}.loops[loop_index].vertex_index");
         lines.Add($"        uv = {BuildVector2List(uvs)}[vertex_index]");
         lines.Add($"        {layerVariable}.data[loop_index].uv = uv");
+    }
+
+    private static bool MaterialHasDisplacement(DccSceneBuildInput buildInput, DccNodeData node)
+    {
+        if (string.IsNullOrWhiteSpace(node.MaterialBindingId))
+            return false;
+
+        var material = buildInput.Scene.Materials.FirstOrDefault(me => me.Id == node.MaterialBindingId);
+        return material != null && material.TextureSlots.Any(me => me.Slot == DccTextureSlotKind.Displacement);
+    }
+
+    private static void AppendSubdivisionModifierLines(List<string> lines, string objectVariableName)
+    {
+        var modifierVariableName = $"{objectVariableName}_subdiv";
+        lines.Add($"{modifierVariableName} = {objectVariableName}.modifiers.new(name='Subdivision', type='SUBSURF')");
+        lines.Add($"{modifierVariableName}.subdivision_type = 'SIMPLE'");
+        lines.Add($"{modifierVariableName}.levels = 2");
+        lines.Add($"{modifierVariableName}.render_levels = 4");
     }
 
     private static void AppendMeshColorLayerLines(List<string> lines, string meshVariableName, List<DccColorData> colors)

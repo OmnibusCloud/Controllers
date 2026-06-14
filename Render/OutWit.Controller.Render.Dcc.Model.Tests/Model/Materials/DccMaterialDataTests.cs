@@ -31,6 +31,28 @@ public sealed class DccMaterialDataTests
     }
 
     [Test]
+    public void DisplacementScaleRoundTripTest()
+    {
+        var original = DccModelTestData.CreateMaterial();
+        original.DisplacementScale = 0.35d;
+
+        var different = DccModelTestData.CreateMaterial();
+        different.DisplacementScale = 0.9d;
+
+        var clone = (DccMaterialData)original.Clone();
+        var memoryPackClone = original.MemoryPackClone();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(original.Is(different), Is.False);
+            Assert.That(clone.DisplacementScale, Is.EqualTo(0.35d));
+            Assert.That(clone.Is(original), Is.True);
+            Assert.That(memoryPackClone.DisplacementScale, Is.EqualTo(0.35d));
+            Assert.That(memoryPackClone.Is(original), Is.True);
+        });
+    }
+
+    [Test]
     public void CloneTest()
     {
         var original = DccModelTestData.CreateMaterial();
