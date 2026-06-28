@@ -3,6 +3,26 @@
 **Scope:** `OmnibusCloud/Controllers` → `Render` controller.
 **Premise:** Rendering is **distributed**. Single-node fallback (run the whole animation sequentially on one node) is explicitly **out of scope** — it defeats the purpose of the network. Every capability below must preserve per-frame / per-tile distribution.
 **Revision:** 2026-06-28 — rewritten against the actual codebase (ground-truth audit). Where this revision corrects the original draft, see §0. File/line citations are as of the audit date; treat line numbers as navigational hints, not contracts.
+**Revision 2:** 2026-06-28 — a live test overturned the "transport is wired end-to-end for Blender" claim. Node-side attachment delivery was **missing**; it is now implemented (Stage 1, Render 1.21.0). See §0.0, which supersedes the affected parts of §0.2 / §2 / Phase D / E-full.
+
+---
+
+## 0.0 Revision 2 — the node-side attachment-delivery gap (supersedes the "wired end-to-end" claim)
+
+A live test against the deployed server overturned this plan's central transport claim. §0.2 and §2 stated the attachment rails were "complete and wired end-to-end for the Blender path." They were **host-side only**: `Render.BuildBlendFromRefs` materializes + remaps attachments and `Render.ValidateBlend` passes — but a remote render **node** only downloads the scene blob into an isolated per-blob cache dir (`BlobCacheService`, `OutWit.Cloud.Client`) and never received the attachment blobs. `RenderTaskData` / `RenderTaskBatchData` carried no attachment refs and nothing materialized node-side (`ProcessingRunner` / `WitEngineNode` do no scene prep). **Verified empirically:** a scene linking an emission sphere from an attached external library validated host-side `{IsValid:true}` but rendered **empty** on the worker node (fixture + images in `scratchpad/attachtest`; jobs validate `40a92121`, still `f4f5f9e9`).
+
+**Consequence:** Phase D was *not* actually shipped for distributed rendering — it worked only in-process (host storage == node storage) and in host-side validation. The same gap sat under **E-lite** (the attached `.abc` never reached the node) and is the foundation **E-full** builds on.
+
+**Fixed — Stage 1 (commit `6eed0b6`; Render 1.21.0 / Render.Model 1.4.0; 40 local tests green):**
+- `RenderTaskData.Attachments` + `RenderTaskBatchData.Attachments` (appended for MemoryPack wire back-compat).
+- `Render.SplitBatched` / `Render.SplitTiles` read the `<blend>.attachments.json` sidecar (written by `BuildBlendFromRefs`) and thread the refs onto every task / chunk — defensive, never a new split-time failure.
+- `Render.Frame` / `Render.FrameBatch` copy the blend to a working dir, download + materialize each attachment at its `RelativePath`, then render (gated on `Attachments.Count > 0` → self-contained rendering byte-for-byte unchanged), with best-effort cleanup.
+- Shared `RenderSceneAttachmentTransfer` util (sidecar read + materialize + path-traversal guard) + unit/split tests.
+
+**Revised phase status (read the phases below through this lens):**
+- **Phase D** — now genuinely complete for the Blender *distributed* path (relative-ref scenes), not merely "verify". Absolute-ref host-remap node-portability (the host remaps to host-absolute paths today) is the remaining follow-up — make the host remap emit `//`-relative paths, or re-remap node-side.
+- **E-lite** — the model / Split / node plumbing it depends on is now in place, so an attached `.abc` reaches the node; the validator allow-when-attached change in §E-lite still stands on its own.
+- **E-full** — the "linchpin does not exist" note in §E-full is now *partly* resolved: per-task / per-batch attachment refs EXIST and `Render.Split*` thread them. What remains for E-full is the **per-frame `Frame (int?)` slice field** (so each node fetches only its frames' cache) + the **host bake activity** (`Render.BakeSimulation`, dispatched via `Grid.Delegate`) + the two simulation scripts (delegated / prebaked).
 
 ---
 
@@ -12,7 +32,7 @@ Three claims in the original draft were out of date or imprecise. Correcting the
 
 1. **There is no `validate_blend.py` file.** The Blender validation script is *generated* as a C# list of source lines by `BlenderValidationScript.BuildScript()` ([`Render/OutWit.Controller.Render/Utils/BlenderValidationScript.cs`](../Render/OutWit.Controller.Render/Utils/BlenderValidationScript.cs)) and written to a randomly-named temp `.py` at runtime by `BlenderRunner` ([`Utils/BlenderRunner.cs`](../Render/OutWit.Controller.Render/Utils/BlenderRunner.cs), ~`:256-263`). Every "edit the validation Python" task in this plan means **editing that C# string list**, not a standalone file. There is nothing to run or hand to a test scene standalone.
 
-2. **The transport rails (Phase D) are not "half-laid" — they are complete and wired end-to-end for the Blender path.** The Blender add-on already *collects* every attachment kind into `<blend>.attachments.json` (`OutWit.Render.BlenderAddon/outwit_render_bridge/bridge_scene_attachments.py`, `collect_scene_attachment_metadata()`), uploads each as a blob, and submits the manifest. The controller already *materializes + remaps + validates* them ([`Adapters/WitActivityAdapterRenderBuildBlendFromRefs.cs`](../Render/OutWit.Controller.Render/Adapters/WitActivityAdapterRenderBuildBlendFromRefs.cs); [`Utils/BlenderSceneAttachmentRemapHelper.cs`](../Render/OutWit.Controller.Render/Utils/BlenderSceneAttachmentRemapHelper.cs); `LoadSupportedAttachedPaths` in `BlenderValidationScript.cs`). So Phase D is **largely already shipped for Blender**; the remaining D work is 3ds-Max coverage + minor polish, not net-new infrastructure.
+2. **The transport rails (Phase D) are not "half-laid" — they are complete and wired end-to-end for the Blender path.** *(Revision 2 correction — this held **host-side only**; render nodes did not receive attachments until Stage 1. See §0.0.)* The Blender add-on already *collects* every attachment kind into `<blend>.attachments.json` (`OutWit.Render.BlenderAddon/outwit_render_bridge/bridge_scene_attachments.py`, `collect_scene_attachment_metadata()`), uploads each as a blob, and submits the manifest. The controller already *materializes + remaps + validates* them ([`Adapters/WitActivityAdapterRenderBuildBlendFromRefs.cs`](../Render/OutWit.Controller.Render/Adapters/WitActivityAdapterRenderBuildBlendFromRefs.cs); [`Utils/BlenderSceneAttachmentRemapHelper.cs`](../Render/OutWit.Controller.Render/Utils/BlenderSceneAttachmentRemapHelper.cs); `LoadSupportedAttachedPaths` in `BlenderValidationScript.cs`). So Phase D is **largely already shipped for Blender**; the remaining D work is 3ds-Max coverage + minor polish, not net-new infrastructure.
 
 3. **Phase E's blocker is a validator contradiction, not a missing capability.** Alembic `.abc` already transports as the `CacheFile` kind and **already passes validation when attached** (proven by `RenderValidateBlendTransferredCacheBlenderTests`). The only thing blocking Alembic scenes is the *unconditional* `MESH_SEQUENCE_CACHE` modifier block in the validator, which never consults the attachment manifest. Phase E therefore splits into **E-lite** (remove that contradiction — a few controller-side lines, this iteration) and **E-full** (per-frame cache slicing — a genuine model re-architecture, deferred).
 
@@ -178,7 +198,7 @@ Each phase preserves distribution. For each: goal, **where the work lives (contr
 
 ---
 
-### Phase D — Transportable external assets via attachments *(mostly already shipped for Blender · verify + close gaps)*
+### Phase D — Transportable external assets via attachments *(host-side shipped pre-Stage-1; node-side delivery added in Stage 1 — see §0.0)*
 
 **Goal:** admit frame-independent external dependencies that cannot be packed into the `.blend`.
 
@@ -227,7 +247,7 @@ The original "Phase E" conflated two very different costs. They are now separate
 
 **Goal:** stream only frame *N*'s slice of a large cache to node *N*, so big Alembic/VDB sequences stay distributable without shipping the whole cache to every node.
 
-**Why deferred:** the linchpin does not exist. `RenderTaskData` carries only `SceneBlobId` + `Frame` (no per-frame attachment reference); `Render.Split*` never receives `AttachedFiles`; `BuildBlendFromRefs` materializes whole attachments **before** split. Building per-frame addressing requires: a frame field on the attachment record, per-frame attachment refs on **both `RenderTaskData` and `RenderTaskBatchData`**, attachment-partitioning in `Render.Split*` / `Render.SplitBatched`, and a new **host-side bake activity** `Render.BakeAlembic` (does not exist — mirror `Render.BuildBlendFromRefs`: a host activity that drives headless Blender and re-uploads a blob; slot it between `BuildBlendFromRefs` and `Split*`). For a **monolithic** `.abc`, "fetch only your frame's slice" is impossible without re-exporting to a per-frame file sequence — at which point E-full converges with Phase F's per-file model. Take this up only when real cache size forces it.
+**Why deferred:** *(Revision 2 — the attachment-plumbing half is now DONE in Stage 1: `RenderTaskData` / `RenderTaskBatchData` carry `Attachments` and `Render.Split*` thread them; what remains for E-full is the per-frame slice field + the host bake activity. See §0.0.)* As originally written, the linchpin did not exist: `RenderTaskData` carries only `SceneBlobId` + `Frame` (no per-frame attachment reference); `Render.Split*` never receives `AttachedFiles`; `BuildBlendFromRefs` materializes whole attachments **before** split. Building per-frame addressing requires: a frame field on the attachment record, per-frame attachment refs on **both `RenderTaskData` and `RenderTaskBatchData`**, attachment-partitioning in `Render.Split*` / `Render.SplitBatched`, and a new **host-side bake activity** `Render.BakeAlembic` (does not exist — mirror `Render.BuildBlendFromRefs`: a host activity that drives headless Blender and re-uploads a blob; slot it between `BuildBlendFromRefs` and `Split*`). For a **monolithic** `.abc`, "fetch only your frame's slice" is impossible without re-exporting to a per-frame file sequence — at which point E-full converges with Phase F's per-file model. Take this up only when real cache size forces it.
 
 ---
 

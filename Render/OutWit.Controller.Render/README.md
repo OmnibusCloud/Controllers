@@ -23,7 +23,7 @@ Those scripts are only for regenerating the canonical committed assets. Runtime 
 |----------|------|-------------|
 | `Render.Split` | Host | Generates `RenderTaskCollection` for a frame range. |
 | `Render.SplitTiles` | Host | Generates tile-oriented `RenderTaskCollection` for a still frame. |
-| `Render.Frame` | Node | Renders one `RenderTask`. Downloads `.blend` from blob storage, runs Blender CLI, uploads result. |
+| `Render.Frame` | Node | Renders one `RenderTask`. Downloads `.blend` from blob storage, materializes any scene attachments next to a working copy, runs Blender CLI, uploads result. |
 | `Render.Collect` | Host | Sorts `RenderResultCollection` and returns ordered frame blobs. |
 | `Render.CollectStill` | Host | Validates a single still-frame result and returns one final image blob for the public still script surface. |
 | `Render.CollectTiles` | Host | Validates complete rectangular tile coverage and tile dimensions, then stitches tile render results into one final still image using ffmpeg. |
@@ -371,6 +371,16 @@ Job:RenderSceneVideoLarge(RenderSceneRef:scene, Int:startFrame, Int:endFrame, Re
     Blob:result = Render.EncodeVideo(frames, video);
 }
 ```
+
+## Scene Dependencies (Attachments)
+
+A `.blend` scene often references external files — linked `.blend` libraries, Alembic/USD caches, OpenVDB volumes, fonts, image sequences, sounds, movie clips, and (for baked physics) cache directories. These are carried as `RenderSceneRef.AttachedFiles` (`RenderSceneAttachmentRefData`: `Kind`, `BlobId`, `OriginalPath`, `RelativePath`, `PackagingStrategy`) and delivered end-to-end so non‑self‑contained scenes render across distributed nodes:
+
+1. **Host — `Render.BuildBlendFromRefs`** materializes each attached blob next to the prepared `.blend` at its `RelativePath`, rewrites in‑scene dependency paths when needed, and writes a `<blend>.attachments.json` sidecar.
+2. **Host — `Render.Split*`** read that sidecar and thread the attachment refs onto every produced task / chunk (`RenderTask.Attachments` / `RenderTaskBatch.Attachments`). Best‑effort: a scene with no sidecar produces tasks with no attachments and the legacy path is unchanged.
+3. **Node — `Render.Frame` / `Render.FrameBatch`** download each referenced blob and materialize it next to a working copy of the `.blend` (at `RelativePath`) before invoking Blender, so the scene's relative dependency references resolve locally on the worker.
+
+A worker only downloads the scene blob into an isolated cache directory, so without step 3 external dependencies are missing on remote nodes (they were previously resolved host‑side only). Self‑contained scenes skip the extra work entirely.
 
 ## Dependencies
 
