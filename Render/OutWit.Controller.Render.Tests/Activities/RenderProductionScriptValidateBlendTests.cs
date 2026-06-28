@@ -131,6 +131,60 @@ internal sealed class RenderProductionScriptValidateBlendTests : RenderProductio
     }
 
     [Test]
+    public async Task BundledRenderValidateBlendScriptAllowsMeshSequenceCacheModifierWhenCacheAttachedRealRunTest()
+    {
+        var cachePath = Path.Combine(m_blobStoragePath, "external_geo_cache.abc");
+        await File.WriteAllTextAsync(cachePath, "outwit-test");
+
+        var blendPath = Path.Combine(m_blobStoragePath, "scene_with_mesh_sequence_cache_modifier.blend");
+        try
+        {
+            await CreateBlendFileAsync(
+                blendPath,
+                [
+                    .. BuildCacheFilePythonLines(cachePath, "GeoCache"),
+                    "bpy.ops.mesh.primitive_cube_add()",
+                    "obj = bpy.context.active_object",
+                    "modifier = obj.modifiers.new(name='GeoCache', type='MESH_SEQUENCE_CACHE')",
+                    "modifier.cache_file = cache_file"
+                ]);
+        }
+        catch (InvalidOperationException e) when (e.Message.Contains("CacheFile datablock creation is unavailable", StringComparison.OrdinalIgnoreCase))
+        {
+            Assert.Ignore("The current Blender runtime does not expose a stable cache_file creation path for bundled script tests.");
+            return;
+        }
+
+        var script = await File.ReadAllTextAsync(Path.Combine(m_scriptsPath!, "RenderValidateBlend.wit"));
+        var job = m_engine.Compile(script);
+        var sceneBlobId = m_blobService.RegisterExistingFile(blendPath);
+        var attachmentBlobId = await m_blobService.UploadFileAsync(cachePath);
+        File.Delete(cachePath);
+
+        var status = await m_engine.ScheduleAndWaitAsync(
+            job,
+            CreateSceneRef(
+                sceneBlobId,
+                [
+                    new RenderSceneAttachmentRefData
+                    {
+                        Kind = "CacheFile",
+                        BlobId = attachmentBlobId,
+                        OriginalPath = cachePath,
+                        RelativePath = "deps/cache-files/external_geo_cache.abc",
+                        PackagingStrategy = "SceneAttachmentBlob"
+                    }
+                ]));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+        var validationJson = job.Variables["result"].Value as string;
+        var validation = validationJson == null ? null : JsonSerializer.Deserialize<RenderValidateBlendData>(validationJson, JSON_OPTIONS);
+        Assert.That(validation, Is.Not.Null);
+        Assert.That(validation!.IsValid, Is.True);
+        Assert.That(validation.Issues.Any(me => me.Contains("geometry cache", StringComparison.OrdinalIgnoreCase)), Is.False);
+    }
+
+    [Test]
     public async Task BundledRenderValidateBlendScriptRemapsFontAttachmentBlobRealRunTest()
     {
         var sourceFontPath = FindTestFontPath();
@@ -716,6 +770,196 @@ internal sealed class RenderProductionScriptValidateBlendTests : RenderProductio
         Assert.That(validation.Issues.Any(me => me.Contains("Image sequence dependency", StringComparison.OrdinalIgnoreCase)), Is.True);
         Assert.That(validation.Issues.Any(me => me.Contains("linked library", StringComparison.OrdinalIgnoreCase)), Is.False);
         Assert.That(validation.Warnings.Any(me => me.Contains("linked library", StringComparison.OrdinalIgnoreCase)), Is.False);
+    }
+
+    [Test]
+    public async Task BundledRenderValidateBlendScriptReportsSoftBodySimulationIssueRealRunTest()
+    {
+        var blendPath = Path.Combine(m_blobStoragePath, "scene_with_soft_body_simulation.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "obj.modifiers.new(name='Softbody', type='SOFT_BODY')"
+            ]);
+
+        var script = await File.ReadAllTextAsync(Path.Combine(m_scriptsPath!, "RenderValidateBlend.wit"));
+        var job = m_engine.Compile(script);
+        var sceneBlobId = m_blobService.RegisterExistingFile(blendPath);
+        var status = await m_engine.ScheduleAndWaitAsync(job, CreateSceneRef(sceneBlobId));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var validationJson = job.Variables["result"].Value as string;
+        var validation = validationJson == null ? null : JsonSerializer.Deserialize<RenderValidateBlendData>(validationJson, JSON_OPTIONS);
+        Assert.That(validation, Is.Not.Null);
+        Assert.That(validation!.IsValid, Is.False);
+        Assert.That(validation.Issues.Any(me => me.Contains("soft body", StringComparison.OrdinalIgnoreCase)), Is.True);
+    }
+
+    [Test]
+    public async Task BundledRenderValidateBlendScriptReportsDynamicPaintSimulationIssueRealRunTest()
+    {
+        var blendPath = Path.Combine(m_blobStoragePath, "scene_with_dynamic_paint_simulation.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "obj.modifiers.new(name='Dynamic Paint', type='DYNAMIC_PAINT')"
+            ]);
+
+        var script = await File.ReadAllTextAsync(Path.Combine(m_scriptsPath!, "RenderValidateBlend.wit"));
+        var job = m_engine.Compile(script);
+        var sceneBlobId = m_blobService.RegisterExistingFile(blendPath);
+        var status = await m_engine.ScheduleAndWaitAsync(job, CreateSceneRef(sceneBlobId));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var validationJson = job.Variables["result"].Value as string;
+        var validation = validationJson == null ? null : JsonSerializer.Deserialize<RenderValidateBlendData>(validationJson, JSON_OPTIONS);
+        Assert.That(validation, Is.Not.Null);
+        Assert.That(validation!.IsValid, Is.False);
+        Assert.That(validation.Issues.Any(me => me.Contains("dynamic paint", StringComparison.OrdinalIgnoreCase)), Is.True);
+    }
+
+    [Test]
+    public async Task BundledRenderValidateBlendScriptReportsMeshCacheModifierIssueRealRunTest()
+    {
+        var blendPath = Path.Combine(m_blobStoragePath, "scene_with_mesh_cache_modifier.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "obj.modifiers.new(name='MeshCache', type='MESH_CACHE')"
+            ]);
+
+        var script = await File.ReadAllTextAsync(Path.Combine(m_scriptsPath!, "RenderValidateBlend.wit"));
+        var job = m_engine.Compile(script);
+        var sceneBlobId = m_blobService.RegisterExistingFile(blendPath);
+        var status = await m_engine.ScheduleAndWaitAsync(job, CreateSceneRef(sceneBlobId));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var validationJson = job.Variables["result"].Value as string;
+        var validation = validationJson == null ? null : JsonSerializer.Deserialize<RenderValidateBlendData>(validationJson, JSON_OPTIONS);
+        Assert.That(validation, Is.Not.Null);
+        Assert.That(validation!.IsValid, Is.False);
+        Assert.That(validation.Issues.Any(me => me.Contains("mesh cache modifier", StringComparison.OrdinalIgnoreCase)), Is.True);
+    }
+
+    [Test]
+    public async Task BundledRenderValidateBlendScriptReportsRigidBodySimulationIssueRealRunTest()
+    {
+        var blendPath = Path.Combine(m_blobStoragePath, "scene_with_rigid_body_simulation.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "bpy.ops.rigidbody.object_add()"
+            ]);
+
+        var script = await File.ReadAllTextAsync(Path.Combine(m_scriptsPath!, "RenderValidateBlend.wit"));
+        var job = m_engine.Compile(script);
+        var sceneBlobId = m_blobService.RegisterExistingFile(blendPath);
+        var status = await m_engine.ScheduleAndWaitAsync(job, CreateSceneRef(sceneBlobId));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var validationJson = job.Variables["result"].Value as string;
+        var validation = validationJson == null ? null : JsonSerializer.Deserialize<RenderValidateBlendData>(validationJson, JSON_OPTIONS);
+        Assert.That(validation, Is.Not.Null);
+        Assert.That(validation!.IsValid, Is.False);
+        Assert.That(validation.Issues.Any(me => me.Contains("rigid body", StringComparison.OrdinalIgnoreCase)), Is.True);
+    }
+
+    [Test]
+    public async Task BundledRenderValidateBlendScriptReportsGeometryNodesSimulationZoneIssueRealRunTest()
+    {
+        var blendPath = Path.Combine(m_blobStoragePath, "scene_with_geometry_nodes_simulation_zone.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "modifier = obj.modifiers.new(name='GeometryNodes', type='NODES')",
+                "node_group = bpy.data.node_groups.new('SimZone', 'GeometryNodeTree')",
+                "modifier.node_group = node_group",
+                "sim_input = node_group.nodes.new('GeometryNodeSimulationInput')",
+                "sim_output = node_group.nodes.new('GeometryNodeSimulationOutput')",
+                "sim_input.pair_with_output(sim_output)"
+            ]);
+
+        var script = await File.ReadAllTextAsync(Path.Combine(m_scriptsPath!, "RenderValidateBlend.wit"));
+        var job = m_engine.Compile(script);
+        var sceneBlobId = m_blobService.RegisterExistingFile(blendPath);
+        var status = await m_engine.ScheduleAndWaitAsync(job, CreateSceneRef(sceneBlobId));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var validationJson = job.Variables["result"].Value as string;
+        var validation = validationJson == null ? null : JsonSerializer.Deserialize<RenderValidateBlendData>(validationJson, JSON_OPTIONS);
+        Assert.That(validation, Is.Not.Null);
+        Assert.That(validation!.IsValid, Is.False);
+        Assert.That(validation.Issues.Any(me => me.Contains("geometry nodes simulation", StringComparison.OrdinalIgnoreCase)), Is.True);
+    }
+
+    [Test]
+    public async Task BundledRenderValidateBlendScriptAllowsStaticHairParticleScatterRealRunTest()
+    {
+        var blendPath = Path.Combine(m_blobStoragePath, "scene_with_static_hair_scatter.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "modifier = obj.modifiers.new(name='Hair', type='PARTICLE_SYSTEM')",
+                "modifier.particle_system.settings.type = 'HAIR'"
+            ]);
+
+        var script = await File.ReadAllTextAsync(Path.Combine(m_scriptsPath!, "RenderValidateBlend.wit"));
+        var job = m_engine.Compile(script);
+        var sceneBlobId = m_blobService.RegisterExistingFile(blendPath);
+        var status = await m_engine.ScheduleAndWaitAsync(job, CreateSceneRef(sceneBlobId));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var validationJson = job.Variables["result"].Value as string;
+        var validation = validationJson == null ? null : JsonSerializer.Deserialize<RenderValidateBlendData>(validationJson, JSON_OPTIONS);
+        Assert.That(validation, Is.Not.Null);
+        Assert.That(validation!.IsValid, Is.True);
+        Assert.That(validation.Issues.Any(me => me.Contains("not yet portable", StringComparison.OrdinalIgnoreCase)), Is.False);
+    }
+
+    [Test]
+    public async Task BundledRenderValidateBlendScriptReportsDynamicHairSimulationIssueRealRunTest()
+    {
+        var blendPath = Path.Combine(m_blobStoragePath, "scene_with_dynamic_hair_simulation.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "modifier = obj.modifiers.new(name='Hair', type='PARTICLE_SYSTEM')",
+                "modifier.particle_system.settings.type = 'HAIR'",
+                "modifier.particle_system.use_hair_dynamics = True"
+            ]);
+
+        var script = await File.ReadAllTextAsync(Path.Combine(m_scriptsPath!, "RenderValidateBlend.wit"));
+        var job = m_engine.Compile(script);
+        var sceneBlobId = m_blobService.RegisterExistingFile(blendPath);
+        var status = await m_engine.ScheduleAndWaitAsync(job, CreateSceneRef(sceneBlobId));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var validationJson = job.Variables["result"].Value as string;
+        var validation = validationJson == null ? null : JsonSerializer.Deserialize<RenderValidateBlendData>(validationJson, JSON_OPTIONS);
+        Assert.That(validation, Is.Not.Null);
+        Assert.That(validation!.IsValid, Is.False);
+        Assert.That(validation.Issues.Any(me => me.Contains("dynamic hair", StringComparison.OrdinalIgnoreCase)), Is.True);
     }
 
     #endregion

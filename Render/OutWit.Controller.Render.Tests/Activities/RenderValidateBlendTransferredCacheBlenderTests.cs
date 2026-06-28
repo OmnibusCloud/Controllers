@@ -108,6 +108,49 @@ public sealed class RenderValidateBlendTransferredCacheBlenderTests
         });
     }
 
+    [Test]
+    public async Task ValidateBlendDetailedAsyncAllowsMeshSequenceCacheModifierWhenCacheAttachedTest()
+    {
+        var originalCachePath = Path.Combine(m_tempDirectory, "original_geo_cache.abc");
+        CreateDummyFile(originalCachePath);
+
+        var blendPath = Path.Combine(m_tempDirectory, "scene_with_mesh_sequence_cache_modifier.blend");
+        try
+        {
+            await CreateBlendFileAsync(blendPath, BuildMeshSequenceCacheModifierPythonLines(originalCachePath, "GeoCache"));
+        }
+        catch (InvalidOperationException e) when (e.Message.Contains("CacheFile datablock creation is unavailable", StringComparison.OrdinalIgnoreCase))
+        {
+            Assert.Ignore("The current Blender runtime does not expose a stable cache_file creation path for tests.");
+            return;
+        }
+
+        var attachment = new RenderSceneAttachmentRefData
+        {
+            Kind = "CacheFile",
+            OriginalPath = originalCachePath,
+            RelativePath = "deps/cache-files/transferred-geo-cache.abc",
+            PackagingStrategy = "SceneAttachmentBlob"
+        };
+
+        var materializedCachePath = Path.Combine(m_tempDirectory, "deps", "cache-files", "transferred-geo-cache.abc");
+        Directory.CreateDirectory(Path.GetDirectoryName(materializedCachePath)!);
+        File.Copy(originalCachePath, materializedCachePath, overwrite: true);
+
+        await RemapAttachmentPathsInPlaceAsync(blendPath, [attachment]);
+        await File.WriteAllTextAsync(blendPath + ".attachments.json", JsonSerializer.Serialize(new[] { attachment }));
+        File.Delete(originalCachePath);
+
+        var validation = await m_blenderRunner.ValidateBlendDetailedAsync(blendPath);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(validation.IsValid, Is.True);
+            Assert.That(validation.Issues.Any(me => me.Contains("geometry cache", StringComparison.OrdinalIgnoreCase)), Is.False);
+            Assert.That(validation.Warnings.Any(me => me.Contains("external cache file", StringComparison.OrdinalIgnoreCase)), Is.False);
+        });
+    }
+
     #endregion
 
     #region Tools
@@ -223,6 +266,18 @@ public sealed class RenderValidateBlendTransferredCacheBlenderTests
             "if cache_file is None:",
             "    raise RuntimeError('CacheFile datablock creation is unavailable in this Blender runtime.')",
             "cache_file.use_fake_user = True"
+        ];
+    }
+
+    private static IReadOnlyList<string> BuildMeshSequenceCacheModifierPythonLines(string cachePath, string cacheName)
+    {
+        return
+        [
+            .. BuildCacheFilePythonLines(cachePath, cacheName),
+            "bpy.ops.mesh.primitive_cube_add()",
+            "obj = bpy.context.active_object",
+            "modifier = obj.modifiers.new(name='GeoCache', type='MESH_SEQUENCE_CACHE')",
+            "modifier.cache_file = cache_file"
         ];
     }
 

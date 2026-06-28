@@ -273,6 +273,51 @@ public sealed class RenderValidateBlendLibraryAndSimulationDependencyTests : Ren
     }
 
     [Test]
+    public async Task ValidateBlendDetailedAsyncAllowsStaticHairParticleScatterTest()
+    {
+        var blendPath = Path.Combine(m_tempDirectory, "scene_with_static_hair_scatter.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "modifier = obj.modifiers.new(name='Hair', type='PARTICLE_SYSTEM')",
+                "modifier.particle_system.settings.type = 'HAIR'"
+            ]);
+
+        var validation = await m_blenderRunner.ValidateBlendDetailedAsync(blendPath);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(validation.IsValid, Is.True);
+            Assert.That(validation.Issues.Any(me => me.Contains("not yet portable", StringComparison.OrdinalIgnoreCase)), Is.False);
+        });
+    }
+
+    [Test]
+    public async Task ValidateBlendDetailedAsyncReportsIssueForDynamicHairSimulationTest()
+    {
+        var blendPath = Path.Combine(m_tempDirectory, "scene_with_dynamic_hair_simulation.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "modifier = obj.modifiers.new(name='Hair', type='PARTICLE_SYSTEM')",
+                "modifier.particle_system.settings.type = 'HAIR'",
+                "modifier.particle_system.use_hair_dynamics = True"
+            ]);
+
+        var validation = await m_blenderRunner.ValidateBlendDetailedAsync(blendPath);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(validation.IsValid, Is.False);
+            Assert.That(validation.Issues.Any(me => me.Contains("dynamic hair", StringComparison.OrdinalIgnoreCase)), Is.True);
+        });
+    }
+
+    [Test]
     public async Task ValidateBlendDetailedAsyncReportsIssueForGeometryCacheModifierTest()
     {
         var blendPath = Path.Combine(m_tempDirectory, "scene_with_geometry_cache.blend");
@@ -290,6 +335,120 @@ public sealed class RenderValidateBlendLibraryAndSimulationDependencyTests : Ren
         {
             Assert.That(validation.IsValid, Is.False);
             Assert.That(validation.Issues.Any(me => me.Contains("geometry cache", StringComparison.OrdinalIgnoreCase)), Is.True);
+        });
+    }
+
+    #endregion
+
+    #region Sequential Simulation Blind Spot Tests
+
+    [Test]
+    public async Task ValidateBlendDetailedAsyncReportsIssueForSoftBodySimulationTest()
+    {
+        var blendPath = Path.Combine(m_tempDirectory, "scene_with_soft_body_simulation.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "obj.modifiers.new(name='Softbody', type='SOFT_BODY')"
+            ]);
+
+        var validation = await m_blenderRunner.ValidateBlendDetailedAsync(blendPath);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(validation.IsValid, Is.False);
+            Assert.That(validation.Issues.Any(me => me.Contains("soft body", StringComparison.OrdinalIgnoreCase)), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ValidateBlendDetailedAsyncReportsIssueForDynamicPaintSimulationTest()
+    {
+        var blendPath = Path.Combine(m_tempDirectory, "scene_with_dynamic_paint_simulation.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "obj.modifiers.new(name='Dynamic Paint', type='DYNAMIC_PAINT')"
+            ]);
+
+        var validation = await m_blenderRunner.ValidateBlendDetailedAsync(blendPath);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(validation.IsValid, Is.False);
+            Assert.That(validation.Issues.Any(me => me.Contains("dynamic paint", StringComparison.OrdinalIgnoreCase)), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ValidateBlendDetailedAsyncReportsIssueForMeshCacheModifierTest()
+    {
+        var blendPath = Path.Combine(m_tempDirectory, "scene_with_mesh_cache_modifier.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "obj.modifiers.new(name='MeshCache', type='MESH_CACHE')"
+            ]);
+
+        var validation = await m_blenderRunner.ValidateBlendDetailedAsync(blendPath);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(validation.IsValid, Is.False);
+            Assert.That(validation.Issues.Any(me => me.Contains("mesh cache modifier", StringComparison.OrdinalIgnoreCase)), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ValidateBlendDetailedAsyncReportsIssueForRigidBodySimulationTest()
+    {
+        var blendPath = Path.Combine(m_tempDirectory, "scene_with_rigid_body_simulation.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "bpy.ops.rigidbody.object_add()"
+            ]);
+
+        var validation = await m_blenderRunner.ValidateBlendDetailedAsync(blendPath);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(validation.IsValid, Is.False);
+            Assert.That(validation.Issues.Any(me => me.Contains("rigid body", StringComparison.OrdinalIgnoreCase)), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ValidateBlendDetailedAsyncReportsIssueForGeometryNodesSimulationZoneTest()
+    {
+        var blendPath = Path.Combine(m_tempDirectory, "scene_with_geometry_nodes_simulation_zone.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "modifier = obj.modifiers.new(name='GeometryNodes', type='NODES')",
+                "node_group = bpy.data.node_groups.new('SimZone', 'GeometryNodeTree')",
+                "modifier.node_group = node_group",
+                "sim_input = node_group.nodes.new('GeometryNodeSimulationInput')",
+                "sim_output = node_group.nodes.new('GeometryNodeSimulationOutput')",
+                "sim_input.pair_with_output(sim_output)"
+            ]);
+
+        var validation = await m_blenderRunner.ValidateBlendDetailedAsync(blendPath);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(validation.IsValid, Is.False);
+            Assert.That(validation.Issues.Any(me => me.Contains("geometry nodes simulation", StringComparison.OrdinalIgnoreCase)), Is.True);
         });
     }
 
