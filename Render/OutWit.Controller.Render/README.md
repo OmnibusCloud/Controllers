@@ -376,7 +376,7 @@ Job:RenderSceneVideoLarge(RenderSceneRef:scene, Int:startFrame, Int:endFrame, Re
 
 A `.blend` scene often references external files — linked `.blend` libraries, Alembic/USD caches, OpenVDB volumes, fonts, image sequences, sounds, movie clips, and (for baked physics) cache directories. These are carried as `RenderSceneRef.AttachedFiles` (`RenderSceneAttachmentRefData`: `Kind`, `BlobId`, `OriginalPath`, `RelativePath`, `PackagingStrategy`) and delivered end-to-end so non‑self‑contained scenes render across distributed nodes:
 
-1. **Host — `Render.BuildBlendFromRefs`** materializes each attached blob next to the prepared `.blend` at its `RelativePath`, rewrites in‑scene dependency paths when needed, and writes a `<blend>.attachments.json` sidecar.
+1. **Host — `Render.BuildBlendFromRefs`** materializes each attached blob next to the prepared `.blend` at its `RelativePath`, rewrites in‑scene dependency paths to **blend‑relative** (`//…`) form (so they resolve wherever the blend lands — host or node), and writes a `<blend>.attachments.json` sidecar.
 2. **Host — `Render.Split*`** read that sidecar and thread the attachment refs onto every produced task / chunk (`RenderTask.Attachments` / `RenderTaskBatch.Attachments`). Best‑effort: a scene with no sidecar produces tasks with no attachments and the legacy path is unchanged.
 3. **Node — `Render.Frame` / `Render.FrameBatch`** download each referenced blob and materialize it next to a working copy of the `.blend` (at `RelativePath`) before invoking Blender, so the scene's relative dependency references resolve locally on the worker.
 

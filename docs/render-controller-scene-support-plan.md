@@ -20,7 +20,7 @@ A live test against the deployed server overturned this plan's central transport
 - Shared `RenderSceneAttachmentTransfer` util (sidecar read + materialize + path-traversal guard) + unit/split tests.
 
 **Revised phase status (read the phases below through this lens):**
-- **Phase D** — now genuinely complete for the Blender *distributed* path (relative-ref scenes), not merely "verify". Absolute-ref host-remap node-portability (the host remaps to host-absolute paths today) is the remaining follow-up — make the host remap emit `//`-relative paths, or re-remap node-side.
+- **Phase D** — now genuinely complete for the Blender *distributed* path, including arbitrary (absolute-ref) scenes as of **Stage 1.5** (Render 1.21.1): `BlenderSceneAttachmentRemapHelper` now calls `bpy.ops.file.make_paths_relative()` after materialization so the prepared blend carries `//`-relative dependency paths, which resolve on both host and node (the node materializes the same relative layout next to its working copy). Verified headless: absolute dep path → `//deps/lib/…` after remap.
 - **E-lite** — the model / Split / node plumbing it depends on is now in place, so an attached `.abc` reaches the node; the validator allow-when-attached change in §E-lite still stands on its own.
 - **E-full** — the "linchpin does not exist" note in §E-full is now *partly* resolved: per-task / per-batch attachment refs EXIST and `Render.Split*` thread them. What remains for E-full is the **per-frame `Frame (int?)` slice field** (so each node fetches only its frames' cache) + the **host bake activity** (`Render.BakeSimulation`, dispatched via `Grid.Delegate`) + the two simulation scripts (delegated / prebaked).
 

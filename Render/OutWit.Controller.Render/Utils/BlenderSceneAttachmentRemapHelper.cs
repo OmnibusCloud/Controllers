@@ -224,6 +224,14 @@ internal static class BlenderSceneAttachmentRemapHelper
             "        target_path = os.path.join(target_directory, os.path.basename(resolved_image_path))",
             "        if os.path.exists(target_path):",
             "            image.filepath = target_path",
+            // Make every materialized dependency path relative to the blend (//path). The remap above
+            // points deps at their absolute materialized location next to the blend; a distributed render
+            // node copies the blend to its own working dir and materializes the same relative layout, so
+            // absolute host paths would not resolve there. Relative paths resolve on both host and node.
+            "try:",
+            "    bpy.ops.file.make_paths_relative()",
+            "except Exception as _relerr:",
+            "    print('make_paths_relative skipped:', _relerr)",
             "bpy.ops.wm.save_mainfile()"
         ];
     }
