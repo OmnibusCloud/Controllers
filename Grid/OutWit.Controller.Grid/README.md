@@ -28,6 +28,28 @@ Grid.ForEach(item in collection, options) => Transformer(item);
 
 **Returns:** Collection of transformed results
 
+### Grid.Delegate
+
+Runs a **single** activity on the **one most-suitable** (fastest compatible) node and
+returns its result — `Grid.ForEach` without the iteration. Use it for an inherently
+**sequential / heavy** step that cannot be fanned out (e.g. a physics-simulation bake)
+and must run once on a capable worker before the rest of the job distributes.
+
+```
+result = Grid.Delegate => Activity(args);
+result = Grid.Delegate(options) => Activity(args);
+Grid.Delegate => Activity(args);            ~ procedural: no return value ~
+```
+
+**Parameters:**
+- `options` - Optional `ProcessingOptions` (node selection)
+
+**Returns:** the delegated activity's single result (or nothing, if it is not a function)
+
+Like `Grid.ForEach`, node compatibility is keyed off the delegated activity's type, and
+only the variables that activity actually references are forwarded to the node. The single
+task is allocated to the fastest compatible node via the same `WitGridTaskAllocator`.
+
 ## How It Works
 
 1. **Node Discovery**: Finds compatible nodes based on activity requirements
@@ -104,9 +126,9 @@ Nodes pull tasks from a central queue. Best for:
 
 ```
 OutWit.Controller.Grid/
-  Activities/          - Grid.ForEach DTO (single activity surface)
-  Adapters/            - WitActivityAdapterGridForEach — scheduling + dispatch
-  Builders/            - WitGridTaskBuilder — per-task variable scoping + work estimate
+  Activities/          - Grid.ForEach + Grid.Delegate DTOs
+  Adapters/            - WitActivityAdapterGridForEach (fan-out) + WitActivityAdapterGridDelegate (single node)
+  Builders/            - WitGridTaskBuilder — per-task variable scoping + work estimate (BuildTasks fan-out / BuildTask single)
   Interfaces/          - Internal marker interface shared with adapters
   Utils/               - Exception-message helpers
   Properties/          - Localized error strings (Resources.resx)
@@ -119,7 +141,7 @@ OutWit.Controller.Grid.Model/
   WitGridTaskAllocator.cs   - LPT-greedy schedule + "minimize node count" heuristic
 ```
 
-The Grid.ForEach activity itself is **not** MemoryPack-serialised — Grid is host-only (only `IWitControllerHost`, not `IWitControllerNode`), so the activity stays on the host and only its inner transformer crosses the wire per task. See the comment on `WitActivityGridForEach` for the design rationale.
+Neither the Grid.ForEach nor the Grid.Delegate activity is MemoryPack-serialised — Grid is host-only (only `IWitControllerHost`, not `IWitControllerNode`), so these activities stay on the host and only their inner transformer crosses the wire per task. See the comment on `WitActivityGridForEach` for the design rationale.
 
 ## Architecture
 

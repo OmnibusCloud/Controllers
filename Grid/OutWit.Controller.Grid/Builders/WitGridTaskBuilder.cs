@@ -46,6 +46,48 @@ internal static class WitGridTaskBuilder
         return tasks.OrderByDescending(task => task.Work).ToList();
     }
 
+    /// <summary>
+    /// Builds a SINGLE task from <paramref name="activity"/> for one-node delegation
+    /// (Grid.Delegate). Unlike <see cref="BuildTasks"/> there is no iteration variable:
+    /// the activity's arguments reference the pool directly. The same reference-scoped
+    /// pool filter applies — only variables the activity actually consumes are forwarded
+    /// to the node, plus a return slot if the activity is a function.
+    /// </summary>
+    public static WitGridTask BuildTask(this IWitControllerManager me, IWitActivity activity, IWitVariablesCollection pool)
+    {
+        string? returnVariableName = null;
+        var taskActivity = (IWitActivity)activity.Clone();
+
+        if (taskActivity is IWitFunction function)
+        {
+            returnVariableName = $"{RETURN_VARIABLE_NAME}0";
+            function.SetReturnReference(returnVariableName);
+        }
+
+        var variables = BuildSingleTaskVariables(pool, returnVariableName, taskActivity);
+        var work = me.EstimateWork(taskActivity, variables);
+
+        return new WitGridTask
+        {
+            Work = work,
+            Variables = variables,
+            Activity = taskActivity
+        };
+    }
+
+    private static IWitVariablesCollection BuildSingleTaskVariables(IWitVariablesCollection pool, string? returnVariableName, IWitActivity transformerActivity)
+    {
+        var variables = new WitVariableCollection();
+        if (!string.IsNullOrEmpty(returnVariableName))
+            variables.Add(new WitVariableObject(returnVariableName));
+
+        // Same scope filter as BuildVariables, minus the iteration variable: forward
+        // only the outer-pool variables the delegated activity actually references.
+        var referenced = CollectReferences(transformerActivity);
+        var filteredPool = pool.Where(variable => referenced.Contains(variable.Name));
+        return variables.Join(filteredPool);
+    }
+
     private static IWitVariablesCollection BuildVariables(IWitVariablesCollection pool, string iterationVariableName, string? returnVariableName, object value, IWitActivity transformerActivity)
     {
         var variables = new WitVariableCollection();

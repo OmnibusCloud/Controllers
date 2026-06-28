@@ -16,6 +16,7 @@ namespace OutWit.Controller.Grid
         public override void Initialize(IServiceCollection services)
         {
             services.AddActivityAdapter<WitActivityGridForEach, WitActivityAdapterGridForEach>();
+            services.AddActivityAdapter<WitActivityGridDelegate, WitActivityAdapterGridDelegate>();
 
             services.AddResources<Resources>();
         }

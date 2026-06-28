@@ -5,10 +5,10 @@
   <PropertyGroup>
     <ControllerName>Grid</ControllerName>
     <Version>1.0.6</Version>
-    <Description>Dense grid layout computation with ForEach support for the WitEngine runtime.</Description>
-    <PackageTags>grid;layout;foreach;witengine;witcloud;controller</PackageTags>
-    <ControllerFeatures>grid-foreach</ControllerFeatures>
-    <ControllerUseCases>Grid iteration;Layout computation</ControllerUseCases>
+    <Description>Distributed execution across compute nodes for the WitEngine runtime: Grid.ForEach (fan-out over a collection) and Grid.Delegate (run one activity on the single most-suitable node).</Description>
+    <PackageTags>grid;distributed;foreach;delegate;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>grid-foreach;grid-delegate</ControllerFeatures>
+    <ControllerUseCases>Distributed iteration;Single-node delegation</ControllerUseCases>
   </PropertyGroup>
 
   <ItemGroup>
