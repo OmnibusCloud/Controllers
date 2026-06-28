@@ -79,8 +79,15 @@ internal sealed class WitActivityAdapterRenderSplitTiles : WitActivityAdapterFun
         var tasks = RenderTileTaskBuilder.BuildTileTasks(
             sceneId, frame, tilesX, tilesY, options, tileOptions, outputWidth, outputHeight);
 
-        Logger.LogInformation("Render.SplitTiles: generated {Count} tile tasks for frame {Frame} using grid {TilesX}x{TilesY}",
-            tasks.Count, frame, tilesX, tilesY);
+        var attachments = await RenderSceneAttachmentTransfer.TryLoadManifestForBlobAsync(BlobService, sceneId, Logger);
+        if (attachments.Count > 0)
+        {
+            foreach (var task in tasks)
+                task.Attachments = attachments.Select(me => (RenderSceneAttachmentRefData)me.Clone()).ToList();
+        }
+
+        Logger.LogInformation("Render.SplitTiles: generated {Count} tile tasks for frame {Frame} using grid {TilesX}x{TilesY}; {Attachments} scene attachment(s) per tile",
+            tasks.Count, frame, tilesX, tilesY, attachments.Count);
 
         pool.TrySetValue(activity.ReturnReference, tasks);
 

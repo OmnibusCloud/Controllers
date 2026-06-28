@@ -129,6 +129,43 @@ public class RenderTaskDataTests
 
     #endregion
 
+    #region Attachments Tests
+
+    [Test]
+    public void IsNotEqualDifferentAttachmentsTest()
+    {
+        var t1 = CreateFrameTask(1);
+        var t2 = CreateFrameTask(1);
+        t2.Attachments.Add(CreateAttachment());
+        Assert.That(t1, Was.Not.EqualTo(t2));
+    }
+
+    [Test]
+    public void CloneDeepCopiesAttachmentsTest()
+    {
+        var task = CreateFrameTask(1);
+        task.Attachments.Add(CreateAttachment());
+
+        var clone = (RenderTaskData)task.Clone();
+        clone.Attachments[0].RelativePath = "deps/changed.bin";
+
+        Assert.That(task.Attachments[0].RelativePath, Is.EqualTo("deps/lib/library.blend"), "Clone must not share attachment instances");
+        Assert.That(clone.Attachments, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void MemoryPackRoundtripWithAttachmentsTest()
+    {
+        var task = CreateFrameTask(5);
+        task.Attachments.Add(CreateAttachment());
+
+        var clone = task.MemoryPackClone();
+        Assert.That(clone, Was.EqualTo(task));
+        Assert.That(clone.Attachments, Has.Count.EqualTo(1));
+    }
+
+    #endregion
+
     #region Tools
 
     private static RenderTaskData CreateFrameTask(int frame)
@@ -146,6 +183,18 @@ public class RenderTaskDataTests
                 ResolutionX = 64,
                 ResolutionY = 64
             }
+        };
+    }
+
+    private static RenderSceneAttachmentRefData CreateAttachment()
+    {
+        return new RenderSceneAttachmentRefData
+        {
+            Kind = "LinkedLibrary",
+            BlobId = Guid.Parse("{11111111-2222-3333-4444-555555555555}"),
+            OriginalPath = "//deps/lib/library.blend",
+            RelativePath = "deps/lib/library.blend",
+            PackagingStrategy = "SceneAttachmentBlob"
         };
     }
 

@@ -28,6 +28,14 @@ public partial class RenderTaskBatchData : ModelBase
     [MemoryPackAllowSerialize]
     public List<RenderTaskData> Tasks { get; set; } = new();
 
+    /// <summary>
+    /// Scene dependency artifacts shared by every task in the chunk (the chunk shares one scene) that
+    /// the node materializes next to the blend before rendering. Populated host-side by
+    /// Render.SplitBatched from the attachment sidecar written by Render.BuildBlendFromRefs; empty for
+    /// self-contained scenes. Appended last for MemoryPack wire back-compatibility.
+    /// </summary>
+    public List<RenderSceneAttachmentRefData> Attachments { get; set; } = [];
+
     #endregion
 
     #region ModelBase
@@ -46,6 +54,15 @@ public partial class RenderTaskBatchData : ModelBase
                 return false;
         }
 
+        if (Attachments.Count != other.Attachments.Count)
+            return false;
+
+        for (int i = 0; i < Attachments.Count; i++)
+        {
+            if (!Attachments[i].Is(other.Attachments[i], tolerance))
+                return false;
+        }
+
         return SceneBlobId.Is(other.SceneBlobId)
                && Options.Is(other.Options, tolerance);
     }
@@ -56,7 +73,8 @@ public partial class RenderTaskBatchData : ModelBase
         {
             SceneBlobId = SceneBlobId,
             Options = (RenderOptionsData)Options.Clone(),
-            Tasks = Tasks.Select(task => (RenderTaskData)task.Clone()).ToList()
+            Tasks = Tasks.Select(task => (RenderTaskData)task.Clone()).ToList(),
+            Attachments = Attachments.Select(me => (RenderSceneAttachmentRefData)me.Clone()).ToList()
         };
     }
 

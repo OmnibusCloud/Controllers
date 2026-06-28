@@ -73,6 +73,44 @@ public class RenderTaskBatchDataTests
 
     #endregion
 
+    #region Attachments Tests
+
+    [Test]
+    public void IsNotEqualDifferentAttachmentsTest()
+    {
+        var sceneId = Guid.NewGuid();
+        var b1 = CreateBatch(sceneId, [1, 2]);
+        var b2 = CreateBatch(sceneId, [1, 2]);
+        b2.Attachments.Add(CreateAttachment());
+        Assert.That(b1, Was.Not.EqualTo(b2));
+    }
+
+    [Test]
+    public void CloneDeepCopiesAttachmentsTest()
+    {
+        var batch = CreateBatch(Guid.NewGuid(), [1, 2]);
+        batch.Attachments.Add(CreateAttachment());
+
+        var clone = (RenderTaskBatchData)batch.Clone();
+        clone.Attachments[0].RelativePath = "deps/changed.bin";
+
+        Assert.That(batch.Attachments[0].RelativePath, Is.EqualTo("deps/lib/library.blend"), "Clone must not share attachment instances");
+        Assert.That(clone.Attachments, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void MemoryPackRoundtripWithAttachmentsTest()
+    {
+        var batch = CreateBatch(Guid.NewGuid(), [10, 11]);
+        batch.Attachments.Add(CreateAttachment());
+
+        var clone = batch.MemoryPackClone();
+        Assert.That(clone, Was.EqualTo(batch));
+        Assert.That(clone.Attachments, Has.Count.EqualTo(1));
+    }
+
+    #endregion
+
     #region Tools
 
     private static RenderTaskBatchData CreateBatch(Guid sceneId, int[] frames)
@@ -107,6 +145,18 @@ public class RenderTaskBatchDataTests
             SceneBlobId = sceneId,
             Options = options,
             Tasks = tasks
+        };
+    }
+
+    private static RenderSceneAttachmentRefData CreateAttachment()
+    {
+        return new RenderSceneAttachmentRefData
+        {
+            Kind = "LinkedLibrary",
+            BlobId = Guid.Parse("{11111111-2222-3333-4444-555555555555}"),
+            OriginalPath = "//deps/lib/library.blend",
+            RelativePath = "deps/lib/library.blend",
+            PackagingStrategy = "SceneAttachmentBlob"
         };
     }
 

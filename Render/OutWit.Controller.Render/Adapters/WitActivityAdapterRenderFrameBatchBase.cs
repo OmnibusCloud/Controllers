@@ -84,6 +84,15 @@ internal abstract class WitActivityAdapterRenderFrameBatchBase<TActivity> : WitA
         var blendPath = await BlobService.GetLocalPathAsync(batch.SceneBlobId);
         var outputDir = RenderFrameOutputHelper.CreateRenderOutputDirectory(TempStorage, status.JobId, batch.Tasks[0].TaskIndex);
 
+        string? sceneWorkingDir = null;
+        if (batch.Attachments.Count > 0)
+        {
+            (blendPath, sceneWorkingDir) = await RenderSceneAttachmentTransfer.PrepareWorkingSceneAsync(
+                BlobService, TempStorage.RootPath, blendPath, batch.Attachments, status.JobId, batch.Tasks[0].TaskIndex, cancellationToken);
+            Logger.LogInformation("{ActivityName}: materialized {Count} scene attachment(s) into the node working scene",
+                GetActivityName(), batch.Attachments.Count);
+        }
+
         try
         {
             var runner = GetBlenderRunner();
@@ -106,6 +115,7 @@ internal abstract class WitActivityAdapterRenderFrameBatchBase<TActivity> : WitA
         finally
         {
             RenderFrameOutputHelper.CleanupRenderOutput(outputDir, renderedPath: null);
+            RenderSceneAttachmentTransfer.TryDeleteWorkingScene(sceneWorkingDir);
         }
     }
 

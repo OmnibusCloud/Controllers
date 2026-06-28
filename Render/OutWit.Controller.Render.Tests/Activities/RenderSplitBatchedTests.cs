@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using OutWit.Controller.Render.Model;
 using OutWit.Controller.Render.Tests.Mock;
@@ -151,6 +152,50 @@ public sealed class RenderSplitBatchedTests
         var job = m_engine.Compile(script);
         var status = await m_engine.ScheduleAndWaitAsync(job, Guid.NewGuid(), 10, 5, CreateOptions(RenderEngine.Cycles, 0));
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Failed));
+    }
+
+    [Test]
+    public async Task SplitBatchedThreadsSceneAttachmentsFromSidecarTest()
+    {
+        // A prepared scene with an attachment sidecar (as Render.BuildBlendFromRefs writes it) must
+        // surface its attachments on EVERY chunk, so the render node can materialize them locally.
+        var blendPath = Path.Combine(m_storageDir, "prepared_scene.blend");
+        await File.WriteAllTextAsync(blendPath, "blend-bytes");
+
+        var attachment = new RenderSceneAttachmentRefData
+        {
+            Kind = "LinkedLibrary",
+            BlobId = Guid.NewGuid(),
+            OriginalPath = "//deps/lib/library.blend",
+            RelativePath = "deps/lib/library.blend",
+            PackagingStrategy = "SceneAttachmentBlob"
+        };
+        await File.WriteAllTextAsync(blendPath + ".attachments.json", JsonSerializer.Serialize(new[] { attachment }));
+
+        var sceneId = m_blobService.RegisterExistingFile(blendPath);
+
+        var job = m_engine.Compile(SplitBatchedScript());
+        var status = await m_engine.ScheduleAndWaitAsync(job, sceneId, 1, 6, CreateOptions(RenderEngine.Cycles, 0));
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var batches = job.Variables["tasks"].Value as IReadOnlyList<RenderTaskBatchData?>;
+        Assert.That(batches, Is.Not.Null);
+        Assert.That(batches!, Is.Not.Empty);
+        foreach (var batch in batches!)
+        {
+            Assert.That(batch!.Attachments, Has.Count.EqualTo(1));
+            Assert.That(batch.Attachments[0].Kind, Is.EqualTo("LinkedLibrary"));
+            Assert.That(batch.Attachments[0].RelativePath, Is.EqualTo("deps/lib/library.blend"));
+            Assert.That(batch.Attachments[0].BlobId, Is.EqualTo(attachment.BlobId));
+        }
+    }
+
+    [Test]
+    public async Task SplitBatchedSelfContainedSceneCarriesNoAttachmentsTest()
+    {
+        // No sidecar => chunks carry no attachments (legacy self-contained path stays unchanged).
+        var batches = await RunSplitBatchedAsync(RenderEngine.Cycles, 1, 6, 0);
+        Assert.That(batches.All(b => b!.Attachments.Count == 0), Is.True);
     }
 
     #endregion

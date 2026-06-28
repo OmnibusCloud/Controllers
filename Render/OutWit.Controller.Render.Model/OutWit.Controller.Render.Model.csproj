@@ -5,8 +5,8 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>Render</ControllerName>
-    <Version>1.3.0</Version>
-    <Description>Shared render and scene data types used by the OutWit.Controller.Render controller — host-side in adapters, node-side in distributed batch processing. Adds scene-fidelity render options (RenderOptions.ColorMode, FilmTransparent, ColorDepth) appended for wire back-compat (Default reproduces legacy behaviour).</Description>
+    <Version>1.4.0</Version>
+    <Description>Shared render and scene data types used by the OutWit.Controller.Render controller — host-side in adapters, node-side in distributed batch processing. Adds per-task/per-batch scene Attachments (RenderTaskData.Attachments, RenderTaskBatchData.Attachments) so render nodes can materialize external scene dependencies locally; appended last for wire back-compat (empty reproduces legacy self-contained behaviour).</Description>
     <PackageTags>render;scene;blender;witengine;witcloud;controller;data-types</PackageTags>
   </PropertyGroup>
 

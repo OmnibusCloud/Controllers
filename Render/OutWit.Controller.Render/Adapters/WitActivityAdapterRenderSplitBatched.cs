@@ -22,9 +22,11 @@ internal sealed class WitActivityAdapterRenderSplitBatched :
 
     public WitActivityAdapterRenderSplitBatched(
         IWitProcessingManager processingManager,
+        IWitBlobService blobService,
         ILogger logger)
         : base(processingManager, logger)
     {
+        BlobService = blobService;
     }
 
     #endregion
@@ -45,7 +47,7 @@ internal sealed class WitActivityAdapterRenderSplitBatched :
         };
     }
 
-    protected override Task Process(
+    protected override async Task Process(
         WitActivityRenderSplitBatched activity,
         IWitVariablesCollection pool,
         IWitActivityStatus? activityStatus,
@@ -97,14 +99,25 @@ internal sealed class WitActivityAdapterRenderSplitBatched :
             });
         }
 
+        var attachments = await RenderSceneAttachmentTransfer.TryLoadManifestForBlobAsync(BlobService, sceneId, Logger);
+        if (attachments.Count > 0)
+        {
+            foreach (var batch in batches)
+                batch.Attachments = attachments.Select(me => (RenderSceneAttachmentRefData)me.Clone()).ToList();
+        }
+
         Logger.LogInformation(
-            "Render.SplitBatched: {Frames} frames ({Start}-{End}) -> {Batches} chunks of up to {ChunkSize} ({Engine})",
-            tasks.Count, startFrame, endFrame, batches.Count, chunkSize, options.Engine);
+            "Render.SplitBatched: {Frames} frames ({Start}-{End}) -> {Batches} chunks of up to {ChunkSize} ({Engine}); {Attachments} scene attachment(s) per chunk",
+            tasks.Count, startFrame, endFrame, batches.Count, chunkSize, options.Engine, attachments.Count);
 
         pool.TrySetValue(activity.ReturnReference, batches);
-
-        return Task.CompletedTask;
     }
+
+    #endregion
+
+    #region Properties
+
+    private IWitBlobService BlobService { get; }
 
     #endregion
 }

@@ -80,6 +80,14 @@ public partial class RenderTaskData : ModelBase
     [MemoryPackAllowSerialize]
     public RenderOptionsData Options { get; set; } = new();
 
+    /// <summary>
+    /// Scene dependency artifacts (textures, caches, linked libraries, …) that the rendering node
+    /// must materialize next to the blend before rendering. Populated host-side by Render.SplitTiles
+    /// from the attachment sidecar written by Render.BuildBlendFromRefs; empty for self-contained
+    /// scenes. Appended last for MemoryPack wire back-compatibility.
+    /// </summary>
+    public List<RenderSceneAttachmentRefData> Attachments { get; set; } = [];
+
     #endregion
 
     #region Functions
@@ -125,7 +133,9 @@ public partial class RenderTaskData : ModelBase
                && RenderMinY.Is(other.RenderMinY, tolerance)
                && RenderMaxY.Is(other.RenderMaxY, tolerance)
                && TaskIndex.Is(other.TaskIndex)
-               && Options.Is(other.Options, tolerance);
+               && Options.Is(other.Options, tolerance)
+               && Attachments.Count == other.Attachments.Count
+               && Attachments.Zip(other.Attachments, (left, right) => left.Is(right, tolerance)).All(me => me);
     }
 
     public override ModelBase Clone()
@@ -143,7 +153,8 @@ public partial class RenderTaskData : ModelBase
             RenderMinY = RenderMinY,
             RenderMaxY = RenderMaxY,
             TaskIndex = TaskIndex,
-            Options = (RenderOptionsData)Options.Clone()
+            Options = (RenderOptionsData)Options.Clone(),
+            Attachments = Attachments.Select(me => (RenderSceneAttachmentRefData)me.Clone()).ToList()
         };
     }
 

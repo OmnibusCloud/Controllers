@@ -75,6 +75,15 @@ internal abstract class WitActivityAdapterRenderFrameBase<TActivity> : WitActivi
         var outputDir = RenderFrameOutputHelper.CreateRenderOutputDirectory(TempStorage, status.JobId, task.TaskIndex);
         string? renderedPath = null;
 
+        string? sceneWorkingDir = null;
+        if (task.Attachments.Count > 0)
+        {
+            (blendPath, sceneWorkingDir) = await RenderSceneAttachmentTransfer.PrepareWorkingSceneAsync(
+                BlobService, TempStorage.RootPath, blendPath, task.Attachments, status.JobId, task.TaskIndex, cancellationToken);
+            Logger.LogInformation("{ActivityName}: materialized {Count} scene attachment(s) into the node working scene",
+                GetActivityName(), task.Attachments.Count);
+        }
+
         try
         {
             var outputBase = Path.Combine(outputDir, "render_");
@@ -96,6 +105,7 @@ internal abstract class WitActivityAdapterRenderFrameBase<TActivity> : WitActivi
         finally
         {
             RenderFrameOutputHelper.CleanupRenderOutput(outputDir, renderedPath);
+            RenderSceneAttachmentTransfer.TryDeleteWorkingScene(sceneWorkingDir);
         }
     }
 
