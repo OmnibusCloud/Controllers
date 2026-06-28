@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Grid</ControllerName>
-    <Version>1.0.6</Version>
+    <Version>1.1.0</Version>
     <Description>Distributed execution across compute nodes for the WitEngine runtime: Grid.ForEach (fan-out over a collection) and Grid.Delegate (run one activity on the single most-suitable node).</Description>
     <PackageTags>grid;distributed;foreach;delegate;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>grid-foreach;grid-delegate</ControllerFeatures>
