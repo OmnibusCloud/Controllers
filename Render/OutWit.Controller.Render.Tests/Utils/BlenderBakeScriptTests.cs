@@ -49,6 +49,17 @@ public class BlenderBakeScriptTests
         Assert.That(text, Does.Contain("BakedPointCaches"));
     }
 
+    [Test]
+    public void BuildScriptShipsLiquidCacheGlobalTest()
+    {
+        var text = string.Join("\n", BlenderBakeScript.BuildScript(1, 24, 0));
+
+        // A liquid surface mesh only displays when its cache is contiguous from the sim start, so liquid
+        // cache files are emitted Frame=null (global -> every node) rather than per-frame sliced.
+        Assert.That(text, Does.Contain("is_liquid = (getattr(ds, 'domain_type', '') == 'LIQUID')"));
+        Assert.That(text, Does.Contain("frame = None if is_liquid else frame_of(fn)"));
+    }
+
     #endregion
 
     #region ParseResult

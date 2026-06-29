@@ -68,8 +68,10 @@ internal static class BlenderBakeScript
             "        ds.cache_type = 'ALL'",
             "        existing_start = int(getattr(ds, 'cache_frame_start', 1) or 1)",
             "        existing_end = int(getattr(ds, 'cache_frame_end', END_FRAME) or END_FRAME)",
+            // Start at the sim's natural start (a liquid mesh only displays when the cache is contiguous from
+            // its start), but bake only up to the requested END — never the scene's full configured range.
             "        ds.cache_frame_start = max(1, min(existing_start, START_FRAME))",
-            "        ds.cache_frame_end = max(existing_end, END_FRAME)",
+            "        ds.cache_frame_end = max(ds.cache_frame_start, END_FRAME)",
             "        if RESOLUTION_MAX > 0:",
             "            ds.resolution_max = RESOLUTION_MAX",
             // Best-effort: store the noise grid (if used) as OpenVDB too. cache_mesh_format is intentionally
@@ -137,13 +139,15 @@ internal static class BlenderBakeScript
             "    bpy.ops.wm.save_mainfile()",
             "except Exception as save_err2:",
             "    result['Errors'].append('Post-bake save: ' + str(save_err2))",
-            // Enumerate ALL produced cache files: gas/smoke renders from the OpenVDB density grid, but a
-            // LIQUID domain renders the surface MESH (.bobj.gz) and also needs the per-frame data + the
-            // global config/script files to interpret the cache. Per-frame files (name has _NNNN.) get a
-            // Frame so Split* ships them only to the node that renders that frame; config files (no frame)
-            // get Frame=null so every node receives them.
+            // Enumerate ALL produced cache files. GAS/smoke renders from the OpenVDB density grid, which is
+            // self-contained per frame -> tag each file with its frame so Split* ships only that frame's slice
+            // to the node rendering it. A LIQUID domain renders the surface MESH (.bobj.gz), which Blender only
+            // displays when the cache is CONTIGUOUS from the sim start (a lone frame falls back to the domain
+            // box) -> emit liquid cache files as Frame=null (global) so EVERY node receives the whole baked
+            // cache. Config files (no frame number) are global either way.
             "seen = set()",
             "for obj, ds in domains:",
+            "    is_liquid = (getattr(ds, 'domain_type', '') == 'LIQUID')",
             "    cache_dir = ds.cache_directory",
             "    if cache_dir.startswith('//'):",
             "        cache_dir = os.path.join(blend_dir, cache_dir[2:])",
@@ -156,7 +160,8 @@ internal static class BlenderBakeScript
             "            if rel in seen:",
             "                continue",
             "            seen.add(rel)",
-            "            result['Cache'].append({'RelativePath': rel, 'OriginalPath': '//' + rel, 'Frame': frame_of(fn)})",
+            "            frame = None if is_liquid else frame_of(fn)",
+            "            result['Cache'].append({'RelativePath': rel, 'OriginalPath': '//' + rel, 'Frame': frame})",
             $"print('{START_MARKER}')",
             "print(json.dumps(result))",
             $"print('{END_MARKER}')",
