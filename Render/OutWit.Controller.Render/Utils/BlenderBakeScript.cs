@@ -60,7 +60,10 @@ internal static class BlenderBakeScript
             "for obj, ds in domains:",
             "    try:",
             "        cache_dir = ds.cache_directory or ''",
-            "        if (not cache_dir) or (not cache_dir.startswith('//')):",
+            // Force a clean in-blend-dir cache: empty, absolute (non-'//'), or escaping ('..', e.g. a
+            // '//../scenes/cache' left by a save-to-new-location) would resolve outside the node working dir
+            // and be rejected by the materialize path-traversal guard.
+            "        if (not cache_dir) or (not cache_dir.startswith('//')) or ('..' in cache_dir):",
             "            ds.cache_directory = '//cache_' + re.sub(r'[^A-Za-z0-9_]', '_', obj.name)",
             // Critical settings first: the density grid must be OpenVDB and cache_type ALL so a headless
             // bake writes EVERY frame (default REPLAY/modal writes only one). These must not be skipped.
@@ -111,6 +114,14 @@ internal static class BlenderBakeScript
             "                pc0.use_disk_cache = False",
             "            except Exception:",
             "                pass",
+            // Free any existing point-cache bake FIRST. A scene may arrive already-baked (Blender demos
+            // ship baked) or with a stale/invalidated cache; calling bake_all on a flagged-but-stale cache
+            // leaves it FROZEN (the sim never re-steps). Freeing forces a clean full re-bake. No-op when
+            // truly unbaked.
+            "try:",
+            "    bpy.ops.ptcache.free_bake_all()",
+            "except Exception as ptc_free_err:",
+            "    result['Errors'].append('ptcache.free_bake_all: ' + str(ptc_free_err))",
             "try:",
             "    bpy.ops.ptcache.bake_all(bake=True)",
             "except Exception as ptc_err:",

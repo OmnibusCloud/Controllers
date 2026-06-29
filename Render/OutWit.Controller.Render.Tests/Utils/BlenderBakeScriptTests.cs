@@ -47,6 +47,8 @@ public class BlenderBakeScriptTests
         // which is embedded in the .blend on save -> self-contained, no per-frame attachments.
         Assert.That(text, Does.Contain("bpy.ops.ptcache.bake_all(bake=True)"));
         Assert.That(text, Does.Contain("BakedPointCaches"));
+        // Must free any stale/pre-existing bake before re-baking, else the cache stays frozen.
+        Assert.That(text, Does.Contain("bpy.ops.ptcache.free_bake_all()"));
     }
 
     [Test]

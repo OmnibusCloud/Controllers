@@ -314,9 +314,9 @@ public sealed class BlenderRunner
                 result.Errors.Count > 0 ? $"; errors: {string.Join("; ", result.Errors)}" : string.Empty);
 
             if (!result.BakedAnything)
-                throw new InvalidOperationException(
-                    "Bake produced no baked simulation. " +
-                    (result.Errors.Count > 0 ? string.Join("; ", result.Errors) : "No fluid domain or point-cache simulation was found in the scene."));
+                m_logger.LogWarning(
+                    "Bake produced no baked simulation; rendering the scene as-is (no bakeable sim found, or only static/keyframed content). {Errors}",
+                    result.Errors.Count > 0 ? string.Join("; ", result.Errors) : string.Empty);
 
             return result;
         }
