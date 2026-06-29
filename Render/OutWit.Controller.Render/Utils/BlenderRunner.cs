@@ -309,14 +309,14 @@ public sealed class BlenderRunner
             var result = BlenderBakeScript.ParseResult(stdout, m_logger);
 
             m_logger.LogInformation(
-                "Blender bake: {Domains} domain(s) baked, {Files} cache file(s){Errors}",
-                result.BakedDomains, result.Cache.Count,
+                "Blender bake: {Domains} fluid domain(s) + {PointCaches} point-cache sim(s) baked, {Files} cache file(s){Errors}",
+                result.BakedDomains, result.BakedPointCaches, result.Cache.Count,
                 result.Errors.Count > 0 ? $"; errors: {string.Join("; ", result.Errors)}" : string.Empty);
 
-            if (result.BakedDomains == 0)
+            if (!result.BakedAnything)
                 throw new InvalidOperationException(
-                    "Bake produced no baked fluid domains. " +
-                    (result.Errors.Count > 0 ? string.Join("; ", result.Errors) : "No fluid domain was found in the scene."));
+                    "Bake produced no baked simulation. " +
+                    (result.Errors.Count > 0 ? string.Join("; ", result.Errors) : "No fluid domain or point-cache simulation was found in the scene."));
 
             return result;
         }

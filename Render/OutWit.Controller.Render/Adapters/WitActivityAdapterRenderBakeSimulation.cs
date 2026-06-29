@@ -145,8 +145,8 @@ internal sealed class WitActivityAdapterRenderBakeSimulation : WitActivityAdapte
             }
 
             Logger.LogInformation(
-                "Render.BakeSimulation: {Domains} domain(s) baked, {Uploaded} frame cache file(s) attached (of {Total} produced)",
-                bakeResult.BakedDomains, uploaded, bakeResult.Cache.Count);
+                "Render.BakeSimulation: {Domains} fluid domain(s) + {PointCaches} point-cache sim(s) baked, {Uploaded} frame cache file(s) attached (of {Total} produced); point-cache sims travel embedded in the baked blend",
+                bakeResult.BakedDomains, bakeResult.BakedPointCaches, uploaded, bakeResult.Cache.Count);
 
             var bakedScene = new RenderSceneRefData
             {

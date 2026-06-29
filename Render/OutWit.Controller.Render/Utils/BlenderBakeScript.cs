@@ -38,7 +38,7 @@ internal static class BlenderBakeScript
             $"START_FRAME = {startFrame}",
             $"END_FRAME = {endFrame}",
             $"RESOLUTION_MAX = {resolutionMax}",
-            "result = {'BakedDomains': 0, 'Cache': [], 'Errors': []}",
+            "result = {'BakedDomains': 0, 'BakedPointCaches': 0, 'Cache': [], 'Errors': []}",
             "blend_path = bpy.data.filepath",
             "blend_dir = os.path.dirname(blend_path)",
             "def rel_to_blend(full):",
@@ -54,8 +54,8 @@ internal static class BlenderBakeScript
             "            ds = getattr(mod, 'domain_settings', None)",
             "            if ds is not None:",
             "                domains.append((obj, ds))",
-            "if not domains:",
-            "    result['Errors'].append('No fluid domain found to bake.')",
+            // No fluid domain is fine — the scene may have only point-cache sims (cloth, particles, …),
+            // baked below. 'nothing baked at all' is detected by the adapter from the baked counts.
             // Configure + bake each domain.
             "for obj, ds in domains:",
             "    try:",
@@ -97,6 +97,30 @@ internal static class BlenderBakeScript
             "            result['Errors'].append('Bake produced no cache for ' + obj.name)",
             "    except Exception as bake_err:",
             "        result['Errors'].append('Bake ' + obj.name + ': ' + str(bake_err))",
+            // Bake non-fluid point-cache sims (cloth, soft body, dynamic particles, dynamic paint, rigid
+            // body) to MEMORY, which is embedded in the .blend on save -> the baked scene is self-contained
+            // for these (no per-frame attachments needed; each node renders its frame from the embedded
+            // cache). Count objects whose cache ends up baked so a sim-only (no fluid) scene still succeeds.
+            "for obj in bpy.data.objects:",
+            "    for mod in getattr(obj, 'modifiers', []):",
+            "        pc0 = getattr(mod, 'point_cache', None)",
+            "        if pc0 is not None:",
+            "            try:",
+            "                pc0.use_disk_cache = False",
+            "            except Exception:",
+            "                pass",
+            "try:",
+            "    bpy.ops.ptcache.bake_all(bake=True)",
+            "except Exception as ptc_err:",
+            "    result['Errors'].append('ptcache.bake_all: ' + str(ptc_err))",
+            "for obj in bpy.data.objects:",
+            "    for mod in getattr(obj, 'modifiers', []):",
+            "        pc1 = getattr(mod, 'point_cache', None)",
+            "        if pc1 is not None and getattr(pc1, 'is_baked', False):",
+            "            result['BakedPointCaches'] += 1",
+            "    for ps in getattr(obj, 'particle_systems', []):",
+            "        if getattr(getattr(ps, 'point_cache', None), 'is_baked', False):",
+            "            result['BakedPointCaches'] += 1",
             // After baking, flow/effector FLUID modifiers are no longer needed to RENDER (their effect is
             // captured in the domain cache) and their live source->domain relations can crash a node that
             // renders an isolated frame from the sliced cache. Strip every non-DOMAIN fluid modifier, keeping
@@ -171,9 +195,14 @@ internal sealed class RenderBakeScriptResult
 {
     public int BakedDomains { get; set; }
 
+    public int BakedPointCaches { get; set; }
+
     public List<RenderBakeCacheEntry> Cache { get; set; } = [];
 
     public List<string> Errors { get; set; } = [];
+
+    /// <summary>True when the bake produced any baked simulation (a fluid domain or a point-cache sim).</summary>
+    public bool BakedAnything => BakedDomains > 0 || BakedPointCaches > 0;
 }
 
 /// <summary>One baked cache file produced by the bake script.</summary>

@@ -38,6 +38,17 @@ public class BlenderBakeScriptTests
         Assert.That(text, Does.Contain("fluid_type', '') == 'DOMAIN'"));
     }
 
+    [Test]
+    public void BuildScriptBakesPointCacheSimsTest()
+    {
+        var text = string.Join("\n", BlenderBakeScript.BuildScript(1, 24, 0));
+
+        // Cloth / soft body / particles / dynamic paint / rigid body bake to the point cache (memory),
+        // which is embedded in the .blend on save -> self-contained, no per-frame attachments.
+        Assert.That(text, Does.Contain("bpy.ops.ptcache.bake_all(bake=True)"));
+        Assert.That(text, Does.Contain("BakedPointCaches"));
+    }
+
     #endregion
 
     #region ParseResult
