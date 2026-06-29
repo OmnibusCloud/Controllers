@@ -280,6 +280,54 @@ public sealed class BlenderRunner
     }
 
     /// <summary>
+    /// Bakes the scene's sequential simulation (v1: Mantaflow fluid/gas domains) into a per-frame OpenVDB
+    /// cache by running <see cref="BlenderBakeScript"/> against <paramref name="blendFilePath"/>. The blend is
+    /// re-saved IN PLACE (baked state + relative cache directory persisted), so on return the file at
+    /// <paramref name="blendFilePath"/> is the baked scene and its cache files sit under the (relative) cache
+    /// directory next to it. Returns the produced cache manifest (RelativePath + frame per file).
+    /// </summary>
+    internal async Task<RenderBakeScriptResult> BakeSimulationAsync(
+        string blendFilePath,
+        int startFrame,
+        int endFrame,
+        int resolutionMax,
+        CancellationToken cancellationToken = default)
+    {
+        var pythonLines = BlenderBakeScript.BuildScript(startFrame, endFrame, resolutionMax);
+        var scriptPath = Path.Combine(m_tempStorage.RootPath, $"outwit_bake_simulation_{Guid.NewGuid():N}.py");
+        await File.WriteAllLinesAsync(scriptPath, pythonLines, cancellationToken);
+
+        try
+        {
+            var args = $"-b \"{blendFilePath}\" --python-exit-code 1 --python \"{scriptPath}\"";
+            var (exitCode, stdout, stderr) = await RunProcessAsync(args, cancellationToken);
+
+            if (exitCode != 0)
+                throw new InvalidOperationException(
+                    $"Blender bake process failed (exit {exitCode}). stderr tail: {Tail(stderr, 800)}");
+
+            var result = BlenderBakeScript.ParseResult(stdout, m_logger);
+
+            m_logger.LogInformation(
+                "Blender bake: {Domains} domain(s) baked, {Files} cache file(s){Errors}",
+                result.BakedDomains, result.Cache.Count,
+                result.Errors.Count > 0 ? $"; errors: {string.Join("; ", result.Errors)}" : string.Empty);
+
+            if (result.BakedDomains == 0)
+                throw new InvalidOperationException(
+                    "Bake produced no baked fluid domains. " +
+                    (result.Errors.Count > 0 ? string.Join("; ", result.Errors) : "No fluid domain was found in the scene."));
+
+            return result;
+        }
+        finally
+        {
+            try { File.Delete(scriptPath); }
+            catch { /* best effort */ }
+        }
+    }
+
+    /// <summary>
     /// Runs the node render benchmark in a single Blender process: builds a procedural
     /// compute-bound scene, warms up, then times only the render loop (see
     /// <see cref="BlenderBenchmarkScript"/>). The returned timing excludes process spawn,

@@ -1,0 +1,13 @@
+Job:BakeAndRenderVideoCycles(RenderSceneRef:scene, Int:startFrame, Int:endFrame, RenderOptions:options, RenderBakeOptions:bakeOptions, VideoOptions:video)
+{
+    RenderSceneRef:baked = Grid.Delegate() => Render.BakeSimulation(scene, startFrame, endFrame, bakeOptions);
+
+    Blob:blend = Render.BuildBlendFromRefs(baked);
+    RenderTaskBatchCollection:tasks = Render.SplitBatched(blend, startFrame, endFrame, options);
+
+    RenderResultBatchCollection:rendered = Grid.ForEach(task in tasks)
+        => Render.FrameBatch.Cycles(task);
+
+    BlobCollection:frames = Render.Collect(rendered, options);
+    Blob:result = Render.EncodeVideo(frames, video);
+}

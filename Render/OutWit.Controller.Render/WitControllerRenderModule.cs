@@ -68,9 +68,11 @@ public class WitControllerRenderModule : WitPluginBase, IWitControllerNode, IWit
         services.AddActivityAdapter<WitActivityRenderPreflightVideo, WitActivityAdapterRenderPreflightVideo>();
         services.AddActivityAdapter<WitActivityRenderRuntimeDiagnostics, WitActivityAdapterRenderRuntimeDiagnostics>();
         services.AddActivityAdapter<WitActivityRenderValidateBlend, WitActivityAdapterRenderValidateBlend>();
+        services.AddActivityAdapter<WitActivityRenderBakeSimulation, WitActivityAdapterRenderBakeSimulation>();
 
         // Variables
         services.AddVariable<WitVariableRenderOptions>();
+        services.AddVariable<WitVariableRenderBakeOptions>();
         services.AddVariable<WitVariableTileOptions>();
         services.AddVariable<WitVariableVideoOptions>();
         services.AddVariable<WitVariableRenderScene>();
