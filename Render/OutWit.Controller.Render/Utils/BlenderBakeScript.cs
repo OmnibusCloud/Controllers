@@ -4,9 +4,11 @@ using Microsoft.Extensions.Logging;
 namespace OutWit.Controller.Render.Utils;
 
 /// <summary>
-/// Builds the Blender Python script that bakes a scene's sequential simulation (v1: Mantaflow fluid/gas
-/// domains) into a per-frame, frame-addressable OpenVDB cache, then reports the produced cache files so the
-/// controller can transport each frame's slice to the node that renders it. Runs on a single delegated node
+/// Builds the Blender Python script that bakes a scene's sequential simulation (v1: Mantaflow fluid —
+/// gas/smoke and liquid domains) into a per-frame, frame-addressable cache, then reports every produced
+/// cache file so the controller can transport each frame's slice to the node that renders it. Gas renders
+/// from the OpenVDB density grid; liquid renders the surface mesh (.bobj.gz) — both are collected. Runs on
+/// a single delegated node
 /// (Grid.Delegate) against the already-open .blend (Blender is launched with <c>-b &lt;blend&gt;</c>), so the
 /// script uses <c>bpy.data.filepath</c> rather than an embedded path.
 ///
@@ -42,7 +44,7 @@ internal static class BlenderBakeScript
             "def rel_to_blend(full):",
             "    return os.path.relpath(full, blend_dir).replace('\\\\', '/')",
             "def frame_of(name):",
-            "    m = re.search(r'_(\\d+)\\.vdb$', name)",
+            "    m = re.search(r'_(\\d+)\\.', name)",
             "    return int(m.group(1)) if m else None",
             // Discover fluid domains.
             "domains = []",
@@ -100,7 +102,11 @@ internal static class BlenderBakeScript
             "    bpy.ops.wm.save_mainfile()",
             "except Exception as save_err2:",
             "    result['Errors'].append('Post-bake save: ' + str(save_err2))",
-            // Enumerate produced VDB cache files.
+            // Enumerate ALL produced cache files: gas/smoke renders from the OpenVDB density grid, but a
+            // LIQUID domain renders the surface MESH (.bobj.gz) and also needs the per-frame data + the
+            // global config/script files to interpret the cache. Per-frame files (name has _NNNN.) get a
+            // Frame so Split* ships them only to the node that renders that frame; config files (no frame)
+            // get Frame=null so every node receives them.
             "seen = set()",
             "for obj, ds in domains:",
             "    cache_dir = ds.cache_directory",
@@ -110,8 +116,6 @@ internal static class BlenderBakeScript
             "        continue",
             "    for root, _dirs, files in os.walk(cache_dir):",
             "        for fn in files:",
-            "            if not fn.lower().endswith('.vdb'):",
-            "                continue",
             "            full = os.path.join(root, fn)",
             "            rel = rel_to_blend(full)",
             "            if rel in seen:",
