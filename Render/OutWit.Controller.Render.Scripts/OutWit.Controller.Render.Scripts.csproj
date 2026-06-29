@@ -4,8 +4,8 @@
 
   <PropertyGroup>
     <ControllerName>Render</ControllerName>
-    <Version>1.2.0</Version>
-    <Description>Bundled .wit scripts for the OutWit.Controller.Render controller — RenderFrames, RenderStill, RenderSceneFrames, RenderPreflight, and the 30+ other render orchestration scripts that WitCloud's ScriptSeeder reads from @Scripts/ on startup. Frame-distribution scripts use the persistent-batch path (Render.SplitBatched + Render.FrameBatch, one Blender process per contiguous frame chunk); tiled stills render per-tile (Render.SplitTiles + Render.Frame). Adds BakeAndRender{Still,Frames,Video}Cycles, which bake an unbaked Mantaflow fluid/smoke sim on the best node via Grid.Delegate + Render.BakeSimulation before distributing the render.</Description>
+    <Version>1.3.0</Version>
+    <Description>Bundled .wit scripts for the OutWit.Controller.Render controller — RenderFrames, RenderStill, RenderSceneFrames, RenderPreflight, and the 30+ other render orchestration scripts that WitCloud's ScriptSeeder reads from @Scripts/ on startup. Frame-distribution scripts use the persistent-batch path (Render.SplitBatched + Render.FrameBatch, one Blender process per contiguous frame chunk); tiled stills render per-tile (Render.SplitTiles + Render.Frame). Adds BakeAndRender{Still,Frames,Video}{Cycles,Eevee}, which bake an unbaked Mantaflow fluid/smoke sim on the best node via Grid.Delegate + Render.BakeSimulation before distributing the render in the scene's native engine.</Description>
     <PackageTags>render;scripts;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
 

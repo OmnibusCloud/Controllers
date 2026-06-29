@@ -97,7 +97,18 @@ internal static class BlenderBakeScript
             "            result['Errors'].append('Bake produced no cache for ' + obj.name)",
             "    except Exception as bake_err:",
             "        result['Errors'].append('Bake ' + obj.name + ': ' + str(bake_err))",
-            // Persist baked state + relative cache directory.
+            // After baking, flow/effector FLUID modifiers are no longer needed to RENDER (their effect is
+            // captured in the domain cache) and their live source->domain relations can crash a node that
+            // renders an isolated frame from the sliced cache. Strip every non-DOMAIN fluid modifier, keeping
+            // the objects' geometry (e.g. effector rocks stay visible) and the domain modifier (reads cache).
+            "for obj in list(bpy.data.objects):",
+            "    for mod in list(getattr(obj, 'modifiers', [])):",
+            "        if getattr(mod, 'type', '') == 'FLUID' and getattr(mod, 'fluid_type', '') != 'DOMAIN':",
+            "            try:",
+            "                obj.modifiers.remove(mod)",
+            "            except Exception as strip_err:",
+            "                result['Errors'].append('Strip ' + obj.name + ': ' + str(strip_err))",
+            // Persist baked state + relative cache directory + the stripped modifiers.
             "try:",
             "    bpy.ops.wm.save_mainfile()",
             "except Exception as save_err2:",

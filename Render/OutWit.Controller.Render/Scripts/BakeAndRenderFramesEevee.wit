@@ -1,0 +1,12 @@
+Job:BakeAndRenderFramesEevee(RenderSceneRef:scene, Int:startFrame, Int:endFrame, RenderOptions:options, RenderBakeOptions:bakeOptions)
+{
+    RenderSceneRef:baked = Grid.Delegate() => Render.BakeSimulation(scene, startFrame, endFrame, bakeOptions);
+
+    Blob:blend = Render.BuildBlendFromRefs(baked);
+    RenderTaskBatchCollection:tasks = Render.SplitBatched(blend, startFrame, endFrame, options);
+
+    RenderResultBatchCollection:rendered = Grid.ForEach(task in tasks)
+        => Render.FrameBatch.Eevee(task);
+
+    BlobCollection:result = Render.Collect(rendered, options);
+}
