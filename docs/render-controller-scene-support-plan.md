@@ -4,6 +4,24 @@
 **Premise:** Rendering is **distributed**. Single-node fallback (run the whole animation sequentially on one node) is explicitly **out of scope** — it defeats the purpose of the network. Every capability below must preserve per-frame / per-tile distribution.
 **Revision:** 2026-06-28 — rewritten against the actual codebase (ground-truth audit). Where this revision corrects the original draft, see §0. File/line citations are as of the audit date; treat line numbers as navigational hints, not contracts.
 **Revision 2:** 2026-06-28 — a live test overturned the "transport is wired end-to-end for Blender" claim. Node-side attachment delivery was **missing**; it is now implemented (Stage 1, Render 1.21.0). See §0.0, which supersedes the affected parts of §0.2 / §2 / Phase D / E-full.
+**Revision 3:** 2026-06-29 — **Stage 2 (E-full for prebaked fluid) shipped and proven live.** Per-frame cache slicing + a baked-fluid validator-accept path now let a prebaked Mantaflow smoke sim render distributed. See §0.1.
+
+---
+
+## 0.1 Revision 3 — Stage 2: per-frame cache slicing + prebaked fluid, proven live (supersedes the E-full "deferred" status for the prebaked path)
+
+E-full's per-frame addressing is now **built and proven on the deployed server** for the *prebaked* simulation path. A user uploads a `.blend` whose simulation is already baked to disk, plus the per-frame cache files as attachments; the controller slices the cache per frame so each node downloads only the frames it renders.
+
+**Shipped (Render.Model 1.5.0 / Render 1.22.1; on `main`; validation suite 82/82 green):**
+- **Per-frame slice field** — `RenderSceneAttachmentRefData.Frame (int?)` (`null` = global/every-frame asset; an int = that cache file belongs only to that frame). Threaded through `Is()` / `Clone()` / MemoryPack (appended for wire back-compat).
+- **Per-frame slicing in the split** — `Render.SplitBatched` gives each chunk `Frame == null` globals **plus only its own frames'** cache; `Render.SplitTiles` gives each tile the global assets plus that single frame's cache. So a node never receives another frame's VDB.
+- **Baked-fluid validator-accept** — `BlenderValidationScript.cs` now admits a `FLUID` domain when it is **baked** *and* its cache files are **attached** under the domain's `cache_directory` (mirrors the `MESH_SEQUENCE_CACHE` allow-when-attached shape). Unbaked or unattached fluid still blocks with an actionable message. **Blender-5.1 fix:** the baked-state attribute is `has_cache_baked_data` (the old `is_cache_baked_data` raised `AttributeError` on 5.1, so the accept path silently never fired) — both the validator and the bake fixture now read `has_`-first with an `is_`-fallback.
+
+**Key architecture insight:** prebaked fluid needs **no new activity or script** — the existing `RenderVideoCycles` flow (`BuildBlendFromRefs → SplitBatched → Grid.ForEach(FrameBatch) → Collect → EncodeVideo`) plus the Stage-1 node materializer plus the slicing above handle it end-to-end. A relative `cache_directory` (Blender's default `//cache_fluid`) resolves on the node as-is via Stage 1.5's `make_paths_relative`.
+
+**Proven live 2026-06-29 (deployed image `v1.6.24-beta`, `engine.omnibuscloud.com`):** a headless-baked 24-frame Mantaflow smoke domain (OpenVDB, `cache_type='ALL'`) uploaded with 24 `Frame`-tagged `FluidCache` attachments. Results: `RenderValidateBlend → IsValid:true` (baked+attached fluid accepted); `RenderStillCycles @ f20 →` visible smoke, **byte-identical to a local single-machine baseline** (proves the right frame's VDB was sliced, delivered, materialized, and read); `RenderVideoCycles 1–24 →` smoke that **evolves frame-to-frame** (proves per-frame slicing across nodes). Fixture/client persist in `scratchpad/fluidtest` + `scratchpad/fluid_stage` + `scratchpad/LiveTest`.
+
+**What this leaves for the full production release (next phase — see Phase F):** the **delegated bake path** — let a user submit an *unbaked* sim and have the controller bake it on the network. The bake is a host-of-the-job concern that must run on **one** node (sequential), so it dispatches via **`Grid.Delegate`**, which already selects the single fastest compatible node using the *same* `WitGridTaskAllocator` benchmark-rate model as `Grid.ForEach` distribution. Then the per-frame VDB it produces flows into the slicing above. Plus: wiring a "bake on a node" option into the Blender add-on + bridge, and live-proving on the real Mantaflow demo scenes from §7.1. Deferred beyond that: absolute `cache_directory` portability (`make_paths_relative` does not touch `FluidDomainSettings.cache_directory`); other sim types (cloth/liquid/fire) reuse these same rails.
 
 ---
 
@@ -251,7 +269,9 @@ The original "Phase E" conflated two very different costs. They are now separate
 
 ---
 
-### Phase F — Baked physics caches: fluid / smoke as OpenVDB sequence *(high cost & risk · demand-driven)*
+### Phase F — Baked physics caches: fluid / smoke as OpenVDB sequence *(prebaked path DONE — Stage 2 / Rev 3; delegated-bake path = current release phase)*
+
+**Status (Rev 3):** the **prebaked** half is shipped and proven live (see §0.1): per-frame VDB slicing + baked-fluid validator-accept render a user-baked Mantaflow smoke sim distributed. The **remaining** release work is the **delegated bake** — accept an *unbaked* sim, bake it once on the network via `Grid.Delegate` (best node by benchmark rate, same model as distribution), emit a per-frame `Frame`-tagged VDB manifest, then feed the existing slice→ForEach→Collect flow — plus add-on/bridge UX and live proof on the real demo scenes.
 
 **Goal:** support Mantaflow fluid/smoke/fire **while distributed**.
 
