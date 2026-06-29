@@ -60,11 +60,9 @@ internal static class BlenderBakeScript
             "        cache_dir = ds.cache_directory or ''",
             "        if (not cache_dir) or (not cache_dir.startswith('//')):",
             "            ds.cache_directory = '//cache_' + re.sub(r'[^A-Za-z0-9_]', '_', obj.name)",
+            // Critical settings first: the density grid must be OpenVDB and cache_type ALL so a headless
+            // bake writes EVERY frame (default REPLAY/modal writes only one). These must not be skipped.
             "        ds.cache_data_format = 'OPENVDB'",
-            "        if hasattr(ds, 'cache_mesh_format'):",
-            "            ds.cache_mesh_format = 'OPENVDB'",
-            "        if hasattr(ds, 'cache_noise_format'):",
-            "            ds.cache_noise_format = 'OPENVDB'",
             "        ds.cache_type = 'ALL'",
             "        existing_start = int(getattr(ds, 'cache_frame_start', 1) or 1)",
             "        existing_end = int(getattr(ds, 'cache_frame_end', END_FRAME) or END_FRAME)",
@@ -72,6 +70,13 @@ internal static class BlenderBakeScript
             "        ds.cache_frame_end = max(existing_end, END_FRAME)",
             "        if RESOLUTION_MAX > 0:",
             "            ds.resolution_max = RESOLUTION_MAX",
+            // Best-effort: store the noise grid (if used) as OpenVDB too. cache_mesh_format is intentionally
+            // NOT touched — it only accepts BOBJECT/OBJECT (mesh geometry), not a grid format.
+            "        try:",
+            "            if hasattr(ds, 'cache_noise_format'):",
+            "                ds.cache_noise_format = 'OPENVDB'",
+            "        except Exception:",
+            "            pass",
             "    except Exception as cfg_err:",
             "        result['Errors'].append('Configure ' + obj.name + ': ' + str(cfg_err))",
             // Save so // resolves to the blend dir, then bake.
