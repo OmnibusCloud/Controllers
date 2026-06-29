@@ -123,6 +123,29 @@ internal static class BlenderBakeScript
             "    for ps in getattr(obj, 'particle_systems', []):",
             "        if getattr(getattr(ps, 'point_cache', None), 'is_baked', False):",
             "            result['BakedPointCaches'] += 1",
+            // Bake Geometry Nodes simulation zones (a NODES modifier whose 'bakes' collection is non-empty)
+            // to PACKED, which embeds the bake in the .blend on save -> self-contained, like the point-cache
+            // memory path. ANIMATION mode bakes the whole range. simulation_nodes_cache_bake needs the object
+            // active + selected.
+            "gn_objs = []",
+            "for obj in bpy.data.objects:",
+            "    for mod in getattr(obj, 'modifiers', []):",
+            "        if getattr(mod, 'type', '') == 'NODES' and getattr(mod, 'bakes', None) and len(mod.bakes) > 0:",
+            "            try:",
+            "                mod.bake_target = 'PACKED'",
+            "                for b in mod.bakes:",
+            "                    b.bake_mode = 'ANIMATION'",
+            "                if obj not in gn_objs:",
+            "                    gn_objs.append(obj)",
+            "            except Exception as gncfg:",
+            "                result['Errors'].append('GN config ' + obj.name + ': ' + str(gncfg))",
+            "for obj in gn_objs:",
+            "    try:",
+            "        with bpy.context.temp_override(active_object=obj, selected_objects=[obj], object=obj):",
+            "            bpy.ops.object.simulation_nodes_cache_bake(selected=True)",
+            "        result['BakedPointCaches'] += 1",
+            "    except Exception as gnbake:",
+            "        result['Errors'].append('GN bake ' + obj.name + ': ' + str(gnbake))",
             // After baking, flow/effector FLUID modifiers are no longer needed to RENDER (their effect is
             // captured in the domain cache) and their live source->domain relations can crash a node that
             // renders an isolated frame from the sliced cache. Strip every non-DOMAIN fluid modifier, keeping

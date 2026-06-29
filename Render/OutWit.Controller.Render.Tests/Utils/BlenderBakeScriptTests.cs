@@ -60,6 +60,16 @@ public class BlenderBakeScriptTests
         Assert.That(text, Does.Contain("frame = None if is_liquid else frame_of(fn)"));
     }
 
+    [Test]
+    public void BuildScriptBakesGeometryNodesSimTest()
+    {
+        var text = string.Join("\n", BlenderBakeScript.BuildScript(1, 24, 0));
+
+        // GN simulation zones bake to PACKED (embedded in the blend) via simulation_nodes_cache_bake.
+        Assert.That(text, Does.Contain("bpy.ops.object.simulation_nodes_cache_bake(selected=True)"));
+        Assert.That(text, Does.Contain("mod.bake_target = 'PACKED'"));
+    }
+
     #endregion
 
     #region ParseResult
