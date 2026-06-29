@@ -41,6 +41,7 @@ internal static class BlenderValidationScript
             .ToList();
         var supportedAttachedVseMoviePaths = LoadSupportedAttachedPaths(blendFilePath, "VseMovieStrip");
         var supportedAttachedVseSoundPaths = LoadSupportedAttachedPaths(blendFilePath, "VseSoundStrip");
+        var supportedAttachedFluidCachePaths = LoadSupportedAttachedPaths(blendFilePath, "FluidCache");
         var supportedAttachedImageSequenceDirectories = supportedAttachedImageSequenceFramePaths
             .Select(Path.GetDirectoryName)
             .Where(me => !string.IsNullOrWhiteSpace(me))
@@ -101,6 +102,7 @@ internal static class BlenderValidationScript
             $"supported_attached_vse_image_directories = set(normalize_path(path) for path in {BuildPythonListLiteral(supportedAttachedVseImageDirectories)})",
             $"supported_attached_vse_movie_paths = set(normalize_path(path) for path in {BuildPythonListLiteral(supportedAttachedVseMoviePaths)})",
             $"supported_attached_vse_sound_paths = set(normalize_path(path) for path in {BuildPythonListLiteral(supportedAttachedVseSoundPaths)})",
+            $"supported_attached_fluid_cache_paths = set(normalize_path(path) for path in {BuildPythonListLiteral(supportedAttachedFluidCachePaths)})",
             "for library in bpy.data.libraries:",
             "    library_path = str(getattr(library, 'filepath', '') or '')",
             "    if not library_path:",
@@ -261,9 +263,16 @@ internal static class BlenderValidationScript
             "        if domain is None:",
             "            continue",
             "        cache_directory = str(getattr(domain, 'cache_directory', '') or '')",
-            "        if cache_directory:",
-            "            add_unique(issues, f\"Fluid domain '{obj.name}' uses external cache directory '{cache_directory}', which is not portable to remote nodes in the current v1 flow.\")",
-            "        if not bool(getattr(domain, 'is_cache_baked_data', False)):",
+            "        resolved_cache_dir = bpy.path.abspath(cache_directory) if cache_directory else ''",
+            "        cache_dir_prefix = (normalize_path(resolved_cache_dir) + os.sep) if resolved_cache_dir else ''",
+            "        baked = bool(getattr(domain, 'is_cache_baked_data', False))",
+            "        cache_attached = bool(cache_dir_prefix) and any(p.startswith(cache_dir_prefix) for p in supported_attached_fluid_cache_paths)",
+            "        mesh_baked_ok = (not bool(getattr(domain, 'use_mesh', False))) or bool(getattr(domain, 'is_cache_baked_mesh', False))",
+            "        if baked and cache_attached and mesh_baked_ok:",
+            "            continue",
+            "        if cache_directory and not cache_attached:",
+            "            add_unique(issues, f\"Fluid domain '{obj.name}' uses external cache directory '{cache_directory}', which is not portable to remote nodes. Bake it and attach the cache, then re-submit.\")",
+            "        if not baked:",
             "            add_unique(issues, f\"Fluid domain '{obj.name}' requires baked simulation data before remote rendering.\")",
             "        if bool(getattr(domain, 'use_mesh', False)) and not bool(getattr(domain, 'is_cache_baked_mesh', False)):",
             "            add_unique(issues, f\"Fluid domain '{obj.name}' requires baked mesh cache before remote rendering.\")",
