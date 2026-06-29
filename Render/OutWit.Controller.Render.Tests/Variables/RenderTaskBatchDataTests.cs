@@ -109,6 +109,26 @@ public class RenderTaskBatchDataTests
         Assert.That(clone.Attachments, Has.Count.EqualTo(1));
     }
 
+    [Test]
+    public void AttachmentFrameSurvivesCloneAndMemoryPackTest()
+    {
+        var batch = CreateBatch(Guid.NewGuid(), [1, 2]);
+        var att = CreateAttachment();
+        att.Frame = 7;
+        batch.Attachments.Add(att);
+
+        var clone = (RenderTaskBatchData)batch.Clone();
+        Assert.That(clone.Attachments[0].Frame, Is.EqualTo(7));
+
+        var mp = batch.MemoryPackClone();
+        Assert.That(mp.Attachments[0].Frame, Is.EqualTo(7));
+        Assert.That(mp, Was.EqualTo(batch));
+
+        var other = (RenderTaskBatchData)batch.Clone();
+        other.Attachments[0].Frame = 8;
+        Assert.That(batch, Was.Not.EqualTo(other), "Frame must participate in equality");
+    }
+
     #endregion
 
     #region Tools

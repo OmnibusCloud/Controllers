@@ -102,12 +102,20 @@ internal sealed class WitActivityAdapterRenderSplitBatched :
         var attachments = await RenderSceneAttachmentTransfer.TryLoadManifestForBlobAsync(BlobService, sceneId, Logger);
         if (attachments.Count > 0)
         {
+            // Per-frame slicing: each chunk carries the frame-agnostic attachments (Frame == null:
+            // textures, linked libraries) plus only the per-frame cache files for the frames it renders.
             foreach (var batch in batches)
-                batch.Attachments = attachments.Select(me => (RenderSceneAttachmentRefData)me.Clone()).ToList();
+            {
+                var batchFrames = batch.Tasks.Select(t => t.Frame).ToHashSet();
+                batch.Attachments = attachments
+                    .Where(me => me.Frame == null || batchFrames.Contains(me.Frame.Value))
+                    .Select(me => (RenderSceneAttachmentRefData)me.Clone())
+                    .ToList();
+            }
         }
 
         Logger.LogInformation(
-            "Render.SplitBatched: {Frames} frames ({Start}-{End}) -> {Batches} chunks of up to {ChunkSize} ({Engine}); {Attachments} scene attachment(s) per chunk",
+            "Render.SplitBatched: {Frames} frames ({Start}-{End}) -> {Batches} chunks of up to {ChunkSize} ({Engine}); {Attachments} manifest attachment(s), frame-sliced per chunk",
             tasks.Count, startFrame, endFrame, batches.Count, chunkSize, options.Engine, attachments.Count);
 
         pool.TrySetValue(activity.ReturnReference, batches);

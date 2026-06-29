@@ -37,6 +37,14 @@ public partial class RenderSceneAttachmentRefData : ModelBase
     /// </summary>
     public string PackagingStrategy { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Frame this artifact belongs to, for per-frame baked simulation caches (one cache file per frame).
+    /// null = applies to all frames (textures, linked libraries, and other non-frame-specific deps).
+    /// Lets Render.Split* send each render node only the cache files for the frames it renders.
+    /// Appended last for MemoryPack wire back-compatibility.
+    /// </summary>
+    public int? Frame { get; set; }
+
     #endregion
 
     #region ModelBase
@@ -50,7 +58,8 @@ public partial class RenderSceneAttachmentRefData : ModelBase
                && BlobId.Is(other.BlobId)
                && OriginalPath.Is(other.OriginalPath)
                && RelativePath.Is(other.RelativePath)
-               && PackagingStrategy.Is(other.PackagingStrategy);
+               && PackagingStrategy.Is(other.PackagingStrategy)
+               && Frame == other.Frame;
     }
 
     public override ModelBase Clone()
@@ -61,7 +70,8 @@ public partial class RenderSceneAttachmentRefData : ModelBase
             BlobId = BlobId,
             OriginalPath = OriginalPath,
             RelativePath = RelativePath,
-            PackagingStrategy = PackagingStrategy
+            PackagingStrategy = PackagingStrategy,
+            Frame = Frame
         };
     }
 

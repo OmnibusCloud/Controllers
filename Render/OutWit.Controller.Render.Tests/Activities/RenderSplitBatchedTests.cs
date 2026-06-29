@@ -198,6 +198,46 @@ public sealed class RenderSplitBatchedTests
         Assert.That(batches.All(b => b!.Attachments.Count == 0), Is.True);
     }
 
+    [Test]
+    public async Task SplitBatchedSlicesPerFrameCacheAcrossChunksTest()
+    {
+        // A baked-sim manifest: one frame-agnostic library (Frame=null) + a per-frame cache file for
+        // each of frames 1..6. Each chunk must carry the global library plus ONLY its own frames' cache.
+        var blendPath = Path.Combine(m_storageDir, "sim_scene.blend");
+        await File.WriteAllTextAsync(blendPath, "blend-bytes");
+
+        var atts = new List<RenderSceneAttachmentRefData>
+        {
+            new() { Kind = "LinkedLibrary", BlobId = Guid.NewGuid(), OriginalPath = "//lib.blend", RelativePath = "lib.blend", PackagingStrategy = "SceneAttachmentBlob", Frame = null }
+        };
+        for (var f = 1; f <= 6; f++)
+            atts.Add(new() { Kind = "FluidCache", BlobId = Guid.NewGuid(), OriginalPath = $"//cache/fluid_{f:D4}.vdb", RelativePath = $"cache/fluid_{f:D4}.vdb", PackagingStrategy = "SceneAttachmentBlob", Frame = f });
+
+        await File.WriteAllTextAsync(blendPath + ".attachments.json", JsonSerializer.Serialize(atts));
+        var sceneId = m_blobService.RegisterExistingFile(blendPath);
+
+        // batchSize override = 2 -> chunks [1,2] [3,4] [5,6].
+        var job = m_engine.Compile(SplitBatchedScript());
+        var status = await m_engine.ScheduleAndWaitAsync(job, sceneId, 1, 6, CreateOptions(RenderEngine.Cycles, batchSize: 2));
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var batches = job.Variables["tasks"].Value as IReadOnlyList<RenderTaskBatchData?>;
+        Assert.That(batches, Is.Not.Null);
+        Assert.That(batches!.Count, Is.EqualTo(3));
+
+        foreach (var batch in batches!)
+        {
+            var frames = batch!.Tasks.Select(t => t.Frame).ToHashSet();
+            Assert.That(batch.Attachments.Any(a => a.Frame == null && a.Kind == "LinkedLibrary"), Is.True, "global attachment must be on every chunk");
+            var cacheFrames = batch.Attachments.Where(a => a.Frame != null).Select(a => a.Frame!.Value).ToHashSet();
+            Assert.That(cacheFrames.SetEquals(frames), Is.True, "chunk must carry exactly its own frames' cache");
+        }
+
+        var allCacheFrames = batches!.SelectMany(b => b!.Attachments).Where(a => a.Frame != null).Select(a => a.Frame!.Value).ToList();
+        Assert.That(allCacheFrames.Count, Is.EqualTo(6), "each frame's cache delivered exactly once across all chunks");
+        Assert.That(allCacheFrames.Distinct().Count(), Is.EqualTo(6));
+    }
+
     #endregion
 
     #region SplitTilesBatched (Tiles) Tests

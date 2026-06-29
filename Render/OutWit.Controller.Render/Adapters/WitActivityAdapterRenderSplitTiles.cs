@@ -82,11 +82,16 @@ internal sealed class WitActivityAdapterRenderSplitTiles : WitActivityAdapterFun
         var attachments = await RenderSceneAttachmentTransfer.TryLoadManifestForBlobAsync(BlobService, sceneId, Logger);
         if (attachments.Count > 0)
         {
+            // All tiles render the same single frame -> each carries frame-agnostic attachments
+            // (Frame == null) plus only that frame's per-frame cache files.
+            var sliced = attachments
+                .Where(me => me.Frame == null || me.Frame.Value == frame)
+                .ToList();
             foreach (var task in tasks)
-                task.Attachments = attachments.Select(me => (RenderSceneAttachmentRefData)me.Clone()).ToList();
+                task.Attachments = sliced.Select(me => (RenderSceneAttachmentRefData)me.Clone()).ToList();
         }
 
-        Logger.LogInformation("Render.SplitTiles: generated {Count} tile tasks for frame {Frame} using grid {TilesX}x{TilesY}; {Attachments} scene attachment(s) per tile",
+        Logger.LogInformation("Render.SplitTiles: generated {Count} tile tasks for frame {Frame} using grid {TilesX}x{TilesY}; {Attachments} manifest attachment(s), frame-sliced",
             tasks.Count, frame, tilesX, tilesY, attachments.Count);
 
         pool.TrySetValue(activity.ReturnReference, tasks);
