@@ -12,29 +12,38 @@ public partial class RenderSceneAttachmentRefData : ModelBase
 {
     #region Properties
 
+    // Explicit MemoryPackOrder on every member so the wire layout is structural, not positional — adding or
+    // reordering a property can no longer silently break compatibility. Order matches the original
+    // declaration order; Frame stays last (appended for back-compat).
+
     /// <summary>
     /// Logical dependency kind, for example ImageAsset or Font.
     /// </summary>
+    [MemoryPackOrder(0)]
     public string Kind { get; set; } = string.Empty;
 
     /// <summary>
     /// Cloud blob identifier of the uploaded dependency artifact when it is transferred separately from the blend file.
     /// </summary>
+    [MemoryPackOrder(1)]
     public Guid BlobId { get; set; }
 
     /// <summary>
     /// Original addon-side source path observed in the Blender scene.
     /// </summary>
+    [MemoryPackOrder(2)]
     public string OriginalPath { get; set; } = string.Empty;
 
     /// <summary>
     /// Logical relative path or slot name inside the addon-side scene package.
     /// </summary>
+    [MemoryPackOrder(3)]
     public string RelativePath { get; set; } = string.Empty;
 
     /// <summary>
     /// Packaging strategy attempted by the addon for this dependency.
     /// </summary>
+    [MemoryPackOrder(4)]
     public string PackagingStrategy { get; set; } = string.Empty;
 
     /// <summary>
@@ -43,6 +52,7 @@ public partial class RenderSceneAttachmentRefData : ModelBase
     /// Lets Render.Split* send each render node only the cache files for the frames it renders.
     /// Appended last for MemoryPack wire back-compatibility.
     /// </summary>
+    [MemoryPackOrder(5)]
     public int? Frame { get; set; }
 
     #endregion

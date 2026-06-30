@@ -1,0 +1,12 @@
+Job:BakeAndRenderStillTiledGreasePencil(RenderSceneRef:scene, Int:frame, Int:tilesX, Int:tilesY, RenderOptions:options, RenderBakeOptions:bakeOptions, TileOptions:tileOptions)
+{
+    RenderSceneRef:baked = Grid.Delegate() => Render.BakeSimulation(scene, frame, frame, bakeOptions);
+
+    Blob:blend = Render.BuildBlendFromRefs(baked);
+    RenderTaskCollection:tasks = Render.SplitTiles(blend, frame, tilesX, tilesY, options, tileOptions);
+
+    RenderResultCollection:rendered = Grid.ForEach(task in tasks)
+        => Render.Frame.GreasePencil(task);
+
+    Blob:result = Render.CollectTiles(rendered, options, tileOptions);
+}

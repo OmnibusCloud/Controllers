@@ -5,7 +5,7 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>Render</ControllerName>
-    <Version>1.6.0</Version>
+    <Version>1.6.1</Version>
     <Description>Shared render and scene data types used by the OutWit.Controller.Render controller — host-side in adapters, node-side in distributed batch processing. Adds per-task/per-batch scene Attachments (RenderTaskData.Attachments, RenderTaskBatchData.Attachments) so render nodes can materialize external scene dependencies locally, and RenderSceneAttachmentRefData.Frame for per-frame baked-simulation cache slicing (each node receives only its frames' cache); appended last for wire back-compat (empty/null reproduces legacy self-contained behaviour). RenderBakeOptionsData configures the host-delegated simulation bake (Render.BakeSimulation) that converts an unbaked sequential sim into a per-frame OpenVDB cache on the best node before distribution.</Description>
     <PackageTags>render;scene;blender;witengine;witcloud;controller;data-types</PackageTags>
   </PropertyGroup>
