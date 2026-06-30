@@ -313,6 +313,12 @@ public sealed class BlenderRunner
                 result.BakedDomains, result.BakedPointCaches, result.Cache.Count,
                 result.Errors.Count > 0 ? $"; errors: {string.Join("; ", result.Errors)}" : string.Empty);
 
+            // A save failure is fatal: the bake ran in memory but the uploaded blend would be UNBAKED (the
+            // process still exits 0), silently shipping a wrong scene. Surface it as a hard error.
+            var saveError = result.Errors.FirstOrDefault(e => e.Contains("save", StringComparison.OrdinalIgnoreCase));
+            if (saveError != null)
+                throw new InvalidOperationException($"Bake could not persist the baked scene: {saveError}");
+
             if (!result.BakedAnything)
                 m_logger.LogWarning(
                     "Bake produced no baked simulation; rendering the scene as-is (no bakeable sim found, or only static/keyframed content). {Errors}",

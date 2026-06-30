@@ -36,6 +36,9 @@ public class BlenderBakeScriptTests
         Assert.That(text, Does.Contain("cache_type = 'ALL'"));
         Assert.That(text, Does.Contain("bpy.ops.fluid.bake_all()"));
         Assert.That(text, Does.Contain("fluid_type', '') == 'DOMAIN'"));
+        // Free-before-bake for fluid + GN (same frozen-stale class as point caches).
+        Assert.That(text, Does.Contain("bpy.ops.fluid.free_all()"));
+        Assert.That(text, Does.Contain("bpy.ops.object.simulation_nodes_cache_delete(selected=True)"));
     }
 
     [Test]
@@ -59,7 +62,8 @@ public class BlenderBakeScriptTests
         // A liquid surface mesh only displays when its cache is contiguous from the sim start, so liquid
         // cache files are emitted Frame=null (global -> every node) rather than per-frame sliced.
         Assert.That(text, Does.Contain("is_liquid = (getattr(ds, 'domain_type', '') == 'LIQUID')"));
-        Assert.That(text, Does.Contain("frame = None if is_liquid else frame_of(fn)"));
+        // Per-frame slicing only for gas density *.vdb (not liquid, not noise) — everything else global.
+        Assert.That(text, Does.Contain("(not is_liquid) and low.endswith('.vdb') and ('noise' not in low)"));
     }
 
     [Test]

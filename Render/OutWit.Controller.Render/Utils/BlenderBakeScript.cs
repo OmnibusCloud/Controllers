@@ -57,14 +57,12 @@ internal static class BlenderBakeScript
             // No fluid domain is fine — the scene may have only point-cache sims (cloth, particles, …),
             // baked below. 'nothing baked at all' is detected by the adapter from the baked counts.
             // Configure + bake each domain.
-            "for obj, ds in domains:",
+            // Always assign a clean, UNIQUE in-blend-dir cache per domain: avoids collisions when two domains
+            // sanitize to the same name, and drops any absolute/stale/escaping ('..') path that would resolve
+            // outside the node working dir and hit the materialize path-traversal guard.
+            "for di, (obj, ds) in enumerate(domains):",
             "    try:",
-            "        cache_dir = ds.cache_directory or ''",
-            // Force a clean in-blend-dir cache: empty, absolute (non-'//'), or escaping ('..', e.g. a
-            // '//../scenes/cache' left by a save-to-new-location) would resolve outside the node working dir
-            // and be rejected by the materialize path-traversal guard.
-            "        if (not cache_dir) or (not cache_dir.startswith('//')) or ('..' in cache_dir):",
-            "            ds.cache_directory = '//cache_' + re.sub(r'[^A-Za-z0-9_]', '_', obj.name)",
+            "        ds.cache_directory = '//cache_%d_%s' % (di, re.sub(r'[^A-Za-z0-9_]', '_', obj.name))",
             // Critical settings first: the density grid must be OpenVDB and cache_type ALL so a headless
             // bake writes EVERY frame (default REPLAY/modal writes only one). These must not be skipped.
             "        ds.cache_data_format = 'OPENVDB'",
@@ -91,9 +89,16 @@ internal static class BlenderBakeScript
             "    bpy.ops.wm.save_mainfile()",
             "except Exception as save_err:",
             "    result['Errors'].append('Pre-bake save: ' + str(save_err))",
+            // Free any existing/stale fluid bake first, then bake. fluid.bake_all on an already-baked domain
+            // is a no-op that ships the OLD cache (possibly wrong resolution/range/format) — the same
+            // frozen-stale failure fixed for point caches. free_all forces a clean re-bake; no-op when unbaked.
             "for obj, ds in domains:",
             "    try:",
             "        with bpy.context.temp_override(active_object=obj, selected_objects=[obj], object=obj):",
+            "            try:",
+            "                bpy.ops.fluid.free_all()",
+            "            except Exception:",
+            "                pass",
             "            bpy.ops.fluid.bake_all()",
             "        baked = bool(getattr(ds, 'has_cache_baked_data', getattr(ds, 'is_cache_baked_data', False)))",
             "        if baked:",
@@ -134,6 +139,10 @@ internal static class BlenderBakeScript
             "    for ps in getattr(obj, 'particle_systems', []):",
             "        if getattr(getattr(ps, 'point_cache', None), 'is_baked', False):",
             "            result['BakedPointCaches'] += 1",
+            // Rigid body world cache is scene-level, not on a modifier (ptcache.bake_all bakes it).
+            "rbw = getattr(bpy.context.scene, 'rigidbody_world', None)",
+            "if rbw is not None and getattr(getattr(rbw, 'point_cache', None), 'is_baked', False):",
+            "    result['BakedPointCaches'] += 1",
             // Bake Geometry Nodes simulation zones (a NODES modifier whose 'bakes' collection is non-empty)
             // to PACKED, which embeds the bake in the .blend on save -> self-contained, like the point-cache
             // memory path. ANIMATION mode bakes the whole range. simulation_nodes_cache_bake needs the object
@@ -153,6 +162,12 @@ internal static class BlenderBakeScript
             "for obj in gn_objs:",
             "    try:",
             "        with bpy.context.temp_override(active_object=obj, selected_objects=[obj], object=obj):",
+            // Delete any existing GN bake first — simulation_nodes_cache_bake skips already-baked zones (a
+            // no-op that ships the stale PACKED bake), so without this a pre-baked GN scene stays frozen.
+            "            try:",
+            "                bpy.ops.object.simulation_nodes_cache_delete(selected=True)",
+            "            except Exception:",
+            "                pass",
             "            bpy.ops.object.simulation_nodes_cache_bake(selected=True)",
             "        result['BakedPointCaches'] += 1",
             "    except Exception as gnbake:",
@@ -194,7 +209,11 @@ internal static class BlenderBakeScript
             "            if rel in seen:",
             "                continue",
             "            seen.add(rel)",
-            "            frame = None if is_liquid else frame_of(fn)",
+            // Per-frame slicing is ONLY safe for a gas domain's self-contained density grids (data *.vdb).
+            // Liquid surface mesh, NOISE grids (upsampling can depend on neighbours), config and every other
+            // file ship global (Frame=null) so each node holds the whole contiguous cache it needs.
+            "            low = fn.lower()",
+            "            frame = frame_of(fn) if ((not is_liquid) and low.endswith('.vdb') and ('noise' not in low)) else None",
             "            result['Cache'].append({'RelativePath': rel, 'OriginalPath': '//' + rel, 'Frame': frame})",
             $"print('{START_MARKER}')",
             "print(json.dumps(result))",
