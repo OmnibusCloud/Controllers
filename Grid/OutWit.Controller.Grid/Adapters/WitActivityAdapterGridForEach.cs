@@ -80,42 +80,49 @@ namespace OutWit.Controller.Grid.Adapters
             }
             else
             {
-                IReadOnlyList<WitGridTaskGroup> groups
-                    = WitGridTaskAllocator.Allocate(nodes, tasks);
-
                 var canRunInParallelOnClient = ResolveClientParallelPolicy(tasks);
 
-                IReadOnlyList<Task<(IWitProcessingStatus, IReadOnlyList<IWitVariable>)>> groupTasks
-                    = groups.Select(group => NodesManager.Process(group, status.JobId, canRunInParallelOnClient)).ToList();
+                // Fault-tolerant distribution: a node that FAILS its batch has its tasks reassigned to the
+                // remaining healthy nodes and retried, instead of failing the whole job because one machine
+                // died. Cancellation is honoured inside DistributeAsync (a node renders its whole batch
+                // before reporting; on cancel the orphaned groups finish in the background and are ignored).
+                // The job fails only when no node can complete the work — a genuine error surfaced with the
+                // last node's message.
+                var outcome = await GridReassignment.DistributeAsync(
+                    nodes,
+                    tasks,
+                    async (group, _) =>
+                    {
+                        try
+                        {
+                            (IWitProcessingStatus groupStatus, IReadOnlyList<IWitVariable> groupVariables)
+                                = await NodesManager.Process(group, status.JobId, canRunInParallelOnClient);
 
-                // Wait for the distributed groups, but honour cancellation: a node renders its whole batch
-                // before reporting, so without this the ForEach would block until the slowest in-flight
-                // batch returns even after the job is cancelled (job hangs mid-progress). On cancel this
-                // throws OperationCanceled -> the engine finalizes the job as Cancelled; the abandoned
-                // group tasks complete in the background (the node finishes its current task) and are
-                // ignored. Cancellation is generic distribution control, not render-specific.
-                var allGroups = Task.WhenAll(groupTasks);
-                try
-                {
-                    await allGroups.WaitAsync(ProcessingManager.CancellationToken(status.JobId));
-                }
-                catch (OperationCanceledException)
-                {
-                    // Observe the orphaned groups' eventual completion so it isn't an unobserved exception.
-                    _ = allGroups.ContinueWith(t => { _ = t.Exception; }, TaskScheduler.Default);
-                    throw;
-                }
+                            bool succeeded = groupStatus.Result != WitProcessingResult.Failed;
+                            return new GridReassignment.GroupProcessResult(succeeded, groupStatus, groupVariables);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.LogWarning(ex, "Node {NodeId} threw while processing its task batch; treating it as a node failure.", group.Node.NodeId);
+                            return new GridReassignment.GroupProcessResult(false, null, Array.Empty<IWitVariable>());
+                        }
+                    },
+                    message => Logger.LogWarning("{Message}", message),
+                    ProcessingManager.CancellationToken(status.JobId));
 
-                foreach (var task in groupTasks)
-                {
-                    IWitProcessingStatus groupStatus = task.Result.Item1;
-                    IReadOnlyList<IWitVariable> groupVariables = task.Result.Item2;
-
+                foreach (var groupStatus in outcome.CompletedStatuses)
                     status.AddChild(groupStatus);
 
-                    foreach (var variable in groupVariables)
-                        resultList.Add(variable.Value);
-                }
+                if (outcome.Failed)
+                    throw new InvalidOperationException(
+                        outcome.FailureMessage ?? "Distributed processing failed on all available nodes.");
+
+                foreach (var value in outcome.Results)
+                    resultList.Add(value);
             }
             
             pool.TrySetCollection(activity.ReturnReference, resultList);

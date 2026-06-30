@@ -4,8 +4,8 @@
 
   <PropertyGroup>
     <ControllerName>Grid</ControllerName>
-    <Version>1.1.0</Version>
-    <Description>Distributed execution across compute nodes for the WitEngine runtime: Grid.ForEach (fan-out over a collection) and Grid.Delegate (run one activity on the single most-suitable node).</Description>
+    <Version>1.1.1</Version>
+    <Description>Distributed execution across compute nodes for the WitEngine runtime: Grid.ForEach (fan-out over a collection) and Grid.Delegate (run one activity on the single most-suitable node). Grid.ForEach is fault-tolerant: when a node fails its assigned batch, that node's tasks are reassigned to the remaining healthy nodes and retried instead of failing the whole job; the job fails only when no node can complete the work.</Description>
     <PackageTags>grid;distributed;foreach;delegate;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>grid-foreach;grid-delegate</ControllerFeatures>
     <ControllerUseCases>Distributed iteration;Single-node delegation</ControllerUseCases>
