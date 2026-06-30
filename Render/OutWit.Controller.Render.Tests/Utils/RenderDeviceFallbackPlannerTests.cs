@@ -122,4 +122,82 @@ internal sealed class RenderDeviceFallbackPlannerTests
     }
 
     #endregion
+
+    #region ResolveAfterFailure (crash-robust)
+
+    [Test]
+    public void ResolveAfterFailure_ForcedCpuFailure_IsTerminal()
+    {
+        var outcome = RenderDeviceFallbackPlanner.ResolveAfterFailure(
+            requestedDevice: RenderDevice.CPU,
+            reportedBackend: RenderDevice.CPU,
+            availableGpuBackends: [],
+            outOfMemory: false,
+            alreadyFailedBackends: []);
+
+        Assert.That(outcome.Done, Is.True);
+        Assert.That(outcome.NextDevice, Is.Null);
+    }
+
+    [Test]
+    public void ResolveAfterFailure_GpuCrashWithLostMarker_StillFallsBackToCpu()
+    {
+        // The crux of the Mac/Metal exit-134 case: the hard abort ate the backend marker, so Blender
+        // reported NOTHING — but we auto-probed a GPU, so we must still retry on CPU (not give up).
+        var outcome = RenderDeviceFallbackPlanner.ResolveAfterFailure(
+            requestedDevice: null,            // auto-probe
+            reportedBackend: null,            // marker lost to the crash
+            availableGpuBackends: [],         // also lost
+            outOfMemory: false,
+            alreadyFailedBackends: []);
+
+        Assert.That(outcome.Done, Is.False);
+        Assert.That(outcome.NextDevice, Is.EqualTo(RenderDevice.CPU));
+        Assert.That(outcome.BackendToBlacklist, Is.Null);   // unknown backend → don't blacklist
+    }
+
+    [Test]
+    public void ResolveAfterFailure_ForcedGpuCrashWithLostMarker_FallsBackToCpu_WhenNoOtherGpu()
+    {
+        // Forced METAL (Mac) crashed; marker lost. We know it was METAL (we forced it), no other GPU → CPU.
+        var outcome = RenderDeviceFallbackPlanner.ResolveAfterFailure(
+            requestedDevice: RenderDevice.METAL,
+            reportedBackend: null,
+            availableGpuBackends: [RenderDevice.METAL],
+            outOfMemory: false,
+            alreadyFailedBackends: []);
+
+        Assert.That(outcome.NextDevice, Is.EqualTo(RenderDevice.CPU));
+        Assert.That(outcome.BackendToBlacklist, Is.EqualTo(RenderDevice.METAL));
+    }
+
+    [Test]
+    public void ResolveAfterFailure_ReportedGpuCrash_ClimbsToNextGpuBackend()
+    {
+        var outcome = RenderDeviceFallbackPlanner.ResolveAfterFailure(
+            requestedDevice: null,
+            reportedBackend: RenderDevice.OPTIX,
+            availableGpuBackends: [RenderDevice.OPTIX, RenderDevice.CUDA],
+            outOfMemory: false,
+            alreadyFailedBackends: []);
+
+        Assert.That(outcome.NextDevice, Is.EqualTo(RenderDevice.CUDA));
+        Assert.That(outcome.BackendToBlacklist, Is.EqualTo(RenderDevice.OPTIX));
+    }
+
+    [Test]
+    public void ResolveAfterFailure_OutOfMemory_GoesToCpu_WithoutBlacklisting()
+    {
+        var outcome = RenderDeviceFallbackPlanner.ResolveAfterFailure(
+            requestedDevice: null,
+            reportedBackend: RenderDevice.OPTIX,
+            availableGpuBackends: [RenderDevice.OPTIX, RenderDevice.CUDA],
+            outOfMemory: true,
+            alreadyFailedBackends: []);
+
+        Assert.That(outcome.NextDevice, Is.EqualTo(RenderDevice.CPU));
+        Assert.That(outcome.BackendToBlacklist, Is.Null);   // OOM is scene-specific, not a backend defect
+    }
+
+    #endregion
 }

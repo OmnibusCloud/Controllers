@@ -43,7 +43,9 @@ internal static class BlenderRenderArgsBuilder
                 $"scene.render.engine = '{preferred}' if '{preferred}' in _engine_keys else ('BLENDER_EEVEE' if 'BLENDER_EEVEE' in _engine_keys else '{preferred}')",
                 "print('OUTWIT_RENDER_AVAILABLE=')",
                 "print('OUTWIT_RENDER_BACKEND=' + scene.render.engine)",
-                $"print('OUTWIT_RENDER_MESSAGE=Using {GetRenderEngineDisplayName(engine)} render path')"
+                $"print('OUTWIT_RENDER_MESSAGE=Using {GetRenderEngineDisplayName(engine)} render path')",
+                // Flush so the markers survive even if the later render aborts (SIGABRT) without flushing.
+                "import sys; sys.stdout.flush()"
             ];
         }
 
@@ -55,7 +57,8 @@ internal static class BlenderRenderArgsBuilder
                 "scene.cycles.device = 'CPU'",
                 "print('OUTWIT_RENDER_AVAILABLE=')",
                 "print('OUTWIT_RENDER_BACKEND=CPU')",
-                "print('OUTWIT_RENDER_MESSAGE=Forced CPU fallback after GPU render failure')"
+                "print('OUTWIT_RENDER_MESSAGE=Forced CPU fallback after GPU render failure')",
+                "import sys; sys.stdout.flush()"
             ];
         }
 
@@ -118,7 +121,9 @@ internal static class BlenderRenderArgsBuilder
             "selection_message = ('Selected ' + selected_backend) if selected_backend != 'CPU' else ('No GPU backend available; falling back to CPU' if len(available_backends) == 0 else 'GPU backend probe succeeded but Blender still fell back to CPU')",
             "print('OUTWIT_RENDER_AVAILABLE=' + ','.join(available_backends))",
             "print('OUTWIT_RENDER_BACKEND=' + str(selected_backend))",
-            "print('OUTWIT_RENDER_MESSAGE=' + selection_message)"
+            "print('OUTWIT_RENDER_MESSAGE=' + selection_message)",
+            // Flush so the markers reach us even if the later render aborts (SIGABRT) before flushing.
+            "import sys; sys.stdout.flush()"
         ];
     }
 

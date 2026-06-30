@@ -727,7 +727,13 @@ public sealed class BlenderRunner
         Action onBeforeRetry,
         string renderDescription)
     {
-        var result = await runAttempt(SnapshotPreferredFirstAttempt());
+        // Track the device we REQUESTED, not just the one Blender reported: a hard crash (SIGABRT /
+        // exit 134, e.g. a Metal "Copying Attributes to device" abort) can abort the process before its
+        // stdout buffer — which carries the OUTWIT_RENDER_BACKEND marker — is flushed, leaving us unable
+        // to parse the selected backend. We must still fall back in that case, so the decision keys on
+        // "did we run on something other than CPU?", which we always know from the request.
+        var requested = SnapshotPreferredFirstAttempt();
+        var result = await runAttempt(requested);
 
         while (true)
         {
@@ -737,25 +743,25 @@ public sealed class BlenderRunner
                 return result;
             }
 
-            // A non-GPU (CPU / unknown) attempt that failed has nothing left to fall back to.
-            if (result.SelectedRenderBackend is not { } failed || !IsGpuBackend(failed))
+            var outOfMemory = IndicatesOutOfMemory(result.Stderr);
+            var outcome = RenderDeviceFallbackPlanner.ResolveAfterFailure(
+                requested, result.SelectedRenderBackend, result.AvailableGpuBackends,
+                outOfMemory, SnapshotFailedGpuBackends());
+
+            if (outcome.Done || outcome.NextDevice is not { } next)
                 return result;
 
-            var outOfMemory = IndicatesOutOfMemory(result.Stderr);
-            var next = RenderDeviceFallbackPlanner.NextDevice(
-                failed, result.AvailableGpuBackends, outOfMemory, SnapshotFailedGpuBackends());
+            if (outcome.BackendToBlacklist is { } bad)
+                RememberBackendFailure(bad);
 
             m_logger.LogWarning(
-                "Blender {Description} failed on GPU backend {Failed} (exit {ExitCode}{Oom}); retrying on {Next}. {Message}",
-                renderDescription, failed, result.ExitCode, outOfMemory ? ", out of memory" : string.Empty, next,
+                "Blender {Description} failed on {Failed} (exit {ExitCode}{Oom}); retrying on {Next}. {Message}",
+                renderDescription, result.SelectedRenderBackend?.ToString() ?? requested?.ToString() ?? "GPU",
+                result.ExitCode, outOfMemory ? ", out of memory" : string.Empty, next,
                 result.SelectionMessage ?? string.Empty);
 
-            // OOM is scene-specific (VRAM pressure), not a backend defect — don't blacklist the backend,
-            // just step down to CPU for this render.
-            if (!outOfMemory)
-                RememberBackendFailure(failed);
-
             onBeforeRetry();
+            requested = next;
             result = await runAttempt(next);
         }
     }
