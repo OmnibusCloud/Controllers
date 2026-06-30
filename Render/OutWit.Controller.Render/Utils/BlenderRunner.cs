@@ -74,33 +74,10 @@ public sealed class BlenderRunner
     {
         m_logger.LogInformation("Blender render: frame {Frame} from {BlendFile}", frame, blendFilePath);
 
-        var result = await RunRenderAttemptAsync(
-            blendFilePath,
-            frame,
-            outputPath,
-            options,
-            task,
-            forceCpuFallback: false,
-            cancellationToken);
-
-        if (ShouldRetryWithCpuFallback(result))
-        {
-            m_logger.LogWarning(
-                "Blender render failed on auto-selected GPU backend {RenderDevice}; retrying once on CPU. Message: {Message}",
-                result.SelectedRenderBackend,
-                result.SelectionMessage ?? "No backend selection message reported");
-
-            DeleteRenderedOutputs(outputPath, frame, options.Format);
-
-            result = await RunRenderAttemptAsync(
-                blendFilePath,
-                frame,
-                outputPath,
-                options,
-                task,
-                forceCpuFallback: true,
-                cancellationToken);
-        }
+        var result = await RenderWithDeviceFallbackAsync(
+            device => RunRenderAttemptAsync(blendFilePath, frame, outputPath, options, task, device, cancellationToken),
+            () => DeleteRenderedOutputs(outputPath, frame, options.Format),
+            $"render frame {frame}");
 
         EnsureSuccessfulRender(result);
 
@@ -150,20 +127,14 @@ public sealed class BlenderRunner
         m_logger.LogInformation("Blender animation render: {Count} frames ({First}..{Last}) in one process from {BlendFile}",
             tasks.Count, startFrame, endFrame, blendFilePath);
 
-        var result = await RunFrameRangeAttemptAsync(blendFilePath, startFrame, endFrame, outputBase, options, forceCpuFallback: false, cancellationToken);
-
-        if (ShouldRetryWithCpuFallback(result))
-        {
-            m_logger.LogWarning(
-                "Blender animation render failed on auto-selected GPU backend {RenderDevice}; retrying the whole range on CPU. Message: {Message}",
-                result.SelectedRenderBackend,
-                result.SelectionMessage ?? "No backend selection message reported");
-
-            foreach (var task in tasks)
-                DeleteRenderedOutputs(outputBase, task.Frame, options.Format);
-
-            result = await RunFrameRangeAttemptAsync(blendFilePath, startFrame, endFrame, outputBase, options, forceCpuFallback: true, cancellationToken);
-        }
+        var result = await RenderWithDeviceFallbackAsync(
+            device => RunFrameRangeAttemptAsync(blendFilePath, startFrame, endFrame, outputBase, options, device, cancellationToken),
+            () =>
+            {
+                foreach (var task in tasks)
+                    DeleteRenderedOutputs(outputBase, task.Frame, options.Format);
+            },
+            $"animation render {startFrame}..{endFrame}");
 
         EnsureSuccessfulRender(result);
 
@@ -399,7 +370,7 @@ public sealed class BlenderRunner
     /// </summary>
     internal async Task<RenderDeviceDiagnostics> GetDeviceDiagnosticsAsync(CancellationToken cancellationToken = default)
     {
-        var args = $"-b --python-exit-code 1 {BlenderRenderArgsBuilder.BuildPythonExecArgument(BlenderRenderArgsBuilder.BuildDeviceConfigurationPython(RenderEngine.Cycles, forceCpuFallback: false))}";
+        var args = $"-b --python-exit-code 1 {BlenderRenderArgsBuilder.BuildPythonExecArgument(BlenderRenderArgsBuilder.BuildDeviceConfigurationPython(RenderEngine.Cycles, forcedDevice: null))}";
         var (exitCode, stdout, stderr) = await RunProcessAsync(args, cancellationToken);
         var result = ParseInvocationResult(exitCode, stdout, stderr);
 
@@ -435,7 +406,7 @@ public sealed class BlenderRunner
         string outputPath,
         RenderOptionsData options,
         RenderTaskData? task,
-        bool forceCpuFallback)
+        RenderDevice? forcedDevice)
     {
         var args = new StringBuilder();
         args.Append($"-b \"{blendFilePath}\"");
@@ -449,7 +420,7 @@ public sealed class BlenderRunner
             "scene = bpy.context.scene"
         };
 
-        pythonLines.AddRange(BlenderRenderArgsBuilder.BuildDeviceConfigurationPython(options.Engine, forceCpuFallback));
+        pythonLines.AddRange(BlenderRenderArgsBuilder.BuildDeviceConfigurationPython(options.Engine, forcedDevice));
         pythonLines.AddRange(BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(options));
         pythonLines.AddRange(BlenderRenderArgsBuilder.BuildViewLayerRecoveryPython());
 
@@ -501,10 +472,10 @@ public sealed class BlenderRunner
         int endFrame,
         string outputBase,
         RenderOptionsData options,
-        bool forceCpuFallback,
+        RenderDevice? forcedDevice,
         CancellationToken cancellationToken)
     {
-        var args = BuildFrameRangeArgs(blendFilePath, startFrame, endFrame, outputBase, options, forceCpuFallback);
+        var args = BuildFrameRangeArgs(blendFilePath, startFrame, endFrame, outputBase, options, forcedDevice);
         m_logger.LogDebug("Blender animation args: {Args}", args);
 
         return await RunBlenderAsync(args, cancellationToken);
@@ -516,7 +487,7 @@ public sealed class BlenderRunner
         int endFrame,
         string outputBase,
         RenderOptionsData options,
-        bool forceCpuFallback)
+        RenderDevice? forcedDevice)
     {
         // Identical per-engine configuration to BuildFrameArgs (the single-frame -f path) — device,
         // engine id, samples/denoise, format, resolution — minus the per-task border (FrameBatch is
@@ -534,7 +505,7 @@ public sealed class BlenderRunner
             "scene = bpy.context.scene"
         };
 
-        pythonLines.AddRange(BlenderRenderArgsBuilder.BuildDeviceConfigurationPython(options.Engine, forceCpuFallback));
+        pythonLines.AddRange(BlenderRenderArgsBuilder.BuildDeviceConfigurationPython(options.Engine, forcedDevice));
         pythonLines.AddRange(BlenderRenderArgsBuilder.BuildImageOutputConfigurationPython(options));
         pythonLines.AddRange(BlenderRenderArgsBuilder.BuildViewLayerRecoveryPython());
         pythonLines.AddRange(BlenderRenderArgsBuilder.BuildEngineConfigurationPython(options));
@@ -568,10 +539,10 @@ public sealed class BlenderRunner
         string outputPath,
         RenderOptionsData options,
         RenderTaskData? task,
-        bool forceCpuFallback,
+        RenderDevice? forcedDevice,
         CancellationToken cancellationToken)
     {
-        var args = BuildFrameArgs(blendFilePath, frame, outputPath, options, task, forceCpuFallback);
+        var args = BuildFrameArgs(blendFilePath, frame, outputPath, options, task, forcedDevice);
         m_logger.LogDebug("Blender args: {Args}", args);
 
         return await RunBlenderAsync(args, cancellationToken);
@@ -631,6 +602,7 @@ public sealed class BlenderRunner
             Stdout = stdout,
             Stderr = stderr,
             SelectedRenderBackend = ParseSelectedRenderDevice(stdout),
+            AvailableGpuBackends = ParseAvailableGpuBackends(stdout),
             SelectionMessage = ParseMarker(stdout, SELECTION_MESSAGE_PREFIX)
         };
     }
@@ -732,14 +704,104 @@ public sealed class BlenderRunner
         return normalized;
     }
 
-    private static bool ShouldRetryWithCpuFallback(RenderBlenderInvocationResult result)
-    {
-        return result.ExitCode != 0 && IsGpuBackend(result.SelectedRenderBackend);
-    }
-
     private static bool IsGpuBackend(RenderDevice? device)
     {
         return device is RenderDevice.CUDA or RenderDevice.OPTIX or RenderDevice.HIP or RenderDevice.METAL;
+    }
+
+    // Per-node (per-process) memo of GPU-backend health, shared across every frame/chunk this node
+    // renders: once a backend renders successfully we prefer it; once one crashes (non-OOM) we skip it.
+    // The node's GPU + driver are process-stable, so learning this once avoids re-crashing every frame.
+    private static readonly object s_deviceMemoLock = new();
+    private static RenderDevice? s_knownGoodGpuBackend;
+    private static readonly HashSet<RenderDevice> s_knownBadGpuBackends = [];
+
+    /// <summary>
+    /// Runs one render with the smart device ladder: prefer the node's known-good GPU backend (else
+    /// auto-probe); on a GPU failure try the next available GPU backend, or drop straight to CPU on an
+    /// out-of-memory failure; CPU last. <paramref name="runAttempt"/> forces the given device
+    /// (null = auto-probe); <paramref name="onBeforeRetry"/> clears partial outputs between attempts.
+    /// </summary>
+    private async Task<RenderBlenderInvocationResult> RenderWithDeviceFallbackAsync(
+        Func<RenderDevice?, Task<RenderBlenderInvocationResult>> runAttempt,
+        Action onBeforeRetry,
+        string renderDescription)
+    {
+        var result = await runAttempt(SnapshotPreferredFirstAttempt());
+
+        while (true)
+        {
+            if (result.ExitCode == 0)
+            {
+                RememberBackendSuccess(result.SelectedRenderBackend);
+                return result;
+            }
+
+            // A non-GPU (CPU / unknown) attempt that failed has nothing left to fall back to.
+            if (result.SelectedRenderBackend is not { } failed || !IsGpuBackend(failed))
+                return result;
+
+            var outOfMemory = IndicatesOutOfMemory(result.Stderr);
+            var next = RenderDeviceFallbackPlanner.NextDevice(
+                failed, result.AvailableGpuBackends, outOfMemory, SnapshotFailedGpuBackends());
+
+            m_logger.LogWarning(
+                "Blender {Description} failed on GPU backend {Failed} (exit {ExitCode}{Oom}); retrying on {Next}. {Message}",
+                renderDescription, failed, result.ExitCode, outOfMemory ? ", out of memory" : string.Empty, next,
+                result.SelectionMessage ?? string.Empty);
+
+            // OOM is scene-specific (VRAM pressure), not a backend defect — don't blacklist the backend,
+            // just step down to CPU for this render.
+            if (!outOfMemory)
+                RememberBackendFailure(failed);
+
+            onBeforeRetry();
+            result = await runAttempt(next);
+        }
+    }
+
+    private static RenderDevice? SnapshotPreferredFirstAttempt()
+    {
+        lock (s_deviceMemoLock)
+            return RenderDeviceFallbackPlanner.PreferredFirstAttempt(s_knownGoodGpuBackend, s_knownBadGpuBackends);
+    }
+
+    private static IReadOnlyCollection<RenderDevice> SnapshotFailedGpuBackends()
+    {
+        lock (s_deviceMemoLock)
+            return s_knownBadGpuBackends.ToArray();
+    }
+
+    private static void RememberBackendSuccess(RenderDevice? backend)
+    {
+        if (backend is not { } device || !IsGpuBackend(device))
+            return;
+
+        lock (s_deviceMemoLock)
+        {
+            s_knownGoodGpuBackend = device;
+            s_knownBadGpuBackends.Remove(device);
+        }
+    }
+
+    private static void RememberBackendFailure(RenderDevice backend)
+    {
+        lock (s_deviceMemoLock)
+        {
+            s_knownBadGpuBackends.Add(backend);
+            if (s_knownGoodGpuBackend == backend)
+                s_knownGoodGpuBackend = null;
+        }
+    }
+
+    private static bool IndicatesOutOfMemory(string stderr)
+    {
+        if (string.IsNullOrEmpty(stderr))
+            return false;
+
+        // Covers "CUDA error: Out of memory", "OptiX ... out of memory", HIP/Metal allocation failures.
+        return stderr.Contains("out of memory", StringComparison.OrdinalIgnoreCase)
+            || stderr.Contains("failed to allocate", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void DeleteRenderedOutputs(string outputBasePath, int frame, RenderFormat format)
@@ -766,6 +828,16 @@ public sealed class BlenderRunner
         return value
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static RenderDevice[] ParseAvailableGpuBackends(string stdout)
+    {
+        return ParseAvailableRenderBackends(stdout)
+            .Select(name => Enum.TryParse<RenderDevice>(name, ignoreCase: true, out var device) ? device : (RenderDevice?)null)
+            .Where(device => device is { } d && IsGpuBackend(d))
+            .Select(device => device!.Value)
+            .Distinct()
             .ToArray();
     }
 

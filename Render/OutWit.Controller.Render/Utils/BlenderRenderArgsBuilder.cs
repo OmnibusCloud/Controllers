@@ -22,7 +22,14 @@ internal static class BlenderRenderArgsBuilder
 
     #region Public
 
-    public static IReadOnlyList<string> BuildDeviceConfigurationPython(RenderEngine engine, bool forceCpuFallback)
+    /// <summary>
+    /// Cycles device-selection Python. <paramref name="forcedDevice"/>:
+    /// <c>null</c> = auto-probe (try each available GPU backend in candidate order, first wins);
+    /// <c>CPU</c> = force CPU; a specific GPU backend = enable ONLY that backend (still probing all
+    /// candidates for the availability report, so the smart fallback keeps full info). The availability
+    /// report (<c>OUTWIT_RENDER_AVAILABLE</c>) always lists every backend whose devices enumerate.
+    /// </summary>
+    public static IReadOnlyList<string> BuildDeviceConfigurationPython(RenderEngine engine, RenderDevice? forcedDevice)
     {
         if (engine != RenderEngine.Cycles)
         {
@@ -40,7 +47,7 @@ internal static class BlenderRenderArgsBuilder
             ];
         }
 
-        if (forceCpuFallback)
+        if (forcedDevice == RenderDevice.CPU)
         {
             return
             [
@@ -52,7 +59,13 @@ internal static class BlenderRenderArgsBuilder
             ];
         }
 
-        var candidateLiteral = "[" + string.Join(", ", GPU_BACKEND_CANDIDATES.Select(ToPythonStringLiteral)) + "]";
+        // Availability is ALWAYS probed across every candidate (so the fallback ladder keeps full info),
+        // but the try-list is narrowed to a single backend when one is forced.
+        var availableLiteral = "[" + string.Join(", ", GPU_BACKEND_CANDIDATES.Select(ToPythonStringLiteral)) + "]";
+        var tryCandidates = forcedDevice is { } forced
+            ? new[] { forced.ToString() }
+            : GPU_BACKEND_CANDIDATES;
+        var tryLiteral = "[" + string.Join(", ", tryCandidates.Select(ToPythonStringLiteral)) + "]";
 
         return
         [
@@ -87,7 +100,7 @@ internal static class BlenderRenderArgsBuilder
             "    except Exception:",
             "        return False",
             "available_backends = []",
-            $"for backend in {candidateLiteral}:",
+            $"for backend in {availableLiteral}:",
             "    if prefs is None:",
             "        break",
             "    try:",
@@ -98,11 +111,11 @@ internal static class BlenderRenderArgsBuilder
             "            available_backends.append(backend)",
             "    except Exception:",
             "        pass",
-            $"for backend in {candidateLiteral}:",
+            $"for backend in {tryLiteral}:",
             "    if _outwit_try_backend(backend):",
             "        selected_backend = backend",
             "        break",
-            "selection_message = ('Auto-selected ' + selected_backend) if selected_backend != 'CPU' else ('No GPU backend available; falling back to CPU' if len(available_backends) == 0 else 'GPU backend probe succeeded but Blender still fell back to CPU')",
+            "selection_message = ('Selected ' + selected_backend) if selected_backend != 'CPU' else ('No GPU backend available; falling back to CPU' if len(available_backends) == 0 else 'GPU backend probe succeeded but Blender still fell back to CPU')",
             "print('OUTWIT_RENDER_AVAILABLE=' + ','.join(available_backends))",
             "print('OUTWIT_RENDER_BACKEND=' + str(selected_backend))",
             "print('OUTWIT_RENDER_MESSAGE=' + selection_message)"

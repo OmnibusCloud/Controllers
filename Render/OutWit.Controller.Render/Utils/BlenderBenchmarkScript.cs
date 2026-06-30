@@ -63,8 +63,9 @@ internal static class BlenderBenchmarkScript
             "scene = bpy.context.scene"
         };
 
-        // Device selection + OUTWIT_RENDER_* markers (reused from the render path).
-        lines.AddRange(BlenderRenderArgsBuilder.BuildDeviceConfigurationPython(engine, forceCpuFallback: false));
+        // Device selection + OUTWIT_RENDER_* markers (reused from the render path). Auto-probe (the
+        // benchmark must measure the node's best backend, not a forced one).
+        lines.AddRange(BlenderRenderArgsBuilder.BuildDeviceConfigurationPython(engine, forcedDevice: null));
 
         // Output resolution.
         lines.Add($"scene.render.resolution_x = {resolution}");
