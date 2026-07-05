@@ -133,6 +133,15 @@ internal static class DccRenderTestData
         };
     }
 
+    public static void AttachStubImageAttachments(DccSceneData scene)
+    {
+        // The build-input factory fail-fasts when a referenced image asset has no matching
+        // attachment. Script-generation tests never materialize blobs, so a stub attachment
+        // per declared image asset satisfies the contract.
+        foreach (var imageAsset in scene.ImageAssets)
+            scene.AttachedFiles.Add(CreateImageAttachment(Guid.NewGuid(), imageAsset.SourcePath, imageAsset.RelativePath));
+    }
+
     public static DccImageAssetData CreateMetallicImageAsset()
     {
         return new DccImageAssetData

@@ -60,12 +60,16 @@ internal static class DccBlenderNodeEmitter
         if (uvs.Count == 0)
             return;
 
+        // The per-vertex UV list is hoisted into a Python variable once — inlining the list
+        // literal in the loop body would rebuild it on every loop iteration (O(N²) in Blender).
         var layerVariable = $"{meshVariableName}_{variableSuffix}";
+        var uvsVariable = $"{layerVariable}_uvs";
         lines.Add($"{layerVariable} = {meshVariableName}.uv_layers.new(name={ToPythonStringLiteral(uvLayerName)})");
+        lines.Add($"{uvsVariable} = {BuildVector2List(uvs)}");
         lines.Add($"for polygon in {meshVariableName}.polygons:");
         lines.Add($"    for loop_index in polygon.loop_indices:");
         lines.Add($"        vertex_index = {meshVariableName}.loops[loop_index].vertex_index");
-        lines.Add($"        uv = {BuildVector2List(uvs)}[vertex_index]");
+        lines.Add($"        uv = {uvsVariable}[vertex_index]");
         lines.Add($"        {layerVariable}.data[loop_index].uv = uv");
     }
 
@@ -146,12 +150,16 @@ internal static class DccBlenderNodeEmitter
             return;
 
         // Per-corner vertex colours as a BYTE_COLOR attribute (the conventional vertex-colour type).
+        // The per-vertex colour list is hoisted into a Python variable once — inlining the list
+        // literal in the loop body would rebuild it on every loop iteration (O(N²) in Blender).
         var layerVariable = $"{meshVariableName}_color_layer";
+        var colorsVariable = $"{layerVariable}_colors";
         lines.Add($"{layerVariable} = {meshVariableName}.color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')");
+        lines.Add($"{colorsVariable} = {BuildColorList(colors)}");
         lines.Add($"for polygon in {meshVariableName}.polygons:");
         lines.Add($"    for loop_index in polygon.loop_indices:");
         lines.Add($"        vertex_index = {meshVariableName}.loops[loop_index].vertex_index");
-        lines.Add($"        color = {BuildColorList(colors)}[vertex_index]");
+        lines.Add($"        color = {colorsVariable}[vertex_index]");
         lines.Add($"        {layerVariable}.data[loop_index].color = color");
     }
 

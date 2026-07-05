@@ -15,6 +15,7 @@ public sealed class DccSceneBuildInputFactoryTests
     public void CreateValidSceneBuildInputTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
 
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
@@ -27,7 +28,47 @@ public sealed class DccSceneBuildInputFactoryTests
             Assert.That(buildInput.MeshesById.Count, Is.EqualTo(1));
             Assert.That(buildInput.MaterialsById.Count, Is.EqualTo(1));
             Assert.That(buildInput.ImageAssetsById.Count, Is.EqualTo(1));
-            Assert.That(buildInput.ImageAttachmentsByImageId.Count, Is.EqualTo(0));
+            Assert.That(buildInput.ImageAttachmentsByImageId.Count, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public void CreateRejectsMaterialTextureImageWithoutMatchingAttachmentTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.Message, Does.Contain("material 'material:cube' texture slot 'BaseColor'"));
+            Assert.That(exception!.Message, Does.Contain("no matching attachment"));
+            Assert.That(exception!.Message, Does.Contain("textures/albedo.png"));
+        });
+    }
+
+    [Test]
+    public void CreateRejectsWorldEnvironmentImageWithoutMatchingAttachmentTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.ImageAssets.Add(new DccImageAssetData
+        {
+            Id = "image:env",
+            Name = "Env",
+            SourcePath = "C:/hdri/studio.hdr",
+            RelativePath = "textures/studio.hdr",
+            AssetKind = "ImageAsset"
+        });
+        scene.World = new DccWorldData { EnvironmentImageId = "image:env" };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.Message, Does.Contain("world environment image 'image:env'"));
+            Assert.That(exception!.Message, Does.Contain("no matching attachment"));
+            Assert.That(exception!.Message, Does.Contain("textures/studio.hdr"));
         });
     }
 

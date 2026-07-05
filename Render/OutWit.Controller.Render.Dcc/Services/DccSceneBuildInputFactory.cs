@@ -25,6 +25,9 @@ internal static class DccSceneBuildInputFactory
         ValidateMaterialAnimations(normalizedScene);
         ValidateMeshTopology(normalizedScene, materialsById.Count);
 
+        var imageAttachmentsByImageId = BuildImageAttachmentsByImageId(normalizedScene);
+        ValidateReferencedImageAttachments(normalizedScene, imageAssetsById, imageAttachmentsByImageId);
+
         return new DccSceneBuildInput
         {
             Scene = normalizedScene,
@@ -33,7 +36,7 @@ internal static class DccSceneBuildInputFactory
             MeshesById = meshesById,
             MaterialsById = materialsById,
             ImageAssetsById = imageAssetsById,
-            ImageAttachmentsByImageId = BuildImageAttachmentsByImageId(normalizedScene)
+            ImageAttachmentsByImageId = imageAttachmentsByImageId
         };
     }
 
@@ -60,6 +63,44 @@ internal static class DccSceneBuildInputFactory
         }
 
         return attachmentsByImageId;
+    }
+
+    private static void ValidateReferencedImageAttachments(
+        DccSceneData scene,
+        IReadOnlyDictionary<string, DccImageAssetData> imageAssetsById,
+        IReadOnlyDictionary<string, RenderSceneAttachmentRefData> attachmentsByImageId)
+    {
+        // Fail fast on textures that never made it into AttachedFiles: without a materialized
+        // attachment the script generator would fall back to a client-machine path and the build
+        // would only fail at image-load time deep inside Blender.
+        foreach (var material in scene.Materials)
+        {
+            foreach (var textureSlot in material.TextureSlots)
+            {
+                if (attachmentsByImageId.ContainsKey(textureSlot.ImageAssetId))
+                    continue;
+
+                var imageAsset = imageAssetsById[textureSlot.ImageAssetId];
+                throw new InvalidOperationException(
+                    $"Render.BuildBlendFromDccScene material '{material.Id}' texture slot '{textureSlot.Slot}' references image asset '{imageAsset.Id}' with no matching attachment for '{DescribeImagePath(imageAsset)}'.");
+            }
+        }
+
+        if (scene.World != null
+            && !string.IsNullOrWhiteSpace(scene.World.EnvironmentImageId)
+            && !attachmentsByImageId.ContainsKey(scene.World.EnvironmentImageId))
+        {
+            var imageAsset = imageAssetsById[scene.World.EnvironmentImageId];
+            throw new InvalidOperationException(
+                $"Render.BuildBlendFromDccScene world environment image '{imageAsset.Id}' has no matching attachment for '{DescribeImagePath(imageAsset)}'.");
+        }
+    }
+
+    private static string DescribeImagePath(DccImageAssetData imageAsset)
+    {
+        return string.IsNullOrWhiteSpace(imageAsset.RelativePath)
+            ? imageAsset.SourcePath
+            : imageAsset.RelativePath;
     }
 
     private static void ValidateMeshTopology(DccSceneData scene, int materialCount)

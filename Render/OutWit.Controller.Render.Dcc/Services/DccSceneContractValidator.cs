@@ -40,6 +40,9 @@ internal static class DccSceneContractValidator
             throw new InvalidOperationException("Render.BuildBlendFromDccScene requires a supported render TargetEngine.");
         }
 
+        ValidateFinite(scene.RenderSettings.Exposure, "RenderSettings.Exposure");
+        ValidateFinite(scene.RenderSettings.MotionBlurShutter, "RenderSettings.MotionBlurShutter");
+
         if (string.IsNullOrWhiteSpace(scene.AxisSystem.Handedness)
             || string.IsNullOrWhiteSpace(scene.AxisSystem.UpAxis)
             || string.IsNullOrWhiteSpace(scene.AxisSystem.ForwardAxis))
@@ -84,6 +87,9 @@ internal static class DccSceneContractValidator
             throw new InvalidOperationException(
                 $"Render.BuildBlendFromDccScene world references missing environment image asset '{scene.World.EnvironmentImageId}'.");
         }
+
+        if (scene.World != null)
+            ValidateFinite(scene.World.Strength, "World.Strength");
 
         foreach (var material in scene.Materials)
         {
@@ -159,6 +165,9 @@ internal static class DccSceneContractValidator
                     $"Render.BuildBlendFromDccScene material '{material.Id}' can use custom normal strength only when a normal texture slot is present.");
             }
 
+            ValidateFinite(material.EmissionStrength, $"material '{material.Id}' EmissionStrength");
+            ValidateFinite(material.DisplacementScale, $"material '{material.Id}' DisplacementScale");
+
             foreach (var textureSlot in material.TextureSlots)
             {
                 if (!Enum.IsDefined(textureSlot.Slot))
@@ -177,6 +186,21 @@ internal static class DccSceneContractValidator
                 {
                     throw new InvalidOperationException(
                         $"Render.BuildBlendFromDccScene material '{material.Id}' references missing image asset '{textureSlot.ImageAssetId}'.");
+                }
+
+                ValidateFinite(textureSlot.UvScaleX, $"material '{material.Id}' texture slot '{textureSlot.Slot}' UvScaleX");
+                ValidateFinite(textureSlot.UvScaleY, $"material '{material.Id}' texture slot '{textureSlot.Slot}' UvScaleY");
+                ValidateFinite(textureSlot.UvOffsetX, $"material '{material.Id}' texture slot '{textureSlot.Slot}' UvOffsetX");
+                ValidateFinite(textureSlot.UvOffsetY, $"material '{material.Id}' texture slot '{textureSlot.Slot}' UvOffsetY");
+                ValidateFinite(textureSlot.UvRotationDegrees, $"material '{material.Id}' texture slot '{textureSlot.Slot}' UvRotationDegrees");
+
+                foreach (var keyframe in textureSlot.UvTransformKeyframes)
+                {
+                    ValidateFinite(keyframe.UvScaleX, $"material '{material.Id}' texture slot '{textureSlot.Slot}' UV-transform keyframe frame '{keyframe.Frame}' UvScaleX");
+                    ValidateFinite(keyframe.UvScaleY, $"material '{material.Id}' texture slot '{textureSlot.Slot}' UV-transform keyframe frame '{keyframe.Frame}' UvScaleY");
+                    ValidateFinite(keyframe.UvOffsetX, $"material '{material.Id}' texture slot '{textureSlot.Slot}' UV-transform keyframe frame '{keyframe.Frame}' UvOffsetX");
+                    ValidateFinite(keyframe.UvOffsetY, $"material '{material.Id}' texture slot '{textureSlot.Slot}' UV-transform keyframe frame '{keyframe.Frame}' UvOffsetY");
+                    ValidateFinite(keyframe.UvRotationDegrees, $"material '{material.Id}' texture slot '{textureSlot.Slot}' UV-transform keyframe frame '{keyframe.Frame}' UvRotationDegrees");
                 }
             }
         }
@@ -255,6 +279,11 @@ internal static class DccSceneContractValidator
                 throw new InvalidOperationException(
                     $"Render.BuildBlendFromDccScene node '{node.Id}' references missing material '{node.MaterialBindingId}'.");
             }
+
+            ValidateFiniteTransform(node.LocalTransform, $"node '{node.Id}' LocalTransform");
+
+            foreach (var keyframe in node.TransformKeyframes)
+                ValidateFiniteTransform(keyframe.Transform, $"node '{node.Id}' transform keyframe frame '{keyframe.Frame}'");
         }
 
         foreach (var camera in scene.Cameras)
@@ -270,6 +299,9 @@ internal static class DccSceneContractValidator
                 throw new InvalidOperationException(
                     $"Render.BuildBlendFromDccScene camera '{camera.Id}' requires positive clipping planes where NearClip is less than FarClip.");
             }
+
+            ValidateFinite(camera.FocusDistance, $"camera '{camera.Id}' FocusDistance");
+            ValidateFinite(camera.FStop, $"camera '{camera.Id}' FStop");
         }
 
         foreach (var light in scene.Lights)
@@ -316,6 +348,31 @@ internal static class DccSceneContractValidator
                     $"Render.BuildBlendFromDccScene light '{light.Id}' requires spot angle in the (0, 180] range for spot lights.");
             }
         }
+    }
+
+    private static void ValidateFinite(double value, string description)
+    {
+        // NaN/Infinity would be rendered verbatim into the generated Python script and only
+        // fail as a NameError deep inside Blender — reject them at the contract boundary.
+        if (double.IsFinite(value))
+            return;
+
+        throw new InvalidOperationException(
+            $"Render.BuildBlendFromDccScene requires finite {description}, got '{value}'.");
+    }
+
+    private static void ValidateFiniteTransform(DccTransformData transform, string description)
+    {
+        ValidateFinite(transform.Translation.X, $"{description} Translation.X");
+        ValidateFinite(transform.Translation.Y, $"{description} Translation.Y");
+        ValidateFinite(transform.Translation.Z, $"{description} Translation.Z");
+        ValidateFinite(transform.Rotation.W, $"{description} Rotation.W");
+        ValidateFinite(transform.Rotation.X, $"{description} Rotation.X");
+        ValidateFinite(transform.Rotation.Y, $"{description} Rotation.Y");
+        ValidateFinite(transform.Rotation.Z, $"{description} Rotation.Z");
+        ValidateFinite(transform.Scale.X, $"{description} Scale.X");
+        ValidateFinite(transform.Scale.Y, $"{description} Scale.Y");
+        ValidateFinite(transform.Scale.Z, $"{description} Scale.Z");
     }
 
     private static void ValidateUniqueIds(IEnumerable<string> ids, string family)

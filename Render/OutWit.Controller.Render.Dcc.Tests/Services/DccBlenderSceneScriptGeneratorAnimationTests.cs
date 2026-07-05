@@ -1,4 +1,5 @@
 using OutWit.Controller.Render.Dcc.Model;
+using OutWit.Controller.Render.Dcc.Models.Build;
 using OutWit.Controller.Render.Dcc.Services;
 using OutWit.Controller.Render.Dcc.Tests.Utils;
 
@@ -30,7 +31,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         var keyframe = DccRenderTestData.CreateMaterialNormalStrengthKeyframe(2, 2d);
         keyframe.InterpolationMode = DccKeyframeInterpolationMode.Linear;
         scene.Materials[0].NormalStrengthKeyframes = [keyframe];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -52,7 +53,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         var keyframe = DccRenderTestData.CreateMaterialAlphaClipThresholdKeyframe(2, 0.2d);
         keyframe.InterpolationMode = DccKeyframeInterpolationMode.Linear;
         scene.Materials[0].AlphaClipThresholdKeyframes = [keyframe];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -73,7 +74,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         var keyframe = DccRenderTestData.CreateMaterialOpacityKeyframe(2, 0.5d);
         keyframe.InterpolationMode = DccKeyframeInterpolationMode.Linear;
         scene.Materials[0].OpacityKeyframes = [keyframe];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -93,7 +94,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         var keyframe = DccRenderTestData.CreateMaterialBaseColorKeyframe(2, 0.2d, 0.3d, 1d);
         keyframe.InterpolationMode = DccKeyframeInterpolationMode.Linear;
         scene.Materials[0].BaseColorKeyframes = [keyframe];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -113,7 +114,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         var keyframe = DccRenderTestData.CreateMaterialMetallicKeyframe(2, 0.8d);
         keyframe.InterpolationMode = DccKeyframeInterpolationMode.Linear;
         scene.Materials[0].MetallicKeyframes = [keyframe];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -133,7 +134,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         var keyframe = DccRenderTestData.CreateMaterialRoughnessKeyframe(2, 0.2d);
         keyframe.InterpolationMode = DccKeyframeInterpolationMode.Linear;
         scene.Materials[0].RoughnessKeyframes = [keyframe];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -153,7 +154,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         var keyframe = DccRenderTestData.CreateTextureTransformKeyframe(2, 2d, 0.5d, 0.25d, -0.1d, 45d);
         keyframe.InterpolationMode = DccKeyframeInterpolationMode.Linear;
         scene.Materials[0].TextureSlots[0].UvTransformKeyframes = [keyframe];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -178,7 +179,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         [
             keyframe
         ];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -203,7 +204,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         [
             DccRenderTestData.CreateTransformKeyframe(2, 6d, -4d, 3d)
         ];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -225,7 +226,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         camera.VerticalFovKeyframes = [keyframe];
         scene.Cameras.Add(camera);
         scene.Nodes.Add(DccRenderTestData.CreateCameraNode());
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -252,7 +253,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         camera.FarClipKeyframes = [farKeyframe];
         scene.Cameras.Add(camera);
         scene.Nodes.Add(DccRenderTestData.CreateCameraNode());
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -280,7 +281,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         [
             DccRenderTestData.CreateTransformKeyframe(2, 5d, -3d, 7d)
         ];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -302,7 +303,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         light.IntensityKeyframes = [intensityKeyframe];
         scene.Lights.Add(light);
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -326,7 +327,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         light.ColorKeyframes = [colorKeyframe];
         scene.Lights.Add(light);
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -350,7 +351,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         light.RangeKeyframes = [keyframe];
         scene.Lights.Add(light);
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -374,7 +375,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         light.SpotAngleKeyframes = [keyframe];
         scene.Lights.Add(light);
         scene.Nodes.Add(DccRenderTestData.CreateSpotLightNode());
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -398,7 +399,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         [
             keyframe
         ];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -424,7 +425,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         [
             DccRenderTestData.CreateVisibilityKeyframe(2, false, false)
         ];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -448,7 +449,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         [
             DccRenderTestData.CreateVisibilityKeyframe(2, false, false)
         ];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -474,7 +475,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         [
             DccRenderTestData.CreateVisibilityKeyframe(2, false, false)
         ];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -507,7 +508,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         [
             visibilityKeyframe
         ];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -541,7 +542,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         [
             visibilityKeyframe
         ];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -557,6 +558,16 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         });
     }
 
+
+    #endregion
+
+    #region Tools
+
+    private static DccSceneBuildInput CreateBuildInput(DccSceneData scene)
+    {
+        DccRenderTestData.AttachStubImageAttachments(scene);
+        return DccSceneBuildInputFactory.Create(scene);
+    }
 
     #endregion
 }

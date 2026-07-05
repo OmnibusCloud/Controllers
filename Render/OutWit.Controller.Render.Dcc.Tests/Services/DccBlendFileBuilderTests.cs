@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OutWit.Controller.Render.Dcc.Services;
 using OutWit.Controller.Render.Dcc.Tests.Mock;
 using OutWit.Controller.Render.Dcc.Tests.Utils;
+using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Render.Dcc.Tests.Services;
 
@@ -67,18 +68,36 @@ public sealed class DccBlendFileBuilderTests
     }
 
     [Test]
-    public void BuildAsyncRejectsRelativeTexturePathWithoutMaterializedAttachmentTest()
+    public void BuildInputRejectsRelativeTexturePathWithoutMaterializedAttachmentTest()
     {
-        if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)
-            Assert.Ignore("Packaged Blender runtime not found for RenderDcc missing-texture regression test.");
-
+        // Regression coverage for the late in-Blender failure this test used to document:
+        // a texture that never made it into AttachedFiles is now rejected up front by
+        // DccSceneBuildInputFactory instead of failing at image-load time inside Blender.
         var scene = DccRenderTestData.CreateValidScene();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.Message, Does.Contain("no matching attachment"));
+            Assert.That(exception!.Message, Does.Contain("textures/albedo.png"));
+        });
+    }
+
+    [Test]
+    public void BuildAsyncDeletesWorkDirectoryWhenBuildFailsTest()
+    {
+        // Attachment materialization fails (the blob was never registered) — the builder must
+        // remove its outwit_render_dcc_build_* work directory on the failure path.
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment(Guid.NewGuid()));
         var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var tempStorage = new WitTempStorageDefault(m_storageDir);
 
-        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await DccBlendFileBuilder.BuildAsync(buildInput, m_blobService, NullLogger.Instance, CancellationToken.None));
+        Assert.ThrowsAsync<FileNotFoundException>(async () =>
+            await DccBlendFileBuilder.BuildAsync(buildInput, m_blobService, NullLogger.Instance, CancellationToken.None, tempStorage));
 
-        Assert.That(exception!.Message, Does.Contain("Cannot read 'textures/albedo.png'").IgnoreCase);
+        Assert.That(Directory.GetDirectories(m_storageDir, "outwit_render_dcc_build_*"), Is.Empty);
     }
 
     #endregion

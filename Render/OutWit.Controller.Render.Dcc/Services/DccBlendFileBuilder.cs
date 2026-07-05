@@ -22,36 +22,48 @@ internal static class DccBlendFileBuilder
         var workDirectory = Path.Combine(tempRoot, $"outwit_render_dcc_build_{Guid.NewGuid():N}");
         Directory.CreateDirectory(workDirectory);
 
-        await MaterializeAttachmentsAsync(workDirectory, buildInput, blobService);
-
-        var outputBlendPath = Path.Combine(workDirectory, SanitizeFileName(buildInput.Scene.SceneName) + ".blend");
-        var scriptBuildInput = CreateScriptBuildInput(buildInput, workDirectory);
-        var pythonScript = DccBlenderSceneScriptGenerator.Create(scriptBuildInput);
-        var pythonScriptPath = Path.Combine(workDirectory, "build_scene.py");
-        await File.WriteAllTextAsync(
-            pythonScriptPath,
-            pythonScript
-            + Environment.NewLine
-            + "bpy.ops.file.pack_all()"
-            + Environment.NewLine
-            + $"bpy.ops.wm.save_as_mainfile(filepath={ToPythonStringLiteral(outputBlendPath)})"
-            + Environment.NewLine,
-            cancellationToken);
-
-        var blenderPath = DccBlenderBinaryResolver.ResolveBlenderPath(Assembly.GetExecutingAssembly().Location, logger);
-        if (!File.Exists(blenderPath))
-            throw new FileNotFoundException($"Blender executable was not found at '{blenderPath}'.", blenderPath);
-
-        await RunBlenderAsync(blenderPath, pythonScriptPath, workDirectory, logger, cancellationToken);
-
-        if (!File.Exists(outputBlendPath))
-            throw new InvalidOperationException($"Render.BuildBlendFromDccScene expected Blender to create '{outputBlendPath}', but the file was not found.");
-
-        return new DccBlendBuildArtifact
+        // On success ownership of the work directory transfers to the caller via the returned
+        // artifact (the adapter uploads the .blend and then calls Cleanup). On any failure the
+        // builder is still the owner and must delete the directory itself — best-effort, so an
+        // IO error during cleanup never masks the original exception.
+        try
         {
-            LocalBlendPath = outputBlendPath,
-            WorkDirectory = workDirectory
-        };
+            await MaterializeAttachmentsAsync(workDirectory, buildInput, blobService);
+
+            var outputBlendPath = Path.Combine(workDirectory, SanitizeFileName(buildInput.Scene.SceneName) + ".blend");
+            var scriptBuildInput = CreateScriptBuildInput(buildInput, workDirectory);
+            var pythonScript = DccBlenderSceneScriptGenerator.Create(scriptBuildInput);
+            var pythonScriptPath = Path.Combine(workDirectory, "build_scene.py");
+            await File.WriteAllTextAsync(
+                pythonScriptPath,
+                pythonScript
+                + Environment.NewLine
+                + "bpy.ops.file.pack_all()"
+                + Environment.NewLine
+                + $"bpy.ops.wm.save_as_mainfile(filepath={ToPythonStringLiteral(outputBlendPath)})"
+                + Environment.NewLine,
+                cancellationToken);
+
+            var blenderPath = DccBlenderBinaryResolver.ResolveBlenderPath(Assembly.GetExecutingAssembly().Location, logger);
+            if (!File.Exists(blenderPath))
+                throw new FileNotFoundException($"Blender executable was not found at '{blenderPath}'.", blenderPath);
+
+            await RunBlenderAsync(blenderPath, pythonScriptPath, workDirectory, logger, cancellationToken);
+
+            if (!File.Exists(outputBlendPath))
+                throw new InvalidOperationException($"Render.BuildBlendFromDccScene expected Blender to create '{outputBlendPath}', but the file was not found.");
+
+            return new DccBlendBuildArtifact
+            {
+                LocalBlendPath = outputBlendPath,
+                WorkDirectory = workDirectory
+            };
+        }
+        catch
+        {
+            TryDeleteDirectory(workDirectory, logger);
+            throw;
+        }
     }
 
     public static void Cleanup(DccBlendBuildArtifact artifact, ILogger logger)

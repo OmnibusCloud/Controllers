@@ -1,4 +1,5 @@
 using OutWit.Controller.Render.Dcc.Model;
+using OutWit.Controller.Render.Dcc.Models.Build;
 using OutWit.Controller.Render.Dcc.Services;
 using OutWit.Controller.Render.Dcc.Tests.Utils;
 
@@ -17,7 +18,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     [Test]
     public void CreateContainsSceneBootstrapAndMeshCreationTest()
     {
-        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+        var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -49,7 +50,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         var scene = DccRenderTestData.CreateValidScene();
         scene.Cameras.Add(DccRenderTestData.CreateCamera());
         scene.Nodes.Add(DccRenderTestData.CreateCameraNode());
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -70,7 +71,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         var scene = DccRenderTestData.CreateValidScene();
         scene.Lights.Add(DccRenderTestData.CreateLight());
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -94,7 +95,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         camera.EnableDepthOfField = true;
         camera.FocusDistance = 7.5d;
         camera.FStop = 1.8d;
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -117,7 +118,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         light.CastShadows = false;
         scene.Lights.Add(light);
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -137,7 +138,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         var scene = DccRenderTestData.CreateValidScene();
         scene.RenderSettings.ViewTransform = "Standard";
         scene.RenderSettings.Exposure = 1.5d;
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -154,7 +155,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         var scene = DccRenderTestData.CreateValidScene();
         var mesh = scene.Meshes[0];
         mesh.Uv1 = [.. mesh.Uv0.Select(uv => new DccVector2Data { X = uv.X, Y = uv.Y })];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -168,7 +169,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     [Test]
     public void CreateAppliesSmoothCustomNormalsWhenMeshHasNormalsTest()
     {
-        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+        var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -188,7 +189,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             BackgroundColor = new DccColorData { R = 0.2d, G = 0.3d, B = 0.4d, A = 1d },
             Strength = 1.5d
         };
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -217,7 +218,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             Strength = 2.5d,
             EnvironmentRotationDegrees = 90d
         };
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -253,7 +254,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
                 Positions = [.. mesh.Positions.Select(me => new DccVector3Data { X = me.X * 2d, Y = me.Y * 2d, Z = me.Z * 2d })]
             }
         ];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -269,7 +270,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     [Test]
     public void CreateDoesNotEmitShapeKeysWhenMeshHasNoDeformationTest()
     {
-        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+        var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -294,7 +295,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             Slot = DccTextureSlotKind.Displacement,
             ImageAssetId = "image:displacement"
         });
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -311,7 +312,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     [Test]
     public void CreateDoesNotEmitDisplacementOrSubdivisionWhenMaterialHasNoneTest()
     {
-        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+        var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -328,7 +329,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         var scene = DccRenderTestData.CreateValidScene();
         scene.RenderSettings.MotionBlur = true;
         scene.RenderSettings.MotionBlurShutter = 0.25d;
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -342,7 +343,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     [Test]
     public void CreateDoesNotEmitMotionBlurWhenDisabledTest()
     {
-        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+        var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -359,7 +360,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             new DccColorData { R = 0d, G = 1d, B = 0d, A = 1d },
             new DccColorData { R = 0d, G = 0d, B = 1d, A = 1d }
         ];
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -373,7 +374,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     [Test]
     public void CreateDoesNotEmitVertexColorAttributeWhenMeshHasNoColorsTest()
     {
-        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+        var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -383,7 +384,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     [Test]
     public void CreateDoesNotEmitWorldWhenSceneHasNoWorldTest()
     {
-        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+        var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -403,7 +404,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             BackgroundColor = new DccColorData { R = 0d, G = 0d, B = 0d, A = 1d },
             Strength = 1d
         };
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -416,7 +417,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         var scene = DccRenderTestData.CreateValidScene();
         scene.Materials[0].Transmission = 1d;
         scene.Materials[0].Ior = 1.5d;
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -430,7 +431,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     [Test]
     public void CreateDoesNotEmitTransmissionForOpaqueMaterialTest()
     {
-        var buildInput = DccSceneBuildInputFactory.Create(DccRenderTestData.CreateValidScene());
+        var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -443,7 +444,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         var scene = DccRenderTestData.CreateValidScene();
         scene.Materials[0].EmissionColor = new DccColorData { R = 1d, G = 0.5d, B = 0d, A = 1d };
         scene.Materials[0].EmissionStrength = 5d;
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -460,7 +461,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         var scene = DccRenderTestData.CreateValidScene();
         scene.Lights.Add(DccRenderTestData.CreateSunLight());
         scene.Nodes.Add(DccRenderTestData.CreateSunLightNode());
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -479,7 +480,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         var scene = DccRenderTestData.CreateValidScene();
         scene.Lights.Add(DccRenderTestData.CreateSpotLight());
         scene.Nodes.Add(DccRenderTestData.CreateSpotLightNode());
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -501,7 +502,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         light.Range = 0.01d;
         scene.Lights.Add(light);
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -529,7 +530,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             Slot = DccTextureSlotKind.Roughness,
             ImageAssetId = "image:roughness"
         });
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -560,7 +561,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             Slot = DccTextureSlotKind.Normal,
             ImageAssetId = "image:normal"
         });
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -585,7 +586,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             Slot = DccTextureSlotKind.Opacity,
             ImageAssetId = "image:opacity"
         });
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -611,7 +612,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             Slot = DccTextureSlotKind.Opacity,
             ImageAssetId = "image:opacity"
         });
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -634,7 +635,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             Slot = DccTextureSlotKind.Opacity,
             ImageAssetId = "image:opacity"
         });
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -649,7 +650,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     public void CreateEmitsCombinedBaseColorTextureAndScalarBaseColorControlTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -674,7 +675,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             Slot = DccTextureSlotKind.Opacity,
             ImageAssetId = "image:opacity"
         });
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -697,7 +698,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].TextureSlots[0].UvOffsetX = 0.25d;
         scene.Materials[0].TextureSlots[0].UvOffsetY = -0.1d;
         scene.Materials[0].TextureSlots[0].UvRotationDegrees = 45d;
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -721,7 +722,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         var scene = DccRenderTestData.CreateValidScene();
         scene.Materials.Add(DccRenderTestData.CreateSecondaryMaterial());
         DccRenderTestData.ApplyTwoTriangleQuadMesh(scene);
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -755,7 +756,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             Slot = DccTextureSlotKind.Displacement,
             ImageAssetId = "image:displacement"
         });
-        var buildInput = DccSceneBuildInputFactory.Create(scene);
+        var buildInput = CreateBuildInput(scene);
 
         var script = DccBlenderSceneScriptGenerator.Create(buildInput);
 
@@ -766,6 +767,16 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         });
     }
 
+
+    #endregion
+
+    #region Tools
+
+    private static DccSceneBuildInput CreateBuildInput(DccSceneData scene)
+    {
+        DccRenderTestData.AttachStubImageAttachments(scene);
+        return DccSceneBuildInputFactory.Create(scene);
+    }
 
     #endregion
 }

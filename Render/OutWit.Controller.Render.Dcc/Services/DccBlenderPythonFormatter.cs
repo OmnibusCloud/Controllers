@@ -13,6 +13,15 @@ internal static class DccBlenderPythonFormatter
 
     public static string FormatDouble(double value)
     {
+        // Backstop: NaN/Infinity would render verbatim into the generated script and only
+        // surface as a NameError deep inside Blender. The contract validator rejects the
+        // known non-finite fields up front; this guards everything else.
+        if (!double.IsFinite(value))
+        {
+            throw new InvalidOperationException(
+                $"Render.BuildBlendFromDccScene cannot emit non-finite value '{value}' into the generated Python script.");
+        }
+
         return value.ToString("0.0###############", CultureInfo.InvariantCulture);
     }
 

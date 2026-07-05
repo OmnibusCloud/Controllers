@@ -506,5 +506,90 @@ public sealed class DccSceneContractValidatorTests
         Assert.That(exception!.Message, Does.Contain("custom spot angle only when Kind is Spot"));
     }
 
+    [Test]
+    public void ValidateRejectsNonFiniteNodeTransformTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Nodes[0].LocalTransform.Translation.X = double.NaN;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneContractValidator.Validate(scene));
+
+        Assert.That(exception!.Message, Does.Contain("requires finite node 'node:cube' LocalTransform Translation.X"));
+    }
+
+    [Test]
+    public void ValidateRejectsNonFiniteTransformKeyframeTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        var keyframe = DccRenderTestData.CreateTransformKeyframe(2, 1d, 2d, 3d);
+        keyframe.Transform.Scale.Z = double.NaN;
+        scene.Nodes[0].TransformKeyframes = [keyframe];
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneContractValidator.Validate(scene));
+
+        Assert.That(exception!.Message, Does.Contain("requires finite node 'node:cube' transform keyframe frame '2' Scale.Z"));
+    }
+
+    [Test]
+    public void ValidateRejectsNonFiniteTextureSlotUvOffsetTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Materials[0].TextureSlots[0].UvOffsetX = double.NaN;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneContractValidator.Validate(scene));
+
+        Assert.That(exception!.Message, Does.Contain("texture slot 'BaseColor' UvOffsetX"));
+    }
+
+    [Test]
+    public void ValidateRejectsNonFiniteMaterialEmissionStrengthTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Materials[0].EmissionStrength = double.PositiveInfinity;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneContractValidator.Validate(scene));
+
+        Assert.That(exception!.Message, Does.Contain("material 'material:cube' EmissionStrength"));
+    }
+
+    [Test]
+    public void ValidateRejectsNonFiniteWorldStrengthTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.World = new DccWorldData
+        {
+            BackgroundColor = new DccColorData { R = 0.2d, G = 0.3d, B = 0.4d, A = 1d },
+            Strength = double.NaN
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneContractValidator.Validate(scene));
+
+        Assert.That(exception!.Message, Does.Contain("World.Strength"));
+    }
+
+    [Test]
+    public void ValidateRejectsNonFiniteRenderSettingsExposureTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.RenderSettings.Exposure = double.NaN;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneContractValidator.Validate(scene));
+
+        Assert.That(exception!.Message, Does.Contain("RenderSettings.Exposure"));
+    }
+
+    [Test]
+    public void ValidateRejectsNonFiniteCameraFocusDistanceTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Cameras.Add(DccRenderTestData.CreateCamera());
+        scene.Cameras[^1].FocusDistance = double.NaN;
+        scene.Nodes.Add(DccRenderTestData.CreateCameraNode());
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneContractValidator.Validate(scene));
+
+        Assert.That(exception!.Message, Does.Contain("camera 'camera:main' FocusDistance"));
+    }
+
     #endregion
 }
