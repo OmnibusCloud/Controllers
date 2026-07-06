@@ -31,7 +31,8 @@ public partial class DccMeshData : ModelBase
                && DeformationFrames.Count == other.DeformationFrames.Count
                && DeformationFrames.Zip(other.DeformationFrames, (left, right) => left.Is(right, tolerance)).All(me => me)
                && TriangleIndices.SequenceEqual(other.TriangleIndices)
-               && MaterialIndices.SequenceEqual(other.MaterialIndices);
+               && MaterialIndices.SequenceEqual(other.MaterialIndices)
+               && SubdivisionLevels == other.SubdivisionLevels;
     }
 
     public override ModelBase Clone()
@@ -47,7 +48,8 @@ public partial class DccMeshData : ModelBase
             Colors = [.. Colors.Select(me => (DccColorData)me.Clone())],
             DeformationFrames = [.. DeformationFrames.Select(me => (DccMeshDeformationFrameData)me.Clone())],
             TriangleIndices = [.. TriangleIndices],
-            MaterialIndices = [.. MaterialIndices]
+            MaterialIndices = [.. MaterialIndices],
+            SubdivisionLevels = SubdivisionLevels
         };
     }
 
@@ -120,6 +122,15 @@ public partial class DccMeshData : ModelBase
     /// </summary>
     [MemoryPackOrder(9)]
     public List<DccMeshDeformationFrameData> DeformationFrames { get; set; } = [];
+
+    /// <summary>
+    /// Render-time Catmull-Clark subdivision levels to apply on top of the exported geometry
+    /// (0 = none). Carries source-application render-only smoothing (e.g. 3ds Max MeshSmooth /
+    /// TurboSmooth "Render Iterations") without baking the subdivided vertices into the payload —
+    /// the exported positions/deformation frames stay at the coarse cage resolution.
+    /// </summary>
+    [MemoryPackOrder(10)]
+    public int SubdivisionLevels { get; set; }
 
     #endregion
 }

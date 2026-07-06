@@ -38,6 +38,11 @@ internal static class DccBlenderNodeEmitter
 
             AppendMeshMaterialLines(lines, buildInput, node, mesh, meshVariableName);
 
+            // Source-application render-only smoothing (e.g. 3ds Max MeshSmooth "Render
+            // Iterations") arrives as a subdivision level count instead of baked vertices.
+            if (mesh.SubdivisionLevels > 0)
+                AppendRenderSubdivisionModifierLines(lines, objectVariableName, mesh.SubdivisionLevels);
+
             // Give displacement-mapped objects geometry to displace (Cycles true displacement
             // needs subdivided geometry).
             if (MaterialHasDisplacement(buildInput, node))
@@ -142,6 +147,23 @@ internal static class DccBlenderNodeEmitter
         lines.Add($"{modifierVariableName}.subdivision_type = 'SIMPLE'");
         lines.Add($"{modifierVariableName}.levels = 2");
         lines.Add($"{modifierVariableName}.render_levels = 4");
+    }
+
+    private static void AppendRenderSubdivisionModifierLines(List<string> lines, string objectVariableName, int subdivisionLevels)
+    {
+        // The payload mesh is unwelded (one vertex per face corner, for exact custom normals), and
+        // Catmull-Clark on disconnected triangles shrinks each one into a separate patch — weld the
+        // coincident duplicates back together first. The threshold only has to catch exact
+        // duplicates, so it stays far below any real edge length.
+        var weldVariableName = $"{objectVariableName}_weld";
+        lines.Add($"{weldVariableName} = {objectVariableName}.modifiers.new(name='WeldBeforeSubdivision', type='WELD')");
+        lines.Add($"{weldVariableName}.merge_threshold = 0.0001");
+
+        var modifierVariableName = $"{objectVariableName}_render_subdiv";
+        lines.Add($"{modifierVariableName} = {objectVariableName}.modifiers.new(name='RenderSubdivision', type='SUBSURF')");
+        lines.Add($"{modifierVariableName}.subdivision_type = 'CATMULL_CLARK'");
+        lines.Add($"{modifierVariableName}.levels = {subdivisionLevels}");
+        lines.Add($"{modifierVariableName}.render_levels = {subdivisionLevels}");
     }
 
     private static void AppendMeshColorLayerLines(List<string> lines, string meshVariableName, List<DccColorData> colors)

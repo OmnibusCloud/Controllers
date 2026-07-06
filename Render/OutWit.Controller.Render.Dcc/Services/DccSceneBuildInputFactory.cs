@@ -136,6 +136,14 @@ internal static class DccSceneBuildInputFactory
                     $"Render.BuildBlendFromDccScene mesh '{mesh.Id}' triangle indices count must be divisible by 3.");
             }
 
+            // Each subdivision level quadruples the face count at render time; anything beyond a
+            // few levels is an exporter bug, not artist intent.
+            if (mesh.SubdivisionLevels is < 0 or > 6)
+            {
+                throw new InvalidOperationException(
+                    $"Render.BuildBlendFromDccScene mesh '{mesh.Id}' requires SubdivisionLevels in the [0, 6] range.");
+            }
+
             if (mesh.MaterialIndices.Count > 0 && mesh.MaterialIndices.Count != triangleCount)
             {
                 throw new InvalidOperationException(

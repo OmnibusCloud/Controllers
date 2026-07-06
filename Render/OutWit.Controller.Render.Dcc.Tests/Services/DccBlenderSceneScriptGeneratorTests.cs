@@ -353,6 +353,96 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsWeldAndCatmullClarkSubdivisionWhenMeshHasSubdivisionLevelsTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Meshes[0].SubdivisionLevels = 2;
+        var buildInput = CreateBuildInput(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            // The payload mesh is unwelded (per-corner vertices) — Catmull-Clark must be preceded
+            // by a weld or every triangle subdivides into a separate shrunken patch.
+            Assert.That(script, Does.Contain("type='WELD'"));
+            Assert.That(script, Does.Contain("subdivision_type = 'CATMULL_CLARK'"));
+            Assert.That(script, Does.Contain("render_levels = 2"));
+            var weldIndex = script.IndexOf("type='WELD'", StringComparison.Ordinal);
+            var subdivisionIndex = script.IndexOf("subdivision_type = 'CATMULL_CLARK'", StringComparison.Ordinal);
+            Assert.That(weldIndex, Is.LessThan(subdivisionIndex));
+        });
+    }
+
+    [Test]
+    public void CreateDoesNotEmitWeldOrCatmullClarkWhenMeshHasNoSubdivisionLevelsTest()
+    {
+        var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Not.Contain("type='WELD'"));
+            Assert.That(script, Does.Not.Contain("CATMULL_CLARK"));
+        });
+    }
+
+    [Test]
+    public void CreateRestrictsConstantBackgroundColorToVisibilityRaysTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.World = new DccWorldData
+        {
+            BackgroundColor = new DccColorData { R = 0d, G = 0.7d, B = 0.95d, A = 1d },
+            Strength = 1d
+        };
+        var buildInput = CreateBuildInput(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            // A background COLOUR is a backdrop (camera/reflection/refraction rays), never an
+            // ambient light source — the source application does not light the scene with it.
+            Assert.That(script, Does.Contain("ShaderNodeLightPath"));
+            Assert.That(script, Does.Contain("Is Camera Ray"));
+            Assert.That(script, Does.Contain("Is Glossy Ray"));
+            Assert.That(script, Does.Contain("Is Transmission Ray"));
+            Assert.That(script, Does.Contain("ShaderNodeMixShader"));
+        });
+    }
+
+    [Test]
+    public void CreateKeepsEnvironmentImageWorldLightingTheSceneTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.ImageAssets.Add(new DccImageAssetData
+        {
+            Id = "image:environment",
+            Name = "Environment",
+            SourcePath = "C:/textures/environment.hdr",
+            RelativePath = "textures/environment.hdr",
+            AssetKind = "ImageAsset"
+        });
+        scene.World = new DccWorldData
+        {
+            EnvironmentImageId = "image:environment",
+            Strength = 0.5d
+        };
+        var buildInput = CreateBuildInput(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            // HDRI environments legitimately light the scene — no camera-ray restriction.
+            Assert.That(script, Does.Contain("ShaderNodeTexEnvironment"));
+            Assert.That(script, Does.Not.Contain("ShaderNodeLightPath"));
+        });
+    }
+
+    [Test]
     public void CreateEmitsMotionBlurWhenEnabledTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

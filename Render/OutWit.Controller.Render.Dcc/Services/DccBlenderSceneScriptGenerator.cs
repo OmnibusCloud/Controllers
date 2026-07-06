@@ -130,12 +130,34 @@ internal static class DccBlenderSceneScriptGenerator
         if (color.R <= 0d && color.G <= 0d && color.B <= 0d)
             return;
 
+        // A source-application background COLOUR is a backdrop, not a light source (3ds Max never
+        // lights the scene with it), but a plain Cycles world colour is full ambient — it washed
+        // every open-air scene toward the backdrop colour. Restrict the colour to camera and
+        // reflection/refraction rays (Max shows the backdrop in mirrors and glass too); diffuse
+        // rays see black. Environment IMAGES keep lighting the scene (HDRI path above).
         lines.Add("scene_world = bpy.data.worlds.new('World')");
         lines.Add("scene.world = scene_world");
         lines.Add("scene_world.use_nodes = True");
-        lines.Add("scene_world_background = scene_world.node_tree.nodes['Background']");
+        lines.Add("scene_world_tree = scene_world.node_tree");
+        lines.Add("scene_world_background = scene_world_tree.nodes['Background']");
         lines.Add($"scene_world_background.inputs['Color'].default_value = ({FormatDouble(color.R)}, {FormatDouble(color.G)}, {FormatDouble(color.B)}, 1.0)");
         lines.Add($"scene_world_background.inputs['Strength'].default_value = {FormatDouble(world.Strength)}");
+        lines.Add("scene_world_dark = scene_world_tree.nodes.new('ShaderNodeBackground')");
+        lines.Add("scene_world_dark.inputs['Color'].default_value = (0.0, 0.0, 0.0, 1.0)");
+        lines.Add("scene_world_light_path = scene_world_tree.nodes.new('ShaderNodeLightPath')");
+        lines.Add("scene_world_visible_fac = scene_world_tree.nodes.new('ShaderNodeMath')");
+        lines.Add("scene_world_visible_fac.operation = 'MAXIMUM'");
+        lines.Add("scene_world_visible_fac_2 = scene_world_tree.nodes.new('ShaderNodeMath')");
+        lines.Add("scene_world_visible_fac_2.operation = 'MAXIMUM'");
+        lines.Add("scene_world_mix = scene_world_tree.nodes.new('ShaderNodeMixShader')");
+        lines.Add("scene_world_tree.links.new(scene_world_light_path.outputs['Is Camera Ray'], scene_world_visible_fac.inputs[0])");
+        lines.Add("scene_world_tree.links.new(scene_world_light_path.outputs['Is Glossy Ray'], scene_world_visible_fac.inputs[1])");
+        lines.Add("scene_world_tree.links.new(scene_world_visible_fac.outputs['Value'], scene_world_visible_fac_2.inputs[0])");
+        lines.Add("scene_world_tree.links.new(scene_world_light_path.outputs['Is Transmission Ray'], scene_world_visible_fac_2.inputs[1])");
+        lines.Add("scene_world_tree.links.new(scene_world_visible_fac_2.outputs['Value'], scene_world_mix.inputs['Fac'])");
+        lines.Add("scene_world_tree.links.new(scene_world_dark.outputs['Background'], scene_world_mix.inputs[1])");
+        lines.Add("scene_world_tree.links.new(scene_world_background.outputs['Background'], scene_world_mix.inputs[2])");
+        lines.Add("scene_world_tree.links.new(scene_world_mix.outputs['Shader'], scene_world_tree.nodes['World Output'].inputs['Surface'])");
         lines.Add(string.Empty);
     }
 

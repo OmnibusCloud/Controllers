@@ -114,6 +114,29 @@ public sealed class DccSceneBuildInputFactoryTests
     }
 
     [Test]
+    public void CreateRejectsOutOfRangeSubdivisionLevelsTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Meshes[0].SubdivisionLevels = 7;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
+
+        Assert.That(exception!.Message, Does.Contain("SubdivisionLevels"));
+    }
+
+    [Test]
+    public void CreateAcceptsSupportedSubdivisionLevelsTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.Meshes[0].SubdivisionLevels = 3;
+
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        Assert.That(buildInput.MeshesById[scene.Meshes[0].Id].SubdivisionLevels, Is.EqualTo(3));
+    }
+
+    [Test]
     public void CreateRejectsMismatchedDeformationFramePositionCountTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
