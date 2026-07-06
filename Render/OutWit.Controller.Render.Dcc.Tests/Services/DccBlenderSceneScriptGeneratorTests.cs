@@ -133,6 +133,35 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsBackfaceCullChainWhenMaterialIsSingleSidedTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Materials[0].BackfaceCull = true;
+        var buildInput = CreateBuildInput(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Contain("ShaderNodeNewGeometry"));
+            Assert.That(script, Does.Contain("ShaderNodeBsdfTransparent"));
+            Assert.That(script, Does.Contain("outputs['Backfacing']"));
+            Assert.That(script, Does.Contain(".use_backface_culling = True"));
+        });
+    }
+
+    [Test]
+    public void CreateOmitsBackfaceCullChainByDefaultTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        var buildInput = CreateBuildInput(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.That(script, Does.Not.Contain("ShaderNodeBsdfTransparent"));
+    }
+
+    [Test]
     public void CreateEmitsColorManagementWhenSpecifiedTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

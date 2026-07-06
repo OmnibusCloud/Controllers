@@ -31,6 +31,27 @@ public sealed class DccMaterialDataTests
     }
 
     [Test]
+    public void BackfaceCullRoundTripTest()
+    {
+        var original = DccModelTestData.CreateMaterial();
+        original.BackfaceCull = true;
+
+        var different = DccModelTestData.CreateMaterial();
+
+        var clone = (DccMaterialData)original.Clone();
+        var memoryPackClone = original.MemoryPackClone();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(original.Is(different), Is.False);
+            Assert.That(clone.BackfaceCull, Is.True);
+            Assert.That(clone.Is(original), Is.True);
+            Assert.That(memoryPackClone.BackfaceCull, Is.True);
+            Assert.That(memoryPackClone.Is(original), Is.True);
+        });
+    }
+
+    [Test]
     public void DisplacementScaleRoundTripTest()
     {
         var original = DccModelTestData.CreateMaterial();

@@ -8,7 +8,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Texture-slot binding contract for the first DCC scene slice.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccTextureSlotData : ModelBase
 {
     #region ModelBase
@@ -49,41 +49,49 @@ public partial class DccTextureSlotData : ModelBase
     /// <summary>
     /// Neutral texture slot kind.
     /// </summary>
+    [MemoryPackOrder(0)]
     public DccTextureSlotKind Slot { get; set; }
 
     /// <summary>
     /// Bound logical image asset id.
     /// </summary>
+    [MemoryPackOrder(1)]
     public string ImageAssetId { get; set; } = string.Empty;
 
     /// <summary>
     /// U scale.
     /// </summary>
+    [MemoryPackOrder(2)]
     public double UvScaleX { get; set; } = 1d;
 
     /// <summary>
     /// V scale.
     /// </summary>
+    [MemoryPackOrder(3)]
     public double UvScaleY { get; set; } = 1d;
 
     /// <summary>
     /// U offset.
     /// </summary>
+    [MemoryPackOrder(4)]
     public double UvOffsetX { get; set; }
 
     /// <summary>
     /// V offset.
     /// </summary>
+    [MemoryPackOrder(5)]
     public double UvOffsetY { get; set; }
 
     /// <summary>
     /// UV rotation in degrees.
     /// </summary>
+    [MemoryPackOrder(6)]
     public double UvRotationDegrees { get; set; }
 
     /// <summary>
     /// Optional UV-transform keyframes for the first texture-transform animation slice.
     /// </summary>
+    [MemoryPackOrder(7)]
     public List<DccTextureTransformKeyframeData> UvTransformKeyframes { get; set; } = [];
 
     #endregion

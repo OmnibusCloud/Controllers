@@ -7,7 +7,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// One UV-transform keyframe for the first texture-animation-aware DCC slice.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccTextureTransformKeyframeData : ModelBase
 {
     #region ModelBase
@@ -45,36 +45,43 @@ public partial class DccTextureTransformKeyframeData : ModelBase
     /// <summary>
     /// Target frame number.
     /// </summary>
+    [MemoryPackOrder(0)]
     public int Frame { get; set; }
 
     /// <summary>
     /// U scale.
     /// </summary>
+    [MemoryPackOrder(1)]
     public double UvScaleX { get; set; } = 1d;
 
     /// <summary>
     /// V scale.
     /// </summary>
+    [MemoryPackOrder(2)]
     public double UvScaleY { get; set; } = 1d;
 
     /// <summary>
     /// U offset.
     /// </summary>
+    [MemoryPackOrder(3)]
     public double UvOffsetX { get; set; }
 
     /// <summary>
     /// V offset.
     /// </summary>
+    [MemoryPackOrder(4)]
     public double UvOffsetY { get; set; }
 
     /// <summary>
     /// UV rotation in degrees.
     /// </summary>
+    [MemoryPackOrder(5)]
     public double UvRotationDegrees { get; set; }
 
     /// <summary>
     /// Interpolation mode applied to the generated keyframe.
     /// </summary>
+    [MemoryPackOrder(6)]
     public DccKeyframeInterpolationMode InterpolationMode { get; set; } = DccKeyframeInterpolationMode.Bezier;
 
     #endregion

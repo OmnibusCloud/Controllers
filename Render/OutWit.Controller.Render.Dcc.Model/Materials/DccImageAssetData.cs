@@ -7,7 +7,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Logical image-asset contract for the first DCC scene slice.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccImageAssetData : ModelBase
 {
     #region ModelBase
@@ -41,26 +41,31 @@ public partial class DccImageAssetData : ModelBase
     /// <summary>
     /// Logical image id.
     /// </summary>
+    [MemoryPackOrder(0)]
     public string Id { get; set; } = string.Empty;
 
     /// <summary>
     /// Human-readable image name.
     /// </summary>
+    [MemoryPackOrder(1)]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// Original source path seen by the exporter.
     /// </summary>
+    [MemoryPackOrder(2)]
     public string SourcePath { get; set; } = string.Empty;
 
     /// <summary>
     /// Logical relative path inside the exported scene package.
     /// </summary>
+    [MemoryPackOrder(3)]
     public string RelativePath { get; set; } = string.Empty;
 
     /// <summary>
     /// Logical asset kind.
     /// </summary>
+    [MemoryPackOrder(4)]
     public string AssetKind { get; set; } = string.Empty;
 
     #endregion

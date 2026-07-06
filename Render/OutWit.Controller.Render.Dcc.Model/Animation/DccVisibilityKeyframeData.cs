@@ -7,7 +7,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// One visibility/renderability keyframe for the first animation-aware DCC slice.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccVisibilityKeyframeData : ModelBase
 {
     #region ModelBase
@@ -39,21 +39,25 @@ public partial class DccVisibilityKeyframeData : ModelBase
     /// <summary>
     /// Target frame number.
     /// </summary>
+    [MemoryPackOrder(0)]
     public int Frame { get; set; }
 
     /// <summary>
     /// Visibility state at the frame.
     /// </summary>
+    [MemoryPackOrder(1)]
     public bool Visible { get; set; } = true;
 
     /// <summary>
     /// Renderability state at the frame.
     /// </summary>
+    [MemoryPackOrder(2)]
     public bool Renderable { get; set; } = true;
 
     /// <summary>
     /// Interpolation mode applied to the generated keyframe.
     /// </summary>
+    [MemoryPackOrder(3)]
     public DccKeyframeInterpolationMode InterpolationMode { get; set; } = DccKeyframeInterpolationMode.Bezier;
 
     #endregion

@@ -7,7 +7,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Neutral 2D vector contract for the first DCC scene slice.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccVector2Data : ModelBase
 {
     #region ModelBase
@@ -35,11 +35,13 @@ public partial class DccVector2Data : ModelBase
     /// <summary>
     /// X component.
     /// </summary>
+    [MemoryPackOrder(0)]
     public double X { get; set; }
 
     /// <summary>
     /// Y component.
     /// </summary>
+    [MemoryPackOrder(1)]
     public double Y { get; set; }
 
     #endregion

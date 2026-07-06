@@ -7,7 +7,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Unit metadata for a neutral DCC scene payload.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccUnitSettingsData : ModelBase
 {
     #region ModelBase
@@ -35,11 +35,13 @@ public partial class DccUnitSettingsData : ModelBase
     /// <summary>
     /// Logical linear-unit name.
     /// </summary>
+    [MemoryPackOrder(0)]
     public string LinearUnit { get; set; } = string.Empty;
 
     /// <summary>
     /// Number of source units per one meter.
     /// </summary>
+    [MemoryPackOrder(1)]
     public double UnitsPerMeter { get; set; } = 1d;
 
     #endregion

@@ -158,9 +158,37 @@ internal static class DccBlenderMaterialEmitter
             if (normalTexture != null)
                 AppendMaterialNormalStrengthAnimationLines(lines, materialVariableName, material);
 
+            if (material.BackfaceCull)
+                AppendBackfaceCullLines(lines, materialVariableName);
+
             lines.Add($"materials_by_id[{ToPythonStringLiteral(material.Id)}] = {materialVariableName}");
             lines.Add(string.Empty);
         }
+    }
+
+    // Single-sided rendering: camera rays hitting a backface pass through (Transparent BSDF via a
+    // Backfacing-driven mix), mirroring 3ds Max Scanline's backface culling — interiors authored
+    // with inward-facing walls stay visible from a camera outside the room. EEVEE's native flag is
+    // set too for viewport parity; Cycles uses the node chain.
+    private static void AppendBackfaceCullLines(List<string> lines, string materialVariableName)
+    {
+        var geometryVariableName = $"backface_geometry_{materialVariableName}";
+        var transparentVariableName = $"backface_transparent_{materialVariableName}";
+        var mixVariableName = $"backface_mix_{materialVariableName}";
+        var outputVariableName = $"backface_output_{materialVariableName}";
+
+        lines.Add($"{geometryVariableName} = {materialVariableName}_nodes.new('ShaderNodeNewGeometry')");
+        lines.Add($"{transparentVariableName} = {materialVariableName}_nodes.new('ShaderNodeBsdfTransparent')");
+        lines.Add($"{mixVariableName} = {materialVariableName}_nodes.new('ShaderNodeMixShader')");
+        lines.Add($"{outputVariableName} = {materialVariableName}_nodes['Material Output']");
+        lines.Add($"{materialVariableName}_links.new({geometryVariableName}.outputs['Backfacing'], {mixVariableName}.inputs['Fac'])");
+        lines.Add($"{materialVariableName}_links.new({materialVariableName}_bsdf.outputs['BSDF'], {mixVariableName}.inputs[1])");
+        lines.Add($"{materialVariableName}_links.new({transparentVariableName}.outputs['BSDF'], {mixVariableName}.inputs[2])");
+        lines.Add($"{materialVariableName}_links.new({mixVariableName}.outputs['Shader'], {outputVariableName}.inputs['Surface'])");
+        lines.Add($"{materialVariableName}.use_backface_culling = True");
+        lines.Add($"{materialVariableName}.blend_method = 'HASHED'");
+        lines.Add($"if hasattr({materialVariableName}, 'shadow_method'):");
+        lines.Add($"    {materialVariableName}.shadow_method = 'HASHED'");
     }
 
     private static void AppendScalarBsdfControlLines(

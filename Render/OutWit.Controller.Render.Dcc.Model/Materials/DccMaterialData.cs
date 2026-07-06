@@ -8,7 +8,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Neutral first-slice material contract.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccMaterialData : ModelBase
 {
     #region ModelBase
@@ -44,7 +44,8 @@ public partial class DccMaterialData : ModelBase
                && Ior.Is(other.Ior, tolerance)
                && EmissionColor.Is(other.EmissionColor, tolerance)
                && EmissionStrength.Is(other.EmissionStrength, tolerance)
-               && DisplacementScale.Is(other.DisplacementScale, tolerance);
+               && DisplacementScale.Is(other.DisplacementScale, tolerance)
+               && BackfaceCull.Is(other.BackfaceCull);
     }
 
     public override ModelBase Clone()
@@ -72,7 +73,8 @@ public partial class DccMaterialData : ModelBase
             Ior = Ior,
             EmissionColor = (DccColorData)EmissionColor.Clone(),
             EmissionStrength = EmissionStrength,
-            DisplacementScale = DisplacementScale
+            DisplacementScale = DisplacementScale,
+            BackfaceCull = BackfaceCull
         };
     }
 
@@ -83,108 +85,129 @@ public partial class DccMaterialData : ModelBase
     /// <summary>
     /// Logical material id.
     /// </summary>
+    [MemoryPackOrder(0)]
     public string Id { get; set; } = string.Empty;
 
     /// <summary>
     /// Human-readable material name.
     /// </summary>
+    [MemoryPackOrder(1)]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// Neutral material kind.
     /// </summary>
+    [MemoryPackOrder(2)]
     public DccMaterialKind Kind { get; set; } = DccMaterialKind.PrincipledSurface;
 
     /// <summary>
     /// Constant base color.
     /// </summary>
+    [MemoryPackOrder(3)]
     public DccColorData BaseColor { get; set; } = new() { R = 1d, G = 1d, B = 1d, A = 1d };
 
     /// <summary>
     /// Optional base-color keyframes for the first material-property animation slice.
     /// </summary>
+    [MemoryPackOrder(4)]
     public List<DccColorKeyframeData> BaseColorKeyframes { get; set; } = [];
 
     /// <summary>
     /// Alpha handling mode for transparent materials.
     /// </summary>
+    [MemoryPackOrder(5)]
     public DccMaterialAlphaMode AlphaMode { get; set; } = DccMaterialAlphaMode.Blend;
 
     /// <summary>
     /// Clip threshold used when AlphaMode is Clip.
     /// </summary>
+    [MemoryPackOrder(6)]
     public double AlphaClipThreshold { get; set; } = 0.5d;
 
     /// <summary>
     /// Optional alpha-clip-threshold keyframes for the first material-property animation slice.
     /// </summary>
+    [MemoryPackOrder(7)]
     public List<DccScalarKeyframeData> AlphaClipThresholdKeyframes { get; set; } = [];
 
     /// <summary>
     /// Scalar opacity.
     /// </summary>
+    [MemoryPackOrder(8)]
     public double Opacity { get; set; } = 1d;
 
     /// <summary>
     /// Optional opacity keyframes for the first material-property animation slice.
     /// </summary>
+    [MemoryPackOrder(9)]
     public List<DccScalarKeyframeData> OpacityKeyframes { get; set; } = [];
 
     /// <summary>
     /// Scalar metalness.
     /// </summary>
+    [MemoryPackOrder(10)]
     public double Metallic { get; set; }
 
     /// <summary>
     /// Optional metallic keyframes for the first material-property animation slice.
     /// </summary>
+    [MemoryPackOrder(11)]
     public List<DccScalarKeyframeData> MetallicKeyframes { get; set; } = [];
 
     /// <summary>
     /// Scalar roughness.
     /// </summary>
+    [MemoryPackOrder(12)]
     public double Roughness { get; set; } = 0.5d;
 
     /// <summary>
     /// Optional roughness keyframes for the first material-property animation slice.
     /// </summary>
+    [MemoryPackOrder(13)]
     public List<DccScalarKeyframeData> RoughnessKeyframes { get; set; } = [];
 
     /// <summary>
     /// Scalar normal-map strength.
     /// </summary>
+    [MemoryPackOrder(14)]
     public double NormalStrength { get; set; } = 1d;
 
     /// <summary>
     /// Optional normal-strength keyframes for the first material-property animation slice.
     /// </summary>
+    [MemoryPackOrder(15)]
     public List<DccScalarKeyframeData> NormalStrengthKeyframes { get; set; } = [];
 
     /// <summary>
     /// Supported texture-slot bindings.
     /// </summary>
+    [MemoryPackOrder(16)]
     public List<DccTextureSlotData> TextureSlots { get; set; } = [];
 
     /// <summary>
     /// Scalar light transmission (0 = opaque, 1 = fully refractive). Drives the Principled BSDF
     /// transmission weight so refractive materials such as glass render correctly.
     /// </summary>
+    [MemoryPackOrder(17)]
     public double Transmission { get; set; }
 
     /// <summary>
     /// Index of refraction for transmissive materials (e.g. ~1.45 for glass). Only meaningful when
     /// <see cref="Transmission"/> is greater than zero.
     /// </summary>
+    [MemoryPackOrder(18)]
     public double Ior { get; set; } = 1.45d;
 
     /// <summary>
     /// Emission color for self-illuminating materials.
     /// </summary>
+    [MemoryPackOrder(19)]
     public DccColorData EmissionColor { get; set; } = new() { R = 0d, G = 0d, B = 0d, A = 1d };
 
     /// <summary>
     /// Emission strength (0 = no emission). Scales <see cref="EmissionColor"/> on the BSDF.
     /// </summary>
+    [MemoryPackOrder(20)]
     public double EmissionStrength { get; set; }
 
     /// <summary>
@@ -192,7 +215,17 @@ public partial class DccMaterialData : ModelBase
     /// <see cref="DccTextureSlotKind.Displacement"/> map drives real geometry displacement). 0
     /// leaves the displacement node's default scale.
     /// </summary>
+    [MemoryPackOrder(21)]
     public double DisplacementScale { get; set; } = 1d;
+
+    /// <summary>
+    /// Hide backfaces from the camera (single-sided rendering). 3ds Max Scanline culls backfaces
+    /// unless a material is flagged 2-Sided, so interiors are often authored with inward-facing
+    /// walls that the camera legitimately looks through from outside. Default false keeps the
+    /// double-sided behaviour older payloads expect.
+    /// </summary>
+    [MemoryPackOrder(22)]
+    public bool BackfaceCull { get; set; }
 
     #endregion
 }

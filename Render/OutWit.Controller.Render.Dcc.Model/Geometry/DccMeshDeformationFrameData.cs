@@ -12,7 +12,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// simulation) as the resulting geometry, independent of any source DCC's rig — so the same
 /// contract works for exporters from other applications, not just 3ds Max.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccMeshDeformationFrameData : ModelBase
 {
     #region ModelBase
@@ -41,11 +41,13 @@ public partial class DccMeshDeformationFrameData : ModelBase
     /// <summary>
     /// Frame number this deformed pose applies to.
     /// </summary>
+    [MemoryPackOrder(0)]
     public int Frame { get; set; }
 
     /// <summary>
     /// Deformed vertex positions for this frame, aligned 1:1 with the mesh base positions.
     /// </summary>
+    [MemoryPackOrder(1)]
     public List<DccVector3Data> Positions { get; set; } = [];
 
     #endregion

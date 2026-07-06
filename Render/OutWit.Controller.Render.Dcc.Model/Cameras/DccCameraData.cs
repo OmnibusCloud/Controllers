@@ -8,7 +8,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Neutral first-slice camera contract.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccCameraData : ModelBase
 {
     #region ModelBase
@@ -59,63 +59,75 @@ public partial class DccCameraData : ModelBase
     /// <summary>
     /// Logical camera id.
     /// </summary>
+    [MemoryPackOrder(0)]
     public string Id { get; set; } = string.Empty;
 
     /// <summary>
     /// Human-readable camera name.
     /// </summary>
+    [MemoryPackOrder(1)]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// Vertical field of view in degrees.
     /// </summary>
+    [MemoryPackOrder(2)]
     public double VerticalFovDegrees { get; set; }
 
     /// <summary>
     /// Optional FOV keyframes for the first camera-property animation slice.
     /// </summary>
+    [MemoryPackOrder(3)]
     public List<DccScalarKeyframeData> VerticalFovKeyframes { get; set; } = [];
 
     /// <summary>
     /// Near clipping plane distance.
     /// </summary>
+    [MemoryPackOrder(4)]
     public double NearClip { get; set; } = 0.1d;
 
     /// <summary>
     /// Optional near-clip keyframes for the first camera-property animation slice.
     /// </summary>
+    [MemoryPackOrder(5)]
     public List<DccScalarKeyframeData> NearClipKeyframes { get; set; } = [];
 
     /// <summary>
     /// Far clipping plane distance.
     /// </summary>
+    [MemoryPackOrder(6)]
     public double FarClip { get; set; } = 1000d;
 
     /// <summary>
     /// Optional far-clip keyframes for the first camera-property animation slice.
     /// </summary>
+    [MemoryPackOrder(7)]
     public List<DccScalarKeyframeData> FarClipKeyframes { get; set; } = [];
 
     /// <summary>
     /// True when the camera is perspective.
     /// </summary>
+    [MemoryPackOrder(8)]
     public bool IsPerspective { get; set; } = true;
 
     /// <summary>
     /// Enables depth of field. When false the camera renders fully in focus (default).
     /// </summary>
+    [MemoryPackOrder(9)]
     public bool EnableDepthOfField { get; set; }
 
     /// <summary>
     /// Focus distance (scene units) for depth of field. Only meaningful when
     /// <see cref="EnableDepthOfField"/> is true.
     /// </summary>
+    [MemoryPackOrder(10)]
     public double FocusDistance { get; set; }
 
     /// <summary>
     /// Aperture f-stop for depth of field (smaller = shallower focus). Only meaningful when
     /// <see cref="EnableDepthOfField"/> is true.
     /// </summary>
+    [MemoryPackOrder(11)]
     public double FStop { get; set; } = 2.8d;
 
     #endregion

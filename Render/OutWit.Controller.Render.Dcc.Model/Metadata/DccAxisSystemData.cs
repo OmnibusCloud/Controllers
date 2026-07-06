@@ -7,7 +7,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Axis-system metadata for a neutral DCC scene payload.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccAxisSystemData : ModelBase
 {
     #region ModelBase
@@ -37,16 +37,19 @@ public partial class DccAxisSystemData : ModelBase
     /// <summary>
     /// Source handedness.
     /// </summary>
+    [MemoryPackOrder(0)]
     public string Handedness { get; set; } = string.Empty;
 
     /// <summary>
     /// Source up axis.
     /// </summary>
+    [MemoryPackOrder(1)]
     public string UpAxis { get; set; } = string.Empty;
 
     /// <summary>
     /// Source forward axis.
     /// </summary>
+    [MemoryPackOrder(2)]
     public string ForwardAxis { get; set; } = string.Empty;
 
     #endregion

@@ -7,7 +7,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// One transform keyframe for the first animation-aware DCC slice.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccTransformKeyframeData : ModelBase
 {
     #region ModelBase
@@ -37,16 +37,19 @@ public partial class DccTransformKeyframeData : ModelBase
     /// <summary>
     /// Target frame number.
     /// </summary>
+    [MemoryPackOrder(0)]
     public int Frame { get; set; }
 
     /// <summary>
     /// Transform sampled at the frame.
     /// </summary>
+    [MemoryPackOrder(1)]
     public DccTransformData Transform { get; set; } = new();
 
     /// <summary>
     /// Interpolation mode applied to the generated keyframe.
     /// </summary>
+    [MemoryPackOrder(2)]
     public DccKeyframeInterpolationMode InterpolationMode { get; set; } = DccKeyframeInterpolationMode.Bezier;
 
     #endregion

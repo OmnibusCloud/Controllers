@@ -8,7 +8,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Neutral first-slice mesh contract.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccMeshData : ModelBase
 {
     #region ModelBase
@@ -58,41 +58,49 @@ public partial class DccMeshData : ModelBase
     /// <summary>
     /// Logical mesh id.
     /// </summary>
+    [MemoryPackOrder(0)]
     public string Id { get; set; } = string.Empty;
 
     /// <summary>
     /// Human-readable mesh name.
     /// </summary>
+    [MemoryPackOrder(1)]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// Vertex positions.
     /// </summary>
+    [MemoryPackOrder(2)]
     public List<DccVector3Data> Positions { get; set; } = [];
 
     /// <summary>
     /// Vertex normals.
     /// </summary>
+    [MemoryPackOrder(3)]
     public List<DccVector3Data> Normals { get; set; } = [];
 
     /// <summary>
     /// Primary UV set.
     /// </summary>
+    [MemoryPackOrder(4)]
     public List<DccVector2Data> Uv0 { get; set; } = [];
 
     /// <summary>
     /// Optional secondary UV set (e.g. a lightmap/detail channel). Empty when the mesh has one set.
     /// </summary>
+    [MemoryPackOrder(5)]
     public List<DccVector2Data> Uv1 { get; set; } = [];
 
     /// <summary>
     /// Flattened triangle index buffer.
     /// </summary>
+    [MemoryPackOrder(6)]
     public List<int> TriangleIndices { get; set; } = [];
 
     /// <summary>
     /// Flattened material indices per primitive group.
     /// </summary>
+    [MemoryPackOrder(7)]
     public List<int> MaterialIndices { get; set; } = [];
 
     // NOTE: keep new members AFTER the original ones — MemoryPack uses declaration order (no
@@ -102,6 +110,7 @@ public partial class DccMeshData : ModelBase
     /// Optional per-corner vertex colours (aligned with <see cref="Positions"/>). Empty when the
     /// mesh has no colour layer.
     /// </summary>
+    [MemoryPackOrder(8)]
     public List<DccColorData> Colors { get; set; } = [];
 
     /// <summary>
@@ -109,6 +118,7 @@ public partial class DccMeshData : ModelBase
     /// <see cref="Positions"/>). Empty for static meshes. Carries skin/morph/cloth/sim deformation
     /// as a vertex cache, applied in Blender as keyframed shape keys.
     /// </summary>
+    [MemoryPackOrder(9)]
     public List<DccMeshDeformationFrameData> DeformationFrames { get; set; } = [];
 
     #endregion

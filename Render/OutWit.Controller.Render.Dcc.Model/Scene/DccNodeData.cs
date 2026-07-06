@@ -8,7 +8,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Neutral first-slice scene-node contract.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccNodeData : ModelBase
 {
     #region ModelBase
@@ -60,66 +60,79 @@ public partial class DccNodeData : ModelBase
     /// <summary>
     /// Logical node id.
     /// </summary>
+    [MemoryPackOrder(0)]
     public string Id { get; set; } = string.Empty;
 
     /// <summary>
     /// Human-readable node name.
     /// </summary>
+    [MemoryPackOrder(1)]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// Parent node id when present.
     /// </summary>
+    [MemoryPackOrder(2)]
     public string? ParentId { get; set; }
 
     /// <summary>
     /// Neutral node kind.
     /// </summary>
+    [MemoryPackOrder(3)]
     public DccNodeKind Kind { get; set; } = DccNodeKind.Mesh;
 
     /// <summary>
     /// Local node transform.
     /// </summary>
+    [MemoryPackOrder(4)]
     public DccTransformData LocalTransform { get; set; } = new();
 
     /// <summary>
     /// Optional transform keyframes for the first animation-aware slice.
     /// </summary>
+    [MemoryPackOrder(5)]
     public List<DccTransformKeyframeData> TransformKeyframes { get; set; } = [];
 
     /// <summary>
     /// Optional visibility/renderability keyframes for the first animation-aware slice.
     /// </summary>
+    [MemoryPackOrder(6)]
     public List<DccVisibilityKeyframeData> VisibilityKeyframes { get; set; } = [];
 
     /// <summary>
     /// Referenced mesh id when the node is a mesh instance.
     /// </summary>
+    [MemoryPackOrder(7)]
     public string? MeshId { get; set; }
 
     /// <summary>
     /// Referenced camera id when the node is a camera.
     /// </summary>
+    [MemoryPackOrder(8)]
     public string? CameraId { get; set; }
 
     /// <summary>
     /// Referenced light id when the node is a light.
     /// </summary>
+    [MemoryPackOrder(9)]
     public string? LightId { get; set; }
 
     /// <summary>
     /// Bound material id for the node when present.
     /// </summary>
+    [MemoryPackOrder(10)]
     public string? MaterialBindingId { get; set; }
 
     /// <summary>
     /// True when the node is visible.
     /// </summary>
+    [MemoryPackOrder(11)]
     public bool Visible { get; set; } = true;
 
     /// <summary>
     /// True when the node is renderable.
     /// </summary>
+    [MemoryPackOrder(12)]
     public bool Renderable { get; set; } = true;
 
     #endregion

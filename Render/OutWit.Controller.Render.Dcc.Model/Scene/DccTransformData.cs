@@ -6,7 +6,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Local transform contract for a neutral DCC scene node.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccTransformData : ModelBase
 {
     #region ModelBase
@@ -36,16 +36,19 @@ public partial class DccTransformData : ModelBase
     /// <summary>
     /// Local translation.
     /// </summary>
+    [MemoryPackOrder(0)]
     public DccVector3Data Translation { get; set; } = new();
 
     /// <summary>
     /// Local rotation quaternion.
     /// </summary>
+    [MemoryPackOrder(1)]
     public DccQuaternionData Rotation { get; set; } = new();
 
     /// <summary>
     /// Local scale.
     /// </summary>
+    [MemoryPackOrder(2)]
     public DccVector3Data Scale { get; set; } = new() { X = 1d, Y = 1d, Z = 1d };
 
     #endregion

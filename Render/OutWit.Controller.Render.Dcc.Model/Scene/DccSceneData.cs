@@ -9,7 +9,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Inline neutral DCC scene payload for the first server-side build slice.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccSceneData : ModelBase
 {
     #region ModelBase
@@ -67,61 +67,73 @@ public partial class DccSceneData : ModelBase
     /// <summary>
     /// Human-readable scene name.
     /// </summary>
+    [MemoryPackOrder(0)]
     public string SceneName { get; set; } = string.Empty;
 
     /// <summary>
     /// Source-application metadata.
     /// </summary>
+    [MemoryPackOrder(1)]
     public DccApplicationData SourceApplication { get; set; } = new();
 
     /// <summary>
     /// Source unit metadata.
     /// </summary>
+    [MemoryPackOrder(2)]
     public DccUnitSettingsData Units { get; set; } = new();
 
     /// <summary>
     /// Source axis-system metadata.
     /// </summary>
+    [MemoryPackOrder(3)]
     public DccAxisSystemData AxisSystem { get; set; } = new();
 
     /// <summary>
     /// Neutral render settings.
     /// </summary>
+    [MemoryPackOrder(4)]
     public DccRenderSettingsData RenderSettings { get; set; } = new();
 
     /// <summary>
     /// Scene nodes.
     /// </summary>
+    [MemoryPackOrder(5)]
     public List<DccNodeData> Nodes { get; set; } = [];
 
     /// <summary>
     /// Scene meshes.
     /// </summary>
+    [MemoryPackOrder(6)]
     public List<DccMeshData> Meshes { get; set; } = [];
 
     /// <summary>
     /// Scene cameras.
     /// </summary>
+    [MemoryPackOrder(7)]
     public List<DccCameraData> Cameras { get; set; } = [];
 
     /// <summary>
     /// Scene lights.
     /// </summary>
+    [MemoryPackOrder(8)]
     public List<DccLightData> Lights { get; set; } = [];
 
     /// <summary>
     /// Scene materials.
     /// </summary>
+    [MemoryPackOrder(9)]
     public List<DccMaterialData> Materials { get; set; } = [];
 
     /// <summary>
     /// Logical image assets.
     /// </summary>
+    [MemoryPackOrder(10)]
     public List<DccImageAssetData> ImageAssets { get; set; } = [];
 
     /// <summary>
     /// Blob-backed attachment materialization metadata.
     /// </summary>
+    [MemoryPackOrder(11)]
     public List<RenderSceneAttachmentRefData> AttachedFiles { get; set; } = [];
 
     /// <summary>
@@ -129,6 +141,7 @@ public partial class DccSceneData : ModelBase
     /// default. Set it to transfer a source-scene environment colour so transmissive and
     /// reflective materials have something to refract / reflect.
     /// </summary>
+    [MemoryPackOrder(12)]
     public DccWorldData? World { get; set; }
 
     #endregion

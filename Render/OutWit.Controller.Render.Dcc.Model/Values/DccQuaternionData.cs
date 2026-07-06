@@ -7,7 +7,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Neutral quaternion rotation contract for the first DCC scene slice.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccQuaternionData : ModelBase
 {
     #region ModelBase
@@ -39,21 +39,25 @@ public partial class DccQuaternionData : ModelBase
     /// <summary>
     /// X component.
     /// </summary>
+    [MemoryPackOrder(0)]
     public double X { get; set; }
 
     /// <summary>
     /// Y component.
     /// </summary>
+    [MemoryPackOrder(1)]
     public double Y { get; set; }
 
     /// <summary>
     /// Z component.
     /// </summary>
+    [MemoryPackOrder(2)]
     public double Z { get; set; }
 
     /// <summary>
     /// W component.
     /// </summary>
+    [MemoryPackOrder(3)]
     public double W { get; set; } = 1d;
 
     #endregion

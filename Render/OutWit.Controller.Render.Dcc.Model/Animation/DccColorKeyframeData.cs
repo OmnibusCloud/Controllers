@@ -7,7 +7,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// One color keyframe for the first animation-aware DCC slice.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccColorKeyframeData : ModelBase
 {
     #region ModelBase
@@ -37,16 +37,19 @@ public partial class DccColorKeyframeData : ModelBase
     /// <summary>
     /// Target frame number.
     /// </summary>
+    [MemoryPackOrder(0)]
     public int Frame { get; set; }
 
     /// <summary>
     /// Color sampled at the frame.
     /// </summary>
+    [MemoryPackOrder(1)]
     public DccColorData Color { get; set; } = new();
 
     /// <summary>
     /// Interpolation mode applied to the generated keyframe.
     /// </summary>
+    [MemoryPackOrder(2)]
     public DccKeyframeInterpolationMode InterpolationMode { get; set; } = DccKeyframeInterpolationMode.Bezier;
 
     #endregion

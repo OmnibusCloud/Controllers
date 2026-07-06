@@ -7,7 +7,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Source-application metadata for a neutral DCC scene payload.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccApplicationData : ModelBase
 {
     #region ModelBase
@@ -37,16 +37,19 @@ public partial class DccApplicationData : ModelBase
     /// <summary>
     /// Exporting application family, for example 3dsMax.
     /// </summary>
+    [MemoryPackOrder(0)]
     public string ApplicationFamily { get; set; } = string.Empty;
 
     /// <summary>
     /// Exporting application version.
     /// </summary>
+    [MemoryPackOrder(1)]
     public string ApplicationVersion { get; set; } = string.Empty;
 
     /// <summary>
     /// Exporter version that produced the scene contract.
     /// </summary>
+    [MemoryPackOrder(2)]
     public string ExporterVersion { get; set; } = string.Empty;
 
     #endregion

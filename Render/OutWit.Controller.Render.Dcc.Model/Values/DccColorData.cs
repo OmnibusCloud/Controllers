@@ -7,7 +7,7 @@ namespace OutWit.Controller.Render.Dcc.Model;
 /// <summary>
 /// Neutral RGBA color contract for the first DCC scene slice.
 /// </summary>
-[MemoryPackable]
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class DccColorData : ModelBase
 {
     #region ModelBase
@@ -39,21 +39,25 @@ public partial class DccColorData : ModelBase
     /// <summary>
     /// Red component.
     /// </summary>
+    [MemoryPackOrder(0)]
     public double R { get; set; }
 
     /// <summary>
     /// Green component.
     /// </summary>
+    [MemoryPackOrder(1)]
     public double G { get; set; }
 
     /// <summary>
     /// Blue component.
     /// </summary>
+    [MemoryPackOrder(2)]
     public double B { get; set; }
 
     /// <summary>
     /// Alpha component.
     /// </summary>
+    [MemoryPackOrder(3)]
     public double A { get; set; } = 1d;
 
     #endregion
