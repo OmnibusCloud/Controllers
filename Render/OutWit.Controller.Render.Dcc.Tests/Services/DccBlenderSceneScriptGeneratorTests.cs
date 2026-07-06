@@ -389,6 +389,34 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsBackdropRayVisibilityForBackdropMeshNodesTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Nodes.First(me => me.Kind == DccNodeKind.Mesh).IsBackdrop = true;
+        var buildInput = CreateBuildInput(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            // A backdrop shell (sky dome) is scenery — visible to camera/reflections but never a
+            // giant area light or shadow caster.
+            Assert.That(script, Does.Contain(".visible_diffuse = False"));
+            Assert.That(script, Does.Contain(".visible_shadow = False"));
+        });
+    }
+
+    [Test]
+    public void CreateDoesNotEmitBackdropRayVisibilityByDefaultTest()
+    {
+        var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.That(script, Does.Not.Contain("visible_diffuse"));
+    }
+
+    [Test]
     public void CreateRestrictsConstantBackgroundColorToVisibilityRaysTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

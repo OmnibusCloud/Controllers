@@ -30,7 +30,8 @@ public partial class DccNodeData : ModelBase
                && LightId.Is(other.LightId)
                && MaterialBindingId.Is(other.MaterialBindingId)
                && Visible.Is(other.Visible)
-               && Renderable.Is(other.Renderable);
+               && Renderable.Is(other.Renderable)
+               && IsBackdrop == other.IsBackdrop;
     }
 
     public override ModelBase Clone()
@@ -49,7 +50,8 @@ public partial class DccNodeData : ModelBase
             LightId = LightId,
             MaterialBindingId = MaterialBindingId,
             Visible = Visible,
-            Renderable = Renderable
+            Renderable = Renderable,
+            IsBackdrop = IsBackdrop
         };
     }
 
@@ -134,6 +136,14 @@ public partial class DccNodeData : ModelBase
     /// </summary>
     [MemoryPackOrder(12)]
     public bool Renderable { get; set; } = true;
+
+    /// <summary>
+    /// Marks a mesh node as a scene backdrop (e.g. a sky-dome shell): it is shown to camera,
+    /// reflection and refraction rays but must not light the scene, cast shadows or occlude
+    /// lights — the source application treats such shells as scenery, not luminaires.
+    /// </summary>
+    [MemoryPackOrder(13)]
+    public bool IsBackdrop { get; set; }
 
     #endregion
 }

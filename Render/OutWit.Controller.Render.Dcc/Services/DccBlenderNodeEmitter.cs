@@ -36,6 +36,15 @@ internal static class DccBlenderNodeEmitter
             lines.Add($"{objectVariableName}.hide_render = {ToPythonBool(!node.Renderable)}");
             lines.Add($"{objectVariableName}.hide_viewport = {ToPythonBool(!node.Visible)}");
 
+            // A backdrop shell (sky dome) is scenery: camera/reflection/refraction rays see it,
+            // but it must not act as a giant area light or shadow the scene.
+            if (node.IsBackdrop)
+            {
+                lines.Add($"{objectVariableName}.visible_diffuse = False");
+                lines.Add($"{objectVariableName}.visible_shadow = False");
+                lines.Add($"{objectVariableName}.visible_volume_scatter = False");
+            }
+
             AppendMeshMaterialLines(lines, buildInput, node, mesh, meshVariableName);
 
             // Source-application render-only smoothing (e.g. 3ds Max MeshSmooth "Render
