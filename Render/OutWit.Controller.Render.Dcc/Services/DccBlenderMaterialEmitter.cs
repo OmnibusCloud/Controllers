@@ -100,12 +100,17 @@ internal static class DccBlenderMaterialEmitter
                 lines.Add($"{materialVariableName}_bsdf.inputs['IOR'].default_value = {FormatDouble(material.Ior)}");
             }
 
-            // Emission for self-illuminating materials.
+            // Emission for self-illuminating materials. 3ds Max self-illumination makes the DIFFUSE
+            // channel glow — with a base-color texture the texture itself must drive the emission
+            // (a sky-dome sphere emits its cloud bitmap), not a flat colour.
             if (material.EmissionStrength > 0d)
             {
                 var emission = material.EmissionColor;
                 lines.Add($"{materialVariableName}_bsdf.inputs['Emission Color'].default_value = ({FormatDouble(emission.R)}, {FormatDouble(emission.G)}, {FormatDouble(emission.B)}, 1.0)");
                 lines.Add($"{materialVariableName}_bsdf.inputs['Emission Strength'].default_value = {FormatDouble(material.EmissionStrength)}");
+
+                if (baseColorTexture != null)
+                    lines.Add($"{materialVariableName}_links.new(texture_{materialVariableName}_base_color.outputs['Color'], {materialVariableName}_bsdf.inputs['Emission Color'])");
             }
 
             var opacityTexture = material.TextureSlots.FirstOrDefault(me => me.Slot == DccTextureSlotKind.Opacity);

@@ -389,6 +389,21 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateDrivesEmissionFromBaseColorTextureWhenMaterialIsEmissiveTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.Materials[0].EmissionStrength = 1d;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        // 3ds Max self-illumination glows the DIFFUSE map — a textured emissive material (sky
+        // dome) must emit its bitmap, not a flat colour.
+        Assert.That(script, Does.Contain("_base_color.outputs['Color'], material_material_cube_bsdf.inputs['Emission Color']"));
+    }
+
+    [Test]
     public void CreateEmitsBackdropRayVisibilityForBackdropMeshNodesTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
