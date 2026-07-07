@@ -151,6 +151,13 @@ internal static class DccBlenderNodeEmitter
 
     private static void AppendSubdivisionModifierLines(List<string> lines, string objectVariableName)
     {
+        // The payload mesh is unwelded (per-corner vertices): displacing it without a weld tears
+        // every UV-island border open — MoonRock showed the chart boundaries as a grid of square
+        // seams over the displaced sphere.
+        var weldVariableName = $"{objectVariableName}_displace_weld";
+        lines.Add($"{weldVariableName} = {objectVariableName}.modifiers.new(name='WeldBeforeDisplacement', type='WELD')");
+        lines.Add($"{weldVariableName}.merge_threshold = 0.0001");
+
         var modifierVariableName = $"{objectVariableName}_subdiv";
         lines.Add($"{modifierVariableName} = {objectVariableName}.modifiers.new(name='Subdivision', type='SUBSURF')");
         lines.Add($"{modifierVariableName}.subdivision_type = 'SIMPLE'");
@@ -230,7 +237,13 @@ internal static class DccBlenderNodeEmitter
             }
 
             if (light.Kind == DccLightKind.Spot)
+            {
                 lines.Add($"{lightVariableName}.spot_size = math.radians({FormatDouble(light.SpotAngleDegrees)})");
+
+                // Source hotspot/falloff cone difference: 0 keeps the legacy hard edge.
+                if (light.SpotBlend > 0d)
+                    lines.Add($"{lightVariableName}.spot_blend = {FormatDouble(Math.Clamp(light.SpotBlend, 0d, 1d))}");
+            }
 
             if (light.Kind == DccLightKind.Area)
             {

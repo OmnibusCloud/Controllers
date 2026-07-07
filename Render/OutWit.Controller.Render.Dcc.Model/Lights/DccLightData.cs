@@ -33,7 +33,8 @@ public partial class DccLightData : ModelBase
                && SpotAngleKeyframes.Zip(other.SpotAngleKeyframes, (left, right) => left.Is(right, tolerance)).All(me => me)
                && CastShadows.Is(other.CastShadows)
                && AreaWidth.Is(other.AreaWidth, tolerance)
-               && AreaHeight.Is(other.AreaHeight, tolerance);
+               && AreaHeight.Is(other.AreaHeight, tolerance)
+               && SpotBlend.Is(other.SpotBlend, tolerance);
     }
 
     public override ModelBase Clone()
@@ -53,6 +54,7 @@ public partial class DccLightData : ModelBase
             SpotAngleKeyframes = [.. SpotAngleKeyframes.Select(me => (DccScalarKeyframeData)me.Clone())],
             CastShadows = CastShadows,
             AreaWidth = AreaWidth,
+            SpotBlend = SpotBlend,
             AreaHeight = AreaHeight
         };
     }
@@ -144,6 +146,13 @@ public partial class DccLightData : ModelBase
     /// </summary>
     [MemoryPackOrder(13)]
     public double AreaHeight { get; set; } = 1d;
+
+    /// <summary>
+    /// Spot edge softness in the [0, 1] range (0 = hard edge). Carries the source hotspot/falloff
+    /// cone difference; only meaningful when <see cref="Kind"/> is Spot.
+    /// </summary>
+    [MemoryPackOrder(14)]
+    public double SpotBlend { get; set; }
 
     #endregion
 }

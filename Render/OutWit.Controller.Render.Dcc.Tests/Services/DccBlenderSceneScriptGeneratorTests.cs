@@ -389,6 +389,36 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsSpotBlendForSoftEdgedSpotLightsTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.Lights.Add(new DccLightData
+        {
+            Id = "light:spot",
+            Name = "Spot",
+            Kind = DccLightKind.Spot,
+            Intensity = 1000d,
+            SpotAngleDegrees = 60d,
+            SpotBlend = 0.35d
+        });
+        scene.Nodes.Add(new DccNodeData
+        {
+            Id = "node:spot",
+            Name = "SpotNode",
+            Kind = DccNodeKind.Light,
+            LightId = "light:spot"
+        });
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        // Max spots fade between the hotspot and falloff cones — a hard-edged Blender spot reads
+        // as a sharp circle of light (TeaPotBounce's pool of light).
+        Assert.That(script, Does.Contain("spot_blend = 0.35"));
+    }
+
+    [Test]
     public void CreateDrivesEmissionFromBaseColorTextureWhenMaterialIsEmissiveTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
