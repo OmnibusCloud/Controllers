@@ -50,13 +50,22 @@ internal static class DccBlenderSceneScriptGenerator
             "    camera_data.sensor_fit = 'VERTICAL'",
             "    camera_data.lens = camera_data.sensor_height / (2.0 * math.tan(math.radians(fov_degrees) / 2.0))",
             "",
+            "def action_fcurves(action):",
+            "    # Blender 4.4+ slotted actions dropped Action.fcurves; walk layers/strips/channelbags",
+            "    # there. The legacy accessor stays for older builds.",
+            "    if hasattr(action, 'fcurves'):",
+            "        return list(action.fcurves)",
+            "    curves = []",
+            "    for layer in action.layers:",
+            "        for strip in layer.strips:",
+            "            for bag in strip.channelbags:",
+            "                curves.extend(bag.fcurves)",
+            "    return curves",
+            "",
             "def set_keyframe_interpolation(obj, data_path, frame, interpolation):",
             "    if obj.animation_data is None or obj.animation_data.action is None:",
             "        return",
-            "    action = obj.animation_data.action",
-            "    if not hasattr(action, 'fcurves'):",
-            "        return",
-            "    for fcurve in action.fcurves:",
+            "    for fcurve in action_fcurves(obj.animation_data.action):",
             "        if fcurve.data_path != data_path:",
             "            continue",
             "        for keyframe in fcurve.keyframe_points:",
@@ -102,6 +111,12 @@ internal static class DccBlenderSceneScriptGenerator
 
         lines.Add("scene.render.use_motion_blur = True");
         lines.Add($"scene.render.motion_blur_shutter = {FormatDouble(renderSettings.MotionBlurShutter)}");
+
+        // Open the shutter AT the frame, not centered on it: a centered window looks backwards
+        // across camera-cut keyframes (montage cuts held with CONSTANT interpolation) and ghosts
+        // the previous shot over the frame — troll_cleric's whole close-up smeared into a wash.
+        // A start-positioned shutter only ever integrates forward inside the held key.
+        lines.Add("scene.render.motion_blur_position = 'START'");
     }
 
     private static void AppendWorldLines(List<string> lines, DccSceneBuildInput buildInput)

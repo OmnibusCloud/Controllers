@@ -644,6 +644,10 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         {
             Assert.That(script, Does.Contain("scene.render.use_motion_blur = True"));
             Assert.That(script, Does.Contain("scene.render.motion_blur_shutter = 0.25"));
+
+            // A centered shutter looks backwards across montage-cut keys (held CONSTANT) and
+            // ghosts the previous shot over the frame; the shutter must open AT the frame.
+            Assert.That(script, Does.Contain("scene.render.motion_blur_position = 'START'"));
         });
     }
 
