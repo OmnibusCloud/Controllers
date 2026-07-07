@@ -174,10 +174,10 @@ internal static class DccSceneBuildInputFactory
             var seenDeformationFrames = new HashSet<int>();
             foreach (var deformationFrame in mesh.DeformationFrames)
             {
-                if (deformationFrame.Frame <= 0)
+                if (deformationFrame.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene mesh '{mesh.Id}' contains a non-positive deformation frame '{deformationFrame.Frame}'.");
+                        $"Render.BuildBlendFromDccScene mesh '{mesh.Id}' contains a negative deformation frame '{deformationFrame.Frame}'.");
                 }
 
                 if (deformationFrame.Positions.Count != mesh.Positions.Count)
@@ -206,10 +206,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in light.ColorKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene light '{light.Id}' contains a non-positive color keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene light '{light.Id}' contains a negative color keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (Math.Abs(keyframe.Color.A - 1d) > 1e-9)
@@ -227,10 +227,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in light.IntensityKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene light '{light.Id}' contains a non-positive intensity keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene light '{light.Id}' contains a negative intensity keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (!seenIntensityFrames.Add(keyframe.Frame))
@@ -248,10 +248,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in light.RangeKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene light '{light.Id}' contains a non-positive range keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene light '{light.Id}' contains a negative range keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (keyframe.Value <= 0d)
@@ -275,10 +275,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in light.SpotAngleKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene light '{light.Id}' contains a non-positive spot-angle keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene light '{light.Id}' contains a negative spot-angle keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (keyframe.Value <= 0d || keyframe.Value > 180d)
@@ -322,10 +322,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in node.TransformKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene node '{node.Id}' contains a non-positive transform keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene node '{node.Id}' contains a negative transform keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (!seenFrames.Add(keyframe.Frame))
@@ -337,10 +337,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in node.VisibilityKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene node '{node.Id}' contains a non-positive visibility keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene node '{node.Id}' contains a negative visibility keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (!seenVisibilityFrames.Add(keyframe.Frame))
@@ -365,10 +365,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in material.BaseColorKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene material '{material.Id}' contains a non-positive base-color keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene material '{material.Id}' contains a negative base-color keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (Math.Abs(keyframe.Color.A - 1d) > 1e-9)
@@ -392,10 +392,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in material.AlphaClipThresholdKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene material '{material.Id}' contains a non-positive alpha-clip-threshold keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene material '{material.Id}' contains a negative alpha-clip-threshold keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (keyframe.Value < 0d || keyframe.Value > 1d)
@@ -413,10 +413,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in material.OpacityKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene material '{material.Id}' contains a non-positive opacity keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene material '{material.Id}' contains a negative opacity keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (keyframe.Value < 0d || keyframe.Value > 1d)
@@ -434,10 +434,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in material.MetallicKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene material '{material.Id}' contains a non-positive metallic keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene material '{material.Id}' contains a negative metallic keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (keyframe.Value < 0d || keyframe.Value > 1d)
@@ -455,10 +455,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in material.RoughnessKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene material '{material.Id}' contains a non-positive roughness keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene material '{material.Id}' contains a negative roughness keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (keyframe.Value < 0d || keyframe.Value > 1d)
@@ -482,10 +482,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in material.NormalStrengthKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene material '{material.Id}' contains a non-positive normal-strength keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene material '{material.Id}' contains a negative normal-strength keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (keyframe.Value < 0d)
@@ -507,10 +507,10 @@ internal static class DccSceneBuildInputFactory
 
                 foreach (var keyframe in textureSlot.UvTransformKeyframes)
                 {
-                    if (keyframe.Frame <= 0)
+                    if (keyframe.Frame < 0)
                     {
                         throw new InvalidOperationException(
-                            $"Render.BuildBlendFromDccScene material '{material.Id}' texture slot '{textureSlot.Slot}' contains a non-positive UV-transform keyframe frame '{keyframe.Frame}'.");
+                            $"Render.BuildBlendFromDccScene material '{material.Id}' texture slot '{textureSlot.Slot}' contains a negative UV-transform keyframe frame '{keyframe.Frame}'.");
                     }
 
                     if (!seenUvTransformFrames.Add(keyframe.Frame))
@@ -539,10 +539,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in camera.VerticalFovKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene camera '{camera.Id}' contains a non-positive vertical-FOV keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene camera '{camera.Id}' contains a negative vertical-FOV keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (keyframe.Value <= 0d || keyframe.Value >= 180d)
@@ -560,10 +560,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in camera.NearClipKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene camera '{camera.Id}' contains a non-positive near-clip keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene camera '{camera.Id}' contains a negative near-clip keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (keyframe.Value <= 0d)
@@ -581,10 +581,10 @@ internal static class DccSceneBuildInputFactory
 
             foreach (var keyframe in camera.FarClipKeyframes)
             {
-                if (keyframe.Frame <= 0)
+                if (keyframe.Frame < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Render.BuildBlendFromDccScene camera '{camera.Id}' contains a non-positive far-clip keyframe frame '{keyframe.Frame}'.");
+                        $"Render.BuildBlendFromDccScene camera '{camera.Id}' contains a negative far-clip keyframe frame '{keyframe.Frame}'.");
                 }
 
                 if (keyframe.Value <= 0d)

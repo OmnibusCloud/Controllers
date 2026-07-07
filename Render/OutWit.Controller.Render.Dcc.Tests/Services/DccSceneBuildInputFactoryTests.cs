@@ -159,21 +159,21 @@ public sealed class DccSceneBuildInputFactoryTests
     }
 
     [Test]
-    public void CreateRejectsNonPositiveDeformationFrameTest()
+    public void CreateRejectsNegativeDeformationFrameTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
         scene.Meshes[0].DeformationFrames =
         [
             new DccMeshDeformationFrameData
             {
-                Frame = 0,
+                Frame = -1,
                 Positions = [.. scene.Meshes[0].Positions.Select(me => (DccVector3Data)me.Clone())]
             }
         ];
 
         var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
 
-        Assert.That(exception!.Message, Does.Contain("non-positive deformation frame"));
+        Assert.That(exception!.Message, Does.Contain("negative deformation frame"));
     }
 
     [Test]
@@ -363,17 +363,33 @@ public sealed class DccSceneBuildInputFactoryTests
     }
 
     [Test]
-    public void CreateRejectsNonPositiveTransformKeyframeFrameTest()
+    public void CreateAcceptsFrameZeroKeyframesTest()
+    {
+        // 3ds Max animation ranges routinely start at frame 0; frame 0 is a legal timeline
+        // position in Blender too. Rejecting it forced exporters to shift whole timelines.
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.Nodes[0].TransformKeyframes =
+        [
+            DccRenderTestData.CreateTransformKeyframe(0, 1d, 2d, 3d),
+            DccRenderTestData.CreateTransformKeyframe(1, 2d, 3d, 4d)
+        ];
+
+        Assert.DoesNotThrow(() => DccSceneBuildInputFactory.Create(scene));
+    }
+
+    [Test]
+    public void CreateRejectsNegativeTransformKeyframeFrameTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
         scene.Nodes[0].TransformKeyframes =
         [
-            DccRenderTestData.CreateTransformKeyframe(0, 1d, 2d, 3d)
+            DccRenderTestData.CreateTransformKeyframe(-1, 1d, 2d, 3d)
         ];
 
         var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
 
-        Assert.That(exception!.Message, Does.Contain("non-positive transform keyframe frame"));
+        Assert.That(exception!.Message, Does.Contain("negative transform keyframe frame"));
     }
 
     [Test]
@@ -392,17 +408,17 @@ public sealed class DccSceneBuildInputFactoryTests
     }
 
     [Test]
-    public void CreateRejectsNonPositiveVisibilityKeyframeFrameTest()
+    public void CreateRejectsNegativeVisibilityKeyframeFrameTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
         scene.Nodes[0].VisibilityKeyframes =
         [
-            DccRenderTestData.CreateVisibilityKeyframe(0, true, true)
+            DccRenderTestData.CreateVisibilityKeyframe(-1, true, true)
         ];
 
         var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
 
-        Assert.That(exception!.Message, Does.Contain("non-positive visibility keyframe frame"));
+        Assert.That(exception!.Message, Does.Contain("negative visibility keyframe frame"));
     }
 
     [Test]
@@ -464,17 +480,17 @@ public sealed class DccSceneBuildInputFactoryTests
     }
 
     [Test]
-    public void CreateRejectsNonPositiveTextureUvTransformKeyframeFrameTest()
+    public void CreateRejectsNegativeTextureUvTransformKeyframeFrameTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
         scene.Materials[0].TextureSlots[0].UvTransformKeyframes =
         [
-            DccRenderTestData.CreateTextureTransformKeyframe(0, 2d, 0.5d, 0.25d, -0.1d, 45d)
+            DccRenderTestData.CreateTextureTransformKeyframe(-1, 2d, 0.5d, 0.25d, -0.1d, 45d)
         ];
 
         var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
 
-        Assert.That(exception!.Message, Does.Contain("non-positive UV-transform keyframe frame"));
+        Assert.That(exception!.Message, Does.Contain("negative UV-transform keyframe frame"));
     }
 
     [Test]
@@ -670,19 +686,19 @@ public sealed class DccSceneBuildInputFactoryTests
     }
 
     [Test]
-    public void CreateRejectsNonPositiveLightIntensityKeyframeFrameTest()
+    public void CreateRejectsNegativeLightIntensityKeyframeFrameTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
         scene.Lights.Add(DccRenderTestData.CreateLight());
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
         scene.Lights[^1].IntensityKeyframes =
         [
-            DccRenderTestData.CreateLightIntensityKeyframe(0, 1200d)
+            DccRenderTestData.CreateLightIntensityKeyframe(-1, 1200d)
         ];
 
         var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
 
-        Assert.That(exception!.Message, Does.Contain("non-positive intensity keyframe frame"));
+        Assert.That(exception!.Message, Does.Contain("negative intensity keyframe frame"));
     }
 
     [Test]
@@ -703,19 +719,19 @@ public sealed class DccSceneBuildInputFactoryTests
     }
 
     [Test]
-    public void CreateRejectsNonPositiveLightColorKeyframeFrameTest()
+    public void CreateRejectsNegativeLightColorKeyframeFrameTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
         scene.Lights.Add(DccRenderTestData.CreateLight());
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
         scene.Lights[^1].ColorKeyframes =
         [
-            DccRenderTestData.CreateLightColorKeyframe(0, 1d, 0.95d, 0.85d)
+            DccRenderTestData.CreateLightColorKeyframe(-1, 1d, 0.95d, 0.85d)
         ];
 
         var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
 
-        Assert.That(exception!.Message, Does.Contain("non-positive color keyframe frame"));
+        Assert.That(exception!.Message, Does.Contain("negative color keyframe frame"));
     }
 
     [Test]
