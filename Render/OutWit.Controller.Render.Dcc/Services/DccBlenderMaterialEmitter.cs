@@ -47,6 +47,19 @@ internal static class DccBlenderMaterialEmitter
                     AppendBaseColorTextureCombinationLines(lines, materialVariableName);
             }
 
+            // Vertex-color driven channels: bind the mesh's per-corner 'Color' attribute (emitted
+            // by the node emitter) through a Color Attribute node. A source-DCC vertex-color map
+            // carries baked shading no flat color can reproduce (Lighting-Vertex's whole look).
+            var usesVertexColors = material.BaseColorFromVertexColors || material.EmissionFromVertexColors;
+            if (usesVertexColors)
+            {
+                lines.Add($"{materialVariableName}_vcol = {materialVariableName}_nodes.new('ShaderNodeVertexColor')");
+                lines.Add($"{materialVariableName}_vcol.layer_name = 'Color'");
+            }
+
+            if (material.BaseColorFromVertexColors)
+                lines.Add($"{materialVariableName}_links.new({materialVariableName}_vcol.outputs['Color'], {materialVariableName}_bsdf.inputs['Base Color'])");
+
             var metallicTexture = material.TextureSlots.FirstOrDefault(me => me.Slot == DccTextureSlotKind.Metallic);
             var usesMetallicControl = metallicTexture != null || material.Metallic != 0d || material.MetallicKeyframes.Count > 0;
             if (usesMetallicControl)
@@ -135,6 +148,12 @@ internal static class DccBlenderMaterialEmitter
 
                 if (baseColorTexture != null)
                     lines.Add($"{materialVariableName}_links.new(texture_{materialVariableName}_base_color.outputs['Color'], {materialVariableName}_bsdf.inputs['Emission Color'])");
+
+                // Vertex colors override both the flat emission color and a base-color texture:
+                // when the source diffuse is vertex-colored the emission glows those colors too
+                // (self-illum glows the diffuse), and an explicit self-illum vertex map wins.
+                if (material.EmissionFromVertexColors || material.BaseColorFromVertexColors)
+                    lines.Add($"{materialVariableName}_links.new({materialVariableName}_vcol.outputs['Color'], {materialVariableName}_bsdf.inputs['Emission Color'])");
             }
 
             var opacityTexture = material.TextureSlots.FirstOrDefault(me => me.Slot == DccTextureSlotKind.Opacity);

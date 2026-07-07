@@ -46,7 +46,9 @@ public partial class DccMaterialData : ModelBase
                && EmissionStrength.Is(other.EmissionStrength, tolerance)
                && DisplacementScale.Is(other.DisplacementScale, tolerance)
                && BackfaceCull.Is(other.BackfaceCull)
-               && EmissionCameraOnly == other.EmissionCameraOnly;
+               && EmissionCameraOnly == other.EmissionCameraOnly
+               && BaseColorFromVertexColors == other.BaseColorFromVertexColors
+               && EmissionFromVertexColors == other.EmissionFromVertexColors;
     }
 
     public override ModelBase Clone()
@@ -76,7 +78,9 @@ public partial class DccMaterialData : ModelBase
             EmissionStrength = EmissionStrength,
             DisplacementScale = DisplacementScale,
             BackfaceCull = BackfaceCull,
-            EmissionCameraOnly = EmissionCameraOnly
+            EmissionCameraOnly = EmissionCameraOnly,
+            BaseColorFromVertexColors = BaseColorFromVertexColors,
+            EmissionFromVertexColors = EmissionFromVertexColors
         };
     }
 
@@ -237,5 +241,19 @@ public partial class DccMaterialData : ModelBase
     /// </summary>
     [MemoryPackOrder(23)]
     public bool EmissionCameraOnly { get; set; }
+
+    /// <summary>
+    /// Base color is driven by the mesh's per-corner color attribute (a source-DCC vertex-color
+    /// map wired into the diffuse channel) instead of <see cref="BaseColor"/>.
+    /// </summary>
+    [MemoryPackOrder(24)]
+    public bool BaseColorFromVertexColors { get; set; }
+
+    /// <summary>
+    /// Emission color is driven by the mesh's per-corner color attribute (a source-DCC
+    /// vertex-color map wired into the self-illumination channel).
+    /// </summary>
+    [MemoryPackOrder(25)]
+    public bool EmissionFromVertexColors { get; set; }
     #endregion
 }

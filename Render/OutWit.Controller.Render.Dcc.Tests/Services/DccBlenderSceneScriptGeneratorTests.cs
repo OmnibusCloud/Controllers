@@ -507,6 +507,48 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateBindsVertexColorsToBaseColorAndEmissionTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Materials[0].TextureSlots.Clear();
+        scene.Materials[0].BaseColorFromVertexColors = true;
+        scene.Materials[0].EmissionStrength = 1d;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            // A vertex-colored diffuse carries baked shading (Lighting-Vertex's boxes) — the
+            // Color Attribute node must drive both the base color and, when emissive, the glow.
+            Assert.That(script, Does.Contain("nodes.new('ShaderNodeVertexColor')"));
+            Assert.That(script, Does.Contain("_vcol.layer_name = 'Color'"));
+            Assert.That(script, Does.Contain("_vcol.outputs['Color'], material_material_cube_bsdf.inputs['Base Color']"));
+            Assert.That(script, Does.Contain("_vcol.outputs['Color'], material_material_cube_bsdf.inputs['Emission Color']"));
+        });
+    }
+
+    [Test]
+    public void CreateBindsVertexColorsToEmissionOnlyForSelfIlluminationMapTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Materials[0].TextureSlots.Clear();
+        scene.Materials[0].EmissionFromVertexColors = true;
+        scene.Materials[0].EmissionStrength = 0.5d;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            // A vertex-colored self-illumination map glows without touching the base color
+            // (Lighting-Vertex's walls: concrete texture lit by baked vertex lighting).
+            Assert.That(script, Does.Contain("_vcol.outputs['Color'], material_material_cube_bsdf.inputs['Emission Color']"));
+            Assert.That(script, Does.Not.Contain("_vcol.outputs['Color'], material_material_cube_bsdf.inputs['Base Color']"));
+        });
+    }
+
+    [Test]
     public void CreateEmitsBackdropRayVisibilityForBackdropMeshNodesTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
