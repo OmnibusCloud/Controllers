@@ -93,9 +93,12 @@ internal static class DccBlenderNodeEmitter
             return;
 
         // Baked vertex-cache deformation as keyframed shape keys: a Basis key (rest pose) plus one
-        // key per deformation frame. Each key's value is keyframed with CONSTANT interpolation - 0
-        // before, 1 at its frame, 0 after - so exactly the current frame's pose is shown and the
-        // keys never blend together.
+        // key per deformation frame, each keyed 0 -> 1 -> 0 around its frame with LINEAR
+        // interpolation. At integer frames exactly one key is active (exact baked pose); between
+        // frames adjacent keys cross-fade (weights sum to 1), which both smooths sub-frame motion
+        // and gives Cycles real deformation vectors — stepped keys froze geometry inside the
+        // shutter window, so motion blur never touched baked deformation (butterfly wings,
+        // dragon flaps rendered rigid while the source renderer ghosts them).
         lines.Add($"{objectVariableName}.shape_key_add(name='Basis')");
 
         var frameIndex = 0;
@@ -114,9 +117,9 @@ internal static class DccBlenderNodeEmitter
             lines.Add($"{keyVariable}.keyframe_insert(data_path='value', frame={frame.Frame})");
             lines.Add($"{keyVariable}.value = 0.0");
             lines.Add($"{keyVariable}.keyframe_insert(data_path='value', frame={frame.Frame + 1})");
-            lines.Add($"set_keyframe_interpolation({objectVariableName}.data.shape_keys, {keyVariable}.path_from_id('value'), {frame.Frame - 1}, 'CONSTANT')");
-            lines.Add($"set_keyframe_interpolation({objectVariableName}.data.shape_keys, {keyVariable}.path_from_id('value'), {frame.Frame}, 'CONSTANT')");
-            lines.Add($"set_keyframe_interpolation({objectVariableName}.data.shape_keys, {keyVariable}.path_from_id('value'), {frame.Frame + 1}, 'CONSTANT')");
+            lines.Add($"set_keyframe_interpolation({objectVariableName}.data.shape_keys, {keyVariable}.path_from_id('value'), {frame.Frame - 1}, 'LINEAR')");
+            lines.Add($"set_keyframe_interpolation({objectVariableName}.data.shape_keys, {keyVariable}.path_from_id('value'), {frame.Frame}, 'LINEAR')");
+            lines.Add($"set_keyframe_interpolation({objectVariableName}.data.shape_keys, {keyVariable}.path_from_id('value'), {frame.Frame + 1}, 'LINEAR')");
 
             frameIndex++;
         }

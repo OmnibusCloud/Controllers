@@ -363,6 +363,10 @@ internal static class DccBlenderMaterialEmitter
         lines.Add($"{textureVariableName}.image.colorspace_settings.name = 'Non-Color'");
         lines.Add($"{displacementNodeVariableName} = {materialVariableName}_nodes.new('ShaderNodeDisplacement')");
         lines.Add($"{displacementNodeVariableName}.inputs['Scale'].default_value = {FormatDouble(material.DisplacementScale)}");
+        // Heights are measured FROM the surface (0 = no displacement), matching source-DCC
+        // semantics. Blender's default midlevel 0.5 would push dark areas inward and halve the
+        // effective peak height (MoonRock's spikes rendered soft and shallow).
+        lines.Add($"{displacementNodeVariableName}.inputs['Midlevel'].default_value = 0.0");
         lines.Add($"{materialVariableName}_links.new({textureVariableName}.outputs['Color'], {displacementNodeVariableName}.inputs['Height'])");
         lines.Add($"{outputNodeVariableName} = {materialVariableName}_nodes['Material Output']");
         lines.Add($"{materialVariableName}_links.new({displacementNodeVariableName}.outputs['Displacement'], {outputNodeVariableName}.inputs['Displacement'])");

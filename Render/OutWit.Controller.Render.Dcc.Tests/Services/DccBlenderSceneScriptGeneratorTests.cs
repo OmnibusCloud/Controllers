@@ -292,7 +292,12 @@ public sealed class DccBlenderSceneScriptGeneratorTests
             Assert.That(script, Does.Contain("shape_key_add(name='Basis')"));
             Assert.That(script, Does.Contain("shape_key_add(name='Frame_2')"));
             Assert.That(script, Does.Contain("keyframe_insert(data_path='value', frame=2)"));
-            Assert.That(script, Does.Contain("'CONSTANT'"));
+
+            // LINEAR cross-fade between adjacent deformation keys: exact pose at integer frames,
+            // blended pose between them — stepped keys froze geometry inside the shutter window
+            // and baked deformation never motion-blurred.
+            Assert.That(script, Does.Contain("set_keyframe_interpolation(object_node_cube.data.shape_keys"));
+            Assert.That(script, Does.Contain(", 2, 'LINEAR')"));
         });
     }
 
