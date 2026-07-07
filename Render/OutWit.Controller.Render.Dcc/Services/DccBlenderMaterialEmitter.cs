@@ -141,6 +141,10 @@ internal static class DccBlenderMaterialEmitter
             if (normalTexture != null)
                 AppendNormalTextureSlotLines(lines, material, materialVariableName, normalTexture);
 
+            var bumpTexture = material.TextureSlots.FirstOrDefault(me => me.Slot == DccTextureSlotKind.Bump);
+            if (bumpTexture != null && normalTexture == null)
+                AppendBumpTextureSlotLines(lines, material, materialVariableName, bumpTexture);
+
             var displacementTexture = material.TextureSlots.FirstOrDefault(me => me.Slot == DccTextureSlotKind.Displacement);
             if (displacementTexture != null)
                 AppendDisplacementTextureSlotLines(lines, material, materialVariableName, displacementTexture);
@@ -274,6 +278,27 @@ internal static class DccBlenderMaterialEmitter
         lines.Add($"{normalStrengthSocketVariableName} = {normalMapVariableName}.inputs['Strength']");
         lines.Add($"{materialVariableName}_links.new({textureVariableName}.outputs['Color'], {normalMapVariableName}.inputs['Color'])");
         lines.Add($"{materialVariableName}_links.new({normalMapVariableName}.outputs['Normal'], {materialVariableName}_bsdf.inputs['Normal'])");
+    }
+
+    private static void AppendBumpTextureSlotLines(
+        List<string> lines,
+        DccMaterialData material,
+        string materialVariableName,
+        DccTextureSlotData textureSlot)
+    {
+        // A bump map is a grayscale HEIGHT map — it must go through a Bump node (Height input).
+        // Feeding it into a normal-map node interprets heights as normal vectors and carves black
+        // craters (hardwood's paint-swatch board with Smoke/Noise bumps).
+        var textureVariableName = $"texture_{materialVariableName}_bump";
+        var bumpNodeVariableName = $"bump_{materialVariableName}";
+        lines.Add($"{textureVariableName} = {materialVariableName}_nodes.new('ShaderNodeTexImage')");
+        lines.Add($"{textureVariableName}.image = images_by_id[{ToPythonStringLiteral(textureSlot.ImageAssetId)}]");
+        AppendTextureVectorMappingLines(lines, materialVariableName, textureVariableName, "bump", textureSlot);
+        lines.Add($"{textureVariableName}.image.colorspace_settings.name = 'Non-Color'");
+        lines.Add($"{bumpNodeVariableName} = {materialVariableName}_nodes.new('ShaderNodeBump')");
+        lines.Add($"{bumpNodeVariableName}.inputs['Strength'].default_value = {FormatDouble(material.NormalStrength)}");
+        lines.Add($"{materialVariableName}_links.new({textureVariableName}.outputs['Color'], {bumpNodeVariableName}.inputs['Height'])");
+        lines.Add($"{materialVariableName}_links.new({bumpNodeVariableName}.outputs['Normal'], {materialVariableName}_bsdf.inputs['Normal'])");
     }
 
     private static void AppendDisplacementTextureSlotLines(

@@ -94,7 +94,7 @@ internal static class DccSceneContractValidator
         foreach (var material in scene.Materials)
         {
             var seenTextureSlots = new HashSet<DccTextureSlotKind>();
-            var hasNormalTextureSlot = material.TextureSlots.Any(me => me.Slot == DccTextureSlotKind.Normal);
+            var hasNormalTextureSlot = material.TextureSlots.Any(me => me.Slot is DccTextureSlotKind.Normal or DccTextureSlotKind.Bump);
             var hasOpacitySource = material.Opacity != 1d
                                    || material.OpacityKeyframes.Count > 0
                                    || material.TextureSlots.Any(me => me.Slot == DccTextureSlotKind.Opacity);

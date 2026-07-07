@@ -389,6 +389,31 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateRoutesBumpSlotThroughBumpNodeTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.Materials[0].NormalStrength = 0.3d;
+        scene.Materials[0].TextureSlots.Add(new DccTextureSlotData
+        {
+            Slot = DccTextureSlotKind.Bump,
+            ImageAssetId = scene.ImageAssets[0].Id
+        });
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            // Height maps go through a Bump node — a normal-map node reads heights as normal
+            // vectors and carves black craters.
+            Assert.That(script, Does.Contain("ShaderNodeBump"));
+            Assert.That(script, Does.Contain(".inputs['Height'])"));
+            Assert.That(script, Does.Not.Contain("ShaderNodeNormalMap"));
+        });
+    }
+
+    [Test]
     public void CreateEmitsSpotBlendForSoftEdgedSpotLightsTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
