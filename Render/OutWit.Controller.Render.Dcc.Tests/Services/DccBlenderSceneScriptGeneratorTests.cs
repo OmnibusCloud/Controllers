@@ -389,6 +389,54 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsConstantFalloffForNoDecayLightsTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        var light = DccRenderTestData.CreateLight();
+        light.NoDecay = true;
+        light.CastShadows = false;
+        scene.Lights.Add(light);
+        scene.Nodes.Add(DccRenderTestData.CreateLightNode());
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            // Max standard lights default to no distance decay; the Constant falloff output
+            // cancels Cycles' inverse-square. Shadows are forced ON — a shadow-less light with a
+            // node tree emits nothing in Cycles.
+            Assert.That(script, Does.Contain("ShaderNodeLightFalloff"));
+            Assert.That(script, Does.Contain("outputs['Constant']"));
+            Assert.That(script, Does.Contain(".energy = 1.0"));
+            var falloffIndex = script.IndexOf("ShaderNodeLightFalloff", StringComparison.Ordinal);
+            var shadowOverrideIndex = script.LastIndexOf(".use_shadow = True", falloffIndex, StringComparison.Ordinal);
+            Assert.That(shadowOverrideIndex, Is.GreaterThan(0));
+        });
+    }
+
+    [Test]
+    public void CreateRestrictsCameraOnlyEmissionToVisibilityRaysTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.Materials[0].EmissionStrength = 0.5d;
+        scene.Materials[0].EmissionCameraOnly = true;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            // A no-GI source renderer shows self-illumination without lighting the scene.
+            Assert.That(script, Does.Contain("_lp = "));
+            Assert.That(script, Does.Contain("Is Camera Ray"));
+            Assert.That(script, Does.Contain("_emis_scale"));
+        });
+    }
+
+    [Test]
     public void CreateRoutesBumpSlotThroughBumpNodeTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

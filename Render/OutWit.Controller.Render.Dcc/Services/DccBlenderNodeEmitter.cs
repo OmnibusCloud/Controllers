@@ -254,6 +254,30 @@ internal static class DccBlenderNodeEmitter
 
             lines.Add($"{lightVariableName}.use_shadow = {ToPythonBool(light.CastShadows)}");
 
+            // 3ds Max standard lights default to NO distance decay, while Cycles lights are
+            // physically inverse-square — near surfaces blow out and far ones go black (interior
+            // walls / the dragon's far omnis). The Light Falloff node's Constant output cancels
+            // the physical falloff so the received intensity matches the source renderer.
+            if (light.NoDecay && light.Kind is DccLightKind.Point or DccLightKind.Spot)
+            {
+                // The Light Falloff node's Constant output removes the physical inverse-square
+                // falloff in CYCLES light shaders (verified: identical illumination at 5 and 20
+                // units). Ray-Length-based compensation does NOT work — Ray Length evaluates to
+                // zero inside light shaders. With use_nodes the light's energy is ignored, so the
+                // falloff node carries the light's power (received irradiance ≈ Strength / 4π).
+                // Energy interacts unpredictably with light node trees — pin it to 1 W so the
+                // falloff strength is the single source of the light's power. Shadows must stay ON:
+                // in Cycles 5.1 a light with use_shadow=False AND a node tree emits NOTHING (the
+                // shadow-less fast path skips node evaluation), so the authored shadows-off flag is
+                // overridden for no-decay lights.
+                lines.Add($"{lightVariableName}.energy = 1.0");
+                lines.Add($"{lightVariableName}.use_shadow = True");
+                lines.Add($"{lightVariableName}.use_nodes = True");
+                lines.Add($"{lightVariableName}_falloff = {lightVariableName}.node_tree.nodes.new('ShaderNodeLightFalloff')");
+                lines.Add($"{lightVariableName}_falloff.inputs['Strength'].default_value = {FormatDouble(light.Intensity)}");
+                lines.Add($"{lightVariableName}.node_tree.links.new({lightVariableName}_falloff.outputs['Constant'], {lightVariableName}.node_tree.nodes['Emission'].inputs['Strength'])");
+            }
+
             AppendLightSpotAngleAnimationLines(lines, lightVariableName, light);
 
             lines.Add($"{objectVariableName} = bpy.data.objects.new({ToPythonStringLiteral(node.Name)}, {lightVariableName})");

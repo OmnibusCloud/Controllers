@@ -45,7 +45,8 @@ public partial class DccMaterialData : ModelBase
                && EmissionColor.Is(other.EmissionColor, tolerance)
                && EmissionStrength.Is(other.EmissionStrength, tolerance)
                && DisplacementScale.Is(other.DisplacementScale, tolerance)
-               && BackfaceCull.Is(other.BackfaceCull);
+               && BackfaceCull.Is(other.BackfaceCull)
+               && EmissionCameraOnly == other.EmissionCameraOnly;
     }
 
     public override ModelBase Clone()
@@ -74,7 +75,8 @@ public partial class DccMaterialData : ModelBase
             EmissionColor = (DccColorData)EmissionColor.Clone(),
             EmissionStrength = EmissionStrength,
             DisplacementScale = DisplacementScale,
-            BackfaceCull = BackfaceCull
+            BackfaceCull = BackfaceCull,
+            EmissionCameraOnly = EmissionCameraOnly
         };
     }
 
@@ -227,5 +229,13 @@ public partial class DccMaterialData : ModelBase
     [MemoryPackOrder(22)]
     public bool BackfaceCull { get; set; }
 
+
+    /// <summary>
+    /// Emission is a display effect only: the surface glows to camera/reflection/refraction rays
+    /// but does not light the scene. Matches renderers without global illumination (3ds Max
+    /// Scanline self-illumination), where a glowing surface never brightens its surroundings.
+    /// </summary>
+    [MemoryPackOrder(23)]
+    public bool EmissionCameraOnly { get; set; }
     #endregion
 }

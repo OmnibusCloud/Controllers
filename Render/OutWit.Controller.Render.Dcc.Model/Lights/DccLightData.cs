@@ -34,7 +34,8 @@ public partial class DccLightData : ModelBase
                && CastShadows.Is(other.CastShadows)
                && AreaWidth.Is(other.AreaWidth, tolerance)
                && AreaHeight.Is(other.AreaHeight, tolerance)
-               && SpotBlend.Is(other.SpotBlend, tolerance);
+               && SpotBlend.Is(other.SpotBlend, tolerance)
+               && NoDecay == other.NoDecay;
     }
 
     public override ModelBase Clone()
@@ -55,6 +56,7 @@ public partial class DccLightData : ModelBase
             CastShadows = CastShadows,
             AreaWidth = AreaWidth,
             SpotBlend = SpotBlend,
+            NoDecay = NoDecay,
             AreaHeight = AreaHeight
         };
     }
@@ -153,6 +155,13 @@ public partial class DccLightData : ModelBase
     /// </summary>
     [MemoryPackOrder(14)]
     public double SpotBlend { get; set; }
+
+    /// <summary>
+    /// The source light does not attenuate with distance (3ds Max standard lights default to no
+    /// decay). The generator cancels the physical inverse-square falloff for such lights.
+    /// </summary>
+    [MemoryPackOrder(15)]
+    public bool NoDecay { get; set; }
 
     #endregion
 }

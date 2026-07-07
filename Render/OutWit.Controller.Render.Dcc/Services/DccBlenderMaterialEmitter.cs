@@ -107,7 +107,31 @@ internal static class DccBlenderMaterialEmitter
             {
                 var emission = material.EmissionColor;
                 lines.Add($"{materialVariableName}_bsdf.inputs['Emission Color'].default_value = ({FormatDouble(emission.R)}, {FormatDouble(emission.G)}, {FormatDouble(emission.B)}, 1.0)");
-                lines.Add($"{materialVariableName}_bsdf.inputs['Emission Strength'].default_value = {FormatDouble(material.EmissionStrength)}");
+
+                if (material.EmissionCameraOnly)
+                {
+                    // A no-GI source renderer (Scanline) shows a self-illuminated surface bright but
+                    // never lights the scene with it — Lighting-Vertex's glowing boxes flooded the
+                    // whole interior through Cycles GI. Restrict the emission to visibility rays.
+                    lines.Add($"{materialVariableName}_lp = {materialVariableName}_nodes.new('ShaderNodeLightPath')");
+                    lines.Add($"{materialVariableName}_emis_vis = {materialVariableName}_nodes.new('ShaderNodeMath')");
+                    lines.Add($"{materialVariableName}_emis_vis.operation = 'MAXIMUM'");
+                    lines.Add($"{materialVariableName}_emis_vis_2 = {materialVariableName}_nodes.new('ShaderNodeMath')");
+                    lines.Add($"{materialVariableName}_emis_vis_2.operation = 'MAXIMUM'");
+                    lines.Add($"{materialVariableName}_emis_scale = {materialVariableName}_nodes.new('ShaderNodeMath')");
+                    lines.Add($"{materialVariableName}_emis_scale.operation = 'MULTIPLY'");
+                    lines.Add($"{materialVariableName}_emis_scale.inputs[1].default_value = {FormatDouble(material.EmissionStrength)}");
+                    lines.Add($"{materialVariableName}_links.new({materialVariableName}_lp.outputs['Is Camera Ray'], {materialVariableName}_emis_vis.inputs[0])");
+                    lines.Add($"{materialVariableName}_links.new({materialVariableName}_lp.outputs['Is Glossy Ray'], {materialVariableName}_emis_vis.inputs[1])");
+                    lines.Add($"{materialVariableName}_links.new({materialVariableName}_emis_vis.outputs['Value'], {materialVariableName}_emis_vis_2.inputs[0])");
+                    lines.Add($"{materialVariableName}_links.new({materialVariableName}_lp.outputs['Is Transmission Ray'], {materialVariableName}_emis_vis_2.inputs[1])");
+                    lines.Add($"{materialVariableName}_links.new({materialVariableName}_emis_vis_2.outputs['Value'], {materialVariableName}_emis_scale.inputs[0])");
+                    lines.Add($"{materialVariableName}_links.new({materialVariableName}_emis_scale.outputs['Value'], {materialVariableName}_bsdf.inputs['Emission Strength'])");
+                }
+                else
+                {
+                    lines.Add($"{materialVariableName}_bsdf.inputs['Emission Strength'].default_value = {FormatDouble(material.EmissionStrength)}");
+                }
 
                 if (baseColorTexture != null)
                     lines.Add($"{materialVariableName}_links.new(texture_{materialVariableName}_base_color.outputs['Color'], {materialVariableName}_bsdf.inputs['Emission Color'])");
