@@ -104,10 +104,13 @@ internal static class DccBlenderMaterialEmitter
                     AppendScalarTextureCombinationLines(lines, materialVariableName, "roughness", "Color");
             }
 
-            // Specular intensity: 1 keeps Principled's default dielectric response (IOR level
-            // 0.5); Blinn Specular Level scales the highlight (ape's eye whites are largely a
-            // 150% specular blowout in the source render).
-            if (material.Specular != 1d)
+            // Specular intensity: only boost above Principled's default dielectric response
+            // (IOR level 0.5), never below it. Blinn's specular is an additive highlight on top
+            // of an unchanged diffuse, so a low/zero Specular Level does not darken the source
+            // render — dropping the Fresnel term in Cycles would (and did) darken and saturate
+            // every default-spinner material. Above 100% the highlight is authored intent
+            // (ape's eye whites are largely a 150% specular blowout).
+            if (material.Specular > 1d)
                 lines.Add($"{materialVariableName}_bsdf.inputs['Specular IOR Level'].default_value = {FormatDouble(Math.Clamp(0.5d * material.Specular, 0d, 1d))}");
 
             // Transmission / refraction (e.g. glass). Blender 4.0+/5.x Principled BSDF socket

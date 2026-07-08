@@ -527,6 +527,22 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateKeepsDefaultSpecularIorLevelWhenBelowUnityTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.Materials[0].Specular = 0d;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        // Blinn's specular is additive on top of an unchanged diffuse, so a zero Specular Level
+        // must not drop the Cycles Fresnel term below the Principled default — that darkens and
+        // saturates every default-spinner material.
+        Assert.That(script, Does.Not.Contain("Specular IOR Level"));
+    }
+
+    [Test]
     public void CreateEmitsPerPixelSelfIlluminationForVertexColorMapTest()
     {
         var scene = DccRenderTestData.CreateValidScene();
