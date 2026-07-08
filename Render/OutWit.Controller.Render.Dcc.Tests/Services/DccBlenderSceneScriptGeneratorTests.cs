@@ -554,6 +554,73 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateSuppressesDiffuseBouncesForNoGiScenesTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.RenderSettings.NoGlobalIllumination = true;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        // A no-GI source lights with direct light only; Cycles' diffuse bounces systematically
+        // brighten enclosed scenes.
+        Assert.That(script, Does.Contain("scene.cycles.diffuse_bounces = 0"));
+    }
+
+    [Test]
+    public void CreateEmitsVectorBlurCompositorForImageMotionBlurTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.RenderSettings.MotionBlur = true;
+        scene.RenderSettings.ImageMotionBlur = true;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            // Image-space source blur = sharp frame + velocity smear; shutter integration would
+            // smudge the subject, the compositor Vector Blur matches the source algorithm.
+            Assert.That(script, Does.Contain("scene.render.use_motion_blur = False"));
+            Assert.That(script, Does.Contain("CompositorNodeVecBlur"));
+            Assert.That(script, Does.Contain("use_pass_vector = True"));
+        });
+    }
+
+    [Test]
+    public void CreateScalesDiffuseShareForPartialCameraOnlyEmissionTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.Materials[0].EmissionStrength = 0.5d;
+        scene.Materials[0].EmissionCameraOnly = true;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        // Source self-illumination REPLACES the lit diffuse share (visible = diffuse × lighting
+        // × (1−si) + diffuse × si); emitting on top of an unscaled diffuse double-brightens.
+        Assert.That(script, Does.Contain("_diffuse_share.inputs['Value'].default_value = 0.5"));
+    }
+
+    [Test]
+    public void CreateBlacksDiffuseForFullCameraOnlyEmissionTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.Materials[0].EmissionStrength = 1d;
+        scene.Materials[0].EmissionCameraOnly = true;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        // Fully self-lit surfaces show ONLY their emission.
+        Assert.That(script, Does.Contain("_bsdf.inputs['Base Color'].default_value = (0.0, 0.0, 0.0, 1.0)"));
+    }
+
+    [Test]
     public void CreateEmitsBackdropRayVisibilityForBackdropMeshNodesTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

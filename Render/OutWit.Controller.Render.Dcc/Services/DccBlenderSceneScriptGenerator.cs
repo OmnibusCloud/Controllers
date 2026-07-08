@@ -75,6 +75,7 @@ internal static class DccBlenderSceneScriptGenerator
         };
 
         AppendColorManagementLines(lines, buildInput);
+        AppendGlobalIlluminationLines(lines, buildInput);
         AppendMotionBlurLines(lines, buildInput);
         AppendWorldLines(lines, buildInput);
         AppendImageLines(lines, buildInput);
@@ -101,6 +102,20 @@ internal static class DccBlenderSceneScriptGenerator
             lines.Add($"scene.view_settings.exposure = {FormatDouble(renderSettings.Exposure)}");
     }
 
+    private static void AppendGlobalIlluminationLines(List<string> lines, DccSceneBuildInput buildInput)
+    {
+        // A no-GI source renderer lights surfaces with DIRECT light only; Cycles' diffuse bounces
+        // add indirect light everywhere and systematically brighten enclosed scenes. Glossy and
+        // transmission bounces stay — the source class does trace reflections and refractions.
+        if (!buildInput.Scene.RenderSettings.NoGlobalIllumination)
+            return;
+
+        lines.Add("try:");
+        lines.Add("    scene.cycles.diffuse_bounces = 0");
+        lines.Add("except AttributeError:");
+        lines.Add("    pass");
+    }
+
     private static void AppendMotionBlurLines(List<string> lines, DccSceneBuildInput buildInput)
     {
         var renderSettings = buildInput.Scene.RenderSettings;
@@ -108,6 +123,52 @@ internal static class DccBlenderSceneScriptGenerator
         // Only touch motion blur when the scene enables it, so default renders are unchanged.
         if (!renderSettings.MotionBlur)
             return;
+
+        if (renderSettings.ImageMotionBlur)
+        {
+            // The source blur is an IMAGE-space post smear (a sharp frame with a velocity smear
+            // layered on top — 3ds Max "Image Motion Blur"). Shutter-integrated blur turns a
+            // flapping butterfly into an unreadable smudge; the compositor's Vector Blur is the
+            // same algorithm class as the source effect and keeps the subject crisp underneath.
+            lines.Add("scene.render.use_motion_blur = False");
+            lines.Add("view_layer = scene.view_layers[0]");
+            lines.Add("view_layer.use_pass_vector = True");
+            lines.Add("view_layer.use_pass_z = True");
+            // Blender 5.x moved the compositor to a node-group asset (scene.compositing_node_group,
+            // NodeGroupOutput, Samples/Shutter as sockets); older builds keep scene.node_tree.
+            lines.Add("try:");
+            lines.Add("    compositor_tree = bpy.data.node_groups.new('DccImageMotionBlur', 'CompositorNodeTree')");
+            lines.Add("    scene.compositing_node_group = compositor_tree");
+            lines.Add("    compositor_output_kind = 'GROUP'");
+            lines.Add("except (AttributeError, TypeError):");
+            lines.Add("    scene.use_nodes = True");
+            lines.Add("    compositor_tree = scene.node_tree");
+            lines.Add("    compositor_output_kind = 'COMPOSITE'");
+            lines.Add("compositor_nodes = compositor_tree.nodes");
+            lines.Add("compositor_links = compositor_tree.links");
+            lines.Add("compositor_nodes.clear()");
+            lines.Add("compositor_render_layers = compositor_nodes.new('CompositorNodeRLayers')");
+            lines.Add("compositor_vector_blur = compositor_nodes.new('CompositorNodeVecBlur')");
+            lines.Add("try:");
+            lines.Add("    compositor_vector_blur.inputs['Samples'].default_value = 32");
+            lines.Add($"    compositor_vector_blur.inputs['Shutter'].default_value = {FormatDouble(renderSettings.MotionBlurShutter)}");
+            lines.Add("except KeyError:");
+            lines.Add("    compositor_vector_blur.samples = 32");
+            lines.Add($"    compositor_vector_blur.factor = {FormatDouble(renderSettings.MotionBlurShutter)}");
+            lines.Add("if compositor_output_kind == 'GROUP':");
+            lines.Add("    compositor_tree.interface.new_socket('Image', in_out='OUTPUT', socket_type='NodeSocketColor')");
+            lines.Add("    compositor_output = compositor_nodes.new('NodeGroupOutput')");
+            lines.Add("else:");
+            lines.Add("    compositor_output = compositor_nodes.new('CompositorNodeComposite')");
+            lines.Add("compositor_links.new(compositor_render_layers.outputs['Image'], compositor_vector_blur.inputs['Image'])");
+            lines.Add("try:");
+            lines.Add("    compositor_links.new(compositor_render_layers.outputs['Depth'], compositor_vector_blur.inputs['Depth'])");
+            lines.Add("except KeyError:");
+            lines.Add("    compositor_links.new(compositor_render_layers.outputs['Depth'], compositor_vector_blur.inputs['Z'])");
+            lines.Add("compositor_links.new(compositor_render_layers.outputs['Vector'], compositor_vector_blur.inputs['Speed'])");
+            lines.Add("compositor_links.new(compositor_vector_blur.outputs['Image'], compositor_output.inputs['Image'])");
+            return;
+        }
 
         lines.Add("scene.render.use_motion_blur = True");
         lines.Add($"scene.render.motion_blur_shutter = {FormatDouble(renderSettings.MotionBlurShutter)}");

@@ -154,6 +154,38 @@ internal static class DccBlenderMaterialEmitter
                 // (self-illum glows the diffuse), and an explicit self-illum vertex map wins.
                 if (material.EmissionFromVertexColors || material.BaseColorFromVertexColors)
                     lines.Add($"{materialVariableName}_links.new({materialVariableName}_vcol.outputs['Color'], {materialVariableName}_bsdf.inputs['Emission Color'])");
+
+                // Source self-illumination REPLACES the lit share of the diffuse, it does not add
+                // to it: visible = diffuse × lighting × (1−si) + diffuse × si. Emitting on top of
+                // an unscaled diffuse double-brightens every lit self-illuminated surface
+                // (Lighting-Vertex's whole interior). Scale the diffuse path by (1−si) — through
+                // an HSV value node when Base Color is texture/attribute-driven.
+                if (material.EmissionCameraOnly && material.EmissionStrength > 0d && material.EmissionStrength < 1d)
+                {
+                    var diffuseShare = 1d - material.EmissionStrength;
+                    lines.Add($"{materialVariableName}_diffuse_share_source = None");
+                    lines.Add($"for _link in list({materialVariableName}_links):");
+                    lines.Add($"    if _link.to_node == {materialVariableName}_bsdf and _link.to_socket.name == 'Base Color':");
+                    lines.Add($"        {materialVariableName}_diffuse_share_source = _link.from_socket");
+                    lines.Add($"        {materialVariableName}_links.remove(_link)");
+                    lines.Add($"if {materialVariableName}_diffuse_share_source is not None:");
+                    lines.Add($"    {materialVariableName}_diffuse_share = {materialVariableName}_nodes.new('ShaderNodeHueSaturation')");
+                    lines.Add($"    {materialVariableName}_diffuse_share.inputs['Value'].default_value = {FormatDouble(diffuseShare)}");
+                    lines.Add($"    {materialVariableName}_links.new({materialVariableName}_diffuse_share_source, {materialVariableName}_diffuse_share.inputs['Color'])");
+                    lines.Add($"    {materialVariableName}_links.new({materialVariableName}_diffuse_share.outputs['Color'], {materialVariableName}_bsdf.inputs['Base Color'])");
+                    lines.Add("else:");
+                    lines.Add($"    _bc = {materialVariableName}_bsdf.inputs['Base Color'].default_value");
+                    lines.Add($"    {materialVariableName}_bsdf.inputs['Base Color'].default_value = (_bc[0] * {FormatDouble(diffuseShare)}, _bc[1] * {FormatDouble(diffuseShare)}, _bc[2] * {FormatDouble(diffuseShare)}, _bc[3])");
+                }
+                else if (material.EmissionCameraOnly && material.EmissionStrength >= 1d)
+                {
+                    // Fully self-lit: the surface shows ONLY its emission; a lit diffuse underneath
+                    // would double-brighten it (Lighting-Vertex's boxes).
+                    lines.Add($"for _link in list({materialVariableName}_links):");
+                    lines.Add($"    if _link.to_node == {materialVariableName}_bsdf and _link.to_socket.name == 'Base Color':");
+                    lines.Add($"        {materialVariableName}_links.remove(_link)");
+                    lines.Add($"{materialVariableName}_bsdf.inputs['Base Color'].default_value = (0.0, 0.0, 0.0, 1.0)");
+                }
             }
 
             var opacityTexture = material.TextureSlots.FirstOrDefault(me => me.Slot == DccTextureSlotKind.Opacity);

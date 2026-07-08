@@ -26,7 +26,9 @@ public partial class DccRenderSettingsData : ModelBase
                && ViewTransform.Is(other.ViewTransform)
                && Exposure.Is(other.Exposure, tolerance)
                && MotionBlur == other.MotionBlur
-               && MotionBlurShutter.Is(other.MotionBlurShutter, tolerance);
+               && MotionBlurShutter.Is(other.MotionBlurShutter, tolerance)
+               && NoGlobalIllumination == other.NoGlobalIllumination
+               && ImageMotionBlur == other.ImageMotionBlur;
     }
 
     public override ModelBase Clone()
@@ -43,7 +45,9 @@ public partial class DccRenderSettingsData : ModelBase
             ViewTransform = ViewTransform,
             Exposure = Exposure,
             MotionBlur = MotionBlur,
-            MotionBlurShutter = MotionBlurShutter
+            MotionBlurShutter = MotionBlurShutter,
+            NoGlobalIllumination = NoGlobalIllumination,
+            ImageMotionBlur = ImageMotionBlur
         };
     }
 
@@ -118,6 +122,21 @@ public partial class DccRenderSettingsData : ModelBase
     /// </summary>
     [MemoryPackOrder(10)]
     public double MotionBlurShutter { get; set; } = 0.5d;
+
+    /// <summary>
+    /// The source renderer has no global illumination (scanline class): surfaces are lit by
+    /// direct light only. The target renderer should suppress diffuse bounces to match.
+    /// </summary>
+    [MemoryPackOrder(11)]
+    public bool NoGlobalIllumination { get; set; }
+
+    /// <summary>
+    /// Motion blur is an IMAGE-space post smear in the source renderer (a sharp frame with a
+    /// velocity smear layered on top), not a shutter-integrated blur. The target should emulate
+    /// it with vector/post blur so the subject stays readable.
+    /// </summary>
+    [MemoryPackOrder(12)]
+    public bool ImageMotionBlur { get; set; }
 
     #endregion
 }
