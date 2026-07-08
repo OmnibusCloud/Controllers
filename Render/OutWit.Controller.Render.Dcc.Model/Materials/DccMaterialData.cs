@@ -48,7 +48,8 @@ public partial class DccMaterialData : ModelBase
                && BackfaceCull.Is(other.BackfaceCull)
                && EmissionCameraOnly == other.EmissionCameraOnly
                && BaseColorFromVertexColors == other.BaseColorFromVertexColors
-               && EmissionFromVertexColors == other.EmissionFromVertexColors;
+               && EmissionFromVertexColors == other.EmissionFromVertexColors
+               && Specular.Is(other.Specular, tolerance);
     }
 
     public override ModelBase Clone()
@@ -80,7 +81,8 @@ public partial class DccMaterialData : ModelBase
             BackfaceCull = BackfaceCull,
             EmissionCameraOnly = EmissionCameraOnly,
             BaseColorFromVertexColors = BaseColorFromVertexColors,
-            EmissionFromVertexColors = EmissionFromVertexColors
+            EmissionFromVertexColors = EmissionFromVertexColors,
+            Specular = Specular
         };
     }
 
@@ -255,5 +257,13 @@ public partial class DccMaterialData : ModelBase
     /// </summary>
     [MemoryPackOrder(25)]
     public bool EmissionFromVertexColors { get; set; }
+
+    /// <summary>
+    /// Specular intensity scale: 1 keeps the renderer's default dielectric response, 0 kills the
+    /// highlight, values above 1 boost it (source specular-level controls — Blinn Specular Level
+    /// 100% maps to 1).
+    /// </summary>
+    [MemoryPackOrder(26)]
+    public double Specular { get; set; } = 1d;
     #endregion
 }

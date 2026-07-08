@@ -512,6 +512,45 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsSpecularIorLevelWhenScaledTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
+        scene.Materials[0].Specular = 1.5d;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        // Blinn Specular Level 150% (the ape's blown-white eye domes) boosts the Principled
+        // dielectric response above its 0.5 default.
+        Assert.That(script, Does.Contain("inputs['Specular IOR Level'].default_value = 0.75"));
+    }
+
+    [Test]
+    public void CreateEmitsPerPixelSelfIlluminationForVertexColorMapTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.Materials[0].TextureSlots.Clear();
+        scene.Materials[0].EmissionFromVertexColors = true;
+        scene.Materials[0].EmissionCameraOnly = true;
+        scene.Materials[0].EmissionStrength = 0.5d;
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            // A self-illumination MAP is per-pixel si: emission = diffuse × si(x) at strength 1,
+            // diffuse share = diffuse × (1 − si(x)) — a flat share left map-lit walls double
+            // bright where their baked light is high.
+            Assert.That(script, Does.Contain("_si_mult.operation = 'MULTIPLY'"));
+            Assert.That(script, Does.Contain("_si_invert = "));
+            Assert.That(script, Does.Contain("_emis_scale.inputs[1].default_value = 1.0"));
+            Assert.That(script, Does.Contain("_diff_mult.outputs['Vector'], material_material_cube_bsdf.inputs['Base Color']"));
+        });
+    }
+
+    [Test]
     public void CreateBindsVertexColorsToBaseColorAndEmissionTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

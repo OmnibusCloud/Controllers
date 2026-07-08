@@ -104,6 +104,12 @@ internal static class DccBlenderMaterialEmitter
                     AppendScalarTextureCombinationLines(lines, materialVariableName, "roughness", "Color");
             }
 
+            // Specular intensity: 1 keeps Principled's default dielectric response (IOR level
+            // 0.5); Blinn Specular Level scales the highlight (ape's eye whites are largely a
+            // 150% specular blowout in the source render).
+            if (material.Specular != 1d)
+                lines.Add($"{materialVariableName}_bsdf.inputs['Specular IOR Level'].default_value = {FormatDouble(Math.Clamp(0.5d * material.Specular, 0d, 1d))}");
+
             // Transmission / refraction (e.g. glass). Blender 4.0+/5.x Principled BSDF socket
             // names: 'Transmission Weight' and 'IOR'. Only emitted when the material is actually
             // transmissive so opaque materials keep the BSDF defaults.
@@ -155,12 +161,52 @@ internal static class DccBlenderMaterialEmitter
                 if (material.EmissionFromVertexColors || material.BaseColorFromVertexColors)
                     lines.Add($"{materialVariableName}_links.new({materialVariableName}_vcol.outputs['Color'], {materialVariableName}_bsdf.inputs['Emission Color'])");
 
+                // A self-illumination MAP is PER-PIXEL si: visible = diffuse × lighting × (1−si(x))
+                // + diffuse × si(x), and the map value replaces the amount spinner. A flat diffuse
+                // share left the map-lit walls double-bright where their baked light is high
+                // (Lighting-Vertex's remaining glow). Emission = diffuse × si(x) at strength 1;
+                // diffuse path = diffuse × (1 − si(x)).
+                if (material.EmissionFromVertexColors)
+                {
+                    // The map value IS the per-pixel strength — the flat amount must not scale it.
+                    if (material.EmissionCameraOnly)
+                        lines.Add($"{materialVariableName}_emis_scale.inputs[1].default_value = 1.0");
+                    else
+                        lines.Add($"{materialVariableName}_bsdf.inputs['Emission Strength'].default_value = 1.0");
+
+                    // emission colour = diffuse source × vcol
+                    lines.Add($"{materialVariableName}_si_mult = {materialVariableName}_nodes.new('ShaderNodeVectorMath')");
+                    lines.Add($"{materialVariableName}_si_mult.operation = 'MULTIPLY'");
+                    if (baseColorTexture != null)
+                        lines.Add($"{materialVariableName}_links.new(texture_{materialVariableName}_base_color.outputs['Color'], {materialVariableName}_si_mult.inputs[0])");
+                    else
+                        lines.Add($"{materialVariableName}_si_mult.inputs[0].default_value = ({FormatDouble(material.BaseColor.R)}, {FormatDouble(material.BaseColor.G)}, {FormatDouble(material.BaseColor.B)})");
+                    lines.Add($"{materialVariableName}_links.new({materialVariableName}_vcol.outputs['Color'], {materialVariableName}_si_mult.inputs[1])");
+                    lines.Add($"{materialVariableName}_links.new({materialVariableName}_si_mult.outputs['Vector'], {materialVariableName}_bsdf.inputs['Emission Color'])");
+
+                    // diffuse share = diffuse source × (1 − vcol)
+                    lines.Add($"{materialVariableName}_si_invert = {materialVariableName}_nodes.new('ShaderNodeInvert')");
+                    lines.Add($"{materialVariableName}_links.new({materialVariableName}_vcol.outputs['Color'], {materialVariableName}_si_invert.inputs['Color'])");
+                    lines.Add($"{materialVariableName}_diff_mult = {materialVariableName}_nodes.new('ShaderNodeVectorMath')");
+                    lines.Add($"{materialVariableName}_diff_mult.operation = 'MULTIPLY'");
+                    if (baseColorTexture != null)
+                        lines.Add($"{materialVariableName}_links.new(texture_{materialVariableName}_base_color.outputs['Color'], {materialVariableName}_diff_mult.inputs[0])");
+                    else
+                        lines.Add($"{materialVariableName}_diff_mult.inputs[0].default_value = ({FormatDouble(material.BaseColor.R)}, {FormatDouble(material.BaseColor.G)}, {FormatDouble(material.BaseColor.B)})");
+                    lines.Add($"{materialVariableName}_links.new({materialVariableName}_si_invert.outputs['Color'], {materialVariableName}_diff_mult.inputs[1])");
+                    lines.Add($"for _link in list({materialVariableName}_links):");
+                    lines.Add($"    if _link.to_node == {materialVariableName}_bsdf and _link.to_socket.name == 'Base Color':");
+                    lines.Add($"        {materialVariableName}_links.remove(_link)");
+                    lines.Add($"{materialVariableName}_links.new({materialVariableName}_diff_mult.outputs['Vector'], {materialVariableName}_bsdf.inputs['Base Color'])");
+                }
+
                 // Source self-illumination REPLACES the lit share of the diffuse, it does not add
                 // to it: visible = diffuse × lighting × (1−si) + diffuse × si. Emitting on top of
                 // an unscaled diffuse double-brightens every lit self-illuminated surface
                 // (Lighting-Vertex's whole interior). Scale the diffuse path by (1−si) — through
                 // an HSV value node when Base Color is texture/attribute-driven.
-                if (material.EmissionCameraOnly && material.EmissionStrength > 0d && material.EmissionStrength < 1d)
+                if (!material.EmissionFromVertexColors
+                    && material.EmissionCameraOnly && material.EmissionStrength > 0d && material.EmissionStrength < 1d)
                 {
                     var diffuseShare = 1d - material.EmissionStrength;
                     lines.Add($"{materialVariableName}_diffuse_share_source = None");
@@ -177,7 +223,8 @@ internal static class DccBlenderMaterialEmitter
                     lines.Add($"    _bc = {materialVariableName}_bsdf.inputs['Base Color'].default_value");
                     lines.Add($"    {materialVariableName}_bsdf.inputs['Base Color'].default_value = (_bc[0] * {FormatDouble(diffuseShare)}, _bc[1] * {FormatDouble(diffuseShare)}, _bc[2] * {FormatDouble(diffuseShare)}, _bc[3])");
                 }
-                else if (material.EmissionCameraOnly && material.EmissionStrength >= 1d)
+                else if (!material.EmissionFromVertexColors
+                         && material.EmissionCameraOnly && material.EmissionStrength >= 1d)
                 {
                     // Fully self-lit: the surface shows ONLY its emission; a lit diffuse underneath
                     // would double-brighten it (Lighting-Vertex's boxes).
