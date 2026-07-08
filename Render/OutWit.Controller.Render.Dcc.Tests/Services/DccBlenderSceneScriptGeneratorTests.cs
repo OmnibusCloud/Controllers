@@ -266,6 +266,41 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateEmitsScreenBackdropWorldWhenEnvironmentIsScreenMappedTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.ImageAssets.Add(new DccImageAssetData
+        {
+            Id = "image:backdrop",
+            Name = "Backdrop",
+            SourcePath = "C:/bakes/environment.png",
+            RelativePath = "textures/environment.png"
+        });
+        scene.World = new DccWorldData
+        {
+            EnvironmentImageId = "image:backdrop",
+            Strength = 1d,
+            EnvironmentIsScreenMapped = true
+        };
+        var buildInput = CreateBuildInput(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+
+        Assert.Multiple(() =>
+        {
+            // A screen-mapped backdrop samples with window coordinates, not an equirect wrap
+            // (which would bury the picture at the zenith and leave the camera a black seam).
+            Assert.That(script, Does.Contain("world_backdrop = world_node_tree.nodes.new('ShaderNodeTexImage')"));
+            Assert.That(script, Does.Contain("world_node_tree.links.new(world_tex_coord.outputs['Window'], world_backdrop.inputs['Vector'])"));
+            Assert.That(script, Does.Not.Contain("ShaderNodeTexEnvironment"));
+            // The backdrop is a picture, not a light source: camera/glossy/transmission rays
+            // see it, diffuse rays see black — same policy as the constant-colour world.
+            Assert.That(script, Does.Contain("ShaderNodeLightPath"));
+            Assert.That(script, Does.Contain("scene_world_light_path.outputs['Is Camera Ray']"));
+        });
+    }
+
+    [Test]
     public void CreateEmitsShapeKeyDeformationWhenMeshHasDeformationFramesTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

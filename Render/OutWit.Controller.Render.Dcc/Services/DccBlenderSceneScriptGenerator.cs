@@ -241,6 +241,12 @@ internal static class DccBlenderSceneScriptGenerator
     {
         var imagePath = ResolveImagePath(buildInput, environmentImage);
 
+        if (world.EnvironmentIsScreenMapped)
+        {
+            AppendScreenBackdropWorldLines(lines, world, imagePath);
+            return;
+        }
+
         lines.Add("scene_world = bpy.data.worlds.new('World')");
         lines.Add("scene.world = scene_world");
         lines.Add("scene_world.use_nodes = True");
@@ -262,6 +268,45 @@ internal static class DccBlenderSceneScriptGenerator
             lines.Add("world_node_tree.links.new(world_mapping.outputs['Vector'], world_environment.inputs['Vector'])");
         }
 
+        lines.Add(string.Empty);
+    }
+
+    // A screen-mapped environment is a 2D backdrop the source application stretches across the
+    // render window, not a panorama — sample it with window coordinates so the camera sees the
+    // image exactly as authored (an equirect wrap would bury the picture at the zenith and show
+    // the camera nothing but the seam colour). Like the constant-colour world, the backdrop is a
+    // picture, not a light source: camera, reflection and refraction rays see it (the source
+    // renderer shows the backdrop in mirrors and glass too), diffuse rays see black.
+    private static void AppendScreenBackdropWorldLines(List<string> lines, DccWorldData world, string imagePath)
+    {
+        lines.Add("scene_world = bpy.data.worlds.new('World')");
+        lines.Add("scene.world = scene_world");
+        lines.Add("scene_world.use_nodes = True");
+        lines.Add("world_node_tree = scene_world.node_tree");
+        lines.Add("world_background = world_node_tree.nodes['Background']");
+        lines.Add("world_backdrop = world_node_tree.nodes.new('ShaderNodeTexImage')");
+        lines.Add($"world_backdrop.image = bpy.data.images.load({ToPythonStringLiteral(imagePath)}, check_existing=True)");
+        lines.Add("world_backdrop.extension = 'EXTEND'");
+        lines.Add("world_tex_coord = world_node_tree.nodes.new('ShaderNodeTexCoord')");
+        lines.Add("world_node_tree.links.new(world_tex_coord.outputs['Window'], world_backdrop.inputs['Vector'])");
+        lines.Add("world_node_tree.links.new(world_backdrop.outputs['Color'], world_background.inputs['Color'])");
+        lines.Add($"world_background.inputs['Strength'].default_value = {FormatDouble(world.Strength)}");
+        lines.Add("scene_world_dark = world_node_tree.nodes.new('ShaderNodeBackground')");
+        lines.Add("scene_world_dark.inputs['Color'].default_value = (0.0, 0.0, 0.0, 1.0)");
+        lines.Add("scene_world_light_path = world_node_tree.nodes.new('ShaderNodeLightPath')");
+        lines.Add("scene_world_visible_fac = world_node_tree.nodes.new('ShaderNodeMath')");
+        lines.Add("scene_world_visible_fac.operation = 'MAXIMUM'");
+        lines.Add("scene_world_visible_fac_2 = world_node_tree.nodes.new('ShaderNodeMath')");
+        lines.Add("scene_world_visible_fac_2.operation = 'MAXIMUM'");
+        lines.Add("scene_world_mix = world_node_tree.nodes.new('ShaderNodeMixShader')");
+        lines.Add("world_node_tree.links.new(scene_world_light_path.outputs['Is Camera Ray'], scene_world_visible_fac.inputs[0])");
+        lines.Add("world_node_tree.links.new(scene_world_light_path.outputs['Is Glossy Ray'], scene_world_visible_fac.inputs[1])");
+        lines.Add("world_node_tree.links.new(scene_world_visible_fac.outputs['Value'], scene_world_visible_fac_2.inputs[0])");
+        lines.Add("world_node_tree.links.new(scene_world_light_path.outputs['Is Transmission Ray'], scene_world_visible_fac_2.inputs[1])");
+        lines.Add("world_node_tree.links.new(scene_world_visible_fac_2.outputs['Value'], scene_world_mix.inputs['Fac'])");
+        lines.Add("world_node_tree.links.new(scene_world_dark.outputs['Background'], scene_world_mix.inputs[1])");
+        lines.Add("world_node_tree.links.new(world_background.outputs['Background'], scene_world_mix.inputs[2])");
+        lines.Add("world_node_tree.links.new(scene_world_mix.outputs['Shader'], world_node_tree.nodes['World Output'].inputs['Surface'])");
         lines.Add(string.Empty);
     }
 

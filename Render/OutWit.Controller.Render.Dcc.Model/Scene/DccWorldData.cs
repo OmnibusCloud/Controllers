@@ -20,7 +20,8 @@ public partial class DccWorldData : ModelBase
                && BackgroundColor.Is(other.BackgroundColor, tolerance)
                && Strength.Is(other.Strength, tolerance)
                && EnvironmentImageId == other.EnvironmentImageId
-               && EnvironmentRotationDegrees.Is(other.EnvironmentRotationDegrees, tolerance);
+               && EnvironmentRotationDegrees.Is(other.EnvironmentRotationDegrees, tolerance)
+               && EnvironmentIsScreenMapped == other.EnvironmentIsScreenMapped;
     }
 
     public override ModelBase Clone()
@@ -30,7 +31,8 @@ public partial class DccWorldData : ModelBase
             BackgroundColor = (DccColorData)BackgroundColor.Clone(),
             Strength = Strength,
             EnvironmentImageId = EnvironmentImageId,
-            EnvironmentRotationDegrees = EnvironmentRotationDegrees
+            EnvironmentRotationDegrees = EnvironmentRotationDegrees,
+            EnvironmentIsScreenMapped = EnvironmentIsScreenMapped
         };
     }
 
@@ -64,6 +66,16 @@ public partial class DccWorldData : ModelBase
     /// </summary>
     [MemoryPackOrder(3)]
     public double EnvironmentRotationDegrees { get; set; }
+
+    /// <summary>
+    /// When true, <see cref="EnvironmentImageId"/> is a screen-space backdrop (the source
+    /// application stretches it across the render window) rather than an equirectangular
+    /// panorama. The generator maps it with window coordinates so the camera sees the image
+    /// as authored instead of sampling a panorama that was never spherical.
+    /// Ignored when <see cref="EnvironmentImageId"/> is not set.
+    /// </summary>
+    [MemoryPackOrder(4)]
+    public bool EnvironmentIsScreenMapped { get; set; }
 
     #endregion
 }
