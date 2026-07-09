@@ -4,14 +4,15 @@
 
   <PropertyGroup>
     <ControllerName>Render.Dcc</ControllerName>
-    <Version>1.1.0</Version>
-    <Description>Bundled .wit scripts for the OutWit.Controller.Render.Dcc controller — typed-scene Render DCC orchestration (RenderDccSceneFrames, RenderDccSceneStill, RenderDccSceneStillTiled, RenderDccSceneVideo, RenderDccSceneExportBlend).</Description>
+    <Version>1.1.1</Version>
+    <Description>Bundled .wit scripts for the OutWit.Controller.Render.Dcc controller — typed-scene Render DCC orchestration (RenderDccSceneFrames, RenderDccSceneStill, RenderDccSceneStillTiled, RenderDccSceneVideo, RenderDccSceneExportBlend), plus *Packed variants that accept a gzip-packed scene payload and expand it via Render.UnzipDccScene before the build.</Description>
     <PackageTags>render-dcc;scripts;typed-scene;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
 
-  <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md). -->
+  <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md).
+       The *Packed scripts call Render.UnzipDccScene, introduced in Dcc 1.6.16. -->
   <ItemGroup>
-    <PackageReference Include="OutWit.Controller.Render.Dcc" Version="[1.0.3, 2.0.0)" />
+    <PackageReference Include="OutWit.Controller.Render.Dcc" Version="[1.6.16, 2.0.0)" />
   </ItemGroup>
 
   <!-- DCC scripts currently live next to the Render controller (no separate
