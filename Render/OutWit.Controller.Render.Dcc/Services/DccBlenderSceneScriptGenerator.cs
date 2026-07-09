@@ -291,22 +291,33 @@ internal static class DccBlenderSceneScriptGenerator
         lines.Add("world_node_tree.links.new(world_tex_coord.outputs['Window'], world_backdrop.inputs['Vector'])");
         lines.Add("world_node_tree.links.new(world_backdrop.outputs['Color'], world_background.inputs['Color'])");
         lines.Add($"world_background.inputs['Strength'].default_value = {FormatDouble(world.Strength)}");
+        // Reflection and refraction rays cannot use window coordinates — a mirror's reflected
+        // ray projects outside the frame and sampled the EXTEND border (C03's chrome spheres
+        // reflected darkness instead of the photo backdrop). Give those rays the same image
+        // wrapped over the ray direction (an equirect approximation of Scanline showing the
+        // backdrop in mirrors and glass). Diffuse rays keep seeing black — the backdrop is a
+        // picture, not a light source.
+        lines.Add("world_backdrop_reflected = world_node_tree.nodes.new('ShaderNodeTexEnvironment')");
+        lines.Add($"world_backdrop_reflected.image = bpy.data.images.load({ToPythonStringLiteral(imagePath)}, check_existing=True)");
+        lines.Add("world_background_reflected = world_node_tree.nodes.new('ShaderNodeBackground')");
+        lines.Add("world_node_tree.links.new(world_backdrop_reflected.outputs['Color'], world_background_reflected.inputs['Color'])");
+        lines.Add($"world_background_reflected.inputs['Strength'].default_value = {FormatDouble(world.Strength)}");
         lines.Add("scene_world_dark = world_node_tree.nodes.new('ShaderNodeBackground')");
         lines.Add("scene_world_dark.inputs['Color'].default_value = (0.0, 0.0, 0.0, 1.0)");
         lines.Add("scene_world_light_path = world_node_tree.nodes.new('ShaderNodeLightPath')");
-        lines.Add("scene_world_visible_fac = world_node_tree.nodes.new('ShaderNodeMath')");
-        lines.Add("scene_world_visible_fac.operation = 'MAXIMUM'");
-        lines.Add("scene_world_visible_fac_2 = world_node_tree.nodes.new('ShaderNodeMath')");
-        lines.Add("scene_world_visible_fac_2.operation = 'MAXIMUM'");
-        lines.Add("scene_world_mix = world_node_tree.nodes.new('ShaderNodeMixShader')");
-        lines.Add("world_node_tree.links.new(scene_world_light_path.outputs['Is Camera Ray'], scene_world_visible_fac.inputs[0])");
-        lines.Add("world_node_tree.links.new(scene_world_light_path.outputs['Is Glossy Ray'], scene_world_visible_fac.inputs[1])");
-        lines.Add("world_node_tree.links.new(scene_world_visible_fac.outputs['Value'], scene_world_visible_fac_2.inputs[0])");
-        lines.Add("world_node_tree.links.new(scene_world_light_path.outputs['Is Transmission Ray'], scene_world_visible_fac_2.inputs[1])");
-        lines.Add("world_node_tree.links.new(scene_world_visible_fac_2.outputs['Value'], scene_world_mix.inputs['Fac'])");
-        lines.Add("world_node_tree.links.new(scene_world_dark.outputs['Background'], scene_world_mix.inputs[1])");
-        lines.Add("world_node_tree.links.new(world_background.outputs['Background'], scene_world_mix.inputs[2])");
-        lines.Add("world_node_tree.links.new(scene_world_mix.outputs['Shader'], world_node_tree.nodes['World Output'].inputs['Surface'])");
+        lines.Add("scene_world_reflect_fac = world_node_tree.nodes.new('ShaderNodeMath')");
+        lines.Add("scene_world_reflect_fac.operation = 'MAXIMUM'");
+        lines.Add("scene_world_reflect_mix = world_node_tree.nodes.new('ShaderNodeMixShader')");
+        lines.Add("scene_world_camera_mix = world_node_tree.nodes.new('ShaderNodeMixShader')");
+        lines.Add("world_node_tree.links.new(scene_world_light_path.outputs['Is Glossy Ray'], scene_world_reflect_fac.inputs[0])");
+        lines.Add("world_node_tree.links.new(scene_world_light_path.outputs['Is Transmission Ray'], scene_world_reflect_fac.inputs[1])");
+        lines.Add("world_node_tree.links.new(scene_world_reflect_fac.outputs['Value'], scene_world_reflect_mix.inputs['Fac'])");
+        lines.Add("world_node_tree.links.new(scene_world_dark.outputs['Background'], scene_world_reflect_mix.inputs[1])");
+        lines.Add("world_node_tree.links.new(world_background_reflected.outputs['Background'], scene_world_reflect_mix.inputs[2])");
+        lines.Add("world_node_tree.links.new(scene_world_light_path.outputs['Is Camera Ray'], scene_world_camera_mix.inputs['Fac'])");
+        lines.Add("world_node_tree.links.new(scene_world_reflect_mix.outputs['Shader'], scene_world_camera_mix.inputs[1])");
+        lines.Add("world_node_tree.links.new(world_background.outputs['Background'], scene_world_camera_mix.inputs[2])");
+        lines.Add("world_node_tree.links.new(scene_world_camera_mix.outputs['Shader'], world_node_tree.nodes['World Output'].inputs['Surface'])");
         lines.Add(string.Empty);
     }
 
