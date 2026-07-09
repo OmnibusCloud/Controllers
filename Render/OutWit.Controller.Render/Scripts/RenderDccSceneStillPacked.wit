@@ -1,0 +1,13 @@
+Job:RenderDccSceneStillPacked(ByteCollection:packedScene, Int:frame, RenderOptions:options)
+{
+    DccScene:scene = Render.UnzipDccScene(packedScene);
+    Blob:blend = Render.BuildBlendFromDccScene(scene);
+    Render.ClearScene(scene);
+
+    RenderTaskBatchCollection:tasks = Render.SplitBatched(blend, frame, frame, options);
+
+    RenderResultBatchCollection:rendered = Grid.ForEach(task in tasks)
+        => Render.FrameBatch(task);
+
+    Blob:result = Render.CollectStill(rendered, options);
+}

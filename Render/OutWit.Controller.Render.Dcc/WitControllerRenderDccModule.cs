@@ -19,6 +19,7 @@ public class WitControllerRenderDccModule : WitPluginBase, IWitControllerHost
     public override void Initialize(IServiceCollection services)
     {
         services.AddActivityAdapter<WitActivityRenderBuildBlendFromDccScene, WitActivityAdapterRenderBuildBlendFromDccScene>();
+        services.AddActivityAdapter<WitActivityRenderUnzipDccScene, WitActivityAdapterRenderUnzipDccScene>();
         services.AddActivityAdapter<WitActivityRenderClearScene, WitActivityAdapterRenderClearScene>();
         services.AddVariable<WitVariableDccScene>();
     }

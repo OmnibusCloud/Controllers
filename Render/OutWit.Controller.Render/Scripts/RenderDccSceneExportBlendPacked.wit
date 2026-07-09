@@ -1,0 +1,6 @@
+Job:RenderDccSceneExportBlendPacked(ByteCollection:packedScene)
+{
+    DccScene:scene = Render.UnzipDccScene(packedScene);
+    Blob:result = Render.BuildBlendFromDccScene(scene);
+    Render.ClearScene(scene);
+}
