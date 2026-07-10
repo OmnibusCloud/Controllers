@@ -32,11 +32,22 @@ internal static class DccBlendFileBuilder
 
             var outputBlendPath = Path.Combine(workDirectory, SanitizeFileName(buildInput.Scene.SceneName) + ".blend");
             var scriptBuildInput = CreateScriptBuildInput(buildInput, workDirectory);
-            var pythonScript = DccBlenderSceneScriptGenerator.Create(scriptBuildInput);
+            var sceneScript = DccBlenderSceneScriptGenerator.Create(scriptBuildInput);
             var pythonScriptPath = Path.Combine(workDirectory, "build_scene.py");
+
+            // The bulk mesh payload rides in a binary sidecar the script reads back with numpy —
+            // it never reaches the .blend as a file (pack_all packs images, not loose binaries).
+            if (sceneScript.SceneData.Length > 0)
+            {
+                await File.WriteAllBytesAsync(
+                    Path.Combine(workDirectory, DccBlenderSceneDataWriter.FILE_NAME),
+                    sceneScript.SceneData,
+                    cancellationToken);
+            }
+
             await File.WriteAllTextAsync(
                 pythonScriptPath,
-                pythonScript
+                sceneScript.PythonScript
                 + Environment.NewLine
                 + "bpy.ops.file.pack_all()"
                 + Environment.NewLine

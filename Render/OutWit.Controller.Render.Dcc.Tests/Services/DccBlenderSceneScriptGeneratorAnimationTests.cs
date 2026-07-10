@@ -33,7 +33,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Materials[0].NormalStrengthKeyframes = [keyframe];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -55,7 +55,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Materials[0].AlphaClipThresholdKeyframes = [keyframe];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -76,7 +76,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Materials[0].OpacityKeyframes = [keyframe];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -96,7 +96,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Materials[0].BaseColorKeyframes = [keyframe];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -116,7 +116,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Materials[0].MetallicKeyframes = [keyframe];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -136,7 +136,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Materials[0].RoughnessKeyframes = [keyframe];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -156,7 +156,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Materials[0].TextureSlots[0].UvTransformKeyframes = [keyframe];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -181,7 +181,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         ];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -206,7 +206,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         ];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -228,7 +228,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Nodes.Add(DccRenderTestData.CreateCameraNode());
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -255,7 +255,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Nodes.Add(DccRenderTestData.CreateCameraNode());
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -283,7 +283,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         ];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -305,7 +305,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -329,7 +329,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -353,7 +353,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -377,7 +377,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         scene.Nodes.Add(DccRenderTestData.CreateSpotLightNode());
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -401,7 +401,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         ];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -427,7 +427,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         ];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -451,7 +451,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         ];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -477,7 +477,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         ];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -510,7 +510,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         ];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -544,7 +544,7 @@ public sealed class DccBlenderSceneScriptGeneratorAnimationTests
         ];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {

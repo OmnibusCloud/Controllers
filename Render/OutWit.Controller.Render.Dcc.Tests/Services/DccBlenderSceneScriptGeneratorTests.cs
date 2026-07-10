@@ -20,7 +20,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     {
         var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -39,7 +39,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment());
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.That(script, Does.Contain("bpy.data.images.load('textures/albedo.png', check_existing=True)"));
     }
@@ -52,7 +52,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Nodes.Add(DccRenderTestData.CreateCameraNode());
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -73,7 +73,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -97,7 +97,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         camera.FStop = 1.8d;
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -120,7 +120,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -139,7 +139,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].BackfaceCull = true;
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -156,7 +156,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         var scene = DccRenderTestData.CreateValidScene();
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.That(script, Does.Not.Contain("ShaderNodeBsdfTransparent"));
     }
@@ -169,7 +169,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.RenderSettings.Exposure = 1.5d;
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -186,7 +186,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         mesh.Uv1 = [.. mesh.Uv0.Select(uv => new DccVector2Data { X = uv.X, Y = uv.Y })];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -200,12 +200,12 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     {
         var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
-            Assert.That(script, Does.Contain("polygon.use_smooth = True"));
-            Assert.That(script, Does.Contain(".normals_split_custom_set_from_vertices("));
+            Assert.That(script, Does.Contain(".polygons.foreach_set('use_smooth'"));
+            Assert.That(script, Does.Contain(".normals_split_custom_set_from_vertices(read_scene_floats("));
         });
     }
 
@@ -220,7 +220,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         };
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -249,7 +249,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         };
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -284,7 +284,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         };
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -325,7 +325,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         ];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -346,7 +346,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     {
         var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.That(script, Does.Not.Contain("shape_key_add"));
     }
@@ -371,7 +371,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         });
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -388,7 +388,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     {
         var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -404,7 +404,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Meshes[0].SubdivisionLevels = 2;
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -424,7 +424,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     {
         var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -445,7 +445,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -470,7 +470,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].EmissionCameraOnly = true;
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -494,7 +494,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         });
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -529,7 +529,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         });
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         // Max spots fade between the hotspot and falloff cones — a hard-edged Blender spot reads
         // as a sharp circle of light (TeaPotBounce's pool of light).
@@ -544,7 +544,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].EmissionStrength = 1d;
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         // 3ds Max self-illumination glows the DIFFUSE map — a textured emissive material (sky
         // dome) must emit its bitmap, not a flat colour.
@@ -559,7 +559,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].Specular = 1.5d;
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         // Blinn Specular Level 150% (the ape's blown-white eye domes) boosts the Principled
         // dielectric response above its 0.5 default.
@@ -574,7 +574,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].Specular = 0d;
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         // Blinn's specular is additive on top of an unchanged diffuse, so a zero Specular Level
         // must not drop the Cycles Fresnel term below the Principled default — that darkens and
@@ -592,7 +592,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].EmissionStrength = 0.5d;
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -615,7 +615,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].EmissionStrength = 1d;
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -637,7 +637,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].EmissionStrength = 0.5d;
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -656,7 +656,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.RenderSettings.NoGlobalIllumination = true;
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         // A no-GI source lights with direct light only; Cycles' diffuse bounces systematically
         // brighten enclosed scenes.
@@ -672,7 +672,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.RenderSettings.ImageMotionBlur = true;
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -693,7 +693,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].EmissionCameraOnly = true;
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         // Source self-illumination REPLACES the lit diffuse share (visible = diffuse × lighting
         // × (1−si) + diffuse × si); emitting on top of an unscaled diffuse double-brightens.
@@ -709,7 +709,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].EmissionCameraOnly = true;
         var buildInput = DccSceneBuildInputFactory.Create(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         // Fully self-lit surfaces show ONLY their emission.
         Assert.That(script, Does.Contain("_bsdf.inputs['Base Color'].default_value = (0.0, 0.0, 0.0, 1.0)"));
@@ -722,7 +722,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Nodes.First(me => me.Kind == DccNodeKind.Mesh).IsBackdrop = true;
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -738,7 +738,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     {
         var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.That(script, Does.Not.Contain("visible_diffuse"));
     }
@@ -754,7 +754,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         };
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -787,7 +787,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         };
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -805,7 +805,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.RenderSettings.MotionBlurShutter = 0.25d;
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -823,7 +823,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     {
         var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.That(script, Does.Not.Contain("use_motion_blur"));
     }
@@ -840,12 +840,12 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         ];
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
             Assert.That(script, Does.Contain(".color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')"));
-            Assert.That(script, Does.Contain(".data[loop_index].color = color"));
+            Assert.That(script, Does.Contain(".data.foreach_set('color', read_scene_floats("));
         });
     }
 
@@ -854,7 +854,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     {
         var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.That(script, Does.Not.Contain("color_attributes.new"));
     }
@@ -864,7 +864,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     {
         var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -884,7 +884,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         };
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.That(script, Does.Not.Contain("scene.world = scene_world"));
     }
@@ -897,7 +897,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].Ior = 1.5d;
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -911,7 +911,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     {
         var buildInput = CreateBuildInput(DccRenderTestData.CreateValidScene());
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.That(script, Does.Not.Contain("Transmission Weight"));
     }
@@ -924,7 +924,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].EmissionStrength = 5d;
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -941,7 +941,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Nodes.Add(DccRenderTestData.CreateSunLightNode());
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -960,7 +960,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Nodes.Add(DccRenderTestData.CreateSpotLightNode());
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -982,7 +982,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Nodes.Add(DccRenderTestData.CreateLightNode());
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -1010,7 +1010,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         });
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -1041,7 +1041,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         });
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -1066,7 +1066,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         });
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -1092,7 +1092,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         });
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -1115,7 +1115,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         });
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -1130,7 +1130,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         var scene = DccRenderTestData.CreateValidScene();
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -1155,7 +1155,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         });
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -1178,7 +1178,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         scene.Materials[0].TextureSlots[0].UvRotationDegrees = 45d;
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
@@ -1202,14 +1202,13 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         DccRenderTestData.ApplyTwoTriangleQuadMesh(scene);
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {
             Assert.That(script, Does.Contain("mesh_node_cube.materials.append(materials_by_id['material:cube'])"));
             Assert.That(script, Does.Contain("mesh_node_cube.materials.append(materials_by_id['material:secondary'])"));
-            Assert.That(script, Does.Contain("mesh_node_cube.polygons[0].material_index = 0"));
-            Assert.That(script, Does.Contain("mesh_node_cube.polygons[1].material_index = 1"));
+            Assert.That(script, Does.Contain("mesh_node_cube.polygons.foreach_set('material_index', read_scene_ints("));
         });
     }
 
@@ -1236,7 +1235,7 @@ public sealed class DccBlenderSceneScriptGeneratorTests
         });
         var buildInput = CreateBuildInput(scene);
 
-        var script = DccBlenderSceneScriptGenerator.Create(buildInput);
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
 
         Assert.Multiple(() =>
         {

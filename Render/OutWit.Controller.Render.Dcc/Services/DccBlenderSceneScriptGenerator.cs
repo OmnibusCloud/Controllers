@@ -10,13 +10,35 @@ internal static class DccBlenderSceneScriptGenerator
 {
     #region Functions
 
-    public static string Create(DccSceneBuildInput buildInput)
+    public static DccBlenderSceneScript Create(DccSceneBuildInput buildInput)
     {
         var lines = new List<string>
         {
             "import bpy",
             "import math",
             "import mathutils",
+            "import os",
+            "import numpy as np",
+            "",
+            // Bulk mesh data (positions/indices/normals/UVs/colours/shape keys) lives in a binary
+            // sidecar next to this script and loads through numpy + foreach_set — the C fast path.
+            // Emitting it as Python literals made the script parser take ~20 minutes for a scene
+            // that renders in seconds.
+            "scene_data_file = None",
+            $"scene_data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '{DccBlenderSceneDataWriter.FILE_NAME}')",
+            "if os.path.exists(scene_data_path):",
+            "    scene_data_file = open(scene_data_path, 'rb')",
+            "",
+            "def read_scene_floats(offset, count):",
+            "    scene_data_file.seek(offset)",
+            "    return np.fromfile(scene_data_file, dtype='<f4', count=count)",
+            "",
+            "def read_scene_ints(offset, count):",
+            "    scene_data_file.seek(offset)",
+            "    return np.fromfile(scene_data_file, dtype='<i4', count=count)",
+            "",
+            "def triangle_loop_starts(triangle_count):",
+            "    return np.arange(0, triangle_count * 3, 3, dtype=np.int32)",
             "",
             "bpy.ops.wm.read_factory_settings(use_empty=True)",
             "scene = bpy.context.scene",
@@ -74,19 +96,25 @@ internal static class DccBlenderSceneScriptGenerator
             ""
         };
 
+        var dataWriter = new DccBlenderSceneDataWriter();
+
         AppendColorManagementLines(lines, buildInput);
         AppendGlobalIlluminationLines(lines, buildInput);
         AppendMotionBlurLines(lines, buildInput);
         AppendWorldLines(lines, buildInput);
         AppendImageLines(lines, buildInput);
         DccBlenderMaterialEmitter.AppendMaterialLines(lines, buildInput);
-        DccBlenderNodeEmitter.AppendMeshNodeLines(lines, buildInput);
+        DccBlenderNodeEmitter.AppendMeshNodeLines(lines, buildInput, dataWriter);
         DccBlenderNodeEmitter.AppendCameraNodeLines(lines, buildInput);
         DccBlenderNodeEmitter.AppendLightNodeLines(lines, buildInput);
         AppendParentingLines(lines, buildInput);
         AppendSceneCameraLine(lines, buildInput);
 
-        return string.Join("\n", lines);
+        return new DccBlenderSceneScript
+        {
+            PythonScript = string.Join("\n", lines),
+            SceneData = dataWriter.ToArray()
+        };
     }
 
     private static void AppendColorManagementLines(List<string> lines, DccSceneBuildInput buildInput)

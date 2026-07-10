@@ -16,20 +16,33 @@ internal static class DccBlenderNodeEmitter
 
     #region Functions
 
-    public static void AppendMeshNodeLines(List<string> lines, DccSceneBuildInput buildInput)
+    public static void AppendMeshNodeLines(List<string> lines, DccSceneBuildInput buildInput, DccBlenderSceneDataWriter dataWriter)
     {
         foreach (var node in buildInput.Scene.Nodes.Where(me => me.Kind == DccNodeKind.Mesh))
         {
             var mesh = buildInput.MeshesById[node.MeshId!];
             var meshVariableName = $"mesh_{SanitizeIdentifier(node.Id)}";
             var objectVariableName = $"object_{SanitizeIdentifier(node.Id)}";
-            var faces = Enumerable.Range(0, mesh.TriangleIndices.Count / 3)
-                .Select(me => $"({mesh.TriangleIndices[me * 3]}, {mesh.TriangleIndices[me * 3 + 1]}, {mesh.TriangleIndices[me * 3 + 2]})");
+            var trianglesVariableName = $"{meshVariableName}_tris";
+
+            // Bulk geometry goes through the binary sidecar + foreach_set — the numpy/C fast
+            // path. Python literals + from_pydata made Blender's parser and per-element RNA
+            // loops take ~20 minutes for a 60 MB scene that renders in seconds.
+            var vertexCount = mesh.Positions.Count;
+            var triangleCount = mesh.TriangleIndices.Count / 3;
+            var positionsOffset = dataWriter.AppendVectors3(mesh.Positions);
+            var trianglesOffset = dataWriter.AppendInts(mesh.TriangleIndices);
 
             lines.Add($"{meshVariableName} = bpy.data.meshes.new({ToPythonStringLiteral(mesh.Name)})");
-            lines.Add($"{meshVariableName}.from_pydata({BuildVector3List(mesh.Positions)}, [], [{string.Join(", ", faces)}])");
-            lines.Add($"{meshVariableName}.update()");
-            AppendMeshNormalLines(lines, mesh, meshVariableName);
+            lines.Add($"{trianglesVariableName} = read_scene_ints({trianglesOffset}, {triangleCount * 3})");
+            lines.Add($"{meshVariableName}.vertices.add({vertexCount})");
+            lines.Add($"{meshVariableName}.vertices.foreach_set('co', read_scene_floats({positionsOffset}, {vertexCount * 3}))");
+            lines.Add($"{meshVariableName}.loops.add({triangleCount * 3})");
+            lines.Add($"{meshVariableName}.loops.foreach_set('vertex_index', {trianglesVariableName})");
+            lines.Add($"{meshVariableName}.polygons.add({triangleCount})");
+            lines.Add($"{meshVariableName}.polygons.foreach_set('loop_start', triangle_loop_starts({triangleCount}))");
+            lines.Add($"{meshVariableName}.update(calc_edges=True)");
+            AppendMeshNormalLines(lines, mesh, meshVariableName, dataWriter);
             lines.Add($"{objectVariableName} = bpy.data.objects.new({ToPythonStringLiteral(node.Name)}, {meshVariableName})");
             lines.Add($"scene.collection.objects.link({objectVariableName})");
             lines.Add($"set_transform({objectVariableName}, {BuildTranslationTuple(node.LocalTransform)}, {BuildQuaternionTuple(node.LocalTransform)}, {BuildScaleTuple(node.LocalTransform)})");
@@ -45,7 +58,7 @@ internal static class DccBlenderNodeEmitter
                 lines.Add($"{objectVariableName}.visible_volume_scatter = False");
             }
 
-            AppendMeshMaterialLines(lines, buildInput, node, mesh, meshVariableName);
+            AppendMeshMaterialLines(lines, buildInput, node, mesh, meshVariableName, dataWriter);
 
             // Source-application render-only smoothing (e.g. 3ds Max MeshSmooth "Render
             // Iterations") arrives as a subdivision level count instead of baked vertices.
@@ -57,10 +70,10 @@ internal static class DccBlenderNodeEmitter
             if (MaterialHasDisplacement(buildInput, node))
                 AppendSubdivisionModifierLines(lines, objectVariableName);
 
-            AppendMeshUvLayerLines(lines, meshVariableName, "UVMap", "uv_layer", mesh.Uv0);
-            AppendMeshUvLayerLines(lines, meshVariableName, "UVMap.001", "uv_layer_1", mesh.Uv1);
-            AppendMeshColorLayerLines(lines, meshVariableName, mesh.Colors);
-            AppendMeshDeformationLines(lines, objectVariableName, mesh);
+            AppendMeshUvLayerLines(lines, meshVariableName, trianglesVariableName, "UVMap", "uv_layer", mesh.Uv0, dataWriter);
+            AppendMeshUvLayerLines(lines, meshVariableName, trianglesVariableName, "UVMap.001", "uv_layer_1", mesh.Uv1, dataWriter);
+            AppendMeshColorLayerLines(lines, meshVariableName, trianglesVariableName, mesh.Colors, dataWriter);
+            AppendMeshDeformationLines(lines, objectVariableName, mesh, dataWriter);
 
             AppendNodeAnimationLines(lines, objectVariableName, node);
             AppendNodeVisibilityAnimationLines(lines, objectVariableName, node);
@@ -69,25 +82,33 @@ internal static class DccBlenderNodeEmitter
         }
     }
 
-    private static void AppendMeshUvLayerLines(List<string> lines, string meshVariableName, string uvLayerName, string variableSuffix, List<DccVector2Data> uvs)
+    private static void AppendMeshUvLayerLines(
+        List<string> lines,
+        string meshVariableName,
+        string trianglesVariableName,
+        string uvLayerName,
+        string variableSuffix,
+        List<DccVector2Data> uvs,
+        DccBlenderSceneDataWriter dataWriter)
     {
         if (uvs.Count == 0)
             return;
 
-        // The per-vertex UV list is hoisted into a Python variable once — inlining the list
-        // literal in the loop body would rebuild it on every loop iteration (O(N²) in Blender).
+        // The payload UVs are per (unwelded) vertex; gathering them through the triangle index
+        // array yields the per-loop layout in one numpy fancy-index instead of a Python loop
+        // over every corner. Blender 4.x moved per-loop UVs to the layer's `uv` float2
+        // attribute; the `data` accessor stays as the fallback for older builds.
         var layerVariable = $"{meshVariableName}_{variableSuffix}";
-        var uvsVariable = $"{layerVariable}_uvs";
+        var uvsOffset = dataWriter.AppendVectors2(uvs);
         lines.Add($"{layerVariable} = {meshVariableName}.uv_layers.new(name={ToPythonStringLiteral(uvLayerName)})");
-        lines.Add($"{uvsVariable} = {BuildVector2List(uvs)}");
-        lines.Add($"for polygon in {meshVariableName}.polygons:");
-        lines.Add($"    for loop_index in polygon.loop_indices:");
-        lines.Add($"        vertex_index = {meshVariableName}.loops[loop_index].vertex_index");
-        lines.Add($"        uv = {uvsVariable}[vertex_index]");
-        lines.Add($"        {layerVariable}.data[loop_index].uv = uv");
+        lines.Add($"{layerVariable}_data = read_scene_floats({uvsOffset}, {uvs.Count * 2}).reshape({uvs.Count}, 2)[{trianglesVariableName}].ravel()");
+        lines.Add("try:");
+        lines.Add($"    {layerVariable}.uv.foreach_set('vector', {layerVariable}_data)");
+        lines.Add("except AttributeError:");
+        lines.Add($"    {layerVariable}.data.foreach_set('uv', {layerVariable}_data)");
     }
 
-    private static void AppendMeshDeformationLines(List<string> lines, string objectVariableName, DccMeshData mesh)
+    private static void AppendMeshDeformationLines(List<string> lines, string objectVariableName, DccMeshData mesh, DccBlenderSceneDataWriter dataWriter)
     {
         if (mesh.DeformationFrames.Count == 0)
             return;
@@ -105,12 +126,10 @@ internal static class DccBlenderNodeEmitter
         foreach (var frame in mesh.DeformationFrames.OrderBy(me => me.Frame))
         {
             var keyVariable = $"{objectVariableName}_shapekey_{frameIndex}";
-            var positionsVariable = $"{keyVariable}_positions";
+            var positionsOffset = dataWriter.AppendVectors3(frame.Positions);
 
             lines.Add($"{keyVariable} = {objectVariableName}.shape_key_add(name='Frame_{frame.Frame}')");
-            lines.Add($"{positionsVariable} = {BuildVector3List(frame.Positions)}");
-            lines.Add($"for shape_index in range(len({positionsVariable})):");
-            lines.Add($"    {keyVariable}.data[shape_index].co = {positionsVariable}[shape_index]");
+            lines.Add($"{keyVariable}.data.foreach_set('co', read_scene_floats({positionsOffset}, {frame.Positions.Count * 3}))");
             lines.Add($"{keyVariable}.value = 0.0");
             lines.Add($"{keyVariable}.keyframe_insert(data_path='value', frame={frame.Frame - 1})");
             lines.Add($"{keyVariable}.value = 1.0");
@@ -185,26 +204,25 @@ internal static class DccBlenderNodeEmitter
         lines.Add($"{modifierVariableName}.render_levels = {subdivisionLevels}");
     }
 
-    private static void AppendMeshColorLayerLines(List<string> lines, string meshVariableName, List<DccColorData> colors)
+    private static void AppendMeshColorLayerLines(
+        List<string> lines,
+        string meshVariableName,
+        string trianglesVariableName,
+        List<DccColorData> colors,
+        DccBlenderSceneDataWriter dataWriter)
     {
         if (colors.Count == 0)
             return;
 
-        // Per-corner vertex colours as a BYTE_COLOR attribute (the conventional vertex-colour type).
-        // The per-vertex colour list is hoisted into a Python variable once — inlining the list
-        // literal in the loop body would rebuild it on every loop iteration (O(N²) in Blender).
+        // Per-corner vertex colours as a BYTE_COLOR attribute (the conventional vertex-colour
+        // type); the per-vertex payload gathers to per-loop through the triangle index array.
         var layerVariable = $"{meshVariableName}_color_layer";
-        var colorsVariable = $"{layerVariable}_colors";
+        var colorsOffset = dataWriter.AppendColors(colors);
         lines.Add($"{layerVariable} = {meshVariableName}.color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')");
-        lines.Add($"{colorsVariable} = {BuildColorList(colors)}");
-        lines.Add($"for polygon in {meshVariableName}.polygons:");
-        lines.Add($"    for loop_index in polygon.loop_indices:");
-        lines.Add($"        vertex_index = {meshVariableName}.loops[loop_index].vertex_index");
-        lines.Add($"        color = {colorsVariable}[vertex_index]");
-        lines.Add($"        {layerVariable}.data[loop_index].color = color");
+        lines.Add($"{layerVariable}.data.foreach_set('color', read_scene_floats({colorsOffset}, {colors.Count * 4}).reshape({colors.Count}, 4)[{trianglesVariableName}].ravel())");
     }
 
-    private static void AppendMeshNormalLines(List<string> lines, DccMeshData mesh, string meshVariableName)
+    private static void AppendMeshNormalLines(List<string> lines, DccMeshData mesh, string meshVariableName, DccBlenderSceneDataWriter dataWriter)
     {
         // The DCC payload carries per-vertex normals (the exporter resolves them from the source
         // smoothing groups). The mesh vertices are unwelded — one vertex per face corner — so a
@@ -213,9 +231,9 @@ internal static class DccBlenderNodeEmitter
         if (mesh.Normals.Count == 0 || mesh.Normals.Count != mesh.Positions.Count)
             return;
 
-        lines.Add($"for polygon in {meshVariableName}.polygons:");
-        lines.Add("    polygon.use_smooth = True");
-        lines.Add($"{meshVariableName}.normals_split_custom_set_from_vertices({BuildVector3List(mesh.Normals)})");
+        var normalsOffset = dataWriter.AppendVectors3(mesh.Normals);
+        lines.Add($"{meshVariableName}.polygons.foreach_set('use_smooth', np.ones(len({meshVariableName}.polygons), dtype=bool))");
+        lines.Add($"{meshVariableName}.normals_split_custom_set_from_vertices(read_scene_floats({normalsOffset}, {mesh.Normals.Count * 3}).reshape({mesh.Normals.Count}, 3))");
     }
 
     public static void AppendLightNodeLines(List<string> lines, DccSceneBuildInput buildInput)
@@ -338,7 +356,8 @@ internal static class DccBlenderNodeEmitter
         DccSceneBuildInput buildInput,
         DccNodeData node,
         DccMeshData mesh,
-        string meshVariableName)
+        string meshVariableName,
+        DccBlenderSceneDataWriter dataWriter)
     {
         if (mesh.MaterialIndices.Count > 0)
         {
@@ -353,12 +372,11 @@ internal static class DccBlenderNodeEmitter
                 lines.Add($"{meshVariableName}.materials.append(materials_by_id[{ToPythonStringLiteral(materialId)}])");
             }
 
-            for (var triangleIndex = 0; triangleIndex < mesh.MaterialIndices.Count; triangleIndex++)
-            {
-                var sceneMaterialIndex = mesh.MaterialIndices[triangleIndex];
-                var localMaterialIndex = localMaterialIndexBySceneIndex[sceneMaterialIndex];
-                lines.Add($"{meshVariableName}.polygons[{triangleIndex}].material_index = {localMaterialIndex}");
-            }
+            // One local index per triangle through the sidecar — the old per-polygon assignment
+            // emitted a script line (and an RNA lookup) per triangle.
+            var localMaterialIndices = mesh.MaterialIndices.Select(me => localMaterialIndexBySceneIndex[me]).ToList();
+            var indicesOffset = dataWriter.AppendInts(localMaterialIndices);
+            lines.Add($"{meshVariableName}.polygons.foreach_set('material_index', read_scene_ints({indicesOffset}, {localMaterialIndices.Count}))");
 
             return;
         }
