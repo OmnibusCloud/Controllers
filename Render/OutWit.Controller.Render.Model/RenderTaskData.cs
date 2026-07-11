@@ -11,6 +11,7 @@ namespace OutWit.Controller.Render.Model;
 /// Shared between SDK, controller, and plugins.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only, and deploy the server before any client that writes a new member (default MemoryPack mode rejects payloads with unknown members).
 public partial class RenderTaskData : ModelBase
 {
     #region Properties
@@ -18,66 +19,78 @@ public partial class RenderTaskData : ModelBase
     /// <summary>
     /// Blob identifier of the .blend scene file.
     /// </summary>
+    [MemoryPackOrder(0)]
     public Guid SceneBlobId { get; set; }
 
     /// <summary>
     /// Frame number to render.
     /// </summary>
+    [MemoryPackOrder(1)]
     public int Frame { get; set; }
 
     /// <summary>
     /// Tile region — normalized X minimum (0.0-1.0). Default 0 = full frame.
     /// </summary>
+    [MemoryPackOrder(2)]
     public float TileMinX { get; set; }
 
     /// <summary>
     /// Tile region — normalized X maximum (0.0-1.0). Default 1 = full frame.
     /// </summary>
+    [MemoryPackOrder(3)]
     public float TileMaxX { get; set; } = 1f;
 
     /// <summary>
     /// Tile region — normalized Y minimum (0.0-1.0). Default 0 = full frame.
     /// </summary>
+    [MemoryPackOrder(4)]
     public float TileMinY { get; set; }
 
     /// <summary>
     /// Tile region — normalized Y maximum (0.0-1.0). Default 1 = full frame.
     /// </summary>
+    [MemoryPackOrder(5)]
     public float TileMaxY { get; set; } = 1f;
 
     /// <summary>
     /// Task index for ordering results (Grid.ForEach is async).
     /// </summary>
+    [MemoryPackOrder(6)]
     public int TaskIndex { get; set; }
 
     /// <summary>
     /// Actual rendered X minimum including overlap expansion.
     /// When not set explicitly, the logical tile bounds are used.
     /// </summary>
+    [MemoryPackOrder(7)]
     public float RenderMinX { get; set; }
 
     /// <summary>
     /// Actual rendered X maximum including overlap expansion.
     /// When not set explicitly, the logical tile bounds are used.
     /// </summary>
+    [MemoryPackOrder(8)]
     public float RenderMaxX { get; set; } = 1f;
 
     /// <summary>
     /// Actual rendered Y minimum including overlap expansion.
     /// When not set explicitly, the logical tile bounds are used.
     /// </summary>
+    [MemoryPackOrder(9)]
     public float RenderMinY { get; set; }
 
     /// <summary>
     /// Actual rendered Y maximum including overlap expansion.
     /// When not set explicitly, the logical tile bounds are used.
     /// </summary>
+    [MemoryPackOrder(10)]
     public float RenderMaxY { get; set; } = 1f;
 
     /// <summary>
     /// Render options for this task.
     /// </summary>
     [MemoryPackAllowSerialize]
+    [MemoryPackOrder(11)]
     public RenderOptionsData Options { get; set; } = new();
 
     /// <summary>
@@ -86,6 +99,7 @@ public partial class RenderTaskData : ModelBase
     /// from the attachment sidecar written by Render.BuildBlendFromRefs; empty for self-contained
     /// scenes. Appended last for MemoryPack wire back-compatibility.
     /// </summary>
+    [MemoryPackOrder(12)]
     public List<RenderSceneAttachmentRefData> Attachments { get; set; } = [];
 
     #endregion

@@ -38,6 +38,71 @@ internal sealed class RenderUnzipDccSceneTests : RenderBuildBlendFromDccSceneTes
     }
 
     [Test]
+    public void UnzipRejectsPayloadsOverTheDecompressedSceneLimitTest()
+    {
+        // Gzip expands ~1000:1 at the format's limit — a small crafted payload must not be able
+        // to pin multi-GB buffers on the worker. A gzipped stream of zeros compresses tiny but
+        // inflates past the cap.
+        using var bombStream = new MemoryStream();
+        using (var gzip = new GZipStream(bombStream, CompressionMode.Compress, leaveOpen: true))
+        {
+            var zeros = new byte[1024 * 1024];
+            var chunks = (WitActivityAdapterRenderUnzipDccScene.MAX_DECOMPRESSED_SCENE_BYTES / zeros.Length) + 2;
+            for (var i = 0L; i < chunks; i++)
+                gzip.Write(zeros, 0, zeros.Length);
+        }
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => WitActivityAdapterRenderUnzipDccScene.Unzip(bombStream.ToArray()));
+        Assert.That(exception!.Message, Does.Contain("decompressed scene limit"));
+    }
+
+    [Test]
+    public void EveryTypeReachableFromTheScenePayloadIsVersionTolerantTest()
+    {
+        // The scene payload crosses the plugin↔server boundary with INDEPENDENT release cadences.
+        // MemoryPack's default object format hard-fails on payloads carrying unknown members, so
+        // any non-VersionTolerant type nested in DccSceneData bricks old-server submissions the
+        // moment a newer client appends a field (RenderSceneAttachmentRefData did exactly that).
+        var pending = new Queue<Type>();
+        pending.Enqueue(typeof(DccSceneData));
+        var seen = new HashSet<Type>();
+        var offenders = new List<string>();
+
+        while (pending.Count > 0)
+        {
+            var type = pending.Dequeue();
+
+            if (type.IsArray)
+                type = type.GetElementType()!;
+            if (type.IsGenericType)
+            {
+                foreach (var argument in type.GetGenericArguments())
+                    pending.Enqueue(argument);
+                type = type.IsGenericTypeDefinition ? type : type.GetGenericTypeDefinition();
+            }
+
+            if (!seen.Add(type) || type.IsPrimitive || type.IsEnum || type == typeof(string) || type.Namespace?.StartsWith("System", StringComparison.Ordinal) == true)
+                continue;
+
+            var packable = type.GetCustomAttributes(inherit: false)
+                .FirstOrDefault(me => me.GetType().Name == "MemoryPackableAttribute");
+            if (packable is not null)
+            {
+                var generateType = packable.GetType().GetProperty("GenerateType")?.GetValue(packable)?.ToString();
+                if (generateType != "VersionTolerant")
+                    offenders.Add($"{type.FullName} ({generateType})");
+            }
+
+            foreach (var property in type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+                pending.Enqueue(property.PropertyType);
+        }
+
+        Assert.That(offenders, Is.Empty,
+            "every MemoryPackable type reachable from DccSceneData must be GenerateType.VersionTolerant");
+    }
+
+    [Test]
     public async Task BundledRenderDccSceneStillPackedScriptCompletesTest()
     {
         if (RenderTestAssetPaths.FindRenderBlenderRoot() == null)

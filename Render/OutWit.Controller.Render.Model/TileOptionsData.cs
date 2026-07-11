@@ -8,6 +8,7 @@ namespace OutWit.Controller.Render.Model;
 /// Kept separate from <see cref="RenderOptionsData"/> because different scripts may need different tiling inputs.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only, and deploy the server before any client that writes a new member (default MemoryPack mode rejects payloads with unknown members).
 public partial class TileOptionsData : ModelBase
 {
     #region Properties
@@ -16,11 +17,13 @@ public partial class TileOptionsData : ModelBase
     /// Tile overlap in pixels.
     /// Current tiled slice uses center-priority crop when overlap is greater than zero.
     /// </summary>
+    [MemoryPackOrder(0)]
     public int OverlapPx { get; set; }
 
     /// <summary>
     /// Stitching strategy for overlap regions.
     /// </summary>
+    [MemoryPackOrder(1)]
     public TileBlendMode BlendMode { get; set; } = TileBlendMode.CenterPriorityCrop;
 
     #endregion

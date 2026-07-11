@@ -11,6 +11,7 @@ namespace OutWit.Controller.Render.Model;
 /// OpenVDB cache that is then sliced and rendered distributed.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only, and deploy the server before any client that writes a new member (default MemoryPack mode rejects payloads with unknown members).
 public partial class RenderBakeOptionsData : ModelBase
 {
     #region Properties
@@ -19,17 +20,20 @@ public partial class RenderBakeOptionsData : ModelBase
     /// Comma-separated simulation kinds to bake. v1 honours "Fluid" (Mantaflow gas/liquid domains).
     /// Other kinds (Cloth, Particles, …) reuse the same delegate-bake framework in later iterations.
     /// </summary>
+    [MemoryPackOrder(0)]
     public string SimulationKinds { get; set; } = "Fluid";
 
     /// <summary>
     /// Cache format for the baked sequence. v1 produces "OpenVDB" (per-frame, frame-addressable).
     /// </summary>
+    [MemoryPackOrder(1)]
     public string CacheFormat { get; set; } = "OpenVDB";
 
     /// <summary>
     /// Optional override for the fluid domain resolution (resolution_max). 0 keeps the scene's value.
     /// Lets a submitter cap network bake cost / cache size without editing the scene.
     /// </summary>
+    [MemoryPackOrder(2)]
     public int ResolutionMax { get; set; }
 
     #endregion

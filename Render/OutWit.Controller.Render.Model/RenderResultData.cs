@@ -10,6 +10,7 @@ namespace OutWit.Controller.Render.Model;
 /// Shared between SDK, controller, and plugins.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only, and deploy the server before any client that writes a new member (default MemoryPack mode rejects payloads with unknown members).
 public partial class RenderResultData : ModelBase
 {
     #region Properties
@@ -17,55 +18,65 @@ public partial class RenderResultData : ModelBase
     /// <summary>
     /// Task index for ordering (matches <see cref="RenderTaskData.TaskIndex"/>).
     /// </summary>
+    [MemoryPackOrder(0)]
     public int Index { get; set; }
 
     /// <summary>
     /// Blob identifier of the rendered image in blob storage.
     /// </summary>
+    [MemoryPackOrder(1)]
     public Guid ImageBlobId { get; set; }
 
     /// <summary>
     /// Tile region — normalized X minimum (0.0-1.0).
     /// </summary>
+    [MemoryPackOrder(2)]
     public float TileMinX { get; set; }
 
     /// <summary>
     /// Tile region — normalized X maximum (0.0-1.0).
     /// </summary>
+    [MemoryPackOrder(3)]
     public float TileMaxX { get; set; } = 1f;
 
     /// <summary>
     /// Tile region — normalized Y minimum (0.0-1.0).
     /// </summary>
+    [MemoryPackOrder(4)]
     public float TileMinY { get; set; }
 
     /// <summary>
     /// Tile region — normalized Y maximum (0.0-1.0).
     /// </summary>
+    [MemoryPackOrder(5)]
     public float TileMaxY { get; set; } = 1f;
 
     /// <summary>
     /// Actual rendered X minimum including overlap expansion.
     /// When not set explicitly, the logical tile bounds are used.
     /// </summary>
+    [MemoryPackOrder(6)]
     public float RenderMinX { get; set; }
 
     /// <summary>
     /// Actual rendered X maximum including overlap expansion.
     /// When not set explicitly, the logical tile bounds are used.
     /// </summary>
+    [MemoryPackOrder(7)]
     public float RenderMaxX { get; set; } = 1f;
 
     /// <summary>
     /// Actual rendered Y minimum including overlap expansion.
     /// When not set explicitly, the logical tile bounds are used.
     /// </summary>
+    [MemoryPackOrder(8)]
     public float RenderMinY { get; set; }
 
     /// <summary>
     /// Actual rendered Y maximum including overlap expansion.
     /// When not set explicitly, the logical tile bounds are used.
     /// </summary>
+    [MemoryPackOrder(9)]
     public float RenderMaxY { get; set; } = 1f;
 
     #endregion

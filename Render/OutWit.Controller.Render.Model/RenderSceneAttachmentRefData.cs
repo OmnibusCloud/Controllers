@@ -7,7 +7,13 @@ namespace OutWit.Controller.Render.Model;
 /// <summary>
 /// Metadata about one addon-side dependency artifact associated with a scene reference.
 /// </summary>
-[MemoryPackable]
+// VersionTolerant like every type this rides inside (DccSceneData.AttachedFiles is part of the
+// plugin↔server scene payload): the default object format hard-fails when a payload carries
+// MORE members than the reader knows, so the first APPENDED property would have bricked every
+// submission from a newer plugin against an older server. Tolerant mode makes version skew
+// degrade (unknown members ignored). NOTE: flipping the mode is itself a one-time wire break —
+// server (WitCloud ≥ 1.6.55) and plugin (≥ 0.7.45) must cross it together.
+[MemoryPackable(GenerateType.VersionTolerant)]
 public partial class RenderSceneAttachmentRefData : ModelBase
 {
     #region Properties

@@ -9,6 +9,7 @@ namespace OutWit.Controller.Render.Model;
 /// Current implementation points directly at a prepared .blend blob in storage.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only, and deploy the server before any client that writes a new member (default MemoryPack mode rejects payloads with unknown members).
 public partial class RenderSceneRefData : ModelBase
 {
     #region Properties
@@ -16,11 +17,13 @@ public partial class RenderSceneRefData : ModelBase
     /// <summary>
     /// Blob identifier of a prepared .blend payload.
     /// </summary>
+    [MemoryPackOrder(0)]
     public Guid BlendBlobId { get; set; }
 
     /// <summary>
     /// Addon-side metadata about dependency artifacts associated with the referenced scene payload.
     /// </summary>
+    [MemoryPackOrder(1)]
     public List<RenderSceneAttachmentRefData> AttachedFiles { get; set; } = [];
 
     #endregion

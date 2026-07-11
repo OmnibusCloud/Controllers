@@ -8,6 +8,7 @@ namespace OutWit.Controller.Render.Model;
 /// Current scope is intentionally minimal: MP4 container with H.264 video and no audio.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only, and deploy the server before any client that writes a new member (default MemoryPack mode rejects payloads with unknown members).
 public partial class VideoOptionsData : ModelBase
 {
     #region Constants
@@ -22,18 +23,21 @@ public partial class VideoOptionsData : ModelBase
     /// <summary>
     /// Output frame rate in frames per second.
     /// </summary>
+    [MemoryPackOrder(0)]
     public int FrameRate { get; set; } = DEFAULT_FRAME_RATE;
 
     /// <summary>
     /// CRF quality setting passed to the ffmpeg encoder (libx264/libx265/libvpx-vp9).
     /// Lower values mean higher quality and larger output.
     /// </summary>
+    [MemoryPackOrder(1)]
     public int ConstantRateFactor { get; set; } = DEFAULT_CONSTANT_RATE_FACTOR;
 
     /// <summary>
     /// Container + codec preset. APPENDED after ConstantRateFactor (wire order is append-only);
     /// <see cref="VideoFormat.Default"/> keeps the legacy MP4/H.264 behaviour for old payloads.
     /// </summary>
+    [MemoryPackOrder(2)]
     public VideoFormat Format { get; set; } = VideoFormat.Default;
 
     #endregion

@@ -13,19 +13,23 @@ namespace OutWit.Controller.Render.Model;
 /// only its own Frame + tile bounds + TaskIndex.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only, and deploy the server before any client that writes a new member (default MemoryPack mode rejects payloads with unknown members).
 public partial class RenderTaskBatchData : ModelBase
 {
     #region Properties
 
     /// <summary>Blob identifier of the .blend scene file (shared by every task in the chunk).</summary>
+    [MemoryPackOrder(0)]
     public Guid SceneBlobId { get; set; }
 
     /// <summary>Render options shared by the chunk (engine/device/resolution configured once).</summary>
     [MemoryPackAllowSerialize]
+    [MemoryPackOrder(1)]
     public RenderOptionsData Options { get; set; } = new();
 
     /// <summary>The frames/tiles rendered together in one Blender process, in submit order.</summary>
     [MemoryPackAllowSerialize]
+    [MemoryPackOrder(2)]
     public List<RenderTaskData> Tasks { get; set; } = new();
 
     /// <summary>
@@ -34,6 +38,7 @@ public partial class RenderTaskBatchData : ModelBase
     /// Render.SplitBatched from the attachment sidecar written by Render.BuildBlendFromRefs; empty for
     /// self-contained scenes. Appended last for MemoryPack wire back-compatibility.
     /// </summary>
+    [MemoryPackOrder(3)]
     public List<RenderSceneAttachmentRefData> Attachments { get; set; } = [];
 
     #endregion

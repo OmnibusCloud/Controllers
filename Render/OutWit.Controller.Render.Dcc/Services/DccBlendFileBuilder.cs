@@ -138,6 +138,12 @@ internal static class DccBlendFileBuilder
         };
     }
 
+    // Belt-and-braces wall clock on top of job cancellation: a wedged Blender (GPU driver stall,
+    // pack_all on a corrupt image, save onto a stuck filesystem) otherwise holds the activity and
+    // its worker slot forever when nobody cancels. The heaviest verified build is under a minute;
+    // half an hour is far beyond any legitimate scene.
+    private static readonly TimeSpan BLENDER_WALL_CLOCK_LIMIT = TimeSpan.FromMinutes(30);
+
     private static async Task RunBlenderAsync(
         string blenderPath,
         string pythonScriptPath,
@@ -160,12 +166,21 @@ internal static class DccBlendFileBuilder
         process.Start();
         OutWit.Controller.Render.Utils.ProcessTreeGuard.AttachToParentLifetime(process, logger);
 
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        using var watchdog = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        watchdog.CancelAfter(BLENDER_WALL_CLOCK_LIMIT);
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(watchdog.Token);
+        var stderrTask = process.StandardError.ReadToEndAsync(watchdog.Token);
 
         try
         {
-            await process.WaitForExitAsync(cancellationToken);
+            await process.WaitForExitAsync(watchdog.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            TryKill(process, logger);
+            throw new InvalidOperationException(
+                $"Render.BuildBlendFromDccScene killed the Blender build after {BLENDER_WALL_CLOCK_LIMIT.TotalMinutes:0} minutes — the process was wedged (no cancellation was requested).");
         }
         catch
         {

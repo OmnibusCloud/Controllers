@@ -8,6 +8,7 @@ namespace OutWit.Controller.Render.Model;
 /// Shared between SDK, controller, and plugins.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only, and deploy the server before any client that writes a new member (default MemoryPack mode rejects payloads with unknown members).
 public partial class RenderOptionsData : ModelBase
 {
     #region Properties
@@ -15,31 +16,37 @@ public partial class RenderOptionsData : ModelBase
     /// <summary>
     /// Output image format.
     /// </summary>
+    [MemoryPackOrder(0)]
     public RenderFormat Format { get; set; } = RenderFormat.PNG;
 
     /// <summary>
     /// Render engine.
     /// </summary>
+    [MemoryPackOrder(1)]
     public RenderEngine Engine { get; set; } = RenderEngine.Cycles;
 
     /// <summary>
     /// Sample count. 0 = use scene default.
     /// </summary>
+    [MemoryPackOrder(2)]
     public int Samples { get; set; }
 
     /// <summary>
     /// Output width. 0 = use scene default.
     /// </summary>
+    [MemoryPackOrder(3)]
     public int ResolutionX { get; set; }
 
     /// <summary>
     /// Output height. 0 = use scene default.
     /// </summary>
+    [MemoryPackOrder(4)]
     public int ResolutionY { get; set; }
 
     /// <summary>
     /// Apply denoising to the rendered image.
     /// </summary>
+    [MemoryPackOrder(5)]
     public bool Denoise { get; set; }
 
     /// <summary>
@@ -48,6 +55,7 @@ public partial class RenderOptionsData : ModelBase
     /// derives it from <see cref="Engine"/>). Declared last so the wire format stays backward
     /// compatible — callers (plugin/SDK) that don't set it deserialize to 0 and get the default.
     /// </summary>
+    [MemoryPackOrder(6)]
     public int BatchSize { get; set; }
 
     /// <summary>
@@ -55,6 +63,7 @@ public partial class RenderOptionsData : ModelBase
     /// (RGB for PNG/JPEG, scene default for EXR). Declared after <see cref="BatchSize"/> so the wire
     /// format stays backward compatible — old callers deserialize to Default and render as before.
     /// </summary>
+    [MemoryPackOrder(7)]
     public RenderColorMode ColorMode { get; set; } = RenderColorMode.Default;
 
     /// <summary>
@@ -62,12 +71,14 @@ public partial class RenderOptionsData : ModelBase
     /// <see cref="RenderFilmTransparency.Default"/> leaves the scene's own setting untouched. Appended
     /// for wire back-compat.
     /// </summary>
+    [MemoryPackOrder(8)]
     public RenderFilmTransparency FilmTransparent { get; set; } = RenderFilmTransparency.Default;
 
     /// <summary>
     /// Output bit depth. <see cref="RenderColorDepth.Default"/> leaves the scene/format default
     /// untouched. Appended for wire back-compat.
     /// </summary>
+    [MemoryPackOrder(9)]
     public RenderColorDepth ColorDepth { get; set; } = RenderColorDepth.Default;
 
     #endregion

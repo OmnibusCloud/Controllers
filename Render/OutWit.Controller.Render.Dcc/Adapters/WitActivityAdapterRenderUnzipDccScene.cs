@@ -56,6 +56,14 @@ internal sealed class WitActivityAdapterRenderUnzipDccScene : WitActivityAdapter
         return Task.CompletedTask;
     }
 
+    // Gzip expands ~1000:1 at the format's limit — an uncapped decompression turns a 2 MB
+    // crafted payload into multi-GB heap pressure that OOM-kills the worker (and MemoryPack
+    // then multiplies the deserialized object graph several times over). The cap gives ~6x
+    // headroom over the heaviest verified scene (~150 MB raw); genuinely larger scenes belong
+    // on the blob-referenced large-scene path, not an inline job parameter (a MemoryStream
+    // hard-fails at 2 GB regardless).
+    internal const long MAX_DECOMPRESSED_SCENE_BYTES = 1024L * 1024 * 1024;
+
     internal static DccSceneData Unzip(IReadOnlyList<byte> packed)
     {
         var buffer = packed as byte[] ?? [.. packed];
@@ -63,9 +71,24 @@ internal sealed class WitActivityAdapterRenderUnzipDccScene : WitActivityAdapter
         using var input = new MemoryStream(buffer, writable: false);
         using var gzip = new GZipStream(input, CompressionMode.Decompress);
         using var output = new MemoryStream();
-        gzip.CopyTo(output);
 
-        return MemoryPackSerializer.Deserialize<DccSceneData>(output.ToArray())
+        var chunk = new byte[81920];
+        int read;
+        while ((read = gzip.Read(chunk, 0, chunk.Length)) > 0)
+        {
+            if (output.Length + read > MAX_DECOMPRESSED_SCENE_BYTES)
+            {
+                throw new InvalidOperationException(
+                    $"Render.UnzipDccScene payload exceeds the {MAX_DECOMPRESSED_SCENE_BYTES / (1024 * 1024)} MB decompressed scene limit.");
+            }
+
+            output.Write(chunk, 0, read);
+        }
+
+        // Deserialize straight from the stream's buffer — ToArray() doubled the peak allocation
+        // of large scenes for nothing.
+        return MemoryPackSerializer.Deserialize<DccSceneData>(
+                   new ReadOnlySpan<byte>(output.GetBuffer(), 0, (int)output.Length))
                ?? throw new InvalidOperationException(
                    "Render.UnzipDccScene payload decompressed but did not deserialize to a DccScene.");
     }

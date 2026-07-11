@@ -10,12 +10,14 @@ namespace OutWit.Controller.Render.Model;
 /// flatten via <c>SelectMany(batch =&gt; batch.Results)</c>, avoiding engine-level nested collections.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only, and deploy the server before any client that writes a new member (default MemoryPack mode rejects payloads with unknown members).
 public partial class RenderResultBatchData : ModelBase
 {
     #region Properties
 
     /// <summary>The per-frame/tile results produced by the chunk's single Blender process.</summary>
     [MemoryPackAllowSerialize]
+    [MemoryPackOrder(0)]
     public List<RenderResultData> Results { get; set; } = new();
 
     #endregion

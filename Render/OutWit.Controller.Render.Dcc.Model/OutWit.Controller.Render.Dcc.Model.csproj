@@ -8,7 +8,7 @@
          render.module/ because the upstream Render controller's runtime
          needs these DCC scene-ref types when consuming RenderDcc output. -->
     <ControllerName>Render</ControllerName>
-    <Version>1.5.9</Version>
+    <Version>1.5.10</Version>
     <Description>Shared DCC scene-ref and validation data types used by the OutWit.Controller.Render.Dcc controller — host-side in adapters and consumed by the downstream Render controller.</Description>
     <PackageTags>render;dcc;scene-build;witengine;witcloud;controller;data-types</PackageTags>
   </PropertyGroup>
