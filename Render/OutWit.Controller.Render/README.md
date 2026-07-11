@@ -34,6 +34,7 @@ Those scripts are only for regenerating the canonical committed assets. Runtime 
 | `Render.PreflightStillTiled` | Node | Validates whether the current packaged runtime can execute a tiled still request and returns blocking issues without starting a render. |
 | `Render.RuntimeDiagnostics` | Node | Returns packaged Blender/ffmpeg/ffprobe availability, versions, and tiled-stitch capability diagnostics for the current runtime. |
 | `Render.ValidateBlend` | Node | Validates a prepared `.blend` blob and returns serialized `RenderValidateBlendData` diagnostics JSON. |
+| `Render.BakeSimulation` | Node | Delegated simulation bake: runs the unbaked simulation (fluid gas/liquid, point-cache sims — cloth/particles/soft body/dynamic paint/rigid body — and Geometry-Nodes simulation zones) on one capable node via `Grid.Delegate`, and returns a self-contained baked `.blend` blob the standard distributed pipeline then renders. |
 
 ### Variable Types
 
@@ -97,6 +98,8 @@ Bundled scripts are the primary public API surface of the render controller. The
 | `RenderDccSceneStill` | `DccScene:scene`, `Int:frame`, `RenderOptions:options` | `Blob:result` |
 | `RenderDccSceneStillTiled` | `DccScene:scene`, `Int:frame`, `Int:tilesX`, `Int:tilesY`, `RenderOptions:options`, `TileOptions:tileOptions` | `Blob:result` |
 | `RenderDccSceneVideo` | `DccScene:scene`, `Int:startFrame`, `Int:endFrame`, `RenderOptions:options`, `VideoOptions:video` | `Blob:result` |
+| `RenderDccSceneExportBlend` | `DccScene:scene` | `Blob:result` (the built self-contained `.blend`, all images packed) |
+| `RenderDccSceneStillPacked` / `FramesPacked` / `StillTiledPacked` / `VideoPacked` / `ExportBlendPacked` | as above, but the scene arrives as `ByteCollection:packedScene` — gzip-packed MemoryPack (compresses 6–10×; expanded host-side by `Render.UnzipDccScene`, capped at 1 GB). **The DCC initiators (3ds Max plugin) submit through these.** | as the unpacked variant |
 | `RenderSceneStillLarge` | `RenderSceneRef:scene`, `Int:frame`, `RenderOptions:options` | `Blob:result` |
 | `RenderSceneFrames` | `RenderScene:scene`, `Int:startFrame`, `Int:endFrame`, `RenderOptions:options` | `BlobCollection:result` |
 | `RenderSceneFramesLarge` | `RenderSceneRef:scene`, `Int:startFrame`, `Int:endFrame`, `RenderOptions:options` | `BlobCollection:result` |
@@ -104,6 +107,10 @@ Bundled scripts are the primary public API surface of the render controller. The
 | `RenderSceneStillTiledLarge` | `RenderSceneRef:scene`, `Int:frame`, `Int:tilesX`, `Int:tilesY`, `RenderOptions:options`, `TileOptions:tileOptions` | `Blob:result` |
 | `RenderSceneVideo` | `RenderScene:scene`, `Int:startFrame`, `Int:endFrame`, `RenderOptions:options`, `VideoOptions:video` | `Blob:result` |
 | `RenderSceneVideoLarge` | `RenderSceneRef:scene`, `Int:startFrame`, `Int:endFrame`, `RenderOptions:options`, `VideoOptions:video` | `Blob:result` |
+
+#### Delegated-bake render scripts
+
+`BakeAndRender{Still,Frames,Video,StillTiled}{Cycles,Eevee,GreasePencil}` (12 scripts, Render ≥ 1.23.8): for a `.blend` whose simulation is **not yet baked**, the job first runs `Render.BakeSimulation` on one capable node (delegated via `Grid.Delegate`), then feeds the returned self-contained baked scene into the standard distributed `Split`/`Frame`/`Collect` pipeline. Inputs mirror the corresponding `Render*` script plus `RenderBakeOptions:bakeOptions` (bake frame range). Prebaked simulations skip this family entirely: point-cache/embedded bakes travel inside the `.blend`; disk-based fluid caches travel as per-frame `Frame`-tagged attachments that `Render.Split*` slices so each node downloads only the cache frames it renders. Proven live for gas + liquid fluid, cloth/particles/soft body/dynamic paint/rigid body, and Geometry-Nodes simulation zones (see `docs/render-controller-scene-support-plan.md` §0.1–0.2 for the full history).
 
 #### Diagnostics and preflight scripts
 

@@ -1,6 +1,16 @@
 # Render.Dcc as a Universal Bridge — Status and Gaps
 
 **Status date:** 2026-07-07 (open-beta start, Dcc 1.6.9 / Dcc.Model 1.5.6).
+**Update 2026-07-11 (Dcc 1.6.18 / Dcc.Model 1.5.10 / Render.Model 1.7.0):** the bridge gained
+the binary mesh sidecar (initiator #2 gets seconds-fast conversion for free — the sidecar is
+generated server-side from the same contract), gzip-packed submission (`Render.UnzipDccScene`,
+1 GB decompression cap), a 30-minute Blender build watchdog, and a fully VersionTolerant wire —
+a reflection test in Dcc.Tests guards every type reachable from `DccSceneData`, so contract
+fields can be appended without bricking older hosts (mind the one-time Render.Model 1.7.0
+cutover: hosts ≥ v1.6.55 pair with initiators built against ≥ 1.7.0). An initiator-side lesson
+worth stealing from the 3ds Max plugin: every approximation it makes is recorded per object and
+surfaced as a named diagnostic — plan the same honesty channel into initiator #2 from day one.
+The gaps below (AxisSystem ignored, etc.) remain accurate.
 **Audience:** whoever builds the *second* scene initiator (Maya, Cinema 4D, Blender-as-source,
 glTF import, …) or the *second* render target. Today the only initiator is the 3ds Max plugin
 (`OmnibusCloud/3ds-Max`) and the only target is Blender/Cycles. The contract was kept clean of
