@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OutWit.Controller.Render.Model;
 using OutWit.Controller.Render.Tests.Mock;
 using OutWit.Controller.Render.Tests.Utils;
+using OutWit.Controller.Render.Utils;
 using OutWit.Engine.Interfaces;
 using OutWit.Engine.Sdk;
 using SixLabors.ImageSharp;
@@ -229,6 +230,77 @@ public sealed class RenderTiledTests
         AssertPixelClose(image[6, 1], new Rgba32(0, 255, 0, 255));
         AssertPixelClose(image[1, 6], new Rgba32(0, 0, 255, 255));
         AssertPixelClose(image[6, 6], new Rgba32(255, 255, 0, 255));
+    }
+
+    [Test]
+    public async Task CollectTilesStitchesFractionalBoundaryGridFromThePlannerTest()
+    {
+        // Farm incident 2026-07-11: 1950×1372, 2×2 tiles, 8px overlap — the tile boundaries land on
+        // fractional pixels (0.5·1372 + 8 = 694 vs Blender's 693). This drives the REAL planner's
+        // bounds through validation + stitch with tiles sized by the boundary grid (the Render.Frame
+        // normalization contract) and asserts a seam-exact full frame.
+        const int width = 1950;
+        const int height = 1372;
+
+        var options = new RenderOptionsData
+        {
+            Format = RenderFormat.PNG,
+            Engine = RenderEngine.Cycles,
+            Samples = 1,
+            ResolutionX = width,
+            ResolutionY = height
+        };
+        var tileOptions = CreateTileOptionsData(8, TileBlendMode.CenterPriorityCrop);
+
+        var tasks = RenderTileTaskBuilder.BuildTileTasks(Guid.NewGuid(), 1, 2, 2, options, tileOptions, width, height);
+        var colors = new[]
+        {
+            new Rgba32(0, 0, 255, 255),   // task 0: bottom-left
+            new Rgba32(255, 255, 0, 255), // task 1: bottom-right
+            new Rgba32(255, 0, 0, 255),   // task 2: top-left
+            new Rgba32(0, 255, 0, 255)    // task 3: top-right
+        };
+
+        var tileResults = new List<RenderResultData?>();
+        foreach (var task in tasks)
+        {
+            var tileWidth = RenderTileGeometry.Span(task.EffectiveRenderMinX, task.EffectiveRenderMaxX, width);
+            var tileHeight = RenderTileGeometry.Span(task.EffectiveRenderMinY, task.EffectiveRenderMaxY, height);
+
+            var tilePath = Path.Combine(m_storageDir, $"fractional_{task.TaskIndex:D4}.png");
+            using (var image = new Image<Rgba32>(tileWidth, tileHeight, colors[task.TaskIndex]))
+                image.SaveAsPng(tilePath);
+
+            tileResults.Add(RenderFrameOutputHelper.CreateRenderResult(
+                task, m_blobService.RegisterExistingFile(tilePath), useLogicalTileBounds: false));
+        }
+
+        var script = """
+                     Job:Tiled(RenderResultCollection:results, RenderOptions:options, TileOptions:tileOptions)
+                     {
+                         Blob:result = Render.CollectTiles(results, options, tileOptions);
+                     }
+                     """;
+        var job = m_engine.Compile(script);
+        var status = await m_engine.ScheduleAndWaitAsync(job, tileResults, options, tileOptions);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"Job failed: {status.Message}");
+
+        var outputBlobId = (Guid?)job.Variables["result"].Value;
+        Assert.That(outputBlobId, Is.Not.Null);
+
+        using var stitched = await Image.LoadAsync<Rgba32>(m_blobService.GetStoredPath(outputBlobId!.Value));
+        Assert.That((stitched.Width, stitched.Height), Is.EqualTo((width, height)));
+
+        // Deep-interior quadrant identity (top-based rows: task 2/3 are the top half).
+        AssertPixelClose(stitched[200, 200], colors[2]);    // top-left
+        AssertPixelClose(stitched[1700, 200], colors[3]);   // top-right
+        AssertPixelClose(stitched[200, 1100], colors[0]);   // bottom-left
+        AssertPixelClose(stitched[1700, 1100], colors[1]);  // bottom-right
+
+        // Seam-exact coverage: every column on the interior seam row is opaque (no 1px gap).
+        for (var x = 970; x <= 980; x++)
+            Assert.That(stitched[x, 300].A, Is.EqualTo(255), $"transparent gap at column {x}");
     }
 
     [Test]

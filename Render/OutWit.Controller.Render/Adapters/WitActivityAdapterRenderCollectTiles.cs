@@ -143,26 +143,27 @@ internal sealed class WitActivityAdapterRenderCollectTiles : WitActivityAdapterF
         return runner;
     }
 
+    // All placement/crop geometry comes from RenderTileGeometry (boundary-first): sizes are
+    // differences of independently rounded boundaries, so adjacent tiles share the exact boundary
+    // pixel and the stitched canvas has no 1px gaps/overlaps at fractional boundaries.
     private static int GetTileOffsetX(RenderResultData result, int width)
     {
-        return (int)Math.Round(result.TileMinX * width, MidpointRounding.AwayFromZero);
+        return RenderTileGeometry.BoundaryPixel(result.TileMinX, width);
     }
 
     private static int GetTileOffsetY(RenderResultData result, int height)
     {
-        var tileMaxY = (int)Math.Round(result.TileMaxY * height, MidpointRounding.AwayFromZero);
-        return height - tileMaxY;
+        return RenderTileGeometry.TopOffset(result.TileMaxY, height);
     }
 
     private static int GetRenderedOffsetX(RenderResultData result, int width)
     {
-        return (int)Math.Round(result.EffectiveRenderMinX * width, MidpointRounding.AwayFromZero);
+        return RenderTileGeometry.BoundaryPixel(result.EffectiveRenderMinX, width);
     }
 
     private static int GetRenderedOffsetY(RenderResultData result, int height)
     {
-        var renderMaxY = (int)Math.Round(result.EffectiveRenderMaxY * height, MidpointRounding.AwayFromZero);
-        return height - renderMaxY;
+        return RenderTileGeometry.TopOffset(result.EffectiveRenderMaxY, height);
     }
 
     private static int GetTileCropX(RenderResultData result, int width)
@@ -177,12 +178,12 @@ internal sealed class WitActivityAdapterRenderCollectTiles : WitActivityAdapterF
 
     private static int GetTileCropWidth(RenderResultData result, int width)
     {
-        return (int)Math.Round((result.TileMaxX - result.TileMinX) * width, MidpointRounding.AwayFromZero);
+        return RenderTileGeometry.Span(result.TileMinX, result.TileMaxX, width);
     }
 
     private static int GetTileCropHeight(RenderResultData result, int height)
     {
-        return (int)Math.Round((result.TileMaxY - result.TileMinY) * height, MidpointRounding.AwayFromZero);
+        return RenderTileGeometry.Span(result.TileMinY, result.TileMaxY, height);
     }
 
     private static string FormatToExtension(RenderFormat format)
@@ -340,8 +341,9 @@ internal sealed class WitActivityAdapterRenderCollectTiles : WitActivityAdapterF
 
     private static void ValidateTileImageMatchesBounds(RenderTileValidationContext context, int outputWidth, int outputHeight)
     {
-        var expectedWidth = (int)Math.Round((context.Result.EffectiveRenderMaxX - context.Result.EffectiveRenderMinX) * outputWidth, MidpointRounding.AwayFromZero);
-        var expectedHeight = (int)Math.Round((context.Result.EffectiveRenderMaxY - context.Result.EffectiveRenderMinY) * outputHeight, MidpointRounding.AwayFromZero);
+        // Boundary-based, matching Render.Frame normalization and the placement math above.
+        var expectedWidth = RenderTileGeometry.Span(context.Result.EffectiveRenderMinX, context.Result.EffectiveRenderMaxX, outputWidth);
+        var expectedHeight = RenderTileGeometry.Span(context.Result.EffectiveRenderMinY, context.Result.EffectiveRenderMaxY, outputHeight);
 
         if (context.ImageInfo.Width <= 0 || context.ImageInfo.Height <= 0)
         {

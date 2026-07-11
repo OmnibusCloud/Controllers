@@ -236,6 +236,57 @@ public sealed class FfmpegRunner
             throw new InvalidOperationException($"ffmpeg completed but cropped output was not found at '{outputFilePath}'.");
     }
 
+    /// <summary>
+    /// Re-anchors a border-rendered tile that came back a hair off the boundary grid (Blender snaps
+    /// interior border edges differently per build) to exactly <paramref name="targetWidth"/>×
+    /// <paramref name="targetHeight"/>, keeping the TOP-LEFT origin fixed so the logical tile window
+    /// the stitch reads stays pixel-aligned. Excess is cropped from the right/bottom; shortfall is
+    /// padded at the right/bottom and edge-smeared (so even a zero-overlap stitch shows no black
+    /// seam). Both touched edges lie in the overlap margin the stitch discards.
+    /// </summary>
+    internal async Task NormalizeTileGeometryAsync(
+        string inputPath,
+        string outputFilePath,
+        int cropRight,
+        int cropBottom,
+        int padRight,
+        int padBottom,
+        int targetWidth,
+        int targetHeight,
+        CancellationToken cancellationToken = default)
+    {
+        if (targetWidth <= 0 || targetHeight <= 0)
+            throw new InvalidOperationException($"ffmpeg tile normalization requires positive target dimensions, got {targetWidth}x{targetHeight}.");
+
+        if (cropRight < 0 || cropBottom < 0 || padRight < 0 || padBottom < 0)
+            throw new InvalidOperationException($"ffmpeg tile normalization requires non-negative edge deltas, got crop ({cropRight},{cropBottom}) pad ({padRight},{padBottom}).");
+
+        var filters = new List<string>();
+
+        // Crop excess off the right/bottom, keeping the top-left origin (crop=W:H:x=0:y=0).
+        if (cropRight > 0 || cropBottom > 0)
+            filters.Add($"crop=iw-{cropRight}:ih-{cropBottom}:0:0");
+
+        // Pad the shortfall at the right/bottom (original stays top-left) and smear the new border.
+        if (padRight > 0 || padBottom > 0)
+        {
+            filters.Add($"pad={targetWidth}:{targetHeight}:0:0");
+            filters.Add($"fillborders=right={padRight}:bottom={padBottom}:mode=smear");
+        }
+
+        if (filters.Count == 0)
+            throw new InvalidOperationException("ffmpeg tile normalization was invoked without any edge delta.");
+
+        var args = $"-y -i \"{inputPath}\" -vf \"{string.Join(",", filters)}\" -frames:v 1 -update 1 \"{outputFilePath}\"";
+        m_logger.LogInformation(
+            "ffmpeg tile normalize: {InputPath} -> {OutputFilePath} [target {Width}x{Height}, cropRight={CropRight}, cropBottom={CropBottom}, padRight={PadRight}, padBottom={PadBottom}]",
+            inputPath, outputFilePath, targetWidth, targetHeight, cropRight, cropBottom, padRight, padBottom);
+        await RunFfmpegAsync(args, cancellationToken);
+
+        if (!File.Exists(outputFilePath))
+            throw new InvalidOperationException($"ffmpeg completed but normalized tile output was not found at '{outputFilePath}'.");
+    }
+
     #endregion
 
     #region Tools

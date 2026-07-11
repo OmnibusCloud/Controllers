@@ -130,26 +130,26 @@ internal static class RenderTileAlphaBlendComposer
         return result;
     }
 
+    // Shared boundary-first geometry (RenderTileGeometry) — identical to the stitch placement, so
+    // the feather weights line up with the exact same pixel grid the CenterPriorityCrop path uses.
     private static int GetRenderedOffsetX(RenderResultData result, int width)
     {
-        return (int)Math.Round(result.EffectiveRenderMinX * width, MidpointRounding.AwayFromZero);
+        return RenderTileGeometry.BoundaryPixel(result.EffectiveRenderMinX, width);
     }
 
     private static int GetRenderedOffsetY(RenderResultData result, int height)
     {
-        var renderMaxY = (int)Math.Round(result.EffectiveRenderMaxY * height, MidpointRounding.AwayFromZero);
-        return height - renderMaxY;
+        return RenderTileGeometry.TopOffset(result.EffectiveRenderMaxY, height);
     }
 
     private static int GetTileOffsetX(RenderResultData result, int width)
     {
-        return (int)Math.Round(result.TileMinX * width, MidpointRounding.AwayFromZero);
+        return RenderTileGeometry.BoundaryPixel(result.TileMinX, width);
     }
 
     private static int GetTileOffsetY(RenderResultData result, int height)
     {
-        var tileMaxY = (int)Math.Round(result.TileMaxY * height, MidpointRounding.AwayFromZero);
-        return height - tileMaxY;
+        return RenderTileGeometry.TopOffset(result.TileMaxY, height);
     }
 
     private static int GetTileCropX(RenderResultData result, int width)
@@ -164,12 +164,12 @@ internal static class RenderTileAlphaBlendComposer
 
     private static int GetTileCropWidth(RenderResultData result, int width)
     {
-        return (int)Math.Round((result.TileMaxX - result.TileMinX) * width, MidpointRounding.AwayFromZero);
+        return RenderTileGeometry.Span(result.TileMinX, result.TileMaxX, width);
     }
 
     private static int GetTileCropHeight(RenderResultData result, int height)
     {
-        return (int)Math.Round((result.TileMaxY - result.TileMinY) * height, MidpointRounding.AwayFromZero);
+        return RenderTileGeometry.Span(result.TileMinY, result.TileMaxY, height);
     }
 
     #endregion

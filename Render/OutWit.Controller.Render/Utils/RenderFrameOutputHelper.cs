@@ -91,10 +91,14 @@ internal static class RenderFrameOutputHelper
 
         var outputWidth = task.Options.ResolutionX > 0 ? task.Options.ResolutionX : DEFAULT_RESOLUTION_X;
         var outputHeight = task.Options.ResolutionY > 0 ? task.Options.ResolutionY : DEFAULT_RESOLUTION_Y;
-        var expectedWidth = GetRenderedWidth(task, outputWidth);
-        var expectedHeight = GetRenderedHeight(task, outputHeight);
-        var logicalWidth = GetLogicalWidth(task, outputWidth);
-        var logicalHeight = GetLogicalHeight(task, outputHeight);
+
+        // Boundary-based sizes (RenderTileGeometry): the stitcher places and crops tiles by rounded
+        // BOUNDARIES, so the expected size here must be the boundary difference — a rounded width
+        // disagrees by ±1 exactly at fractional boundaries and rejects healthy tiles.
+        var expectedWidth = RenderTileGeometry.Span(task.EffectiveRenderMinX, task.EffectiveRenderMaxX, outputWidth);
+        var expectedHeight = RenderTileGeometry.Span(task.EffectiveRenderMinY, task.EffectiveRenderMaxY, outputHeight);
+        var logicalWidth = RenderTileGeometry.Span(task.TileMinX, task.TileMaxX, outputWidth);
+        var logicalHeight = RenderTileGeometry.Span(task.TileMinY, task.TileMaxY, outputHeight);
 
         var imageInfo = await ffmpegRunner.GetImageInfoAsync(renderedPath, cancellationToken);
         if (imageInfo.Width == expectedWidth && imageInfo.Height == expectedHeight)
@@ -109,14 +113,26 @@ internal static class RenderFrameOutputHelper
             return new NormalizedTileOutputData(renderedPath, useLogicalTileBounds: true);
         }
 
+        // Blender snaps interior border edges a hair differently per build (the local build lands on
+        // our rounded boundary; the farm build truncated one edge → a 1px-short tile the old code
+        // rejected). Re-anchor any tile within the snap tolerance to the boundary grid by trimming/
+        // padding the right & bottom OVERLAP margins, keeping the top-left logical origin fixed so
+        // the stitch stays pixel-aligned. Only interior (overlap-bearing) edges may absorb a delta —
+        // frame edges (fraction 0/1) are exact, so a discrepancy there is a real error.
+        var reanchored = await TryReanchorTileToBoundaryGridAsync(
+            ffmpegRunner, logger, activityName, renderedPath, task, outputDir,
+            imageInfo, expectedWidth, expectedHeight, cancellationToken);
+        if (reanchored != null)
+            return reanchored;
+
         var widthPadding = imageInfo.Width - outputWidth;
         var heightPadding = imageInfo.Height - outputHeight;
         if (widthPadding >= 0 && heightPadding >= 0 && widthPadding % 2 == 0 && heightPadding % 2 == 0)
         {
             var paddingX = widthPadding / 2;
             var paddingY = heightPadding / 2;
-            var cropOffsetX = GetRenderedOffsetX(task, outputWidth) + paddingX;
-            var cropOffsetY = GetRenderedOffsetY(task, outputHeight) + paddingY;
+            var cropOffsetX = RenderTileGeometry.BoundaryPixel(task.EffectiveRenderMinX, outputWidth) + paddingX;
+            var cropOffsetY = RenderTileGeometry.TopOffset(task.EffectiveRenderMaxY, outputHeight) + paddingY;
 
             if (cropOffsetX >= 0
                 && cropOffsetY >= 0
@@ -139,29 +155,62 @@ internal static class RenderFrameOutputHelper
         }
 
         throw new InvalidOperationException(
-            $"{activityName} tile output size mismatch for task {task.TaskIndex}. Expected {expectedWidth}x{expectedHeight} but got {imageInfo.Width}x{imageInfo.Height}.");
+            $"{activityName} tile output size mismatch for task {task.TaskIndex}. Expected {expectedWidth}x{expectedHeight} " +
+            $"(Blender-snapped would be {RenderTileGeometry.BlenderSpan(task.EffectiveRenderMinX, task.EffectiveRenderMaxX, outputWidth)}x" +
+            $"{RenderTileGeometry.BlenderSpan(task.EffectiveRenderMinY, task.EffectiveRenderMaxY, outputHeight)}) " +
+            $"but got {imageInfo.Width}x{imageInfo.Height}.");
     }
 
-    private static int GetRenderedOffsetX(RenderTaskData task, int width)
-        => (int)Math.Round(task.EffectiveRenderMinX * width, MidpointRounding.AwayFromZero);
-
-    private static int GetRenderedOffsetY(RenderTaskData task, int height)
+    private static async Task<NormalizedTileOutputData?> TryReanchorTileToBoundaryGridAsync(
+        FfmpegRunner ffmpegRunner,
+        ILogger logger,
+        string activityName,
+        string renderedPath,
+        RenderTaskData task,
+        string outputDir,
+        RenderImageInfo imageInfo,
+        int expectedWidth,
+        int expectedHeight,
+        CancellationToken cancellationToken)
     {
-        var renderMaxY = (int)Math.Round(task.EffectiveRenderMaxY * height, MidpointRounding.AwayFromZero);
-        return height - renderMaxY;
+        if (expectedWidth <= 0 || expectedHeight <= 0)
+            return null;
+
+        var deltaW = expectedWidth - imageInfo.Width;   // > 0 undersized, < 0 oversized
+        var deltaH = expectedHeight - imageInfo.Height;
+        if (deltaW == 0 && deltaH == 0)
+            return null;
+
+        // A discrepancy of at most a pixel or two is, by construction, the boundary-rounding class:
+        // there is no other way for a border render to be off by exactly 1-2px. Re-anchoring it to
+        // the boundary grid by trimming/padding the right & bottom margins keeps the top-left
+        // logical origin fixed, so the stitch reads the same pixels. (Snaps only occur with overlap,
+        // which SplitTiles adds at every interior boundary, so the touched margin is always the
+        // overlap the stitch discards.) Anything larger is a real geometry error → fail loudly.
+        if (Math.Abs(deltaW) > RenderTileGeometry.MAX_EDGE_SNAP_PX || Math.Abs(deltaH) > RenderTileGeometry.MAX_EDGE_SNAP_PX)
+            return null;
+
+        var cropRight = Math.Max(0, -deltaW);
+        var cropBottom = Math.Max(0, -deltaH);
+        var padRight = Math.Max(0, deltaW);
+        var padBottom = Math.Max(0, deltaH);
+
+        var normalizedPath = Path.Combine(outputDir, $"tile_snap{Path.GetExtension(renderedPath)}");
+        await ffmpegRunner.NormalizeTileGeometryAsync(
+            renderedPath, normalizedPath, cropRight, cropBottom, padRight, padBottom,
+            expectedWidth, expectedHeight, cancellationToken);
+
+        var normalizedInfo = await ffmpegRunner.GetImageInfoAsync(normalizedPath, cancellationToken);
+        if (normalizedInfo.Width != expectedWidth || normalizedInfo.Height != expectedHeight)
+            return null;
+
+        logger.LogInformation(
+            "{ActivityName} re-anchored a Blender-snapped tile for task {TaskIndex}: {ActualWidth}x{ActualHeight} -> {ExpectedWidth}x{ExpectedHeight} (cropRight={CropRight}, cropBottom={CropBottom}, padRight={PadRight}, padBottom={PadBottom})",
+            activityName, task.TaskIndex, imageInfo.Width, imageInfo.Height, expectedWidth, expectedHeight,
+            cropRight, cropBottom, padRight, padBottom);
+
+        return new NormalizedTileOutputData(normalizedPath, useLogicalTileBounds: false);
     }
-
-    private static int GetRenderedWidth(RenderTaskData task, int width)
-        => (int)Math.Round((task.EffectiveRenderMaxX - task.EffectiveRenderMinX) * width, MidpointRounding.AwayFromZero);
-
-    private static int GetRenderedHeight(RenderTaskData task, int height)
-        => (int)Math.Round((task.EffectiveRenderMaxY - task.EffectiveRenderMinY) * height, MidpointRounding.AwayFromZero);
-
-    private static int GetLogicalWidth(RenderTaskData task, int width)
-        => (int)Math.Round((task.TileMaxX - task.TileMinX) * width, MidpointRounding.AwayFromZero);
-
-    private static int GetLogicalHeight(RenderTaskData task, int height)
-        => (int)Math.Round((task.TileMaxY - task.TileMinY) * height, MidpointRounding.AwayFromZero);
 
     #endregion
 

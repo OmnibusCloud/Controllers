@@ -243,6 +243,69 @@ public sealed class BlenderRunnerCubeDioramaDiagnosticsTests
     }
 
     [Test]
+    [Explicit("Local empirical pin of Blender's border pixel snapping (farm incident 2026-07-11: expected 983x694, Blender produced 983x693) and of the Render.Frame re-anchoring that absorbs it.")]
+    public async Task RenderFractionalBoundaryTileMatchesBlenderSnapPredictionAndNormalizesTest()
+    {
+        // Farm incident geometry: 1950×1372, 2×2 grid, 8px overlap — bottom-left tile.
+        const int width = 1950;
+        const int height = 1372;
+
+        var options = new RenderOptionsData
+        {
+            Format = RenderFormat.PNG,
+            Engine = RenderEngine.Cycles,
+            Samples = 1,
+            ResolutionX = width,
+            ResolutionY = height
+        };
+
+        var tileTask = new RenderTaskData
+        {
+            Frame = 1,
+            TaskIndex = 0,
+            TileMinX = 0f,
+            TileMaxX = 0.5f,
+            TileMinY = 0f,
+            TileMaxY = 0.5f,
+            RenderMinX = 0f,
+            RenderMaxX = 0.5f + 8f / width,
+            RenderMinY = 0f,
+            RenderMaxY = 0.5f + 8f / height,
+            Options = options
+        };
+
+        var outputBase = Path.Combine(m_outputDir, "cube_diorama_fractional_tile_");
+        var renderedPath = await m_runner.RenderFrameAsync(m_scenePath, 1, outputBase, options, default, tileTask);
+        Assert.That(File.Exists(renderedPath), Is.True, $"Rendered tile file not found: {renderedPath}");
+
+        var ffmpegDir = Path.Combine(m_solutionRoot, "@Prerequisites", "ffmpeg");
+        var ffmpeg = new FfmpegRunner(ffmpegDir, NullLogger.Instance);
+        if (!ffmpeg.IsAvailable)
+            Assert.Ignore($"ffmpeg not found at {ffmpegDir}");
+
+        var rawInfo = await ffmpeg.GetImageInfoAsync(renderedPath);
+        var boundaryWidth = RenderTileGeometry.Span(tileTask.EffectiveRenderMinX, tileTask.EffectiveRenderMaxX, width);
+        var boundaryHeight = RenderTileGeometry.Span(tileTask.EffectiveRenderMinY, tileTask.EffectiveRenderMaxY, height);
+        TestContext.Progress.WriteLine(
+            $"Blender produced {rawInfo.Width}x{rawInfo.Height}; boundary grid expects {boundaryWidth}x{boundaryHeight}; " +
+            $"farm-incident truncation model predicts {RenderTileGeometry.BlenderSpan(tileTask.EffectiveRenderMinX, tileTask.EffectiveRenderMaxX, width)}x" +
+            $"{RenderTileGeometry.BlenderSpan(tileTask.EffectiveRenderMinY, tileTask.EffectiveRenderMaxY, height)}");
+
+        // Whatever this Blender build snaps to, it must be within the re-anchor tolerance of the
+        // boundary grid (the local build lands exactly on it; the farm build was 1px short).
+        Assert.That(rawInfo.Width, Is.EqualTo(boundaryWidth).Within(RenderTileGeometry.MAX_EDGE_SNAP_PX));
+        Assert.That(rawInfo.Height, Is.EqualTo(boundaryHeight).Within(RenderTileGeometry.MAX_EDGE_SNAP_PX));
+
+        // Normalization always lands exactly on the boundary grid, whether or not a snap occurred.
+        var normalized = await RenderFrameOutputHelper.NormalizeRenderedTileOutputAsync(
+            ffmpeg, NullLogger.Instance, "Render.Frame", renderedPath, tileTask, m_outputDir, CancellationToken.None);
+        var normalizedInfo = await ffmpeg.GetImageInfoAsync(normalized.RenderedPath);
+
+        Assert.That((normalizedInfo.Width, normalizedInfo.Height), Is.EqualTo((boundaryWidth, boundaryHeight)));
+        Assert.That(normalized.UseLogicalTileBounds, Is.False);
+    }
+
+    [Test]
     [Explicit("Local diagnostic tiled render for the full cube_diorama scene from @Data using BlenderRunner tile-task arguments.")]
     public async Task RenderCubeDioramaTileTaskReportsExpectedTileDimensionsTest()
     {
