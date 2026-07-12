@@ -27,16 +27,23 @@ public class BlenderBakeScriptTests
     }
 
     [Test]
-    public void BuildScriptForcesOpenVdbAllCacheTest()
+    public void BuildScriptUsesReplayFrameSteppingForFluidTest()
     {
         var text = string.Join("\n", BlenderBakeScript.BuildScript(1, 24, 0));
 
-        // The hard-won headless recipe: OpenVDB data format + ALL cache type (default REPLAY bakes one frame).
+        // Headless-safe recipe: OpenVDB + REPLAY, then STEP the timeline so the solver writes each frame.
         Assert.That(text, Does.Contain("cache_data_format = 'OPENVDB'"));
-        Assert.That(text, Does.Contain("cache_type = 'ALL'"));
-        Assert.That(text, Does.Contain("bpy.ops.fluid.bake_all()"));
+        Assert.That(text, Does.Contain("cache_type = 'REPLAY'"));
         Assert.That(text, Does.Contain("fluid_type', '') == 'DOMAIN'"));
-        // Free-before-bake for fluid + GN (same frozen-stale class as point caches).
+        // The modal bake_all no-ops in headless Blender (writes nothing) — it must be gone, replaced by
+        // an explicit frame_set() loop across the bake range.
+        Assert.That(text, Does.Not.Contain("bpy.ops.fluid.bake_all()"));
+        Assert.That(text, Does.Contain("bpy.context.scene.frame_set(f)"));
+        // Success is measured by real cache files on disk, NOT the has_cache_baked_data flag (which REPLAY
+        // leaves False and the modal bake set to a false-positive True). The flag must not gate success.
+        Assert.That(text, Does.Not.Contain("has_cache_baked_data"));
+        Assert.That(text, Does.Contain("os.walk(_cache_dir)"));
+        // Free any stale fluid cache before recomputing; GN keeps its own free-before-bake.
         Assert.That(text, Does.Contain("bpy.ops.fluid.free_all()"));
         Assert.That(text, Does.Contain("bpy.ops.object.simulation_nodes_cache_delete(selected=True)"));
     }
@@ -74,6 +81,28 @@ public class BlenderBakeScriptTests
         // GN simulation zones bake to PACKED (embedded in the blend) via simulation_nodes_cache_bake.
         Assert.That(text, Does.Contain("bpy.ops.object.simulation_nodes_cache_bake(selected=True)"));
         Assert.That(text, Does.Contain("mod.bake_target = 'PACKED'"));
+    }
+
+    // Dev utility (not run in CI): dump the exact generated bake script to a file so it can be executed
+    // against a real .blend headless (blender -b scene --python <file>) to validate the full recipe
+    // end-to-end. Set OUTWIT_BAKE_SCRIPT_OUT (+ optional OUTWIT_BAKE_START/END/RES) and run explicitly.
+    [Test]
+    [Explicit("Writes the generated bake script to OUTWIT_BAKE_SCRIPT_OUT for manual headless execution.")]
+    public void DumpGeneratedBakeScriptTest()
+    {
+        var outPath = Environment.GetEnvironmentVariable("OUTWIT_BAKE_SCRIPT_OUT");
+        Assert.That(outPath, Is.Not.Null.And.Not.Empty, "set OUTWIT_BAKE_SCRIPT_OUT to a file path");
+
+        int Env(string name, int fallback) =>
+            int.TryParse(Environment.GetEnvironmentVariable(name), out var v) ? v : fallback;
+
+        var lines = BlenderBakeScript.BuildScript(
+            startFrame: Env("OUTWIT_BAKE_START", 1),
+            endFrame: Env("OUTWIT_BAKE_END", 25),
+            resolutionMax: Env("OUTWIT_BAKE_RES", 48));
+
+        File.WriteAllLines(outPath!, lines);
+        TestContext.Progress.WriteLine($"Bake script written to {outPath} ({lines.Count} lines).");
     }
 
     #endregion

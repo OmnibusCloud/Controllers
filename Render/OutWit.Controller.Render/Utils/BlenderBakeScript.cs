@@ -12,11 +12,13 @@ namespace OutWit.Controller.Render.Utils;
 /// (Grid.Delegate) against the already-open .blend (Blender is launched with <c>-b &lt;blend&gt;</c>), so the
 /// script uses <c>bpy.data.filepath</c> rather than an embedded path.
 ///
-/// Mirrors the proven headless bake recipe: force <c>cache_data_format='OPENVDB'</c> + <c>cache_type='ALL'</c>
-/// (default REPLAY bakes a single modal frame headless), save the mainfile so <c>//</c> resolves, bake each
-/// domain via <c>fluid.bake_all()</c> under a temp-override, save again so the baked state + relative cache
-/// directory persist, then enumerate the *.vdb files and emit a manifest (RelativePath relative to the blend
-/// directory + the frame parsed from the filename) between markers on stdout.
+/// Uses the headless-safe bake recipe: force <c>cache_data_format='OPENVDB'</c> + <c>cache_type='REPLAY'</c>,
+/// save the mainfile so <c>//</c> resolves, then COMPUTE the cache by stepping <c>scene.frame_set()</c> across
+/// the range — the modal <c>fluid.bake_all()</c> no-ops in headless (<c>-b</c>) Blender (returns instantly,
+/// flips the baked flag, writes no files), whereas REPLAY + frame-stepping runs the solver per frame and
+/// persists each frame to disk. Save again so the relative cache directory persists, then enumerate the
+/// produced <c>*.vdb</c>/mesh files and emit a manifest (RelativePath relative to the blend directory + the
+/// frame parsed from the filename) between markers on stdout.
 ///
 /// Stateless — the Blender invocation itself stays on <see cref="BlenderRunner"/>.
 /// </summary>
@@ -63,10 +65,12 @@ internal static class BlenderBakeScript
             "for di, (obj, ds) in enumerate(domains):",
             "    try:",
             "        ds.cache_directory = '//cache_%d_%s' % (di, re.sub(r'[^A-Za-z0-9_]', '_', obj.name))",
-            // Critical settings first: the density grid must be OpenVDB and cache_type ALL so a headless
-            // bake writes EVERY frame (default REPLAY/modal writes only one). These must not be skipped.
+            // Critical settings first: the density grid must be OpenVDB, and cache_type REPLAY so the solver
+            // computes + writes EACH frame as the timeline is stepped below. cache_type 'ALL' looks right but
+            // needs the modal bpy.ops.fluid.bake_all(), which no-ops in headless Blender (see the bake loop).
+            // These must not be skipped.
             "        ds.cache_data_format = 'OPENVDB'",
-            "        ds.cache_type = 'ALL'",
+            "        ds.cache_type = 'REPLAY'",
             "        existing_start = int(getattr(ds, 'cache_frame_start', 1) or 1)",
             "        existing_end = int(getattr(ds, 'cache_frame_end', END_FRAME) or END_FRAME)",
             // Start at the sim's natural start (a liquid mesh only displays when the cache is contiguous from
@@ -89,9 +93,9 @@ internal static class BlenderBakeScript
             "    bpy.ops.wm.save_mainfile()",
             "except Exception as save_err:",
             "    result['Errors'].append('Pre-bake save: ' + str(save_err))",
-            // Free any existing/stale fluid bake first, then bake. fluid.bake_all on an already-baked domain
-            // is a no-op that ships the OLD cache (possibly wrong resolution/range/format) — the same
-            // frozen-stale failure fixed for point caches. free_all forces a clean re-bake; no-op when unbaked.
+            // Free any existing/stale fluid cache first so a scene that arrives already-baked (or with a
+            // stale cache in the freshly-reassigned directory) is recomputed cleanly. free_all is NOT modal,
+            // so it works headless; no-op when unbaked.
             "for obj, ds in domains:",
             "    try:",
             "        with bpy.context.temp_override(active_object=obj, selected_objects=[obj], object=obj):",
@@ -99,14 +103,38 @@ internal static class BlenderBakeScript
             "                bpy.ops.fluid.free_all()",
             "            except Exception:",
             "                pass",
-            "            bpy.ops.fluid.bake_all()",
-            "        baked = bool(getattr(ds, 'has_cache_baked_data', getattr(ds, 'is_cache_baked_data', False)))",
-            "        if baked:",
+            "    except Exception as free_err:",
+            "        result['Errors'].append('Free ' + obj.name + ': ' + str(free_err))",
+            // Compute the cache by STEPPING the timeline under REPLAY. bpy.ops.fluid.bake_all() is a MODAL
+            // operator that no-ops in headless (-b) Blender: it returns FINISHED in ~0.1s and flips
+            // has_cache_baked_data=True but writes ZERO cache files (every Mantaflow domain then renders
+            // empty). Setting cache_type=REPLAY and calling scene.frame_set() across the range runs the solver
+            // on each frame's depsgraph evaluation and persists that frame to disk — gas writes data/*.vdb
+            // (+ noise), liquid writes mesh/*.bobj.gz. Sequential from the sim start so the liquid surface
+            // stays contiguous; this is the real simulation work (minutes), kept alive server-side by F11.
+            "if domains:",
+            "    bake_start = min(int(getattr(ds, 'cache_frame_start', 1) or 1) for _obj, ds in domains)",
+            "    bake_end = max(int(getattr(ds, 'cache_frame_end', END_FRAME) or END_FRAME) for _obj, ds in domains)",
+            "    for f in range(bake_start, bake_end + 1):",
+            "        bpy.context.scene.frame_set(f)",
+            "        bpy.context.view_layer.update()",
+            // Success is real cache files on disk: has_cache_baked_data stays False under REPLAY, so the file
+            // count (not the flag) is the source of truth for 'this domain baked'.
+            "for obj, ds in domains:",
+            "    try:",
+            "        _cache_dir = ds.cache_directory",
+            "        if _cache_dir.startswith('//'):",
+            "            _cache_dir = os.path.join(blend_dir, _cache_dir[2:])",
+            "        _produced = 0",
+            "        if os.path.isdir(_cache_dir):",
+            "            for _r, _d, _fs in os.walk(_cache_dir):",
+            "                _produced += len(_fs)",
+            "        if _produced > 0:",
             "            result['BakedDomains'] += 1",
             "        else:",
             "            result['Errors'].append('Bake produced no cache for ' + obj.name)",
-            "    except Exception as bake_err:",
-            "        result['Errors'].append('Bake ' + obj.name + ': ' + str(bake_err))",
+            "    except Exception as chk_err:",
+            "        result['Errors'].append('Verify ' + obj.name + ': ' + str(chk_err))",
             // Bake non-fluid point-cache sims (cloth, soft body, dynamic particles, dynamic paint, rigid
             // body) to MEMORY, which is embedded in the .blend on save -> the baked scene is self-contained
             // for these (no per-frame attachments needed; each node renders its frame from the embedded
