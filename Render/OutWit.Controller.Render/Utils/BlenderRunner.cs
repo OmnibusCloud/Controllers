@@ -273,7 +273,7 @@ public sealed class BlenderRunner
         try
         {
             var args = $"-b \"{blendFilePath}\" --python-exit-code 1 --python \"{scriptPath}\"";
-            var (exitCode, stdout, stderr) = await RunProcessAsync(args, cancellationToken);
+            var (exitCode, stdout, stderr) = await RunProcessAsync(args, cancellationToken, BAKE_WALL_CLOCK_LIMIT);
 
             if (exitCode != 0)
                 throw new InvalidOperationException(
@@ -562,9 +562,13 @@ public sealed class BlenderRunner
 
     // Bounded, headless Blender probes (version, scene-resolution read, open-validate) finish in
     // seconds; a wall-clock watchdog on top of job cancellation stops a wedged one (stuck filesystem,
-    // driver stall) from pinning the host activity forever when nobody cancels. Renders and simulation
-    // bakes are legitimately long-running and pass no timeout (unbounded, cancellation-only).
+    // driver stall) from pinning the host activity forever when nobody cancels. Renders pass no timeout
+    // (unbounded, cancellation-only). The simulation bake is legitimately long but not unbounded — it
+    // carries a generous absolute ceiling as a backstop: the node keeps the job alive with progress
+    // pings while it works, so a wedged bake that never returns would otherwise never be reaped.
     private static readonly TimeSpan HOST_PROBE_WALL_CLOCK_LIMIT = TimeSpan.FromMinutes(15);
+
+    private static readonly TimeSpan BAKE_WALL_CLOCK_LIMIT = TimeSpan.FromHours(4);
 
     private async Task<(int ExitCode, string Stdout, string Stderr)> RunProcessAsync(
         string args, CancellationToken cancellationToken, TimeSpan? wallClockTimeout = null)
@@ -601,7 +605,7 @@ public sealed class BlenderRunner
             try { process.Kill(entireProcessTree: true); }
             catch { /* best effort */ }
             throw new InvalidOperationException(
-                $"Blender probe exceeded its {wallClockTimeout.Value.TotalMinutes:0}-minute wall-clock limit and was terminated (args: {args}).");
+                $"Blender process exceeded its {wallClockTimeout.Value.TotalMinutes:0}-minute wall-clock limit and was terminated (args: {args}).");
         }
         catch (OperationCanceledException)
         {
