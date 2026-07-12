@@ -58,6 +58,7 @@ The `Render.BuildBlendFromDccScene` pass handles the following subset of the neu
 ### Attachments
 
 - Blob-backed image attachments are materialized into the build sandbox (path-traversal guarded) and **packed into the `.blend`** (`pack_all`), so the artifact is self-contained.
+- `bpy.data.images.load` is only ever handed a **materialized attachment path** inside the sandbox. A scene's raw client texture paths (`SourcePath`/`RelativePath`) are untrusted and never reach a load; referenced images are validated to have an attachment, and an image asset without one — always unreferenced — is skipped rather than loaded, so a crafted scene cannot read an arbitrary host file (or open an outbound UNC connection) via `pack_all`.
 
 ## Operational bounds
 

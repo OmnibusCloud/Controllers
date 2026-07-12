@@ -114,6 +114,23 @@ public sealed class DccSceneBuildInputFactoryTests
     }
 
     [Test]
+    public void CreateRejectsMismatchedSecondUvCountTest()
+    {
+        var scene = DccRenderTestData.CreateValidScene();
+        // Positions.Count == 3, so a 2-entry Uv1 would index out of range through the shared
+        // per-vertex triangle fancy-index — must be rejected up front like Uv0.
+        scene.Meshes[0].Uv1 =
+        [
+            new DccVector2Data { X = 0d, Y = 0d },
+            new DccVector2Data { X = 1d, Y = 0d }
+        ];
+
+        var exception = Assert.Throws<InvalidOperationException>(() => DccSceneBuildInputFactory.Create(scene));
+
+        Assert.That(exception!.Message, Does.Contain("second uv count"));
+    }
+
+    [Test]
     public void CreateRejectsOutOfRangeSubdivisionLevelsTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

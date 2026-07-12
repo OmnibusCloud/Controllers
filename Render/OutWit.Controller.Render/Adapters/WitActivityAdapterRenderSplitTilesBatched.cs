@@ -79,6 +79,8 @@ internal sealed class WitActivityAdapterRenderSplitTilesBatched :
         if (tilesY <= 0)
             throw new InvalidOperationException($"tilesY must be > 0, got {tilesY}");
 
+        RenderInputLimits.ValidateTileGrid(tilesX, tilesY);
+
         var (outputWidth, outputHeight) = await ResolveOutputResolutionAsync(sceneId, options, status.JobId);
 
         RenderTileTaskBuilder.ValidateTileOptions(tileOptions, outputWidth, outputHeight, tilesX, tilesY);

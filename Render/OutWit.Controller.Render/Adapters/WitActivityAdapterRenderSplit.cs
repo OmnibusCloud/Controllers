@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.Render.Activities;
 using OutWit.Controller.Render.Model;
+using OutWit.Controller.Render.Utils;
 using OutWit.Controller.Render.Variables;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -65,6 +66,8 @@ internal sealed class WitActivityAdapterRenderSplit :
         if (endFrame < startFrame)
             throw new InvalidOperationException(
                 $"endFrame ({endFrame}) must be >= startFrame ({startFrame})");
+
+        RenderInputLimits.ValidateFrameRange(startFrame, endFrame);
 
         var tasks = new List<RenderTaskData>();
         int taskIndex = 0;

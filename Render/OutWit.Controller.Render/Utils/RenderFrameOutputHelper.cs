@@ -115,13 +115,13 @@ internal static class RenderFrameOutputHelper
 
         // Blender snaps interior border edges a hair differently per build (the local build lands on
         // our rounded boundary; the farm build truncated one edge → a 1px-short tile the old code
-        // rejected). Re-anchor any tile within the snap tolerance to the boundary grid by trimming/
-        // padding the right & bottom OVERLAP margins, keeping the top-left logical origin fixed so
-        // the stitch stays pixel-aligned. Only interior (overlap-bearing) edges may absorb a delta —
-        // frame edges (fraction 0/1) are exact, so a discrepancy there is a real error.
+        // rejected). Re-anchor a tile whose size matches the boundary-truncation model to the rounded
+        // grid by compensating the EXACT edge each boundary snapped on (see below). Only interior
+        // (overlap-bearing) edges snap — frame edges (fraction 0/1) are exact, so a discrepancy there
+        // is a real error handled by the oversized-crop path or the loud throw.
         var reanchored = await TryReanchorTileToBoundaryGridAsync(
             ffmpegRunner, logger, activityName, renderedPath, task, outputDir,
-            imageInfo, expectedWidth, expectedHeight, cancellationToken);
+            imageInfo, outputWidth, outputHeight, expectedWidth, expectedHeight, cancellationToken);
         if (reanchored != null)
             return reanchored;
 
@@ -169,6 +169,8 @@ internal static class RenderFrameOutputHelper
         RenderTaskData task,
         string outputDir,
         RenderImageInfo imageInfo,
+        int outputWidth,
+        int outputHeight,
         int expectedWidth,
         int expectedHeight,
         CancellationToken cancellationToken)
@@ -176,28 +178,44 @@ internal static class RenderFrameOutputHelper
         if (expectedWidth <= 0 || expectedHeight <= 0)
             return null;
 
-        var deltaW = expectedWidth - imageInfo.Width;   // > 0 undersized, < 0 oversized
-        var deltaH = expectedHeight - imageInfo.Height;
-        if (deltaW == 0 && deltaH == 0)
+        // A border render lands off the rounded boundary grid only when Blender's build TRUNCATES a
+        // boundary the round grid rounds up (floor vs round, ±1 per boundary — proven by the farm
+        // incident). Which physical EDGE moved is fully determined by the geometry, not by the size
+        // delta: compute the snap of each of the four boundaries independently and compensate that
+        // exact edge. A boundary that snaps outward (round > Blender's truncation) means a MISSING
+        // row/column on that side → pad it; the retained content then sits on the rounded grid at its
+        // true position (the earlier right/bottom-only scheme mis-compensated max-Y and min-X snaps,
+        // shifting the whole tile 1px). Fractions are bottom-based (Blender border): min-X = left
+        // edge, max-X = right, min-Y = BOTTOM, max-Y = TOP.
+        var snapLeft = SnapPixels(task.EffectiveRenderMinX, outputWidth);   // extra columns Blender rendered on the left
+        var snapRight = SnapPixels(task.EffectiveRenderMaxX, outputWidth);  // columns Blender omitted on the right
+        var snapBottom = SnapPixels(task.EffectiveRenderMinY, outputHeight);
+        var snapTop = SnapPixels(task.EffectiveRenderMaxY, outputHeight);
+
+        // The re-anchor only explains the boundary-truncation class: the actual image must be exactly
+        // the Blender-truncated size (round size minus the outward snaps plus the inward ones). Any
+        // other size is a different error → fall through to the oversized-crop path or a loud throw.
+        var predictedWidth = expectedWidth - snapRight + snapLeft;
+        var predictedHeight = expectedHeight - snapTop + snapBottom;
+        if (imageInfo.Width != predictedWidth || imageInfo.Height != predictedHeight)
             return null;
 
-        // A discrepancy of at most a pixel or two is, by construction, the boundary-rounding class:
-        // there is no other way for a border render to be off by exactly 1-2px. Re-anchoring it to
-        // the boundary grid by trimming/padding the right & bottom margins keeps the top-left
-        // logical origin fixed, so the stitch reads the same pixels. (Snaps only occur with overlap,
-        // which SplitTiles adds at every interior boundary, so the touched margin is always the
-        // overlap the stitch discards.) Anything larger is a real geometry error → fail loudly.
-        if (Math.Abs(deltaW) > RenderTileGeometry.MAX_EDGE_SNAP_PX || Math.Abs(deltaH) > RenderTileGeometry.MAX_EDGE_SNAP_PX)
+        // Belt-and-braces: a genuine snap is at most MAX_EDGE_SNAP_PX per edge (float noise on the
+        // product); anything larger is not the rounding class.
+        if (snapLeft > RenderTileGeometry.MAX_EDGE_SNAP_PX || snapRight > RenderTileGeometry.MAX_EDGE_SNAP_PX
+            || snapTop > RenderTileGeometry.MAX_EDGE_SNAP_PX || snapBottom > RenderTileGeometry.MAX_EDGE_SNAP_PX)
             return null;
 
-        var cropRight = Math.Max(0, -deltaW);
-        var cropBottom = Math.Max(0, -deltaH);
-        var padRight = Math.Max(0, deltaW);
-        var padBottom = Math.Max(0, deltaH);
+        if (snapLeft == 0 && snapRight == 0 && snapTop == 0 && snapBottom == 0)
+            return null;
 
+        // Crop the edges Blender rendered wide (inward snaps), pad the edges it rendered short
+        // (outward snaps). Every padded edge is a frame-interior overlap boundary the stitch discards.
         var normalizedPath = Path.Combine(outputDir, $"tile_snap{Path.GetExtension(renderedPath)}");
         await ffmpegRunner.NormalizeTileGeometryAsync(
-            renderedPath, normalizedPath, cropRight, cropBottom, padRight, padBottom,
+            renderedPath, normalizedPath,
+            cropLeft: snapLeft, cropTop: 0, cropRight: 0, cropBottom: snapBottom,
+            padLeft: 0, padTop: snapTop, padRight: snapRight, padBottom: 0,
             expectedWidth, expectedHeight, cancellationToken);
 
         var normalizedInfo = await ffmpegRunner.GetImageInfoAsync(normalizedPath, cancellationToken);
@@ -205,12 +223,20 @@ internal static class RenderFrameOutputHelper
             return null;
 
         logger.LogInformation(
-            "{ActivityName} re-anchored a Blender-snapped tile for task {TaskIndex}: {ActualWidth}x{ActualHeight} -> {ExpectedWidth}x{ExpectedHeight} (cropRight={CropRight}, cropBottom={CropBottom}, padRight={PadRight}, padBottom={PadBottom})",
+            "{ActivityName} re-anchored a Blender-snapped tile for task {TaskIndex}: {ActualWidth}x{ActualHeight} -> {ExpectedWidth}x{ExpectedHeight} (snap left={SnapLeft}, right={SnapRight}, top={SnapTop}, bottom={SnapBottom})",
             activityName, task.TaskIndex, imageInfo.Width, imageInfo.Height, expectedWidth, expectedHeight,
-            cropRight, cropBottom, padRight, padBottom);
+            snapLeft, snapRight, snapTop, snapBottom);
 
         return new NormalizedTileOutputData(normalizedPath, useLogicalTileBounds: false);
     }
+
+    /// <summary>
+    /// Pixels a boundary snaps by between the rounded grid and Blender's own truncation of the same
+    /// fraction (0 or 1 in practice). A nonzero value on a given boundary means the retained tile is
+    /// short one row/column on that edge.
+    /// </summary>
+    private static int SnapPixels(float fraction, int dimension)
+        => RenderTileGeometry.BoundaryPixel(fraction, dimension) - RenderTileGeometry.BlenderBoundaryPixel(fraction, dimension);
 
     #endregion
 

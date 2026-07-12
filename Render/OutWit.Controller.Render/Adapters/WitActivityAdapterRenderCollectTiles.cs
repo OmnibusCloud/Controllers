@@ -110,6 +110,7 @@ internal sealed class WitActivityAdapterRenderCollectTiles : WitActivityAdapterF
             var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
             if (tileOptions.BlendMode == TileBlendMode.AlphaBlend)
             {
+                RenderInputLimits.ValidateAlphaBlendResolution(outputWidth, outputHeight);
                 var image = await RenderTileAlphaBlendComposer.ComposeAsync(contexts, outputWidth, outputHeight, runner, cancellationToken);
                 await runner.EncodeRgbaImageAsync(image, outputPath, format, cancellationToken);
             }

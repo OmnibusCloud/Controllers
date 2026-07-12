@@ -66,9 +66,14 @@ public sealed class RenderFrameOutputHelperTests
     [Test]
     public async Task BlenderSnappedTileIsReanchoredToTheBoundaryGridTest()
     {
-        // THE farm incident: Blender returned 983x693 for a tile our boundary grid sizes at 983x694.
+        // THE farm incident: Blender truncated the interior TOP boundary (max-Y) of the bottom-left
+        // tile, returning 983x693 for a boundary grid that sizes it 983x694 — the tile is missing its
+        // TOP row. A marker on the input's top row lets us prove the re-anchor pads at the TOP (so the
+        // retained content lands one row lower, at its true grid position), not the bottom.
         var task = CreateFarmIncidentTask();
-        var renderedPath = await WritePngAsync(983, 693, new Rgba32(200, 90, 40, 255));
+        var marker = new Rgba32(0, 200, 0, 255);
+        var body = new Rgba32(200, 90, 40, 255);
+        var renderedPath = await WriteTopMarkedPngAsync(983, 693, marker, body);
 
         var normalized = await RenderFrameOutputHelper.NormalizeRenderedTileOutputAsync(
             m_runner, NullLogger.Instance, "Render.Frame", renderedPath, task, m_testDir, CancellationToken.None);
@@ -79,24 +84,42 @@ public sealed class RenderFrameOutputHelperTests
         var info = await m_runner.GetImageInfoAsync(normalized.RenderedPath);
         Assert.That((info.Width, info.Height), Is.EqualTo((983, 694)));
 
-        // The padded bottom row is edge-smeared, not black: the seam-safe guarantee for zero overlap.
         using var image = await Image.LoadAsync<Rgba32>(normalized.RenderedPath);
-        Assert.That(image[500, 693].R, Is.EqualTo(200).Within(2));
-        Assert.That(image[500, 693].A, Is.EqualTo(255));
+        Assert.Multiple(() =>
+        {
+            // The pad landed on top: the marker row shifted down to row 1, the smeared pad row 0 copies
+            // it (green, not black — the zero-overlap seam-safe guarantee), and the body follows below.
+            Assert.That(image[500, 0].G, Is.EqualTo(200).Within(4), "top pad row must be edge-smeared, not black");
+            Assert.That(image[500, 1].G, Is.EqualTo(200).Within(4), "the marker row must shift down to row 1 (content padded at top)");
+            Assert.That(image[500, 2].R, Is.EqualTo(200).Within(4), "the body must follow the shifted marker");
+            Assert.That(image[500, 2].G, Is.EqualTo(90).Within(6), "row 2 is body (G=90), not the green marker (G=200)");
+        });
     }
 
     [Test]
-    public async Task OversizedTileWithinToleranceIsCroppedToTheBoundaryGridTest()
+    public async Task OversizedTileFromMinBoundarySnapIsCroppedAtTheLeadingEdgeTest()
     {
-        // The mirror case: a build that snaps an interior edge UP returns a 1px-too-big tile.
-        var task = CreateFarmIncidentTask();
-        var renderedPath = await WritePngAsync(984, 695, new Rgba32(60, 160, 60, 255));
+        // The mirror class: when Blender truncates a MIN (bottom) interior boundary, it renders one
+        // row BELOW the rounded grid — a 1px-too-tall tile whose extra row is at the BOTTOM. The
+        // re-anchor must crop that bottom row and keep the top, so a marker on the input's top row
+        // survives at output row 0 (a right/bottom-only scheme that cropped the wrong end would drop it).
+        var task = CreateBottomBoundarySnapTask();
+        var marker = new Rgba32(0, 200, 0, 255);
+        var body = new Rgba32(60, 120, 200, 255);
+        var renderedPath = await WriteTopMarkedPngAsync(100, 679, marker, body);
 
         var normalized = await RenderFrameOutputHelper.NormalizeRenderedTileOutputAsync(
             m_runner, NullLogger.Instance, "Render.Frame", renderedPath, task, m_testDir, CancellationToken.None);
 
         var info = await m_runner.GetImageInfoAsync(normalized.RenderedPath);
-        Assert.That((info.Width, info.Height), Is.EqualTo((983, 694)));
+        Assert.That((info.Width, info.Height), Is.EqualTo((100, 678)));
+
+        using var image = await Image.LoadAsync<Rgba32>(normalized.RenderedPath);
+        Assert.Multiple(() =>
+        {
+            Assert.That(image[50, 0].G, Is.EqualTo(200).Within(4), "the top marker row must be retained (bottom row cropped)");
+            Assert.That(image[50, 1].B, Is.EqualTo(200).Within(4), "the body must follow the retained marker");
+        });
     }
 
     [Test]
@@ -107,6 +130,22 @@ public sealed class RenderFrameOutputHelperTests
         Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
             var renderedPath = await WritePngAsync(983, 600, new Rgba32(10, 10, 10, 255));
+            await RenderFrameOutputHelper.NormalizeRenderedTileOutputAsync(
+                m_runner, NullLogger.Instance, "Render.Frame", renderedPath, task, m_testDir, CancellationToken.None);
+        });
+    }
+
+    [Test]
+    public void ImpossibleSnapSizeForTheTaskGeometryFailsLoudlyTest()
+    {
+        // 984x695 cannot arise from the farm task: its X boundaries are frame edges (never snap) and
+        // its max-Y boundary only truncates DOWN. The model-based re-anchor must reject it rather than
+        // blindly crop the right/bottom (the old ±2 tolerance masked geometry errors as valid tiles).
+        var task = CreateFarmIncidentTask();
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            var renderedPath = await WritePngAsync(984, 695, new Rgba32(60, 160, 60, 255));
             await RenderFrameOutputHelper.NormalizeRenderedTileOutputAsync(
                 m_runner, NullLogger.Instance, "Render.Frame", renderedPath, task, m_testDir, CancellationToken.None);
         });
@@ -144,10 +183,53 @@ public sealed class RenderFrameOutputHelperTests
         };
     }
 
+    /// <summary>
+    /// A tile whose interior boundary is the BOTTOM (min-Y) edge and truncates like the farm value,
+    /// so Blender renders one row below the rounded grid (100×679 for a grid that sizes it 100×678).
+    /// X is a full, frame-aligned span so only the Y min boundary snaps.
+    /// </summary>
+    private static RenderTaskData CreateBottomBoundarySnapTask()
+    {
+        const int width = 100;
+        const int height = 1372;
+
+        return new RenderTaskData
+        {
+            Frame = 1,
+            TaskIndex = 0,
+            TileMinX = 0f,
+            TileMaxX = 1f,
+            TileMinY = 0.5f,
+            TileMaxY = 1f,
+            RenderMinX = 0f,
+            RenderMaxX = 1f,
+            RenderMinY = 0.5f + 8f / height, // the same fraction the farm build truncated (694/1372 -> 693)
+            RenderMaxY = 1f,
+            Options = new RenderOptionsData
+            {
+                Format = RenderFormat.PNG,
+                Engine = RenderEngine.Cycles,
+                ResolutionX = width,
+                ResolutionY = height
+            }
+        };
+    }
+
     private async Task<string> WritePngAsync(int width, int height, Rgba32 color)
     {
         var path = Path.Combine(m_testDir, $"tile_{width}x{height}_{Guid.NewGuid():N}.png");
         using var image = new Image<Rgba32>(width, height, color);
+        await image.SaveAsPngAsync(path);
+        return path;
+    }
+
+    /// <summary>Writes a PNG whose top row is <paramref name="marker"/> and every other row is <paramref name="body"/>.</summary>
+    private async Task<string> WriteTopMarkedPngAsync(int width, int height, Rgba32 marker, Rgba32 body)
+    {
+        var path = Path.Combine(m_testDir, $"tile_marked_{width}x{height}_{Guid.NewGuid():N}.png");
+        using var image = new Image<Rgba32>(width, height, body);
+        for (var x = 0; x < width; x++)
+            image[x, 0] = marker;
         await image.SaveAsPngAsync(path);
         return path;
     }

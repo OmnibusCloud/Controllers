@@ -351,16 +351,28 @@ internal static class DccBlenderSceneScriptGenerator
 
     private static void AppendImageLines(List<string> lines, DccSceneBuildInput buildInput)
     {
+        var emitted = false;
         foreach (var imageAsset in buildInput.Scene.ImageAssets)
         {
+            // Only load images the server actually materialized as an attachment under the work
+            // directory. An image asset with no matching attachment carries only its original
+            // client-machine path (SourcePath/RelativePath), which is untrusted scene data — loading
+            // it verbatim would read an arbitrary server file (or force an outbound UNC connection)
+            // and pack_all() would embed it into the returned .blend. Referenced images (material
+            // slots, world environment) are guaranteed an attachment by the contract validator, so
+            // skipping the unattached remainder — always unreferenced — never drops a used texture.
+            if (!buildInput.ImageAttachmentsByImageId.ContainsKey(imageAsset.Id))
+                continue;
+
             var imageVariableName = $"image_{SanitizeIdentifier(imageAsset.Id)}";
             var imagePath = ResolveImagePath(buildInput, imageAsset);
 
             lines.Add($"{imageVariableName} = bpy.data.images.load({ToPythonStringLiteral(imagePath)}, check_existing=True)");
             lines.Add($"images_by_id[{ToPythonStringLiteral(imageAsset.Id)}] = {imageVariableName}");
+            emitted = true;
         }
 
-        if (buildInput.Scene.ImageAssets.Count > 0)
+        if (emitted)
             lines.Add(string.Empty);
     }
 
@@ -386,13 +398,18 @@ internal static class DccBlenderSceneScriptGenerator
 
     private static string ResolveImagePath(DccSceneBuildInput buildInput, DccImageAssetData imageAsset)
     {
+        // The only path we may hand to bpy.data.images.load is a materialized attachment: its
+        // RelativePath is absolutized under (and containment-checked against) the work directory
+        // during MaterializeAttachments/CreateScriptBuildInput, so a malicious scene cannot point
+        // the load at an arbitrary host file. The raw SourcePath/RelativePath are untrusted client
+        // paths and must never reach a load. Every caller guarantees an attachment (referenced
+        // images are validated to have one; the image-load loop skips those without) — an absent
+        // attachment here is a contract violation, not a fallback.
         if (buildInput.ImageAttachmentsByImageId.TryGetValue(imageAsset.Id, out var attachment))
             return attachment.RelativePath;
 
-        if (!string.IsNullOrWhiteSpace(imageAsset.RelativePath))
-            return imageAsset.RelativePath;
-
-        return imageAsset.SourcePath;
+        throw new InvalidOperationException(
+            $"Render.BuildBlendFromDccScene image asset '{imageAsset.Id}' has no materialized attachment; refusing to load an untrusted client path.");
     }
 
     #endregion

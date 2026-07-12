@@ -68,6 +68,8 @@ internal sealed class WitActivityAdapterRenderSplitBatched :
         if (endFrame < startFrame)
             throw new InvalidOperationException($"endFrame ({endFrame}) must be >= startFrame ({startFrame})");
 
+        RenderInputLimits.ValidateFrameRange(startFrame, endFrame);
+
         var tasks = new List<RenderTaskData>();
         int taskIndex = 0;
         for (int frame = startFrame; frame <= endFrame; frame++)

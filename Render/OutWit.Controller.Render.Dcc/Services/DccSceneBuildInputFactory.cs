@@ -124,6 +124,15 @@ internal static class DccSceneBuildInputFactory
                     $"Render.BuildBlendFromDccScene mesh '{mesh.Id}' uv count must match positions count when UVs are provided.");
             }
 
+            // Uv1 is gathered through the same per-vertex triangle fancy-index as Uv0; a count that
+            // does not match the vertex count would index out of range (numpy IndexError deep inside
+            // Blender) or silently drop rows, so reject it up front like Uv0 rather than fail mid-build.
+            if (mesh.Uv1.Count > 0 && mesh.Uv1.Count != mesh.Positions.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Render.BuildBlendFromDccScene mesh '{mesh.Id}' second uv count must match positions count when a second UV channel is provided.");
+            }
+
             if (mesh.Colors.Count > 0 && mesh.Colors.Count != mesh.Positions.Count)
             {
                 throw new InvalidOperationException(

@@ -45,6 +45,39 @@ public sealed class DccBlenderSceneScriptGeneratorTests
     }
 
     [Test]
+    public void CreateDoesNotLoadUnreferencedImageAssetWithoutAttachmentTest()
+    {
+        // A crafted scene adds an image asset that no material or world references and that carries
+        // only an untrusted client path (an absolute host path / UNC share). The contract validator
+        // does not require an attachment for unreferenced assets, so the build proceeds — but the
+        // generator must never hand a non-materialized path to bpy.data.images.load, or pack_all()
+        // would read an arbitrary server file (or open an outbound SMB connection) and embed it into
+        // the .blend that Render.DccSceneExportBlend returns to the submitter.
+        var scene = DccRenderTestData.CreateValidScene();
+        scene.AttachedFiles.Add(DccRenderTestData.CreateImageAttachment()); // the referenced albedo
+        scene.ImageAssets.Add(new DccImageAssetData
+        {
+            Id = "image:exfil",
+            Name = "Exfil",
+            SourcePath = @"\\attacker-host\share\secret.png",
+            RelativePath = string.Empty,
+            AssetKind = "ImageAsset"
+        });
+
+        var buildInput = DccSceneBuildInputFactory.Create(scene);
+
+        var script = DccBlenderSceneScriptGenerator.Create(buildInput).PythonScript;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(script, Does.Not.Contain("attacker-host"));
+            Assert.That(script, Does.Not.Contain("secret.png"));
+            Assert.That(script, Does.Not.Contain("images_by_id['image:exfil']"));
+            Assert.That(script, Does.Contain("bpy.data.images.load('textures/albedo.png', check_existing=True)"));
+        });
+    }
+
+    [Test]
     public void CreateEmitsCameraConfigurationWhenCameraNodeIsPresentTest()
     {
         var scene = DccRenderTestData.CreateValidScene();

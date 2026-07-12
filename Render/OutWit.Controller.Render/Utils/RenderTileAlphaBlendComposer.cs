@@ -18,19 +18,20 @@ internal static class RenderTileAlphaBlendComposer
         var green = new double[pixelCount];
         var blue = new double[pixelCount];
         var alpha = new double[pixelCount];
-        var weight = new double[pixelCount];
+        var colorWeight = new double[pixelCount];
+        var featherWeight = new double[pixelCount];
 
         foreach (var context in contexts)
         {
             var image = await runner.DecodeImageToRgbaAsync(context.LocalPath, cancellationToken);
-            BlendTile(context.Result, image, outputWidth, outputHeight, red, green, blue, alpha, weight);
+            BlendTile(context.Result, image, outputWidth, outputHeight, red, green, blue, alpha, colorWeight, featherWeight);
         }
 
         return new RenderRawImage
         {
             Width = outputWidth,
             Height = outputHeight,
-            PixelBytes = BuildOutputPixels(pixelCount, red, green, blue, alpha, weight)
+            PixelBytes = BuildOutputPixels(pixelCount, red, green, blue, alpha, colorWeight, featherWeight)
         };
     }
 
@@ -43,7 +44,8 @@ internal static class RenderTileAlphaBlendComposer
         double[] green,
         double[] blue,
         double[] alpha,
-        double[] weight)
+        double[] colorWeight,
+        double[] featherWeight)
     {
         var renderedOffsetX = GetRenderedOffsetX(result, outputWidth);
         var renderedOffsetY = GetRenderedOffsetY(result, outputHeight);
@@ -73,37 +75,50 @@ internal static class RenderTileAlphaBlendComposer
                     continue;
 
                 var sourceIndex = (y * image.Width + x) * 4;
-                var sourceAlpha = image.PixelBytes[sourceIndex + 3] / 255d;
-                var blendedWeight = feather * sourceAlpha;
+                var sourceAlphaByte = image.PixelBytes[sourceIndex + 3];
+                var canvasIndex = canvasY * outputWidth + canvasX;
+
+                // Output alpha is the feather-weighted average of the SOURCE alpha (accumulated for
+                // every covered pixel, including fully-transparent ones), so an anti-aliased or
+                // semi-transparent edge keeps its partial alpha instead of collapsing to opaque. RGB
+                // is averaged by feather×alpha (an "over" composite weighted by coverage), so fully
+                // transparent contributors add no colour.
+                alpha[canvasIndex] += sourceAlphaByte * feather;
+                featherWeight[canvasIndex] += feather;
+
+                var blendedWeight = feather * (sourceAlphaByte / 255d);
                 if (blendedWeight <= 0)
                     continue;
 
-                var canvasIndex = canvasY * outputWidth + canvasX;
                 red[canvasIndex] += image.PixelBytes[sourceIndex] * blendedWeight;
                 green[canvasIndex] += image.PixelBytes[sourceIndex + 1] * blendedWeight;
                 blue[canvasIndex] += image.PixelBytes[sourceIndex + 2] * blendedWeight;
-                alpha[canvasIndex] += 255d * blendedWeight;
-                weight[canvasIndex] += blendedWeight;
+                colorWeight[canvasIndex] += blendedWeight;
             }
         }
     }
 
-    private static byte[] BuildOutputPixels(int pixelCount, double[] red, double[] green, double[] blue, double[] alpha, double[] weight)
+    private static byte[] BuildOutputPixels(int pixelCount, double[] red, double[] green, double[] blue, double[] alpha, double[] colorWeight, double[] featherWeight)
     {
         var pixels = new byte[pixelCount * 4];
         for (var index = 0; index < pixelCount; index++)
         {
             var outputIndex = index * 4;
-            if (weight[index] <= 0)
+            if (featherWeight[index] <= 0)
             {
+                // No tile covered this pixel — fully transparent.
                 pixels[outputIndex + 3] = 0;
                 continue;
             }
 
-            pixels[outputIndex] = ClampToByte(red[index] / weight[index]);
-            pixels[outputIndex + 1] = ClampToByte(green[index] / weight[index]);
-            pixels[outputIndex + 2] = ClampToByte(blue[index] / weight[index]);
-            pixels[outputIndex + 3] = ClampToByte(alpha[index] / weight[index]);
+            pixels[outputIndex + 3] = ClampToByte(alpha[index] / featherWeight[index]);
+
+            if (colorWeight[index] <= 0)
+                continue; // covered only by fully-transparent pixels — alpha ~0, colour stays black.
+
+            pixels[outputIndex] = ClampToByte(red[index] / colorWeight[index]);
+            pixels[outputIndex + 1] = ClampToByte(green[index] / colorWeight[index]);
+            pixels[outputIndex + 2] = ClampToByte(blue[index] / colorWeight[index]);
         }
 
         return pixels;

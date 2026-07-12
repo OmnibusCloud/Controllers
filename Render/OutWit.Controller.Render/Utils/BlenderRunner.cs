@@ -75,6 +75,7 @@ public sealed class BlenderRunner
         m_logger.LogInformation("Blender render: frame {Frame} from {BlendFile}", frame, blendFilePath);
 
         var result = await RenderWithDeviceFallbackAsync(
+            options.Engine,
             device => RunRenderAttemptAsync(blendFilePath, frame, outputPath, options, task, device, cancellationToken),
             () => DeleteRenderedOutputs(outputPath, frame, options.Format),
             $"render frame {frame}");
@@ -128,6 +129,7 @@ public sealed class BlenderRunner
             tasks.Count, startFrame, endFrame, blendFilePath);
 
         var result = await RenderWithDeviceFallbackAsync(
+            options.Engine,
             device => RunFrameRangeAttemptAsync(blendFilePath, startFrame, endFrame, outputBase, options, device, cancellationToken),
             () =>
             {
@@ -160,7 +162,7 @@ public sealed class BlenderRunner
     /// <returns>Version string (e.g., "Blender 4.2.19").</returns>
     public async Task<string> GetVersionAsync(CancellationToken cancellationToken = default)
     {
-        var (exitCode, stdout, _) = await RunProcessAsync("-b --version", cancellationToken);
+        var (exitCode, stdout, _) = await RunProcessAsync("-b --version", cancellationToken, HOST_PROBE_WALL_CLOCK_LIMIT);
         if (exitCode != 0)
             throw new InvalidOperationException("Failed to get Blender version");
 
@@ -187,7 +189,7 @@ public sealed class BlenderRunner
         };
 
         var args = $"-b \"{blendFilePath}\" --python-exit-code 1 {BlenderRenderArgsBuilder.BuildPythonExecArgument(pythonLines)}";
-        var (exitCode, stdout, stderr) = await RunProcessAsync(args, cancellationToken);
+        var (exitCode, stdout, stderr) = await RunProcessAsync(args, cancellationToken, HOST_PROBE_WALL_CLOCK_LIMIT);
         if (exitCode != 0)
             throw new InvalidOperationException($"Failed to read Blender scene resolution: {stderr}");
 
@@ -232,7 +234,7 @@ public sealed class BlenderRunner
         try
         {
             var args = $"-b \"{blendFilePath}\" --python-exit-code 1 --python \"{scriptPath}\"";
-            validationProcessResult = await RunProcessAsync(args, cancellationToken);
+            validationProcessResult = await RunProcessAsync(args, cancellationToken, HOST_PROBE_WALL_CLOCK_LIMIT);
         }
         finally
         {
@@ -558,8 +560,14 @@ public sealed class BlenderRunner
         return result;
     }
 
+    // Bounded, headless Blender probes (version, scene-resolution read, open-validate) finish in
+    // seconds; a wall-clock watchdog on top of job cancellation stops a wedged one (stuck filesystem,
+    // driver stall) from pinning the host activity forever when nobody cancels. Renders and simulation
+    // bakes are legitimately long-running and pass no timeout (unbounded, cancellation-only).
+    private static readonly TimeSpan HOST_PROBE_WALL_CLOCK_LIMIT = TimeSpan.FromMinutes(15);
+
     private async Task<(int ExitCode, string Stdout, string Stderr)> RunProcessAsync(
-        string args, CancellationToken cancellationToken)
+        string args, CancellationToken cancellationToken, TimeSpan? wallClockTimeout = null)
     {
         using var process = new Process
         {
@@ -577,12 +585,23 @@ public sealed class BlenderRunner
         process.Start();
         ProcessTreeGuard.AttachToParentLifetime(process, m_logger);
 
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        using var watchdog = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (wallClockTimeout is { } timeout)
+            watchdog.CancelAfter(timeout);
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(watchdog.Token);
+        var stderrTask = process.StandardError.ReadToEndAsync(watchdog.Token);
 
         try
         {
-            await process.WaitForExitAsync(cancellationToken);
+            await process.WaitForExitAsync(watchdog.Token);
+        }
+        catch (OperationCanceledException) when (wallClockTimeout != null && watchdog.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            try { process.Kill(entireProcessTree: true); }
+            catch { /* best effort */ }
+            throw new InvalidOperationException(
+                $"Blender probe exceeded its {wallClockTimeout.Value.TotalMinutes:0}-minute wall-clock limit and was terminated (args: {args}).");
         }
         catch (OperationCanceledException)
         {
@@ -723,10 +742,19 @@ public sealed class BlenderRunner
     /// (null = auto-probe); <paramref name="onBeforeRetry"/> clears partial outputs between attempts.
     /// </summary>
     private async Task<RenderBlenderInvocationResult> RenderWithDeviceFallbackAsync(
+        RenderEngine engine,
         Func<RenderDevice?, Task<RenderBlenderInvocationResult>> runAttempt,
         Action onBeforeRetry,
         string renderDescription)
     {
+        // The GPU device ladder is a Cycles-only concept. Eevee / Grease Pencil have no CPU/CUDA/OPTIX
+        // device to fall back to (they render through OpenGL), and their device-config emits an
+        // unparseable backend marker with an empty availability list — running them through the ladder
+        // would (a) retry a hard failure with byte-identical arguments and (b) let a failure blacklist
+        // (or a success re-key) the Cycles GPU memo across engines. Run them exactly once.
+        if (engine != RenderEngine.Cycles)
+            return await runAttempt(null);
+
         // Track the device we REQUESTED, not just the one Blender reported: a hard crash (SIGABRT /
         // exit 134, e.g. a Metal "Copying Attributes to device" abort) can abort the process before its
         // stdout buffer — which carries the OUTWIT_RENDER_BACKEND marker — is flushed, leaving us unable

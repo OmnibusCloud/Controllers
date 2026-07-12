@@ -408,7 +408,11 @@ For the current tiled-still slice, tile collection is fail-fast:
 - tile image dimensions must match the expected rendered tile size after overlap expansion
 - overlap stitching supports two modes:
   - `CenterPriorityCrop` — overlap regions are rendered, then cropped back to each tile's logical core area before overlay
-  - `AlphaBlend` — overlap regions are feather-blended with normalized weight accumulation in managed RGBA composition before encoding the final image
+  - `AlphaBlend` — overlap regions are feather-blended with normalized weight accumulation in managed RGBA composition before encoding the final image. Output alpha is the feather-weighted average of the source alpha, so an anti-aliased or semi-transparent render keeps its transparency.
+
+A border render can land a pixel off the rounded boundary grid because some Blender builds truncate an interior border edge the round grid rounds up (the 2026-07-11 farm incident: 983×693 for a tile the grid sizes 983×694). `RenderFrameOutputHelper` re-anchors such a tile by computing the snap of each of the four boundaries independently and compensating that exact edge — padding an edge whose boundary snapped outward, cropping one that snapped inward — so the retained content stays on the grid at its true position and the stitch is seam-exact. Only genuine boundary-truncation sizes are accepted; any other mismatch fails loudly.
+
+Job-sized inputs are bounded (`RenderInputLimits`) so a malformed or hostile submission cannot exhaust host memory before dispatch: a single split materialises at most 200 000 frames, a tiled split at most 4096 tiles, and the in-memory AlphaBlend compositor at most 64 megapixels (larger canvases must use `CenterPriorityCrop`).
 
 ### Supported Platforms
 

@@ -35,6 +35,13 @@ internal static class BlenderSceneAttachmentRemapHelper
 
     private const string VSE_SOUND_STRIP_ATTACHMENT_KIND = "VseSoundStrip";
 
+    /// <summary>
+    /// Wall-clock ceiling on the host-side remap Blender process, on top of job cancellation. Rewriting
+    /// dependency paths is a headless open/save that finishes in seconds; a wedged process (stuck
+    /// filesystem, driver stall) would otherwise pin the host activity forever when nobody cancels.
+    /// </summary>
+    private static readonly TimeSpan REMAP_WALL_CLOCK_LIMIT = TimeSpan.FromMinutes(30);
+
     #endregion
 
     #region Functions
@@ -77,9 +84,34 @@ internal static class BlenderSceneAttachmentRemapHelper
 
             process.Start();
             ProcessTreeGuard.AttachToParentLifetime(process, blenderRunner.Logger);
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken);
+
+            using var watchdog = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            watchdog.CancelAfter(REMAP_WALL_CLOCK_LIMIT);
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(watchdog.Token);
+            var stderrTask = process.StandardError.ReadToEndAsync(watchdog.Token);
+
+            try
+            {
+                await process.WaitForExitAsync(watchdog.Token);
+            }
+            catch (OperationCanceledException) when (watchdog.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                // The wall-clock watchdog fired (not a job cancel): the remap wedged. Kill the tree and
+                // surface a descriptive error so the process cannot pin the host forever.
+                try { process.Kill(entireProcessTree: true); }
+                catch { /* best effort */ }
+                throw new InvalidOperationException(
+                    $"Blender scene attachment remap for '{blendFilePath}' exceeded its {REMAP_WALL_CLOCK_LIMIT.TotalMinutes:0}-minute wall-clock limit and was terminated.");
+            }
+            catch (OperationCanceledException)
+            {
+                // Kill the whole Blender tree on cancellation so a wedged remap cannot outlive the job
+                // and pin the host (every other Blender/ffmpeg invocation does the same).
+                try { process.Kill(entireProcessTree: true); }
+                catch { /* best effort */ }
+                throw;
+            }
 
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
