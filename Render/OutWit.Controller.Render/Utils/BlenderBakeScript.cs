@@ -43,6 +43,22 @@ internal static class BlenderBakeScript
             "result = {'BakedDomains': 0, 'BakedPointCaches': 0, 'Cache': [], 'Errors': []}",
             "blend_path = bpy.data.filepath",
             "blend_dir = os.path.dirname(blend_path)",
+            // Fail FAST on a disk-cached rigid body world: its cache files do not travel with the baked
+            // blend, and converting it to memory is impossible here — assigning use_disk_cache on the
+            // object-less SCENE-level cache segfaults Blender (BKE_ptcache_toggle_disk_cache). READING the
+            // flag is safe. Emit the manifest with the error and exit before any expensive bake work; the
+            // runner turns this marker into a hard failure instead of silently shipping a wrong scene.
+            "rbw_pre = getattr(bpy.context.scene, 'rigidbody_world', None)",
+            "if rbw_pre is not None and getattr(rbw_pre, 'enabled', True):",
+            "    rbw_pre_pc = getattr(rbw_pre, 'point_cache', None)",
+            "    if rbw_pre_pc is not None and bool(getattr(rbw_pre_pc, 'use_disk_cache', False)):",
+            "        result['Errors'].append('RigidBodyDiskCache: the rigid body world uses a DISK point cache, which does not travel with the baked scene and cannot be converted headless. In Blender: Scene Properties > Rigid Body World > Cache, disable Disk Cache, save, then re-submit.')",
+            $"        print('{START_MARKER}')",
+            "        print(json.dumps(result))",
+            $"        print('{END_MARKER}')",
+            "        import sys",
+            "        sys.stdout.flush()",
+            "        raise SystemExit(0)",
             "def rel_to_blend(full):",
             "    return os.path.relpath(full, blend_dir).replace('\\\\', '/')",
             "def frame_of(name):",

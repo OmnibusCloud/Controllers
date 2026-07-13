@@ -292,6 +292,13 @@ public sealed class BlenderRunner
             if (saveError != null)
                 throw new InvalidOperationException($"Bake could not persist the baked scene: {saveError}");
 
+            // A disk-cached rigid body world is unfixable here (its files don't travel, and the RNA
+            // memory-conversion segfaults Blender on the scene-level cache) — the script fails fast with
+            // this marker; fail the bake loudly instead of rendering rest-pose rigid bodies silently.
+            var rigidBodyDiskError = result.Errors.FirstOrDefault(e => e.StartsWith("RigidBodyDiskCache:", StringComparison.Ordinal));
+            if (rigidBodyDiskError != null)
+                throw new InvalidOperationException(rigidBodyDiskError["RigidBodyDiskCache:".Length..].Trim());
+
             if (!result.BakedAnything)
                 m_logger.LogWarning(
                     "Bake produced no baked simulation; rendering the scene as-is (no bakeable sim found, or only static/keyframed content). {Errors}",

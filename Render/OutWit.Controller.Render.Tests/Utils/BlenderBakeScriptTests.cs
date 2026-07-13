@@ -64,6 +64,11 @@ public class BlenderBakeScriptTests
         // cache (the 1.23.18 regression: every delegated fluid bake died mid-script on the lava demo).
         Assert.That(text, Does.Not.Contain("rigidbody_world', None)\n    point_cache.use_disk_cache"));
         Assert.That(text, Does.Not.Contain("rbw0.point_cache.use_disk_cache"));
+        // A disk-cached rigid body world is unfixable headless (files don't travel; conversion segfaults):
+        // the script must FAIL FAST with the marker the runner escalates to a hard error, before any
+        // expensive bake work. READING the flag is safe (only assignment crashes).
+        Assert.That(text, Does.Contain("RigidBodyDiskCache:"));
+        Assert.That(text, Does.Contain("raise SystemExit(0)"));
     }
 
     [Test]
