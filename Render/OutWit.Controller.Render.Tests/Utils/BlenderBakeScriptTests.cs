@@ -59,9 +59,11 @@ public class BlenderBakeScriptTests
         Assert.That(text, Does.Contain("BakedPointCaches"));
         // Must free any stale/pre-existing bake before re-baking, else the cache stays frozen.
         Assert.That(text, Does.Contain("bpy.ops.ptcache.free_bake_all()"));
-        // The rigid body world cache is scene-level (missed by the modifier loop) and must be forced to
-        // MEMORY too, else a disk-cached world writes files that don't travel with the baked blend.
-        Assert.That(text, Does.Contain("rbw0.point_cache.use_disk_cache = False"));
+        // ANTI-PIN: never assign use_disk_cache on the SCENE-level rigidbody_world point cache — the RNA
+        // setter fires BKE_ptcache_toggle_disk_cache, which segfaults Blender for the object-less scene
+        // cache (the 1.23.18 regression: every delegated fluid bake died mid-script on the lava demo).
+        Assert.That(text, Does.Not.Contain("rigidbody_world', None)\n    point_cache.use_disk_cache"));
+        Assert.That(text, Does.Not.Contain("rbw0.point_cache.use_disk_cache"));
     }
 
     [Test]
