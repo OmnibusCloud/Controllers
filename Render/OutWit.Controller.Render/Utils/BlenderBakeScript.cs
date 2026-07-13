@@ -26,6 +26,32 @@ internal static class BlenderBakeScript
 {
     public const string START_MARKER = "OUTWIT_BAKE_SIMULATION_START";
     public const string END_MARKER = "OUTWIT_BAKE_SIMULATION_END";
+    public const string PROGRESS_MARKER = "OUTWIT_BAKE_PROGRESS";
+
+    /// <summary>
+    /// Parses a live "<c>OUTWIT_BAKE_PROGRESS frame first last</c>" stdout line into a 0..1 fraction of
+    /// the bake range plus a human-readable stage. Returns false for any other line.
+    /// </summary>
+    public static bool TryParseProgressLine(string line, out double fraction, out string stage)
+    {
+        fraction = 0;
+        stage = string.Empty;
+
+        if (string.IsNullOrEmpty(line) || !line.StartsWith(PROGRESS_MARKER, StringComparison.Ordinal))
+            return false;
+
+        var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 4
+            || !int.TryParse(parts[1], out var frame)
+            || !int.TryParse(parts[2], out var first)
+            || !int.TryParse(parts[3], out var last)
+            || last < first)
+            return false;
+
+        fraction = Math.Clamp((frame - first + 1) / (double)(last - first + 1), 0.0, 1.0);
+        stage = $"Baking frame {frame}/{last}";
+        return true;
+    }
 
     /// <summary>
     /// Builds the bake script. <paramref name="startFrame"/>/<paramref name="endFrame"/> are the render range
@@ -134,6 +160,9 @@ internal static class BlenderBakeScript
             "    for f in range(bake_start, bake_end + 1):",
             "        bpy.context.scene.frame_set(f)",
             "        bpy.context.view_layer.update()",
+            // Per-frame progress marker, flushed so the runner's streaming reader sees it LIVE (the bake
+            // is minutes of otherwise-silent work; this line drives the job's visible progress).
+            $"        print('{PROGRESS_MARKER} %d %d %d' % (f, bake_start, bake_end), flush=True)",
             // Success is real cache files on disk: has_cache_baked_data stays False under REPLAY, so the file
             // count (not the flag) is the source of truth for 'this domain baked'.
             "for obj, ds in domains:",

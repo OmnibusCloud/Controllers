@@ -264,7 +264,8 @@ public sealed class BlenderRunner
         int startFrame,
         int endFrame,
         int resolutionMax,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<double, string>? progress = null)
     {
         var pythonLines = BlenderBakeScript.BuildScript(startFrame, endFrame, resolutionMax);
         var scriptPath = Path.Combine(m_tempStorage.RootPath, $"outwit_bake_simulation_{Guid.NewGuid():N}.py");
@@ -272,12 +273,31 @@ public sealed class BlenderRunner
 
         try
         {
+            // Stream stdout only when someone listens: the bake script prints a flushed
+            // OUTWIT_BAKE_PROGRESS line per stepped frame, which drives the job's live progress.
+            Action<string>? onLine = progress == null
+                ? null
+                : line =>
+                {
+                    if (BlenderBakeScript.TryParseProgressLine(line, out var fraction, out var stage))
+                        progress(fraction, stage);
+                };
+
             var args = $"-b \"{blendFilePath}\" --python-exit-code 1 --python \"{scriptPath}\"";
-            var (exitCode, stdout, stderr) = await RunProcessAsync(args, cancellationToken, BAKE_WALL_CLOCK_LIMIT);
+            var (exitCode, stdout, stderr) = await RunProcessAsync(args, cancellationToken, BAKE_WALL_CLOCK_LIMIT, onLine);
 
             if (exitCode != 0)
+            {
+                // The fail-fast guards (e.g. a disk-cached rigid body world) print their manifest and
+                // exit early — depending on the Blender build that exit can surface as non-zero under
+                // --python-exit-code. Prefer their SPECIFIC actionable error over the generic failure.
+                var earlyDiskError = ExtractRigidBodyDiskCacheError(stdout);
+                if (earlyDiskError != null)
+                    throw new InvalidOperationException(earlyDiskError);
+
                 throw new InvalidOperationException(
                     $"Blender bake process failed (exit {exitCode}). stderr tail: {Tail(stderr, 800)}");
+            }
 
             var result = BlenderBakeScript.ParseResult(stdout, m_logger);
 
@@ -578,7 +598,8 @@ public sealed class BlenderRunner
     private static readonly TimeSpan BAKE_WALL_CLOCK_LIMIT = TimeSpan.FromHours(4);
 
     private async Task<(int ExitCode, string Stdout, string Stderr)> RunProcessAsync(
-        string args, CancellationToken cancellationToken, TimeSpan? wallClockTimeout = null)
+        string args, CancellationToken cancellationToken, TimeSpan? wallClockTimeout = null,
+        Action<string>? onStdoutLine = null)
     {
         using var process = new Process
         {
@@ -600,7 +621,11 @@ public sealed class BlenderRunner
         if (wallClockTimeout is { } timeout)
             watchdog.CancelAfter(timeout);
 
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(watchdog.Token);
+        // Streaming per-line reading is opt-in: a long bake prints live progress markers that must reach
+        // the caller WHILE the process runs, not after ReadToEnd returns.
+        var stdoutTask = onStdoutLine == null
+            ? process.StandardOutput.ReadToEndAsync(watchdog.Token)
+            : ReadAllLinesStreamingAsync(process.StandardOutput, onStdoutLine, watchdog.Token);
         var stderrTask = process.StandardError.ReadToEndAsync(watchdog.Token);
 
         try
@@ -622,6 +647,42 @@ public sealed class BlenderRunner
         }
 
         return (process.ExitCode, await stdoutTask, await stderrTask);
+    }
+
+    /// <summary>
+    /// Finds the bake script's fail-fast "RigidBodyDiskCache: ..." error in raw stdout — used when the
+    /// early exit surfaces as a non-zero process exit, where the manifest may not be parsed at all.
+    /// </summary>
+    private static string? ExtractRigidBodyDiskCacheError(string stdout)
+    {
+        const string marker = "RigidBodyDiskCache:";
+        var index = stdout.IndexOf(marker, StringComparison.Ordinal);
+        if (index < 0)
+            return null;
+
+        var start = index + marker.Length;
+        var end = stdout.IndexOfAny(['\r', '\n', '"'], start);
+        var message = (end < 0 ? stdout[start..] : stdout[start..end]).Trim();
+        return message.Length > 0 ? message : null;
+    }
+
+    /// <summary>
+    /// Reads stdout line-by-line, invoking <paramref name="onLine"/> per line AS IT ARRIVES (live
+    /// progress), while still accumulating the full text for the caller's post-run parsing. A throwing
+    /// callback never fails the run — progress is informational.
+    /// </summary>
+    private static async Task<string> ReadAllLinesStreamingAsync(
+        StreamReader reader, Action<string> onLine, CancellationToken cancellationToken)
+    {
+        var builder = new StringBuilder();
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            builder.AppendLine(line);
+            try { onLine(line); }
+            catch { /* progress is informational */ }
+        }
+
+        return builder.ToString();
     }
 
     private RenderBlenderInvocationResult ParseInvocationResult(int exitCode, string stdout, string stderr)

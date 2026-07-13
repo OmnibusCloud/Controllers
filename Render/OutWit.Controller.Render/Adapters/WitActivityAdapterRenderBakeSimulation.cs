@@ -101,7 +101,11 @@ internal sealed class WitActivityAdapterRenderBakeSimulation : WitActivityAdapte
                 startFrame, endFrame, resolutionMax);
 
             // Bakes in place: workingBlendPath becomes the baked scene; cache files sit under its relative dir.
-            var bakeResult = await runner.BakeSimulationAsync(workingBlendPath, startFrame, endFrame, resolutionMax, cancellationToken);
+            // The live per-frame progress feeds the job's visible progress (an 8-minute bake otherwise
+            // looks hung on every dashboard).
+            var bakeResult = await runner.BakeSimulationAsync(
+                workingBlendPath, startFrame, endFrame, resolutionMax, cancellationToken,
+                CreateActivityProgressReporter(status.JobId));
 
             // Re-upload the baked blend as a fresh blob.
             var bakedBlendBlobId = await BlobService.UploadFileAsync(workingBlendPath);
@@ -195,6 +199,45 @@ internal sealed class WitActivityAdapterRenderBakeSimulation : WitActivityAdapte
     #endregion
 
     #region Tools
+
+    /// <summary>
+    /// Builds a progress reporter that forwards the bake's live 0..1 fraction to the host's
+    /// <c>ProcessingManager.ReportActivityProgress(Guid, double, string?)</c> — VIA REFLECTION on
+    /// purpose: the method ships with Engine.Shared 1.1.6+, and a reflective lookup keeps this
+    /// controller loadable on OLDER hosts (the lookup finds nothing there and reporting is skipped),
+    /// where a typed call would throw MissingMethod/TypeLoad on a mixed fleet. Returns null when the
+    /// host cannot receive progress. The reflection contract is pinned by an engine-side test.
+    /// </summary>
+    private Action<double, string>? CreateActivityProgressReporter(Guid jobId)
+    {
+        var manager = ProcessingManager;
+        if (manager == null)
+            return null;
+
+        var method = s_reportActivityProgressMethods.GetOrAdd(
+            manager.GetType(),
+            static type => type.GetMethod(
+                "ReportActivityProgress",
+                [typeof(Guid), typeof(double), typeof(string)]));
+
+        if (method == null)
+            return null;
+
+        return (fraction, stage) =>
+        {
+            try
+            {
+                method.Invoke(manager, [jobId, fraction, stage]);
+            }
+            catch
+            {
+                // Progress is purely informational — never let it disturb the bake.
+            }
+        };
+    }
+
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<Type, global::System.Reflection.MethodInfo?>
+        s_reportActivityProgressMethods = new();
 
     private BlenderRunner GetBlenderRunner()
     {

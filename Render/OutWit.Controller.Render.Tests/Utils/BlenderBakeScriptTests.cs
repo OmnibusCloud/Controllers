@@ -69,6 +69,9 @@ public class BlenderBakeScriptTests
         // expensive bake work. READING the flag is safe (only assignment crashes).
         Assert.That(text, Does.Contain("RigidBodyDiskCache:"));
         Assert.That(text, Does.Contain("raise SystemExit(0)"));
+        // The frame-step loop must emit a FLUSHED live progress marker per frame — it drives the job's
+        // visible progress through the activity-progress sink (an 8-minute bake looks hung without it).
+        Assert.That(text, Does.Contain($"print('{BlenderBakeScript.PROGRESS_MARKER} %d %d %d' % (f, bake_start, bake_end), flush=True)"));
     }
 
     [Test]
@@ -113,6 +116,42 @@ public class BlenderBakeScriptTests
 
         File.WriteAllLines(outPath!, lines);
         TestContext.Progress.WriteLine($"Bake script written to {outPath} ({lines.Count} lines).");
+    }
+
+    #endregion
+
+    #region Progress Line
+
+    [Test]
+    public void TryParseProgressLineParsesValidMarkerTest()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(BlenderBakeScript.TryParseProgressLine("OUTWIT_BAKE_PROGRESS 46 46 95", out var f1, out var s1), Is.True);
+            Assert.That(f1, Is.EqualTo(1.0 / 50.0).Within(1e-9));
+            Assert.That(s1, Is.EqualTo("Baking frame 46/95"));
+
+            Assert.That(BlenderBakeScript.TryParseProgressLine("OUTWIT_BAKE_PROGRESS 95 46 95", out var f2, out _), Is.True);
+            Assert.That(f2, Is.EqualTo(1.0).Within(1e-9));
+
+            Assert.That(BlenderBakeScript.TryParseProgressLine("OUTWIT_BAKE_PROGRESS 70 46 95", out var f3, out var s3), Is.True);
+            Assert.That(f3, Is.EqualTo(25.0 / 50.0).Within(1e-9));
+            Assert.That(s3, Is.EqualTo("Baking frame 70/95"));
+        });
+    }
+
+    [Test]
+    public void TryParseProgressLineRejectsGarbageTest()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(BlenderBakeScript.TryParseProgressLine("", out _, out _), Is.False);
+            Assert.That(BlenderBakeScript.TryParseProgressLine("Fra:47 Mem:120M", out _, out _), Is.False);
+            Assert.That(BlenderBakeScript.TryParseProgressLine("OUTWIT_BAKE_PROGRESS", out _, out _), Is.False);
+            Assert.That(BlenderBakeScript.TryParseProgressLine("OUTWIT_BAKE_PROGRESS a b c", out _, out _), Is.False);
+            Assert.That(BlenderBakeScript.TryParseProgressLine("OUTWIT_BAKE_PROGRESS 5 10 1", out _, out _), Is.False);
+            Assert.That(BlenderBakeScript.TryParseProgressLine("OUTWIT_BAKE_SIMULATION_START", out _, out _), Is.False);
+        });
     }
 
     #endregion
