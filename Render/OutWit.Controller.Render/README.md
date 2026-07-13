@@ -34,7 +34,7 @@ Those scripts are only for regenerating the canonical committed assets. Runtime 
 | `Render.PreflightStillTiled` | Node | Validates whether the current packaged runtime can execute a tiled still request and returns blocking issues without starting a render. |
 | `Render.RuntimeDiagnostics` | Node | Returns packaged Blender/ffmpeg/ffprobe availability, versions, and tiled-stitch capability diagnostics for the current runtime. |
 | `Render.ValidateBlend` | Node | Validates a prepared `.blend` blob and returns serialized `RenderValidateBlendData` diagnostics JSON. |
-| `Render.BakeSimulation` | Node | Delegated simulation bake: runs the unbaked simulation (fluid gas/liquid, point-cache sims — cloth/particles/soft body/dynamic paint/rigid body — and Geometry-Nodes simulation zones) on one capable node via `Grid.Delegate`, and returns a self-contained baked `.blend` blob the standard distributed pipeline then renders. |
+| `Render.BakeSimulation` | Node | Delegated simulation bake: runs the unbaked simulation (fluid gas/liquid, point-cache sims — cloth/particles/soft body/dynamic paint/rigid body — and Geometry-Nodes simulation zones) on one capable node via `Grid.Delegate`, and returns a self-contained baked `.blend` blob the standard distributed pipeline then renders. Reports live per-frame bake progress into the job (≥ 1.23.21), and fails fast with an actionable message when the rigid body world uses a disk point cache (those files cannot travel; switch the world cache to memory). |
 
 ### Variable Types
 
@@ -111,6 +111,8 @@ Bundled scripts are the primary public API surface of the render controller. The
 #### Delegated-bake render scripts
 
 `BakeAndRender{Still,Frames,Video,StillTiled}{Cycles,Eevee,GreasePencil}` (12 scripts, Render ≥ 1.23.8): for a `.blend` whose simulation is **not yet baked**, the job first runs `Render.BakeSimulation` on one capable node (delegated via `Grid.Delegate`), then feeds the returned self-contained baked scene into the standard distributed `Split`/`Frame`/`Collect` pipeline. Inputs mirror the corresponding `Render*` script plus `RenderBakeOptions:bakeOptions` (bake frame range). Prebaked simulations skip this family entirely: point-cache/embedded bakes travel inside the `.blend`; disk-based fluid caches travel as per-frame `Frame`-tagged attachments that `Render.Split*` slices so each node downloads only the cache frames it renders. Proven live for gas + liquid fluid, cloth/particles/soft body/dynamic paint/rigid body, and Geometry-Nodes simulation zones (see `docs/render-controller-scene-support-plan.md` §0.1–0.2 for the full history).
+
+Implementation notes (Render ≥ 1.23.16): the fluid bake computes its cache with `cache_type='REPLAY'` **stepping the timeline frame-by-frame** — the modal `bpy.ops.fluid.bake_all()` silently no-ops in headless Blender (it flips the baked flag but writes zero cache files). Because a REPLAY cache leaves `has_cache_baked_data` false, `Render.ValidateBlend` treats a fluid domain as baked when its cache directory holds **data files through the configured end frame** (single scrubbed frames and config files don't count). Never assign `use_disk_cache` on the scene-level rigid body world point cache from a script — the RNA setter segfaults Blender; the bake instead detects a disk-cached world up front and fails loudly.
 
 #### Diagnostics and preflight scripts
 
