@@ -59,6 +59,9 @@ public class BlenderBakeScriptTests
         Assert.That(text, Does.Contain("BakedPointCaches"));
         // Must free any stale/pre-existing bake before re-baking, else the cache stays frozen.
         Assert.That(text, Does.Contain("bpy.ops.ptcache.free_bake_all()"));
+        // The rigid body world cache is scene-level (missed by the modifier loop) and must be forced to
+        // MEMORY too, else a disk-cached world writes files that don't travel with the baked blend.
+        Assert.That(text, Does.Contain("rbw0.point_cache.use_disk_cache = False"));
     }
 
     [Test]

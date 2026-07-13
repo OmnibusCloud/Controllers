@@ -147,6 +147,15 @@ internal static class BlenderBakeScript
             "                pc0.use_disk_cache = False",
             "            except Exception:",
             "                pass",
+            // The rigid body world cache is SCENE-level (not on a modifier), so the loop above misses it.
+            // Force it to memory too — a disk cache would write external files that do not travel with the
+            // baked blend, breaking the render on other nodes.
+            "rbw0 = getattr(bpy.context.scene, 'rigidbody_world', None)",
+            "if rbw0 is not None and getattr(rbw0, 'point_cache', None) is not None:",
+            "    try:",
+            "        rbw0.point_cache.use_disk_cache = False",
+            "    except Exception:",
+            "        pass",
             // Free any existing point-cache bake FIRST. A scene may arrive already-baked (Blender demos
             // ship baked) or with a stale/invalidated cache; calling bake_all on a flagged-but-stale cache
             // leaves it FROZEN (the sim never re-steps). Freeing forces a clean full re-bake. No-op when

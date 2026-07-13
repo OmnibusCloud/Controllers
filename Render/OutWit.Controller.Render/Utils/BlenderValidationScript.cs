@@ -341,9 +341,21 @@ internal static class BlenderValidationScript
             "        if mod.type != 'MESH_CACHE':",
             "            continue",
             "        add_unique(issues, f\"Mesh cache modifier '{obj.name}' is not yet portable to remote rendering in the current v1 flow. Export to Alembic and attach the cache, then re-submit.\")",
-            "for obj in bpy.data.objects:",
-            "    if getattr(obj, 'rigid_body', None) is not None:",
-            "        add_unique(issues, f\"Rigid body simulation '{obj.name}' is not yet portable to remote rendering in the current v1 flow. Bake it to keyframes or Alembic and re-submit.\")",
+            // Rigid body is a SCENE-level simulation (rigidbody_world); objects' obj.rigid_body entries are
+            // just members of its collection. A memory-baked world cache is EMBEDDED in the .blend on save
+            // (verified: a fresh reopen shows is_baked and the objects animate from the cache), so a baked
+            // world IS portable — the same embedded-point-cache mechanism as cloth/soft body, and both bake
+            // paths (Render.BakeSimulation + the addon's local bake) produce it via ptcache.bake_all. An
+            // unbaked (or disk-cached — those files do NOT travel with the blend) world keeps an issue worded
+            // in the 'requires baked simulation data' family, so the addon's bake plan resolves it with a
+            // delegated or local bake instead of hard-blocking. A disabled world runs no simulation.
+            "rbw_val = getattr(bpy.context.scene, 'rigidbody_world', None)",
+            "if rbw_val is not None and getattr(rbw_val, 'enabled', True):",
+            "    rbw_pc = getattr(rbw_val, 'point_cache', None)",
+            "    rbw_baked = bool(getattr(rbw_pc, 'is_baked', False)) if rbw_pc is not None else False",
+            "    rbw_disk = bool(getattr(rbw_pc, 'use_disk_cache', False)) if rbw_pc is not None else False",
+            "    if not rbw_baked or rbw_disk:",
+            "        add_unique(issues, \"Rigid body simulation requires baked simulation data before remote rendering.\")",
             "for obj in bpy.data.objects:",
             "    for mod in getattr(obj, 'modifiers', []):",
             "        if mod.type != 'NODES':",

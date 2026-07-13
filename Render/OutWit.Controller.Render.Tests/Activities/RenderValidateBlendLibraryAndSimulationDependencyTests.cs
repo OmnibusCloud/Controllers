@@ -463,8 +463,49 @@ public sealed class RenderValidateBlendLibraryAndSimulationDependencyTests : Ren
         Assert.Multiple(() =>
         {
             Assert.That(validation.IsValid, Is.False);
-            Assert.That(validation.Issues.Any(me => me.Contains("rigid body", StringComparison.OrdinalIgnoreCase)), Is.True);
+            // The issue must be worded in the 'requires baked simulation data' family so the addon's
+            // dependency policy classifies it as bake-resolvable (delegated/local bake) instead of a
+            // hard block.
+            Assert.That(validation.Issues.Any(me =>
+                me.Contains("rigid body", StringComparison.OrdinalIgnoreCase)
+                && me.Contains("requires baked simulation data", StringComparison.OrdinalIgnoreCase)), Is.True);
         });
+    }
+
+    [Test]
+    public async Task ValidateBlendDetailedAsyncTreatsBakedRigidBodyWorldAsPortableTest()
+    {
+        // A memory-baked rigid body world cache is embedded in the .blend on save (the objects animate
+        // from it on any node), so a baked world must NOT be flagged — the same portability rule the
+        // bake paths rely on (both run ptcache.bake_all over the scene's rigidbody_world).
+        var blendPath = Path.Combine(m_tempDirectory, "scene_with_baked_rigid_body.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_plane_add(size=10, location=(0, 0, -2))",
+                "bpy.ops.rigidbody.object_add(type='PASSIVE')",
+                "bpy.ops.mesh.primitive_cube_add(location=(0, 0, 2))",
+                "bpy.ops.rigidbody.object_add(type='ACTIVE')",
+                "scene = bpy.context.scene",
+                "scene.frame_start = 1",
+                "scene.frame_end = 5",
+                "rbw = scene.rigidbody_world",
+                "rbw.point_cache.frame_start = 1",
+                "rbw.point_cache.frame_end = 5",
+                "try:",
+                "    rbw.point_cache.use_disk_cache = False",
+                "except Exception:",
+                "    pass",
+                "bpy.ops.ptcache.free_bake_all()",
+                "bpy.ops.ptcache.bake_all(bake=True)"
+            ]);
+
+        var validation = await m_blenderRunner.ValidateBlendDetailedAsync(blendPath);
+
+        Assert.That(
+            validation.Issues.Any(me => me.Contains("rigid body", StringComparison.OrdinalIgnoreCase)),
+            Is.False,
+            "a memory-baked rigid body world is embedded in the .blend and must not be reported as an issue");
     }
 
     [Test]
