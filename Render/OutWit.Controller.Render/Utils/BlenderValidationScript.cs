@@ -267,6 +267,29 @@ internal static class BlenderValidationScript
             "        cache_dir_prefix = (normalize_path(resolved_cache_dir) + os.sep) if resolved_cache_dir else ''",
             "        baked = bool(getattr(domain, 'has_cache_baked_data', getattr(domain, 'is_cache_baked_data', False)))",
             "        mesh_baked = bool(getattr(domain, 'has_cache_baked_mesh', getattr(domain, 'is_cache_baked_mesh', False)))",
+            // A REPLAY-mode bake (Render.BakeSimulation + the addon's local-bake path) writes real per-frame
+            // cache DATA files but leaves has_cache_baked_data/mesh False. Trust the files on disk: a domain
+            // whose cache holds DATA (.vdb / .bobj.gz) for its LAST configured frame (cache_frame_end) is
+            // baked through the range. Keying on the END frame avoids false positives from (a) the single
+            // current-frame slice Blender writes for an UNBAKED REPLAY domain on save, (b) stray scrubbed
+            // frames, and (c) config '*.uni' files that exist without any bake.
+            "        end_frame = int(getattr(domain, 'cache_frame_end', 0) or 0)",
+            "        cache_has_data = False",
+            "        mesh_has_data = False",
+            "        if end_frame > 0 and resolved_cache_dir and os.path.isdir(resolved_cache_dir):",
+            "            for cache_root, _cache_dirs, cache_files in os.walk(resolved_cache_dir):",
+            "                is_mesh_dir = os.path.basename(cache_root).lower() == 'mesh'",
+            "                for cache_file in cache_files:",
+            "                    low = cache_file.lower()",
+            "                    if not (low.endswith('.vdb') or low.endswith('.bobj.gz')):",
+            "                        continue",
+            "                    frame_match = re.search(r'_(\\d+)\\.', cache_file)",
+            "                    if frame_match and int(frame_match.group(1)) == end_frame:",
+            "                        cache_has_data = True",
+            "                        if is_mesh_dir:",
+            "                            mesh_has_data = True",
+            "        baked = baked or cache_has_data",
+            "        mesh_baked = mesh_baked or mesh_has_data",
             "        cache_attached = bool(cache_dir_prefix) and any(p.startswith(cache_dir_prefix) for p in supported_attached_fluid_cache_paths)",
             "        mesh_baked_ok = (not bool(getattr(domain, 'use_mesh', False))) or mesh_baked",
             "        if baked and cache_attached and mesh_baked_ok:",

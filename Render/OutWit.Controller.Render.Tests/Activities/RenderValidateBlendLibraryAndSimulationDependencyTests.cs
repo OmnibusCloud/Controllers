@@ -174,6 +174,47 @@ public sealed class RenderValidateBlendLibraryAndSimulationDependencyTests : Ren
     }
 
     [Test]
+    public async Task ValidateBlendDetailedAsyncTreatsFluidWithCacheFilesOnDiskAsBakedTest()
+    {
+        // A REPLAY-mode bake (the addon's local-bake path + Render.BakeSimulation) writes real per-frame
+        // cache files but leaves has_cache_baked_data False. The validator must trust the files on disk, so
+        // a domain whose cache directory holds data is NOT flagged "requires baked simulation data". (The
+        // "external cache directory" note still applies until the cache is attached — the local-bake path
+        // attaches it — so this asserts only that the bake-required issue is gone.)
+        // Bake the domain the headless-safe way (cache_type='REPLAY' + frame-stepping) so real cache DATA is
+        // written through cache_frame_end — exactly what the addon's local-bake path and Render.BakeSimulation
+        // produce. This leaves has_cache_baked_data False, so it proves the validator trusts the files.
+        var cacheDirectory = Path.Combine(m_tempDirectory, "fluid-cache-baked");
+
+        var blendPath = Path.Combine(m_tempDirectory, "scene_with_fluid_replay_cache.blend");
+        await CreateBlendFileAsync(
+            blendPath,
+            [
+                "bpy.ops.mesh.primitive_cube_add()",
+                "obj = bpy.context.active_object",
+                "modifier = obj.modifiers.new(name='Fluid', type='FLUID')",
+                "modifier.fluid_type = 'DOMAIN'",
+                "domain = modifier.domain_settings",
+                $"domain.cache_directory = r'{NormalizePythonPath(cacheDirectory)}'",
+                "domain.cache_data_format = 'OPENVDB'",
+                "domain.cache_type = 'REPLAY'",
+                "domain.cache_frame_start = 1",
+                "domain.cache_frame_end = 3",
+                "domain.resolution_max = 16",
+                "for _frame in range(1, 4):",
+                "    bpy.context.scene.frame_set(_frame)",
+                "    bpy.context.view_layer.update()"
+            ]);
+
+        var validation = await m_blenderRunner.ValidateBlendDetailedAsync(blendPath);
+
+        Assert.That(
+            validation.Issues.Any(me => me.Contains("requires baked simulation data", StringComparison.OrdinalIgnoreCase)),
+            Is.False,
+            "a fluid domain with a REPLAY cache on disk through cache_frame_end must not be reported as requiring a bake (has_cache_baked_data stays False)");
+    }
+
+    [Test]
     public async Task ValidateBlendDetailedAsyncReportsIssueForFluidMeshCacheRequirementTest()
     {
         var cacheDirectory = Path.Combine(m_tempDirectory, "fluid-mesh-cache");
