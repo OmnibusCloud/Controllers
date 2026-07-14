@@ -1,0 +1,33 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Simulation.Schwarz NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+      Copies the package's content/module/* into the consumer's
+      $(OutputPath)@Controllers\schwarz.module\ so the controller runtime can
+      find the controller DLL, the shared Simulation.Model DLL, and the manifest.
+      Tier-1: no external data assets, so no ResolveControllerAssetsTask step.
+  -->
+
+  <PropertyGroup>
+    <_OutWitSchwarzModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitSchwarzModulePackageContent>
+    <_OutWitSchwarzModuleOutputDir>$(OutputPath)@Controllers\schwarz.module\</_OutWitSchwarzModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopySchwarzModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitSchwarzModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitSchwarzFiles Include="$(_OutWitSchwarzModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitSchwarzFiles)"
+        DestinationFiles="@(_OutWitSchwarzFiles->'$(_OutWitSchwarzModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Simulation.Schwarz: staged module to '$(_OutWitSchwarzModuleOutputDir)'." />
+  </Target>
+
+</Project>

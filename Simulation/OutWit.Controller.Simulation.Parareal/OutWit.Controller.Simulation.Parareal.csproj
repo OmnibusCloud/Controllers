@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.props" />
+
+  <PropertyGroup>
+    <ControllerName>Parareal</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Distributed transient-problem solver (heat, diffusion) via parareal parallel-in-time integration: time slabs propagated across the pool with a fine Crank-Nicolson integrator, coarse correction server-side.</Description>
+    <PackageTags>simulation;parareal;parallel-in-time;fem;fd;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>parareal-solve</ControllerFeatures>
+    <ControllerUseCases>Long transient heat and diffusion runs on crowd pools</ControllerUseCases>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.Simulation.Model\OutWit.Controller.Simulation.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.Simulation.Parareal.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
+
+</Project>

@@ -1,0 +1,31 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Simulation.Schwarz.Scripts
+      NuGet package. Auto-imported into any csproj that PackageReferences this
+      scripts pack. Copies content/scripts/*.wit into the consumer's
+      $(OutputPath)@Scripts/ flat layout.
+  -->
+
+  <PropertyGroup>
+    <_OutWitSchwarzScriptsContent>$(MSBuildThisFileDirectory)..\content\scripts\</_OutWitSchwarzScriptsContent>
+    <_OutWitSchwarzScriptsOutputDir>$(OutputPath)@Scripts\</_OutWitSchwarzScriptsOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopySchwarzScripts"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitSchwarzScriptsContent)')">
+    <ItemGroup>
+      <_OutWitSchwarzScriptFiles Include="$(_OutWitSchwarzScriptsContent)*.wit" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitSchwarzScriptFiles)"
+        DestinationFiles="@(_OutWitSchwarzScriptFiles->'$(_OutWitSchwarzScriptsOutputDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Simulation.Schwarz.Scripts: staged @(_OutWitSchwarzScriptFiles->Count()) script(s) to '$(_OutWitSchwarzScriptsOutputDir)'." />
+  </Target>
+
+</Project>

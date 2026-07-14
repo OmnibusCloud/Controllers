@@ -1,0 +1,33 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Simulation.Parareal NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+      Copies the package's content/module/* into the consumer's
+      $(OutputPath)@Controllers\parareal.module\ so the controller runtime can
+      find the controller DLL, the shared Simulation.Model DLL, and the manifest.
+      Tier-1: no external data assets, so no ResolveControllerAssetsTask step.
+  -->
+
+  <PropertyGroup>
+    <_OutWitPararealModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitPararealModulePackageContent>
+    <_OutWitPararealModuleOutputDir>$(OutputPath)@Controllers\parareal.module\</_OutWitPararealModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyPararealModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitPararealModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitPararealFiles Include="$(_OutWitPararealModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitPararealFiles)"
+        DestinationFiles="@(_OutWitPararealFiles->'$(_OutWitPararealModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Simulation.Parareal: staged module to '$(_OutWitPararealModuleOutputDir)'." />
+  </Target>
+
+</Project>

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.props" />
+
+  <PropertyGroup>
+    <ControllerName>Schwarz</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Distributed stationary-problem solver (steady heat, Poisson-class fields) via overlapping Restricted Additive Schwarz domain decomposition: subdomains solved across the pool per round, boundary strips exchanged through the server.</Description>
+    <PackageTags>simulation;schwarz;domain-decomposition;fem;fd;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>schwarz-solve</ControllerFeatures>
+    <ControllerUseCases>Stationary heat and structural statics on LAN pools</ControllerUseCases>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.Simulation.Model\OutWit.Controller.Simulation.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.Simulation.Schwarz.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
+
+</Project>

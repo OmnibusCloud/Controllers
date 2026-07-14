@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.Simulation.Schwarz\OutWit.Controller.Simulation.Schwarz.csproj" />
+  </ItemGroup>
+
+  <!-- Build-only references: these projects must be built (so their PostBuild
+       populates @Controllers/<Cfg>/<name>.module/) but their DLLs are not
+       pulled into the test compile output. Parareal is needed by the co-load
+       test; Variables/Grid/Special are the script-level dependencies of
+       SchwarzSolve.wit (typed variables, Grid.ForEach, Loop/If/Break/Return). -->
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.Simulation.Parareal\OutWit.Controller.Simulation.Parareal.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Special\OutWit.Controller.Special\OutWit.Controller.Special.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ExcludedControllerModule Include="render.module" />
+    <ExcludedControllerModule Include="renderdcc.module" />
+  </ItemGroup>
+
+</Project>

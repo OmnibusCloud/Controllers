@@ -30,6 +30,16 @@
     <Project Path="Render/OutWit.Controller.Render.Dcc.Tests/OutWit.Controller.Render.Dcc.Tests.csproj" />
     <Project Path="Render/OutWit.Controller.Render.Tests/OutWit.Controller.Render.Tests.csproj" />
   </Folder>
+  <Folder Name="/Simulation/">
+    <Project Path="Simulation/OutWit.Controller.Simulation.Model/OutWit.Controller.Simulation.Model.csproj" />
+    <Project Path="Simulation/OutWit.Controller.Simulation.Model.Tests/OutWit.Controller.Simulation.Model.Tests.csproj" />
+    <Project Path="Simulation/OutWit.Controller.Simulation.Schwarz/OutWit.Controller.Simulation.Schwarz.csproj" />
+    <Project Path="Simulation/OutWit.Controller.Simulation.Schwarz.Scripts/OutWit.Controller.Simulation.Schwarz.Scripts.csproj" />
+    <Project Path="Simulation/OutWit.Controller.Simulation.Schwarz.Tests/OutWit.Controller.Simulation.Schwarz.Tests.csproj" />
+    <Project Path="Simulation/OutWit.Controller.Simulation.Parareal/OutWit.Controller.Simulation.Parareal.csproj" />
+    <Project Path="Simulation/OutWit.Controller.Simulation.Parareal.Scripts/OutWit.Controller.Simulation.Parareal.Scripts.csproj" />
+    <Project Path="Simulation/OutWit.Controller.Simulation.Parareal.Tests/OutWit.Controller.Simulation.Parareal.Tests.csproj" />
+  </Folder>
   <Folder Name="/Tools/">
     <Project Path="Tools/OutWit.Controller.Pack/OutWit.Controller.Pack.csproj" />
     <Project Path="Tools/OutWit.Controller.Pack.Tests/OutWit.Controller.Pack.Tests.csproj" />

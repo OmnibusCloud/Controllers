@@ -1,0 +1,24 @@
+Job:PararealSolve(Blob:model, PararealOptions:opts)
+{
+    PararealPlan:plan = Parareal.Slice(model, opts);
+    PararealState:state = Parareal.Init(model, plan);
+    Int:maxIter = Parareal.IterationBudget(opts);
+    PararealTaskCollection:tasks;
+    PararealResultCollection:wave;
+    Bool:converged = false;
+
+    Loop(maxIter)
+    {
+        tasks = Parareal.MakeTasks(plan, state);
+        wave = Grid.ForEach(task in tasks) => Parareal.Propagate(task);
+        state = Parareal.Correct(plan, state, wave);
+        converged = Parareal.IsConverged(state);
+        If(converged) { Break; }
+    }
+
+    ~ deferred snapshot wave (PR-11): recompute from converged states, snapshots on ~
+    tasks = Parareal.MakeSnapshotTasks(plan, state);
+    wave = Grid.ForEach(task in tasks) => Parareal.Propagate(task);
+    Blob:timeline = Parareal.Collect(plan, wave);
+    Return(timeline);
+}

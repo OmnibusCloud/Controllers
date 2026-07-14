@@ -1,0 +1,24 @@
+Job:SchwarzSolve(Blob:model, SchwarzOptions:opts)
+{
+    SchwarzPlan:plan = Schwarz.Decompose(model, opts);
+    SchwarzRound:state = Schwarz.InitRound(plan);
+    Int:maxRounds = Schwarz.RoundBudget(opts);
+    SchwarzTaskCollection:tasks;
+    SchwarzResultCollection:wave;
+    Bool:converged = false;
+
+    Loop(maxRounds)
+    {
+        tasks = Schwarz.MakeTasks(plan, state);
+        wave = Grid.ForEach(task in tasks) => Schwarz.SolveSubdomain(task);
+        state = Schwarz.Advance(plan, state, wave);
+        converged = Schwarz.IsConverged(state);
+        If(converged) { Break; }
+    }
+
+    ~ final wave: back-substitution from cached factorizations, owned fields uploaded ~
+    tasks = Schwarz.MakeFinalTasks(plan, state);
+    wave = Grid.ForEach(task in tasks) => Schwarz.SolveSubdomain(task);
+    Blob:field = Schwarz.Assemble(plan, wave);
+    Return(field);
+}

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.props" />
+
+  <PropertyGroup>
+    <ControllerName>Schwarz</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Bundled .wit scripts for the OutWit.Controller.Simulation.Schwarz controller — the SchwarzSolve distributed stationary-solve job.</Description>
+    <PackageTags>simulation;schwarz;scripts;domain-decomposition;witengine;witcloud;controller</PackageTags>
+  </PropertyGroup>
+
+  <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md).
+       ENABLE AT FIRST PUBLISH: the referenced controller package does not exist
+       on any feed yet, so the marker would break restore until then.
+  <ItemGroup>
+    <PackageReference Include="OutWit.Controller.Simulation.Schwarz" Version="[0.1.0, 1.0.0)" />
+  </ItemGroup>
+  -->
+
+  <ItemGroup>
+    <None Include="..\OutWit.Controller.Simulation.Schwarz\Scripts\*.wit"
+          Pack="true"
+          PackagePath="content/scripts/" />
+
+    <None Include="build\OutWit.Controller.Simulation.Schwarz.Scripts.targets"
+          Pack="true"
+          PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.targets" />
+
+</Project>

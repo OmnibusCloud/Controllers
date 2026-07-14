@@ -59,6 +59,7 @@ artifacts/
 # side-by-side diff for visual inspection. Not part of source.
 @Controllers/
 @Zips/
+@Simulation/
 @Output/
 dist/
 

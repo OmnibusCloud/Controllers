@@ -1,0 +1,31 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Simulation.Parareal.Scripts
+      NuGet package. Auto-imported into any csproj that PackageReferences this
+      scripts pack. Copies content/scripts/*.wit into the consumer's
+      $(OutputPath)@Scripts/ flat layout.
+  -->
+
+  <PropertyGroup>
+    <_OutWitPararealScriptsContent>$(MSBuildThisFileDirectory)..\content\scripts\</_OutWitPararealScriptsContent>
+    <_OutWitPararealScriptsOutputDir>$(OutputPath)@Scripts\</_OutWitPararealScriptsOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyPararealScripts"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitPararealScriptsContent)')">
+    <ItemGroup>
+      <_OutWitPararealScriptFiles Include="$(_OutWitPararealScriptsContent)*.wit" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitPararealScriptFiles)"
+        DestinationFiles="@(_OutWitPararealScriptFiles->'$(_OutWitPararealScriptsOutputDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Simulation.Parareal.Scripts: staged @(_OutWitPararealScriptFiles->Count()) script(s) to '$(_OutWitPararealScriptsOutputDir)'." />
+  </Target>
+
+</Project>

@@ -23,10 +23,13 @@ Each row is a stable, supported release.
 | [`OutWit.Controller.Matrices`](https://www.nuget.org/packages/OutWit.Controller.Matrices)          | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Matrices.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Matrices)                         | 2    | Dense + sparse matrix / vector operations with Gustavson multiplication. Ships benchmark `.smat` data via GitHub Release.     |
 | [`OutWit.Controller.Render.Dcc`](https://www.nuget.org/packages/OutWit.Controller.Render.Dcc)      | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Render.Dcc.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Render.Dcc)                     | 1    | Host-only neutral DCC scene validation and `.blend` build bootstrap, upstream of Render.                                      |
 | [`OutWit.Controller.Render`](https://www.nuget.org/packages/OutWit.Controller.Render)              | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Render.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Render)                             | 2    | Distributed rendering via Blender CLI + FFmpeg, delivering external scene dependencies (libraries, caches, volumes, …) to render nodes. Ships per-platform Blender / FFmpeg / benchmark scenes via GitHub Release.    |
+| `OutWit.Controller.Simulation.Schwarz` ([`Simulation/`](Simulation/))                               | v0.1 — in development, not yet published                                                                                                                              | 1    | Distributed stationary solves (steady heat / Poisson-class) via overlapping Schwarz domain decomposition. LAN-profile.        |
+| `OutWit.Controller.Simulation.Parareal` ([`Simulation/`](Simulation/))                              | v0.1 — in development, not yet published                                                                                                                              | 1    | Distributed transient solves (heat / diffusion) via parareal parallel-in-time integration. Crowd/WAN-profile.                 |
 
 Each controller comes with a companion `OutWit.Controller.<Name>.Model`
 NuGet that contains shared data types — referenced transitively by
-consumers, available standalone for tooling.
+consumers, available standalone for tooling (the two Simulation controllers
+share a single `OutWit.Controller.Simulation.Model`).
 
 ---
 
@@ -190,6 +193,13 @@ canonical minimal Model shape.
 │   ├── OutWit.Controller.Render.Dcc/        # Tier-1 host-only DCC bootstrap
 │   ├── OutWit.Controller.Render.Dcc.Model/
 │   └── OutWit.Controller.Render.Dcc.Scripts/ # Bundled RenderDcc*.wit scripts (content-only nupkg)
+│
+├── Simulation/                      # Distributed numerical simulation (in development)
+│   ├── OutWit.Controller.Simulation.Model/    # Shared numerics + OWSM blob formats + wire DTOs
+│   ├── OutWit.Controller.Simulation.Schwarz/  # Stationary solves (domain decomposition)
+│   ├── OutWit.Controller.Simulation.Schwarz.Scripts/
+│   ├── OutWit.Controller.Simulation.Parareal/ # Transient solves (parallel-in-time)
+│   └── OutWit.Controller.Simulation.Parareal.Scripts/
 │
 ├── Tools/
 │   ├── OutWit.Controller.Pack/              # Path-B author tool: pack module/ -> contributor zip
