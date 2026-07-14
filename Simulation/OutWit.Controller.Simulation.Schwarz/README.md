@@ -76,6 +76,3 @@ faces.
 Cholesky factorization + 20 back-substitutions of a deterministic in-code 40³
 reference (unit `subdomain-solve@40^3-v1`), so node scores rank real solve
 throughput.
-
-Design source: `@Simulation/schwarz-controller-deep-dive.md` as amended by
-`@Simulation/simulation-controllers-revision-1-code-reality.md` (repo-local docs).

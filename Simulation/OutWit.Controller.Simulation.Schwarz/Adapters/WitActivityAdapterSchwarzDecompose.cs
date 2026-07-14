@@ -39,7 +39,7 @@ internal sealed class WitActivityAdapterSchwarzDecompose : WitActivityAdapterFun
 
         if (options.Coarse)
             throw new InvalidOperationException(
-                "The two-level coarse correction is not available in v1 — run with Coarse=false (see the code-reality revision doc).");
+                "The two-level coarse correction is not available in v1 — run with Coarse=false (a one-level solve cannot materialize the global residual a sound correction needs).");
 
         var modelPath = await BlobService.GetLocalPathAsync(modelBlobId);
         var model = SimulationModelDefinition.FromBlobBytes(await File.ReadAllBytesAsync(modelPath));

@@ -76,6 +76,3 @@ condition (`SimulationModelDefinition.Initial*`).
 `Parareal.Propagate` benchmarks itself as the activity in miniature: one
 Crank–Nicolson factorization + 20 CN steps of a deterministic in-code 40³
 reference (unit `slab-step@40^3-v1`).
-
-Design source: `@Simulation/parareal-controller-deep-dive.md` as amended by
-`@Simulation/simulation-controllers-revision-1-code-reality.md` (repo-local docs).
