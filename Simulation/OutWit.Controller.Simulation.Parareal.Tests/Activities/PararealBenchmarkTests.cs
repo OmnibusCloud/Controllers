@@ -29,7 +29,7 @@ public class PararealBenchmarkTests
         var second = PararealBenchmark.Measure(gridSize: 9, stepCount: 3);
 
         Assert.That(second.Custom!["checksum"], Is.EqualTo(first.Custom!["checksum"]),
-            "the benchmark computation must be bitwise-deterministic (B-4)");
+            "the benchmark computation must be bitwise-deterministic");
     }
 
     [Test]

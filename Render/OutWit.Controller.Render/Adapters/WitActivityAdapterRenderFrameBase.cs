@@ -140,7 +140,7 @@ internal abstract class WitActivityAdapterRenderFrameBase<TActivity> : WitActivi
 
         // The render benchmark no longer needs a shipped .blend — it generates a procedural
         // compute-bound scene in-process and times only the render loop (amortising and
-        // excluding Blender startup). See @Docs/Active/plan-render-benchmark-redesign.md.
+        // excluding Blender startup).
         var result = await RenderBenchmarkHelper.MeasureRenderAsync(
             runner,
             BenchmarkEngine,

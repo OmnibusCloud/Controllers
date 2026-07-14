@@ -16,7 +16,7 @@ Job:PararealSolve(Blob:model, PararealOptions:opts)
         If(converged) { Break; }
     }
 
-    ~ deferred snapshot wave (PR-11): recompute from converged states, snapshots on ~
+    ~ deferred snapshot wave: recompute from converged states, snapshots on ~
     tasks = Parareal.MakeSnapshotTasks(plan, state);
     wave = Grid.ForEach(task in tasks) => Parareal.Propagate(task);
     Blob:timeline = Parareal.Collect(plan, wave);

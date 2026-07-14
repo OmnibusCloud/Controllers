@@ -8,7 +8,7 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.Simulation.Parareal.Activities;
 
 /// <summary>
-/// Node-side slab propagation — a pure function of its task (PR-8): retries and
+/// Node-side slab propagation — a pure function of its task: retries and
 /// reassignment re-run it safely because outputs are new immutable blobs.
 /// </summary>
 [Activity("Parareal.Propagate")]

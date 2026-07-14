@@ -29,7 +29,7 @@ internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFu
     #region Fields
 
     /// <summary>
-    /// Per-process fine-stepper cache (PR-5): adapters are singletons, so the
+    /// Per-process fine-stepper cache: adapters are singletons, so the
     /// factorization of M + θδt·A persists across slabs and rounds; keyed by
     /// (model blob, δt). LRU-bounded (factorizations are large) and
     /// poison-evicting (a transient build fault must not stick to the key).
@@ -113,7 +113,7 @@ internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFu
         if (!pool.TryGetValue(activity.Task, out PararealTaskData? task) || task == null)
             return 1.0;
 
-        // B-6: Work(slab) = steps × (dof/ref)^(4/3) — read from explicit DTO scalars.
+        // Work(slab) = steps × (dof/ref)^(4/3) — read from explicit DTO scalars.
         return task.Steps * Math.Pow(task.Dof / (double)REFERENCE_DOF, 4.0 / 3.0);
     }
 

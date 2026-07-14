@@ -6,10 +6,10 @@ using OutWit.Engine.Data.Benchmark;
 namespace OutWit.Controller.Simulation.Parareal.Utils;
 
 /// <summary>
-/// The Parareal.Propagate benchmark (deep-dive B-1..B-6 applied verbatim): one
+/// The Parareal.Propagate benchmark: one
 /// Crank–Nicolson factorization + 20 CN steps of the reference problem.
 /// Reference size is 40³ for the same measured reason as Schwarz (64³
-/// factorization ~5 min single-threaded — far beyond the 5–15 s B-5 target).
+/// factorization ~5 min single-threaded — far beyond the 5–15 s target).
 /// </summary>
 public static class PararealBenchmark
 {

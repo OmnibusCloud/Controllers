@@ -6,12 +6,12 @@ using OutWit.Engine.Data.Benchmark;
 namespace OutWit.Controller.Simulation.Schwarz.Utils;
 
 /// <summary>
-/// The Schwarz.SolveSubdomain benchmark (deep-dive B-1..B-6): the activity in
+/// The Schwarz.SolveSubdomain benchmark: the activity in
 /// miniature — one Cholesky factorization + 20 back-substitutions of the
 /// reference problem, deterministic and generated in-code. Reference size is
-/// 40³, NOT the deep-dive's 64³: CSparse's single-threaded factorization
-/// measured ~5 minutes at 64³, violating the 5–15 s target (B-5) by ~20× —
-/// 40³ lands in the window while staying far out of L3 (B-3's intent).
+/// 40³ rather than 64³: CSparse's single-threaded factorization
+/// measured ~5 minutes at 64³, violating the 5–15 s target by ~20× —
+/// 40³ lands in the window while staying far out of L3.
 /// </summary>
 public static class SchwarzBenchmark
 {
@@ -31,7 +31,7 @@ public static class SchwarzBenchmark
 
     public static WitBenchmarkResult Measure(int gridSize, int solveCount)
     {
-        // Warm-up at a tiny size removes JIT noise from the timed pass (B-4).
+        // Warm-up at a tiny size removes JIT noise from the timed pass.
         MeasureCore(WARMUP_SIZE, 2);
         return MeasureCore(gridSize, solveCount);
     }

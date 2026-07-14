@@ -10,7 +10,7 @@ namespace OutWit.Controller.Simulation.Parareal.Tests.Activities;
 
 /// <summary>
 /// Deep-dive §10 fault injection: a vanished contributor mid-wave costs one
-/// re-download + re-run of one slab (PR-8); the job completes and the result is
+/// re-download + re-run of one slab; the job completes and the result is
 /// bitwise-identical to the healthy run.
 /// </summary>
 [TestFixture]

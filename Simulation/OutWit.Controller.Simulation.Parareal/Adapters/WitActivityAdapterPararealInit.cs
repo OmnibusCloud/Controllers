@@ -38,7 +38,7 @@ internal sealed class WitActivityAdapterPararealInit : WitActivityAdapterFunctio
 
         var kernel = await PararealKernelCache.GetOrCreateAsync(BlobService, plan);
 
-        // Round 0: serial coarse sweep from u₀ (server-side, cheap by PR-4).
+        // Round 0: serial coarse sweep from u₀ (server-side, cheap on the coarse grid).
         var states = new double[plan.Slabs + 1][];
         states[0] = kernel.BuildInitialField();
         for (var slab = 0; slab < plan.Slabs; slab++)

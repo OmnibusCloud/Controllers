@@ -9,9 +9,9 @@ using OutWit.Engine.Sdk;
 namespace OutWit.Controller.Simulation.Schwarz.Tests.Activities;
 
 /// <summary>
-/// Deep-dive §10 fault injection: a node dying mid-wave must not fail the job —
+/// Fault injection: a node dying mid-wave must not fail the job —
 /// GridReassignment re-packs its tasks onto the survivors, and because
-/// SolveSubdomain is a pure function over immutable blobs (DM-8) the final
+/// SolveSubdomain is a pure function over immutable blobs, the final
 /// field is bitwise-identical to the healthy run.
 /// </summary>
 [TestFixture]

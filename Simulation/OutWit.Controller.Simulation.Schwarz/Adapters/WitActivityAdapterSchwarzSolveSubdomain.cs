@@ -28,7 +28,7 @@ internal sealed class WitActivityAdapterSchwarzSolveSubdomain : WitActivityAdapt
     #region Fields
 
     /// <summary>
-    /// Per-process factorization cache (DM-7): adapters are singletons, so this
+    /// Per-process factorization cache: adapters are singletons, so this
     /// persists across tasks and rounds; keyed by the immutable Subdomain blob id
     /// (the BlenderRunner memo discipline). LRU-bounded (factorizations are large)
     /// and poison-evicting (a transient build fault must not stick to the key).

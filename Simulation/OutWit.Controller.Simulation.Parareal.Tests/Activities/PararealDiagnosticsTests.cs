@@ -10,7 +10,7 @@ using OutWit.Engine.Sdk;
 namespace OutWit.Controller.Simulation.Parareal.Tests.Activities;
 
 [TestFixture]
-[Explicit("PP-3 diagnostics")]
+[Explicit("Distributed-run diagnostics")]
 public class PararealDiagnosticsTests
 {
     private SimulationTestBlobService m_blobService = null!;

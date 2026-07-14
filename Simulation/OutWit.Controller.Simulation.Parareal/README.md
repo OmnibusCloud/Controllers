@@ -21,7 +21,7 @@ Blob:timeline = PararealSolve(model, opts);
 `PararealSolve.wit` (bundled, ships via
 `OutWit.Controller.Simulation.Parareal.Scripts`): slice → iterations of
 `Grid.ForEach` slab propagations with server-side correction and a relative
-correction-norm stop → final snapshot wave (PR-11: outputs are recomputed once
+correction-norm stop → final snapshot wave (outputs are recomputed once
 from converged states) → Timeline blob (OWSM kind=6) the bridge writes as a
 multi-step result.
 

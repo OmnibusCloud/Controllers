@@ -13,7 +13,7 @@ using OutWit.Engine.Sdk;
 namespace OutWit.Controller.Simulation.Schwarz.Tests.Activities;
 
 /// <summary>
-/// SW-4 distributed gates: the bundled SchwarzSolve.wit script running through
+/// Distributed gates: the bundled SchwarzSolve.wit script running through
 /// the engine (Loop{Grid.ForEach}+Break, blob transport, mock nodes) must
 /// reproduce the in-memory algorithm reference exactly, and both must match the
 /// single-machine reference solver.
@@ -302,7 +302,7 @@ public class SchwarzSolveSkeletonTests
         // The cast proves type identity across the boundary: the plan produced by
         // the parareal.module's adapter must be the SAME Simulation.Model type the
         // test assembly compiled against, while schwarz.module (same shared DLL)
-        // is loaded alongside — the duplicate-Model-assembly question of SW-0.
+        // is loaded alongside — the duplicate-Model-assembly question.
         var plan = job.Variables["plan"].Value as PararealPlanData;
         Assert.That(plan, Is.Not.Null);
         Assert.That(plan!.Slabs, Is.EqualTo(5));

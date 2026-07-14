@@ -8,8 +8,8 @@ internal static class PararealTaskFactory
 
     public static List<PararealTaskData?> BuildTasks(PararealPlanData plan, PararealStateData state, bool emitSnapshots)
     {
-        // PR-7 frontier: after k iterations slabs 0..k−1 are exact and leave the
-        // wave. The snapshot wave (PR-11) recomputes every slab from converged
+        // Frontier: after k iterations slabs 0..k−1 are exact and leave the
+        // wave. The snapshot wave recomputes every slab from converged
         // states, so it starts at 0.
         var frontier = emitSnapshots ? 0 : Math.Min(state.Round, plan.Slabs - 1);
 

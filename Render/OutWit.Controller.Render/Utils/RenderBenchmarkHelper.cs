@@ -37,8 +37,7 @@ internal static class RenderBenchmarkHelper
     private const int BENCHMARK_RESOLUTION = 128;
     private const int BENCHMARK_SAMPLES = 8;
 
-    // Node render-benchmark calibration (see @Docs/Active/plan-render-benchmark-redesign.md
-    // and WitCloud/@Docs/plan-2026-06-04-render-and-client-issues.md §B).
+    // Node render-benchmark calibration.
     //
     // v1 (256px @ 128 spp, 3×3 grid) was calibrated only on RTX 3080 Ti + Ryzen 9 5950X vs an
     // Ubuntu RTX 1080 Ti — there it ordered discrete GPUs correctly (3080 Ti > 1080 Ti) and beat

@@ -30,7 +30,7 @@ public class SchwarzBenchmarkTests
         var second = SchwarzBenchmark.Measure(gridSize: 9, solveCount: 3);
 
         Assert.That(second.Custom!["checksum"], Is.EqualTo(first.Custom!["checksum"]),
-            "the benchmark computation must be bitwise-deterministic (B-4)");
+            "the benchmark computation must be bitwise-deterministic");
     }
 
     [Test]

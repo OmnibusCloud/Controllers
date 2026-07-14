@@ -12,7 +12,7 @@ using OutWit.Engine.Sdk;
 namespace OutWit.Controller.Simulation.Parareal.Tests.Activities;
 
 /// <summary>
-/// PP-3 distributed gates: the bundled PararealSolve.wit script running through
+/// Distributed gates: the bundled PararealSolve.wit script running through
 /// the engine (Loop{Grid.ForEach}+Break, blob transport, mock nodes) must
 /// reproduce the in-memory algorithm reference exactly.
 /// </summary>
@@ -186,7 +186,7 @@ public class PararealSolveDistributedTests
     [Test]
     public async Task InteriorSnapshotsTimelineTest()
     {
-        // PR-11 with SnapshotsPerSlab > 1: every other test uses 1, so the
+        // SnapshotsPerSlab > 1: every other test uses 1, so the
         // interior-snapshot schedule would otherwise ship untested.
         var model = CreateHeatModel(17);
         var modelBlobId = await m_blobService.UploadBytesAsync(model.ToBlobBytes(), "model_snap.owsm");

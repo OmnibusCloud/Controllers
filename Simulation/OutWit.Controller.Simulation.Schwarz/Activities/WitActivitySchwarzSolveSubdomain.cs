@@ -8,7 +8,7 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.Simulation.Schwarz.Activities;
 
 /// <summary>
-/// Node-side subdomain solve — a pure function of its task (DM-8): retries and
+/// Node-side subdomain solve — a pure function of its task: retries and
 /// reassignment re-run it safely because outputs are new immutable blobs.
 /// Single per client: the real solver saturates cores via ThreadsPerNode.
 /// </summary>

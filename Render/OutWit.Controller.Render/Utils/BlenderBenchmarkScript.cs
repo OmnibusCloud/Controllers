@@ -5,8 +5,7 @@ namespace OutWit.Controller.Render.Utils;
 
 /// <summary>
 /// Builds the Blender Python script for the node render benchmark and parses its
-/// timing markers. The script is the methodology fix described in
-/// <c>@Docs/Active/plan-render-benchmark-redesign.md</c>:
+/// timing markers. Methodology:
 ///
 /// <list type="bullet">
 /// <item>It generates a moderate, compute-bound scene <b>in code</b> (a floor plus a
