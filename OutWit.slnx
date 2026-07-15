@@ -40,6 +40,13 @@
     <Project Path="Simulation/OutWit.Controller.Simulation.Parareal.Scripts/OutWit.Controller.Simulation.Parareal.Scripts.csproj" />
     <Project Path="Simulation/OutWit.Controller.Simulation.Parareal.Tests/OutWit.Controller.Simulation.Parareal.Tests.csproj" />
   </Folder>
+  <Folder Name="/AI/">
+    <Project Path="AI/OutWit.Controller.AI.Verify/OutWit.Controller.AI.Verify.csproj" />
+    <Project Path="AI/OutWit.Controller.AI.Verify.Model/OutWit.Controller.AI.Verify.Model.csproj" />
+    <Project Path="AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj" />
+    <Project Path="AI/OutWit.Controller.AI.Vision/OutWit.Controller.AI.Vision.csproj" />
+    <Project Path="AI/OutWit.Controller.AI.Vision.Tests/OutWit.Controller.AI.Vision.Tests.csproj" />
+  </Folder>
   <Folder Name="/Tools/">
     <Project Path="Tools/OutWit.Controller.Pack/OutWit.Controller.Pack.csproj" />
     <Project Path="Tools/OutWit.Controller.Pack.Tests/OutWit.Controller.Pack.Tests.csproj" />

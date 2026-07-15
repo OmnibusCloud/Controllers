@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.props" />
+
+  <PropertyGroup>
+    <ControllerName>Verify</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Sandboxed, deterministic, resource-metered execution of untrusted programs against specifications (WASM/wasmtime): code-vs-tests verification, code and math corpus generation, formal proof checking — verification by construction on anonymous nodes.</Description>
+    <PackageTags>verify;sandbox;wasm;wasmtime;rlvr;code-execution;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>verify-execute</ControllerFeatures>
+    <ControllerUseCases>RLVR code verification and generated-corpus checking on volunteer pools</ControllerUseCases>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify.Model\OutWit.Controller.AI.Verify.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.AI.Verify.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
+
+</Project>

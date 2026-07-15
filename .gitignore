@@ -101,6 +101,8 @@ Migrations/
 
 # Internal working docs/plans live locally only — this is a public repo.
 @Archive/
+@AI/
+AI/@Design/
 docs/*.internal.md
 docs/render-controller-scene-support-plan.md
 docs/render-dcc-universality.md

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify\OutWit.Controller.AI.Verify.csproj" />
+  </ItemGroup>
+
+  <!-- Build-only reference: Variables must be built (so its PostBuild populates
+       @Controllers/<Cfg>/variables.module/) because the Verify module declares a
+       [WitPluginDependency("Variables")]; its DLL is not pulled into the test
+       compile output. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ExcludedControllerModule Include="render.module" />
+    <ExcludedControllerModule Include="renderdcc.module" />
+  </ItemGroup>
+
+</Project>

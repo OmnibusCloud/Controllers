@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.props" />
+
+  <PropertyGroup>
+    <ControllerName>Vision</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Annotation extraction and COCO dataset assembly for synthetic computer-vision data rendered by the Render controller: object-index masks to bounding boxes and segmentation, dataset sharding and per-class statistics. Pure .NET — never bundles or invokes Blender.</Description>
+    <PackageTags>vision;synthetic-data;coco;annotations;dataset;domain-randomization;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>vision-extract-annotations</ControllerFeatures>
+    <ControllerUseCases>Labeled synthetic image datasets for detector and segmentation training</ControllerUseCases>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.AI.Vision.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
+
+</Project>

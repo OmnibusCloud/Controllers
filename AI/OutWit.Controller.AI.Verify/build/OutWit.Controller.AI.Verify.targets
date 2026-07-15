@@ -1,0 +1,33 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.AI.Verify NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+      Copies the package's content/module/* into the consumer's
+      $(OutputPath)@Controllers\verify.module\ so the controller runtime can
+      find the controller DLL, the Verify.Model DLL, and the manifest.
+      Tier-1: no external data assets, so no ResolveControllerAssetsTask step.
+  -->
+
+  <PropertyGroup>
+    <_OutWitVerifyModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitVerifyModulePackageContent>
+    <_OutWitVerifyModuleOutputDir>$(OutputPath)@Controllers\verify.module\</_OutWitVerifyModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyVerifyModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitVerifyModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitVerifyFiles Include="$(_OutWitVerifyModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitVerifyFiles)"
+        DestinationFiles="@(_OutWitVerifyFiles->'$(_OutWitVerifyModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.AI.Verify: staged module to '$(_OutWitVerifyModuleOutputDir)'." />
+  </Target>
+
+</Project>
