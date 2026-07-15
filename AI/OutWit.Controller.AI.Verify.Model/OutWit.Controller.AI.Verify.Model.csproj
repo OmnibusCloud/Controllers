@@ -3,6 +3,7 @@
   <Import Project="..\..\Build\OutWit.Controller.Model.props" />
 
   <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>Verify</ControllerName>
     <Version>0.1.0</Version>
     <Description>Data types for the OutWit Verify controller: tasks, batches, test suites, resource limits, and results for sandboxed execution.</Description>

@@ -19,6 +19,14 @@
     <ProjectReference Include="..\OutWit.Controller.AI.Verify.Model\OutWit.Controller.AI.Verify.Model.csproj" />
   </ItemGroup>
 
+  <!-- WASM sandbox host. Ships native wasmtime runtimes for the full client matrix.
+       NB: staging the native libs + the language runtime modules into the deployable
+       module/zip is the node-deploy step (a later phase); in-solution tests resolve
+       them from the referenced test bin, like the render controller's native prereqs. -->
+  <ItemGroup>
+    <PackageReference Include="Wasmtime" Version="44.0.0" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="build\OutWit.Controller.AI.Verify.targets" Pack="true" PackagePath="build\" />
   </ItemGroup>

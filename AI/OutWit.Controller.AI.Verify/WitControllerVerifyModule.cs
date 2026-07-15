@@ -1,6 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using OutWit.Common.Plugins.Abstractions;
 using OutWit.Common.Plugins.Abstractions.Attributes;
+using OutWit.Controller.AI.Verify.Activities;
+using OutWit.Controller.AI.Verify.Adapters;
+using OutWit.Controller.AI.Verify.Variables;
+using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Verify;
@@ -11,7 +15,12 @@ public sealed class WitControllerVerifyModule : WitPluginBase, IWitControllerNod
 {
     public override void Initialize(IServiceCollection services)
     {
-        // Skeleton: variable/activity registrations arrive with the first
-        // activity (the sandboxed ExecuteBatch primitive).
+        services.AddVariable<WitVariableVerifyTask>();
+        services.AddVariable<WitVariableVerifyResult>();
+        services.AddVariable<WitVariableVerifyTaskBatch>();
+        services.AddVariable<WitVariableVerifyResultBatch>();
+
+        services.AddActivityAdapter<WitActivityVerifyExecuteBatch, WitActivityAdapterVerifyExecuteBatch>();
+        services.AddActivityAdapter<WitActivityVerifyExecute, WitActivityAdapterVerifyExecute>();
     }
 }
