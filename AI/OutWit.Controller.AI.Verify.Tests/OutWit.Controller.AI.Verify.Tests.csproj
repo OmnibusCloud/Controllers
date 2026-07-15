@@ -20,4 +20,15 @@
     <ExcludedControllerModule Include="renderdcc.module" />
   </ItemGroup>
 
+  <!-- Wasmtime sandbox spike. The sandbox tests are opt-in: they Assert.Ignore
+       unless @Data/runtimes/ holds the pinned CPython-WASI + QuickJS modules
+       (fetch via download-spike-runtimes.ps1; @Data/ is gitignored). -->
+  <ItemGroup>
+    <PackageReference Include="Wasmtime" Version="44.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Sandbox\Golden\*.golden.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
