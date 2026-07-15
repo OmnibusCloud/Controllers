@@ -6,12 +6,17 @@
     <ProjectReference Include="..\OutWit.Controller.AI.Verify\OutWit.Controller.AI.Verify.csproj" />
   </ItemGroup>
 
-  <!-- Build-only reference: Variables must be built (so its PostBuild populates
-       @Controllers/<Cfg>/variables.module/) because the Verify module declares a
-       [WitPluginDependency("Variables")]; its DLL is not pulled into the test
-       compile output. -->
+  <!-- Build-only references: these projects must be built (so their PostBuild
+       populates @Controllers/<Cfg>/<name>.module/) but their DLLs are not pulled
+       into the test compile output. Variables is the Verify module dependency;
+       Grid/Special are the script-level dependencies of VerifyRun.wit
+       (Grid.ForEach and the typed-variable/flow constructs the engine resolves). -->
   <ItemGroup>
     <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Special\OutWit.Controller.Special\OutWit.Controller.Special.csproj"
                       ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 

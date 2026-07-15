@@ -1,0 +1,4 @@
+Job:VerifyRuntimeDiagnostics()
+{
+    VerifyRuntimeDiagnostics:result = Verify.RuntimeDiagnostics();
+}

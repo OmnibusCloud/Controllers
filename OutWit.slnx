@@ -43,6 +43,7 @@
   <Folder Name="/AI/">
     <Project Path="AI/OutWit.Controller.AI.Verify/OutWit.Controller.AI.Verify.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Verify.Model/OutWit.Controller.AI.Verify.Model.csproj" />
+    <Project Path="AI/OutWit.Controller.AI.Verify.Scripts/OutWit.Controller.AI.Verify.Scripts.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Vision/OutWit.Controller.AI.Vision.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Vision.Tests/OutWit.Controller.AI.Vision.Tests.csproj" />

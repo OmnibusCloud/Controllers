@@ -1,0 +1,9 @@
+Job:VerifyRun(Blob:taskset, VerifyOptions:opts)
+{
+    VerifyTaskBatchCollection:batches = Verify.Split(taskset, opts);
+
+    VerifyResultBatchCollection:results = Grid.ForEach(batch in batches)
+        => Verify.ExecuteBatch(batch);
+
+    Blob:report = Verify.Collect(results, opts);
+}
