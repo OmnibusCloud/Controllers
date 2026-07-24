@@ -218,6 +218,51 @@ public class SchwarzSolveSkeletonTests
     }
 
     [Test]
+    public async Task ConvergedDistributedRobinRunMatchesInMemoryTest()
+    {
+        // Robin gate: Robin faces through the REAL pipeline — the model blob
+        // carries the constant-pair BC encoding, the subdomain blobs carry the
+        // per-face film coefficients, and the distributed field must still be
+        // bitwise-identical to the in-memory algorithm.
+        var n = 25;
+        var h = 1.0 / (n - 1);
+        var model = new SimulationModelDefinition
+        {
+            Nx = n,
+            Ny = n,
+            Hx = h,
+            Hy = h,
+            ConductivityConstant = 2
+        };
+        model.Boundaries.Add(new SimulationBoundaryCondition(SimulationFace.XMin, SimulationBcKind.Dirichlet, 1));
+        model.Boundaries.Add(new SimulationBoundaryCondition(SimulationFace.XMax, SimulationBcKind.Robin, 10, 5));
+        model.Boundaries.Add(new SimulationBoundaryCondition(SimulationFace.YMin, SimulationBcKind.Neumann, 0));
+        model.Boundaries.Add(new SimulationBoundaryCondition(SimulationFace.YMax, SimulationBcKind.Neumann, 0));
+
+        var modelBlobId = await m_blobService.UploadBytesAsync(model.ToBlobBytes(), "model-robin.owsm");
+        var options = new SchwarzOptionsData { Parts = 4, Overlap = 3, Eps = 1e-10, MaxRounds = 500 };
+
+        var job = m_engine.Compile(m_schwarzScript);
+        var status = await m_engine.ScheduleAndWaitAsync(job, modelBlobId, options);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
+
+        var report = SchwarzInMemorySolver.Solve(model, options);
+        Assert.That(report.Converged, Is.True);
+        Assert.That(job.Variables["converged"].Value, Is.EqualTo(true));
+
+        var field = await DownloadFieldAsync(job);
+        Assert.That(field.Values, Is.EqualTo(report.Field), "Robin distributed field must match in-memory bitwise");
+
+        // And the solved wall must obey the analytic linear profile u = 1 + 45/7·x.
+        var reference = SimulationReferenceSolver.Solve(model);
+        var difference = FixedOrderNorms.MaxAbsDifference(field.Values, reference);
+        var scale = FixedOrderNorms.MaxAbs(reference);
+        TestContext.Out.WriteLine($"Robin distributed relative parity vs reference: {difference / scale:E3}");
+        Assert.That(difference / scale, Is.LessThanOrEqualTo(1e-9));
+    }
+
+    [Test]
     public async Task ConvergedDistributedMixedBcNonSquareRunTest()
     {
         // Neumann face roles must survive the subdomain-blob round-trip and the
