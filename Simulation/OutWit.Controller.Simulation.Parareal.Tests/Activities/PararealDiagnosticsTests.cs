@@ -20,9 +20,15 @@ public class PararealDiagnosticsTests
     [OneTimeSetUp]
     public void Setup()
     {
-        var solutionRoot = SimulationTestPaths.FindSolutionRoot()!;
+        var solutionRoot = SimulationTestPaths.FindSolutionRoot();
+        if (solutionRoot == null)
+            Assert.Ignore("Solution root not found");
+
         m_script = File.ReadAllText(SimulationTestPaths.GetPararealSolveScriptPath(solutionRoot));
-        var controllersPath = SimulationTestPaths.FindControllersPath()!;
+
+        var controllersPath = SimulationTestPaths.FindControllersPath();
+        if (controllersPath == null)
+            Assert.Ignore("@Controllers not found");
 
         m_blobService = new SimulationTestBlobService(Path.Combine(Path.GetTempPath(), $"parareal_diag_{Guid.NewGuid():N}"));
 

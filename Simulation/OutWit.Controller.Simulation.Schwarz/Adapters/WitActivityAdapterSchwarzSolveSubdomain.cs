@@ -33,7 +33,7 @@ internal sealed class WitActivityAdapterSchwarzSolveSubdomain : WitActivityAdapt
     /// (the BlenderRunner memo discipline). LRU-bounded (factorizations are large)
     /// and poison-evicting (a transient build fault must not stick to the key).
     /// </summary>
-    private static readonly SimulationComputeCache<Guid, SchwarzLocalSystem> s_systems = new(MAX_CACHED_SYSTEMS);
+    private static readonly SimulationComputeCache<Guid, SchwarzLocalSystem> m_systems = new(MAX_CACHED_SYSTEMS);
 
     #endregion
 
@@ -134,7 +134,7 @@ internal sealed class WitActivityAdapterSchwarzSolveSubdomain : WitActivityAdapt
 
     private static SchwarzLocalSystem GetOrCreateSystem(Guid blobId, string path)
     {
-        return s_systems.GetOrCreate(blobId, () =>
+        return m_systems.GetOrCreate(blobId, () =>
         {
             var definition = SchwarzSubdomainDefinition.FromBlobBytes(File.ReadAllBytes(path));
             return new SchwarzLocalSystem(definition);

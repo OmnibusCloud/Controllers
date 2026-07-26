@@ -34,7 +34,7 @@ internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFu
     /// (model blob, δt). LRU-bounded (factorizations are large) and
     /// poison-evicting (a transient build fault must not stick to the key).
     /// </summary>
-    private static readonly SimulationComputeCache<string, FdTransientStepper> s_steppers = new(MAX_CACHED_STEPPERS);
+    private static readonly SimulationComputeCache<string, FdTransientStepper> m_steppers = new(MAX_CACHED_STEPPERS);
 
     #endregion
 
@@ -133,7 +133,7 @@ internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFu
         var key = $"{modelBlobId:N}:{timeStep:R}";
         var modelPath = await BlobService.GetLocalPathAsync(modelBlobId);
 
-        return s_steppers.GetOrCreate(key, () =>
+        return m_steppers.GetOrCreate(key, () =>
         {
             var model = SimulationModelDefinition.FromBlobBytes(File.ReadAllBytes(modelPath));
 
