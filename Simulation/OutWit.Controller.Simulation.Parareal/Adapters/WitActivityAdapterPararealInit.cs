@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Numerics;
-using OutWit.Controller.Simulation.Model.Parareal;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Numerics;
+using OutWit.Math.Simulation.Parareal;
 using OutWit.Controller.Simulation.Parareal.Activities;
 using OutWit.Controller.Simulation.Parareal.Utils;
 using OutWit.Engine.Data.ActivityAdapters;

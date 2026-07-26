@@ -1,12 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Parareal;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Parareal;
 using OutWit.Controller.Simulation.Parareal.Tests.Mock;
 using OutWit.Controller.Simulation.Parareal.Tests.Utils;
 using OutWit.Engine.Interfaces;
 using OutWit.Engine.Sdk;
 
 namespace OutWit.Controller.Simulation.Parareal.Tests.Activities;
+
+using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
 
 /// <summary>
 /// Deep-dive §10 fault injection: a vanished contributor mid-wave costs one

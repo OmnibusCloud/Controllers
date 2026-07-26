@@ -57,7 +57,7 @@ Job:PararealSolve(Blob:model, PararealOptions:opts)
 
 The input is the same OWSM Model blob (kind = 1) the Schwarz controller takes,
 built with `SimulationModelDefinition` from
-`OutWit.Controller.Simulation.Model` — plus the initial condition
+`OutWit.Math.Simulation` — plus the initial condition
 (`InitialConstant` / `InitialPerNode`) and, optionally, a source time curve.
 
 ## Supported physics envelope
@@ -219,8 +219,8 @@ and the shortest path to understanding the algorithm.
 `PararealInMemorySolver.SolveSerialFine` is the exactness oracle beside it.
 
 ```csharp
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Parareal;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Parareal;
 
 var model = new SimulationModelDefinition
 {
@@ -293,8 +293,9 @@ sides together.
 ## Dependencies
 
 - `Variables` 1.0.0+ — `Blob`, `Int`, `Bool`
-- `OutWit.Controller.Simulation.Model` 0.1.5 — shared types, blob formats and
-  the numerical core (see its README for the OWSM format and the model API)
+- `OutWit.Math.Simulation` 0.2.0 — shared types, blob formats and the
+  numerical core. Built from the private WitMath repository rather than from
+  this one, so building this controller needs credentials for that feed.
 
 The bundled script additionally needs two controllers **on the server that
 runs the job**: `Special` for the iteration loop's control flow (`Loop`, `If`,

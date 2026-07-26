@@ -31,15 +31,21 @@ the table.
 
 Each controller comes with a companion `OutWit.Controller.<Name>.Model`
 NuGet that contains shared data types — referenced transitively by
-consumers, available standalone for tooling (the two Simulation controllers
-share a single `OutWit.Controller.Simulation.Model`).
+consumers, available standalone for tooling.
 
-The two Simulation controllers are off nuget.org by choice, not by
-readiness: both algorithms are complete and live-proven on real distributed
-pools — a distributed run reproduces the single-machine reference bitwise,
-and a node lost mid-wave is absorbed by reassignment with an identical
-result. They are published to the OmnibusCloud organization feed, together
-with the shared `OutWit.Controller.Simulation.Model` (v0.1.5) and their
+The two Simulation controllers are the exception: the numerics they share
+are not in this repository at all. They consume `OutWit.Math.Simulation`,
+a package built from the private WitMath repository, which holds the
+control-volume assembly, the transient stepper, the decomposition and
+parallel-in-time kernels, and the blob formats these travel in. Building
+these two projects therefore needs credentials for that feed; every other
+controller here builds from nuget.org alone.
+
+Those two controllers are off nuget.org by choice, not by readiness: both
+algorithms are complete and live-proven on real distributed pools — a
+distributed run reproduces the single-machine reference bitwise, and a node
+lost mid-wave is absorbed by reassignment with an identical result. They
+are published to the OmnibusCloud organization feed together with their
 bundled job scripts (`OutWit.Controller.Simulation.Schwarz.Scripts` and
 `OutWit.Controller.Simulation.Parareal.Scripts`, v0.1.1). Per-controller
 scope and the honest v1 limits are documented in each controller's own
@@ -209,7 +215,7 @@ canonical minimal Model shape.
 │   └── OutWit.Controller.Render.Dcc.Scripts/ # Bundled RenderDcc*.wit scripts (content-only nupkg)
 │
 ├── Simulation/                      # Distributed numerical simulation (org-feed packages)
-│   ├── OutWit.Controller.Simulation.Model/    # Shared numerics + OWSM blob formats + wire DTOs
+│                                    # numerics come from OutWit.Math.Simulation (private feed)
 │   ├── OutWit.Controller.Simulation.Schwarz/  # Stationary solves (domain decomposition)
 │   ├── OutWit.Controller.Simulation.Schwarz.Scripts/  # Bundled SchwarzSolve.wit (content-only nupkg)
 │   ├── OutWit.Controller.Simulation.Parareal/ # Transient solves (parallel-in-time)

@@ -40,7 +40,6 @@ on:
           - OutWit.Controller.Matrices.Model
           - OutWit.Controller.Render.Model
           - OutWit.Controller.Render.Dcc.Model
-          - OutWit.Controller.Simulation.Model
           # Scripts (content-only nupkgs that ship bundled .wit scripts)
           - OutWit.Controller.Matrices.Scripts
           - OutWit.Controller.Render.Scripts
@@ -146,6 +145,20 @@ jobs:
       # it explicitly using the runner's workspace root (trailing slash required).
       - name: Build
         shell: bash
+        # Credentials for the private WitMath feed, which nuget.config reads
+        # from these two variables. Only the two Simulation controllers restore
+        # from it — everything else here comes from nuget.org and builds fine
+        # when the secret is absent.
+        #
+        # WitMath belongs to a personal account rather than to this
+        # organization, so this repository's built-in GITHUB_TOKEN has no read
+        # access to it: WITMATH_PACKAGES_TOKEN must be a PAT with read:packages
+        # on that account. Scoped to this step on purpose — setting GITHUB_TOKEN
+        # for the whole job would also hand it to the release step, which needs
+        # this repository's own token to create tags.
+        env:
+          GITHUB_USER: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.WITMATH_PACKAGES_TOKEN }}
         run: dotnet build "${{ steps.paths.outputs.csproj }}" -c Release -p:ContinuousIntegrationBuild=true -p:SolutionDir="${GITHUB_WORKSPACE}/"
 
       - name: Pack

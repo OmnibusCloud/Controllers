@@ -1,7 +1,7 @@
 using MemoryPack;
 using OutWit.Common.Abstract;
 using OutWit.Common.Values;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 using OutWit.Engine.Data.Attributes;
 using OutWit.Engine.Data.Variables;
 using OutWit.Engine.Interfaces;

@@ -24,11 +24,11 @@
 
   <ItemGroup>
     <!-- The shared numerical core lives in the private WitMath repository and
-         is consumed as a package from the OmnibusCloud feed. Building this
-         controller therefore needs GITHUB_USER / GITHUB_TOKEN with
-         read:packages; the rest of this repository builds from nuget.org
+         is consumed as a package from that account's feed (see nuget.config).
+         Building this controller therefore needs GITHUB_USER / GITHUB_TOKEN
+         with read:packages; the rest of this repository builds from nuget.org
          alone. -->
-    <PackageReference Include="OutWit.Controller.Simulation.Model" Version="0.1.*" />
+    <PackageReference Include="OutWit.Math.Simulation" Version="0.2.*" />
   </ItemGroup>
 
   <ItemGroup>

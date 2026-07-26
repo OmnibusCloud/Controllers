@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 using OutWit.Controller.Simulation.Parareal.Activities;
 using OutWit.Controller.Simulation.Parareal.Utils;
 using OutWit.Engine.Data.ActivityAdapters;

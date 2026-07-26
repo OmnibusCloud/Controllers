@@ -1,15 +1,17 @@
 using Microsoft.Extensions.DependencyInjection;
 using OutWit.Common.MemoryPack;
 using OutWit.Common.NUnit;
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Numerics;
-using OutWit.Controller.Simulation.Model.Parareal;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Numerics;
+using OutWit.Math.Simulation.Parareal;
 using OutWit.Controller.Simulation.Parareal.Tests.Mock;
 using OutWit.Controller.Simulation.Parareal.Tests.Utils;
 using OutWit.Engine.Interfaces;
 using OutWit.Engine.Sdk;
 
 namespace OutWit.Controller.Simulation.Parareal.Tests.Activities;
+
+using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
 
 /// <summary>
 /// Distributed gates: the bundled PararealSolve.wit script running through

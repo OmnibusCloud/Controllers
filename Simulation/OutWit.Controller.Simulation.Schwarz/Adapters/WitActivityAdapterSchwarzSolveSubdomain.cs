@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Schwarz;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Schwarz;
 using OutWit.Controller.Simulation.Schwarz.Activities;
 using OutWit.Controller.Simulation.Schwarz.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
@@ -10,6 +10,8 @@ using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Schwarz.Adapters;
+
+using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
 
 internal sealed class WitActivityAdapterSchwarzSolveSubdomain : WitActivityAdapterFunction<WitActivitySchwarzSolveSubdomain>
 {

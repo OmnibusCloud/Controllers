@@ -1,6 +1,6 @@
 using System.Linq;
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 using OutWit.Controller.Simulation.Schwarz.Activities;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;

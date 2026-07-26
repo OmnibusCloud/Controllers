@@ -56,7 +56,7 @@ Job:SchwarzSolve(Blob:model, SchwarzOptions:opts)
 ```
 
 The input is an OWSM Model blob (kind = 1) built with
-`SimulationModelDefinition` from `OutWit.Controller.Simulation.Model`.
+`SimulationModelDefinition` from `OutWit.Math.Simulation`.
 
 ## Supported physics envelope
 
@@ -199,9 +199,9 @@ blob transport — the reference the distributed runs are compared against bitwi
 and the shortest path to understanding the algorithm.
 
 ```csharp
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Numerics;
-using OutWit.Controller.Simulation.Model.Schwarz;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Numerics;
+using OutWit.Math.Simulation.Schwarz;
 
 var model = new SimulationModelDefinition
 {
@@ -262,8 +262,9 @@ sides together.
 ## Dependencies
 
 - `Variables` 1.0.0+ — `Blob`, `Int`, `Bool`
-- `OutWit.Controller.Simulation.Model` 0.1.5 — shared types, blob formats and
-  the numerical core (see its README for the OWSM format and the model API)
+- `OutWit.Math.Simulation` 0.2.0 — shared types, blob formats and the
+  numerical core. Built from the private WitMath repository rather than from
+  this one, so building this controller needs credentials for that feed.
 
 The bundled script additionally needs two controllers **on the server that
 runs the job**: `Special` for the round loop's control flow (`Loop`, `If`,

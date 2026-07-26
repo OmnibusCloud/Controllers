@@ -2,15 +2,17 @@ using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
 using OutWit.Common.MemoryPack;
 using OutWit.Common.NUnit;
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Numerics;
-using OutWit.Controller.Simulation.Model.Schwarz;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Numerics;
+using OutWit.Math.Simulation.Schwarz;
 using OutWit.Controller.Simulation.Schwarz.Tests.Mock;
 using OutWit.Controller.Simulation.Schwarz.Tests.Utils;
 using OutWit.Engine.Interfaces;
 using OutWit.Engine.Sdk;
 
 namespace OutWit.Controller.Simulation.Schwarz.Tests.Activities;
+
+using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
 
 /// <summary>
 /// Distributed gates: the bundled SchwarzSolve.wit script running through

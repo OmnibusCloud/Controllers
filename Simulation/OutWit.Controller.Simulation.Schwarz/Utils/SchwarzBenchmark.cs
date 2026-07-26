@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Numerics;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Numerics;
 using OutWit.Engine.Data.Benchmark;
 
 namespace OutWit.Controller.Simulation.Schwarz.Utils;

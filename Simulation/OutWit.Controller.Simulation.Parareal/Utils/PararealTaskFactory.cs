@@ -1,6 +1,8 @@
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 
 namespace OutWit.Controller.Simulation.Parareal.Utils;
+
+using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
 
 internal static class PararealTaskFactory
 {

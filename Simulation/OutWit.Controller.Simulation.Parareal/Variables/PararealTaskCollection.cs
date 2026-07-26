@@ -3,7 +3,7 @@ using System.Linq;
 using MemoryPack;
 using OutWit.Common.Abstract;
 using OutWit.Common.Collections;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 using OutWit.Engine.Data.Attributes;
 using OutWit.Engine.Data.Collections;
 using OutWit.Engine.Interfaces;

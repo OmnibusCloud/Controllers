@@ -1,5 +1,5 @@
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Parareal;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Parareal;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Parareal.Utils;

@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Linq;
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 using OutWit.Controller.Simulation.Schwarz.Activities;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -9,6 +9,8 @@ using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Schwarz.Adapters;
+
+using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
 
 internal sealed class WitActivityAdapterSchwarzAdvance : WitActivityAdapterFunction<WitActivitySchwarzAdvance>
 {
