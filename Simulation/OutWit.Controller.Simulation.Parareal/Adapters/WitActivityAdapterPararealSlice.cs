@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.Simulation.Model;
+using OutWit.Controller.Simulation.Model.Parareal;
 using OutWit.Controller.Simulation.Parareal.Activities;
 using OutWit.Controller.Simulation.Parareal.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
@@ -47,6 +48,10 @@ internal sealed class WitActivityAdapterPararealSlice : WitActivityAdapterFuncti
         // coarsening divisibility, and warms the cache Init/Correct reuse.
         var kernel = await PararealKernelCache.GetOrCreateAsync(
             BlobService, modelBlobId, slabs, options.Coarsening, options.TotalTime, options.FineStepsPerSlab);
+
+        // Closes the silent never-converge hole and bounds the timeline blob
+        // BEFORE any propagation is scheduled.
+        PararealOptionsValidator.Validate(options, slabs, kernel.FineProblem.Geometry.NodeCount);
 
         // The last boundary is pinned to TotalTime exactly (TotalTime·N/N may
         // round differently) — task δt and the kernel cache key derive from it.

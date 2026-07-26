@@ -33,6 +33,9 @@ internal sealed class WitActivityAdapterPararealCollect : WitActivityAdapterFunc
         if (!pool.TryGetObject(activity.Wave, out var waveObject) || waveObject is not IEnumerable waveEnumerable)
             throw new InvalidOperationException("Failed to get parameter 'Wave'.");
 
+        if (!pool.TryGetValue(activity.State, out PararealStateData? state) || state == null)
+            throw new InvalidOperationException("Failed to get parameter 'State'.");
+
         var wave = waveEnumerable.OfType<PararealResultData>().OrderBy(result => result.SlabIndex).ToList();
         if (wave.Count != plan.Slabs)
             throw new InvalidOperationException($"Parareal.Collect expected {plan.Slabs} wave results, got {wave.Count}.");
@@ -44,7 +47,17 @@ internal sealed class WitActivityAdapterPararealCollect : WitActivityAdapterFunc
                 throw new InvalidOperationException($"Parareal.Collect: wave is not a permutation of slabs (expected index {i}, got {wave[i].SlabIndex}).");
         }
 
-        var timeline = new PararealTimeline();
+        var timeline = new PararealTimeline
+        {
+            Convergence = new SimulationConvergenceInfo
+            {
+                Converged = state.Round > 0 && state.CorrectionNorm <= state.Eps * state.Scale,
+                Iterations = state.Round,
+                Eps = state.Eps,
+                Scale = state.Scale
+            }
+        };
+        timeline.Convergence.History.AddRange(state.History);
 
         foreach (var result in wave)
         {
@@ -75,8 +88,8 @@ internal sealed class WitActivityAdapterPararealCollect : WitActivityAdapterFunc
     {
         try
         {
-            if (parameters.Length != 2)
-                throw new ArgumentException($"Expected 2 parameter(s), got {parameters.Length}.");
+            if (parameters.Length != 3)
+                throw new ArgumentException($"Expected 3 parameter(s), got {parameters.Length}.");
 
             if (parameters[0] is not IWitReference plan)
                 throw new ArgumentException("Parameter 'Plan' must be a variable reference.");
@@ -84,10 +97,14 @@ internal sealed class WitActivityAdapterPararealCollect : WitActivityAdapterFunc
             if (parameters[1] is not IWitReference wave)
                 throw new ArgumentException("Parameter 'Wave' must be a variable reference.");
 
+            if (parameters[2] is not IWitReference state)
+                throw new ArgumentException("Parameter 'State' must be a variable reference.");
+
             return new WitActivityPararealCollect
             {
                 Plan = plan,
-                Wave = wave
+                Wave = wave,
+                State = state
             };
         }
         catch (Exception e)

@@ -19,6 +19,6 @@ Job:SchwarzSolve(Blob:model, SchwarzOptions:opts)
     ~ final wave: back-substitution from cached factorizations, owned fields uploaded ~
     tasks = Schwarz.MakeFinalTasks(plan, state);
     wave = Grid.ForEach(task in tasks) => Schwarz.SolveSubdomain(task);
-    Blob:field = Schwarz.Assemble(plan, wave);
+    Blob:field = Schwarz.Assemble(plan, wave, state);
     Return(field);
 }

@@ -15,7 +15,7 @@ public sealed partial class WitActivityPararealCollect : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Plan}, {Wave}";
+        return $"{Plan}, {Wave}, {State}";
     }
 
     #endregion
@@ -29,7 +29,8 @@ public sealed partial class WitActivityPararealCollect : WitActivityFunction
 
         return base.Is(activity, tolerance)
                && Plan.Check(activity.Plan)
-               && Wave.Check(activity.Wave);
+               && Wave.Check(activity.Wave)
+               && State.Check(activity.State);
     }
 
     protected override WitActivityPararealCollect InnerClone()
@@ -37,7 +38,8 @@ public sealed partial class WitActivityPararealCollect : WitActivityFunction
         return new WitActivityPararealCollect
         {
             Plan = Plan?.Clone() as IWitReference,
-            Wave = Wave?.Clone() as IWitReference
+            Wave = Wave?.Clone() as IWitReference,
+            State = State?.Clone() as IWitReference
         };
     }
 
@@ -50,6 +52,9 @@ public sealed partial class WitActivityPararealCollect : WitActivityFunction
 
     [MemoryPackAllowSerialize]
     public IWitReference? Wave { get; init; }
+
+    [MemoryPackAllowSerialize]
+    public IWitReference? State { get; init; }
 
     #endregion
 }

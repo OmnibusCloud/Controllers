@@ -104,7 +104,8 @@ internal sealed class WitActivityAdapterPararealCorrect : WitActivityAdapterFunc
             CorrectionNorm = correction,
             Scale = state.Scale,
             Eps = state.Eps,
-            StateBlobIds = newBlobIds
+            StateBlobIds = newBlobIds,
+            History = [.. state.History, correction]
         };
 
         if (!pool.TrySetValue(activity.ReturnReference, next2))

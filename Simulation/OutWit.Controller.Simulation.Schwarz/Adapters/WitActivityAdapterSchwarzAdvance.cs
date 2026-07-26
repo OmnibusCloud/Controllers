@@ -64,7 +64,8 @@ internal sealed class WitActivityAdapterSchwarzAdvance : WitActivityAdapterFunct
             {
                 SubdomainIndex = neighbors.SubdomainIndex,
                 BlobIds = [.. neighbors.Producers.Select(producer => wave[producer].BoundaryOutBlobId)]
-            })]
+            })],
+            History = [.. state.History, residual]
         };
 
         if (!pool.TrySetValue(activity.ReturnReference, next))
