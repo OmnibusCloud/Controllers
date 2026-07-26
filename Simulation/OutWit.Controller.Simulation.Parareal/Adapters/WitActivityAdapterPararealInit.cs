@@ -42,7 +42,7 @@ internal sealed class WitActivityAdapterPararealInit : WitActivityAdapterFunctio
         var states = new double[plan.Slabs + 1][];
         states[0] = kernel.BuildInitialField();
         for (var slab = 0; slab < plan.Slabs; slab++)
-            states[slab + 1] = kernel.CoarsePropagate(states[slab]);
+            states[slab + 1] = kernel.CoarsePropagate(states[slab], slab);
 
         var scale = states.Max(state => FixedOrderNorms.MaxAbs(state));
         if (scale == 0)

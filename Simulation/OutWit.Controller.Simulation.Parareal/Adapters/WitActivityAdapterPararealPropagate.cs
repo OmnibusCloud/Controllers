@@ -66,7 +66,7 @@ internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFu
         if (task.EmitSnapshots)
         {
             var (final, fractions, snapshots) = PararealFinePropagation.PropagateWithSnapshots(
-                stepper, stateIn.Values, task.Steps, task.SnapshotsPerSlab);
+                stepper, stateIn.Values, task.Steps, task.SnapshotsPerSlab, task.SlabStart);
 
             var pack = new PararealSnapshotPack
             {
@@ -84,7 +84,7 @@ internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFu
         }
         else
         {
-            stateOut = PararealFinePropagation.Propagate(stepper, stateIn.Values, task.Steps);
+            stateOut = PararealFinePropagation.Propagate(stepper, stateIn.Values, task.Steps, task.SlabStart);
         }
 
         var outSnapshot = new PararealStateSnapshot
@@ -136,8 +136,12 @@ internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFu
         return s_steppers.GetOrCreate(key, () =>
         {
             var model = SimulationModelDefinition.FromBlobBytes(File.ReadAllBytes(modelPath));
-            var problem = FdOperatorAssembler.BuildProblem(model);
-            return new FdTransientStepper(problem, timeStep, theta: 0.5);
+
+            // Transient: no solvability requirement (the time derivative
+            // regularizes the operator) — mirrors the kernel's own build.
+            var problem = FdOperatorAssembler.BuildProblem(model, requireSolvability: false);
+            var sourceFactor = model.SourceCurve.Count > 0 ? model.SourceFactorAt : (Func<double, double>?)null;
+            return new FdTransientStepper(problem, timeStep, theta: 0.5, sourceFactor);
         });
     }
 

@@ -74,8 +74,8 @@ internal sealed class WitActivityAdapterPararealCorrect : WitActivityAdapterFunc
 
         for (var slab = frontier; slab < plan.Slabs; slab++)
         {
-            var coarseNew = kernel.CoarsePropagate(newFields[slab]);
-            var coarseOld = kernel.CoarsePropagate(oldFields[slab]);
+            var coarseNew = kernel.CoarsePropagate(newFields[slab], slab);
+            var coarseOld = kernel.CoarsePropagate(oldFields[slab], slab);
 
             var next = new double[coarseNew.Length];
             for (var i = 0; i < next.Length; i++)
