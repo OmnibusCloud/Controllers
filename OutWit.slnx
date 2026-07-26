@@ -31,8 +31,6 @@
     <Project Path="Render/OutWit.Controller.Render.Tests/OutWit.Controller.Render.Tests.csproj" />
   </Folder>
   <Folder Name="/Simulation/">
-    <Project Path="Simulation/OutWit.Controller.Simulation.Model/OutWit.Controller.Simulation.Model.csproj" />
-    <Project Path="Simulation/OutWit.Controller.Simulation.Model.Tests/OutWit.Controller.Simulation.Model.Tests.csproj" />
     <Project Path="Simulation/OutWit.Controller.Simulation.Schwarz/OutWit.Controller.Simulation.Schwarz.csproj" />
     <Project Path="Simulation/OutWit.Controller.Simulation.Schwarz.Scripts/OutWit.Controller.Simulation.Schwarz.Scripts.csproj" />
     <Project Path="Simulation/OutWit.Controller.Simulation.Schwarz.Tests/OutWit.Controller.Simulation.Schwarz.Tests.csproj" />
