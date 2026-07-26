@@ -1,19 +1,22 @@
 # OutWit Controllers
 
 Open-source SDK and reference implementations of OmnibusCloud controllers.
-Distributed via [nuget.org](https://www.nuget.org/profiles/dmitrat) as a set
-of consumable NuGet packages. Each controller demonstrates a distinct
+Shipped as consumable NuGet packages — most via
+[nuget.org](https://www.nuget.org/profiles/dmitrat), the Simulation pair via
+the OmnibusCloud organization feed. Each controller demonstrates a distinct
 slice of OmnibusCloud's distributed-compute capabilities — basic types,
 distributed iteration, control flow, linear algebra, distributed
-rendering — and serves as a working template for authors writing their
-own controllers.
+rendering, distributed numerical simulation — and serves as a working
+template for authors writing their own controllers.
 
 ---
 
 ## Published controllers
 
-All packages are on nuget.org under the `OutWit.Controller.*` namespace.
-Each row is a stable, supported release.
+All packages live under the `OutWit.Controller.*` namespace. Rows carrying a
+NuGet badge are stable, supported releases on nuget.org; the two Simulation
+rows ship on the OmnibusCloud organization feed instead — see the note under
+the table.
 
 | Package                                                                                            | Latest                                                                                                                                                              | Tier | Purpose                                                                                                                       |
 | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -23,13 +26,24 @@ Each row is a stable, supported release.
 | [`OutWit.Controller.Matrices`](https://www.nuget.org/packages/OutWit.Controller.Matrices)          | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Matrices.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Matrices)                         | 2    | Dense + sparse matrix / vector operations with Gustavson multiplication. Ships benchmark `.smat` data via GitHub Release.     |
 | [`OutWit.Controller.Render.Dcc`](https://www.nuget.org/packages/OutWit.Controller.Render.Dcc)      | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Render.Dcc.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Render.Dcc)                     | 1    | Host-only neutral DCC scene validation and `.blend` build bootstrap, upstream of Render.                                      |
 | [`OutWit.Controller.Render`](https://www.nuget.org/packages/OutWit.Controller.Render)              | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Render.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Render)                             | 2    | Distributed rendering via Blender CLI + FFmpeg, delivering external scene dependencies (libraries, caches, volumes, …) to render nodes. Ships per-platform Blender / FFmpeg / benchmark scenes via GitHub Release.    |
-| `OutWit.Controller.Simulation.Schwarz` ([`Simulation/`](Simulation/))                               | v0.1 — in development, not yet published                                                                                                                              | 1    | Distributed stationary solves (steady heat / Poisson-class) via overlapping Schwarz domain decomposition. LAN-profile.        |
-| `OutWit.Controller.Simulation.Parareal` ([`Simulation/`](Simulation/))                              | v0.1 — in development, not yet published                                                                                                                              | 1    | Distributed transient solves (heat / diffusion) via parareal parallel-in-time integration. Crowd/WAN-profile.                 |
+| `OutWit.Controller.Simulation.Schwarz` ([`Simulation/`](Simulation/))                               | v0.1.6 — OmnibusCloud org feed                                                                                                                                       | 1    | Distributed stationary solves — steady heat / Poisson-class fields on structured Cartesian or axisymmetric (r-z) grids — via overlapping Schwarz domain decomposition. LAN-profile. |
+| `OutWit.Controller.Simulation.Parareal` ([`Simulation/`](Simulation/))                              | v0.1.6 — OmnibusCloud org feed                                                                                                                                       | 1    | Distributed transient solves — heat / diffusion over a time horizon — via parareal parallel-in-time integration. Crowd/WAN-profile. |
 
 Each controller comes with a companion `OutWit.Controller.<Name>.Model`
 NuGet that contains shared data types — referenced transitively by
 consumers, available standalone for tooling (the two Simulation controllers
 share a single `OutWit.Controller.Simulation.Model`).
+
+The two Simulation controllers are off nuget.org by choice, not by
+readiness: both algorithms are complete and live-proven on real distributed
+pools — a distributed run reproduces the single-machine reference bitwise,
+and a node lost mid-wave is absorbed by reassignment with an identical
+result. They are published to the OmnibusCloud organization feed, together
+with the shared `OutWit.Controller.Simulation.Model` (v0.1.5) and their
+bundled job scripts (`OutWit.Controller.Simulation.Schwarz.Scripts` and
+`OutWit.Controller.Simulation.Parareal.Scripts`, v0.1.1). Per-controller
+scope and the honest v1 limits are documented in each controller's own
+README under [`Simulation/`](Simulation/).
 
 ---
 
@@ -194,12 +208,12 @@ canonical minimal Model shape.
 │   ├── OutWit.Controller.Render.Dcc.Model/
 │   └── OutWit.Controller.Render.Dcc.Scripts/ # Bundled RenderDcc*.wit scripts (content-only nupkg)
 │
-├── Simulation/                      # Distributed numerical simulation (in development)
+├── Simulation/                      # Distributed numerical simulation (org-feed packages)
 │   ├── OutWit.Controller.Simulation.Model/    # Shared numerics + OWSM blob formats + wire DTOs
 │   ├── OutWit.Controller.Simulation.Schwarz/  # Stationary solves (domain decomposition)
-│   ├── OutWit.Controller.Simulation.Schwarz.Scripts/
+│   ├── OutWit.Controller.Simulation.Schwarz.Scripts/  # Bundled SchwarzSolve.wit (content-only nupkg)
 │   ├── OutWit.Controller.Simulation.Parareal/ # Transient solves (parallel-in-time)
-│   └── OutWit.Controller.Simulation.Parareal.Scripts/
+│   └── OutWit.Controller.Simulation.Parareal.Scripts/ # Bundled PararealSolve.wit (content-only nupkg)
 │
 ├── Tools/
 │   ├── OutWit.Controller.Pack/              # Path-B author tool: pack module/ -> contributor zip
@@ -292,10 +306,11 @@ See [Tools/OutWit.Controller.Pack/README.md](Tools/OutWit.Controller.Pack/README
 | [`verify-render-consumer.yml`](.github/workflows/verify-render-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference the published Render package, assert every external asset materialised. |
 | [`verify-scripts-consumer.yml`](.github/workflows/verify-scripts-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference a published Scripts package, assert the staged `@Scripts/*.wit` layout matches what WitCloud's ScriptSeeder expects. |
 
-A separate external smoke test lives outside this repo at
-`@Verify/ControllerConsumerCheck/` and consumes every published
-controller through nuget.org in a single `dotnet build`, then runs
-`verify.ps1` to assert all 28 expected paths land correctly.
+A separate external smoke test lives outside this repository: it
+consumes the nuget.org-published controllers in a single `dotnet build`
+and asserts that every expected path lands in the `@Controllers/`
+layout. The organization-feed Simulation packages are covered by their
+own test suites instead.
 
 ---
 
