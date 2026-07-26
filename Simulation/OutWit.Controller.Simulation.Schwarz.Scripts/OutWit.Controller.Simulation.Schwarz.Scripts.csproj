@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Schwarz</ControllerName>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Description>Bundled .wit scripts for the OutWit.Controller.Simulation.Schwarz controller — the SchwarzSolve distributed stationary-solve job.</Description>
     <PackageTags>simulation;schwarz;scripts;domain-decomposition;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>

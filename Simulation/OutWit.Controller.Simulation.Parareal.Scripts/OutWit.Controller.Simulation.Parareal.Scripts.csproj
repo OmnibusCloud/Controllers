@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Parareal</ControllerName>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Description>Bundled .wit scripts for the OutWit.Controller.Simulation.Parareal controller — the PararealSolve distributed transient-solve job.</Description>
     <PackageTags>simulation;parareal;scripts;parallel-in-time;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
