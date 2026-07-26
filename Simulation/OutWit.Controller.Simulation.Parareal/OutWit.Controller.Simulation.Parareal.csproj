@@ -31,6 +31,20 @@
     <PackageReference Include="OutWit.Math.Simulation" Version="0.2.*" />
   </ItemGroup>
 
+  <!-- The core used to be a sibling project that staged its own DLL into this
+       controller's module. As a package it stages nothing, so the module has
+       to carry it explicitly — together with CSparse, the sparse factorization
+       it calls into. Without this the module builds and tests fine and then
+       fails to load on a node. -->
+  <PropertyGroup>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ControllerModuleAssembly Include="OutWit.Math.Simulation" />
+    <ControllerModuleAssembly Include="CSparse" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="build\OutWit.Controller.Simulation.Parareal.targets" Pack="true" PackagePath="build\" />
   </ItemGroup>

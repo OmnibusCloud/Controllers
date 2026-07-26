@@ -30,6 +30,30 @@
     <ControllerModuleFile Include="$(ControllerManifestOutputPath)" />
   </ItemGroup>
 
+  <!-- Runtime assemblies that arrive as PACKAGES and must travel inside the
+       module. A node loads a module with only the engine assemblies the host
+       provides, so anything else the controller calls into has to be staged
+       beside it.
+
+       Controllers whose dependencies come from a sibling Model project need
+       nothing here — that project stages its own DLL (see
+       OutWit.Controller.Model.targets). This is for the other case: the two
+       Simulation controllers take their numerical core from a NuGet package,
+       and when that core lived here as a project it staged itself. Nothing
+       does now, and a module missing it fails at load on the node rather than
+       at build time — which is why the Error below exists instead of a
+       best-effort copy. Set ControllerModuleAssembly to the assembly NAME,
+       without extension. -->
+  <Target Name="ControllerStagePackagedDependencies"
+          Condition="'@(ControllerModuleAssembly)' != ''"
+          BeforeTargets="ControllerPostBuild">
+    <Error Condition="!Exists('$(TargetDir)%(ControllerModuleAssembly.Identity).dll')"
+           Text="ControllerModuleAssembly '%(ControllerModuleAssembly.Identity)' is not in $(TargetDir). It must be next to the controller to be staged into the module — check that the package is referenced and that CopyLocalLockFileAssemblies is true for this project." />
+    <ItemGroup>
+      <ControllerModuleFile Include="$(TargetDir)%(ControllerModuleAssembly.Identity).dll" />
+    </ItemGroup>
+  </Target>
+
   <!-- Stages the controller's outputs into $(SolutionDir)@Controllers/<Cfg>/<name>.module/.
        Mirrors the legacy WitEngine layout so existing tooling keeps working. -->
   <Target Name="ControllerPostBuild" AfterTargets="PostBuildEvent">
