@@ -19,11 +19,22 @@ public sealed partial class WitVariableSchwarzResultCollection : WitCollection<S
 {
     #region Constructors
 
+    /// <summary>
+    /// Creates the collection with no items yet — the form used when the script
+    /// declares it ahead of the first wave.
+    /// </summary>
+    /// <param name="name">Script name of the variable.</param>
     public WitVariableSchwarzResultCollection(string name)
         : base(name)
     {
     }
 
+    /// <summary>
+    /// Deserialization constructor: rehydrates name and items together when the
+    /// collection crosses the wire.
+    /// </summary>
+    /// <param name="name">Script name of the variable.</param>
+    /// <param name="value">Deserialized items, in the order they were gathered.</param>
     [MemoryPackConstructor]
     public WitVariableSchwarzResultCollection(string name, IReadOnlyList<SchwarzResultData?> value)
         : base(name, value)
@@ -56,6 +67,12 @@ public sealed partial class WitVariableSchwarzResultCollection : WitCollection<S
 
     #region IWitVariableFactory
 
+    /// <summary>
+    /// Factory hook the engine calls when the script declares a collection of
+    /// this type.
+    /// </summary>
+    /// <param name="name">Script name of the variable.</param>
+    /// <returns>An empty collection awaiting its first wave.</returns>
     public static WitVariableSchwarzResultCollection Create(string name)
     {
         return new WitVariableSchwarzResultCollection(name);

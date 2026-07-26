@@ -49,6 +49,10 @@ public sealed partial class WitActivityPararealPropagate : WitActivityFunction
 
     #region Properties
 
+    /// <summary>
+    /// Pool reference to the slab task — the activity's only input, carried
+    /// whole so the script transformer takes a single argument.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Task { get; init; }
 

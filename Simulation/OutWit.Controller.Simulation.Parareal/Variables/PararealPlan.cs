@@ -8,17 +8,33 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Parareal.Variables;
 
+/// <summary>
+/// Script variable carrying <see cref="PararealPlanData"/> — the slab plan
+/// Parareal.Slice produces once and every later stage reads; immutable for the
+/// rest of the job.
+/// </summary>
 [Variable("PararealPlan")]
 [MemoryPackable]
 public sealed partial class WitVariablePararealPlan : WitVariable<PararealPlanData?>, IWitVariableFactory<WitVariablePararealPlan>
 {
     #region Constructors
 
+    /// <summary>
+    /// Creates the variable without a value — the form a script declaration
+    /// starts from before an activity assigns it.
+    /// </summary>
+    /// <param name="name">Script name of the variable.</param>
     public WitVariablePararealPlan(string name)
         : base(name)
     {
     }
 
+    /// <summary>
+    /// Deserialization constructor (MemoryPack): restores the variable with its
+    /// payload in place.
+    /// </summary>
+    /// <param name="name">Script name of the variable.</param>
+    /// <param name="value">Carried payload, or null when unset.</param>
     [MemoryPackConstructor]
     public WitVariablePararealPlan(string name, PararealPlanData? value)
         : base(name, value)
@@ -47,6 +63,12 @@ public sealed partial class WitVariablePararealPlan : WitVariable<PararealPlanDa
 
     #region IWitVariableFactory
 
+    /// <summary>
+    /// Factory hook the engine calls when the script declares a variable of
+    /// this type.
+    /// </summary>
+    /// <param name="name">Script name of the variable.</param>
+    /// <returns>An empty variable awaiting its first assignment.</returns>
     public static WitVariablePararealPlan Create(string name)
     {
         return new WitVariablePararealPlan(name);

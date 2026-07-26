@@ -7,6 +7,11 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Parareal.Activities;
 
+/// <summary>
+/// Server-side task builder for the deferred snapshot wave: every slab
+/// re-propagates from its converged start state with snapshot emission on —
+/// interior output is paid for only once the answer is settled.
+/// </summary>
 [Activity("Parareal.MakeSnapshotTasks")]
 [MemoryPackable]
 public sealed partial class WitActivityPararealMakeSnapshotTasks : WitActivityFunction
@@ -45,9 +50,17 @@ public sealed partial class WitActivityPararealMakeSnapshotTasks : WitActivityFu
 
     #region Properties
 
+    /// <summary>
+    /// Pool reference to the slab plan; the time grid, step counts and the
+    /// shared model blob id every task carries.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Plan { get; init; }
 
+    /// <summary>
+    /// Pool reference to the converged iteration state whose slab-boundary
+    /// blobs seed the emit wave — all slabs, frontier ignored.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? State { get; init; }
 

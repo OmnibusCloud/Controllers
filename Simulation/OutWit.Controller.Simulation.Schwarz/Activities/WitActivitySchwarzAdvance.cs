@@ -52,12 +52,26 @@ public sealed partial class WitActivitySchwarzAdvance : WitActivityFunction
 
     #region Properties
 
+    /// <summary>
+    /// Reference to the SchwarzPlan; its routing graph decides which
+    /// producers' boundary blobs feed each subdomain in the next round.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Plan { get; init; }
 
+    /// <summary>
+    /// Reference to the SchwarzRound state entering the round; supplies the
+    /// counter, residual anchors and history the successor state is derived
+    /// from (the state itself is never mutated in place).
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? State { get; init; }
 
+    /// <summary>
+    /// Reference to the SchwarzResultCollection gathered by the Grid.ForEach
+    /// wave — completion-ordered on arrival; re-keyed by SubdomainIndex and
+    /// validated as an exact permutation of the current round before reduction.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Wave { get; init; }
 

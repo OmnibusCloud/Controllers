@@ -10,17 +10,33 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Parareal.Variables;
 
+/// <summary>
+/// Collection of parareal wave results — arrives in completion order, not slab
+/// order; Parareal.Correct and Parareal.Collect re-key it by SlabIndex and
+/// reject a wave that is not a permutation of the slabs they expected.
+/// </summary>
 [Variable("PararealResultCollection")]
 [MemoryPackable]
 public sealed partial class WitVariablePararealResultCollection : WitCollection<PararealResultData?>, IWitVariableFactory<WitVariablePararealResultCollection>
 {
     #region Constructors
 
+    /// <summary>
+    /// Creates the collection with no items yet — the form a script declaration
+    /// starts from before the first wave lands.
+    /// </summary>
+    /// <param name="name">Script name of the variable.</param>
     public WitVariablePararealResultCollection(string name)
         : base(name)
     {
     }
 
+    /// <summary>
+    /// Deserialization constructor (MemoryPack): restores name and items
+    /// together.
+    /// </summary>
+    /// <param name="name">Script name of the variable.</param>
+    /// <param name="value">Deserialized items, in the order they were gathered.</param>
     [MemoryPackConstructor]
     public WitVariablePararealResultCollection(string name, IReadOnlyList<PararealResultData?> value)
         : base(name, value)
@@ -53,6 +69,12 @@ public sealed partial class WitVariablePararealResultCollection : WitCollection<
 
     #region IWitVariableFactory
 
+    /// <summary>
+    /// Factory hook the engine calls when the script declares a collection of
+    /// this type.
+    /// </summary>
+    /// <param name="name">Script name of the variable.</param>
+    /// <returns>An empty collection awaiting its first wave.</returns>
     public static WitVariablePararealResultCollection Create(string name)
     {
         return new WitVariablePararealResultCollection(name);

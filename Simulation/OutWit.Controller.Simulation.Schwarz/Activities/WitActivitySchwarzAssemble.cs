@@ -51,12 +51,26 @@ public sealed partial class WitActivitySchwarzAssemble : WitActivityFunction
 
     #region Properties
 
+    /// <summary>
+    /// Reference to the SchwarzPlan; supplies the part count the wave is
+    /// validated against before any slice is pasted.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Plan { get; init; }
 
+    /// <summary>
+    /// Reference to the final SchwarzResultCollection — the emit wave from
+    /// Schwarz.MakeFinalTasks; every result must carry a field slice, and a
+    /// missing one fails loudly rather than leaving a region zeroed.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Wave { get; init; }
 
+    /// <summary>
+    /// Reference to the final SchwarzRound state; its residual history and
+    /// convergence verdict are stamped into the assembled Field blob so the
+    /// caller can audit the solve without replaying it.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? State { get; init; }
 

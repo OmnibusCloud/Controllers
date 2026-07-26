@@ -7,6 +7,11 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Schwarz.Activities;
 
+/// <summary>
+/// Server-side scalar bridge: extracts MaxRounds from the options into the
+/// plain Int the script's Loop takes as its bound — the .wit grammar has no
+/// property access, so the budget must pass through an activity.
+/// </summary>
 [Activity("Schwarz.RoundBudget")]
 [MemoryPackable]
 public sealed partial class WitActivitySchwarzRoundBudget : WitActivityFunction
@@ -43,6 +48,10 @@ public sealed partial class WitActivitySchwarzRoundBudget : WitActivityFunction
 
     #region Properties
 
+    /// <summary>
+    /// Reference to the job-input SchwarzOptions variable; only MaxRounds is
+    /// read here.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Options { get; init; }
 
