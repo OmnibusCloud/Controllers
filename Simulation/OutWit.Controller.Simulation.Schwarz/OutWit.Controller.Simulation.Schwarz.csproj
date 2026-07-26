@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Schwarz</ControllerName>
-    <Version>0.1.7</Version>
+    <Version>0.1.6</Version>
     <Description>Distributed stationary-problem solver (steady heat, Poisson-class fields) via overlapping Restricted Additive Schwarz domain decomposition: subdomains solved across the pool per round, boundary strips exchanged through the server.</Description>
     <PackageTags>simulation;schwarz;domain-decomposition;fem;fd;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>schwarz-solve</ControllerFeatures>
@@ -12,12 +12,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The bundled SchwarzSolve.wit drives the round loop with Special's
-         control flow (Loop/If/Break/Return) and fans each wave out through
-         Grid.ForEach — both must be present for the script to compile. -->
+    <!-- Variables only, deliberately. The bundled SchwarzSolve.wit also needs
+         Special (Loop/If/Break/Return) and Grid (ForEach) to COMPILE, but both
+         are host-only controllers that are never delivered to compute nodes,
+         while this controller carries host AND node activities in one module.
+         Declaring them here would make every node refuse to load the module —
+         the dependency check runs node-side too. They are a server-side script
+         requirement, not a module dependency; see the README. -->
     <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
-    <ControllerDependency Include="Special" MinimumVersion="1.0.0" />
-    <ControllerDependency Include="Grid" MinimumVersion="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>

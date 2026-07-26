@@ -64,8 +64,13 @@ In a hand-written script the same call reads:
 Blob:field = SchwarzSolve(model, opts);
 ```
 
-Because the wave step goes through `Grid.ForEach`, the consuming installation
-also needs `OutWit.Controller.Grid` loaded alongside the Schwarz controller.
+The script compiles against three controllers besides Schwarz itself:
+`Variables` for its value types, `Special` for the loop's control flow
+(`Loop`, `If`, `Break`, `Return`) and `Grid` for the `Grid.ForEach` fan-out.
+`Special` and `Grid` are host-only, so they must be present **on the server**
+that compiles and runs the job — they are not manifest dependencies of the
+Schwarz module, which also has to load on compute nodes that never receive
+them.
 
 ## Where the files land
 

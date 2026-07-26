@@ -66,8 +66,13 @@ In a hand-written script the same call reads:
 Blob:timeline = PararealSolve(model, opts);
 ```
 
-Because the wave step goes through `Grid.ForEach`, the consuming installation
-also needs `OutWit.Controller.Grid` loaded alongside the Parareal controller.
+The script compiles against three controllers besides Parareal itself:
+`Variables` for its value types, `Special` for the loop's control flow
+(`Loop`, `If`, `Break`, `Return`) and `Grid` for the `Grid.ForEach` fan-out.
+`Special` and `Grid` are host-only, so they must be present **on the server**
+that compiles and runs the job — they are not manifest dependencies of the
+Parareal module, which also has to load on compute nodes that never receive
+them.
 
 ## Where the files land
 

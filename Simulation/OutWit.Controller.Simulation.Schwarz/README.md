@@ -265,5 +265,14 @@ sides together.
 - `OutWit.Controller.Simulation.Model` 0.1.5 — shared types, blob formats and
   the numerical core (see its README for the OWSM format and the model API)
 
-The bundled script drives its waves with `Grid.ForEach`, so the Grid controller
-has to be available on the server that runs the job.
+The bundled script additionally needs two controllers **on the server that
+runs the job**: `Special` for the round loop's control flow (`Loop`, `If`,
+`Break`, `Return`) and `Grid` for the `Grid.ForEach` fan-out.
+
+They are deliberately **not** declared as manifest dependencies. Both are
+host-only controllers that are never delivered to compute nodes, whereas this
+module carries host activities (decompose, advance, assemble) and the node
+activity (subdomain solve) together. Since the dependency check also runs
+node-side, declaring them would make every node refuse to load this module and
+the distributed solve would never start. They are a script requirement of the
+server, not a dependency of the module.
