@@ -23,6 +23,8 @@
   <ItemGroup>
     <ExcludedControllerModule Include="render.module" />
     <ExcludedControllerModule Include="renderdcc.module" />
+    <ExcludedControllerModule Include="schwarz.module" />
+    <ExcludedControllerModule Include="parareal.module" />
   </ItemGroup>
 
 </Project>
