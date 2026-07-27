@@ -10,6 +10,8 @@ using OutWit.Engine.Sdk;
 namespace OutWit.Controller.Simulation.Parareal.Tests.Activities;
 
 using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
+using OutWit.Math.Simulation.Model.Parareal;
+using OutWit.Math.Simulation.Model.Problem;
 
 [TestFixture]
 [Explicit("Distributed-run diagnostics")]

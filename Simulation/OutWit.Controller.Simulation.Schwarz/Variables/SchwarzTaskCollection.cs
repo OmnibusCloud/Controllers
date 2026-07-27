@@ -7,6 +7,7 @@ using OutWit.Math.Simulation;
 using OutWit.Engine.Data.Attributes;
 using OutWit.Engine.Data.Collections;
 using OutWit.Engine.Interfaces;
+using OutWit.Math.Simulation.Model.Schwarz;
 
 namespace OutWit.Controller.Simulation.Schwarz.Variables;
 

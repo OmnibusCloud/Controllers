@@ -12,6 +12,8 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.Simulation.Schwarz.Adapters;
 
 using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
+using OutWit.Math.Simulation.Model.Results;
+using OutWit.Math.Simulation.Model.Schwarz;
 
 internal sealed class WitActivityAdapterSchwarzSolveSubdomain : WitActivityAdapterFunction<WitActivitySchwarzSolveSubdomain>
 {

@@ -13,6 +13,10 @@ using OutWit.Engine.Sdk;
 namespace OutWit.Controller.Simulation.Schwarz.Tests.Activities;
 
 using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
+using OutWit.Math.Simulation.Model.Parareal;
+using OutWit.Math.Simulation.Model.Problem;
+using OutWit.Math.Simulation.Model.Results;
+using OutWit.Math.Simulation.Model.Schwarz;
 
 /// <summary>
 /// Distributed gates: the bundled SchwarzSolve.wit script running through

@@ -8,6 +8,8 @@ using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
+using OutWit.Math.Simulation.Model.Parareal;
+using OutWit.Math.Simulation.Model.Results;
 
 namespace OutWit.Controller.Simulation.Parareal.Adapters;
 

@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Parareal</ControllerName>
-    <Version>0.1.6</Version>
+    <Version>0.1.7</Version>
     <Description>Distributed transient-problem solver (heat, diffusion) via parareal parallel-in-time integration: time slabs propagated across the pool with a fine Crank-Nicolson integrator, coarse correction server-side.</Description>
     <PackageTags>simulation;parareal;parallel-in-time;fem;fd;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>parareal-solve</ControllerFeatures>
@@ -27,20 +27,26 @@
          is consumed as a package from that account's feed (see nuget.config).
          Building this controller therefore needs GITHUB_USER / GITHUB_TOKEN
          with read:packages; the rest of this repository builds from nuget.org
-         alone. -->
-    <PackageReference Include="OutWit.Math.Simulation" Version="0.2.*" />
+         alone.
+
+         Two packages since 0.3.0: Model is the contract (problem model, wire
+         DTOs, blob format) and the other half is the numerics. A controller
+         needs both. They are versioned in lockstep, so both float 0.3.*. -->
+    <PackageReference Include="OutWit.Math.Simulation.Model" Version="0.3.*" />
+    <PackageReference Include="OutWit.Math.Simulation" Version="0.3.*" />
   </ItemGroup>
 
   <!-- The core used to be a sibling project that staged its own DLL into this
        controller's module. As a package it stages nothing, so the module has
-       to carry it explicitly — together with CSparse, the sparse factorization
-       it calls into. Without this the module builds and tests fine and then
-       fails to load on a node. -->
+       to carry every assembly it needs explicitly — both halves of the core
+       and CSparse, the sparse factorization it calls into. Without this the
+       module builds and tests fine and then fails to load on a node. -->
   <PropertyGroup>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
+    <ControllerModuleAssembly Include="OutWit.Math.Simulation.Model" />
     <ControllerModuleAssembly Include="OutWit.Math.Simulation" />
     <ControllerModuleAssembly Include="CSparse" />
   </ItemGroup>

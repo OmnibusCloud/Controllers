@@ -13,6 +13,8 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.Simulation.Parareal.Adapters;
 
 using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
+using OutWit.Math.Simulation.Model.Parareal;
+using OutWit.Math.Simulation.Model.Problem;
 
 internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFunction<WitActivityPararealPropagate>
 {

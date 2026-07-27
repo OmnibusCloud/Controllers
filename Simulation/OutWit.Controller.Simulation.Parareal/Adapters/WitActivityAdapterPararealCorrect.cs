@@ -14,6 +14,7 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.Simulation.Parareal.Adapters;
 
 using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
+using OutWit.Math.Simulation.Model.Parareal;
 
 internal sealed class WitActivityAdapterPararealCorrect : WitActivityAdapterFunction<WitActivityPararealCorrect>
 {

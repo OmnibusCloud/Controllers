@@ -9,6 +9,9 @@ using OutWit.Engine.Sdk;
 namespace OutWit.Controller.Simulation.Schwarz.Tests.Activities;
 
 using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
+using OutWit.Math.Simulation.Model.Problem;
+using OutWit.Math.Simulation.Model.Results;
+using OutWit.Math.Simulation.Model.Schwarz;
 
 /// <summary>
 /// Fault injection: a node dying mid-wave must not fail the job —
