@@ -55,7 +55,7 @@ The script declares the job, so a caller supplies only the two inputs:
 
 - `model` — a `Blob` handle for an OWSM Model blob (kind=1), the same format
   the stationary solver consumes, plus the initial condition; typically built
-  through `SimulationModelDefinition` from `OutWit.Math.Simulation`;
+  through `SimulationModelDefinition` from `OutWit.Math.Simulation.Model`;
 - `opts` — a `PararealOptions` variable carrying the tuning set (`Slabs`,
   `Eps`, `MaxIterations`, `Coarsening`, `TotalTime`, `FineStepsPerSlab`,
   `SnapshotsPerSlab`). It is a job input, not something a script constructs.
@@ -101,8 +101,9 @@ did not change the script text does not touch the staged file.
 ## Versioning and controller pairing
 
 Current versions: this package **0.1.1**, controller
-`OutWit.Controller.Simulation.Parareal` **0.1.6**, shared
-numerical core `OutWit.Math.Simulation` **0.2.0**. Both Simulation
+`OutWit.Controller.Simulation.Parareal` **0.1.7**, shared
+numerical core `OutWit.Math.Simulation.Model` + `OutWit.Math.Simulation`
+**0.3.0** (contract and numerics, versioned in lockstep). Both Simulation
 controllers and their Scripts packages are published to the OmnibusCloud
 organization feed rather than nuget.org; the numerical core comes from the
 separate private WitMath feed.

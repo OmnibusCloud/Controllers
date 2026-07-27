@@ -7,8 +7,8 @@ every round solves them across the pool, boundary strips are exchanged through
 the server, and convergence control runs server-side. Designed for on-premise
 LAN pools, where frequent small rounds are cheap.
 
-**Version 0.1.6** (Model core 0.1.5, `OutWit.Controller.Simulation.Schwarz.Scripts`
-0.1.1).
+**Version 0.1.7** (numerical core `OutWit.Math.Simulation` 0.3.0,
+`OutWit.Controller.Simulation.Schwarz.Scripts` 0.1.1).
 
 **Status: v0.1 — algorithm complete and gate-tested, not yet published to a
 public feed.** Distributed runs reproduce the in-memory reference **bitwise**
@@ -56,7 +56,7 @@ Job:SchwarzSolve(Blob:model, SchwarzOptions:opts)
 ```
 
 The input is an OWSM Model blob (kind = 1) built with
-`SimulationModelDefinition` from `OutWit.Math.Simulation`.
+`SimulationModelDefinition` from `OutWit.Math.Simulation.Model`.
 
 ## Supported physics envelope
 
@@ -199,7 +199,7 @@ blob transport — the reference the distributed runs are compared against bitwi
 and the shortest path to understanding the algorithm.
 
 ```csharp
-using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Model.Problem;
 using OutWit.Math.Simulation.Numerics;
 using OutWit.Math.Simulation.Schwarz;
 
@@ -262,9 +262,12 @@ sides together.
 ## Dependencies
 
 - `Variables` 1.0.0+ — `Blob`, `Int`, `Bool`
-- `OutWit.Math.Simulation` 0.2.0 — shared types, blob formats and the
-  numerical core. Built from the private WitMath repository rather than from
-  this one, so building this controller needs credentials for that feed.
+- `OutWit.Math.Simulation.Model` 0.3.0 — the contract: the problem model,
+  the wire DTOs and the OWSM blob format.
+- `OutWit.Math.Simulation` 0.3.0 — the numerics on top of it. Both are built
+  from the private WitMath repository rather than from this one, so building
+  this controller needs credentials for that feed, and BOTH assemblies are
+  staged into the module — a package stages nothing of its own.
 
 The bundled script additionally needs two controllers **on the server that
 runs the job**: `Special` for the round loop's control flow (`Loop`, `If`,

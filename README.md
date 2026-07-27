@@ -26,18 +26,20 @@ the table.
 | [`OutWit.Controller.Matrices`](https://www.nuget.org/packages/OutWit.Controller.Matrices)          | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Matrices.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Matrices)                         | 2    | Dense + sparse matrix / vector operations with Gustavson multiplication. Ships benchmark `.smat` data via GitHub Release.     |
 | [`OutWit.Controller.Render.Dcc`](https://www.nuget.org/packages/OutWit.Controller.Render.Dcc)      | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Render.Dcc.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Render.Dcc)                     | 1    | Host-only neutral DCC scene validation and `.blend` build bootstrap, upstream of Render.                                      |
 | [`OutWit.Controller.Render`](https://www.nuget.org/packages/OutWit.Controller.Render)              | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Render.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Render)                             | 2    | Distributed rendering via Blender CLI + FFmpeg, delivering external scene dependencies (libraries, caches, volumes, …) to render nodes. Ships per-platform Blender / FFmpeg / benchmark scenes via GitHub Release.    |
-| `OutWit.Controller.Simulation.Schwarz` ([`Simulation/`](Simulation/))                               | v0.1.6 — OmnibusCloud org feed                                                                                                                                       | 1    | Distributed stationary solves — steady heat / Poisson-class fields on structured Cartesian or axisymmetric (r-z) grids — via overlapping Schwarz domain decomposition. LAN-profile. |
-| `OutWit.Controller.Simulation.Parareal` ([`Simulation/`](Simulation/))                              | v0.1.6 — OmnibusCloud org feed                                                                                                                                       | 1    | Distributed transient solves — heat / diffusion over a time horizon — via parareal parallel-in-time integration. Crowd/WAN-profile. |
+| `OutWit.Controller.Simulation.Schwarz` ([`Simulation/`](Simulation/))                               | v0.1.7 — OmnibusCloud org feed                                                                                                                                       | 1    | Distributed stationary solves — steady heat / Poisson-class fields on structured Cartesian or axisymmetric (r-z) grids — via overlapping Schwarz domain decomposition. LAN-profile. |
+| `OutWit.Controller.Simulation.Parareal` ([`Simulation/`](Simulation/))                              | v0.1.7 — OmnibusCloud org feed                                                                                                                                       | 1    | Distributed transient solves — heat / diffusion over a time horizon — via parareal parallel-in-time integration. Crowd/WAN-profile. |
 
 Each controller comes with a companion `OutWit.Controller.<Name>.Model`
 NuGet that contains shared data types — referenced transitively by
 consumers, available standalone for tooling.
 
 The two Simulation controllers are the exception: the numerics they share
-are not in this repository at all. They consume `OutWit.Math.Simulation`,
-a package built from the private WitMath repository, which holds the
-control-volume assembly, the transient stepper, the decomposition and
-parallel-in-time kernels, and the blob formats these travel in. Building
+are not in this repository at all. They consume two packages built from
+the private WitMath repository: `OutWit.Math.Simulation.Model`, the contract
+— problem model, wire DTOs and the blob formats these travel in — and
+`OutWit.Math.Simulation`, the numerics on top of it: the control-volume
+assembly, the transient stepper, the decomposition and parallel-in-time
+kernels. Building
 these two projects therefore needs credentials for that feed; every other
 controller here builds from nuget.org alone.
 
@@ -215,7 +217,7 @@ canonical minimal Model shape.
 │   └── OutWit.Controller.Render.Dcc.Scripts/ # Bundled RenderDcc*.wit scripts (content-only nupkg)
 │
 ├── Simulation/                      # Distributed numerical simulation (org-feed packages)
-│                                    # numerics come from OutWit.Math.Simulation (private feed)
+│                                    # model + numerics come from OutWit.Math.Simulation[.Model] (private feed)
 │   ├── OutWit.Controller.Simulation.Schwarz/  # Stationary solves (domain decomposition)
 │   ├── OutWit.Controller.Simulation.Schwarz.Scripts/  # Bundled SchwarzSolve.wit (content-only nupkg)
 │   ├── OutWit.Controller.Simulation.Parareal/ # Transient solves (parallel-in-time)

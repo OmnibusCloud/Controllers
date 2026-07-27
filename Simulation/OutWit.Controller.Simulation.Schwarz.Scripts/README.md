@@ -53,7 +53,7 @@ convergence flag and the round count travel in the result metadata.
 The script declares the job, so a caller supplies only the two inputs:
 
 - `model` — a `Blob` handle for an OWSM Model blob (kind=1), typically built
-  through `SimulationModelDefinition` from `OutWit.Math.Simulation`;
+  through `SimulationModelDefinition` from `OutWit.Math.Simulation.Model`;
 - `opts` — a `SchwarzOptions` variable carrying the tuning set (`Parts`,
   `Overlap`, `Eps`, `MaxRounds`, ...). It is a job input, not something a
   script constructs.
@@ -99,8 +99,9 @@ did not change the script text does not touch the staged file.
 ## Versioning and controller pairing
 
 Current versions: this package **0.1.1**, controller
-`OutWit.Controller.Simulation.Schwarz` **0.1.6**, shared
-numerical core `OutWit.Math.Simulation` **0.2.0**. Both Simulation
+`OutWit.Controller.Simulation.Schwarz` **0.1.7**, shared
+numerical core `OutWit.Math.Simulation.Model` + `OutWit.Math.Simulation`
+**0.3.0** (contract and numerics, versioned in lockstep). Both Simulation
 controllers and their Scripts packages are published to the OmnibusCloud
 organization feed rather than nuget.org; the numerical core comes from the
 separate private WitMath feed.

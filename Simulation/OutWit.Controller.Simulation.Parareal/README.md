@@ -7,7 +7,7 @@ Crank–Nicolson integrator while a cheap coarse propagator runs serially on the
 server and drives the correction. Designed for crowd/WAN pools, where few rounds
 with chunky transfers beat many small ones.
 
-**Version 0.1.6** (Model core 0.1.5,
+**Version 0.1.7** (numerical core `OutWit.Math.Simulation` 0.3.0,
 `OutWit.Controller.Simulation.Parareal.Scripts` 0.1.1).
 
 **Status: v0.1 — algorithm complete and gate-tested, not yet published to a
@@ -57,7 +57,7 @@ Job:PararealSolve(Blob:model, PararealOptions:opts)
 
 The input is the same OWSM Model blob (kind = 1) the Schwarz controller takes,
 built with `SimulationModelDefinition` from
-`OutWit.Math.Simulation` — plus the initial condition
+`OutWit.Math.Simulation.Model` — plus the initial condition
 (`InitialConstant` / `InitialPerNode`) and, optionally, a source time curve.
 
 ## Supported physics envelope
@@ -219,7 +219,8 @@ and the shortest path to understanding the algorithm.
 `PararealInMemorySolver.SolveSerialFine` is the exactness oracle beside it.
 
 ```csharp
-using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Model.Problem;
+using OutWit.Math.Simulation.Model.Parareal;
 using OutWit.Math.Simulation.Parareal;
 
 var model = new SimulationModelDefinition
@@ -293,9 +294,12 @@ sides together.
 ## Dependencies
 
 - `Variables` 1.0.0+ — `Blob`, `Int`, `Bool`
-- `OutWit.Math.Simulation` 0.2.0 — shared types, blob formats and the
-  numerical core. Built from the private WitMath repository rather than from
-  this one, so building this controller needs credentials for that feed.
+- `OutWit.Math.Simulation.Model` 0.3.0 — the contract: the problem model,
+  the wire DTOs and the OWSM blob format.
+- `OutWit.Math.Simulation` 0.3.0 — the numerics on top of it. Both are built
+  from the private WitMath repository rather than from this one, so building
+  this controller needs credentials for that feed, and BOTH assemblies are
+  staged into the module — a package stages nothing of its own.
 
 The bundled script additionally needs two controllers **on the server that
 runs the job**: `Special` for the iteration loop's control flow (`Loop`, `If`,
