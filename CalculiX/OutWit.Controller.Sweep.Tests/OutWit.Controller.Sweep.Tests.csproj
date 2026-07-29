@@ -4,14 +4,33 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OutWit.Controller.Sweep\OutWit.Controller.Sweep.csproj" />
+    <ProjectReference Include="..\OutWit.Controller.CalculiX\OutWit.Controller.CalculiX.csproj" />
   </ItemGroup>
 
+  <!-- Build-only references: these projects must be built (so their PostBuild
+       populates @Controllers/<Cfg>/<name>.module/ and the fake solver exists)
+       but their DLLs are not pulled into the test compile output. CalculiX is
+       the node half the bundled SweepSolve.wit dispatches to;
+       Variables/Grid/Special are the script-level dependencies (typed
+       variables, Grid.ForEach, Loop). -->
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.CalculiX.Tests.FakeCcx\OutWit.Controller.CalculiX.Tests.FakeCcx.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Special\OutWit.Controller.Special\OutWit.Controller.Special.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <!-- calculix.module deliberately NOT excluded: the SDK end-to-end test
+       loads it — the bundled script dispatches Ccx.Solve. -->
   <ItemGroup>
     <ExcludedControllerModule Include="render.module" />
     <ExcludedControllerModule Include="renderdcc.module" />
     <ExcludedControllerModule Include="schwarz.module" />
     <ExcludedControllerModule Include="parareal.module" />
-    <ExcludedControllerModule Include="calculix.module" />
   </ItemGroup>
 
 </Project>

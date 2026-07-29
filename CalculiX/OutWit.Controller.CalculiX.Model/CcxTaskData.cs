@@ -10,6 +10,7 @@ namespace OutWit.Controller.CalculiX.Model;
 /// scalars so work estimation never opens the deck blob.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).
 public sealed partial class CcxTaskData : ModelBase
 {
     #region Model Base
@@ -53,21 +54,27 @@ public sealed partial class CcxTaskData : ModelBase
     /// Source-table index of the variant. Mandatory in every result mapping:
     /// Grid.ForEach returns results in completion order, never source order.
     /// </summary>
+    [MemoryPackOrder(0)]
     public int VariantIndex { get; set; }
 
     /// <summary>Blob id of the variant's complete .inp deck.</summary>
+    [MemoryPackOrder(1)]
     public Guid DeckBlobId { get; set; }
 
     /// <summary>Mesh node count, for work estimation without opening the blob.</summary>
+    [MemoryPackOrder(2)]
     public int NodeCount { get; set; }
 
     /// <summary>Mesh element count, for work estimation without opening the blob.</summary>
+    [MemoryPackOrder(3)]
     public int ElementCount { get; set; }
 
     /// <summary>OMP thread count for the solver process; 0 = all cores of the node.</summary>
+    [MemoryPackOrder(4)]
     public int Threads { get; set; }
 
     /// <summary>Responses to extract on the node after the solve; null = automatic set only.</summary>
+    [MemoryPackOrder(5)]
     public CcxExtractionRequestData? Extraction { get; set; }
 
     #endregion

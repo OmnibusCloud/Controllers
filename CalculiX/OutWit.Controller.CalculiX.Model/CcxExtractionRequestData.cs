@@ -10,6 +10,7 @@ namespace OutWit.Controller.CalculiX.Model;
 /// response set of the analysis type is always extracted; probes are extras.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).
 public sealed partial class CcxExtractionRequestData : ModelBase
 {
     #region Model Base
@@ -40,6 +41,7 @@ public sealed partial class CcxExtractionRequestData : ModelBase
     #region Properties
 
     /// <summary>User-defined probes on top of the automatic response set.</summary>
+    [MemoryPackOrder(0)]
     public List<CcxProbeData> Probes { get; set; } = [];
 
     #endregion

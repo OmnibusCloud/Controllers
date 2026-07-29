@@ -15,18 +15,31 @@ public static class CcxBinaryResolver
 
     private const string TOOL_DIRECTORY = "ccx";
 
+    /// <summary>
+    /// Environment override of the solver path — operator escape hatch and the
+    /// test harness's seam. An explicit override wins even when the file is
+    /// missing: a configured-but-wrong path must fail loudly at spawn, never
+    /// fall through to a different solver silently.
+    /// </summary>
+    public const string ENV_SOLVER_PATH = "OUTWIT_CCX";
+
     #endregion
 
     #region Functions
 
     /// <summary>
-    /// Resolves the bundled ccx executable for the current platform.
+    /// Resolves the ccx executable: the OUTWIT_CCX environment override first,
+    /// then the bundled per-platform build inside the module.
     /// </summary>
     /// <param name="controllerAssemblyPath">Path of the controller assembly, the module root anchor.</param>
     /// <param name="logger">Diagnostics sink.</param>
     /// <returns>Full path of an executable ccx, or null when the module carries none for this platform.</returns>
     public static string? Resolve(string controllerAssemblyPath, ILogger? logger = null)
     {
+        var overridePath = Environment.GetEnvironmentVariable(ENV_SOLVER_PATH);
+        if (!string.IsNullOrWhiteSpace(overridePath))
+            return overridePath;
+
         var runtimeFolder = ResolveCurrentRuntimeFolder();
         if (runtimeFolder == null)
         {

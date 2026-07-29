@@ -42,6 +42,7 @@
     <Project Path="CalculiX/OutWit.Controller.CalculiX/OutWit.Controller.CalculiX.csproj" />
     <Project Path="CalculiX/OutWit.Controller.CalculiX.Model/OutWit.Controller.CalculiX.Model.csproj" />
     <Project Path="CalculiX/OutWit.Controller.CalculiX.Tests/OutWit.Controller.CalculiX.Tests.csproj" />
+    <Project Path="CalculiX/OutWit.Controller.CalculiX.Tests.FakeCcx/OutWit.Controller.CalculiX.Tests.FakeCcx.csproj" />
     <Project Path="CalculiX/OutWit.Controller.Sweep/OutWit.Controller.Sweep.csproj" />
     <Project Path="CalculiX/OutWit.Controller.Sweep.Scripts/OutWit.Controller.Sweep.Scripts.csproj" />
     <Project Path="CalculiX/OutWit.Controller.Sweep.Tests/OutWit.Controller.Sweep.Tests.csproj" />

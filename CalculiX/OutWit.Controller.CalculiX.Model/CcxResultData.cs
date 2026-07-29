@@ -10,6 +10,7 @@ namespace OutWit.Controller.CalculiX.Model;
 /// the orchestration records it and moves on.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).
 public sealed partial class CcxResultData : ModelBase
 {
     #region Model Base
@@ -52,24 +53,31 @@ public sealed partial class CcxResultData : ModelBase
     #region Properties
 
     /// <summary>Source-table index of the variant this result belongs to.</summary>
+    [MemoryPackOrder(0)]
     public int VariantIndex { get; set; }
 
     /// <summary>Blob id of the uploaded .frd result file; null when the solve produced none.</summary>
+    [MemoryPackOrder(1)]
     public Guid? FrdBlobId { get; set; }
 
     /// <summary>Blob id of the uploaded .dat result file; null when the solve produced none.</summary>
+    [MemoryPackOrder(2)]
     public Guid? DatBlobId { get; set; }
 
     /// <summary>Solver process exit code; 0 = success.</summary>
+    [MemoryPackOrder(3)]
     public int ExitCode { get; set; }
 
     /// <summary>Measured wall-clock solve time in seconds.</summary>
+    [MemoryPackOrder(4)]
     public double SolveSeconds { get; set; }
 
     /// <summary>Responses extracted on the node; null when the solve failed.</summary>
+    [MemoryPackOrder(5)]
     public CcxResponseRowData? ResponseRow { get; set; }
 
     /// <summary>Last lines of solver output — the error tail of a failed variant.</summary>
+    [MemoryPackOrder(6)]
     public string? LogTail { get; set; }
 
     #endregion

@@ -11,6 +11,7 @@ namespace OutWit.Controller.CalculiX.Model;
 /// progress lives in <see cref="SweepStateData"/>, never here.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).
 public sealed partial class SweepPlanData : ModelBase
 {
     #region Model Base
@@ -45,12 +46,15 @@ public sealed partial class SweepPlanData : ModelBase
     #region Properties
 
     /// <summary>Blob id of the base deck with baked placeholder tokens.</summary>
+    [MemoryPackOrder(0)]
     public Guid BaseDeckBlobId { get; set; }
 
     /// <summary>The study as submitted.</summary>
+    [MemoryPackOrder(1)]
     public SweepOptionsData? Options { get; set; }
 
     /// <summary>Progressive chunk sizes; sums to the variant count.</summary>
+    [MemoryPackOrder(2)]
     public List<int> ChunkSizes { get; set; } = [];
 
     #endregion

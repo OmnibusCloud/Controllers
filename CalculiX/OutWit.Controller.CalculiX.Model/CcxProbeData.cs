@@ -19,6 +19,7 @@ public enum CcxProbeAggregate
 /// the deck. Composed from fixed menus — no free-form expressions.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).
 public sealed partial class CcxProbeData : ModelBase
 {
     #region Model Base
@@ -53,12 +54,15 @@ public sealed partial class CcxProbeData : ModelBase
     #region Properties
 
     /// <summary>Aggregate applied over the set.</summary>
+    [MemoryPackOrder(0)]
     public CcxProbeAggregate Aggregate { get; set; }
 
     /// <summary>Result quantity name (dataset vocabulary of the analysis type).</summary>
+    [MemoryPackOrder(1)]
     public string Quantity { get; set; } = string.Empty;
 
     /// <summary>Named node/element set from the deck the probe evaluates over.</summary>
+    [MemoryPackOrder(2)]
     public string SetName { get; set; } = string.Empty;
 
     #endregion

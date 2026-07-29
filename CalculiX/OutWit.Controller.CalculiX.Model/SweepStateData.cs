@@ -11,6 +11,7 @@ namespace OutWit.Controller.CalculiX.Model;
 /// variable and downloads the manifest blob it points at.
 /// </summary>
 [MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).
 public sealed partial class SweepStateData : ModelBase
 {
     #region Model Base
@@ -49,18 +50,23 @@ public sealed partial class SweepStateData : ModelBase
     #region Properties
 
     /// <summary>Index of the next chunk to run.</summary>
+    [MemoryPackOrder(0)]
     public int ChunkIndex { get; set; }
 
     /// <summary>Ordinal (position in the variant table) where the next chunk starts.</summary>
+    [MemoryPackOrder(1)]
     public int NextVariantOrdinal { get; set; }
 
     /// <summary>Variants solved successfully so far.</summary>
+    [MemoryPackOrder(2)]
     public int CompletedCount { get; set; }
 
     /// <summary>Variants that finished with a nonzero solver exit so far.</summary>
+    [MemoryPackOrder(3)]
     public int FailedCount { get; set; }
 
     /// <summary>Blob id of the latest harvested manifest; null before the first chunk lands.</summary>
+    [MemoryPackOrder(4)]
     public Guid? ManifestBlobId { get; set; }
 
     #endregion

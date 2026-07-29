@@ -12,12 +12,22 @@
 
   <Import Project="..\..\Build\OutWit.Controller.Model.targets" />
 
+  <!-- A shared model must not stage its deps.json into a module: the client
+       install pipeline falls back to inferring the root assembly from THE
+       single deps.json it finds, and a second one breaks that inference —
+       the exact defect that once froze controller updates fleet-wide.
+       Resolution roots at the controller DLL; the model rides as a plain
+       dependency. -->
+  <Target Name="ModelDropDepsJson" BeforeTargets="ModelPostBuild">
+    <ItemGroup>
+      <ModelModuleFile Remove="$(TargetDir)$(TargetName).deps.json" />
+    </ItemGroup>
+  </Target>
+
   <!-- The Sweep host controller shares these types with the CalculiX node
        controller, so the assembly is staged into BOTH module folders. The
        default ModelPostBuild covers calculix.module; this covers sweep.module.
-       Deliberately DLL-only (no deps.json): a shared model must not stage a
-       second deps.json into a module — the client install pipeline infers the
-       root assembly from the single deps.json it finds. -->
+       Deliberately DLL-only. -->
   <Target Name="ModelPostBuildSweep" AfterTargets="ModelPostBuild">
     <Copy SourceFiles="$(TargetDir)$(TargetName).dll"
           DestinationFolder="$(SolutionDir)@Controllers\$(Configuration)\sweep.module\"

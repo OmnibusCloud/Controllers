@@ -34,15 +34,19 @@ on:
           - OutWit.Controller.Render.Dcc
           - OutWit.Controller.Simulation.Schwarz
           - OutWit.Controller.Simulation.Parareal
+          - OutWit.Controller.CalculiX
+          - OutWit.Controller.Sweep
           # Models
           - OutWit.Controller.Grid.Model
           - OutWit.Controller.Variables.Model
           - OutWit.Controller.Matrices.Model
           - OutWit.Controller.Render.Model
           - OutWit.Controller.Render.Dcc.Model
+          - OutWit.Controller.CalculiX.Model
           # Scripts (content-only nupkgs that ship bundled .wit scripts)
           - OutWit.Controller.Matrices.Scripts
           - OutWit.Controller.Render.Scripts
+          - OutWit.Controller.Sweep.Scripts
           - OutWit.Controller.Render.Dcc.Scripts
           - OutWit.Controller.Simulation.Schwarz.Scripts
           - OutWit.Controller.Simulation.Parareal.Scripts
