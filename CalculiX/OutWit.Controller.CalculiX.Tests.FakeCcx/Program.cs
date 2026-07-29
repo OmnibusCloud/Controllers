@@ -32,6 +32,9 @@ if (deckText.Contains("FAKE-FAIL", StringComparison.Ordinal))
 }
 
 File.WriteAllText($"{jobName}.frd", deckText);
-File.WriteAllText($"{jobName}.dat", "fake dat\n");
+// Deliberately EMPTY, like real ccx on a deck without *NODE PRINT requests:
+// the adapter must treat a zero-byte artifact as no artifact (uploading it
+// failed the first live sweep).
+File.WriteAllText($"{jobName}.dat", string.Empty);
 Console.WriteLine(" Job finished");
 return 0;

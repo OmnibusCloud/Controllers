@@ -165,7 +165,11 @@ public class SweepSolveSkeletonTests
             Assert.That(row.ExitCode, Is.Zero);
             Assert.That(row.SolveSeconds, Is.GreaterThan(0));
             Assert.That(row.FrdBlobId, Is.Not.Null);
-            Assert.That(row.DatBlobId, Is.Not.Null);
+
+            // The fake solver leaves a zero-byte .dat, like real ccx on a deck
+            // without *NODE PRINT requests — an empty artifact must yield NO
+            // blob rather than an upload of empty data.
+            Assert.That(row.DatBlobId, Is.Null);
         }
 
         // Substitution proven through the whole pipeline: the fake solver

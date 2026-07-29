@@ -103,7 +103,14 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
     private static string? ExistingArtifact(string directory, string extension)
     {
         var path = Path.Combine(directory, JOB_NAME + extension);
-        return File.Exists(path) ? path : null;
+        if (!File.Exists(path))
+            return null;
+
+        // ccx touches artifacts it has nothing to write into — a deck without
+        // *NODE PRINT requests leaves a zero-byte .dat next to a full .frd.
+        // An empty artifact is no artifact, and the blob service rightly
+        // refuses empty payloads (found on the first live sweep).
+        return new FileInfo(path).Length > 0 ? path : null;
     }
 
     private void TryDeleteScratch(string directory)
