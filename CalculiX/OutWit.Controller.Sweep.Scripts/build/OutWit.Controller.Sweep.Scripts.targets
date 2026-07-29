@@ -4,28 +4,34 @@
       Consumer-side targets for the OutWit.Controller.Sweep.Scripts
       NuGet package. Auto-imported into any csproj that PackageReferences this
       scripts pack. Copies content/scripts/*.wit into the consumer's
-      $(OutputPath)@Scripts/ flat layout.
+      $(OutputPath)@Scripts\ so the script seeder finds the bundled jobs.
+
+      Target and property names MUST be unique per scripts package: every
+      scripts pack imports a file of this shape, and MSBuild resolves equal
+      target names by last-definition-wins — a copied name silently disables
+      one pack's staging (found live: a Schwarz-named copy of this target left
+      SweepSolve.wit out of the image while everything built green).
   -->
 
   <PropertyGroup>
-    <_OutWitSchwarzScriptsContent>$(MSBuildThisFileDirectory)..\content\scripts\</_OutWitSchwarzScriptsContent>
-    <_OutWitSchwarzScriptsOutputDir>$(OutputPath)@Scripts\</_OutWitSchwarzScriptsOutputDir>
+    <_OutWitSweepScriptsContent>$(MSBuildThisFileDirectory)..\content\scripts\</_OutWitSweepScriptsContent>
+    <_OutWitSweepScriptsOutputDir>$(OutputPath)@Scripts\</_OutWitSweepScriptsOutputDir>
   </PropertyGroup>
 
-  <Target Name="OutWitCopySchwarzScripts"
+  <Target Name="OutWitCopySweepScripts"
           AfterTargets="ResolveAssemblyReferences"
           BeforeTargets="Build"
-          Condition="Exists('$(_OutWitSchwarzScriptsContent)')">
+          Condition="Exists('$(_OutWitSweepScriptsContent)')">
     <ItemGroup>
-      <_OutWitSchwarzScriptFiles Include="$(_OutWitSchwarzScriptsContent)*.wit" />
+      <_OutWitSweepScriptFiles Include="$(_OutWitSweepScriptsContent)*.wit" />
     </ItemGroup>
     <Copy
-        SourceFiles="@(_OutWitSchwarzScriptFiles)"
-        DestinationFiles="@(_OutWitSchwarzScriptFiles->'$(_OutWitSchwarzScriptsOutputDir)%(Filename)%(Extension)')"
+        SourceFiles="@(_OutWitSweepScriptFiles)"
+        DestinationFiles="@(_OutWitSweepScriptFiles->'$(_OutWitSweepScriptsOutputDir)%(Filename)%(Extension)')"
         SkipUnchangedFiles="true"
         OverwriteReadOnlyFiles="true" />
     <Message Importance="Normal"
-             Text="OutWit.Controller.Sweep.Scripts: staged @(_OutWitSchwarzScriptFiles->Count()) script(s) to '$(_OutWitSchwarzScriptsOutputDir)'." />
+             Text="OutWit.Controller.Sweep.Scripts: staged @(_OutWitSweepScriptFiles->Count()) script(s) to '$(_OutWitSweepScriptsOutputDir)'." />
   </Target>
 
 </Project>

@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Sweep</ControllerName>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Description>Bundled .wit scripts for the OutWit.Controller.Sweep controller — the SweepSolve chunked parameter-study job.</Description>
     <PackageTags>sweep;parameter-study;scripts;calculix;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
