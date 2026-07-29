@@ -6,6 +6,11 @@
     <ProjectReference Include="..\OutWit.Controller.CalculiX\OutWit.Controller.CalculiX.csproj" />
   </ItemGroup>
 
+  <!-- Golden fixtures: verbatim ccx 2.22 output of the committed decks. -->
+  <ItemGroup>
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ExcludedControllerModule Include="render.module" />
     <ExcludedControllerModule Include="renderdcc.module" />

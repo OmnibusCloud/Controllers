@@ -56,7 +56,8 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
         try
         {
             var deckPath = await BlobService.GetLocalPathAsync(task.DeckBlobId);
-            File.Copy(deckPath, Path.Combine(scratchDirectory, $"{JOB_NAME}.inp"));
+            var jobDeckPath = Path.Combine(scratchDirectory, $"{JOB_NAME}.inp");
+            File.Copy(deckPath, jobDeckPath);
 
             var outcome = await CcxProcessRunner.RunAsync(solverPath, JOB_NAME, scratchDirectory, task.Threads);
 
@@ -80,8 +81,21 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
             // A nonzero exit is data, not a task failure: the orchestration
             // records the failed variant and moves on; only infrastructure
             // errors (blob transfer, missing solver) throw out of here.
+            // Extraction itself follows the same rule — a parsing surprise
+            // must not turn a finished solve into a failure, so it degrades
+            // to an empty row with the artifacts still uploaded.
             if (outcome.ExitCode == 0)
-                result.ResponseRow = CcxResponseExtractor.Extract(frdPath, datPath, task.Extraction);
+            {
+                try
+                {
+                    result.ResponseRow = CcxResponseExtractor.Extract(jobDeckPath, frdPath, datPath, task.Extraction);
+                }
+                catch (Exception e)
+                {
+                    Logger.LogWarning(e, "Ccx.Solve: response extraction failed — the row stays empty, artifacts remain.");
+                    result.ResponseRow = new CcxResponseRowData();
+                }
+            }
 
             if (!pool.TrySetValue(activity.ReturnReference, result))
                 throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
