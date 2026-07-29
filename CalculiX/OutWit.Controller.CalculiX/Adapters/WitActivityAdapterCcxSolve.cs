@@ -106,6 +106,26 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
         }
     }
 
+    public override async Task<IWitBenchmarkResult> RunBenchmark(IWitBenchmarkOptions? options, CancellationToken cancellationToken)
+    {
+        var solverPath = CcxBinaryResolver.Resolve(GetType().Assembly.Location, Logger);
+        if (solverPath == null)
+        {
+            // No bundled solver for this platform: the node reports the
+            // default (unranked) score instead of failing registration.
+            Logger.LogWarning("Ccx.Solve benchmark: bundled ccx not found — reporting the default score.");
+            return OutWit.Engine.Data.Benchmark.WitBenchmarkResult.Default;
+        }
+
+        var result = await CcxBenchmark.MeasureAsync(solverPath, cancellationToken);
+
+        Logger.LogInformation(
+            "Ccx.Solve benchmark: {Rate:F3} {Unit} ({Elapsed} for the reference solve)",
+            result.Rate, result.Unit, result.Elapsed);
+
+        return result;
+    }
+
     protected override double EstimateWork(WitActivityCcxSolve activity, IWitVariablesCollection pool)
     {
         if (!pool.TryGetValue(activity.Task, out CcxTaskData? task) || task == null || task.ElementCount <= 0)

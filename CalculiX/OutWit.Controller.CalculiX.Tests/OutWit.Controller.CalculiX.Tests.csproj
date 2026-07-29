@@ -4,6 +4,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OutWit.Controller.CalculiX\OutWit.Controller.CalculiX.csproj" />
+    <ProjectReference Include="..\OutWit.Controller.CalculiX.Tests.FakeCcx\OutWit.Controller.CalculiX.Tests.FakeCcx.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
   <!-- Golden fixtures: verbatim ccx 2.22 output of the committed decks. -->
