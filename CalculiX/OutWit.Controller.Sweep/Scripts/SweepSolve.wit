@@ -1,0 +1,22 @@
+Job:SweepSolve(Blob:baseDeck, SweepOptions:opts)
+{
+    SweepPlan:plan = Sweep.Plan(baseDeck, opts);
+    SweepState:state = Sweep.InitState(plan);
+    Int:chunks = Sweep.ChunkCount(plan);
+    CcxTaskCollection:tasks;
+    CcxResultCollection:wave;
+
+    ~ Progressive chunks: each pass materializes the next slice of the variant
+      table, fans it out, and checkpoints everything harvested so far into the
+      manifest blob the state points at. A monitoring client polls the state;
+      whatever it has read survives cancellation. ~
+    Loop(chunks)
+    {
+        tasks = Sweep.MakeChunk(plan, state);
+        wave = Grid.ForEach(task in tasks) => Ccx.Solve(task);
+        state = Sweep.Harvest(plan, state, wave);
+    }
+
+    Blob:responses = Sweep.Finish(plan, state);
+    Return(responses);
+}

@@ -28,6 +28,8 @@
        it into @Controllers\ does not bloat the test bin here. -->
   <ItemGroup>
     <ExcludedControllerModule Include="renderdcc.module" />
+    <ExcludedControllerModule Include="calculix.module" />
+    <ExcludedControllerModule Include="sweep.module" />
   </ItemGroup>
 
   <!-- Bundled Render scripts (RenderStill.wit, RenderFrames.wit, etc.) are staged

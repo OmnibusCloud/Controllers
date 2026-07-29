@@ -38,6 +38,14 @@
     <Project Path="Simulation/OutWit.Controller.Simulation.Parareal.Scripts/OutWit.Controller.Simulation.Parareal.Scripts.csproj" />
     <Project Path="Simulation/OutWit.Controller.Simulation.Parareal.Tests/OutWit.Controller.Simulation.Parareal.Tests.csproj" />
   </Folder>
+  <Folder Name="/CalculiX/">
+    <Project Path="CalculiX/OutWit.Controller.CalculiX/OutWit.Controller.CalculiX.csproj" />
+    <Project Path="CalculiX/OutWit.Controller.CalculiX.Model/OutWit.Controller.CalculiX.Model.csproj" />
+    <Project Path="CalculiX/OutWit.Controller.CalculiX.Tests/OutWit.Controller.CalculiX.Tests.csproj" />
+    <Project Path="CalculiX/OutWit.Controller.Sweep/OutWit.Controller.Sweep.csproj" />
+    <Project Path="CalculiX/OutWit.Controller.Sweep.Scripts/OutWit.Controller.Sweep.Scripts.csproj" />
+    <Project Path="CalculiX/OutWit.Controller.Sweep.Tests/OutWit.Controller.Sweep.Tests.csproj" />
+  </Folder>
   <Folder Name="/Tools/">
     <Project Path="Tools/OutWit.Controller.Pack/OutWit.Controller.Pack.csproj" />
     <Project Path="Tools/OutWit.Controller.Pack.Tests/OutWit.Controller.Pack.Tests.csproj" />

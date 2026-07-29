@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.CalculiX\OutWit.Controller.CalculiX.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ExcludedControllerModule Include="render.module" />
+    <ExcludedControllerModule Include="renderdcc.module" />
+    <ExcludedControllerModule Include="schwarz.module" />
+    <ExcludedControllerModule Include="parareal.module" />
+    <ExcludedControllerModule Include="sweep.module" />
+  </ItemGroup>
+
+</Project>

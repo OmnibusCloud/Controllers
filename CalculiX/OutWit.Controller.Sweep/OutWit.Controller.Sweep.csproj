@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.props" />
+
+  <PropertyGroup>
+    <ControllerName>Sweep</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Host-side orchestration of parameter studies over the CalculiX controller: instantiates variant decks by placeholder substitution, fans each chunk out with Grid.ForEach, and harvests responses into a manifest blob after every chunk — so partial results are first-class and progress is observable while the sweep runs. Progressive chunk sizing: small first chunk for fast feedback, geometric growth for packing efficiency.</Description>
+    <PackageTags>sweep;parameter-study;doe;calculix;ccx;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>sweep-solve</ControllerFeatures>
+    <ControllerUseCases>Material/load/thickness studies fanned across a pool; night-batch parameter sweeps with partial harvest</ControllerUseCases>
+  </PropertyGroup>
+
+  <!-- Host-only module (IWitControllerHost alone), so the host-only Grid and
+       Special dependencies are declarable honestly — the node-side loader
+       never sees this module. -->
+  <ItemGroup>
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+    <ControllerDependency Include="Grid" MinimumVersion="1.0.0" />
+    <ControllerDependency Include="Special" MinimumVersion="1.0.0" />
+    <ControllerDependency Include="CalculiX" MinimumVersion="0.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.CalculiX.Model\OutWit.Controller.CalculiX.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.Sweep.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
+
+</Project>

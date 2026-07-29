@@ -1,0 +1,32 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Sweep NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+      Copies the package's content/module/* into the consumer's
+      $(OutputPath)@Controllers\sweep.module\. Tier-1: no external data
+      assets — the solver payload belongs to the CalculiX controller.
+  -->
+
+  <PropertyGroup>
+    <_OutWitSweepModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitSweepModulePackageContent>
+    <_OutWitSweepModuleOutputDir>$(OutputPath)@Controllers\sweep.module\</_OutWitSweepModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopySweepModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitSweepModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitSweepFiles Include="$(_OutWitSweepModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitSweepFiles)"
+        DestinationFiles="@(_OutWitSweepFiles->'$(_OutWitSweepModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Sweep: staged module to '$(_OutWitSweepModuleOutputDir)'." />
+  </Target>
+
+</Project>

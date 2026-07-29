@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.props" />
+
+  <PropertyGroup>
+    <ControllerName>CalculiX</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Runs complete CalculiX (ccx) decks on compute nodes: each solve is one whole deck on one node — the unit of parameter-study throughput. Carries pinned ccx 2.22 builds for every supported node platform as controller assets, so nodes need no preinstalled software; responses are extracted from the result files right on the node.</Description>
+    <PackageTags>calculix;ccx;fem;solver;simulation;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>ccx-solve</ControllerFeatures>
+    <ControllerUseCases>Whole-deck CalculiX solves fanned out across a pool; the solve backend of the Sweep parameter-study controller</ControllerUseCases>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.CalculiX.Model\OutWit.Controller.CalculiX.Model.csproj" />
+  </ItemGroup>
+
+  <!-- Pinned ccx builds, one per supported node platform, published by the
+       OmnibusCloud/CalculiX repository (which also carries the GPL kit and
+       the corresponding-source mirror). Fetched at consumer build time by
+       ResolveControllerAssetsTask, never packed into the nupkg.
+       Note the two naming vocabularies: RuntimeIdentifier uses RIDs
+       (win-x64/osx-arm64), ExtractTo uses the runtime folder names the
+       node-side resolver probes (windows-x64/macos-arm64). -->
+  <ItemGroup>
+    <ControllerDataAsset Include="ccx-win-x64">
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/CalculiX/ccx-v2.22-1/ccx-win-x64.zip</Uri>
+      <Sha256>0551a313a4e165f7759e7bba0534aa88e41c91a7f56f0268adcc84f4c4f54a17</Sha256>
+      <Size>237061203</Size>
+      <ExtractTo>ccx/windows-x64/</ExtractTo>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="ccx-linux-x64">
+      <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/CalculiX/ccx-v2.22-1/ccx-linux-x64.zip</Uri>
+      <Sha256>841de697ff1f5a912e664f0abea7b314e2f9108d082fd2ddc559683f3e2dd209</Sha256>
+      <Size>275922761</Size>
+      <ExtractTo>ccx/linux-x64/</ExtractTo>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="ccx-macos-arm64">
+      <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/CalculiX/ccx-v2.22-1/ccx-macos-arm64.zip</Uri>
+      <Sha256>241f036a5f47642bce4e68782638fd6f49b6e8ca5a8f336735268b75241511bc</Sha256>
+      <Size>2690218</Size>
+      <ExtractTo>ccx/macos-arm64/</ExtractTo>
+    </ControllerDataAsset>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.CalculiX.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
+
+</Project>
