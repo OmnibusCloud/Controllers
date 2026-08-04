@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Sweep</ControllerName>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Description>Host-side orchestration of parameter studies over the CalculiX controller: instantiates variant decks by placeholder substitution, fans each chunk out with Grid.ForEach, and harvests responses into a manifest blob after every chunk — so partial results are first-class and progress is observable while the sweep runs. Progressive chunk sizing: small first chunk for fast feedback, geometric growth for packing efficiency.</Description>
     <PackageTags>sweep;parameter-study;doe;calculix;ccx;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>sweep-solve</ControllerFeatures>

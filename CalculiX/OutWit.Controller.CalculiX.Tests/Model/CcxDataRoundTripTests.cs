@@ -68,6 +68,29 @@ public class CcxDataRoundTripTests
     }
 
     [Test]
+    public void VariantSurvivesMemoryPackRoundTripTest()
+    {
+        var variant = new SweepVariantData
+        {
+            VariantIndex = 4,
+            Values = ["250"],
+            DeckBlobId = Guid.NewGuid(),
+            NodeCount = 132651,
+            ElementCount = 125000
+        };
+
+        var restored = MemoryPackSerializer.Deserialize<SweepVariantData>(MemoryPackSerializer.Serialize(variant));
+
+        Assert.That(restored, Is.Not.Null);
+        Assert.That(restored!.Is(variant), Is.True);
+
+        // The deck-set fields participate in value identity.
+        var other = variant.Clone();
+        other.DeckBlobId = Guid.NewGuid();
+        Assert.That(other.Is(variant), Is.False);
+    }
+
+    [Test]
     public void ManifestSurvivesMemoryPackRoundTripTest()
     {
         var manifest = new SweepManifestData

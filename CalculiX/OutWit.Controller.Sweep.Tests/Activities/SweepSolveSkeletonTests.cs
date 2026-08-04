@@ -181,5 +181,91 @@ public class SweepSolveSkeletonTests
         Assert.That(frdText, Does.Not.Contain("{{"));
     }
 
+    [Test]
+    public async Task DeckSetSweepRunsEndToEndTest()
+    {
+        // Three ready decks (UC-3: meshed elsewhere, no tokens, no
+        // parameters); the middle one fails on purpose — a bad deck in the
+        // set is a red row, not a failed study.
+        const string deckA = "*HEADING\ndeck A mesh-coarse\n*STEP\n*STATIC\n*END STEP\n";
+        const string deckB = "*HEADING\ndeck B FAKE-FAIL\n*STEP\n*STATIC\n*END STEP\n";
+        const string deckC = "*HEADING\ndeck C mesh-fine\n*STEP\n*STATIC\n*END STEP\n";
+
+        var blobA = await m_blobService.UploadBytesAsync(Encoding.UTF8.GetBytes(deckA), "coarse.inp");
+        var blobB = await m_blobService.UploadBytesAsync(Encoding.UTF8.GetBytes(deckB), "broken.inp");
+        var blobC = await m_blobService.UploadBytesAsync(Encoding.UTF8.GetBytes(deckC), "fine.inp");
+
+        var options = new SweepOptionsData
+        {
+            Variants =
+            [
+                new SweepVariantData { VariantIndex = 0, DeckBlobId = blobA, NodeCount = 1_000, ElementCount = 700 },
+                new SweepVariantData { VariantIndex = 1, DeckBlobId = blobB, NodeCount = 8_000, ElementCount = 6_000 },
+                new SweepVariantData { VariantIndex = 2, DeckBlobId = blobC, NodeCount = 27_000, ElementCount = 21_000 }
+            ],
+            Threads = 1,
+            FirstChunkSize = 2,
+            MaxChunkSize = 3
+        };
+
+        var inpCountBefore = Directory.GetFiles(m_blobStoragePath, "*.inp").Length;
+
+        // The base-deck slot is the script's signature, not the study's
+        // content — any of the set's blobs serves; the plan must not read it.
+        var job = m_engine.Compile(m_sweepScript);
+        var status = await m_engine.ScheduleAndWaitAsync(job, blobA, options);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
+
+        var state = job.Variables["state"].Value as SweepStateData;
+        Assert.That(state, Is.Not.Null);
+        Assert.That(state!.CompletedCount, Is.EqualTo(2));
+        Assert.That(state.FailedCount, Is.EqualTo(1));
+
+        var manifest = MemoryPackSerializer.Deserialize<SweepManifestData>(
+            await File.ReadAllBytesAsync(m_blobService.GetStoredPath(state.ManifestBlobId!.Value)));
+        Assert.That(manifest!.Rows.Select(row => row.VariantIndex), Is.EquivalentTo(new[] { 0, 1, 2 }));
+
+        // The node solved the client's deck verbatim — the fake solver
+        // echoes the deck text into the .frd.
+        var fine = manifest.Rows.Single(row => row.VariantIndex == 2);
+        Assert.That(fine.Succeeded, Is.True);
+        var frdText = await File.ReadAllTextAsync(m_blobService.GetStoredPath(fine.FrdBlobId!.Value));
+        Assert.That(frdText, Does.Contain("deck C mesh-fine"));
+
+        var failed = manifest.Rows.Single(row => row.VariantIndex == 1);
+        Assert.That(failed.Succeeded, Is.False);
+        Assert.That(failed.ExitCode, Is.EqualTo(201));
+
+        // Deck-set chunks are pure metadata: nothing instantiated, nothing
+        // re-uploaded — the decks the client uploaded are the decks solved.
+        Assert.That(Directory.GetFiles(m_blobStoragePath, "*.inp").Length, Is.EqualTo(inpCountBefore));
+    }
+
+    [Test]
+    public async Task MixedStudyIsRejectedUpFrontTest()
+    {
+        var blob = await m_blobService.UploadBytesAsync(
+            Encoding.UTF8.GetBytes("*HEADING\nmixed probe\n"), "probe.inp");
+
+        var options = new SweepOptionsData
+        {
+            Variants =
+            [
+                new SweepVariantData { VariantIndex = 0, DeckBlobId = blob },
+                new SweepVariantData { VariantIndex = 1 }
+            ],
+            FirstChunkSize = 2,
+            MaxChunkSize = 3
+        };
+
+        // Half a deck set, half a template: unsolvable by construction — the
+        // plan must reject the study before any node sees a task.
+        var job = m_engine.Compile(m_sweepScript);
+        var status = await m_engine.ScheduleAndWaitAsync(job, blob, options);
+
+        Assert.That(status.Result, Is.Not.EqualTo(WitProcessingResult.Completed));
+    }
+
     #endregion
 }

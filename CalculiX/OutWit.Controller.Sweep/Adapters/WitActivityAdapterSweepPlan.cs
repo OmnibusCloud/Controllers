@@ -41,11 +41,26 @@ internal sealed class WitActivityAdapterSweepPlan : WitActivityAdapterFunction<W
                     $"Variant #{variant.VariantIndex} carries {variant.Values.Count} value(s) for {options.Parameters.Count} parameter(s).");
         }
 
-        // The template is validated once, up front — a token missing from the
-        // deck must reject the sweep before any node burns a solve on it.
-        var deckPath = await BlobService.GetLocalPathAsync(baseDeckBlobId);
-        var deckText = await File.ReadAllTextAsync(deckPath);
-        SweepDeckTemplating.ValidateTemplate(deckText, options.Parameters);
+        // A deck-set study (every variant brings its own ready deck) and a
+        // templated study are distinct modes — mixing them would leave part
+        // of the table silently unsolvable, so it rejects up front.
+        var ownDeckCount = options.Variants.Count(variant => variant.DeckBlobId != Guid.Empty);
+        if (ownDeckCount > 0 && ownDeckCount < options.Variants.Count)
+            throw new InvalidOperationException(
+                $"{ownDeckCount} of {options.Variants.Count} variant(s) carry their own deck — a study is either a deck set or a template, never both.");
+
+        if (ownDeckCount > 0 && options.Parameters.Count > 0)
+            throw new InvalidOperationException(
+                "A deck-set study cannot also declare template parameters.");
+
+        if (ownDeckCount == 0)
+        {
+            // The template is validated once, up front — a token missing from the
+            // deck must reject the sweep before any node burns a solve on it.
+            var deckPath = await BlobService.GetLocalPathAsync(baseDeckBlobId);
+            var deckText = await File.ReadAllTextAsync(deckPath);
+            SweepDeckTemplating.ValidateTemplate(deckText, options.Parameters);
+        }
 
         var plan = new SweepPlanData
         {

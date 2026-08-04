@@ -44,24 +44,39 @@ internal sealed class WitActivityAdapterSweepMakeChunk : WitActivityAdapterFunct
             .ToList();
 
         // Variant decks materialize lazily, one chunk at a time — a 300-variant
-        // night sweep never holds 300 deck blobs at once.
-        var deckPath = await BlobService.GetLocalPathAsync(plan.BaseDeckBlobId);
-        var deckText = await File.ReadAllTextAsync(deckPath);
+        // night sweep never holds 300 deck blobs at once. A deck-set variant
+        // (UC-3) brings its own uploaded deck, so its chunk is pure metadata:
+        // the base template loads only when a templated variant needs it.
+        string? deckText = null;
 
         var tasks = new List<CcxTaskData>(variants.Count);
         foreach (var variant in variants)
         {
-            var variantDeck = SweepDeckTemplating.Instantiate(deckText, options.Parameters, variant.Values);
-            var deckBlobId = await BlobService.UploadBytesAsync(
-                Encoding.UTF8.GetBytes(variantDeck),
-                $"variant_{variant.VariantIndex}.inp");
+            Guid deckBlobId;
+            if (variant.DeckBlobId != Guid.Empty)
+            {
+                deckBlobId = variant.DeckBlobId;
+            }
+            else
+            {
+                if (deckText == null)
+                {
+                    var deckPath = await BlobService.GetLocalPathAsync(plan.BaseDeckBlobId);
+                    deckText = await File.ReadAllTextAsync(deckPath);
+                }
+
+                var variantDeck = SweepDeckTemplating.Instantiate(deckText, options.Parameters, variant.Values);
+                deckBlobId = await BlobService.UploadBytesAsync(
+                    Encoding.UTF8.GetBytes(variantDeck),
+                    $"variant_{variant.VariantIndex}.inp");
+            }
 
             tasks.Add(new CcxTaskData
             {
                 VariantIndex = variant.VariantIndex,
                 DeckBlobId = deckBlobId,
-                NodeCount = options.NodeCount,
-                ElementCount = options.ElementCount,
+                NodeCount = variant.NodeCount > 0 ? variant.NodeCount : options.NodeCount,
+                ElementCount = variant.ElementCount > 0 ? variant.ElementCount : options.ElementCount,
                 Threads = options.Threads,
                 Extraction = options.Extraction
             });
