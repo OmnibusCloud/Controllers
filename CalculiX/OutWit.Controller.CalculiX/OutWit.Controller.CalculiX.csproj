@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>CalculiX</ControllerName>
-    <Version>0.1.3</Version>
+    <Version>0.1.4</Version>
     <Description>Runs complete CalculiX (ccx) decks on compute nodes: each solve is one whole deck on one node — the unit of parameter-study throughput. Carries pinned ccx 2.22 builds for every supported node platform as controller assets, so nodes need no preinstalled software; responses are extracted from the result files right on the node.</Description>
     <PackageTags>calculix;ccx;fem;solver;simulation;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>ccx-solve</ControllerFeatures>
