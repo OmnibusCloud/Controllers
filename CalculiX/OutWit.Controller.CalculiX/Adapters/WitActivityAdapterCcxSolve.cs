@@ -59,7 +59,19 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
             var jobDeckPath = Path.Combine(scratchDirectory, $"{JOB_NAME}.inp");
             File.Copy(deckPath, jobDeckPath);
 
-            var outcome = await CcxProcessRunner.RunAsync(solverPath, JOB_NAME, scratchDirectory, task.Threads);
+            // The job's cancellation must reach the RUNNING solver: without
+            // the token a cancelled overnight sweep keeps every node's
+            // in-flight ccx solving to completion, and cancel only takes
+            // effect between activities.
+            var cancellation = ProcessingManager.CancellationToken(status.JobId);
+
+            var outcome = await CcxProcessRunner.RunAsync(
+                solverPath, JOB_NAME, scratchDirectory, task.Threads, cancellation);
+
+            // A killed solve is the user's verdict, not the deck's — it must
+            // surface as cancellation, never be harvested as a red variant,
+            // and no artifacts of a killed run get uploaded.
+            cancellation.ThrowIfCancellationRequested();
 
             var frdPath = ExistingArtifact(scratchDirectory, ".frd");
             var datPath = ExistingArtifact(scratchDirectory, ".dat");
