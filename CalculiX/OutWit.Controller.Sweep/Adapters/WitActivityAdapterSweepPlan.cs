@@ -41,6 +41,17 @@ internal sealed class WitActivityAdapterSweepPlan : WitActivityAdapterFunction<W
                     $"Variant #{variant.VariantIndex} carries {variant.Values.Count} value(s) for {options.Parameters.Count} parameter(s).");
         }
 
+        // The manifest maps results by VariantIndex, never positionally — a
+        // repeated index would burn the whole sweep's node-time and come
+        // back permanently unmappable to variants. Plan is the one
+        // validation gate, so the study identity is checked here.
+        var duplicate = options.Variants
+            .GroupBy(variant => variant.VariantIndex)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicate != null)
+            throw new InvalidOperationException(
+                $"Variant index {duplicate.Key} appears {duplicate.Count()} time(s) — variant indices must be unique.");
+
         // A deck-set study (every variant brings its own ready deck) and a
         // templated study are distinct modes — mixing them would leave part
         // of the table silently unsolvable, so it rejects up front.

@@ -267,5 +267,34 @@ public class SweepSolveSkeletonTests
         Assert.That(status.Result, Is.Not.EqualTo(WitProcessingResult.Completed));
     }
 
+    [Test]
+    public async Task DuplicateVariantIndexIsRejectedUpFrontTest()
+    {
+        var blob = await m_blobService.UploadBytesAsync(
+            Encoding.UTF8.GetBytes("*HEADING\ndup probe {{oc1}}\n"), "dup.inp");
+
+        var options = new SweepOptionsData
+        {
+            Parameters = [new SweepParameterData { Name = "E", Token = "{{oc1}}" }],
+            Variants =
+            [
+                new SweepVariantData { VariantIndex = 0, Values = ["1"] },
+                new SweepVariantData { VariantIndex = 0, Values = ["2"] },
+                new SweepVariantData { VariantIndex = 1, Values = ["3"] }
+            ],
+            FirstChunkSize = 2,
+            MaxChunkSize = 3
+        };
+
+        // The manifest maps results by VariantIndex, never positionally — a
+        // repeated index would burn the fleet's time and come back
+        // permanently unmappable, so the plan rejects the study before any
+        // node sees a task.
+        var job = m_engine.Compile(m_sweepScript);
+        var status = await m_engine.ScheduleAndWaitAsync(job, blob, options);
+
+        Assert.That(status.Result, Is.Not.EqualTo(WitProcessingResult.Completed));
+    }
+
     #endregion
 }

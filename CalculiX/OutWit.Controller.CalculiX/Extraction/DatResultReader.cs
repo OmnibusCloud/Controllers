@@ -42,7 +42,18 @@ public static partial class DatResultReader
             {
                 mode = Section.Forces;
                 forces = new DatForceSum(forcesHeader.Groups[1].Value);
-                result.ForceSums.Add(forces);
+
+                // ccx prints one forces block per increment/step (the header
+                // carries the time for exactly that reason) — the response is
+                // the FINAL state, so a later block for the same set REPLACES
+                // the earlier one; appending would emit duplicate response
+                // names carrying partial-load values.
+                var earlier = result.ForceSums.FindIndex(
+                    sum => sum.SetName.Equals(forces.SetName, StringComparison.OrdinalIgnoreCase));
+                if (earlier >= 0)
+                    result.ForceSums[earlier] = forces;
+                else
+                    result.ForceSums.Add(forces);
                 continue;
             }
 

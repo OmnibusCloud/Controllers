@@ -102,5 +102,53 @@ public class DeckNodeSetReaderTests
         Assert.That(DeckNodeSetReader.Read(path), Is.Empty);
     }
 
+    [Test]
+    public void SetReferencesExpandToAnyDepthTest()
+    {
+        // Standard ccx/Abaqus: a *NSET data line may list previously
+        // defined SET NAMES among the ids — the audit caught them being
+        // dropped silently, leaving probes over a subset.
+        var path = WriteDeck(
+            "*NSET, NSET=BASE\n" +
+            "1, 2, 3\n" +
+            "*NSET, NSET=CLAMP\n" +
+            "BASE, 4\n" +
+            "*NSET, NSET=ALLOF\n" +
+            "CLAMP, 5\n");
+
+        var sets = DeckNodeSetReader.Read(path);
+
+        Assert.That(sets["CLAMP"], Is.EquivalentTo(new[] { 1, 2, 3, 4 }));
+        Assert.That(sets["ALLOF"], Is.EquivalentTo(new[] { 1, 2, 3, 4, 5 }),
+            "references chain through referencing sets");
+    }
+
+    [Test]
+    public void AnUnresolvableReferenceDropsTheWholeSetTest()
+    {
+        // Loud-missing beats silent-wrong: a probe over a PARTIAL set would
+        // return a plausible wrong number, so the set must vanish whole —
+        // an absent set skips its probes by the reader's own doctrine.
+        var path = WriteDeck(
+            "*NSET, NSET=GOOD\n" +
+            "1, 2\n" +
+            "*NSET, NSET=BROKEN\n" +
+            "NOPE, 7\n" +
+            "*NSET, NSET=DOWNSTREAM\n" +
+            "BROKEN, 8\n" +
+            "*NSET, NSET=LOOPA\n" +
+            "LOOPB\n" +
+            "*NSET, NSET=LOOPB\n" +
+            "LOOPA\n");
+
+        var sets = DeckNodeSetReader.Read(path);
+
+        Assert.That(sets.ContainsKey("GOOD"), Is.True);
+        Assert.That(sets.ContainsKey("BROKEN"), Is.False, "an unknown reference is unresolvable");
+        Assert.That(sets.ContainsKey("DOWNSTREAM"), Is.False, "and the drop is transitive");
+        Assert.That(sets.ContainsKey("LOOPA"), Is.False, "a cycle never resolves");
+        Assert.That(sets.ContainsKey("LOOPB"), Is.False);
+    }
+
     #endregion
 }

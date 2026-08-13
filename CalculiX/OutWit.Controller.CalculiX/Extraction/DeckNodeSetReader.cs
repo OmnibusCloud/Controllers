@@ -22,6 +22,8 @@ public static class DeckNodeSetReader
     public static Dictionary<string, HashSet<int>> Read(string path)
     {
         var sets = new Dictionary<string, HashSet<int>>(StringComparer.OrdinalIgnoreCase);
+        var references = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        string? currentName = null;
         HashSet<int>? current = null;
         var generate = false;
         var nodeCard = false;
@@ -34,6 +36,7 @@ public static class DeckNodeSetReader
 
             if (line.StartsWith("*", StringComparison.Ordinal))
             {
+                currentName = null;
                 current = null;
                 generate = false;
                 nodeCard = false;
@@ -49,9 +52,9 @@ public static class DeckNodeSetReader
                 {
                     if (parameter.StartsWith("NSET=", StringComparison.OrdinalIgnoreCase))
                     {
-                        var name = parameter[5..].Trim();
-                        if (!sets.TryGetValue(name, out current))
-                            sets[name] = current = [];
+                        currentName = parameter[5..].Trim();
+                        if (!sets.TryGetValue(currentName, out current))
+                            sets[currentName] = current = [];
                     }
                     else if (parameter.Equals("GENERATE", StringComparison.OrdinalIgnoreCase))
                     {
@@ -62,7 +65,7 @@ public static class DeckNodeSetReader
                 continue;
             }
 
-            if (current == null)
+            if (currentName == null || current == null)
                 continue;
 
             var tokens = line.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -91,11 +94,57 @@ public static class DeckNodeSetReader
                 {
                     if (TryParse(token, out var node))
                         current.Add(node);
+                    else
+                        RecordReference(references, currentName, token);
                 }
             }
         }
 
+        ExpandReferences(sets, references);
         return sets;
+    }
+
+    // A *NSET data line may list PREVIOUSLY DEFINED SET NAMES among the node
+    // ids (standard ccx/Abaqus semantics). Dropping the token silently would
+    // leave the probe aggregating over a subset — a plausible wrong number.
+    private static void RecordReference(
+        Dictionary<string, HashSet<string>> references, string setName, string token)
+    {
+        if (!references.TryGetValue(setName, out var refs))
+            references[setName] = refs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        refs.Add(token);
+    }
+
+    // Expands set references to any depth. A set whose reference never
+    // resolves — an unknown name or a cycle — is dropped WHOLE, transitively:
+    // per the reader's doctrine an unresolved set skips its probes, and
+    // loud-missing beats silent-wrong.
+    private static void ExpandReferences(
+        Dictionary<string, HashSet<int>> sets, Dictionary<string, HashSet<string>> references)
+    {
+        var pending = new HashSet<string>(references.Keys, StringComparer.OrdinalIgnoreCase);
+
+        var progressed = true;
+        while (progressed && pending.Count > 0)
+        {
+            progressed = false;
+            foreach (var name in pending.ToList())
+            {
+                var refs = references[name];
+                if (refs.Any(pending.Contains) || !refs.All(sets.ContainsKey))
+                    continue;
+
+                foreach (var reference in refs)
+                    sets[name].UnionWith(sets[reference]);
+
+                pending.Remove(name);
+                progressed = true;
+            }
+        }
+
+        foreach (var unresolved in pending)
+            sets.Remove(unresolved);
     }
 
     private static bool TryParse(string token, out int value)
