@@ -44,18 +44,47 @@ public static class CcxResponseExtractor
     {
         var row = new CcxResponseRowData();
 
-        var blocks = frdPath != null ? FrdResultReader.Read(frdPath) : [];
-        AddTemperatureResponses(row, blocks);
-        AddDisplacementResponses(row, blocks);
-        AddStressResponses(row, blocks);
+        var blocks = frdPath != null ? Guard(() => FrdResultReader.Read(frdPath), []) : [];
+        Guard(() => AddTemperatureResponses(row, blocks));
+        Guard(() => AddDisplacementResponses(row, blocks));
+        Guard(() => AddStressResponses(row, blocks));
 
         if (datPath != null)
-            AddDatResponses(row, DatResultReader.Read(datPath));
+            Guard(() => AddDatResponses(row, DatResultReader.Read(datPath)));
 
         if (request?.Probes.Count > 0 && deckPath != null && blocks.Count > 0)
-            AddProbes(row, blocks, DeckNodeSetReader.Read(deckPath), request.Probes);
+            AddProbes(row, blocks, Guard(() => DeckNodeSetReader.Read(deckPath), new Dictionary<string, HashSet<int>>()), request.Probes);
 
         return row;
+    }
+
+    // The readers tolerate malformed LINES, but a truncated block can still
+    // blow up the value math (a node row cut mid-write yields fewer numbers
+    // than the block's component list promises). One damaged block must
+    // empty ITS response family only — the row keeps what the intact blocks
+    // yielded. This is where the "never throws over a finished solve"
+    // contract is enforced, not hoped for.
+    private static void Guard(Action extraction)
+    {
+        try
+        {
+            extraction();
+        }
+        catch
+        {
+        }
+    }
+
+    private static T Guard<T>(Func<T> extraction, T fallback)
+    {
+        try
+        {
+            return extraction();
+        }
+        catch
+        {
+            return fallback;
+        }
     }
 
     private static void AddTemperatureResponses(CcxResponseRowData row, List<FrdResultBlock> blocks)
@@ -120,32 +149,39 @@ public static class CcxResponseExtractor
         List<CcxProbeData> probes)
     {
         foreach (var probe in probes)
+            Guard(() => AddProbe(row, blocks, sets, probe));
+    }
+
+    private static void AddProbe(
+        CcxResponseRowData row,
+        List<FrdResultBlock> blocks,
+        Dictionary<string, HashSet<int>> sets,
+        CcxProbeData probe)
+    {
+        if (!sets.TryGetValue(probe.SetName, out var nodes) || nodes.Count == 0)
+            return;
+
+        var field = ProbeField(blocks, probe.Quantity);
+        if (field == null)
+            return;
+
+        var samples = nodes
+            .Where(field.ContainsKey)
+            .Select(node => field[node])
+            .ToList();
+
+        if (samples.Count == 0)
+            return;
+
+        var value = probe.Aggregate switch
         {
-            if (!sets.TryGetValue(probe.SetName, out var nodes) || nodes.Count == 0)
-                continue;
+            CcxProbeAggregate.Min => samples.Min(),
+            CcxProbeAggregate.Avg => samples.Average(),
+            _ => samples.Max()
+        };
 
-            var field = ProbeField(blocks, probe.Quantity);
-            if (field == null)
-                continue;
-
-            var samples = nodes
-                .Where(field.ContainsKey)
-                .Select(node => field[node])
-                .ToList();
-
-            if (samples.Count == 0)
-                continue;
-
-            var value = probe.Aggregate switch
-            {
-                CcxProbeAggregate.Min => samples.Min(),
-                CcxProbeAggregate.Avg => samples.Average(),
-                _ => samples.Max()
-            };
-
-            var aggregate = probe.Aggregate.ToString().ToLowerInvariant();
-            Add(row, $"{aggregate}_{probe.Quantity.ToLowerInvariant()}@{probe.SetName.ToLowerInvariant()}", value);
-        }
+        var aggregate = probe.Aggregate.ToString().ToLowerInvariant();
+        Add(row, $"{aggregate}_{probe.Quantity.ToLowerInvariant()}@{probe.SetName.ToLowerInvariant()}", value);
     }
 
     private static Dictionary<int, double>? ProbeField(List<FrdResultBlock> blocks, string quantity)

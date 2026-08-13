@@ -42,6 +42,15 @@ internal sealed class WitActivityAdapterSweepHarvest : WitActivityAdapterFunctio
             .OrderBy(result => result.VariantIndex)
             .ToList();
 
+        // Grid delivers the chunk as one group, so the wave's cardinality is
+        // an invariant — a short wave (a protocol drift, a foreign entry
+        // dropped by the filter above) must fail LOUDLY here, because the
+        // silent alternative is a manifest that under-reports forever.
+        var expected = plan.ChunkSizes[state.ChunkIndex];
+        if (results.Count != expected)
+            throw new InvalidOperationException(
+                $"Chunk {state.ChunkIndex} returned {results.Count} result(s) for {expected} task(s).");
+
         var manifest = await DownloadManifestAsync(state.ManifestBlobId);
         foreach (var result in results)
         {

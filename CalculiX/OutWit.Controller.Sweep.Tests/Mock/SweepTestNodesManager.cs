@@ -22,9 +22,9 @@ internal sealed class SweepTestNodesManager : IWitNodesManager
         m_node = node;
         CompatibleNodes =
         [
-            new SweepTestActivityNode(node),
-            new SweepTestActivityNode(node),
-            new SweepTestActivityNode(node)
+            new SweepTestActivityNode(),
+            new SweepTestActivityNode(),
+            new SweepTestActivityNode()
         ];
     }
 

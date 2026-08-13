@@ -139,5 +139,36 @@ public class CcxResponseExtractorTests
         Assert.That(row.Values, Is.Empty);
     }
 
+    [Test]
+    public void TruncatedBlockLosesItsResponsesButNotTheRowTest()
+    {
+        // A node row cut mid-write leaves fewer numbers than the block's
+        // component list promises — the value math over that block blows up.
+        // The damaged DISP block must empty ITS response family only; the
+        // intact temperature block still reports.
+        var frd = Path.Combine(TestContext.CurrentContext.TestDirectory, $"truncated_{Guid.NewGuid():N}.frd");
+        File.WriteAllLines(frd,
+        [
+            " -4  NDTEMP      1    1",
+            " -5  T           1    1",
+            " -1         1 3.00000E+02",
+            " -1         2 1.00000E+02",
+            " -3",
+            " -4  DISP        4    1",
+            " -5  D1          1    2    1    0",
+            " -5  D2          1    2    2    0",
+            " -5  D3          1    2    3    0",
+            " -1         1 1.00000E-03",
+            " -3"
+        ]);
+
+        var row = CcxResponseExtractor.Extract(null, frd, null, null);
+
+        Assert.That(Value(row, "max_temp"), Is.EqualTo(300.0).Within(1e-9));
+        Assert.That(Value(row, "min_temp"), Is.EqualTo(100.0).Within(1e-9));
+        Assert.That(row.Values.Select(value => value.Name), Has.None.StartsWith("max_disp"),
+            "the truncated displacement block yields nothing — and kills nothing else");
+    }
+
     #endregion
 }

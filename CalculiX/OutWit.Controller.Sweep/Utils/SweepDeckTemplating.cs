@@ -1,4 +1,4 @@
-using System.Text;
+using System.Text.RegularExpressions;
 using OutWit.Controller.CalculiX.Model;
 
 namespace OutWit.Controller.Sweep.Utils;
@@ -52,20 +52,54 @@ public static class SweepDeckTemplating
             throw new InvalidOperationException(
                 $"Variant carries {values.Count} value(s) for {parameters.Count} parameter(s).");
 
-        var builder = new StringBuilder(deckText);
+        // ONE pass over the deck, all tokens at once: sequential Replace
+        // calls would re-scan each parameter's OUTPUT, so a substituted
+        // value containing a later token got silently re-substituted.
+        // Longest token first (regex alternation is first-match); the first
+        // parameter claiming a token wins, matching the old semantics.
+        var byToken = new Dictionary<string, string>(StringComparer.Ordinal);
         for (var i = 0; i < parameters.Count; i++)
-            builder.Replace(parameters[i].Token, values[i]);
+            byToken.TryAdd(parameters[i].Token, values[i]);
 
-        var result = builder.ToString();
+        var result = parameters.Count == 0
+            ? deckText
+            : Regex.Replace(
+                deckText,
+                string.Join("|", byToken.Keys.OrderByDescending(token => token.Length).Select(Regex.Escape)),
+                match => byToken[match.Value]);
 
-        var leftover = result.IndexOf(TOKEN_OPEN, StringComparison.Ordinal);
-        if (leftover >= 0)
-        {
-            var tail = result.Substring(leftover, System.Math.Min(24, result.Length - leftover)).Split('\n')[0];
-            throw new InvalidOperationException($"Unsubstituted placeholder near '{tail}' — the parameter list does not cover the template.");
-        }
-
+        ThrowOnLeftoverPlaceholder(result);
         return result;
+    }
+
+    // A surviving "{{" outside a comment means the parameter list does not
+    // cover the template — but a literal "{{" INSIDE a deck comment is the
+    // deck author's own business, and failing every variant over it would
+    // punish a remark (** lines are comments in ccx).
+    private static void ThrowOnLeftoverPlaceholder(string result)
+    {
+        var search = 0;
+        while (search < result.Length)
+        {
+            var leftover = result.IndexOf(TOKEN_OPEN, search, StringComparison.Ordinal);
+            if (leftover < 0)
+                return;
+
+            var lineStart = result.LastIndexOf('\n', leftover) + 1;
+            var probe = lineStart;
+            while (probe < result.Length && result[probe] is ' ' or '\t')
+                probe++;
+
+            var isComment = probe + 1 < result.Length && result[probe] == '*' && result[probe + 1] == '*';
+            if (!isComment)
+            {
+                var tail = result.Substring(leftover, System.Math.Min(24, result.Length - leftover)).Split('\n')[0];
+                throw new InvalidOperationException(
+                    $"Unsubstituted placeholder near '{tail}' — the parameter list does not cover the template.");
+            }
+
+            search = leftover + TOKEN_OPEN.Length;
+        }
     }
 
     #endregion

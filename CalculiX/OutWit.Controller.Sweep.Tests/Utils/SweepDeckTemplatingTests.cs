@@ -54,6 +54,50 @@ public class SweepDeckTemplatingTests
             Throws.InvalidOperationException.With.Message.Contains("{{oc3}}"));
     }
 
+    [Test]
+    public void InstantiateNeverResubstitutesAValueCarryingAnotherTokenTest()
+    {
+        // Substitution is ONE pass over the original text. A value that
+        // itself carries another parameter's token used to be silently
+        // re-substituted by the sequential-Replace implementation (the
+        // deck got the OTHER parameter's value); now the surviving braces
+        // are refused loudly instead — never quietly mangled.
+        Assert.That(
+            () => SweepDeckTemplating.Instantiate(TEMPLATE, PARAMETERS, ["{{oc2}}", "0.3"]),
+            Throws.InvalidOperationException.With.Message.Contains("parameter list does not cover"));
+    }
+
+    [Test]
+    public void InstantiateToleratesBracesInsideDeckCommentsTest()
+    {
+        // "**" lines are ccx comments — a literal "{{" in a remark is the
+        // deck author's own business and must not fail every variant.
+        var template = "** a remark with {{braces}} in it\n  ** indented {{too}}\n" + TEMPLATE;
+
+        var deck = SweepDeckTemplating.Instantiate(template, PARAMETERS, ["210000.0", "0.3"]);
+
+        Assert.That(deck, Does.StartWith("** a remark with {{braces}} in it"));
+        Assert.That(deck, Does.Contain("210000.0, 0.3"));
+    }
+
+    [Test]
+    public void InstantiateFirstParameterClaimingATokenWinsTest()
+    {
+        // Two parameters sharing one token: the first claims it — the exact
+        // semantics of the old sequential Replace, pinned across the rewrite.
+        var parameters = new List<SweepParameterData>
+        {
+            new() { Name = "First", Token = "{{oc1}}" },
+            new() { Name = "Second", Token = "{{oc1}}" },
+            new() { Name = "Poisson", Token = "{{oc2}}" }
+        };
+
+        var deck = SweepDeckTemplating.Instantiate(TEMPLATE, parameters, ["111.0", "222.0", "0.3"]);
+
+        Assert.That(deck, Does.Contain("111.0, 0.3"));
+        Assert.That(deck, Does.Not.Contain("222.0"));
+    }
+
     #endregion
 
     #region Validation Tests

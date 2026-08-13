@@ -104,9 +104,23 @@ public static class CcxBinaryResolver
             .FirstOrDefault()
             ?? Directory
                 .EnumerateFiles(toolRoot, "ccx*", SearchOption.AllDirectories)
-                .FirstOrDefault(path => !path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-                                        && !path.EndsWith(".so", StringComparison.OrdinalIgnoreCase)
-                                        && !path.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase));
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .FirstOrDefault(IsExecutableCandidate);
+    }
+
+    // The wide fallback ("ccx_2.22", "ccx_2.22_MT.exe") must not latch onto a
+    // stray sibling like ccx_readme.txt or a leftover archive. Windows: only
+    // .exe can spawn anyway. Unix: no extension, or a version tail — which
+    // Path.GetExtension misreads as an extension (".22", ".22_MT") but always
+    // starts with a digit, unlike any document or archive suffix.
+    private static bool IsExecutableCandidate(string path)
+    {
+        var extension = Path.GetExtension(path);
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return extension.Equals(".exe", StringComparison.OrdinalIgnoreCase);
+
+        return extension.Length == 0 || char.IsAsciiDigit(extension[1]);
     }
 
     private static void EnsureExecutable(string path, ILogger? logger)
