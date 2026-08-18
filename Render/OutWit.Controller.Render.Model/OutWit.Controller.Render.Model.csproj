@@ -5,10 +5,27 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>Render</ControllerName>
-    <Version>1.7.0</Version>
-    <Description>Shared render and scene data types used by the OutWit.Controller.Render controller — host-side in adapters, node-side in distributed batch processing. Adds per-task/per-batch scene Attachments (RenderTaskData.Attachments, RenderTaskBatchData.Attachments) so render nodes can materialize external scene dependencies locally, and RenderSceneAttachmentRefData.Frame for per-frame baked-simulation cache slicing (each node receives only its frames' cache); appended last for wire back-compat (empty/null reproduces legacy self-contained behaviour). RenderBakeOptionsData configures the host-delegated simulation bake (Render.BakeSimulation) that converts an unbaked sequential sim into a per-frame OpenVDB cache on the best node before distribution.</Description>
-    <PackageTags>render;scene;blender;witengine;witcloud;controller;data-types</PackageTags>
+    <Version>1.8.0</Version>
+    <Description>Shared render and scene data types used by the OutWit.Controller.Render controller — host-side in adapters, node-side in distributed batch processing. Adds per-task/per-batch scene Attachments (RenderTaskData.Attachments, RenderTaskBatchData.Attachments) so render nodes can materialize external scene dependencies locally, and RenderSceneAttachmentRefData.Frame for per-frame baked-simulation cache slicing (each node receives only its frames' cache); appended last for wire back-compat (empty/null reproduces legacy self-contained behaviour). RenderBakeOptionsData configures the host-delegated simulation bake (Render.BakeSimulation) that converts an unbaked sequential sim into a per-frame OpenVDB cache on the best node before distribution. 1.8: the render job document vocabulary — the request DTOs (sceneRef, options, tileOptions, videoOptions, bakeOptions) and the validate/preflight results are published as [JobDocumentContract] types, with the schema fragment and C++/Python bindings shipped under documents/.</Description>
+    <PackageTags>render;scene;blender;witengine;witcloud;controller;data-types;job-documents</PackageTags>
+    <!-- The vocabulary artifacts carry the authors' summaries. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
+
+  <!-- Job document vocabulary: the generator scans the built assembly for
+       [JobDocumentContract] types (it also compiles the attribute into this
+       assembly, so no OutWit.Cloud.Contracts reference is needed) and writes
+       Documents/render.schema.json + render_documents.{hpp,py}. The
+       artifacts are committed — a wire-shape change is a reviewable diff —
+       and verified in CI (ContinuousIntegrationBuild → check mode). -->
+  <ItemGroup>
+    <PackageReference Include="OutWit.Cloud.Documents.Generator" Version="1.0.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Documents\**" Pack="true" PackagePath="documents\" />
+  </ItemGroup>
 
   <Import Project="..\..\Build\OutWit.Controller.Model.targets" />
 

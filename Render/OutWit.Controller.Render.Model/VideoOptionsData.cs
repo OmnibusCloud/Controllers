@@ -1,4 +1,5 @@
 using MemoryPack;
+using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
 
 namespace OutWit.Controller.Render.Model;
@@ -7,6 +8,7 @@ namespace OutWit.Controller.Render.Model;
 /// Video encoding options for the first production RenderVideo path.
 /// Current scope is intentionally minimal: MP4 container with H.264 video and no audio.
 /// </summary>
+[JobDocumentContract("render.videoOptions@1")]
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only, and deploy the server before any client that writes a new member (default MemoryPack mode rejects payloads with unknown members).
 public partial class VideoOptionsData : ModelBase

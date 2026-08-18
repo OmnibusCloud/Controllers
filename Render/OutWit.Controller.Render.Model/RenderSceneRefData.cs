@@ -1,4 +1,5 @@
 using MemoryPack;
+using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
 using System.Linq;
 
@@ -8,6 +9,7 @@ namespace OutWit.Controller.Render.Model;
 /// Bootstrap blob-backed typed-scene reference for host-side BuildBlendFromRefs execution.
 /// Current implementation points directly at a prepared .blend blob in storage.
 /// </summary>
+[JobDocumentContract("render.sceneRef@1")]
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only, and deploy the server before any client that writes a new member (default MemoryPack mode rejects payloads with unknown members).
 public partial class RenderSceneRefData : ModelBase

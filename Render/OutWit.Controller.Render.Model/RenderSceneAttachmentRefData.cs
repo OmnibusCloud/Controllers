@@ -1,4 +1,5 @@
 using MemoryPack;
+using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
 using OutWit.Common.Values;
 
@@ -13,6 +14,7 @@ namespace OutWit.Controller.Render.Model;
 // submission from a newer plugin against an older server. Tolerant mode makes version skew
 // degrade (unknown members ignored). NOTE: flipping the mode is itself a one-time wire break —
 // server (WitCloud ≥ 1.6.55) and plugin (≥ 0.7.45) must cross it together.
+[JobDocumentContract("render.sceneAttachmentRef@1")]
 [MemoryPackable(GenerateType.VersionTolerant)]
 public partial class RenderSceneAttachmentRefData : ModelBase
 {
