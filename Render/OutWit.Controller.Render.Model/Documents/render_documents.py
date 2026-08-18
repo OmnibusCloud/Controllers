@@ -11,7 +11,8 @@
 # Optional fields left as None are omitted, which lets the server apply its
 # own defaults; a field the server marks required has no default here.
 #
-# Standard library only; no OmnibusCloud SDK import is needed to use it.
+# Standard library only, Python 3.10+ (keyword-only dataclasses); no OmnibusCloud
+# SDK import is needed to use it.
 from __future__ import annotations
 
 import datetime as _datetime
