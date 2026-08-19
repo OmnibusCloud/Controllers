@@ -100,18 +100,34 @@ RULES = {
         ],
     },
     "macos-arm64": {
+        # Layout of the official dmg's ParaView-6.1.1.app: Contents/bin (pvpython is a real Mach-O, rpath
+        # @executable_path/../Libraries), Contents/Libraries (flat dylibs, the Python stdlib under lib/python3.12,
+        # and — unlike Linux — the plugin libraries next to the core ones), Contents/Python (site-packages),
+        # Contents/Frameworks (Qt only), Contents/Plugins (the .so plugin stubs), Contents/Resources.
         "remove_dirs": [
-            "Contents/doc", "Contents/examples", "Contents/translations", "Contents/Resources/qml",
-            "Contents/share/paraview-*/web", "Contents/share/paraview-*/openxrmodels", "Contents/share/proj",
-            "Contents/Plugins", "Contents/Frameworks/Qt*", "Contents/PlugIns",
-            "Contents/Libraries/python*/ensurepip", "Contents/Libraries/python*/idlelib", "Contents/Libraries/python*/tkinter", "Contents/Libraries/python*/test",
-            "Contents/MacOS/plugins",
+            "Contents/doc", "Contents/examples", "Contents/translations", "Contents/materials",
+            "Contents/Resources/web", "Contents/Resources/qml", "Contents/Plugins", "Contents/PlugIns", "Contents/Frameworks",
+            "Contents/Libraries/catalyst",
+            "Contents/Libraries/lib/python*/ensurepip", "Contents/Libraries/lib/python*/idlelib", "Contents/Libraries/lib/python*/tkinter",
+            "Contents/Libraries/lib/python*/turtledemo", "Contents/Libraries/lib/python*/test",
         ],
         "remove_files": [
-            "Contents/MacOS/paraview", "Contents/bin/paraview", "Contents/bin/vrpn_*", "Contents/bin/pvdataserver", "Contents/bin/pvrenderserver", "Contents/bin/pvserver",
+            "Contents/MacOS/paraview", "Contents/MacOS/mpiexec", "Contents/MacOS/hydra_pmi_proxy",
+            "Contents/bin/paraview", "Contents/bin/vrpn*", "Contents/bin/pvdataserver", "Contents/bin/pvrenderserver", "Contents/bin/pvserver",
+            "Contents/bin/ospray_mpi_worker", "Contents/bin/mpiexec", "Contents/bin/hydra_pmi_proxy",
+            "Contents/Resources/proj.db", "Contents/Resources/qt.conf", "Contents/Resources/pvIcon.icns",
             "Contents/Libraries/libpq*", "Contents/Libraries/libvtkGUISupportQt-pv*", "Contents/Libraries/libvtkQtTesting-pv*", "Contents/Libraries/libvtkExtensionsShaderBall-pv*",
             "Contents/Libraries/libnvindex*", "Contents/Libraries/libcatalyst-paraview*", "Contents/Libraries/libcatalyst-stub*",
+            "Contents/Libraries/libospray_module_mpi*", "Contents/Libraries/libqhull_r*", "Contents/Libraries/libsf_error_state*",
         ],
+        # Plugin libraries live next to the core ones here, so the rule set is completed by a closure prune:
+        # every dylib not reachable from pvpython / the Python extension modules goes, except the dlopen'd
+        # families (OSPRay CPU device and friends).
+        "prune_unreachable": {
+            "libraries": "Contents/Libraries",
+            "roots": ["Contents/bin/pvpython", "Contents/bin/pvbatch", "Contents/Python/**/*.so", "Contents/Libraries/lib/python*/lib-dynload/*.so"],
+            "keep": ["libospray*", "libopenvkl*", "libembree*", "librkcommon*", "libtbb*", "libglcommon*"],
+        },
         "site_packages": "Contents/Python",
         "dll_dir": None,
         "dedupe_dll_dirs": [],
@@ -240,6 +256,37 @@ def main(argv):
             for name in sorted(os.listdir(sp)):
                 if fnmatch.fnmatch(name, pattern):
                     remove_path(os.path.join(sp, name))
+
+    prune = rules.get("prune_unreachable")
+    if prune:
+        import glob
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from macho_closure import loads_of_file
+        lib_dir = os.path.join(root, *prune["libraries"].split("/"))
+        available = {}
+        for name in os.listdir(lib_dir):
+            path = os.path.join(lib_dir, name)
+            if os.path.isfile(path) and not os.path.islink(path) and ".dylib" in name:
+                available[name] = path
+        roots = []
+        for pattern in prune["roots"]:
+            roots.extend(glob.glob(os.path.join(root, *pattern.split("/")), recursive=True))
+        seen, queue = set(), list(roots)
+        while queue:
+            for name in loads_of_file(queue.pop()):
+                if name in available and name not in seen:
+                    seen.add(name)
+                    queue.append(available[name])
+        print("closure prune: %d of %d libraries reachable from %d roots" % (len(seen), len(available), len(roots)))
+        for name in sorted(available):
+            if name in seen or any(fnmatch.fnmatch(name, keep) for keep in prune["keep"]):
+                continue
+            remove_path(available[name])
+            # Aliases (symlinks) of a pruned library go with it.
+            for alias in os.listdir(lib_dir):
+                alias_path = os.path.join(lib_dir, alias)
+                if os.path.islink(alias_path) and not os.path.exists(alias_path):
+                    remove_path(alias_path)
 
     after = size_of(root) if not args.dry_run else before - removed
     print("removed %.0f MB; runtime %.0f MB -> %.0f MB (%.0f%%)" % (removed / 1e6, before / 1e6, after / 1e6, 100.0 * after / max(1, before)))

@@ -70,8 +70,8 @@
     <ControllerDataAsset Include="paraview-win-x64">
       <RuntimeIdentifier>win-x64</RuntimeIdentifier>
       <Uri>gh-release://OmnibusCloud/Controllers/paraview-v0.1.0/paraview-windows-x64.zip</Uri>
-      <Sha256>0000000000000000000000000000000000000000000000000000000000000000</Sha256>
-      <Size>0</Size>
+      <Sha256>4111e02bb72d7dfce6313d2377990f791544d4b569d63a2af8218842bebd5b93</Sha256>
+      <Size>247373911</Size>
       <ExtractTo>paraview/windows-x64/</ExtractTo>
       <PackSource>paraview/windows-x64</PackSource>
       <PackKind>zip-folder</PackKind>
@@ -79,8 +79,8 @@
     <ControllerDataAsset Include="paraview-linux-x64">
       <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
       <Uri>gh-release://OmnibusCloud/Controllers/paraview-v0.1.0/paraview-linux-x64.zip</Uri>
-      <Sha256>0000000000000000000000000000000000000000000000000000000000000000</Sha256>
-      <Size>0</Size>
+      <Sha256>879640dce46af0fd834944a73f3a46780bbe9d04b3946cad9638b0f8b8265310</Sha256>
+      <Size>411363458</Size>
       <ExtractTo>paraview/linux-x64/</ExtractTo>
       <PackSource>paraview/linux-x64</PackSource>
       <PackKind>zip-folder</PackKind>
@@ -88,8 +88,8 @@
     <ControllerDataAsset Include="paraview-osx-arm64">
       <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
       <Uri>gh-release://OmnibusCloud/Controllers/paraview-v0.1.0/paraview-macos-arm64.zip</Uri>
-      <Sha256>0000000000000000000000000000000000000000000000000000000000000000</Sha256>
-      <Size>0</Size>
+      <Sha256>87f9965210a331c019274945dc173364bc6579025fb6ea99848df5dfc5fac6c6</Sha256>
+      <Size>259539063</Size>
       <ExtractTo>paraview/macos-arm64/</ExtractTo>
       <PackSource>paraview/macos-arm64</PackSource>
       <PackKind>zip-folder</PackKind>

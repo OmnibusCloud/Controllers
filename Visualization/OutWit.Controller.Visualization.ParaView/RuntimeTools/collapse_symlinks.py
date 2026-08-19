@@ -1,6 +1,6 @@
 """Replaces the symlink chains of a Linux/macOS ParaView tree with one regular file per shared library.
 
-    python3 collapse_symlinks.py <runtime-root> [--pseudo]
+    python3 collapse_symlinks.py <runtime-root> [--pseudo] [--keep-alias <glob>]...
 
 Zip archives (and the engine's asset extractor, which unpacks them with .NET's ZipFile) carry no
 symlinks, and storing every alias of a library as a copy would triple the archive. Dynamic loaders
@@ -10,12 +10,18 @@ every other alias (the unversioned development link, the fully versioned name); 
 full byte-identical copy (the bundled Mesa ships its aliases as copies) is deleted too. Libraries
 without an embedded name keep their file name. Non-library symlinks are replaced by copies.
 
+Some families are dlopen'd by their UNVERSIONED alias rather than linked by loader name — OSPRay
+loads "libospray_module_ispc.so"/".dylib", Open VKL its device modules — so --keep-alias <glob> marks
+aliases that must survive: when nothing in the tree links the library by its loader name the single
+kept file takes the alias name; otherwise the alias is kept as a copy.
+
 --pseudo additionally treats the files 7-Zip writes on Windows when extracting HFS+ symlinks
 (a tiny regular file whose content is the link target path) as symlinks, which is how the macOS
 bundle is processed on the author's Windows machine.
 """
 
 import filecmp
+import fnmatch
 import os
 import shutil
 import struct
@@ -102,6 +108,110 @@ def macho_id(data):
     return None
 
 
+def elf_needed(data):
+    """DT_NEEDED names of an ELF image."""
+    if len(data) < 64 or data[:4] != b"\x7fELF":
+        return []
+    is64 = data[4] == 2
+    endian = "<" if data[5] == 1 else ">"
+    if is64:
+        e_shoff = struct.unpack_from(endian + "Q", data, 0x28)[0]
+        e_shentsize, e_shnum = struct.unpack_from(endian + "HH", data, 0x3A)
+    else:
+        e_shoff = struct.unpack_from(endian + "I", data, 0x20)[0]
+        e_shentsize, e_shnum = struct.unpack_from(endian + "HH", data, 0x2E)
+    sections = []
+    for i in range(e_shnum):
+        off = e_shoff + i * e_shentsize
+        if off + e_shentsize > len(data):
+            return []
+        if is64:
+            _, sh_type, _, _, sh_offset, sh_size, sh_link, _, _, sh_entsize = struct.unpack_from(endian + "IIQQQQIIQQ", data, off)
+        else:
+            _, sh_type, _, _, sh_offset, sh_size, sh_link, _, _, sh_entsize = struct.unpack_from(endian + "IIIIIIIIII", data, off)
+        sections.append((sh_type, sh_offset, sh_size, sh_link, sh_entsize))
+    needed = []
+    for sh_type, sh_offset, sh_size, sh_link, sh_entsize in sections:
+        if sh_type != 6 or sh_link >= len(sections):
+            continue
+        _, str_off, _, _, _ = sections[sh_link]
+        entsize = sh_entsize or (16 if is64 else 8)
+        for pos in range(sh_offset, min(sh_offset + sh_size, len(data) - entsize + 1), entsize):
+            d_tag, d_val = struct.unpack_from(endian + ("qQ" if is64 else "iI"), data, pos)
+            if d_tag == 0:
+                break
+            if d_tag == 1:  # DT_NEEDED
+                start = str_off + d_val
+                end = data.find(b"\0", start)
+                if end > start:
+                    needed.append(data[start:end].decode("ascii", "replace"))
+    return needed
+
+
+def macho_loads(data):
+    """Basenames of LC_LOAD_DYLIB / LC_LOAD_WEAK_DYLIB / LC_REEXPORT_DYLIB of a Mach-O image."""
+    if len(data) < 32:
+        return []
+    magic = struct.unpack_from(">I", data, 0)[0]
+    if magic == 0xCAFEBABE:
+        nfat = struct.unpack_from(">I", data, 4)[0]
+        if nfat == 0:
+            return []
+        _, _, offset, size, _ = struct.unpack_from(">IIIII", data, 8)
+        return macho_loads(data[offset:offset + size])
+    little = struct.unpack_from("<I", data, 0)[0]
+    if little == 0xFEEDFACF:
+        endian, header = "<", 32
+    elif little == 0xFEEDFACE:
+        endian, header = "<", 28
+    elif magic == 0xFEEDFACF:
+        endian, header = ">", 32
+    elif magic == 0xFEEDFACE:
+        endian, header = ">", 28
+    else:
+        return []
+    ncmds = struct.unpack_from(endian + "I", data, 16)[0]
+    names = []
+    pos = header
+    for _ in range(ncmds):
+        if pos + 8 > len(data):
+            break
+        cmd, cmdsize = struct.unpack_from(endian + "II", data, pos)
+        if cmdsize < 8:
+            break
+        if cmd in (0xC, 0x80000018, 0x8000001F):
+            name_off = struct.unpack_from(endian + "I", data, pos + 8)[0]
+            start = pos + name_off
+            end = data.find(b"\0", start, pos + cmdsize)
+            names.append(os.path.basename(data[start:end if end > 0 else pos + cmdsize].decode("utf-8", "replace")))
+        pos += cmdsize
+    return names
+
+
+BINARY_MAGICS = (b"\x7fELF", b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xfe\xed\xfa\xcf", b"\xfe\xed\xfa\xce")
+
+
+def referenced_names(root):
+    """Every library name some binary in the tree links (DT_NEEDED / LC_LOAD_*)."""
+    names = set()
+    for dirpath, _, filenames in os.walk(root):
+        for name in filenames:
+            path = os.path.join(dirpath, name)
+            if os.path.islink(path):
+                continue
+            try:
+                with open(path, "rb") as handle:
+                    head = handle.read(4)
+                    if head not in BINARY_MAGICS:
+                        continue
+                    data = head + handle.read()
+            except OSError:
+                continue
+            names.update(elf_needed(data))
+            names.update(macho_loads(data))
+    return names
+
+
 def library_name_of(path):
     """The name the loader resolves this library by (SONAME / LC_ID_DYLIB basename), or None."""
     try:
@@ -154,12 +264,34 @@ def resolve_pseudo_chain(path):
 
 def main(argv):
     pseudo = "--pseudo" in argv
-    positional = [a for a in argv if not a.startswith("--")]
+    keep_alias = []
+    positional = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--keep-alias" and i + 1 < len(argv):
+            keep_alias.append(argv[i + 1])
+            i += 2
+            continue
+        if not argv[i].startswith("--"):
+            positional.append(argv[i])
+        i += 1
     if not positional:
         print(__doc__)
         return 2
     root = os.path.abspath(positional[0])
-    replaced = removed = copied = 0
+    replaced = removed = copied = kept = 0
+    referenced = referenced_names(root) if keep_alias else set()
+
+    def is_kept_alias(name):
+        # Only the UNVERSIONED alias (libfoo.so / libfoo.dylib, not libfoo.so.2 / libfoo.2.dylib) is
+        # dlopen'd by name; versioned aliases of the same family collapse like everything else.
+        for suffix in (".so", ".dylib"):
+            if name.endswith(suffix):
+                parts = name[:-len(suffix)].split(".")
+                if len(parts) > 1 and parts[-1].isdigit():
+                    return False
+                return any(fnmatch.fnmatch(name, pattern) for pattern in keep_alias)
+        return False
 
     def links_in(dirpath, names):
         for name in names:
@@ -188,6 +320,19 @@ def main(argv):
                 os.remove(path)
                 shutil.copy2(target, path)
                 copied += 1
+                print("  copied non-library link %s -> %s" % (os.path.relpath(path, root), os.path.relpath(target, root)))
+                continue
+            if is_kept_alias(name) and name != library_name:
+                # A dlopen'd alias must exist under this very name. When nothing links the loader name
+                # the alias becomes the one kept file (a rename); otherwise it is kept as a copy.
+                os.remove(path)
+                if library_name in referenced:
+                    shutil.copy2(target, path)
+                    print("  dlopen'd alias %s kept as a copy (%s is linked by name)" % (os.path.relpath(path, root), library_name))
+                else:
+                    os.rename(target, path)
+                    print("  dlopen'd alias %s is the single kept file (%s is not linked by name)" % (os.path.relpath(path, root), library_name))
+                kept += 1
                 continue
             wanted = os.path.join(os.path.dirname(target), library_name)
             os.remove(path)
@@ -208,6 +353,8 @@ def main(argv):
             library_name = library_name_of(path)
             if not library_name or library_name == name:
                 continue
+            if is_kept_alias(name):
+                continue  # a dlopen'd alias: kept under its own name by design (single file or copy)
             wanted = os.path.join(dirpath, library_name)
             if not os.path.exists(wanted):
                 os.rename(path, wanted)
@@ -217,7 +364,7 @@ def main(argv):
                 deduped += 1
             else:
                 print("  ! %s is %s to its loader but differs from the existing file; kept both" % (os.path.relpath(path, root), library_name))
-    print("links removed: %d, libraries renamed to their loader name: %d, duplicate alias copies deleted: %d, non-library links copied: %d" % (removed, replaced, deduped, copied))
+    print("links removed: %d, libraries renamed: %d, duplicate alias copies deleted: %d, dlopen'd aliases kept: %d, non-library links copied: %d" % (removed, replaced, deduped, kept, copied))
     return 0
 
 

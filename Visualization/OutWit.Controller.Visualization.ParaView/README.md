@@ -87,7 +87,23 @@ allowlist from the trimmed runtime — never by the scripts alone.
 
 `RuntimeTools/` is author-side: `generate_fixtures.py` (the golden corpus), `generate_allowlist.py`
 (the proxy allowlist from the corpus + the live registration), `trim_paraview.py`, `collapse_symlinks.py`,
-`pe_closure.py` / `elf_closure.py` (import-closure reports that guide the trim rules).
+`pe_closure.py` / `elf_closure.py` / `macho_closure.py` (import-closure reports that guide the trim rules).
+The author recipe per platform (official archive → `@Prerequisites/paraview/<platform>`):
+
+```
+# Windows (extract the official zip first)
+python trim_paraview.py --platform windows-x64 --source <extracted> --out @Prerequisites/paraview/windows-x64
+# Linux (inside ubuntu:22.04 — the tarball's symlinks need a POSIX filesystem)
+python3 trim_paraview.py --platform linux-x64 --source <extracted> --out linux-x64
+python3 collapse_symlinks.py linux-x64 --keep-alias "libospray_module_*" --keep-alias "libopenvkl_module_cpu_device.so"
+# macOS (extract ParaView-6.1.1.app from the dmg with 7-Zip ≥ 22; HFS+ symlinks come out as real links)
+python trim_paraview.py --platform macos-arm64 --source <ParaView-6.1.1.app> --out @Prerequisites/paraview/macos-arm64/ParaView-6.1.1.app
+python collapse_symlinks.py @Prerequisites/paraview/macos-arm64/ParaView-6.1.1.app --keep-alias "libospray_module_*" --keep-alias "libopenvkl_module_cpu_device.dylib"
+# then: outwit-assets-pack <csproj> --prerequisites @Prerequisites --apply --push-release
+```
+
+OSPRay and Open VKL dlopen their device modules by the *unversioned* name, which is why those aliases
+survive the collapse; everything else is resolved by SONAME / install name.
 
 ## Limits (version 1)
 
