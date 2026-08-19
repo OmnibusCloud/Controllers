@@ -1,0 +1,590 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:omnibuscloud:documents:paraview",
+  "title": "OmnibusCloud job document vocabulary: paraview",
+  "description": "Published document types of one controller component. Each $defs entry keyed by a type id (<component>.<name>@<major>) is the value shape carried by a job request parameter of kind \"document\" and by the value document of a job variable; each entry keyed by a plain name is an enum referenced by those shapes. Wire convention: camelCase properties, enum member names as strings, null properties omitted.",
+  "x-oc-vocabulary": {
+    "schemaVersion": 1,
+    "component": "paraview",
+    "types": [
+      "paraview.attachmentRef@1",
+      "paraview.frameSelection@1",
+      "paraview.outputOptions@1",
+      "paraview.pluginRequirement@1",
+      "paraview.renderResult@1",
+      "paraview.runtimeRequirement@1",
+      "paraview.sceneRef@1",
+      "paraview.validationReport@1"
+    ],
+    "source": {
+      "assembly": "OutWit.Controller.Visualization.ParaView.Model",
+      "version": "0.1.0"
+    },
+    "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
+  },
+  "$defs": {
+    "paraview.attachmentRef@1": {
+      "type": "object",
+      "title": "ParaviewAttachmentRef",
+      "description": "One content-addressed file of a visualization package: the blob that holds it, the normalized logical path the state refers to it by, its digest and size, its semantic role, and the file-series metadata that drives per-task attachment subsetting.",
+      "x-oc-type-id": "paraview.attachmentRef@1",
+      "x-oc-binding-name": "ParaviewAttachmentRef",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewAttachmentRefData, OutWit.Controller.Visualization.ParaView.Model",
+      "properties": {
+        "blobId": {
+          "description": "Blob identifier of the uploaded file content.",
+          "x-oc-clr-name": "BlobId",
+          "type": "string",
+          "format": "uuid"
+        },
+        "logicalPath": {
+          "description": "Normalized logical path inside the package: relative, '/'-separated, no '..', no drive letter, no URI scheme. The state refers to the file by exactly this path, and the node materializes the file at exactly this path under the task's package root.",
+          "x-oc-clr-name": "LogicalPath",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "Lower-case hexadecimal SHA-256 digest of the file content.",
+          "x-oc-clr-name": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "description": "Declared byte size of the file content.",
+          "x-oc-clr-name": "Size",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "role": {
+          "description": "Semantic role of the file.",
+          "x-oc-clr-name": "Role",
+          "$ref": "#/$defs/ParaViewAttachmentRole"
+        },
+        "seriesGroup": {
+          "description": "Name of the file-series group the file belongs to (for example the reader's registration name); empty for a file that is not part of a series.",
+          "x-oc-clr-name": "SeriesGroup",
+          "type": "string"
+        },
+        "timestepIndices": {
+          "description": "Indices into the state's timeline at which this file is displayed. Empty means the file applies to every timestep (static meshes, non-series inputs, indexes). A series member with an empty list is a series whose format gives no per-timestep association: the whole group is shipped to every task and the fallback is recorded in the validation report.",
+          "x-oc-clr-name": "TimestepIndices",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          }
+        },
+        "seriesOrdinal": {
+          "description": "Position of the file inside its series group (ordering metadata, informational).",
+          "x-oc-clr-name": "SeriesOrdinal",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      }
+    },
+    "paraview.frameSelection@1": {
+      "type": "object",
+      "title": "ParaviewFrameSelection",
+      "description": "Which timesteps of the state's timeline to render. Indices refer to the resolved timeline (the state's TimeKeeper); a static scene has exactly one timestep, index 0.",
+      "x-oc-type-id": "paraview.frameSelection@1",
+      "x-oc-binding-name": "ParaviewFrameSelection",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewFrameSelectionData, OutWit.Controller.Visualization.ParaView.Model",
+      "properties": {
+        "mode": {
+          "description": "Selection mode.",
+          "x-oc-clr-name": "Mode",
+          "$ref": "#/$defs/ParaViewFrameSelectionMode"
+        },
+        "first": {
+          "description": "First timestep index (Single: the only index; Range: the start).",
+          "x-oc-clr-name": "First",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "last": {
+          "description": "Last timestep index, inclusive (Range only).",
+          "x-oc-clr-name": "Last",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "step": {
+          "description": "Index stride (Range only; at least 1).",
+          "x-oc-clr-name": "Step",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "indices": {
+          "description": "Explicit timestep indices, in render order (Explicit only).",
+          "x-oc-clr-name": "Indices",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          }
+        }
+      }
+    },
+    "paraview.outputOptions@1": {
+      "type": "object",
+      "title": "ParaviewOutputOptions",
+      "description": "What to render from the package: the view, the output size and format, and the timesteps. Everything except Frames is per-output and participates in the task identity; the frame selection determines the task set.",
+      "x-oc-type-id": "paraview.outputOptions@1",
+      "x-oc-binding-name": "ParaviewOutputOptions",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewOutputOptionsData, OutWit.Controller.Visualization.ParaView.Model",
+      "properties": {
+        "viewId": {
+          "description": "Registration name of the render view to capture (the state's views collection, for example RenderView1). Empty selects the state's first render view; the validation report records the resolved name.",
+          "x-oc-clr-name": "ViewId",
+          "type": "string"
+        },
+        "width": {
+          "description": "Output width in pixels.",
+          "x-oc-clr-name": "Width",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "height": {
+          "description": "Output height in pixels.",
+          "x-oc-clr-name": "Height",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "format": {
+          "description": "Output image format.",
+          "x-oc-clr-name": "Format",
+          "$ref": "#/$defs/ParaViewImageFormat"
+        },
+        "transparentBackground": {
+          "description": "Render with a transparent background (PNG only; ignored for JPEG).",
+          "x-oc-clr-name": "TransparentBackground",
+          "type": "boolean"
+        },
+        "frames": {
+          "description": "Timesteps to render.",
+          "x-oc-clr-name": "Frames",
+          "$ref": "#/$defs/paraview.frameSelection@1"
+        }
+      }
+    },
+    "paraview.pluginRequirement@1": {
+      "type": "object",
+      "title": "ParaviewPluginRequirement",
+      "description": "A non-built-in ParaView plugin the state requires. Version 1 admits exactly one entry: the OmnibusCloud .frd reader at a version the bundled reader satisfies.",
+      "x-oc-type-id": "paraview.pluginRequirement@1",
+      "x-oc-binding-name": "ParaviewPluginRequirement",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewPluginRequirementData, OutWit.Controller.Visualization.ParaView.Model",
+      "properties": {
+        "name": {
+          "description": "Plugin name as ParaView registers it (for example OmnibusCloudFrdReader).",
+          "x-oc-clr-name": "Name",
+          "type": "string"
+        },
+        "version": {
+          "description": "Minimum plugin version the state was produced with, as major.minor[.patch].",
+          "x-oc-clr-name": "Version",
+          "type": "string"
+        }
+      }
+    },
+    "paraview.renderResult@1": {
+      "type": "object",
+      "title": "ParaviewRenderResult",
+      "description": "Result of rendering one task: the task identity it answers, the output image blob, the validated output dimensions and size, and the exact backend versions that produced it.",
+      "x-oc-type-id": "paraview.renderResult@1",
+      "x-oc-binding-name": "ParaviewRenderResult",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewRenderResultData, OutWit.Controller.Visualization.ParaView.Model",
+      "properties": {
+        "taskId": {
+          "description": "Identity of the task this result answers.",
+          "x-oc-clr-name": "TaskId",
+          "type": "string"
+        },
+        "taskIndex": {
+          "description": "Ordinal of the task (Collect restores this order).",
+          "x-oc-clr-name": "TaskIndex",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "viewId": {
+          "description": "Registration name of the rendered view.",
+          "x-oc-clr-name": "ViewId",
+          "type": "string"
+        },
+        "timestepIndex": {
+          "description": "Rendered timestep index.",
+          "x-oc-clr-name": "TimestepIndex",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "timeValue": {
+          "description": "Rendered physical time value; null for a static scene.",
+          "x-oc-clr-name": "TimeValue",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "imageBlobId": {
+          "description": "Blob identifier of the rendered image.",
+          "x-oc-clr-name": "ImageBlobId",
+          "type": "string",
+          "format": "uuid"
+        },
+        "width": {
+          "description": "Validated output width in pixels.",
+          "x-oc-clr-name": "Width",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "height": {
+          "description": "Validated output height in pixels.",
+          "x-oc-clr-name": "Height",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "format": {
+          "description": "Output image format.",
+          "x-oc-clr-name": "Format",
+          "$ref": "#/$defs/ParaViewImageFormat"
+        },
+        "byteSize": {
+          "description": "Output byte size.",
+          "x-oc-clr-name": "ByteSize",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "runtimeVersion": {
+          "description": "Exact ParaView runtime version that rendered the task (for example 6.1.1).",
+          "x-oc-clr-name": "RuntimeVersion",
+          "type": "string"
+        },
+        "readerVersion": {
+          "description": "Version of the bundled OmnibusCloud reader loaded for the task; empty when no plugin was loaded.",
+          "x-oc-clr-name": "ReaderVersion",
+          "type": "string"
+        },
+        "renderSeconds": {
+          "description": "Wall-clock seconds of the runner process.",
+          "x-oc-clr-name": "RenderSeconds",
+          "type": "number",
+          "format": "double"
+        },
+        "diagnostics": {
+          "description": "Bounded diagnostic text from the runner (never the full process output).",
+          "x-oc-clr-name": "Diagnostics",
+          "type": "string"
+        }
+      }
+    },
+    "paraview.runtimeRequirement@1": {
+      "type": "object",
+      "title": "ParaviewRuntimeRequirement",
+      "description": "What the package was produced with and what it needs to be rendered: the producing ParaView version (exact major and minor are mandatory in the version-1 compatibility policy), the producing plugin and platform (provenance), and the non-built-in plugins the state requires.",
+      "x-oc-type-id": "paraview.runtimeRequirement@1",
+      "x-oc-binding-name": "ParaviewRuntimeRequirement",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewRuntimeRequirementData, OutWit.Controller.Visualization.ParaView.Model",
+      "properties": {
+        "paraViewMajor": {
+          "description": "Major version of the ParaView that produced the state.",
+          "x-oc-clr-name": "ParaViewMajor",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "paraViewMinor": {
+          "description": "Minor version of the ParaView that produced the state.",
+          "x-oc-clr-name": "ParaViewMinor",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "paraViewPatch": {
+          "description": "Patch version of the ParaView that produced the state (informational; patch mismatch is tolerated).",
+          "x-oc-clr-name": "ParaViewPatch",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "producerPluginVersion": {
+          "description": "Version of the producing OmnibusCloud ParaView plugin (provenance).",
+          "x-oc-clr-name": "ProducerPluginVersion",
+          "type": "string"
+        },
+        "producerPlatform": {
+          "description": "Runtime identifier of the producing platform, for example win-x64 (provenance).",
+          "x-oc-clr-name": "ProducerPlatform",
+          "type": "string"
+        },
+        "plugins": {
+          "description": "Non-built-in plugins the state requires. Unknown names are rejected; version 1 allowlists only the bundled OmnibusCloud reader.",
+          "x-oc-clr-name": "Plugins",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/paraview.pluginRequirement@1"
+          }
+        }
+      }
+    },
+    "paraview.sceneRef@1": {
+      "type": "object",
+      "title": "ParaviewSceneRef",
+      "description": "Blob-backed reference to an OmnibusCloud ParaView package: the saved state (.pvsm) blob, every content-addressed attachment the state refers to by logical path, the runtime requirements, and the producer's view of the timeline. The package is validated server-side independently of any plugin-side validation; the controller never uses a client absolute path.",
+      "x-oc-type-id": "paraview.sceneRef@1",
+      "x-oc-binding-name": "ParaviewSceneRef",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewSceneRefData, OutWit.Controller.Visualization.ParaView.Model",
+      "properties": {
+        "stateBlobId": {
+          "description": "Blob identifier of the saved ParaView state (.pvsm).",
+          "x-oc-clr-name": "StateBlobId",
+          "type": "string",
+          "format": "uuid"
+        },
+        "stateSha256": {
+          "description": "Lower-case hexadecimal SHA-256 digest of the state file; verified against the blob before validation.",
+          "x-oc-clr-name": "StateSha256",
+          "type": "string"
+        },
+        "stateSize": {
+          "description": "Declared byte size of the state file.",
+          "x-oc-clr-name": "StateSize",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "attachments": {
+          "description": "Every file the state refers to, by normalized logical path, with digest, size, role, and series metadata.",
+          "x-oc-clr-name": "Attachments",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/paraview.attachmentRef@1"
+          }
+        },
+        "runtime": {
+          "description": "Producing ParaView version and required plugins.",
+          "x-oc-clr-name": "Runtime",
+          "$ref": "#/$defs/paraview.runtimeRequirement@1"
+        },
+        "timestepValues": {
+          "description": "The timeline (TimeKeeper timestep values) as the producer saw it. The state's own TimeKeeper is authoritative when the state carries one; the validation report records the resolved timeline. Empty for a static scene.",
+          "x-oc-clr-name": "TimestepValues",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "packageManifestJson": {
+          "description": "The producer's package manifest (com.omnibuscloud.paraview-package) as opaque provenance, bounded in size. It never drives a controller decision — the typed members above do.",
+          "x-oc-clr-name": "PackageManifestJson",
+          "type": "string"
+        }
+      }
+    },
+    "paraview.validationReport@1": {
+      "type": "object",
+      "title": "ParaviewValidationReport",
+      "description": "Outcome of ParaView.Validate: whether the package, state, and options are admissible, every error and warning found, the subsetting fallbacks recorded, and the resolved rendering plan (view, timeline, timestep indices, output size) that ParaView.Split turns into tasks.",
+      "x-oc-type-id": "paraview.validationReport@1",
+      "x-oc-binding-name": "ParaviewValidationReport",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewValidationReportData, OutWit.Controller.Visualization.ParaView.Model",
+      "properties": {
+        "isValid": {
+          "description": "True when no error was found; Split refuses an invalid report.",
+          "x-oc-clr-name": "IsValid",
+          "type": "boolean"
+        },
+        "errors": {
+          "description": "Permanent input failures (the job must not retry).",
+          "x-oc-clr-name": "Errors",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "description": "Non-fatal findings.",
+          "x-oc-clr-name": "Warnings",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fallbacks": {
+          "description": "Series groups that fell back to full-set transfer because their format gives no per-timestep association.",
+          "x-oc-clr-name": "Fallbacks",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "packageDigest": {
+          "description": "Digest of the whole package (state + attachments) — the first component of every task identity.",
+          "x-oc-clr-name": "PackageDigest",
+          "type": "string"
+        },
+        "resolvedViewId": {
+          "description": "Registration name of the view that will be rendered.",
+          "x-oc-clr-name": "ResolvedViewId",
+          "type": "string"
+        },
+        "resolvedTimestepIndices": {
+          "description": "Timestep indices that will be rendered, in render order.",
+          "x-oc-clr-name": "ResolvedTimestepIndices",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          }
+        },
+        "timestepValues": {
+          "description": "The resolved timeline (TimeKeeper values); empty for a static scene.",
+          "x-oc-clr-name": "TimestepValues",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "attachmentCount": {
+          "description": "Number of attachments in the package.",
+          "x-oc-clr-name": "AttachmentCount",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "totalAttachmentBytes": {
+          "description": "Sum of the declared attachment sizes plus the state size.",
+          "x-oc-clr-name": "TotalAttachmentBytes",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "proxyTypes": {
+          "description": "Distinct proxy types the state instantiates, as group/type, sorted.",
+          "x-oc-clr-name": "ProxyTypes",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "requiredPlugins": {
+          "description": "Plugin requirements of the package, as name@version.",
+          "x-oc-clr-name": "RequiredPlugins",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "runtimeVersion": {
+          "description": "The ParaView runtime version the controller will render with.",
+          "x-oc-clr-name": "RuntimeVersion",
+          "type": "string"
+        },
+        "width": {
+          "description": "Resolved output width in pixels.",
+          "x-oc-clr-name": "Width",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "height": {
+          "description": "Resolved output height in pixels.",
+          "x-oc-clr-name": "Height",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "format": {
+          "description": "Resolved output format.",
+          "x-oc-clr-name": "Format",
+          "$ref": "#/$defs/ParaViewImageFormat"
+        }
+      }
+    },
+    "ParaViewAttachmentRole": {
+      "type": "string",
+      "title": "ParaViewAttachmentRole",
+      "description": "Semantic role of a package attachment. The role drives per-task attachment subsetting: a series index file rides in every task's subset, while reader inputs ride only in the subsets of the timesteps they belong to.",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewAttachmentRole",
+      "enum": [
+        "ReaderInput",
+        "SeriesIndex",
+        "Auxiliary"
+      ],
+      "x-oc-member-descriptions": {
+        "ReaderInput": "A data file a reader in the state opens (a mesh, a field, one piece of a file series).",
+        "SeriesIndex": "A collection/index file (for example a .pvd or a .series JSON) whose reader needs the whole index at load time; present in every task's subset while the referenced pieces stay per-timestep.",
+        "Auxiliary": "A file the state references that is not read through a reader input (textures, lookup table presets, fonts); static, present in every task's subset."
+      }
+    },
+    "ParaViewFrameSelectionMode": {
+      "type": "string",
+      "title": "ParaViewFrameSelectionMode",
+      "description": "How ParaViewFrameSelectionData picks the timesteps to render.",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewFrameSelectionMode",
+      "enum": [
+        "Single",
+        "Range",
+        "All",
+        "Explicit"
+      ],
+      "x-oc-member-descriptions": {
+        "Single": "One output: the timestep at index First.",
+        "Range": "Timestep indices First..Last inclusive, every Step.",
+        "All": "Every timestep of the state's timeline (one output for a static scene).",
+        "Explicit": "Exactly the indices listed in Indices, in that order."
+      }
+    },
+    "ParaViewImageFormat": {
+      "type": "string",
+      "title": "ParaViewImageFormat",
+      "description": "Image format of a rendered output. Version 1 supports the two formats the runner's SaveScreenshot path and the adapter's output validator both understand.",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewImageFormat",
+      "enum": [
+        "Png",
+        "Jpeg"
+      ],
+      "x-oc-member-descriptions": {
+        "Png": "Lossless PNG (RGB or RGBA when the background is transparent).",
+        "Jpeg": "JPEG (RGB; transparency is not representable)."
+      }
+    }
+  }
+}

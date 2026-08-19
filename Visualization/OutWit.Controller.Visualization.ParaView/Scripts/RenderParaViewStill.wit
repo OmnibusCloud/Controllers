@@ -1,0 +1,10 @@
+Job:RenderParaViewStill(ParaViewSceneRef:scene, ParaViewOutputOptions:options)
+{
+    ParaViewValidationReport:report = ParaView.Validate(scene, options);
+    ParaViewRenderTaskCollection:tasks = ParaView.Split(scene, report, options);
+
+    ParaViewRenderResultCollection:rendered = Grid.ForEach(task in tasks)
+        => ParaView.RenderFrame(task);
+
+    Blob:result = ParaView.CollectStill(rendered, options);
+}

@@ -47,6 +47,13 @@
     <Project Path="CalculiX/OutWit.Controller.Sweep.Scripts/OutWit.Controller.Sweep.Scripts.csproj" />
     <Project Path="CalculiX/OutWit.Controller.Sweep.Tests/OutWit.Controller.Sweep.Tests.csproj" />
   </Folder>
+  <Folder Name="/Visualization/">
+    <Project Path="Visualization/OutWit.Controller.Visualization.ParaView/OutWit.Controller.Visualization.ParaView.csproj" />
+    <Project Path="Visualization/OutWit.Controller.Visualization.ParaView.Model/OutWit.Controller.Visualization.ParaView.Model.csproj" />
+    <Project Path="Visualization/OutWit.Controller.Visualization.ParaView.Scripts/OutWit.Controller.Visualization.ParaView.Scripts.csproj" />
+    <Project Path="Visualization/OutWit.Controller.Visualization.ParaView.Tests/OutWit.Controller.Visualization.ParaView.Tests.csproj" />
+    <Project Path="Visualization/OutWit.Controller.Visualization.ParaView.Tests.FakePvpython/OutWit.Controller.Visualization.ParaView.Tests.FakePvpython.csproj" />
+  </Folder>
   <Folder Name="/Tools/">
     <Project Path="Tools/OutWit.Controller.Pack/OutWit.Controller.Pack.csproj" />
     <Project Path="Tools/OutWit.Controller.Pack.Tests/OutWit.Controller.Pack.Tests.csproj" />

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Model.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ControllerName>ParaView</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Shared data types for the OutWit.Controller.Visualization.ParaView controller — the visualization package reference (state blob + content-addressed attachments with file-series/timestep metadata + runtime requirements), output options and frame selection, the per-task payload the host splits for worker nodes (state, view, timestep, and the task's minimal attachment subset), the per-frame render result, and the validation report. The request and result DTOs are published as [JobDocumentContract] types (paraview.*@1) with the schema fragment and C++/Python bindings shipped under documents/, so non-.NET initiators (the ParaView C++/Qt plugin) drive the controller through the native SDK's job request documents.</Description>
+    <PackageTags>paraview;visualization;scientific-visualization;vtk;witengine;witcloud;controller;data-types;job-documents</PackageTags>
+    <!-- The vocabulary artifacts carry the authors' summaries. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- Job document vocabulary: the generator scans the built assembly for
+       [JobDocumentContract] types (it also compiles the attribute into this
+       assembly, so no OutWit.Cloud.Contracts reference is needed) and writes
+       Documents/paraview.schema.json + paraview_documents.{hpp,py}. The
+       artifacts are committed — a wire-shape change is a reviewable diff —
+       and verified in CI (ContinuousIntegrationBuild → check mode). The
+       ParaView GUI plugin vendors paraview_documents.hpp. -->
+  <ItemGroup>
+    <PackageReference Include="OutWit.Cloud.Documents.Generator" Version="1.0.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Documents\**" Exclude="Documents\**\__pycache__\**" Pack="true" PackagePath="documents\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Model.targets" />
+
+</Project>

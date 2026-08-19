@@ -24,7 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Documents\**" Pack="true" PackagePath="documents\" />
+    <None Include="Documents\**" Exclude="Documents\**\__pycache__\**" Pack="true" PackagePath="documents\" />
   </ItemGroup>
 
   <Import Project="..\..\Build\OutWit.Controller.Model.targets" />

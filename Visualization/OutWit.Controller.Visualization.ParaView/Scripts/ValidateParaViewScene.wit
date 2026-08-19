@@ -1,0 +1,4 @@
+Job:ValidateParaViewScene(ParaViewSceneRef:scene, ParaViewOutputOptions:options)
+{
+    ParaViewValidationReport:result = ParaView.Validate(scene, options);
+}

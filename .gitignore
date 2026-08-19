@@ -104,3 +104,7 @@ Migrations/
 docs/*.internal.md
 docs/render-controller-scene-support-plan.md
 docs/render-dcc-universality.md
+
+# Python bytecode caches (runner sources, generated bindings)
+__pycache__/
+*.pyc

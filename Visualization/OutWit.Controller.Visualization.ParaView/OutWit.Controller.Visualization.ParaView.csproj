@@ -1,0 +1,96 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ControllerName>ParaView</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Headless scientific visualization: safely executes OmnibusCloud ParaView packages (a saved .pvsm state plus content-addressed data attachments) and distributes independent rendering tasks across worker nodes. ParaView.Validate treats the state as untrusted input (hardened XML parsing, proxy allowlist, programmable-pipeline rejection, logical-path and plugin-requirement checks, size and resolution limits); ParaView.Split produces deterministic tasks per timestep, each carrying only the attachments its timestep needs (per-task attachment subsetting); ParaView.RenderFrame materializes a task's subset into an isolated package root and renders one output through the controller-owned pvpython runner on the software-rendering baseline; ParaView.Collect returns the ordered frame set. The ParaView runtime ships as per-platform Tier-2 assets, never inside the package.</Description>
+    <PackageTags>paraview;vtk;visualization;scientific-visualization;headless;osmesa;distributed-rendering;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>scientific-visualization;paraview-validate;paraview-split;paraview-render-frame;paraview-collect;paraview-collect-still;per-task-attachment-subsetting;software-rendering-baseline</ControllerFeatures>
+    <ControllerUseCases>Simulation field rendering;Time-series animation rendering;Slices, contours, glyphs and volume visualization;CalculiX .frd result visualization;Distributed scientific frame rendering</ControllerUseCases>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.Visualization.ParaView.Model\OutWit.Controller.Visualization.ParaView.Model.csproj" />
+  </ItemGroup>
+
+  <!-- Direct reference so IWitTempStorage (Engine.Interfaces 1.1.3+) is visible.
+       PLAIN MINIMUM, never a wildcard or an exact pin: the module ships no engine
+       assemblies — every node's client provides them, and the deployed fleet bundles
+       Engine.Interfaces 1.1.4. Restore resolves the LOWEST version satisfying a plain
+       minimum, so the compiled reference stays at the fleet's floor while hosts on a
+       newer engine still restore (see docs/controller-author-guide.md, "engine
+       references and the node fleet", and the Render 1.23.22 incident). -->
+  <ItemGroup>
+    <PackageReference Include="OutWit.Engine.Interfaces" Version="1.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+    <ControllerDependency Include="Grid" MinimumVersion="1.0.0" />
+    <ControllerRuntimeTarget Include="win-x64">
+      <Rid>win-x64</Rid>
+      <Os>windows</Os>
+      <Architecture>x64</Architecture>
+    </ControllerRuntimeTarget>
+    <ControllerRuntimeTarget Include="linux-x64">
+      <Rid>linux-x64</Rid>
+      <Os>linux</Os>
+      <Architecture>x64</Architecture>
+    </ControllerRuntimeTarget>
+    <ControllerRuntimeTarget Include="osx-arm64">
+      <Rid>osx-arm64</Rid>
+      <Os>macos</Os>
+      <Architecture>arm64</Architecture>
+    </ControllerRuntimeTarget>
+  </ItemGroup>
+
+  <!-- ParaView runtime assets (per-platform portable ParaView with the software-rendering
+       baseline, the bundled OmnibusCloud reader and the license/SPDX materials) are
+       declared here as <ControllerDataAsset> entries once the runtime proof milestone
+       publishes them on a paraview-v<ver> GitHub Release (gh-release://OmnibusCloud/
+       Controllers/paraview-v<ver>/paraview-<platform>.zip, ExtractTo paraview/<platform>/).
+       Until then the module carries no runtime: ParaView.RenderFrame reports the missing
+       runtime explicitly and the OUTWIT_PVPYTHON override (tests, operators) points at one. -->
+
+  <!-- Controller-owned files that are NOT user-supplied and must travel with exactly this
+       assembly version: the pvpython task runner, the proxy allowlist tied to the pinned
+       runtime version, and — from the reader milestone on — the bundled OmnibusCloud reader
+       (byte-identical with the GUI plugin's copy; until then Plugins/ is absent and a package
+       requiring the reader is rejected by ParaView.Validate). They are embedded in the controller
+       assembly and extracted per task
+       into the task's own work directory — the only plugin path the runner consults — so a
+       node can never run a stale or foreign copy. Module Resources/ are excluded from the
+       nupkg by convention, hence embedding rather than staging. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Runner\**\*.py" LogicalName="runner/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Allowlists\**\*.json" LogicalName="allowlists/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Plugins\**\*.py" LogicalName="plugins/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- Consumer-side build/.targets — ships in the nupkg's build/ folder and
+       auto-imports into any csproj that PackageReferences this. -->
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.Visualization.ParaView.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
+
+  <!-- Stage bundled .wit scripts to $(SolutionDir)@Scripts/$(Configuration)/ so the test
+       project finds them the same way the Render tests do (FindBundledScriptsPath). -->
+  <ItemGroup>
+    <ParaViewBundledScript Include="Scripts\*.wit" />
+  </ItemGroup>
+
+  <Target Name="ParaViewStageBundledScriptsAtSolutionRoot"
+          AfterTargets="ControllerPostBuild"
+          Condition="@(ParaViewBundledScript->Count()) &gt; 0">
+    <Copy SourceFiles="@(ParaViewBundledScript)"
+          DestinationFiles="@(ParaViewBundledScript->'$(SolutionDir)@Scripts\$(Configuration)\%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          OverwriteReadOnlyFiles="true" />
+  </Target>
+
+</Project>

@@ -1,0 +1,49 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Visualization.ParaView NuGet
+      package. Auto-imported into any csproj that PackageReferences this controller.
+
+      Tier-2 controller: the per-platform ParaView runtime (software-rendering
+      baseline + bundled reader + licenses) arrives as external assets declared in
+      controller.json and fetched by ResolveControllerAssetsTask.
+
+      ResolveForAllPlatforms="true": the typical consumer is a WitCloud-style
+      server that distributes per-platform runtimes to worker nodes, so it needs
+      every RID's archive in its paraview.module/ folder, not just the host's.
+
+      Target and property names are unique per package (MSBuild resolves equal
+      target names last-definition-wins across imported packages).
+  -->
+
+  <PropertyGroup>
+    <_OutWitParaViewModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitParaViewModulePackageContent>
+    <_OutWitParaViewModuleOutputDir>$(OutputPath)@Controllers\paraview.module\</_OutWitParaViewModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyParaViewModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitParaViewModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitParaViewFiles Include="$(_OutWitParaViewModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitParaViewFiles)"
+        DestinationFiles="@(_OutWitParaViewFiles->'$(_OutWitParaViewModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Visualization.ParaView: staged module to '$(_OutWitParaViewModuleOutputDir)'." />
+  </Target>
+
+  <Target Name="OutWitResolveParaViewAssets"
+          AfterTargets="OutWitCopyParaViewModule"
+          Condition="Exists('$(_OutWitParaViewModuleOutputDir)controller.json')">
+    <ResolveControllerAssetsTask
+        ManifestPath="$(_OutWitParaViewModuleOutputDir)controller.json"
+        OutputPath="$(OutputPath)@Controllers\"
+        ResolveForAllPlatforms="true" />
+  </Target>
+
+</Project>

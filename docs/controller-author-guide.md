@@ -71,6 +71,7 @@ The fastest path is **copy an existing pair**:
 | Tier-1 controller with shared DTOs | `Variables/` or `Grid/` |
 | Tier-2 controller with external assets | `Matrices/` (simple, two `.smat` files) or `Render/` (multi-platform native binaries) |
 | Host-only controller (no worker nodes involved) | `Render/OutWit.Controller.Render.Dcc/` |
+| Tier-2 controller around an external runtime driven by a controller-owned runner script, with untrusted-input validation (allowlist, limits) and per-task attachment subsetting | `Visualization/OutWit.Controller.Visualization.ParaView/` |
 
 The walkthrough below assumes you've copied `Variables` and renamed it `Foo` — adapt as needed.
 

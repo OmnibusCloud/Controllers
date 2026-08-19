@@ -28,6 +28,7 @@ the table.
 | [`OutWit.Controller.Render`](https://www.nuget.org/packages/OutWit.Controller.Render)              | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Render.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Render)                             | 2    | Distributed rendering via Blender CLI + FFmpeg, delivering external scene dependencies (libraries, caches, volumes, …) to render nodes. Ships per-platform Blender / FFmpeg / benchmark scenes via GitHub Release.    |
 | `OutWit.Controller.Simulation.Schwarz` ([`Simulation/`](Simulation/))                               | v0.1.7 — OmnibusCloud org feed                                                                                                                                       | 1    | Distributed stationary solves — steady heat / Poisson-class fields on structured Cartesian or axisymmetric (r-z) grids — via overlapping Schwarz domain decomposition. LAN-profile. |
 | `OutWit.Controller.Simulation.Parareal` ([`Simulation/`](Simulation/))                              | v0.1.7 — OmnibusCloud org feed                                                                                                                                       | 1    | Distributed transient solves — heat / diffusion over a time horizon — via parareal parallel-in-time integration. Crowd/WAN-profile. |
+| `OutWit.Controller.Visualization.ParaView` ([`Visualization/`](Visualization/))                    | in development — not yet published                                                                                                                                   | 2    | Headless scientific visualization: validates OmnibusCloud ParaView packages (state + content-addressed data) as untrusted input, splits them into per-timestep tasks with per-task attachment subsets, renders through a controller-owned pvpython runner on the software-rendering baseline. Per-platform ParaView runtimes ship via GitHub Release (runtime-proof milestone). |
 
 Each controller comes with a companion `OutWit.Controller.<Name>.Model`
 NuGet that contains shared data types — referenced transitively by
@@ -225,6 +226,13 @@ canonical minimal Model shape.
 │   ├── OutWit.Controller.Render.Dcc/        # Tier-1 host-only DCC bootstrap
 │   ├── OutWit.Controller.Render.Dcc.Model/
 │   └── OutWit.Controller.Render.Dcc.Scripts/ # Bundled RenderDcc*.wit scripts (content-only nupkg)
+│
+├── Visualization/                   # Headless scientific visualization (ParaView)
+│   ├── OutWit.Controller.Visualization.ParaView/        # Tier-2 controller (pvpython runner, allowlist validation, subsetting)
+│   ├── OutWit.Controller.Visualization.ParaView.Model/  # Shared data types + paraview.*@1 document vocabulary
+│   ├── OutWit.Controller.Visualization.ParaView.Scripts/ # Bundled RenderParaView*.wit scripts (content-only nupkg)
+│   ├── OutWit.Controller.Visualization.ParaView.Tests/
+│   └── OutWit.Controller.Visualization.ParaView.Tests.FakePvpython/  # Test-only pvpython stand-in (never shipped)
 │
 ├── Simulation/                      # Distributed numerical simulation (org-feed packages)
 │                                    # model + numerics come from OutWit.Math.Simulation[.Model] (private feed)

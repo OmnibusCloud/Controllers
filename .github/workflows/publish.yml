@@ -36,6 +36,7 @@ on:
           - OutWit.Controller.Simulation.Parareal
           - OutWit.Controller.CalculiX
           - OutWit.Controller.Sweep
+          - OutWit.Controller.Visualization.ParaView
           # Models
           - OutWit.Controller.Grid.Model
           - OutWit.Controller.Variables.Model
@@ -43,6 +44,7 @@ on:
           - OutWit.Controller.Render.Model
           - OutWit.Controller.Render.Dcc.Model
           - OutWit.Controller.CalculiX.Model
+          - OutWit.Controller.Visualization.ParaView.Model
           # Scripts (content-only nupkgs that ship bundled .wit scripts)
           - OutWit.Controller.Matrices.Scripts
           - OutWit.Controller.Render.Scripts
@@ -50,6 +52,7 @@ on:
           - OutWit.Controller.Render.Dcc.Scripts
           - OutWit.Controller.Simulation.Schwarz.Scripts
           - OutWit.Controller.Simulation.Parareal.Scripts
+          - OutWit.Controller.Visualization.ParaView.Scripts
           # Tools
           - OutWit.Controller.Pack
       pushToNuGet:
