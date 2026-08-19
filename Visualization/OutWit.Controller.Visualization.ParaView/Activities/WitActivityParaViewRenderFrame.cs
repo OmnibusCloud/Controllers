@@ -19,19 +19,9 @@ namespace OutWit.Controller.Visualization.ParaView.Activities;
 [MemoryPackable]
 public sealed partial class WitActivityParaViewRenderFrame : WitActivityFunction
 {
-    #region Properties
-
-    /// <summary>
-    /// Self-contained render task (state, view, timestep, options, attachment subset).
-    /// </summary>
-    [MemoryPackOrder(0)]
-    [MemoryPackAllowSerialize]
-    public IWitParameter? Task { get; init; }
-
-    #endregion
-
     #region Functions
 
+    /// <inheritdoc />
     protected override string InnerString()
     {
         return $"ParaView.RenderFrame({Task})";
@@ -41,6 +31,7 @@ public sealed partial class WitActivityParaViewRenderFrame : WitActivityFunction
 
     #region ModelBase
 
+    /// <inheritdoc />
     public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
     {
         if (modelBase is not WitActivityParaViewRenderFrame other)
@@ -50,6 +41,7 @@ public sealed partial class WitActivityParaViewRenderFrame : WitActivityFunction
                && Task.Check(other.Task);
     }
 
+    /// <inheritdoc />
     protected override WitActivityParaViewRenderFrame InnerClone()
     {
         return new WitActivityParaViewRenderFrame
@@ -57,6 +49,17 @@ public sealed partial class WitActivityParaViewRenderFrame : WitActivityFunction
             Task = Task?.Clone() as IWitParameter
         };
     }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// Self-contained render task (state, view, timestep, options, attachment subset).
+    /// </summary>
+    [MemoryPackOrder(0)]
+    [MemoryPackAllowSerialize]
+    public IWitParameter? Task { get; init; }
 
     #endregion
 }

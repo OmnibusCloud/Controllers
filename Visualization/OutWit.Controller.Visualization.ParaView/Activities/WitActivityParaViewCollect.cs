@@ -14,6 +14,39 @@ namespace OutWit.Controller.Visualization.ParaView.Activities;
 [MemoryPackable]
 public sealed partial class WitActivityParaViewCollect : WitActivityFunction
 {
+    #region Functions
+
+    /// <inheritdoc />
+    protected override string InnerString()
+    {
+        return $"ParaView.Collect({Results}, {Options})";
+    }
+
+    #endregion
+
+    #region ModelBase
+
+    /// <inheritdoc />
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not WitActivityParaViewCollect other)
+            return false;
+
+        return base.Is(modelBase, tolerance);
+    }
+
+    /// <inheritdoc />
+    protected override WitActivityParaViewCollect InnerClone()
+    {
+        return new WitActivityParaViewCollect
+        {
+            Results = Results,
+            Options = Options
+        };
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>
@@ -29,36 +62,6 @@ public sealed partial class WitActivityParaViewCollect : WitActivityFunction
     [MemoryPackOrder(1)]
     [MemoryPackAllowSerialize]
     public IWitParameter? Options { get; init; }
-
-    #endregion
-
-    #region Functions
-
-    protected override string InnerString()
-    {
-        return $"ParaView.Collect({Results}, {Options})";
-    }
-
-    #endregion
-
-    #region ModelBase
-
-    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
-    {
-        if (modelBase is not WitActivityParaViewCollect other)
-            return false;
-
-        return base.Is(modelBase, tolerance);
-    }
-
-    protected override WitActivityParaViewCollect InnerClone()
-    {
-        return new WitActivityParaViewCollect
-        {
-            Results = Results,
-            Options = Options
-        };
-    }
 
     #endregion
 }

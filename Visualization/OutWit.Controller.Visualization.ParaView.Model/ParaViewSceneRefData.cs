@@ -13,8 +13,44 @@ namespace OutWit.Controller.Visualization.ParaView.Model;
 /// </summary>
 [JobDocumentContract("paraview.sceneRef@1")]
 [MemoryPackable(GenerateType.VersionTolerant)]
-public partial class ParaViewSceneRefData : ModelBase
+public sealed partial class ParaViewSceneRefData : ModelBase
 {
+    #region ModelBase
+
+    /// <inheritdoc />
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not ParaViewSceneRefData other)
+            return false;
+
+        return StateBlobId.Is(other.StateBlobId)
+               && StateSha256.Is(other.StateSha256)
+               && StateSize.Is(other.StateSize)
+               && Attachments.Count == other.Attachments.Count
+               && Attachments.Zip(other.Attachments, (left, right) => left.Is(right, tolerance)).All(me => me)
+               && Runtime.Is(other.Runtime, tolerance)
+               && TimestepValues.Count == other.TimestepValues.Count
+               && TimestepValues.Zip(other.TimestepValues, (left, right) => left.Is(right, tolerance)).All(me => me)
+               && PackageManifestJson.Is(other.PackageManifestJson);
+    }
+
+    /// <inheritdoc />
+    public override ModelBase Clone()
+    {
+        return new ParaViewSceneRefData
+        {
+            StateBlobId = StateBlobId,
+            StateSha256 = StateSha256,
+            StateSize = StateSize,
+            Attachments = [.. Attachments.Select(me => (ParaViewAttachmentRefData)me.Clone())],
+            Runtime = (ParaViewRuntimeRequirementData)Runtime.Clone(),
+            TimestepValues = [.. TimestepValues],
+            PackageManifestJson = PackageManifestJson
+        };
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>
@@ -61,40 +97,6 @@ public partial class ParaViewSceneRefData : ModelBase
     /// </summary>
     [MemoryPackOrder(6)]
     public string PackageManifestJson { get; set; } = string.Empty;
-
-    #endregion
-
-    #region ModelBase
-
-    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
-    {
-        if (modelBase is not ParaViewSceneRefData other)
-            return false;
-
-        return StateBlobId.Is(other.StateBlobId)
-               && StateSha256.Is(other.StateSha256)
-               && StateSize.Is(other.StateSize)
-               && Attachments.Count == other.Attachments.Count
-               && Attachments.Zip(other.Attachments, (left, right) => left.Is(right, tolerance)).All(me => me)
-               && Runtime.Is(other.Runtime, tolerance)
-               && TimestepValues.Count == other.TimestepValues.Count
-               && TimestepValues.Zip(other.TimestepValues, (left, right) => left.Is(right, tolerance)).All(me => me)
-               && PackageManifestJson.Is(other.PackageManifestJson);
-    }
-
-    public override ModelBase Clone()
-    {
-        return new ParaViewSceneRefData
-        {
-            StateBlobId = StateBlobId,
-            StateSha256 = StateSha256,
-            StateSize = StateSize,
-            Attachments = [.. Attachments.Select(me => (ParaViewAttachmentRefData)me.Clone())],
-            Runtime = (ParaViewRuntimeRequirementData)Runtime.Clone(),
-            TimestepValues = [.. TimestepValues],
-            PackageManifestJson = PackageManifestJson
-        };
-    }
 
     #endregion
 }

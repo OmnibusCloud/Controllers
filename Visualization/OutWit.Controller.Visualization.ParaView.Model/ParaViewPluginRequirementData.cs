@@ -11,8 +11,32 @@ namespace OutWit.Controller.Visualization.ParaView.Model;
 /// </summary>
 [JobDocumentContract("paraview.pluginRequirement@1")]
 [MemoryPackable(GenerateType.VersionTolerant)]
-public partial class ParaViewPluginRequirementData : ModelBase
+public sealed partial class ParaViewPluginRequirementData : ModelBase
 {
+    #region ModelBase
+
+    /// <inheritdoc />
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not ParaViewPluginRequirementData other)
+            return false;
+
+        return Name.Is(other.Name)
+               && Version.Is(other.Version);
+    }
+
+    /// <inheritdoc />
+    public override ModelBase Clone()
+    {
+        return new ParaViewPluginRequirementData
+        {
+            Name = Name,
+            Version = Version
+        };
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>
@@ -26,28 +50,6 @@ public partial class ParaViewPluginRequirementData : ModelBase
     /// </summary>
     [MemoryPackOrder(1)]
     public string Version { get; set; } = string.Empty;
-
-    #endregion
-
-    #region ModelBase
-
-    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
-    {
-        if (modelBase is not ParaViewPluginRequirementData other)
-            return false;
-
-        return Name.Is(other.Name)
-               && Version.Is(other.Version);
-    }
-
-    public override ModelBase Clone()
-    {
-        return new ParaViewPluginRequirementData
-        {
-            Name = Name,
-            Version = Version
-        };
-    }
 
     #endregion
 }

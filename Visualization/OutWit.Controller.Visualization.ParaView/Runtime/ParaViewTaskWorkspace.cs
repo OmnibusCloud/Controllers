@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using OutWit.Controller.Visualization.ParaView.Model;
+using OutWit.Controller.Visualization.ParaView.Output;
+using OutWit.Controller.Visualization.ParaView.Tasks;
 using OutWit.Controller.Visualization.ParaView.Validation;
 using OutWit.Engine.Interfaces;
 

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using OutWit.Controller.Visualization.ParaView;
 using OutWit.Controller.Visualization.ParaView.Activities;
 using OutWit.Controller.Visualization.ParaView.Model;
 using OutWit.Controller.Visualization.ParaView.Runtime;

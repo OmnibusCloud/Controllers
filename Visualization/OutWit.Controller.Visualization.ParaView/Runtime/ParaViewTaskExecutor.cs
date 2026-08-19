@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.Visualization.ParaView.Model;
+using OutWit.Controller.Visualization.ParaView.Output;
+using OutWit.Controller.Visualization.ParaView.Processes;
 using OutWit.Controller.Visualization.ParaView.Validation;
 using OutWit.Engine.Interfaces;
 

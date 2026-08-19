@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.Visualization.ParaView.Activities;
 using OutWit.Controller.Visualization.ParaView.Model;
+using OutWit.Controller.Visualization.ParaView.Tasks;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;

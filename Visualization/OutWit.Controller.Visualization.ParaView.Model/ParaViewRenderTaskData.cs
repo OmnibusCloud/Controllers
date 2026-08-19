@@ -11,8 +11,57 @@ namespace OutWit.Controller.Visualization.ParaView.Model;
 /// ParaView.RenderFrame. Not a document type: tasks never cross the initiator boundary.
 /// </summary>
 [MemoryPackable(GenerateType.VersionTolerant)]
-public partial class ParaViewRenderTaskData : ModelBase
+public sealed partial class ParaViewRenderTaskData : ModelBase
 {
+    #region ModelBase
+
+    /// <inheritdoc />
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not ParaViewRenderTaskData other)
+            return false;
+
+        return TaskId.Is(other.TaskId)
+               && TaskIndex.Is(other.TaskIndex)
+               && StateBlobId.Is(other.StateBlobId)
+               && StateSha256.Is(other.StateSha256)
+               && StateSize.Is(other.StateSize)
+               && ViewId.Is(other.ViewId)
+               && TimestepIndex.Is(other.TimestepIndex)
+               && TimeValue.Is(other.TimeValue, tolerance)
+               && Options.Is(other.Options, tolerance)
+               && Attachments.Count == other.Attachments.Count
+               && Attachments.Zip(other.Attachments, (left, right) => left.Is(right, tolerance)).All(me => me)
+               && Runtime.Is(other.Runtime, tolerance)
+               && PackageDigest.Is(other.PackageDigest)
+               && DatasetId.Is(other.DatasetId)
+               && SubsetBytes.Is(other.SubsetBytes);
+    }
+
+    /// <inheritdoc />
+    public override ModelBase Clone()
+    {
+        return new ParaViewRenderTaskData
+        {
+            TaskId = TaskId,
+            TaskIndex = TaskIndex,
+            StateBlobId = StateBlobId,
+            StateSha256 = StateSha256,
+            StateSize = StateSize,
+            ViewId = ViewId,
+            TimestepIndex = TimestepIndex,
+            TimeValue = TimeValue,
+            Options = (ParaViewOutputOptionsData)Options.Clone(),
+            Attachments = [.. Attachments.Select(me => (ParaViewAttachmentRefData)me.Clone())],
+            Runtime = (ParaViewRuntimeRequirementData)Runtime.Clone(),
+            PackageDigest = PackageDigest,
+            DatasetId = DatasetId,
+            SubsetBytes = SubsetBytes
+        };
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>
@@ -101,53 +150,6 @@ public partial class ParaViewRenderTaskData : ModelBase
     /// </summary>
     [MemoryPackOrder(13)]
     public long SubsetBytes { get; set; }
-
-    #endregion
-
-    #region ModelBase
-
-    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
-    {
-        if (modelBase is not ParaViewRenderTaskData other)
-            return false;
-
-        return TaskId.Is(other.TaskId)
-               && TaskIndex.Is(other.TaskIndex)
-               && StateBlobId.Is(other.StateBlobId)
-               && StateSha256.Is(other.StateSha256)
-               && StateSize.Is(other.StateSize)
-               && ViewId.Is(other.ViewId)
-               && TimestepIndex.Is(other.TimestepIndex)
-               && Nullable.Equals(TimeValue, other.TimeValue)
-               && Options.Is(other.Options, tolerance)
-               && Attachments.Count == other.Attachments.Count
-               && Attachments.Zip(other.Attachments, (left, right) => left.Is(right, tolerance)).All(me => me)
-               && Runtime.Is(other.Runtime, tolerance)
-               && PackageDigest.Is(other.PackageDigest)
-               && DatasetId.Is(other.DatasetId)
-               && SubsetBytes.Is(other.SubsetBytes);
-    }
-
-    public override ModelBase Clone()
-    {
-        return new ParaViewRenderTaskData
-        {
-            TaskId = TaskId,
-            TaskIndex = TaskIndex,
-            StateBlobId = StateBlobId,
-            StateSha256 = StateSha256,
-            StateSize = StateSize,
-            ViewId = ViewId,
-            TimestepIndex = TimestepIndex,
-            TimeValue = TimeValue,
-            Options = (ParaViewOutputOptionsData)Options.Clone(),
-            Attachments = [.. Attachments.Select(me => (ParaViewAttachmentRefData)me.Clone())],
-            Runtime = (ParaViewRuntimeRequirementData)Runtime.Clone(),
-            PackageDigest = PackageDigest,
-            DatasetId = DatasetId,
-            SubsetBytes = SubsetBytes
-        };
-    }
 
     #endregion
 }

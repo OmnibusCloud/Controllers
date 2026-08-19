@@ -1,6 +1,7 @@
 using MemoryPack;
 using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
+using OutWit.Common.Collections;
 using OutWit.Common.Values;
 
 namespace OutWit.Controller.Visualization.ParaView.Model;
@@ -12,8 +13,61 @@ namespace OutWit.Controller.Visualization.ParaView.Model;
 /// </summary>
 [JobDocumentContract("paraview.validationReport@1")]
 [MemoryPackable(GenerateType.VersionTolerant)]
-public partial class ParaViewValidationReportData : ModelBase
+public sealed partial class ParaViewValidationReportData : ModelBase
 {
+    #region ModelBase
+
+    /// <inheritdoc />
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not ParaViewValidationReportData other)
+            return false;
+
+        return IsValid.Is(other.IsValid)
+               && Errors.Is(other.Errors)
+               && Warnings.Is(other.Warnings)
+               && Fallbacks.Is(other.Fallbacks)
+               && PackageDigest.Is(other.PackageDigest)
+               && ResolvedViewId.Is(other.ResolvedViewId)
+               && ResolvedTimestepIndices.Is(other.ResolvedTimestepIndices)
+               && TimestepValues.Count == other.TimestepValues.Count
+               && TimestepValues.Zip(other.TimestepValues, (left, right) => left.Is(right, tolerance)).All(me => me)
+               && AttachmentCount.Is(other.AttachmentCount)
+               && TotalAttachmentBytes.Is(other.TotalAttachmentBytes)
+               && ProxyTypes.Is(other.ProxyTypes)
+               && RequiredPlugins.Is(other.RequiredPlugins)
+               && RuntimeVersion.Is(other.RuntimeVersion)
+               && Width.Is(other.Width)
+               && Height.Is(other.Height)
+               && Format.Is(other.Format);
+    }
+
+    /// <inheritdoc />
+    public override ModelBase Clone()
+    {
+        return new ParaViewValidationReportData
+        {
+            IsValid = IsValid,
+            Errors = [.. Errors],
+            Warnings = [.. Warnings],
+            Fallbacks = [.. Fallbacks],
+            PackageDigest = PackageDigest,
+            ResolvedViewId = ResolvedViewId,
+            ResolvedTimestepIndices = [.. ResolvedTimestepIndices],
+            TimestepValues = [.. TimestepValues],
+            AttachmentCount = AttachmentCount,
+            TotalAttachmentBytes = TotalAttachmentBytes,
+            ProxyTypes = [.. ProxyTypes],
+            RequiredPlugins = [.. RequiredPlugins],
+            RuntimeVersion = RuntimeVersion,
+            Width = Width,
+            Height = Height,
+            Format = Format
+        };
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>
@@ -111,57 +165,6 @@ public partial class ParaViewValidationReportData : ModelBase
     /// </summary>
     [MemoryPackOrder(15)]
     public ParaViewImageFormat Format { get; set; }
-
-    #endregion
-
-    #region ModelBase
-
-    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
-    {
-        if (modelBase is not ParaViewValidationReportData other)
-            return false;
-
-        return IsValid == other.IsValid
-               && Errors.SequenceEqual(other.Errors)
-               && Warnings.SequenceEqual(other.Warnings)
-               && Fallbacks.SequenceEqual(other.Fallbacks)
-               && PackageDigest.Is(other.PackageDigest)
-               && ResolvedViewId.Is(other.ResolvedViewId)
-               && ResolvedTimestepIndices.SequenceEqual(other.ResolvedTimestepIndices)
-               && TimestepValues.Count == other.TimestepValues.Count
-               && TimestepValues.Zip(other.TimestepValues, (left, right) => left.Is(right, tolerance)).All(me => me)
-               && AttachmentCount.Is(other.AttachmentCount)
-               && TotalAttachmentBytes.Is(other.TotalAttachmentBytes)
-               && ProxyTypes.SequenceEqual(other.ProxyTypes)
-               && RequiredPlugins.SequenceEqual(other.RequiredPlugins)
-               && RuntimeVersion.Is(other.RuntimeVersion)
-               && Width.Is(other.Width)
-               && Height.Is(other.Height)
-               && Format == other.Format;
-    }
-
-    public override ModelBase Clone()
-    {
-        return new ParaViewValidationReportData
-        {
-            IsValid = IsValid,
-            Errors = [.. Errors],
-            Warnings = [.. Warnings],
-            Fallbacks = [.. Fallbacks],
-            PackageDigest = PackageDigest,
-            ResolvedViewId = ResolvedViewId,
-            ResolvedTimestepIndices = [.. ResolvedTimestepIndices],
-            TimestepValues = [.. TimestepValues],
-            AttachmentCount = AttachmentCount,
-            TotalAttachmentBytes = TotalAttachmentBytes,
-            ProxyTypes = [.. ProxyTypes],
-            RequiredPlugins = [.. RequiredPlugins],
-            RuntimeVersion = RuntimeVersion,
-            Width = Width,
-            Height = Height,
-            Format = Format
-        };
-    }
 
     #endregion
 }

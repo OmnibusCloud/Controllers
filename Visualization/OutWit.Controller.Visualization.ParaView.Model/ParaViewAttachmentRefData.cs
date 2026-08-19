@@ -1,6 +1,7 @@
 using MemoryPack;
 using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
+using OutWit.Common.Collections;
 using OutWit.Common.Values;
 
 namespace OutWit.Controller.Visualization.ParaView.Model;
@@ -15,8 +16,44 @@ namespace OutWit.Controller.Visualization.ParaView.Model;
 // MemoryPackOrder on every member keeps the wire layout structural — append only.
 [JobDocumentContract("paraview.attachmentRef@1")]
 [MemoryPackable(GenerateType.VersionTolerant)]
-public partial class ParaViewAttachmentRefData : ModelBase
+public sealed partial class ParaViewAttachmentRefData : ModelBase
 {
+    #region ModelBase
+
+    /// <inheritdoc />
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not ParaViewAttachmentRefData other)
+            return false;
+
+        return BlobId.Is(other.BlobId)
+               && LogicalPath.Is(other.LogicalPath)
+               && Sha256.Is(other.Sha256)
+               && Size.Is(other.Size)
+               && Role.Is(other.Role)
+               && SeriesGroup.Is(other.SeriesGroup)
+               && TimestepIndices.Is(other.TimestepIndices)
+               && SeriesOrdinal.Is(other.SeriesOrdinal);
+    }
+
+    /// <inheritdoc />
+    public override ModelBase Clone()
+    {
+        return new ParaViewAttachmentRefData
+        {
+            BlobId = BlobId,
+            LogicalPath = LogicalPath,
+            Sha256 = Sha256,
+            Size = Size,
+            Role = Role,
+            SeriesGroup = SeriesGroup,
+            TimestepIndices = [.. TimestepIndices],
+            SeriesOrdinal = SeriesOrdinal
+        };
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>
@@ -72,40 +109,6 @@ public partial class ParaViewAttachmentRefData : ModelBase
     /// </summary>
     [MemoryPackOrder(7)]
     public int SeriesOrdinal { get; set; }
-
-    #endregion
-
-    #region ModelBase
-
-    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
-    {
-        if (modelBase is not ParaViewAttachmentRefData other)
-            return false;
-
-        return BlobId.Is(other.BlobId)
-               && LogicalPath.Is(other.LogicalPath)
-               && Sha256.Is(other.Sha256)
-               && Size.Is(other.Size)
-               && Role == other.Role
-               && SeriesGroup.Is(other.SeriesGroup)
-               && TimestepIndices.SequenceEqual(other.TimestepIndices)
-               && SeriesOrdinal.Is(other.SeriesOrdinal);
-    }
-
-    public override ModelBase Clone()
-    {
-        return new ParaViewAttachmentRefData
-        {
-            BlobId = BlobId,
-            LogicalPath = LogicalPath,
-            Sha256 = Sha256,
-            Size = Size,
-            Role = Role,
-            SeriesGroup = SeriesGroup,
-            TimestepIndices = [.. TimestepIndices],
-            SeriesOrdinal = SeriesOrdinal
-        };
-    }
 
     #endregion
 }

@@ -11,8 +11,56 @@ namespace OutWit.Controller.Visualization.ParaView.Model;
 /// </summary>
 [JobDocumentContract("paraview.renderResult@1")]
 [MemoryPackable(GenerateType.VersionTolerant)]
-public partial class ParaViewRenderResultData : ModelBase
+public sealed partial class ParaViewRenderResultData : ModelBase
 {
+    #region ModelBase
+
+    /// <inheritdoc />
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not ParaViewRenderResultData other)
+            return false;
+
+        return TaskId.Is(other.TaskId)
+               && TaskIndex.Is(other.TaskIndex)
+               && ViewId.Is(other.ViewId)
+               && TimestepIndex.Is(other.TimestepIndex)
+               && TimeValue.Is(other.TimeValue, tolerance)
+               && ImageBlobId.Is(other.ImageBlobId)
+               && Width.Is(other.Width)
+               && Height.Is(other.Height)
+               && Format.Is(other.Format)
+               && ByteSize.Is(other.ByteSize)
+               && RuntimeVersion.Is(other.RuntimeVersion)
+               && ReaderVersion.Is(other.ReaderVersion)
+               && RenderSeconds.Is(other.RenderSeconds, tolerance)
+               && Diagnostics.Is(other.Diagnostics);
+    }
+
+    /// <inheritdoc />
+    public override ModelBase Clone()
+    {
+        return new ParaViewRenderResultData
+        {
+            TaskId = TaskId,
+            TaskIndex = TaskIndex,
+            ViewId = ViewId,
+            TimestepIndex = TimestepIndex,
+            TimeValue = TimeValue,
+            ImageBlobId = ImageBlobId,
+            Width = Width,
+            Height = Height,
+            Format = Format,
+            ByteSize = ByteSize,
+            RuntimeVersion = RuntimeVersion,
+            ReaderVersion = ReaderVersion,
+            RenderSeconds = RenderSeconds,
+            Diagnostics = Diagnostics
+        };
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>
@@ -98,52 +146,6 @@ public partial class ParaViewRenderResultData : ModelBase
     /// </summary>
     [MemoryPackOrder(13)]
     public string Diagnostics { get; set; } = string.Empty;
-
-    #endregion
-
-    #region ModelBase
-
-    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
-    {
-        if (modelBase is not ParaViewRenderResultData other)
-            return false;
-
-        return TaskId.Is(other.TaskId)
-               && TaskIndex.Is(other.TaskIndex)
-               && ViewId.Is(other.ViewId)
-               && TimestepIndex.Is(other.TimestepIndex)
-               && Nullable.Equals(TimeValue, other.TimeValue)
-               && ImageBlobId.Is(other.ImageBlobId)
-               && Width.Is(other.Width)
-               && Height.Is(other.Height)
-               && Format == other.Format
-               && ByteSize.Is(other.ByteSize)
-               && RuntimeVersion.Is(other.RuntimeVersion)
-               && ReaderVersion.Is(other.ReaderVersion)
-               && RenderSeconds.Is(other.RenderSeconds, tolerance)
-               && Diagnostics.Is(other.Diagnostics);
-    }
-
-    public override ModelBase Clone()
-    {
-        return new ParaViewRenderResultData
-        {
-            TaskId = TaskId,
-            TaskIndex = TaskIndex,
-            ViewId = ViewId,
-            TimestepIndex = TimestepIndex,
-            TimeValue = TimeValue,
-            ImageBlobId = ImageBlobId,
-            Width = Width,
-            Height = Height,
-            Format = Format,
-            ByteSize = ByteSize,
-            RuntimeVersion = RuntimeVersion,
-            ReaderVersion = ReaderVersion,
-            RenderSeconds = RenderSeconds,
-            Diagnostics = Diagnostics
-        };
-    }
 
     #endregion
 }

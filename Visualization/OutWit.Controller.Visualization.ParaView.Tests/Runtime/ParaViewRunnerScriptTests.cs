@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using OutWit.Controller.Visualization.ParaView.Model;
+using OutWit.Controller.Visualization.ParaView.Output;
 using OutWit.Controller.Visualization.ParaView.Runtime;
 using OutWit.Controller.Visualization.ParaView.Tests.Utils;
 using OutWit.Controller.Visualization.ParaView.Validation;

@@ -1,8 +1,8 @@
 using System.Text;
 using OutWit.Controller.Visualization.ParaView.Model;
 using OutWit.Controller.Visualization.ParaView.Runtime;
+using OutWit.Controller.Visualization.ParaView.Tasks;
 using OutWit.Controller.Visualization.ParaView.Tests.Mock;
-using OutWit.Controller.Visualization.ParaView.Validation;
 
 namespace OutWit.Controller.Visualization.ParaView.Tests.Utils;
 

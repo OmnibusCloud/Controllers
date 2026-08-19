@@ -16,6 +16,39 @@ namespace OutWit.Controller.Visualization.ParaView.Activities;
 [MemoryPackable]
 public sealed partial class WitActivityParaViewValidate : WitActivityFunction
 {
+    #region Functions
+
+    /// <inheritdoc />
+    protected override string InnerString()
+    {
+        return $"ParaView.Validate({Scene}, {Options})";
+    }
+
+    #endregion
+
+    #region ModelBase
+
+    /// <inheritdoc />
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not WitActivityParaViewValidate other)
+            return false;
+
+        return base.Is(modelBase, tolerance);
+    }
+
+    /// <inheritdoc />
+    protected override WitActivityParaViewValidate InnerClone()
+    {
+        return new WitActivityParaViewValidate
+        {
+            Scene = Scene,
+            Options = Options
+        };
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>
@@ -31,36 +64,6 @@ public sealed partial class WitActivityParaViewValidate : WitActivityFunction
     [MemoryPackOrder(1)]
     [MemoryPackAllowSerialize]
     public IWitParameter? Options { get; init; }
-
-    #endregion
-
-    #region Functions
-
-    protected override string InnerString()
-    {
-        return $"ParaView.Validate({Scene}, {Options})";
-    }
-
-    #endregion
-
-    #region ModelBase
-
-    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
-    {
-        if (modelBase is not WitActivityParaViewValidate other)
-            return false;
-
-        return base.Is(modelBase, tolerance);
-    }
-
-    protected override WitActivityParaViewValidate InnerClone()
-    {
-        return new WitActivityParaViewValidate
-        {
-            Scene = Scene,
-            Options = Options
-        };
-    }
 
     #endregion
 }

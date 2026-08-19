@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using OutWit.Controller.Visualization.ParaView.Model;
+using OutWit.Controller.Visualization.ParaView.Output;
 using OutWit.Controller.Visualization.ParaView.Runtime;
 using OutWit.Controller.Visualization.ParaView.Tests.Mock;
 using OutWit.Controller.Visualization.ParaView.Tests.Utils;

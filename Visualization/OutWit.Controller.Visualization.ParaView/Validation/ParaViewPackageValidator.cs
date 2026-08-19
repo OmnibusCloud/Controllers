@@ -1,5 +1,7 @@
 using OutWit.Controller.Visualization.ParaView.Model;
 using OutWit.Controller.Visualization.ParaView.Runtime;
+using OutWit.Controller.Visualization.ParaView.State;
+using OutWit.Controller.Visualization.ParaView.Tasks;
 
 namespace OutWit.Controller.Visualization.ParaView.Validation;
 

@@ -12,8 +12,40 @@ namespace OutWit.Controller.Visualization.ParaView.Model;
 /// </summary>
 [JobDocumentContract("paraview.outputOptions@1")]
 [MemoryPackable(GenerateType.VersionTolerant)]
-public partial class ParaViewOutputOptionsData : ModelBase
+public sealed partial class ParaViewOutputOptionsData : ModelBase
 {
+    #region ModelBase
+
+    /// <inheritdoc />
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not ParaViewOutputOptionsData other)
+            return false;
+
+        return ViewId.Is(other.ViewId)
+               && Width.Is(other.Width)
+               && Height.Is(other.Height)
+               && Format.Is(other.Format)
+               && TransparentBackground.Is(other.TransparentBackground)
+               && Frames.Is(other.Frames, tolerance);
+    }
+
+    /// <inheritdoc />
+    public override ModelBase Clone()
+    {
+        return new ParaViewOutputOptionsData
+        {
+            ViewId = ViewId,
+            Width = Width,
+            Height = Height,
+            Format = Format,
+            TransparentBackground = TransparentBackground,
+            Frames = (ParaViewFrameSelectionData)Frames.Clone()
+        };
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>
@@ -53,36 +85,6 @@ public partial class ParaViewOutputOptionsData : ModelBase
     /// </summary>
     [MemoryPackOrder(5)]
     public ParaViewFrameSelectionData Frames { get; set; } = new();
-
-    #endregion
-
-    #region ModelBase
-
-    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
-    {
-        if (modelBase is not ParaViewOutputOptionsData other)
-            return false;
-
-        return ViewId.Is(other.ViewId)
-               && Width.Is(other.Width)
-               && Height.Is(other.Height)
-               && Format == other.Format
-               && TransparentBackground == other.TransparentBackground
-               && Frames.Is(other.Frames, tolerance);
-    }
-
-    public override ModelBase Clone()
-    {
-        return new ParaViewOutputOptionsData
-        {
-            ViewId = ViewId,
-            Width = Width,
-            Height = Height,
-            Format = Format,
-            TransparentBackground = TransparentBackground,
-            Frames = (ParaViewFrameSelectionData)Frames.Clone()
-        };
-    }
 
     #endregion
 }

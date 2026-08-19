@@ -4,7 +4,8 @@ using OutWit.Common.Plugins.Abstractions;
 using OutWit.Common.Plugins.Abstractions.Attributes;
 using OutWit.Controller.Visualization.ParaView.Activities;
 using OutWit.Controller.Visualization.ParaView.Adapters;
-using OutWit.Controller.Visualization.ParaView.Runtime;
+using OutWit.Controller.Visualization.ParaView.Collections;
+using OutWit.Controller.Visualization.ParaView.Utils;
 using OutWit.Controller.Visualization.ParaView.Variables;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
@@ -28,6 +29,7 @@ public class WitControllerParaViewModule : WitPluginBase, IWitControllerNode, IW
 {
     #region Initialization
 
+    /// <inheritdoc />
     public override void Initialize(IServiceCollection services)
     {
         // Register a no-op IWitBlobService if none is provided by the host.

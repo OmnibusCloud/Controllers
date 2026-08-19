@@ -74,14 +74,22 @@ subset, 32 MiB state, 10 000 attachments, 10 000 outputs, 16 384 px per dimensio
 
 ## Layout
 
+Packages follow folders (namespace = `OutWit.Controller.Visualization.ParaView.<Folder>`):
+
 ```
 Activities/    WitActivityParaView{Validate,Split,RenderFrame,Collect,CollectStill}
-Adapters/      the executors + ParaViewResultOrdering
-Variables/     ParaViewSceneRef, ParaViewOutputOptions, ParaViewValidationReport, ParaViewRenderTask(+Collection), ParaViewRenderResult(+Collection)
-Validation/    ParaViewStateDocument (hardened parser), ParaViewPackageValidator, ParaViewProxyAllowlist/Policy,
-               ParaViewLogicalPath, ParaViewPackageDigest, ParaViewTaskSplitter, ParaViewFrameSelectionResolver, ParaViewCompatibility, ParaViewInputLimits
-Runtime/       ParaViewBinaryResolver, ParaViewRunnerEnvironment, ParaViewProcessRunner, ParaViewTaskWorkspace, ParaViewTaskExecutor,
-               ParaViewRunnerTask/Status (the documents), ParaViewImageInfo, ParaViewOutputValidator, ParaViewRuntimeInfo
+Adapters/      WitActivityAdapterParaView{...} — the executors
+Variables/     WitVariableParaView{SceneRef,OutputOptions,ValidationReport,RenderTask,RenderResult}
+Collections/   WitVariableParaView{RenderTaskCollection,RenderResultCollection}
+State/         ParaViewStateDocument (+Parser, Proxy, Property, CollectionItem, FormatException) — the hardened .pvsm reader
+Validation/    ParaViewPackageValidator, ParaViewProxyAllowlist (+Document), ParaViewProxyPolicy, ParaViewLogicalPath,
+               ParaViewCompatibility, ParaViewInputLimits, ParaViewFrameSelectionResolver
+Tasks/         ParaViewTaskSplitter, ParaViewAttachmentSubsetIndex, ParaViewPackageDigest, ParaViewResultOrdering
+Runtime/       ParaViewRuntimeInfo, ParaViewBinaryResolver, ParaViewRunnerEnvironment, ParaViewRunnerTask/Status (the documents),
+               ParaViewTaskWorkspace, ParaViewTaskExecutor
+Processes/     ParaViewProcessRunner, ParaViewProcessOutcome, ParaViewProcessOutputTail, ProcessTreeGuard
+Output/        ParaViewImageInfo, ParaViewImageFormats, ParaViewOutputValidator
+Utils/         NullBlobService
 Runner/        render_task.py (embedded)
 Allowlists/    paraview-6.1.json (embedded; seed — regenerated from the fixture corpus by the runtime-proof tooling)
 Scripts/       the bundled .wit scripts

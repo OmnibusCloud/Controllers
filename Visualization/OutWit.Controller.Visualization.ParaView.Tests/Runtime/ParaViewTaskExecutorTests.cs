@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using OutWit.Controller.Visualization.ParaView.Model;
+using OutWit.Controller.Visualization.ParaView.Output;
 using OutWit.Controller.Visualization.ParaView.Runtime;
+using OutWit.Controller.Visualization.ParaView.Tasks;
 using OutWit.Controller.Visualization.ParaView.Tests.Mock;
 using OutWit.Controller.Visualization.ParaView.Tests.Utils;
 using OutWit.Controller.Visualization.ParaView.Validation;
@@ -198,56 +200,6 @@ public sealed class ParaViewTaskExecutorTests
         Assert.CatchAsync<OperationCanceledException>(() => m_executor.ExecuteAsync(task, Guid.NewGuid(), m_fakePvpython, cts.Token));
 
         Assert.That(DateTime.UtcNow - started, Is.LessThan(TimeSpan.FromSeconds(60)));
-    }
-
-    [Test]
-    public async Task WallClockLimitKillsTheRunnerTest()
-    {
-        var runnerPath = Path.Combine(m_root, "render_task.py");
-        File.WriteAllText(runnerPath, "# fake");
-        var state = Path.Combine(m_root, "state.pvsm");
-        File.WriteAllText(state, ParaViewStateBuilder.Typical("data/field_0.vtu").WithExtraStateContent("<!-- FAKE-HANG -->").Build());
-        var package = Path.Combine(m_root, "package", "data");
-        Directory.CreateDirectory(package);
-        File.WriteAllText(Path.Combine(package, "field_0.vtu"), "x");
-        var taskFile = Path.Combine(m_root, "task.json");
-        File.WriteAllText(taskFile, new ParaViewRunnerTask
-        {
-            StatePath = state,
-            PackageRoot = Path.Combine(m_root, "package"),
-            WorkDir = m_root,
-            OutputPath = Path.Combine(m_root, "out.png"),
-            StatusPath = Path.Combine(m_root, "status.json"),
-            ViewId = "RenderView1",
-            Width = 4,
-            Height = 4,
-            FileReferenceGroups = ["sources"]
-        }.ToJson());
-
-        var outcome = await ParaViewProcessRunner.RunAsync(
-            m_fakePvpython,
-            ParaViewTaskExecutor.BuildArguments(runnerPath, taskFile),
-            Path.Combine(m_root, "package"),
-            ParaViewRunnerEnvironment.Build(m_fakePvpython, m_root, m_root, false),
-            TimeSpan.FromSeconds(2),
-            NullLogger.Instance,
-            CancellationToken.None);
-
-        Assert.That(outcome.TimedOut, Is.True);
-        Assert.That(outcome.ExitCode, Is.EqualTo(-1));
-    }
-
-    [Test]
-    public async Task ProcessRunnerCapturesBoundedStderrTest()
-    {
-        var outcome = await ParaViewProcessRunner.RunAsync(
-            m_fakePvpython, ["--no-such"], m_root,
-            ParaViewRunnerEnvironment.Build(m_fakePvpython, m_root, m_root, false),
-            TimeSpan.FromSeconds(30), NullLogger.Instance, CancellationToken.None);
-
-        Assert.That(outcome.ExitCode, Is.EqualTo(2));
-        Assert.That(outcome.StderrTail, Does.Contain("--task-file"));
-        Assert.That(outcome.TimedOut, Is.False);
     }
 
     #endregion

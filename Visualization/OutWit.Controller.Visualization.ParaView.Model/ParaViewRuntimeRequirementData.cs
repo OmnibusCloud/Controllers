@@ -12,8 +12,41 @@ namespace OutWit.Controller.Visualization.ParaView.Model;
 /// </summary>
 [JobDocumentContract("paraview.runtimeRequirement@1")]
 [MemoryPackable(GenerateType.VersionTolerant)]
-public partial class ParaViewRuntimeRequirementData : ModelBase
+public sealed partial class ParaViewRuntimeRequirementData : ModelBase
 {
+    #region ModelBase
+
+    /// <inheritdoc />
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not ParaViewRuntimeRequirementData other)
+            return false;
+
+        return ParaViewMajor.Is(other.ParaViewMajor)
+               && ParaViewMinor.Is(other.ParaViewMinor)
+               && ParaViewPatch.Is(other.ParaViewPatch)
+               && ProducerPluginVersion.Is(other.ProducerPluginVersion)
+               && ProducerPlatform.Is(other.ProducerPlatform)
+               && Plugins.Count == other.Plugins.Count
+               && Plugins.Zip(other.Plugins, (left, right) => left.Is(right, tolerance)).All(me => me);
+    }
+
+    /// <inheritdoc />
+    public override ModelBase Clone()
+    {
+        return new ParaViewRuntimeRequirementData
+        {
+            ParaViewMajor = ParaViewMajor,
+            ParaViewMinor = ParaViewMinor,
+            ParaViewPatch = ParaViewPatch,
+            ProducerPluginVersion = ProducerPluginVersion,
+            ProducerPlatform = ProducerPlatform,
+            Plugins = [.. Plugins.Select(me => (ParaViewPluginRequirementData)me.Clone())]
+        };
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>
@@ -52,37 +85,6 @@ public partial class ParaViewRuntimeRequirementData : ModelBase
     /// </summary>
     [MemoryPackOrder(5)]
     public List<ParaViewPluginRequirementData> Plugins { get; set; } = [];
-
-    #endregion
-
-    #region ModelBase
-
-    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
-    {
-        if (modelBase is not ParaViewRuntimeRequirementData other)
-            return false;
-
-        return ParaViewMajor.Is(other.ParaViewMajor)
-               && ParaViewMinor.Is(other.ParaViewMinor)
-               && ParaViewPatch.Is(other.ParaViewPatch)
-               && ProducerPluginVersion.Is(other.ProducerPluginVersion)
-               && ProducerPlatform.Is(other.ProducerPlatform)
-               && Plugins.Count == other.Plugins.Count
-               && Plugins.Zip(other.Plugins, (left, right) => left.Is(right, tolerance)).All(me => me);
-    }
-
-    public override ModelBase Clone()
-    {
-        return new ParaViewRuntimeRequirementData
-        {
-            ParaViewMajor = ParaViewMajor,
-            ParaViewMinor = ParaViewMinor,
-            ParaViewPatch = ParaViewPatch,
-            ProducerPluginVersion = ProducerPluginVersion,
-            ProducerPlatform = ProducerPlatform,
-            Plugins = [.. Plugins.Select(me => (ParaViewPluginRequirementData)me.Clone())]
-        };
-    }
 
     #endregion
 }

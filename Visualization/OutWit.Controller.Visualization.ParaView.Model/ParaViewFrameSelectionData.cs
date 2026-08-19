@@ -1,6 +1,7 @@
 using MemoryPack;
 using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
+using OutWit.Common.Collections;
 using OutWit.Common.Values;
 
 namespace OutWit.Controller.Visualization.ParaView.Model;
@@ -11,8 +12,38 @@ namespace OutWit.Controller.Visualization.ParaView.Model;
 /// </summary>
 [JobDocumentContract("paraview.frameSelection@1")]
 [MemoryPackable(GenerateType.VersionTolerant)]
-public partial class ParaViewFrameSelectionData : ModelBase
+public sealed partial class ParaViewFrameSelectionData : ModelBase
 {
+    #region ModelBase
+
+    /// <inheritdoc />
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not ParaViewFrameSelectionData other)
+            return false;
+
+        return Mode.Is(other.Mode)
+               && First.Is(other.First)
+               && Last.Is(other.Last)
+               && Step.Is(other.Step)
+               && Indices.Is(other.Indices);
+    }
+
+    /// <inheritdoc />
+    public override ModelBase Clone()
+    {
+        return new ParaViewFrameSelectionData
+        {
+            Mode = Mode,
+            First = First,
+            Last = Last,
+            Step = Step,
+            Indices = [.. Indices]
+        };
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>
@@ -44,34 +75,6 @@ public partial class ParaViewFrameSelectionData : ModelBase
     /// </summary>
     [MemoryPackOrder(4)]
     public List<int> Indices { get; set; } = [];
-
-    #endregion
-
-    #region ModelBase
-
-    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
-    {
-        if (modelBase is not ParaViewFrameSelectionData other)
-            return false;
-
-        return Mode == other.Mode
-               && First.Is(other.First)
-               && Last.Is(other.Last)
-               && Step.Is(other.Step)
-               && Indices.SequenceEqual(other.Indices);
-    }
-
-    public override ModelBase Clone()
-    {
-        return new ParaViewFrameSelectionData
-        {
-            Mode = Mode,
-            First = First,
-            Last = Last,
-            Step = Step,
-            Indices = [.. Indices]
-        };
-    }
 
     #endregion
 }

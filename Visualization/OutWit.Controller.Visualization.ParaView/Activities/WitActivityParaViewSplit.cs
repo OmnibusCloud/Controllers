@@ -14,6 +14,40 @@ namespace OutWit.Controller.Visualization.ParaView.Activities;
 [MemoryPackable]
 public sealed partial class WitActivityParaViewSplit : WitActivityFunction
 {
+    #region Functions
+
+    /// <inheritdoc />
+    protected override string InnerString()
+    {
+        return $"ParaView.Split({Scene}, {Report}, {Options})";
+    }
+
+    #endregion
+
+    #region ModelBase
+
+    /// <inheritdoc />
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not WitActivityParaViewSplit other)
+            return false;
+
+        return base.Is(modelBase, tolerance);
+    }
+
+    /// <inheritdoc />
+    protected override WitActivityParaViewSplit InnerClone()
+    {
+        return new WitActivityParaViewSplit
+        {
+            Scene = Scene,
+            Report = Report,
+            Options = Options
+        };
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>
@@ -36,37 +70,6 @@ public sealed partial class WitActivityParaViewSplit : WitActivityFunction
     [MemoryPackOrder(2)]
     [MemoryPackAllowSerialize]
     public IWitParameter? Options { get; init; }
-
-    #endregion
-
-    #region Functions
-
-    protected override string InnerString()
-    {
-        return $"ParaView.Split({Scene}, {Report}, {Options})";
-    }
-
-    #endregion
-
-    #region ModelBase
-
-    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
-    {
-        if (modelBase is not WitActivityParaViewSplit other)
-            return false;
-
-        return base.Is(modelBase, tolerance);
-    }
-
-    protected override WitActivityParaViewSplit InnerClone()
-    {
-        return new WitActivityParaViewSplit
-        {
-            Scene = Scene,
-            Report = Report,
-            Options = Options
-        };
-    }
 
     #endregion
 }
