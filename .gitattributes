@@ -6,3 +6,5 @@ Visualization/**/Fixtures/Corpus/states/** text eol=lf
 # plugin's copy) and run under Python on every platform: always LF, whatever the checkout OS
 Visualization/**/Runner/*.py text eol=lf
 Visualization/**/Plugins/*.py text eol=lf
+# Shell scripts run by bash on every platform (git-bash on Windows): always LF
+*.sh text eol=lf
