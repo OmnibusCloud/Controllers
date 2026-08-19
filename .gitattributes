@@ -2,3 +2,7 @@
 # ParaView fixture corpus: data files are byte-exact (VTK XML with appended binary), states stay LF
 Visualization/**/Fixtures/Corpus/data/** -text
 Visualization/**/Fixtures/Corpus/states/** text eol=lf
+# The embedded runner and the bundled reader are shipped as bytes (the reader byte-identical with the GUI
+# plugin's copy) and run under Python on every platform: always LF, whatever the checkout OS
+Visualization/**/Runner/*.py text eol=lf
+Visualization/**/Plugins/*.py text eol=lf
