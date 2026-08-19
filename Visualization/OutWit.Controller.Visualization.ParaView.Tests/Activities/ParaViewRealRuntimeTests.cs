@@ -5,6 +5,7 @@ using OutWit.Controller.Visualization.ParaView.Processes;
 using OutWit.Controller.Visualization.ParaView.Runtime;
 using OutWit.Controller.Visualization.ParaView.Tests.Mock;
 using OutWit.Controller.Visualization.ParaView.Tests.Utils;
+using OutWit.Engine.Data.Benchmark;
 using OutWit.Engine.Interfaces;
 using OutWit.Engine.Sdk;
 
@@ -369,6 +370,32 @@ public sealed class ParaViewRealRuntimeTests
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status.Result}: {status.Message}");
         Assert.That(ParaViewImageInfo.TryRead(m_blobs.GetStoredPath((Guid)job.Variables["result"].Value!))!.HasAlpha, Is.True);
+    }
+
+    [Test]
+    public async Task NodeBenchmarkRendersTheProceduralSceneThroughTheRealRuntimeTest()
+    {
+        // The benchmark a worker runs at startup, through the real pvpython: the procedural Wavelet
+        // scene must build, render, and yield a positive pixels-per-second rate with the run metadata —
+        // this is the number the grid allocator weighs nodes by.
+        var options = new WitBenchmarkOptions { MinDuration = TimeSpan.FromSeconds(1), WarmupIterations = 1 };
+
+        var result = await WitEngineNodeSdk.Instance.RunBenchmark("ParaView.RenderFrame", options);
+
+        TestContext.Out.WriteLine($"ParaView.RenderFrame: {result.Rate:N0} {result.Unit}, frames={result.Iterations}, elapsed={result.Elapsed}, custom={string.Join(", ", result.Custom?.Select(me => $"{me.Key}={me.Value}") ?? [])}");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Unit, Is.EqualTo(ParaViewBenchmark.UNIT));
+            Assert.That(result.DatasetId, Is.EqualTo(ParaViewBenchmark.DATASET_ID));
+            Assert.That(result.Rate, Is.GreaterThan(0));
+            Assert.That(result.Iterations, Is.GreaterThan(0));
+            Assert.That(result.Elapsed, Is.GreaterThan(TimeSpan.Zero));
+            Assert.That(result.Elapsed >= options.MinDuration || result.Iterations >= ParaViewBenchmark.MAX_FRAMES, Is.True, "the timed loop runs to the target duration or the frame cap");
+            Assert.That(result.Custom?[ParaViewBenchmark.CUSTOM_PARAVIEW_VERSION], Does.StartWith(ParaViewRuntimeInfo.RUNTIME_SERIES));
+            Assert.That(result.Custom?[ParaViewBenchmark.CUSTOM_RENDER_WINDOW], Does.EndWith("RenderWindow"));
+            Assert.That(result.Custom?[ParaViewBenchmark.CUSTOM_SCENE_POINTS], Is.EqualTo("226981"), "61^3 Wavelet points");
+        });
     }
 
     #endregion

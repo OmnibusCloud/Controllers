@@ -14,7 +14,8 @@ using OutWit.Engine.Sdk;
 //
 //   ConsumerRunner --controllers <dir> --scripts <dir> --corpus <dir> --out <dir> [--state <name>]...
 //
-// Exit code 0 only when every requested scene rendered a valid PNG (and the PVD series all its frames).
+// Exit code 0 only when every requested scene rendered a valid PNG (and the PVD series all its frames)
+// and the node benchmark of ParaView.RenderFrame measured a positive rate.
 
 var arguments = ParseArguments(args);
 var controllers = Required(arguments, "controllers");
@@ -134,7 +135,28 @@ foreach (var stateName in states)
     }
 }
 
-Console.WriteLine(failures == 0 ? "consumer runner: all scenes rendered" : $"consumer runner: {failures} failure(s)");
+// The benchmark pass a worker runs at startup, through the consumer's module: the measured rate is what
+// the grid allocator weighs this node by, so a deployment whose benchmark fails would render at rate 1.0
+// (or 0) without anyone noticing in a render test.
+try
+{
+    var benchmark = await WitEngineNodeSdk.Instance.RunBenchmark("ParaView.RenderFrame", new WitBenchmarkOptions { MinDuration = TimeSpan.FromSeconds(1), WarmupIterations = 1 });
+    var custom = benchmark.Custom == null ? string.Empty : string.Join(", ", benchmark.Custom.Select(me => $"{me.Key}={me.Value}"));
+    if (benchmark.Rate > 0 && benchmark.Iterations > 0 && benchmark.Unit == "paraview-pixels@v1")
+        Console.WriteLine($"OK   benchmark ParaView.RenderFrame: {benchmark.Rate:N0} {benchmark.Unit} ({benchmark.Iterations} frames, {benchmark.Elapsed.TotalSeconds:F2}s; {custom})");
+    else
+    {
+        Console.WriteLine($"FAIL benchmark ParaView.RenderFrame: rate={benchmark.Rate} unit={benchmark.Unit} iterations={benchmark.Iterations} ({custom})");
+        failures++;
+    }
+}
+catch (Exception error)
+{
+    Console.WriteLine($"FAIL benchmark ParaView.RenderFrame: {error.GetType().Name}: {error.Message}");
+    failures++;
+}
+
+Console.WriteLine(failures == 0 ? "consumer runner: all scenes rendered, benchmark measured" : $"consumer runner: {failures} failure(s)");
 return failures == 0 ? 0 : 1;
 
 // ----------------------------------------------------------------------------------------------------

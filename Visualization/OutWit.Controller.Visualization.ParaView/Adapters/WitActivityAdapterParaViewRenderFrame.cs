@@ -15,11 +15,14 @@ namespace OutWit.Controller.Visualization.ParaView.Adapters;
 /// Adapter for <see cref="WitActivityParaViewRenderFrame"/>: node-side execution of one task through
 /// <see cref="ParaViewTaskExecutor"/>. The work estimate scales with the output pixels and the bytes
 /// the node must materialize, so data movement — the dominant cost for scientific datasets — weighs
-/// into distribution.
+/// into distribution; the node benchmark (<see cref="ParaViewBenchmark"/>) measures the same unit
+/// (pixels per second), so the grid allocator can set node rates against task work.
 /// </summary>
 internal sealed class WitActivityAdapterParaViewRenderFrame : WitActivityAdapterFunction<WitActivityParaViewRenderFrame>
 {
     #region Constants
+
+    private const string ACTIVITY_NAME = "ParaView.RenderFrame";
 
     private const double BYTES_PER_PIXEL_EQUIVALENT = 64.0;
 
@@ -87,6 +90,43 @@ internal sealed class WitActivityAdapterParaViewRenderFrame : WitActivityAdapter
 
         var pixels = (double)Math.Max(1, task.Options.Width) * Math.Max(1, task.Options.Height);
         return pixels + Math.Max(0, task.SubsetBytes) / BYTES_PER_PIXEL_EQUIVALENT;
+    }
+
+    /// <summary>
+    /// Measures this node's ParaView throughput (output pixels per second on the procedural benchmark
+    /// scene). A node without a usable runtime reports rate 0 rather than failing the benchmark pass,
+    /// so the engine can still schedule its other activities.
+    /// </summary>
+    /// <param name="options">Engine benchmark options or null for defaults.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The benchmark result.</returns>
+    public override async Task<IWitBenchmarkResult> RunBenchmark(IWitBenchmarkOptions? options, CancellationToken cancellationToken)
+    {
+        string pvpythonPath;
+        try
+        {
+            pvpythonPath = ResolvePvpython();
+        }
+        catch (InvalidOperationException exception)
+        {
+            Logger.LogWarning("{ActivityName} benchmark: {Message}", ACTIVITY_NAME, exception.Message);
+            return ParaViewBenchmark.CreateUnavailableResult();
+        }
+
+        var result = await ParaViewBenchmark.MeasureAsync(pvpythonPath, TempStorage, options, Logger, cancellationToken);
+
+        Logger.LogInformation(
+            "{ActivityName} benchmark: {Rate:F0} {Unit} on {Window} ({Frames} frames of {Resolution}, render-only {Elapsed}) with ParaView {Version}",
+            ACTIVITY_NAME,
+            result.Rate,
+            ParaViewBenchmark.UNIT,
+            result.Custom?[ParaViewBenchmark.CUSTOM_RENDER_WINDOW],
+            result.Iterations,
+            result.Custom?[ParaViewBenchmark.CUSTOM_RENDER_RESOLUTION],
+            result.Elapsed,
+            result.Custom?[ParaViewBenchmark.CUSTOM_PARAVIEW_VERSION]);
+
+        return result;
     }
 
     #endregion

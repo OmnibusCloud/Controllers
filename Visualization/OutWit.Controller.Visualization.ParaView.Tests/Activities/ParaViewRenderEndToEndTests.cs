@@ -4,6 +4,7 @@ using OutWit.Controller.Visualization.ParaView.Output;
 using OutWit.Controller.Visualization.ParaView.Runtime;
 using OutWit.Controller.Visualization.ParaView.Tests.Mock;
 using OutWit.Controller.Visualization.ParaView.Tests.Utils;
+using OutWit.Engine.Data.Benchmark;
 using OutWit.Engine.Interfaces;
 using OutWit.Engine.Sdk;
 
@@ -214,6 +215,39 @@ public sealed class ParaViewRenderEndToEndTests
         var status = await m_engine.ScheduleAndWaitAsync(job, scene, new ParaViewOutputOptionsData { Width = 8, Height = 8 });
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Failed));
+    }
+
+    [Test]
+    public async Task NodeBenchmarkOfRenderFrameMeasuresPixelsPerSecondTest()
+    {
+        // The engine's per-activity benchmark pass (what every worker runs at startup) must reach the
+        // controller's own measurement — not the base adapter's rate-1.0 placeholder that would make the
+        // grid allocator treat every node as equal.
+        var options = new WitBenchmarkOptions { MinDuration = TimeSpan.FromSeconds(1), WarmupIterations = 1 };
+
+        var result = await WitEngineNodeSdk.Instance.RunBenchmark("ParaView.RenderFrame", options);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Unit, Is.EqualTo(ParaViewBenchmark.UNIT));
+            Assert.That(result.DatasetId, Is.EqualTo(ParaViewBenchmark.DATASET_ID));
+            Assert.That(result.Iterations, Is.EqualTo(50), "the fake renders 20 ms/frame: 1 s → 50 frames");
+            Assert.That(result.Rate, Is.EqualTo(50 * (double)ParaViewBenchmark.RESOLUTION * ParaViewBenchmark.RESOLUTION / 1.0).Within(1e-3));
+            Assert.That(result.Elapsed, Is.EqualTo(TimeSpan.FromSeconds(1)).Within(TimeSpan.FromMilliseconds(1)));
+            Assert.That(result.Custom?[ParaViewBenchmark.CUSTOM_RENDER_WINDOW], Is.EqualTo("FakeOffscreenWindow"));
+        });
+    }
+
+    [Test]
+    public async Task OtherParaViewActivitiesKeepTheDefaultBenchmarkTest()
+    {
+        // Planning, validation and assembly run on the host; only RenderFrame is distributed, so only it
+        // needs a measured rate. The others must still answer the benchmark pass without failing.
+        foreach (var activity in WitEngineNodeSdk.Instance.RegisteredActivities.Where(me => me.StartsWith("ParaView.", StringComparison.Ordinal) && me != "ParaView.RenderFrame"))
+        {
+            var result = await WitEngineNodeSdk.Instance.RunBenchmark(activity, (WitBenchmarkOptions)WitBenchmarkOptions.Default);
+            Assert.That(result.Rate, Is.GreaterThan(0), $"{activity} must report a schedulable rate");
+        }
     }
 
     #endregion

@@ -21,6 +21,23 @@ test harness, the per-platform ParaView runtime assets (`paraview-v0.1.0`) and t
 | `ParaView.Collect(rendered, options)` → `BlobCollection` | host | Restores task order, fails on missing/duplicate/conflicting identities. |
 | `ParaView.CollectStill(rendered, options)` → `Blob` | host | Exactly one result → one image blob. |
 
+## Node benchmark and work distribution
+
+`ParaView.RenderFrame` is the only distributed activity, so it is the only one with a measured node
+benchmark (`Runtime/ParaViewBenchmark` + the embedded `Runner/benchmark_frames.py`). At startup every
+worker runs the engine's benchmark pass: one pvpython process builds a procedural Wavelet scene
+(61³ points contoured at four values, clipped and sliced) and renders 512×512 PNG frames while rotating
+the camera — `SaveScreenshot` included, so readback and encoding count — for `MinDuration` seconds
+(default 1.5 s from the engine, 3 s fallback, at most 120 frames, 1 warm-up frame). The result is
+`paraview-pixels@v1`: **output pixels per second**, with `render-window`/`render-device`
+(`vtkOSOpenGLRenderWindow` = software), `render-frames`, `render-seconds`, `paraview-version` and
+`scene-points` in `Custom`. A node without a usable runtime reports rate 0.
+
+The work estimate of a task is expressed in the same unit — `pixels + materializedBytes / 64` — so the
+Grid allocator (`WitGridTaskAllocator`: longest-processing-time first, rate-weighted, fewer nodes when
+the makespan does not suffer) hands a GPU workstation proportionally more frames than a software-GL VM.
+Measured: ~11 M px/s on a Windows GPU workstation, ~5.4 M px/s under OSMesa in a 32-core container.
+
 ## Bundled scripts (`OutWit.Controller.Visualization.ParaView.Scripts`)
 
 ```

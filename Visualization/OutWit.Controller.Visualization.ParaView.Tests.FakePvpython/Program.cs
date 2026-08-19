@@ -15,6 +15,8 @@
 //   FAKE-NO-STATUS     renders, exits 0, writes no status (adapter must reject);
 //   FAKE-EXTRA-OUTPUT  renders and leaves an extra file in the output directory (must reject);
 //   anything else      renders a solid image of the requested size.
+//
+// When the script is benchmark_frames.py the fake runs its benchmark mode instead (see FakeBenchmark).
 
 using System.Text.Json;
 using System.Xml.Linq;
@@ -50,6 +52,9 @@ catch (Exception e)
     Console.Error.WriteLine($"fake-pvpython: cannot read the task file: {e.Message}");
     return 2;
 }
+
+if (string.Equals(Path.GetFileName(scriptPath), FakeBenchmark.SCRIPT_NAME, StringComparison.OrdinalIgnoreCase))
+    return FakeBenchmark.Run(task);
 
 string Str(string name) => task.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
 int Int(string name) => task.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number ? value.GetInt32() : 0;
