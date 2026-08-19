@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using OutWit.Controller.Visualization.ParaView.Model;
 using OutWit.Controller.Visualization.ParaView.Output;
+using OutWit.Controller.Visualization.ParaView.Processes;
 using OutWit.Controller.Visualization.ParaView.Runtime;
 using OutWit.Controller.Visualization.ParaView.Tests.Mock;
 using OutWit.Controller.Visualization.ParaView.Tests.Utils;
@@ -289,6 +290,36 @@ public sealed class ParaViewRealRuntimeTests
     }
 
     [Test]
+    public async Task WallClockLimitKillsTheWholeRuntimeProcessTreeTest()
+    {
+        // The real runtime under the real process runner: a pvpython that sleeps past the wall-clock
+        // limit must be killed with its whole tree — on Linux the official bin/pvpython is a launcher
+        // whose pvpython-real child would otherwise keep burning a node core after the task is gone.
+        var home = Path.Combine(m_root, "kill-home");
+        var temp = Path.Combine(m_root, "kill-tmp");
+        Directory.CreateDirectory(home);
+        Directory.CreateDirectory(temp);
+        var environment = ParaViewRunnerEnvironment.Build(m_pvpython, home, temp, ParaViewRunnerEnvironment.ForceSoftwareRenderingByDefault());
+        var marker = $"outwit_kill_marker_{Guid.NewGuid():N}";
+        var script = Path.Combine(m_root, $"{marker}.py");
+        File.WriteAllText(script, "import time\nprint('sleeping', flush=True)\ntime.sleep(120)\n");
+
+        var started = DateTime.UtcNow;
+        var outcome = await ParaViewProcessRunner.RunAsync(
+            m_pvpython, ["--force-offscreen-rendering", "--disable-registry", script], m_root, environment, TimeSpan.FromSeconds(5), null, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(outcome.TimedOut, Is.True, "the wall-clock limit must report a timeout");
+            Assert.That(DateTime.UtcNow - started, Is.LessThan(TimeSpan.FromSeconds(60)));
+        });
+
+        // Nothing of that tree may survive: look for any live process whose command line carries the marker.
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        Assert.That(LiveProcessesMentioning(marker), Is.Empty, "a runtime process survived the kill");
+    }
+
+    [Test]
     public async Task TransparentPngCarriesAlphaTest()
     {
         var (scene, _) = ParaViewCorpus.BuildScene(ParaViewCorpus.SPHERE_STATIC, Path.Combine(m_root, "alpha"), m_blobs);
@@ -308,6 +339,47 @@ public sealed class ParaViewRealRuntimeTests
     private string Script(string fileName)
     {
         return File.ReadAllText(Path.Combine(m_scriptsPath, fileName));
+    }
+
+    private static IReadOnlyList<string> LiveProcessesMentioning(string marker)
+    {
+        var found = new List<string>();
+        if (OperatingSystem.IsWindows())
+        {
+            // WMI-free: PowerShell lists command lines of live processes.
+            var start = new System.Diagnostics.ProcessStartInfo("powershell", $"-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object {{ $_.CommandLine -like '*{marker}*' -and $_.Name -notlike 'powershell*' }} | ForEach-Object {{ $_.ProcessId.ToString() + ' ' + $_.Name }}\"")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false
+            };
+            using var process = System.Diagnostics.Process.Start(start)!;
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            found.AddRange(output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(me => me.Trim()).Where(me => me.Length > 0));
+        }
+        else
+        {
+            foreach (var directory in Directory.EnumerateDirectories("/proc"))
+            {
+                if (!int.TryParse(Path.GetFileName(directory), out var pid) || pid == Environment.ProcessId)
+                    continue;
+
+                try
+                {
+                    var commandLine = File.ReadAllText(Path.Combine(directory, "cmdline")).Replace(' ', ' ');
+                    if (commandLine.Contains(marker, StringComparison.Ordinal))
+                        found.Add($"{pid} {commandLine}");
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+
+        return found;
     }
 
     private static string Digest(string path)

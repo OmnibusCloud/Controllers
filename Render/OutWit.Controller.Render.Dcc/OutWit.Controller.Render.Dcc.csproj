@@ -24,7 +24,7 @@
   <!-- Direct reference so IWitTempStorage (Engine.Interfaces 1.1.3) is visible;
        the transitive pull via Engine.Data would otherwise pin 1.1.2. -->
   <ItemGroup>
-    <PackageReference Include="OutWit.Engine.Interfaces" Version="1.1.*" />
+    <PackageReference Include="OutWit.Engine.Interfaces" Version="1.1.4" />
   </ItemGroup>
 
   <ItemGroup>

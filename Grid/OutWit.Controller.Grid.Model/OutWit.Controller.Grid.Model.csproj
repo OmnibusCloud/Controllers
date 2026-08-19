@@ -11,7 +11,7 @@
 
   <!-- Grid.Model also needs OutWit.Engine.Interfaces on top of the common Model deps. -->
   <ItemGroup>
-    <PackageReference Include="OutWit.Engine.Interfaces" Version="1.1.*" />
+    <PackageReference Include="OutWit.Engine.Interfaces" Version="1.1.4" />
   </ItemGroup>
 
   <!-- Builders subtree is host-only and excluded from the published Model assembly. -->
