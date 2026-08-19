@@ -9,13 +9,11 @@
     <PackageTags>paraview;visualization;scripts;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
 
-  <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md).
-       ENABLE AT FIRST PUBLISH: the referenced controller package does not exist
-       on any feed yet, so the marker would break restore until then.
+  <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md):
+       these scripts bind to the ParaView controller's 0.x activity surface. -->
   <ItemGroup>
     <PackageReference Include="OutWit.Controller.Visualization.ParaView" Version="[0.1.0, 1.0.0)" />
   </ItemGroup>
-  -->
 
   <!-- Source of truth lives next to the ParaView controller. Pack as content so
        consumers receive content/scripts/*.wit on restore; the consumer-side
