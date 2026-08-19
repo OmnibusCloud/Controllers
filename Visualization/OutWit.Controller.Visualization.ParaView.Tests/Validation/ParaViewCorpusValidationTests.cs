@@ -149,6 +149,54 @@ public sealed class ParaViewCorpusValidationTests
     }
 
     [Test]
+    public void GuiSavedStatesParseRenderAndValidateLikeTheirPvpythonTwinsTest()
+    {
+        // What a real client sends: states the ParaView GUI saved (root <ParaView>, CameraWidgetViewLinks /
+        // InteractiveViewLinks siblings, the GUI's own proxies: colour legends, text and time annotations,
+        // the common filters, a second chart view). Every one must parse, resolve a render view and pass
+        // the bundled allowlist; the re-saved core scenes must see the same files and timeline.
+        Assert.That(ParaViewCorpus.GuiStates, Has.Count.GreaterThanOrEqualTo(10));
+
+        foreach (var stateName in ParaViewCorpus.GuiStates)
+        {
+            var document = ParaViewStateDocument.Parse(ParaViewCorpus.StatePath(stateName));
+            Assert.That(document.Version, Is.EqualTo(ParaViewRuntimeInfo.RUNTIME_VERSION), stateName);
+            Assert.That(document.ViewNames, Does.Contain("RenderView1"), stateName);
+
+            var (scene, _) = ParaViewCorpus.BuildScene(stateName, Path.Combine(m_root, Path.GetFileNameWithoutExtension(stateName) + "_gui"), m_blobs);
+            var options = new ParaViewOutputOptionsData { Width = 64, Height = 48, Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.All } };
+
+            var report = m_validator.Validate(scene, options, m_blobs.GetStoredPath(scene.StateBlobId));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(report.IsValid, Is.True, $"{stateName}: {string.Join("; ", report.Errors)}");
+                Assert.That(report.ResolvedViewId, Is.EqualTo("RenderView1"), stateName);
+                Assert.That(report.TimestepValues, Is.EqualTo(ParaViewCorpus.TimelineOf(stateName)).Within(1e-9), stateName);
+            });
+        }
+    }
+
+    [Test]
+    public void GuiSavedReaderStatesAreValidWithThePluginRequirementTest()
+    {
+        var guiReaderStates = Directory.GetFiles(Path.Combine(ParaViewCorpus.Root, "states", ParaViewCorpus.FRD_READER_FOLDER), "gui_*.pvsm")
+            .Select(me => $"{ParaViewCorpus.FRD_READER_FOLDER}/{Path.GetFileName(me)}")
+            .Order()
+            .ToList();
+        Assert.That(guiReaderStates, Has.Count.GreaterThanOrEqualTo(4));
+
+        foreach (var stateName in guiReaderStates)
+        {
+            var (scene, _) = ParaViewCorpus.BuildScene(stateName, Path.Combine(m_root, Path.GetFileNameWithoutExtension(stateName) + "_gui"), m_blobs);
+            var report = m_validator.Validate(scene, new ParaViewOutputOptionsData { Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.All } }, m_blobs.GetStoredPath(scene.StateBlobId));
+
+            Assert.That(report.IsValid, Is.True, $"{stateName}: {string.Join("; ", report.Errors)}");
+            Assert.That(report.TimestepValues, Is.EqualTo(ParaViewCorpus.TimelineOf(stateName)).Within(1e-9), stateName);
+        }
+    }
+
+    [Test]
     public void ReaderStatesAreValidWithThePluginRequirementTest()
     {
         Assert.That(ParaViewCorpus.ReaderStates, Has.Count.GreaterThanOrEqualTo(4));

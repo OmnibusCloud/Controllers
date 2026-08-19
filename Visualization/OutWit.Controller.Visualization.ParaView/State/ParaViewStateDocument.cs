@@ -143,6 +143,19 @@ public sealed class ParaViewStateDocument
     public IReadOnlyList<string> ViewNames => CollectionItems(VIEWS_COLLECTION).Select(me => me.Name).ToList();
 
     /// <summary>
+    /// Registration names of the 3D render views (views/RenderView), in collection order — the GUI
+    /// registers chart and spreadsheet views in the same collection, often before the render view.
+    /// </summary>
+    public IReadOnlyList<string> RenderViewNames
+    {
+        get
+        {
+            var renderViewIds = Proxies.Where(me => me.Group == "views" && me.Type == "RenderView").Select(me => me.Id).ToHashSet(StringComparer.Ordinal);
+            return CollectionItems(VIEWS_COLLECTION).Where(me => renderViewIds.Contains(me.Id)).Select(me => me.Name).ToList();
+        }
+    }
+
+    /// <summary>
     /// The TimeKeeper timeline, or null when the state carries no TimeKeeper timestep values.
     /// </summary>
     public IReadOnlyList<double>? TimestepValues

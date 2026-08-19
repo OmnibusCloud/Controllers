@@ -115,10 +115,30 @@ allowlist from the trimmed runtime — never by the scripts alone.
 | macos-arm64 | `paraview-macos-arm64.zip` | `ParaView-6.1.1.app/Contents/bin/pvpython`; best effort — packed from the official dmg but not run on macOS hardware yet |
 
 `RuntimeTools/` is author-side: `generate_fixtures.py` (the golden corpus; `--plugin/--frd` add the
-reader states), `generate_allowlist.py` (the proxy allowlist from the corpus + the live registration;
-`--plugin` classifies the reader's proxies), `generate_frd_fixtures.py` + `check_frd_reader.py` (the
-reader proof on real CalculiX output), `trim_paraview.py`, `collapse_symlinks.py`,
-`pe_closure.py` / `elf_closure.py` / `macho_closure.py` (import-closure reports that guide the trim rules).
+reader states), `generate_gui_states.py` (run INSIDE the ParaView GUI with `--script`: re-saves every
+corpus scene from the GUI and adds GUI-native scenes — colour legend, text and time annotations, the
+common filters, a chart view in a split layout — because a real client's state is GUI-saved and carries
+proxies pvpython never writes), `generate_allowlist.py` (the proxy allowlist from the corpus + the live
+registration, GUI states included; `--plugin` classifies the reader's proxies), `generate_frd_fixtures.py`
++ `check_frd_reader.py` (the reader proof on real CalculiX output), `verify_consumer.sh` (below),
+`trim_paraview.py`, `collapse_symlinks.py`, `pe_closure.py` / `elf_closure.py` / `macho_closure.py`
+(import-closure reports that guide the trim rules).
+
+### Consumer verification (`RuntimeTools/verify_consumer.sh`)
+
+The closest local stand-in for "published and deployed": builds the three packages (Release —
+`GeneratePackageOnBuild`; a bare `dotnet pack` can serve a stale Release output), builds a throw-away
+consumer that references them like WitCloud does (isolated NuGet packages folder; Grid + Variables from
+nuget.org), which stages the module and fetches the three `paraview-v<ver>` zips from the GitHub Release
+(SHA-verified, extracted to `paraview.module/paraview/<platform>/`), asserts the layout (every
+platform's pvpython, the Linux launcher pair and Mesa, licenses, the embedded runner / allowlist / reader,
+the scripts), and then renders corpus scenes through the consumer's modules with
+`OutWit.Controller.Visualization.ParaView.Tests.ConsumerRunner` — a node-like process that references
+only the engine SDK, so every controller type (and the `Assembly.Location` the runtime resolver reads)
+comes from the consumer's `paraview.module`: stills, a GUI-saved scene, a reader scene, the PVD series
+(5 frames). The in-process test suite cannot do that last step faithfully: it references the controller
+project and its bin copy shadows the module's assembly. Runs on Windows (git-bash) and in a
+`mcr.microsoft.com/dotnet/sdk:10.0` container with `libgomp1 libpciaccess0 libx11-6 libxext6`.
 The author recipe per platform (official archive → `@Prerequisites/paraview/<platform>`):
 
 ```
@@ -182,9 +202,13 @@ engine against a **real** pvpython over the golden corpus (`Fixtures/Corpus`, ge
 `RuntimeTools/generate_fixtures.py` with the pinned ParaView): stills, every frame of the PVD series with
 subset-only downloads (index + series anchor + own piece), the file-series reader, transparent PNGs,
 the `.frd` states through the bundled reader (a warped static result, a quadratic element, a transient
-heat transfer and a set of mode shapes whose frames must all differ), and the reader's element-mapping
-proof — and asserts that frames of different timesteps differ (the series contours a wavelet of growing
-amplitude, so a task silently rendering its anchor piece would be caught). It auto-skips without a
-runtime; point `OUTWIT_PVPYTHON` at one or place a runtime under `@Prerequisites/paraview/<platform>`.
+heat transfer and a set of mode shapes whose frames must all differ), GUI-saved states (root
+`<ParaView>`, legends, annotations, a chart view next to the render view), the reader's element-mapping
+proof and a wall-clock kill of the whole runtime process tree — and asserts that frames of different
+timesteps differ (the series contours a wavelet of growing amplitude, so a task silently rendering its
+anchor piece would be caught). It auto-skips without a runtime; point `OUTWIT_PVPYTHON` at one or place
+a runtime under `@Prerequisites/paraview/<platform>`. When no view is requested the validator renders
+the first 3D render view, not the first registered view (the GUI lists chart and spreadsheet views ahead
+of it).
 The Linux runtime is certified by the same corpus through the runner in a bare `ubuntu:22.04` container
 (see `@Prerequisites/paraview/linux-work` on the author machine).

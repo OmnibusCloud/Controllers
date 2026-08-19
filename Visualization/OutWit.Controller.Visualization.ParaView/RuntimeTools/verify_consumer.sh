@@ -9,9 +9,11 @@
 #      and extracted to paraview.module/paraview/<platform>/,
 #   3. asserts the resulting layout (module dll + controller.json, every platform's pvpython,
 #      the embedded runner/allowlist/reader inside the assembly, the scripts),
-#   4. runs the real-runtime test suite in CONSUMER MODE (OUTWIT_PARAVIEW_CONTROLLERS): the node
-#      engine loads the consumer's modules and the resolver must find pvpython inside
-#      paraview.module — no OUTWIT_PVPYTHON, no @Prerequisites fallback.
+#   4. renders corpus scenes through the consumer's modules with OutWit.Controller.Visualization.ParaView.Tests.ConsumerRunner — a
+#      node-like process that references only the engine SDK, so every controller type (and the
+#      Assembly.Location the runtime resolver reads) comes from the consumer's paraview.module:
+#      stills, a GUI-saved scene, a reader scene, the PVD series (5 frames). No OUTWIT_PVPYTHON,
+#      no @Prerequisites fallback, no test-project shadow copy.
 #
 #   RuntimeTools/verify_consumer.sh [--keep] [--work <dir>] [--skip-tests]
 #
@@ -109,12 +111,15 @@ if [ -n "$SCRIPTS" ]; then echo "  OK   scripts staged ($(dirname "$SCRIPTS"))";
 du -sh "$MODULE/paraview/"* 2>/dev/null | sed 's/^/  /'
 [ $fail -eq 0 ] || { echo "layout assertions FAILED"; exit 1; }
 
-if [ $SKIP_TESTS -eq 1 ]; then echo "== tests skipped"; exit 0; fi
-echo "== 4. real-runtime tests in consumer mode"
-export OUTWIT_PARAVIEW_CONTROLLERS="$OUT/@Controllers"
-unset OUTWIT_PVPYTHON || true
+if [ $SKIP_TESTS -eq 1 ]; then echo "== render skipped"; exit 0; fi
+echo "== 4. render through the consumer's modules (ConsumerRunner, node-like process)"
 unset NUGET_PACKAGES
-dotnet test "$VIS/OutWit.Controller.Visualization.ParaView.Tests/OutWit.Controller.Visualization.ParaView.Tests.csproj" -c Debug --nologo -v q --filter "Category=RealRuntime" 2>&1 | tail -5
+unset OUTWIT_PVPYTHON || true
+RUNNER="$VIS/OutWit.Controller.Visualization.ParaView.Tests.ConsumerRunner/OutWit.Controller.Visualization.ParaView.Tests.ConsumerRunner.csproj"
+dotnet build "$RUNNER" -c Debug --nologo -v q
+dotnet run --project "$RUNNER" -c Debug --no-build --   --controllers "$OUT/@Controllers" --scripts "$OUT/@Scripts"   --corpus "$VIS/OutWit.Controller.Visualization.ParaView.Tests/Fixtures/Corpus" --out "$WORK/render" 2>&1 | grep -E "^(OK|FAIL|controller assembly|runtime|consumer runner)"
+status=${PIPESTATUS[0]}
+[ "$status" -eq 0 ] || { echo "consumer render FAILED"; exit 1; }
 
 if [ $KEEP -eq 0 ]; then rm -rf "$FEED"; fi
 echo "== consumer verification done (work: $WORK)"

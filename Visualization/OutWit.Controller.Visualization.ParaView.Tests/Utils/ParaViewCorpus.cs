@@ -41,6 +41,15 @@ internal static class ParaViewCorpus
 
     public const string FRD_QUADRATIC = FRD_READER_FOLDER + "/frd_quadratic.pvsm";
 
+    /// <summary>Folder of the states the ParaView GUI saved (generate_gui_states.py): what real clients send.</summary>
+    public const string GUI_FOLDER = "gui";
+
+    public const string GUI_NATIVE = GUI_FOLDER + "/gui_native.pvsm";
+
+    public const string GUI_FILTERS = GUI_FOLDER + "/gui_filters.pvsm";
+
+    public const string GUI_CHART = GUI_FOLDER + "/gui_chart.pvsm";
+
     private const string SERIES_GROUP = "series";
 
     #endregion
@@ -61,6 +70,18 @@ internal static class ParaViewCorpus
             var folder = Path.Combine(Root, "states", FRD_READER_FOLDER);
             return Directory.Exists(folder)
                 ? Directory.GetFiles(folder, "*.pvsm").Select(me => $"{FRD_READER_FOLDER}/{Path.GetFileName(me)}").Order().ToList()
+                : [];
+        }
+    }
+
+    /// <summary>The GUI-saved states ("gui/name.pvsm"): every core scene re-saved by the GUI plus the GUI-native scenes.</summary>
+    public static IReadOnlyList<string> GuiStates
+    {
+        get
+        {
+            var folder = Path.Combine(Root, "states", GUI_FOLDER);
+            return Directory.Exists(folder)
+                ? Directory.GetFiles(folder, "*.pvsm").Select(me => $"{GUI_FOLDER}/{Path.GetFileName(me)}").Order().ToList()
                 : [];
         }
     }
@@ -103,7 +124,7 @@ internal static class ParaViewCorpus
     /// <returns>(logicalPath, role, seriesGroup, timestepIndices, ordinal) per file.</returns>
     public static IReadOnlyList<(string LogicalPath, ParaViewAttachmentRole Role, string SeriesGroup, int[] TimestepIndices, int Ordinal)> FilesOf(string stateName)
     {
-        return stateName switch
+        return BaseName(stateName) switch
         {
             VTI_CONTOUR or VTI_VOLUME => [("data/wavelet.vti", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
             VTU_SLICE_CLIP_GLYPH => [("data/tets.vtu", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
@@ -119,6 +140,8 @@ internal static class ParaViewCorpus
             FRD_TRANSIENT => [("data/frd/transient_heat.frd", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
             FRD_MODES => [("data/frd/freq.frd", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
             FRD_QUADRATIC => [("data/frd/he20_c3d20.frd", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
+            GUI_NATIVE => [],
+            GUI_FILTERS or GUI_CHART => [("data/wavelet.vti", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
             _ => throw new ArgumentOutOfRangeException(nameof(stateName), stateName, "unknown corpus state")
         };
     }
@@ -126,12 +149,13 @@ internal static class ParaViewCorpus
     /// <summary>The producer timeline of a state (what the plugin reads from the TimeKeeper).</summary>
     public static double[] TimelineOf(string stateName)
     {
-        return stateName switch
+        return BaseName(stateName) switch
         {
             PVD_SERIES => [0.0, 0.5, 1.0, 1.5, 2.0],
             FILE_SERIES => [0, 1, 2, 3, 4],
             FRD_TRANSIENT => [0.2, 0.4, 0.6, 0.8, 1.0],
             FRD_MODES => [1, 2, 3, 4],
+            FRD_STATIC or FRD_QUADRATIC => [1.0], // a single-step result: the reader reports its one step value
             _ => []
         };
     }
@@ -184,6 +208,26 @@ internal static class ParaViewCorpus
     #endregion
 
     #region Tools
+
+    /// <summary>
+    /// The corpus scene a state name stands for: GUI re-saves of core scenes ("gui/vti_contour.pvsm")
+    /// map to the core name, GUI re-saves of reader scenes ("OmnibusCloudFrdReader/gui_frd_static.pvsm")
+    /// to the reader name; everything else (GUI-native scenes, core, reader) is itself.
+    /// </summary>
+    private static string BaseName(string stateName)
+    {
+        if (stateName.StartsWith(GUI_FOLDER + "/", StringComparison.Ordinal))
+        {
+            var name = stateName[(GUI_FOLDER.Length + 1)..];
+            return name.StartsWith("gui_", StringComparison.Ordinal) ? stateName : name;
+        }
+
+        var readerPrefix = FRD_READER_FOLDER + "/gui_";
+        if (stateName.StartsWith(readerPrefix, StringComparison.Ordinal))
+            return FRD_READER_FOLDER + "/" + stateName[readerPrefix.Length..];
+
+        return stateName;
+    }
 
     private static bool OnThisPlatform(string distributionName)
     {

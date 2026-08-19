@@ -346,10 +346,15 @@ public sealed class ParaViewPackageValidator
 
         if (string.IsNullOrEmpty(options.ViewId))
         {
+            // No view requested: the first 3D render view (the GUI lists chart and spreadsheet views in
+            // the same collection, often ahead of the render view); only a state without any render
+            // view falls back to its first view.
+            var renderViews = document.RenderViewNames;
+            var chosen = renderViews.Count > 0 ? renderViews[0] : views[0];
             if (views.Count > 1)
-                warnings.Add($"state registers {views.Count} views and no view id was requested; rendering '{views[0]}'");
+                warnings.Add($"state registers {views.Count} views and no view id was requested; rendering '{chosen}'");
 
-            return views[0];
+            return chosen;
         }
 
         if (!views.Contains(options.ViewId, StringComparer.Ordinal))

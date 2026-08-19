@@ -21,13 +21,6 @@ namespace OutWit.Controller.Visualization.ParaView.Tests.Activities;
 [Category("RealRuntime")]
 public sealed class ParaViewRealRuntimeTests
 {
-    #region Constants
-
-    /// <summary>Consumer mode: the @Controllers folder of a consumer built from the packed nupkgs.</summary>
-    public const string ENV_CONSUMER_CONTROLLERS = "OUTWIT_PARAVIEW_CONTROLLERS";
-
-    #endregion
-
     #region Fields
 
     private string m_root = null!;
@@ -47,12 +40,8 @@ public sealed class ParaViewRealRuntimeTests
     [OneTimeSetUp]
     public void Setup()
     {
-        // Consumer mode (RuntimeTools/verify_consumer.sh): the module folder of a throw-away consumer
-        // built from the packed nupkgs, whose paraview.module carries the fetched runtime assets. No
-        // override is set, so the resolver must find pvpython where a real deployment has it.
-        var consumerControllers = Environment.GetEnvironmentVariable(ENV_CONSUMER_CONTROLLERS);
-        var controllersPath = string.IsNullOrWhiteSpace(consumerControllers) ? ParaViewTestPaths.FindControllersPath() : consumerControllers;
-        if (controllersPath == null || !Directory.Exists(controllersPath))
+        var controllersPath = ParaViewTestPaths.FindControllersPath();
+        if (controllersPath == null)
             Assert.Ignore("@Controllers not found");
 
         m_scriptsPath = ParaViewTestPaths.FindBundledScriptsPath() ?? string.Empty;
@@ -62,23 +51,15 @@ public sealed class ParaViewRealRuntimeTests
         if (!Directory.Exists(ParaViewCorpus.Root))
             Assert.Ignore("fixture corpus not present");
 
-        string? pvpython;
-        if (!string.IsNullOrWhiteSpace(consumerControllers))
-        {
-            Environment.SetEnvironmentVariable(ParaViewBinaryResolver.ENV_PVPYTHON_PATH, null);
-            pvpython = ParaViewBinaryResolver.Resolve(Path.Combine(controllersPath, "paraview.module", "OutWit.Controller.Visualization.ParaView.dll"));
-            Assert.That(pvpython, Is.Not.Null, "consumer mode: the resolver must find the runtime inside paraview.module");
-            Assert.That(pvpython, Does.Contain(Path.Combine("paraview.module", "paraview")), $"consumer mode: the runtime must come from the module, not a dev fallback ({pvpython})");
-            TestContext.Progress.WriteLine($"consumer mode: pvpython = {pvpython}");
-        }
-        else
-        {
-            pvpython = ParaViewCorpus.FindPvpython();
-            if (pvpython == null)
-                Assert.Ignore("no ParaView runtime (set OUTWIT_PVPYTHON or place a distribution under @Prerequisites/paraview)");
+        // A consumer's module cannot be exercised from this process: the test project references the
+        // controller, so its bin copy shadows the module's assembly (Assembly.Location, which the runtime
+        // resolver reads, would be this folder). RuntimeTools/verify_consumer.sh runs the Tests.ConsumerRunner
+        // — a node-like process without controller references — for that.
+        var pvpython = ParaViewCorpus.FindPvpython();
+        if (pvpython == null)
+            Assert.Ignore("no ParaView runtime (set OUTWIT_PVPYTHON or place a distribution under @Prerequisites/paraview)");
 
-            Environment.SetEnvironmentVariable(ParaViewBinaryResolver.ENV_PVPYTHON_PATH, pvpython);
-        }
+        Environment.SetEnvironmentVariable(ParaViewBinaryResolver.ENV_PVPYTHON_PATH, pvpython);
 
         m_pvpython = pvpython!;
 
@@ -128,7 +109,7 @@ public sealed class ParaViewRealRuntimeTests
         var job = m_engine.Compile(Script("RenderParaViewStill.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status.Result}: {status.Message}");
 
         var blobId = (Guid)job.Variables["result"].Value!;
         var image = ParaViewImageInfo.TryRead(m_blobs.GetStoredPath(blobId));
@@ -149,7 +130,7 @@ public sealed class ParaViewRealRuntimeTests
         var job = m_engine.Compile(Script("RenderParaViewFrames.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status.Result}: {status.Message}");
 
         var result = (job.Variables["result"].Value as IReadOnlyList<Guid?>)!;
         Assert.That(result, Has.Count.EqualTo(5));
@@ -187,7 +168,7 @@ public sealed class ParaViewRealRuntimeTests
         var job = m_engine.Compile(Script("RenderParaViewStill.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status.Result}: {status.Message}");
 
         var requested = m_blobs.Requests.Distinct().ToList();
         Assert.That(requested, Is.EquivalentTo(new[] { scene.StateBlobId, package.BlobOf("data/series/series_000.vti"), package.BlobOf("data/series/series_003.vti") }));
@@ -197,11 +178,29 @@ public sealed class ParaViewRealRuntimeTests
         var firstJob = m_engine.Compile(Script("RenderParaViewStill.wit"));
         var firstStatus = await m_engine.ScheduleAndWaitAsync(firstJob, scene, first);
 
-        Assert.That(firstStatus.Result, Is.EqualTo(WitProcessingResult.Completed), firstStatus.ToString());
+        Assert.That(firstStatus.Result, Is.EqualTo(WitProcessingResult.Completed), $"{firstStatus.Result}: {firstStatus.Message}");
         Assert.That(
             Digest(m_blobs.GetStoredPath((Guid)job.Variables["result"].Value!)),
             Is.Not.EqualTo(Digest(m_blobs.GetStoredPath((Guid)firstJob.Variables["result"].Value!))),
             "the middle frame must differ from the anchor's frame");
+    }
+
+    [TestCase(ParaViewCorpus.GUI_NATIVE)]
+    [TestCase(ParaViewCorpus.GUI_FILTERS)]
+    [TestCase(ParaViewCorpus.GUI_CHART)]
+    [TestCase(ParaViewCorpus.GUI_FOLDER + "/" + ParaViewCorpus.VTU_SLICE_CLIP_GLYPH)]
+    public async Task GuiSavedStateRendersThroughTheRealRuntimeTest(string stateName)
+    {
+        // A state the ParaView GUI saved (root <ParaView>, legends, annotations, a chart view next to
+        // the render view) must load and render through the runner exactly like the pvpython twins.
+        var (scene, _) = ParaViewCorpus.BuildScene(stateName, Path.Combine(m_root, Path.GetFileNameWithoutExtension(stateName) + "_gui"), m_blobs);
+        var options = new ParaViewOutputOptionsData { Width = 320, Height = 240 };
+
+        var job = m_engine.Compile(Script("RenderParaViewStill.wit"));
+        var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status.Result}: {status.Message}");
+        Assert.That(ParaViewImageInfo.TryRead(m_blobs.GetStoredPath((Guid)job.Variables["result"].Value!)), Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 320, 240, false)));
     }
 
     [TestCase(ParaViewCorpus.FRD_STATIC)]
@@ -214,7 +213,7 @@ public sealed class ParaViewRealRuntimeTests
         var job = m_engine.Compile(Script("RenderParaViewStill.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status.Result}: {status.Message}");
 
         var image = ParaViewImageInfo.TryRead(m_blobs.GetStoredPath((Guid)job.Variables["result"].Value!));
         Assert.That(image, Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 320, 240, false)));
@@ -233,7 +232,7 @@ public sealed class ParaViewRealRuntimeTests
         var job = m_engine.Compile(Script("RenderParaViewFrames.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status.Result}: {status.Message}");
 
         var result = (job.Variables["result"].Value as IReadOnlyList<Guid?>)!;
         Assert.That(result, Has.Count.EqualTo(frameCount));
@@ -328,7 +327,7 @@ public sealed class ParaViewRealRuntimeTests
         var job = m_engine.Compile(Script("RenderParaViewStill.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status.Result}: {status.Message}");
         Assert.That(ParaViewImageInfo.TryRead(m_blobs.GetStoredPath((Guid)job.Variables["result"].Value!))!.HasAlpha, Is.True);
     }
 
