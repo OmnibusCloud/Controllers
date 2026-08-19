@@ -225,6 +225,12 @@ jobs:
               # this case-branch only verifies that, it does not upload.
               echo "(Render assets are author-uploaded via outwit-assets-pack; verifying release...)"
               ;;
+            OutWit.Controller.Visualization.ParaView)
+              # ParaView Tier-2: the trimmed per-platform pvpython runtimes are
+              # author-uploaded via outwit-assets-pack (paraview-v<ver>); the
+              # guard step below verifies the release before the nuget.org push.
+              echo "(ParaView assets are author-uploaded via outwit-assets-pack; verifying release...)"
+              ;;
             *)
               echo "(no external assets for ${{ env.PROJECT }})"
               ;;
@@ -297,6 +303,34 @@ jobs:
             benchmark_scene.blend
             benchmark_scene_still.blend
             benchmark_scene_video.blend
+          )
+          missing=0
+          for asset in "${expected[@]}"; do
+            url="https://github.com/${{ github.repository }}/releases/download/${tag}/${asset}"
+            code=$(curl -s -L -o /dev/null -w "%{http_code}" "$url")
+            if [ "$code" = "200" ]; then
+              echo "  OK   $asset"
+            else
+              echo "  FAIL $asset  (HTTP $code at $url)"
+              missing=$((missing+1))
+            fi
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo ""
+            echo "::error::$missing asset(s) missing on release '$tag'. Run outwit-assets-pack --push-release locally first."
+            exit 1
+          fi
+
+      - name: Verify Tier-2 release assets exist (ParaView)
+        if: inputs.pushToNuGet && env.PROJECT == 'OutWit.Controller.Visualization.ParaView'
+        shell: bash
+        run: |
+          set -e
+          tag="${{ steps.paths.outputs.asset_tag }}"
+          expected=(
+            paraview-windows-x64.zip
+            paraview-linux-x64.zip
+            paraview-macos-arm64.zip
           )
           missing=0
           for asset in "${expected[@]}"; do

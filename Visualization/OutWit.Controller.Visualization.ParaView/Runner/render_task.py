@@ -658,4 +658,11 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    code = main(sys.argv[1:])
+    # Leave through os._exit: every artifact (the frame, status.json) is already on disk, and the
+    # regular interpreter shutdown — ParaView session teardown, the OSMesa/llvmpipe thread pool,
+    # MPI finalisation — has been seen to deadlock on Linux after a completed render, which would
+    # hold the task until the controller's wall-clock limit.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)

@@ -15,6 +15,13 @@ public static class ParaViewBinaryResolver
 {
     #region Constants
 
+    /// <summary>
+    /// Binaries the official Linux/macOS pvpython launcher exec's (bin/pvpython is a small ELF that
+    /// sets LD_LIBRARY_PATH and the Mesa fallback, then runs pvpython-real); the zip archive drops
+    /// their execute bits too.
+    /// </summary>
+    private static readonly string[] LAUNCHER_TARGETS = ["pvpython-real", "pvbatch", "pvbatch-real"];
+
     /// <summary>Module subdirectory holding the per-platform runtimes.</summary>
     public const string TOOL_DIRECTORY = "paraview";
 
@@ -62,6 +69,9 @@ public static class ParaViewBinaryResolver
         }
 
         EnsureExecutable(executable, logger);
+        foreach (var sibling in LAUNCHER_TARGETS)
+            EnsureExecutable(Path.Combine(Path.GetDirectoryName(executable)!, sibling), logger);
+
         return executable;
     }
 

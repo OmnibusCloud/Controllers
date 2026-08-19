@@ -83,8 +83,9 @@ def main(argv):
     from vtkmodules.vtkIOXML import vtkXMLRectilinearGridWriter
     grid = vtkRectilinearGrid()
     grid.SetDimensions(9, 7, 5)
-    for setter, n, scale in ((grid.SetXCoordinates, 9, 1.0), (grid.SetYCoordinates, 7, 1.5), (grid.SetZCoordinates, 5, 2.0)):
+    for setter, name, n, scale in ((grid.SetXCoordinates, "x", 9, 1.0), (grid.SetYCoordinates, "y", 7, 1.5), (grid.SetZCoordinates, "z", 5, 2.0)):
         coords = vtkDoubleArray()
+        coords.SetName(name)  # unnamed arrays are written under their pointer address: not reproducible
         for i in range(n):
             coords.InsertNextValue(i * i * scale * 0.1)
         setter(coords)
@@ -183,10 +184,16 @@ def main(argv):
         rep = pv.Show(reader, view)
         pv.ColorBy(rep, ("POINTS", "height"))
 
+    # The series scenes contour the wavelet at a fixed value: the amplitude grows with every step, so
+    # the isosurface (and the frame) changes per timestep. Outline/surface renders of the same box would
+    # look identical across steps and could not tell a silently failed time switch (a task rendering its
+    # anchor piece instead of its own) from a correct one.
     def pvd_series(view):
         reader = pv.PVDReader(registrationName="series.pvd", FileName=pvd)
         rep = pv.Show(reader, view)
         pv.ColorBy(rep, ("POINTS", "RTData"))
+        contour = pv.Contour(registrationName="Contour1", Input=reader, ContourBy=["POINTS", "RTData"], Isosurfaces=[200.0])
+        pv.Show(contour, view)
         scene = pv.GetAnimationScene()
         scene.UpdateAnimationUsingDataTimeSteps()
 
@@ -194,6 +201,8 @@ def main(argv):
         reader = pv.XMLImageDataReader(registrationName="series_*.vti", FileName=pieces)
         rep = pv.Show(reader, view)
         pv.ColorBy(rep, ("POINTS", "RTData"))
+        contour = pv.Contour(registrationName="Contour1", Input=reader, ContourBy=["POINTS", "RTData"], Isosurfaces=[200.0])
+        pv.Show(contour, view)
         scene = pv.GetAnimationScene()
         scene.UpdateAnimationUsingDataTimeSteps()
 

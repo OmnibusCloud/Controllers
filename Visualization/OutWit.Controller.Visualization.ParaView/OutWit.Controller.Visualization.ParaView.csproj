@@ -47,13 +47,54 @@
     </ControllerRuntimeTarget>
   </ItemGroup>
 
-  <!-- ParaView runtime assets (per-platform portable ParaView with the software-rendering
-       baseline, the bundled OmnibusCloud reader and the license/SPDX materials) are
-       declared here as <ControllerDataAsset> entries once the runtime proof milestone
-       publishes them on a paraview-v<ver> GitHub Release (gh-release://OmnibusCloud/
-       Controllers/paraview-v<ver>/paraview-<platform>.zip, ExtractTo paraview/<platform>/).
-       Until then the module carries no runtime: ParaView.RenderFrame reports the missing
-       runtime explicitly and the OUTWIT_PVPYTHON override (tests, operators) points at one. -->
+  <!--
+      ParaView runtime assets: the official ParaView 6.1.1 binaries trimmed to the headless
+      pvpython runtime (RuntimeTools/trim_paraview.py; Linux/macOS symlink chains collapsed to
+      one SONAME-named file each by collapse_symlinks.py), one zip per platform on the
+      paraview-v<ver> GitHub Release, fetched at consumer-build time by OutWit.Engine.Assets'
+      ResolveControllerAssetsTask for every RID (build/.targets sets ResolveForAllPlatforms).
+
+      ExtractTo uses the 'windows-x64'/'linux-x64'/'macos-arm64' folder vocabulary that
+      ParaViewBinaryResolver reads from paraview.module/paraview/<folder>/; RuntimeIdentifier
+      carries the .NET RID the task filters against. PackSource/PackKind are author-only
+      (outwit-assets-pack reads @Prerequisites/paraview/<folder>). Sha256/Size are written by
+      outwit-assets-pack; the placeholder zeros compile but fail every real fetch, so a release
+      cannot be published without running the tool first.
+
+      Linux nodes need the system libraries the runtime does not bundle: libgomp1, libpciaccess0,
+      libx11-6, libxext6 (Debian/Ubuntu names; X11 is dlopen'd even for offscreen OSMesa rendering).
+      The runtime picks llvmpipe OSMesa through VTK_DEFAULT_OPENGL_WINDOW, which the runner
+      environment sets; no GPU, display or system Mesa is required.
+  -->
+  <ItemGroup>
+    <ControllerDataAsset Include="paraview-win-x64">
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/paraview-v0.1.0/paraview-windows-x64.zip</Uri>
+      <Sha256>0000000000000000000000000000000000000000000000000000000000000000</Sha256>
+      <Size>0</Size>
+      <ExtractTo>paraview/windows-x64/</ExtractTo>
+      <PackSource>paraview/windows-x64</PackSource>
+      <PackKind>zip-folder</PackKind>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="paraview-linux-x64">
+      <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/paraview-v0.1.0/paraview-linux-x64.zip</Uri>
+      <Sha256>0000000000000000000000000000000000000000000000000000000000000000</Sha256>
+      <Size>0</Size>
+      <ExtractTo>paraview/linux-x64/</ExtractTo>
+      <PackSource>paraview/linux-x64</PackSource>
+      <PackKind>zip-folder</PackKind>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="paraview-osx-arm64">
+      <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/paraview-v0.1.0/paraview-macos-arm64.zip</Uri>
+      <Sha256>0000000000000000000000000000000000000000000000000000000000000000</Sha256>
+      <Size>0</Size>
+      <ExtractTo>paraview/macos-arm64/</ExtractTo>
+      <PackSource>paraview/macos-arm64</PackSource>
+      <PackKind>zip-folder</PackKind>
+    </ControllerDataAsset>
+  </ItemGroup>
 
   <!-- Controller-owned files that are NOT user-supplied and must travel with exactly this
        assembly version: the pvpython task runner, the proxy allowlist tied to the pinned

@@ -128,6 +128,12 @@ public sealed class ParaViewRealRuntimeTests
         foreach (var blobId in result)
             Assert.That(ParaViewImageInfo.TryRead(m_blobs.GetStoredPath(blobId!.Value)), Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 160, 120, false)));
 
+        // The corpus contours a wavelet whose amplitude grows per step, so every frame must differ:
+        // a task that silently rendered its anchor piece (series_000) instead of its own would
+        // reproduce frame 0 and be caught here.
+        var digests = result.Select(me => Digest(m_blobs.GetStoredPath(me!.Value))).ToList();
+        Assert.That(digests.Distinct().Count(), Is.EqualTo(5), "frames of different timesteps must differ");
+
         // Every task downloaded the index, the anchor (piece 0) and its own piece — nothing else.
         var requests = m_blobs.Requests.GroupBy(me => me).ToDictionary(me => me.Key, me => me.Count());
         Assert.Multiple(() =>
@@ -157,6 +163,17 @@ public sealed class ParaViewRealRuntimeTests
 
         var requested = m_blobs.Requests.Distinct().ToList();
         Assert.That(requested, Is.EquivalentTo(new[] { scene.StateBlobId, package.BlobOf("data/series/series_000.vti"), package.BlobOf("data/series/series_003.vti") }));
+
+        // Frame 3 must not be the anchor's frame: render the first step too and compare.
+        var first = new ParaViewOutputOptionsData { Width = 160, Height = 120, Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Single, First = 0 } };
+        var firstJob = m_engine.Compile(Script("RenderParaViewStill.wit"));
+        var firstStatus = await m_engine.ScheduleAndWaitAsync(firstJob, scene, first);
+
+        Assert.That(firstStatus.Result, Is.EqualTo(WitProcessingResult.Completed), firstStatus.ToString());
+        Assert.That(
+            Digest(m_blobs.GetStoredPath((Guid)job.Variables["result"].Value!)),
+            Is.Not.EqualTo(Digest(m_blobs.GetStoredPath((Guid)firstJob.Variables["result"].Value!))),
+            "the middle frame must differ from the anchor's frame");
     }
 
     [Test]
@@ -179,6 +196,12 @@ public sealed class ParaViewRealRuntimeTests
     private string Script(string fileName)
     {
         return File.ReadAllText(Path.Combine(m_scriptsPath, fileName));
+    }
+
+    private static string Digest(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
     }
 
     #endregion

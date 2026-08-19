@@ -8,9 +8,9 @@
       <CellData>
       </CellData>
       <Coordinates>
-        <DataArray type="Float64" Name="Array 000002006FAD5CF0" format="appended" RangeMin=""                     RangeMax=""                     offset="272"                 />
-        <DataArray type="Float64" Name="Array 000002006FAD3340" format="appended" RangeMin=""                     RangeMax=""                     offset="356"                 />
-        <DataArray type="Float64" Name="Array 000002006FAD3EC0" format="appended" RangeMin=""                     RangeMax=""                     offset="432"                 />
+        <DataArray type="Float64" Name="x" format="appended" RangeMin=""                     RangeMax=""                     offset="272"                 />
+        <DataArray type="Float64" Name="y" format="appended" RangeMin=""                     RangeMax=""                     offset="356"                 />
+        <DataArray type="Float64" Name="z" format="appended" RangeMin=""                     RangeMax=""                     offset="432"                 />
       </Coordinates>
     </Piece>
   </RectilinearGrid>

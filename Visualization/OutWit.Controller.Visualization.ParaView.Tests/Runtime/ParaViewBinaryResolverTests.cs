@@ -13,6 +13,8 @@ public sealed class ParaViewBinaryResolverTests
 
     private string m_dir = null!;
 
+    private string? m_ambientOverride;
+
     #endregion
 
     #region Setup
@@ -20,6 +22,11 @@ public sealed class ParaViewBinaryResolverTests
     [SetUp]
     public void SetUp()
     {
+        // The operator override must not leak into these tests from the ambient environment
+        // (a developer pointing OUTWIT_PVPYTHON at a runtime for the real-runtime fixtures).
+        m_ambientOverride = Environment.GetEnvironmentVariable(ParaViewBinaryResolver.ENV_PVPYTHON_PATH);
+        Environment.SetEnvironmentVariable(ParaViewBinaryResolver.ENV_PVPYTHON_PATH, null);
+
         m_dir = Path.Combine(Path.GetTempPath(), $"pv_resolve_{Guid.NewGuid():N}");
         Directory.CreateDirectory(m_dir);
     }
@@ -27,7 +34,7 @@ public sealed class ParaViewBinaryResolverTests
     [TearDown]
     public void TearDown()
     {
-        Environment.SetEnvironmentVariable(ParaViewBinaryResolver.ENV_PVPYTHON_PATH, null);
+        Environment.SetEnvironmentVariable(ParaViewBinaryResolver.ENV_PVPYTHON_PATH, m_ambientOverride);
         if (Directory.Exists(m_dir))
             Directory.Delete(m_dir, recursive: true);
     }
@@ -65,12 +72,19 @@ public sealed class ParaViewBinaryResolverTests
     }
 
     [Test]
-    public void MissingRuntimeResolvesNullTest()
+    public void MissingRuntimeResolvesNullOrADevTimeFallbackTest()
     {
         var module = Path.Combine(m_dir, "paraview.module");
         Directory.CreateDirectory(module);
 
-        Assert.That(ParaViewBinaryResolver.Resolve(Path.Combine(module, "x.dll")), Is.Null);
+        var resolved = ParaViewBinaryResolver.Resolve(Path.Combine(module, "x.dll"));
+
+        // On a developer machine the resolver may fall back to the staged module or the author-side
+        // prerequisites tree; anything else would be a runtime found outside the documented places.
+        if (resolved != null)
+            Assert.That(resolved, Does.Contain("@Prerequisites").Or.Contain("@Controllers"), resolved);
+        else
+            Assert.That(resolved, Is.Null);
     }
 
     [Test]
