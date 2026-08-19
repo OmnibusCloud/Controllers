@@ -359,6 +359,103 @@ For Path-A (first-party, nuget.org) distribution, the publish workflow handles e
 
 ---
 
+## Non-.NET initiators: publishing a document vocabulary
+
+Everything above serves **managed** initiators — .NET applications on
+`OutWit.Cloud.SDK` calling typed methods. OmnibusCloud also has a **native
+SDK** (`OutWit.Cloud.SDK.Native` on nuget.org): a C ABI + C++/Python bindings
+for hosts without .NET — DCC plugins, C++ applications, Python scripts. Those
+hosts submit jobs as **JSON request documents**, and the server materializes
+complex parameters into your Model types at its boundary (the "document
+door") using a vocabulary it scans from installed controller modules.
+
+**The default is zero cost.** If you don't expect non-.NET initiators, write
+your controller exactly as this guide describes and stop reading: no new
+dependencies, no attributes, no recompilation. Absence from the vocabulary is
+the default, not a failure — the door refuses documents for unpublished types
+with an explicit message, and every managed initiator works as always.
+
+Opting in is attributes on the Model DTOs you already have:
+
+### 1. Reference the generator from the Model project
+
+```xml
+<PackageReference Include="OutWit.Cloud.Documents.Generator" Version="1.0.0" PrivateAssets="all" />
+```
+
+The package is build-time only (`DevelopmentDependency`): it adds **no**
+runtime dependency to your Model. It injects an `internal` copy of the
+`JobDocumentContractAttribute` into your compilation — the server matches the
+attribute **by full name**, not by assembly, so your package's dependency
+graph does not change.
+
+### 2. Annotate the DTOs you publish
+
+```csharp
+[JobDocumentContract("foo.thing@1")]
+[MemoryPackable]
+public sealed partial class FooThingData : ModelBase { ... }
+```
+
+Type ids are namespaced and versioned: `<component>.<name>@<major>`,
+ordinal-case-sensitive, owned by your controller. Annotate the request
+parameter types your scripts take and the result/variable types you want
+document clients to read back.
+
+### 3. Build — and commit `Documents/`
+
+After every build the generator reads the compiled Model assembly the same
+way the server's vocabulary scan does and writes three artifacts into
+`<ModelProject>/Documents/`:
+
+- `<component>.schema.json` — a JSON Schema 2020-12 fragment of the vocabulary;
+- `<component>_documents.hpp` — a header-only C++17 binding (standard library only);
+- `<component>_documents.py` — a Python binding (keyword-only dataclasses, standard library only, 3.10+).
+
+Commit them. In CI (`ContinuousIntegrationBuild=true`) the generator runs in
+**check mode** and fails the build if the committed artifacts drift from the
+annotations, so the published bindings can never lie about the model.
+`Documents/**` is packed into the Model nupkg under `documents/` — that is
+what a host vendors (a Python host copies `<component>_documents.py`, a C++
+host includes the `.hpp`).
+
+### 4. Respect the wire shape — the mapping is closed and total
+
+A property the wire cannot carry is a **build error naming the property**,
+never a silently partial vocabulary. Not publishable: `byte[]` (blobs are
+assets — pass an asset id `Guid`), nested types that are not themselves
+published, `[Flags]` enums, custom `[JsonConverter]`s, polymorphism/abstract
+types, generics, recursion, references to another component's types,
+`decimal`/`TimeSpan`/`char`/`object`. Enums travel as their member names.
+The camelCase/enum-name/null-omitting wire convention is applied by the
+server door and the generated bindings — you never write serialization code.
+
+### 5. Version by contract, not by assembly
+
+A published id is **frozen**: hosts hold generated bindings, so a wire-shape
+change is a new major — `foo.thing@2` on a new (or the evolved) type, which
+binds as `FooThingV2`. Non-breaking evolution is appending properties with
+defaults (see `RenderOptionsData` for the worked pattern) — old documents
+missing the property still materialize.
+
+### 6. Ship as usual
+
+The Model DLL with the attributes rides in your `.module/` exactly as before.
+The server (1.6.76+; list-shaped results need 1.6.79+) scans installed
+modules at startup and builds the vocabulary — which doubles as the
+type-resolution allowlist. Nothing recompiles: not the server, not the native
+client, not the engine. Managed initiators never see any of this.
+
+**Worked example:** `Render/OutWit.Controller.Render.Model` — twelve
+annotated DTOs, the committed [`Documents/`](../Render/OutWit.Controller.Render.Model/Documents)
+folder, and its [README section](../Render/OutWit.Controller.Render.Model/README.md)
+showing how a host composes `RenderStill(RenderSceneRef, Int, RenderOptions)`
+from generated bindings. The consuming side is the open
+[OmnibusCloud Blender addon](https://github.com/OmnibusCloud/Blender), which
+vendors `render_documents.py` and drives production renders through it.
+
+---
+
 ## Reference
 
 The walkthrough above sketches the shape. The sections below are reference material — each one a flat list of what's enforced where, with citations.
@@ -424,6 +521,33 @@ Smaller — `Build/OutWit.Controller.Model.props` adds the same target framework
 Model package references (added by `Build/OutWit.Controller.Model.props`):
 - `OutWit.Common 1.3.2` — `ModelBase`, value comparisons.
 - `OutWit.Common.MemoryPack 1.1.4` — MemoryPack source generator.
+
+### Reference: engine references and the node fleet
+
+The module ships **no engine assemblies** — every node's client provides
+them at load time. That makes the *versions your controller DLL references*
+a compatibility contract with the deployed fleet:
+
+- Reference engine packages with a **plain minimum version**
+  (`<PackageReference Include="OutWit.Engine.Interfaces" Version="1.1.4" />`),
+  never a wildcard. NuGet resolves the lowest version satisfying a plain
+  minimum, so your compiled reference stays at the floor the fleet can load,
+  while hosts that carry a newer engine still restore (the packaged
+  dependency range is ">= floor"). A wildcard bakes whatever is newest on
+  nuget.org **on publish day** into your DLL — and a node whose client
+  bundles an older engine then fails the module load with an unresolvable
+  reference (`Type.GetType` → null), which surfaces as every job failing
+  "No fallback nodes available".
+- An exact pin (`[1.1.4]`) is equally wrong in the other direction: it
+  breaks restore (NU1107) for hosts that already carry a newer engine.
+- Raise the floor only together with a client release that bundles the newer
+  engine, after the fleet has updated.
+
+This was a production incident (Render 1.23.22, 2026-08-19): a floating
+`1.1.*` picked up an engine rebuild published the day before, and the render
+controller stopped loading on every node in the fleet at once. The fix is
+one character of version syntax — treat it as part of the controller's
+public contract.
 
 ### Reference: activities
 

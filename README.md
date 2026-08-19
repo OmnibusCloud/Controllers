@@ -155,6 +155,16 @@ adjust `ControllerName` / `Description` / `PackageTags` / activities, and
 let the shared `Build/OutWit.Controller.props` + `OutWit.Controller.targets`
 handle the rest of the wiring.
 
+Controllers serve **managed (.NET) initiators with zero extra work**. If you
+also want **non-.NET initiators** (C++/Python hosts on the OmnibusCloud
+native SDK), publishing is opt-in and fully automated: annotate your Model
+DTOs with `[JobDocumentContract("<component>.<name>@<major>")]` and a
+build-time generator emits the JSON Schema + C++/Python bindings; the server
+materializes documents into your types at its boundary. See
+[the guide section](docs/controller-author-guide.md#non-net-initiators-publishing-a-document-vocabulary)
+and the worked example in
+[`Render/OutWit.Controller.Render.Model`](Render/OutWit.Controller.Render.Model/README.md).
+
 Minimal controller csproj:
 
 ```xml
