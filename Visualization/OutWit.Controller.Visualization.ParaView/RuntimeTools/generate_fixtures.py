@@ -2,7 +2,7 @@
 
 Run with the bundled pvpython of the runtime under test:
 
-    pvpython generate_fixtures.py --out <corpus-dir>
+    pvpython generate_fixtures.py --out <corpus-dir> [--plugin <omnibuscloud_frd_reader.py> --frd <dir-of-frd-files>]
 
 Writes small data files and REAL states saved by this ParaView (SaveState), then rewrites the
 absolute data paths inside each state to the package's logical paths (what the GUI plugin does
@@ -22,6 +22,13 @@ controller's golden validation tests:
       states/pvd_series.pvsm              # PVDReader time series (index file + per-step pieces)
       states/file_series.pvsm             # XMLImageDataReader over FileNames (file-series reader)
       states/sphere_static.pvsm           # no files at all (static, no attachments)
+      data/frd/*.frd                      # (with --frd) CalculiX results: the CalculiX.Tests fixtures +
+                                          #   generate_frd_fixtures.py output (every cgx element type)
+      states/OmnibusCloudFrdReader/       # (with --plugin) states that need the bundled reader:
+        frd_static.pvsm                   #   static.frd warped by DISP, coloured by STRESS
+        frd_transient.pvsm                #   transient_heat.frd, 5 real time steps, fixed colour range
+        frd_modes.pvsm                    #   freq.frd, 4 mode shapes as ordinal time steps
+        frd_quadratic.pvsm                #   he20_c3d20.frd, a quadratic cell with edges
 """
 
 import argparse
@@ -49,7 +56,11 @@ def rewrite_state(state_path, mapping):
 def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", required=True)
+    parser.add_argument("--plugin", help="path of the bundled reader plugin; enables the reader states")
+    parser.add_argument("--frd", help="directory whose *.frd files become data/frd/ (requires --plugin)")
     args = parser.parse_args(argv)
+    if bool(args.plugin) != bool(args.frd):
+        parser.error("--plugin and --frd go together")
 
     from paraview import simple as pv
     from paraview import servermanager
@@ -58,7 +69,9 @@ def main(argv):
     data = os.path.join(out, "data")
     series_dir = os.path.join(data, "series")
     states = os.path.join(out, "states")
-    for d in (data, series_dir, states):
+    frd_dir = os.path.join(data, "frd")
+    plugin_states = os.path.join(states, "OmnibusCloudFrdReader")
+    for d in (data, series_dir, states) + ((frd_dir, plugin_states) if args.plugin else ()):
         os.makedirs(d, exist_ok=True)
 
     version = pv.GetParaViewSourceVersion()
@@ -128,12 +141,25 @@ def main(argv):
     for piece in pieces:
         mapping[piece] = "data/series/" + os.path.basename(piece)
 
+    # CalculiX results for the bundled reader: copied verbatim, one logical path each.
+    import shutil
+    frd_files = {}
+    if args.frd:
+        for name in sorted(os.listdir(args.frd)):
+            if name.lower().endswith(".frd"):
+                target = fwd(os.path.join(frd_dir, name))
+                shutil.copy(os.path.join(args.frd, name), target)
+                frd_files[os.path.splitext(name)[0]] = target
+                mapping[target] = "data/frd/" + name
+
     # ------------------------------------------------------------------ states
-    def save(name, build):
+    def save(name, build, folder=None):
         # A fresh session per state; the view must be created explicitly after ResetSession so it is
         # registered in the new session's "views" collection (GetActiveViewOrCreate would hand back a
         # stale view and SaveState would save no view at all).
         pv.ResetSession()
+        if args.plugin:
+            pv.LoadPlugin(os.path.abspath(args.plugin), remote=False, ns=globals())
         view = pv.CreateRenderView()
         pv.SetActiveView(view)
         pv.AssignViewToLayout(view)
@@ -141,10 +167,10 @@ def main(argv):
         build(view)
         pv.ResetCamera(view)
         pv.Render(view)
-        path = os.path.join(states, name + ".pvsm")
+        path = os.path.join(folder or states, name + ".pvsm")
         pv.SaveState(path)
         rewrite_state(path, mapping)
-        produced.append(name + ".pvsm")
+        produced.append(name + ".pvsm" if folder is None else os.path.basename(folder) + "/" + name + ".pvsm")
         print("state:", name)
 
     def vti_contour(view):
@@ -218,12 +244,60 @@ def main(argv):
     save("file_series", file_series)
     save("sphere_static", sphere_static)
 
+    # ------------------------------------------------------------------ reader states
+    plugin_version = None
+    if args.plugin:
+        with open(args.plugin, "r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.strip().startswith("__version__"):
+                    plugin_version = line.split("=", 1)[1].strip().strip("\"'")
+                    break
+
+        def frd_static(view):
+            reader = pv.OmnibusCloudFrdReader(registrationName="static.frd", FileName=frd_files["static"])
+            warp = pv.WarpByVector(registrationName="WarpByVector1", Input=reader, Vectors=["POINTS", "DISP"], ScaleFactor=20.0)
+            rep = pv.Show(warp, view)
+            pv.ColorBy(rep, ("POINTS", "STRESS", "Magnitude"))
+
+        def frd_transient(view):
+            reader = pv.OmnibusCloudFrdReader(registrationName="transient_heat.frd", FileName=frd_files["transient_heat"])
+            rep = pv.Show(reader, view)
+            pv.ColorBy(rep, ("POINTS", "NDTEMP"))
+            lut = pv.GetColorTransferFunction("NDTEMP")
+            lut.RescaleTransferFunction(0.0, 100.0)
+            lut.AutomaticRescaleRangeMode = "Never"
+            scene = pv.GetAnimationScene()
+            scene.UpdateAnimationUsingDataTimeSteps()
+
+        def frd_modes(view):
+            reader = pv.OmnibusCloudFrdReader(registrationName="freq.frd", FileName=frd_files["freq"])
+            warp = pv.WarpByVector(registrationName="WarpByVector1", Input=reader, Vectors=["POINTS", "DISP"], ScaleFactor=1.0e-4)
+            rep = pv.Show(warp, view)
+            pv.ColorBy(rep, ("POINTS", "DISP", "Magnitude"))
+            scene = pv.GetAnimationScene()
+            scene.UpdateAnimationUsingDataTimeSteps()
+
+        def frd_quadratic(view):
+            reader = pv.OmnibusCloudFrdReader(registrationName="he20_c3d20.frd", FileName=frd_files["he20_c3d20"])
+            rep = pv.Show(reader, view)
+            rep.SetRepresentationType("Surface With Edges")
+            pv.ColorBy(rep, ("POINTS", "STRESS", "Magnitude"))
+
+        save("frd_static", frd_static, plugin_states)
+        save("frd_transient", frd_transient, plugin_states)
+        save("frd_modes", frd_modes, plugin_states)
+        save("frd_quadratic", frd_quadratic, plugin_states)
+
     manifest = {
         "paraview": version,
         "data": sorted(v for v in mapping.values()),
         "states": produced,
         "timesteps": {"pvd_series": [0.0, 0.5, 1.0, 1.5, 2.0], "file_series": [0, 1, 2, 3, 4]},
     }
+    if args.plugin:
+        manifest["plugins"] = {"OmnibusCloudFrdReader": plugin_version}
+        manifest["timesteps"]["OmnibusCloudFrdReader/frd_transient"] = [0.2, 0.4, 0.6, 0.8, 1.0]
+        manifest["timesteps"]["OmnibusCloudFrdReader/frd_modes"] = [1.0, 2.0, 3.0, 4.0]
     with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2)
     print("fixtures written to", out, "with", version)

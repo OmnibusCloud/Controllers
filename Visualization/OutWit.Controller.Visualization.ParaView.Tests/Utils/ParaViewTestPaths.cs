@@ -36,6 +36,17 @@ internal static class ParaViewTestPaths
         return null;
     }
 
+    /// <summary>The controller's author-side RuntimeTools directory (repository checkouts only).</summary>
+    public static string? FindRuntimeToolsPath()
+    {
+        var root = FindSolutionRoot();
+        if (root == null)
+            return null;
+
+        var tools = Path.Combine(root, "Visualization", "OutWit.Controller.Visualization.ParaView", "RuntimeTools");
+        return Directory.Exists(tools) ? tools : null;
+    }
+
     public static string? FindSolutionRoot()
     {
         var dir = TestContext.CurrentContext.TestDirectory;

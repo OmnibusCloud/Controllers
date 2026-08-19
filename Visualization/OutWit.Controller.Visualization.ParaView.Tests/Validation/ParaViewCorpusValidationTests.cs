@@ -149,6 +149,63 @@ public sealed class ParaViewCorpusValidationTests
     }
 
     [Test]
+    public void ReaderStatesAreValidWithThePluginRequirementTest()
+    {
+        Assert.That(ParaViewCorpus.ReaderStates, Has.Count.GreaterThanOrEqualTo(4));
+        Assert.That(ParaViewCorpus.ReaderVersion(), Is.EqualTo(ParaViewRuntimeInfo.BundledReaderVersion()), "corpus generated with the bundled reader version");
+
+        foreach (var stateName in ParaViewCorpus.ReaderStates)
+        {
+            var (scene, _) = ParaViewCorpus.BuildScene(stateName, Path.Combine(m_root, Path.GetFileNameWithoutExtension(stateName)), m_blobs);
+            var options = new ParaViewOutputOptionsData { Width = 64, Height = 48, Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.All } };
+
+            var report = m_validator.Validate(scene, options, m_blobs.GetStoredPath(scene.StateBlobId));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(report.IsValid, Is.True, $"{stateName}: {string.Join("; ", report.Errors)}");
+                Assert.That(report.ProxyTypes, Does.Contain($"sources/{ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME}"), stateName);
+                Assert.That(report.RequiredPlugins, Is.EqualTo(new[] { $"{ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME}@{ParaViewCorpus.ReaderVersion()}" }), stateName);
+            });
+        }
+    }
+
+    [Test]
+    public void ReaderStatesAreRejectedWithoutThePluginRequirementTest()
+    {
+        // The same state, declared by a package that does not ask for the reader: the reader proxy is
+        // not allowlisted for it, exactly like any other unknown plugin proxy would be.
+        var package = new ParaViewPackageBuilder(Path.Combine(m_root, "noplugin"), m_blobs);
+        package.AddFile("data/frd/static.frd", File.ReadAllBytes(Path.Combine(ParaViewCorpus.Root, "data", "frd", "static.frd")), ParaViewAttachmentRole.ReaderInput, "", null, 0);
+        var scene = package.BuildScene(File.ReadAllText(ParaViewCorpus.StatePath(ParaViewCorpus.FRD_STATIC)));
+
+        var report = m_validator.Validate(scene, new ParaViewOutputOptionsData(), m_blobs.GetStoredPath(scene.StateBlobId));
+
+        Assert.That(report.IsValid, Is.False);
+        Assert.That(report.Errors, Has.Some.Contains($"sources/{ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME}").And.Some.Contains("not in the proxy allowlist"));
+    }
+
+    [Test]
+    public void TransientFrdStateResolvesItsTimelineFromTheStateTest()
+    {
+        var (scene, _) = ParaViewCorpus.BuildScene(ParaViewCorpus.FRD_TRANSIENT, Path.Combine(m_root, "frd_transient"), m_blobs);
+        var all = new ParaViewOutputOptionsData { Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.All } };
+
+        var report = m_validator.Validate(scene, all, m_blobs.GetStoredPath(scene.StateBlobId));
+        var tasks = ParaViewTaskSplitter.Split(scene, report, all);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.IsValid, Is.True, string.Join("; ", report.Errors));
+            Assert.That(report.TimestepValues, Is.EqualTo(new[] { 0.2, 0.4, 0.6, 0.8, 1.0 }).Within(1e-9));
+            Assert.That(report.SeriesAnchors, Is.Empty, "a single multi-step file is no series");
+            Assert.That(tasks, Has.Count.EqualTo(5));
+            Assert.That(tasks.Select(me => me.Attachments.Single().LogicalPath), Has.All.EqualTo("data/frd/transient_heat.frd"));
+            Assert.That(tasks.Select(me => me.TimeValue), Is.EqualTo(new double?[] { 0.2, 0.4, 0.6, 0.8, 1.0 }).Within(1e-9));
+        });
+    }
+
+    [Test]
     public void StaticStatesProduceOneTaskTest()
     {
         var (scene, _) = ParaViewCorpus.BuildScene(ParaViewCorpus.SPHERE_STATIC, Path.Combine(m_root, "sphere"), m_blobs);

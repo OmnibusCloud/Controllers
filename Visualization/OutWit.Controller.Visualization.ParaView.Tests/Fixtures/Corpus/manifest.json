@@ -1,6 +1,21 @@
 {
   "paraview": "paraview version 6.1.1",
   "data": [
+    "data/frd/beam_b32_2d.frd",
+    "data/frd/beam_b32_3d.frd",
+    "data/frd/freq.frd",
+    "data/frd/he20_c3d20.frd",
+    "data/frd/heat.frd",
+    "data/frd/pe15_c3d15.frd",
+    "data/frd/pe6_c3d6.frd",
+    "data/frd/shell_s6_2d.frd",
+    "data/frd/shell_s6_3d.frd",
+    "data/frd/shell_s8_2d.frd",
+    "data/frd/shell_s8_3d.frd",
+    "data/frd/static.frd",
+    "data/frd/tet10_c3d10.frd",
+    "data/frd/tet4_c3d4.frd",
+    "data/frd/transient_heat.frd",
     "data/grid.vtr",
     "data/series/series.pvd",
     "data/series/series_000.vti",
@@ -18,7 +33,11 @@
     "vtr_surface.pvsm",
     "pvd_series.pvsm",
     "file_series.pvsm",
-    "sphere_static.pvsm"
+    "sphere_static.pvsm",
+    "OmnibusCloudFrdReader/frd_static.pvsm",
+    "OmnibusCloudFrdReader/frd_transient.pvsm",
+    "OmnibusCloudFrdReader/frd_modes.pvsm",
+    "OmnibusCloudFrdReader/frd_quadratic.pvsm"
   ],
   "timesteps": {
     "pvd_series": [
@@ -34,6 +53,22 @@
       2,
       3,
       4
+    ],
+    "OmnibusCloudFrdReader/frd_transient": [
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      1.0
+    ],
+    "OmnibusCloudFrdReader/frd_modes": [
+      1.0,
+      2.0,
+      3.0,
+      4.0
     ]
+  },
+  "plugins": {
+    "OmnibusCloudFrdReader": "1.0.0"
   }
 }

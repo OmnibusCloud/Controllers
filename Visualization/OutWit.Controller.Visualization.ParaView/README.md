@@ -7,9 +7,9 @@ tasks across worker nodes. The companion
 carries the shared data types and the `paraview.*@1` job document vocabulary for non-.NET initiators
 (the ParaView GUI plugin).
 
-**Status: in development.** The controller shape, validation, splitting, the node runner contract and
-the test harness are complete; the per-platform ParaView runtime assets (runtime-proof milestone) and
-the bundled OmnibusCloud `.frd` reader (reader milestone) follow.
+**Status: in development.** The controller shape, validation, splitting, the node runner contract, the
+test harness, the per-platform ParaView runtime assets (`paraview-v0.1.0`) and the bundled OmnibusCloud
+`.frd` reader are complete; distributed animation at scale and the platform completion pass follow.
 
 ## Activities
 
@@ -49,13 +49,42 @@ A single-valued file reference of the state must be a materialized package file;
 with several elements) legitimately lists every file while the task carries only its own piece, so at least
 one must exist — and any VTK error during load or render (a reader touching a file this task did not
 materialize, a GL failure) fails the task through an error observer rather than producing a blank frame.
-Whether file-series readers need an anchor file in every subset is settled against the real runtime in the
-distributed-animation milestone.
+File-series readers (PVD, `FileNames` lists) open the FIRST file of a series when the state loads, so every
+task carries that *series anchor* next to the index and its own piece (`ValidationReport.SeriesAnchors`).
 The runner (`Runner/render_task.py`), the proxy allowlist (`Allowlists/paraview-<major.minor>.json`) and
 the bundled reader are **embedded in the controller assembly** and written per task into the task's own
 work directory — the only plugin path the runner consults — so a node can never run a stale or foreign copy.
 
 `OUTWIT_PVPYTHON` overrides the runtime location (operator escape hatch and the test seam).
+
+## The bundled reader (`Plugins/omnibuscloud_frd_reader.py`)
+
+CalculiX results come as `.frd` files, which ParaView cannot open by itself. The controller bundles a
+single-file `VTKPythonAlgorithm` reader — plugin name `OmnibusCloudFrdReader`, version `__version__`
+(1.0.0) — as an embedded resource; the GUI plugin ships the byte-identical file, so the desktop and the
+render nodes read a package with the same code. A package that uses it declares
+`runtime.plugins = [{ name: "OmnibusCloudFrdReader", version: "1.0.0" }]`; the validator admits the
+`sources/OmnibusCloudFrdReader` proxy only for such packages (`pluginProxies` of the allowlist), checks
+the version against the bundled reader (same major, greater-or-equal minor), and the executor writes the
+reader into the task's plugin directory — the only plugin path the runner loads.
+
+What it reads: the cgx "Result Format" as ccx writes it — ASCII short or long records (binary variants
+are rejected with a clear error; ccx never writes them); nodes, elements and nodal results
+(`100C`/`100CL` blocks) as point arrays named after the dataset (`DISP`, `STRESS`, `NDTEMP`, …; a
+vector keeps 3 components, a tensor 6, components flagged as cgx-computed such as `ALL` are skipped,
+nodes a block does not mention get NaN), `NodeNumber` on points and `ElementNumber` / `ElementType` /
+`ElementGroup` / `Material` on cells, `StepNumber` / `StepValue` / `AnalysisType` as field data. Every
+result step is a time step: the step value (time, frequency, load factor) when values strictly increase,
+otherwise the 1-based ordinal (degenerate modes at one frequency, static steps all at 1.0). Element
+types follow the cgx manual's numbering: he8, pe6, tet4, he20, pe15, tet10, tr3, tr6, qu4, qu8, be2, be3
+→ the VTK linear/quadratic cells, with the he20 and pe15 mid-side nodes reordered (cgx lists vertical
+mid-edges before top ones; VTK the other way round) and **no** wedge corner swap (cgx's base triangle is
+the orientation of VTK's wedge parametric map and of VTK's own CGNS reader). That mapping is proven on
+real ccx output, not read off a diagram: `RuntimeTools/generate_frd_fixtures.py` runs CalculiX on one
+element of every type (solids, shells and beams in both expanded and 2D output, a transient heat
+transfer), and `RuntimeTools/check_frd_reader.py` asserts under pvpython that every cell validates,
+every quadratic mid-side node is its VTK edge midpoint, every 3D cell's parametric Jacobian is
+positive, arrays have their shapes and every step has data — the real-runtime suite runs the same check.
 
 ## Runtime
 
@@ -85,8 +114,10 @@ allowlist from the trimmed runtime — never by the scripts alone.
 | linux-x64 | `paraview-linux-x64.zip` | `bin/pvpython` is Kitware's ELF launcher (sets `LD_LIBRARY_PATH`, falls back to the bundled `lib/mesa` OSMesa) exec'ing `pvpython-real`; the resolver restores both execute bits. Renders through llvmpipe OSMesa — `VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow`, set by `ParaViewRunnerEnvironment`; no GPU, display or system Mesa needed. **Nodes must provide** `libgomp1 libpciaccess0 libx11-6 libxext6` (Debian/Ubuntu names; X11 is dlopen'd even for offscreen rendering). Certified in a bare `ubuntu:22.04` container. |
 | macos-arm64 | `paraview-macos-arm64.zip` | `ParaView-6.1.1.app/Contents/bin/pvpython`; best effort — packed from the official dmg but not run on macOS hardware yet |
 
-`RuntimeTools/` is author-side: `generate_fixtures.py` (the golden corpus), `generate_allowlist.py`
-(the proxy allowlist from the corpus + the live registration), `trim_paraview.py`, `collapse_symlinks.py`,
+`RuntimeTools/` is author-side: `generate_fixtures.py` (the golden corpus; `--plugin/--frd` add the
+reader states), `generate_allowlist.py` (the proxy allowlist from the corpus + the live registration;
+`--plugin` classifies the reader's proxies), `generate_frd_fixtures.py` + `check_frd_reader.py` (the
+reader proof on real CalculiX output), `trim_paraview.py`, `collapse_symlinks.py`,
 `pe_closure.py` / `elf_closure.py` / `macho_closure.py` (import-closure reports that guide the trim rules).
 The author recipe per platform (official archive → `@Prerequisites/paraview/<platform>`):
 
@@ -130,8 +161,9 @@ Processes/     ParaViewProcessRunner, ParaViewProcessOutcome, ParaViewProcessOut
 Output/        ParaViewImageInfo, ParaViewImageFormats, ParaViewOutputValidator
 Utils/         NullBlobService
 Runner/        render_task.py (embedded)
+Plugins/       omnibuscloud_frd_reader.py (embedded; byte-identical with the GUI plugin's copy)
 Allowlists/    paraview-6.1.json (embedded; generated from the fixture corpus by RuntimeTools/generate_allowlist.py)
-RuntimeTools/  author-side: corpus + allowlist generators, runtime trimming, closure reports
+RuntimeTools/  author-side: corpus + allowlist generators, frd fixtures + reader proof, runtime trimming, closure reports
 Scripts/       the bundled .wit scripts
 ```
 
@@ -148,8 +180,10 @@ how the suite proves per-task subsetting.
 `Activities/ParaViewRealRuntimeTests` (`[Category("RealRuntime")]`) runs the bundled scripts through the
 engine against a **real** pvpython over the golden corpus (`Fixtures/Corpus`, generated by
 `RuntimeTools/generate_fixtures.py` with the pinned ParaView): stills, every frame of the PVD series with
-subset-only downloads (index + series anchor + own piece), the file-series reader, transparent PNGs —
-and asserts that frames of different timesteps differ (the series contours a wavelet of growing
+subset-only downloads (index + series anchor + own piece), the file-series reader, transparent PNGs,
+the `.frd` states through the bundled reader (a warped static result, a quadratic element, a transient
+heat transfer and a set of mode shapes whose frames must all differ), and the reader's element-mapping
+proof — and asserts that frames of different timesteps differ (the series contours a wavelet of growing
 amplitude, so a task silently rendering its anchor piece would be caught). It auto-skips without a
 runtime; point `OUTWIT_PVPYTHON` at one or place a runtime under `@Prerequisites/paraview/<platform>`.
 The Linux runtime is certified by the same corpus through the runner in a bare `ubuntu:22.04` container

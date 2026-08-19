@@ -176,6 +176,91 @@ public sealed class ParaViewRealRuntimeTests
             "the middle frame must differ from the anchor's frame");
     }
 
+    [TestCase(ParaViewCorpus.FRD_STATIC)]
+    [TestCase(ParaViewCorpus.FRD_QUADRATIC)]
+    public async Task FrdStillRendersThroughTheBundledReaderTest(string stateName)
+    {
+        var (scene, _) = ParaViewCorpus.BuildScene(stateName, Path.Combine(m_root, Path.GetFileNameWithoutExtension(stateName)), m_blobs);
+        var options = new ParaViewOutputOptionsData { Width = 320, Height = 240 };
+
+        var job = m_engine.Compile(Script("RenderParaViewStill.wit"));
+        var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+
+        var image = ParaViewImageInfo.TryRead(m_blobs.GetStoredPath((Guid)job.Variables["result"].Value!));
+        Assert.That(image, Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 320, 240, false)));
+
+        var rendered = (job.Variables["rendered"].Value as IReadOnlyList<ParaViewRenderResultData?>)!.Single()!;
+        Assert.That(rendered.ReaderVersion, Is.EqualTo(ParaViewRuntimeInfo.BundledReaderVersion()), "the runner loaded the bundled reader");
+    }
+
+    [TestCase(ParaViewCorpus.FRD_TRANSIENT, 5)]
+    [TestCase(ParaViewCorpus.FRD_MODES, 4)]
+    public async Task FrdTimeStepsRenderDistinctFramesTest(string stateName, int frameCount)
+    {
+        var (scene, _) = ParaViewCorpus.BuildScene(stateName, Path.Combine(m_root, Path.GetFileNameWithoutExtension(stateName)), m_blobs);
+        var options = new ParaViewOutputOptionsData { Width = 160, Height = 120, Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.All } };
+
+        var job = m_engine.Compile(Script("RenderParaViewFrames.wit"));
+        var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+
+        var result = (job.Variables["result"].Value as IReadOnlyList<Guid?>)!;
+        Assert.That(result, Has.Count.EqualTo(frameCount));
+        var digests = result.Select(me => Digest(m_blobs.GetStoredPath(me!.Value))).ToList();
+        Assert.That(digests.Distinct().Count(), Is.EqualTo(frameCount), "every step of the reader's time series must render differently");
+
+        var rendered = (job.Variables["rendered"].Value as IReadOnlyList<ParaViewRenderResultData?>)!.Select(me => me!).OrderBy(me => me.TaskIndex).ToList();
+        Assert.That(rendered.Select(me => me.TimeValue!.Value), Is.EqualTo(ParaViewCorpus.TimelineOf(stateName)).Within(1e-9));
+    }
+
+    [Test]
+    public void FrdReaderElementMappingIsProvenOnEveryCgxTypeTest()
+    {
+        // RuntimeTools/check_frd_reader.py under the real pvpython: every cgx element type ccx writes
+        // (he8, pe6, tet4, he20, pe15, tet10, tr6, qu8, be3) maps to a valid, non-inverted VTK cell
+        // whose mid-side nodes are its edge midpoints, every result array has its shape, every time
+        // step has data. The script is the author-side proof; this test keeps it in the suite.
+        var pvpython = Environment.GetEnvironmentVariable(ParaViewBinaryResolver.ENV_PVPYTHON_PATH)!;
+        var tools = ParaViewTestPaths.FindRuntimeToolsPath();
+        if (tools == null)
+            Assert.Ignore("RuntimeTools not found (tests run outside the repository)");
+
+        var plugin = Path.Combine(Path.GetTempPath(), $"pv_reader_{Guid.NewGuid():N}.py");
+        File.WriteAllText(plugin, ParaViewRuntimeInfo.ReadEmbeddedText(ParaViewRuntimeInfo.FRD_READER_RESOURCE)!);
+        try
+        {
+            var arguments = new List<string>
+            {
+                "--force-offscreen-rendering", "--disable-registry", Path.Combine(tools, "check_frd_reader.py"), "--plugin", plugin,
+                "--expect", "he20_c3d20.frd=vtkQuadraticHexahedron,1", "--expect", "pe15_c3d15.frd=vtkQuadraticWedge,1",
+                "--expect", "tet10_c3d10.frd=vtkQuadraticTetra,1", "--expect", "pe6_c3d6.frd=vtkWedge,1", "--expect", "tet4_c3d4.frd=vtkTetra,1",
+                "--expect", "shell_s8_3d.frd=vtkQuadraticHexahedron,1", "--expect", "shell_s8_2d.frd=vtkQuadraticQuad,1",
+                "--expect", "shell_s6_3d.frd=vtkQuadraticWedge,1", "--expect", "shell_s6_2d.frd=vtkQuadraticTriangle,1",
+                "--expect", "beam_b32_3d.frd=vtkQuadraticHexahedron,1", "--expect", "beam_b32_2d.frd=vtkQuadraticEdge,1",
+                "--expect", "static.frd=vtkHexahedron,2", "--expect", "heat.frd=vtkHexahedron,125", "--expect", "transient_heat.frd=vtkHexahedron,2",
+            };
+            arguments.AddRange(ParaViewCorpus.FrdFiles.Select(me => Path.Combine(ParaViewCorpus.Root, me.Replace('/', Path.DirectorySeparatorChar))));
+
+            var start = new System.Diagnostics.ProcessStartInfo(pvpython) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            foreach (var argument in arguments)
+                start.ArgumentList.Add(argument);
+            using var process = System.Diagnostics.Process.Start(start)!;
+            var output = process.StandardOutput.ReadToEnd();
+            var errors = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.That(process.ExitCode, Is.EqualTo(0), output + errors);
+            Assert.That(output, Does.Contain($"checked {ParaViewCorpus.FrdFiles.Count} file(s), 0 failed"));
+        }
+        finally
+        {
+            File.Delete(plugin);
+        }
+    }
+
     [Test]
     public async Task TransparentPngCarriesAlphaTest()
     {

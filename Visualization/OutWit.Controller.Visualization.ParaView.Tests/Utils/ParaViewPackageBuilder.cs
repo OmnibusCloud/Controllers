@@ -82,7 +82,7 @@ internal sealed class ParaViewPackageBuilder
     }
 
     /// <summary>Writes the state and produces the scene reference.</summary>
-    public ParaViewSceneRefData BuildScene(string stateXml, int major = ParaViewRuntimeInfo.RUNTIME_MAJOR, int minor = ParaViewRuntimeInfo.RUNTIME_MINOR, IEnumerable<double>? timestepValues = null)
+    public ParaViewSceneRefData BuildScene(string stateXml, int major = ParaViewRuntimeInfo.RUNTIME_MAJOR, int minor = ParaViewRuntimeInfo.RUNTIME_MINOR, IEnumerable<double>? timestepValues = null, IEnumerable<ParaViewPluginRequirementData>? plugins = null)
     {
         var statePath = Path.Combine(m_directory, "state.pvsm");
         File.WriteAllText(statePath, stateXml, new UTF8Encoding(false));
@@ -102,7 +102,8 @@ internal sealed class ParaViewPackageBuilder
                 ParaViewMinor = minor,
                 ParaViewPatch = ParaViewRuntimeInfo.RUNTIME_PATCH,
                 ProducerPluginVersion = "0.0.0-test",
-                ProducerPlatform = "test"
+                ProducerPlatform = "test",
+                Plugins = plugins == null ? [] : [.. plugins]
             },
             TimestepValues = timestepValues == null ? [] : [.. timestepValues]
         };

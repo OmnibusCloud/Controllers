@@ -30,6 +30,17 @@ internal static class ParaViewCorpus
 
     public const string SPHERE_STATIC = "sphere_static.pvsm";
 
+    /// <summary>Folder of the states that need the bundled reader (named after the plugin).</summary>
+    public const string FRD_READER_FOLDER = "OmnibusCloudFrdReader";
+
+    public const string FRD_STATIC = FRD_READER_FOLDER + "/frd_static.pvsm";
+
+    public const string FRD_TRANSIENT = FRD_READER_FOLDER + "/frd_transient.pvsm";
+
+    public const string FRD_MODES = FRD_READER_FOLDER + "/frd_modes.pvsm";
+
+    public const string FRD_QUADRATIC = FRD_READER_FOLDER + "/frd_quadratic.pvsm";
+
     private const string SERIES_GROUP = "series";
 
     #endregion
@@ -39,8 +50,38 @@ internal static class ParaViewCorpus
     /// <summary>Root of the committed corpus in the test output.</summary>
     public static string Root => Path.Combine(AppContext.BaseDirectory, "Fixtures", "Corpus");
 
-    /// <summary>All state file names of the corpus.</summary>
+    /// <summary>All core state file names of the corpus (no plugin needed).</summary>
     public static IReadOnlyList<string> States => Directory.GetFiles(Path.Combine(Root, "states"), "*.pvsm").Select(Path.GetFileName).Select(me => me!).Order().ToList();
+
+    /// <summary>The states that need the bundled reader, as "OmnibusCloudFrdReader/name.pvsm".</summary>
+    public static IReadOnlyList<string> ReaderStates
+    {
+        get
+        {
+            var folder = Path.Combine(Root, "states", FRD_READER_FOLDER);
+            return Directory.Exists(folder)
+                ? Directory.GetFiles(folder, "*.pvsm").Select(me => $"{FRD_READER_FOLDER}/{Path.GetFileName(me)}").Order().ToList()
+                : [];
+        }
+    }
+
+    /// <summary>Every .frd file of the corpus (the CalculiX fixtures + every cgx element type), as logical paths.</summary>
+    public static IReadOnlyList<string> FrdFiles => Directory.GetFiles(Path.Combine(Root, "data", "frd"), "*.frd").Select(me => $"data/frd/{Path.GetFileName(me)}").Order().ToList();
+
+    /// <summary>Whether a corpus state needs the bundled reader.</summary>
+    public static bool NeedsReader(string stateName)
+    {
+        return stateName.StartsWith(FRD_READER_FOLDER + "/", StringComparison.Ordinal);
+    }
+
+    /// <summary>The reader version the corpus was generated with, from manifest.json (null without reader states).</summary>
+    public static string? ReaderVersion()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(Root, "manifest.json")));
+        return document.RootElement.TryGetProperty("plugins", out var plugins) && plugins.TryGetProperty(FRD_READER_FOLDER, out var version)
+            ? version.GetString()
+            : null;
+    }
 
     /// <summary>The ParaView version the corpus was generated with, from manifest.json.</summary>
     public static string GeneratedWith()
@@ -52,7 +93,7 @@ internal static class ParaViewCorpus
     /// <summary>Absolute path of a corpus state.</summary>
     public static string StatePath(string stateName)
     {
-        return Path.Combine(Root, "states", stateName);
+        return Path.Combine(Root, "states", stateName.Replace('/', Path.DirectorySeparatorChar));
     }
 
     /// <summary>
@@ -74,6 +115,10 @@ internal static class ParaViewCorpus
             ],
             FILE_SERIES => [.. Enumerable.Range(0, 5).Select(i => ($"data/series/series_{i:D3}.vti", ParaViewAttachmentRole.ReaderInput, SERIES_GROUP, new[] { i }, i))],
             SPHERE_STATIC => [],
+            FRD_STATIC => [("data/frd/static.frd", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
+            FRD_TRANSIENT => [("data/frd/transient_heat.frd", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
+            FRD_MODES => [("data/frd/freq.frd", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
+            FRD_QUADRATIC => [("data/frd/he20_c3d20.frd", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
             _ => throw new ArgumentOutOfRangeException(nameof(stateName), stateName, "unknown corpus state")
         };
     }
@@ -85,6 +130,8 @@ internal static class ParaViewCorpus
         {
             PVD_SERIES => [0.0, 0.5, 1.0, 1.5, 2.0],
             FILE_SERIES => [0, 1, 2, 3, 4],
+            FRD_TRANSIENT => [0.2, 0.4, 0.6, 0.8, 1.0],
+            FRD_MODES => [1, 2, 3, 4],
             _ => []
         };
     }
@@ -99,7 +146,10 @@ internal static class ParaViewCorpus
         foreach (var (logicalPath, role, group, timesteps, ordinal) in FilesOf(stateName))
             package.AddFile(logicalPath, File.ReadAllBytes(Path.Combine(Root, logicalPath.Replace('/', Path.DirectorySeparatorChar))), role, group, timesteps.Length == 0 ? null : timesteps, ordinal);
 
-        var scene = package.BuildScene(File.ReadAllText(StatePath(stateName)), timestepValues: TimelineOf(stateName));
+        var plugins = NeedsReader(stateName)
+            ? new[] { new ParaViewPluginRequirementData { Name = ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME, Version = ReaderVersion() ?? "1.0.0" } }
+            : null;
+        var scene = package.BuildScene(File.ReadAllText(StatePath(stateName)), timestepValues: TimelineOf(stateName), plugins: plugins);
         return (scene, package);
     }
 

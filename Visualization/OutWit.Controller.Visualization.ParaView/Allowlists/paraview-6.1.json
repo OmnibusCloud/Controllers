@@ -10,7 +10,11 @@
     "vti_contour.pvsm",
     "vti_volume.pvsm",
     "vtr_surface.pvsm",
-    "vtu_slice_clip_glyph.pvsm"
+    "vtu_slice_clip_glyph.pvsm",
+    "OmnibusCloudFrdReader/frd_modes.pvsm",
+    "OmnibusCloudFrdReader/frd_quadratic.pvsm",
+    "OmnibusCloudFrdReader/frd_static.pvsm",
+    "OmnibusCloudFrdReader/frd_transient.pvsm"
   ],
   "proxies": [
     "animation/AnimationScene",
@@ -24,6 +28,7 @@
     "filters/Cut",
     "filters/Glyph",
     "filters/Gradient",
+    "filters/WarpVector",
     "implicit_functions/Annulus",
     "implicit_functions/Axis Aligned Box",
     "implicit_functions/Axis Aligned Plane",
@@ -65,5 +70,9 @@
     "transfer_2d_functions/TransferFunction2D",
     "views/RenderView"
   ],
-  "pluginProxies": {}
+  "pluginProxies": {
+    "OmnibusCloudFrdReader": [
+      "sources/OmnibusCloudFrdReader"
+    ]
+  }
 }
