@@ -289,6 +289,46 @@ public sealed class ParaViewRealRuntimeTests
     }
 
     [Test]
+    public async Task JpegStillRendersThroughTheRealRuntimeTest()
+    {
+        var (scene, _) = ParaViewCorpus.BuildScene(ParaViewCorpus.VTI_CONTOUR, Path.Combine(m_root, "jpeg"), m_blobs);
+        var options = new ParaViewOutputOptionsData { Width = 200, Height = 150, Format = ParaViewImageFormat.Jpeg };
+
+        var job = m_engine.Compile(Script("RenderParaViewStill.wit"));
+        var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status.Result}: {status.Message}");
+        Assert.That(ParaViewImageInfo.TryRead(m_blobs.GetStoredPath((Guid)job.Variables["result"].Value!)), Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Jpeg, 200, 150, false)));
+    }
+
+    [Test]
+    public async Task UnicodeAndSpacesInLogicalPathsRenderTest()
+    {
+        // Clients name their files in their own language: the same scene with its data under a
+        // logical path carrying Cyrillic letters and a space must render through the real runtime
+        // (task.json, the state rewrite and the reader's file open all travel through UTF-8).
+        var logicalPath = "data/результаты расчёта/волна.vti";
+        var package = new ParaViewPackageBuilder(Path.Combine(m_root, "unicode"), m_blobs);
+        package.AddFile(logicalPath, File.ReadAllBytes(Path.Combine(ParaViewCorpus.Root, "data", "wavelet.vti")), ParaViewAttachmentRole.ReaderInput, "", null, 0);
+        var stateXml = File.ReadAllText(ParaViewCorpus.StatePath(ParaViewCorpus.VTI_CONTOUR)).Replace("data/wavelet.vti", logicalPath);
+        var scene = package.BuildScene(stateXml);
+        var options = new ParaViewOutputOptionsData { Width = 160, Height = 120 };
+
+        var job = m_engine.Compile(Script("RenderParaViewStill.wit"));
+        var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status.Result}: {status.Message}");
+        Assert.That(ParaViewImageInfo.TryRead(m_blobs.GetStoredPath((Guid)job.Variables["result"].Value!)), Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 160, 120, false)));
+
+        // ... and it must be the contour scene, not an empty view: same image as the ASCII twin.
+        var (twin, _) = ParaViewCorpus.BuildScene(ParaViewCorpus.VTI_CONTOUR, Path.Combine(m_root, "unicode_twin"), m_blobs);
+        var twinJob = m_engine.Compile(Script("RenderParaViewStill.wit"));
+        var twinStatus = await m_engine.ScheduleAndWaitAsync(twinJob, twin, options);
+        Assert.That(twinStatus.Result, Is.EqualTo(WitProcessingResult.Completed), $"{twinStatus.Result}: {twinStatus.Message}");
+        Assert.That(Digest(m_blobs.GetStoredPath((Guid)job.Variables["result"].Value!)), Is.EqualTo(Digest(m_blobs.GetStoredPath((Guid)twinJob.Variables["result"].Value!))));
+    }
+
+    [Test]
     public async Task WallClockLimitKillsTheWholeRuntimeProcessTreeTest()
     {
         // The real runtime under the real process runner: a pvpython that sleeps past the wall-clock
