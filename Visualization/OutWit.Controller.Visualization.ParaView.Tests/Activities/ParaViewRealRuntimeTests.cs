@@ -20,9 +20,18 @@ namespace OutWit.Controller.Visualization.ParaView.Tests.Activities;
 [Category("RealRuntime")]
 public sealed class ParaViewRealRuntimeTests
 {
+    #region Constants
+
+    /// <summary>Consumer mode: the @Controllers folder of a consumer built from the packed nupkgs.</summary>
+    public const string ENV_CONSUMER_CONTROLLERS = "OUTWIT_PARAVIEW_CONTROLLERS";
+
+    #endregion
+
     #region Fields
 
     private string m_root = null!;
+
+    private string m_pvpython = null!;
 
     private ParaViewTestBlobService m_blobs = null!;
 
@@ -37,8 +46,12 @@ public sealed class ParaViewRealRuntimeTests
     [OneTimeSetUp]
     public void Setup()
     {
-        var controllersPath = ParaViewTestPaths.FindControllersPath();
-        if (controllersPath == null)
+        // Consumer mode (RuntimeTools/verify_consumer.sh): the module folder of a throw-away consumer
+        // built from the packed nupkgs, whose paraview.module carries the fetched runtime assets. No
+        // override is set, so the resolver must find pvpython where a real deployment has it.
+        var consumerControllers = Environment.GetEnvironmentVariable(ENV_CONSUMER_CONTROLLERS);
+        var controllersPath = string.IsNullOrWhiteSpace(consumerControllers) ? ParaViewTestPaths.FindControllersPath() : consumerControllers;
+        if (controllersPath == null || !Directory.Exists(controllersPath))
             Assert.Ignore("@Controllers not found");
 
         m_scriptsPath = ParaViewTestPaths.FindBundledScriptsPath() ?? string.Empty;
@@ -48,11 +61,25 @@ public sealed class ParaViewRealRuntimeTests
         if (!Directory.Exists(ParaViewCorpus.Root))
             Assert.Ignore("fixture corpus not present");
 
-        var pvpython = ParaViewCorpus.FindPvpython();
-        if (pvpython == null)
-            Assert.Ignore("no ParaView runtime (set OUTWIT_PVPYTHON or place a distribution under @Prerequisites/paraview)");
+        string? pvpython;
+        if (!string.IsNullOrWhiteSpace(consumerControllers))
+        {
+            Environment.SetEnvironmentVariable(ParaViewBinaryResolver.ENV_PVPYTHON_PATH, null);
+            pvpython = ParaViewBinaryResolver.Resolve(Path.Combine(controllersPath, "paraview.module", "OutWit.Controller.Visualization.ParaView.dll"));
+            Assert.That(pvpython, Is.Not.Null, "consumer mode: the resolver must find the runtime inside paraview.module");
+            Assert.That(pvpython, Does.Contain(Path.Combine("paraview.module", "paraview")), $"consumer mode: the runtime must come from the module, not a dev fallback ({pvpython})");
+            TestContext.Progress.WriteLine($"consumer mode: pvpython = {pvpython}");
+        }
+        else
+        {
+            pvpython = ParaViewCorpus.FindPvpython();
+            if (pvpython == null)
+                Assert.Ignore("no ParaView runtime (set OUTWIT_PVPYTHON or place a distribution under @Prerequisites/paraview)");
 
-        Environment.SetEnvironmentVariable(ParaViewBinaryResolver.ENV_PVPYTHON_PATH, pvpython);
+            Environment.SetEnvironmentVariable(ParaViewBinaryResolver.ENV_PVPYTHON_PATH, pvpython);
+        }
+
+        m_pvpython = pvpython!;
 
         m_root = Path.Combine(Path.GetTempPath(), $"pv_real_{Guid.NewGuid():N}");
         m_blobs = new ParaViewTestBlobService(Path.Combine(m_root, "blobs"));
@@ -223,7 +250,7 @@ public sealed class ParaViewRealRuntimeTests
         // (he8, pe6, tet4, he20, pe15, tet10, tr6, qu8, be3) maps to a valid, non-inverted VTK cell
         // whose mid-side nodes are its edge midpoints, every result array has its shape, every time
         // step has data. The script is the author-side proof; this test keeps it in the suite.
-        var pvpython = Environment.GetEnvironmentVariable(ParaViewBinaryResolver.ENV_PVPYTHON_PATH)!;
+        var pvpython = m_pvpython;
         var tools = ParaViewTestPaths.FindRuntimeToolsPath();
         if (tools == null)
             Assert.Ignore("RuntimeTools not found (tests run outside the repository)");
