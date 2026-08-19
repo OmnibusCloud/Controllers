@@ -1,0 +1,4 @@
+
+# ParaView fixture corpus: data files are byte-exact (VTK XML with appended binary), states stay LF
+Visualization/**/Fixtures/Corpus/data/** -text
+Visualization/**/Fixtures/Corpus/states/** text eol=lf
