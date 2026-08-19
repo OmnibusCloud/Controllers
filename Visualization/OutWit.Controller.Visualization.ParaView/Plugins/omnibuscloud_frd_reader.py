@@ -13,6 +13,10 @@ point arrays named after the dataset (DISP, STRESS, NDTEMP, ...), one time step 
 Components flagged IEXIST != 0 (cgx-computed, such as the "ALL" magnitude) carry no data and are
 skipped. Nodes a results block does not mention get NaN.
 
+The file is read once to index it (mesh in memory, result blocks located by byte offset); a step's
+values are parsed on demand and only the step being rendered stays in memory, so large transients do
+not pile up. Fixed-width records are parsed with numpy when every row has the nominal width.
+
 Time: the step VALUE (time / frequency / load factor) becomes the time step value when the values are
 strictly increasing; otherwise (repeated frequencies of degenerate modes, static steps all at 1.0)
 the 1-based step ordinal is used and the actual value is kept in field data "StepValue".
@@ -87,14 +91,20 @@ class FrdFormatError(Exception):
 # ---------------------------------------------------------------------------------------------------
 
 class FrdDataset(object):
-    """One -4 attribute header: a named result with its components at one step."""
+    """One -4 attribute header: a named result with its components at one step. The values are read
+    from the file on demand (FrdModel.load_step) — a large transient keeps only the step being
+    rendered in memory."""
 
-    __slots__ = ("name", "components", "values")
+    __slots__ = ("name", "components", "irtype", "long_format", "offset", "length", "values")
 
-    def __init__(self, name, components):
+    def __init__(self, name, components, irtype, long_format, offset, length):
         self.name = name
         self.components = components  # list of (component name, ictype, iexist)
-        self.values = None            # numpy (node count, data columns)
+        self.irtype = irtype
+        self.long_format = long_format
+        self.offset = offset          # byte offset of the first data record
+        self.length = length          # byte length of the data records
+        self.values = None            # numpy (node count, data columns) once loaded
 
     @property
     def data_components(self):
@@ -115,14 +125,16 @@ class FrdStep(object):
 
 
 class FrdModel(object):
-    """Nodes, elements and result steps of one frd file."""
+    """Nodes, elements and result steps of one frd file (mesh in memory, results indexed by file
+    offset and loaded per step)."""
 
-    def __init__(self):
+    def __init__(self, path):
+        self.path = path
         self.header = []                # 1U user header strings
         self.node_numbers = None        # numpy int64 (n,)
         self.coordinates = None         # numpy float64 (n, 3)
-        self.node_index = {}            # node number -> row
-        self.element_numbers = []       # python lists until finalised
+        self.node_index = {}            # node number -> row (dict; see row_of for the fast path)
+        self.element_numbers = []
         self.element_types = []
         self.element_groups = []
         self.element_materials = []
@@ -130,6 +142,8 @@ class FrdModel(object):
         self.cell_types = []
         self.steps = []                 # FrdStep in file order
         self.unknown_element_types = set()
+        self._row_lookup = None         # numpy int64 lookup table (node number -> row, -1 = unknown)
+        self._loaded_step = None
 
     # -- time ----------------------------------------------------------------------------------
 
@@ -162,6 +176,33 @@ class FrdModel(object):
                 if dataset.name not in names:
                     names.append(dataset.name)
         return names
+
+    # -- results -------------------------------------------------------------------------------
+
+    def load_step(self, step):
+        """Reads the result values of one step from the file; the previously loaded step's values are
+        released so that only one step lives in memory."""
+        if step is None or step is self._loaded_step:
+            return
+        if self._loaded_step is not None:
+            for dataset in self._loaded_step.datasets:
+                dataset.values = None
+        with open(self.path, "rb") as handle:
+            for dataset in step.datasets:
+                handle.seek(dataset.offset)
+                block = handle.read(dataset.length)
+                dataset.values = _parse_values(block, dataset, self)
+        self._loaded_step = step
+
+    def row_lookup(self):
+        """Node number -> row as a numpy table when node numbers are dense enough; None otherwise."""
+        if self._row_lookup is None and self.node_numbers is not None and len(self.node_numbers):
+            largest = int(self.node_numbers.max())
+            if 0 < largest <= max(50_000_000, 4 * len(self.node_numbers)):
+                table = numpy.full(largest + 1, -1, dtype=numpy.int64)
+                table[self.node_numbers] = numpy.arange(len(self.node_numbers), dtype=numpy.int64)
+                self._row_lookup = table
+        return self._row_lookup
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -197,78 +238,104 @@ def _format_flag(header):
     return _int(header[73:75]) if len(header) > 73 else 0
 
 
+def _text(line):
+    return line.decode("latin-1").rstrip("\r\n")
+
+
 def parse_frd(path):
-    """Parses an ASCII frd file into an FrdModel."""
-    model = FrdModel()
-    with open(path, "r", encoding="latin-1", errors="replace") as handle:
-        lines = handle.read().split("\n")
-    _parse_lines(lines, model)
-    _finalise(model)
+    """Indexes an ASCII frd file: mesh in memory, result blocks located for FrdModel.load_step."""
+    model = FrdModel(path)
+    with open(path, "rb") as handle:
+        _index_file(handle, model)
+    if model.node_numbers is None:
+        model.node_numbers = numpy.zeros((0,), dtype=numpy.int64)
+        model.coordinates = numpy.zeros((0, 3), dtype=numpy.float64)
     return model
 
 
-def _parse_lines(lines, model):
+def _index_file(handle, model):
     """Dispatches the record keys: ccx writes block keys right-aligned in five columns ("    1C",
-    "    2C", "  100CL"), data keys in two (" -1", " -3")."""
-    n = len(lines)
-    i = 0
-    pending_parameters = []
-    while i < n:
-        line = lines[i]
+    "    2C", "  100CL"), data keys in two (" -1", " -3"). Reads the file once, sequentially."""
+    pending = handle.readline()
+    offset = 0
+    while pending:
+        line = pending
         head = line[:6].strip()
-        if not head:
-            i += 1
-        elif head.startswith("1U"):
-            model.header.append(line[6:].rstrip())
-            i += 1
-        elif head.startswith("1P"):
-            pending_parameters.append(line[6:].rstrip())
-            i += 1
-        elif head == "2C":
-            i = _parse_nodes(lines, i, model)
-        elif head == "3C":
-            i = _parse_elements(lines, i, model)
-        elif head.startswith("100C"):
-            i = _parse_results(lines, i, model, pending_parameters)
-            pending_parameters = []
-        elif head == "9999":
+        if head.startswith(b"1U"):
+            model.header.append(_text(line)[6:])
+        elif head == b"2C":
+            offset, pending = _parse_nodes(handle, line, offset, model)
+            continue
+        elif head == b"3C":
+            offset, pending = _parse_elements(handle, line, offset, model)
+            continue
+        elif head.startswith(b"100C"):
+            offset, pending = _index_results(handle, line, offset, model)
+            continue
+        elif head == b"9999":
             break
-        else:
-            i += 1
+        offset += len(line)
+        pending = handle.readline()
 
 
-def _parse_nodes(lines, i, model):
-    header = lines[i]
+def _parse_nodes(handle, header_line, offset, model):
+    header = _text(header_line)
     fmt = _format_flag(header)
     if fmt >= 2:
         raise FrdFormatError("binary frd node blocks (FORMAT %d) are not supported; write ASCII results" % fmt)
-    long_format = fmt == 1
-    id_width = 10 if long_format else 5
-    numbers = []
-    coordinates = []
-    i += 1
-    while i < len(lines):
-        line = lines[i]
+    id_width = 10 if fmt == 1 else 5
+    offset += len(header_line)
+    lines = []
+    line = handle.readline()
+    while line:
         record = line[1:3]
-        if record == "-3":
-            i += 1
+        if record != b"-1":
             break
-        if record == "-1":
-            start = 3
-            numbers.append(_int(line[start:start + id_width]))
-            start += id_width
-            coordinates.append((_float(line[start:start + 12]), _float(line[start + 12:start + 24]), _float(line[start + 24:start + 36])))
-        else:
-            break
-        i += 1
-    model.node_numbers = numpy.array(numbers, dtype=numpy.int64) if numpy is not None else numbers
-    model.coordinates = numpy.array(coordinates, dtype=numpy.float64).reshape(-1, 3) if numpy is not None else coordinates
-    model.node_index = {number: row for row, number in enumerate(numbers)}
-    return i
+        lines.append(line)
+        offset += len(line)
+        line = handle.readline()
+    if line[1:3] == b"-3":
+        offset += len(line)
+        line = handle.readline()
+    numbers, coordinates = _parse_fixed_rows(lines, id_width, 3)
+    model.node_numbers = numbers
+    model.coordinates = coordinates
+    model.node_index = {int(number): row for row, number in enumerate(numbers.tolist())}
+    return offset, line
 
 
-def _parse_elements(lines, i, model):
-    header = lines[i]
+def _parse_fixed_rows(lines, id_width, columns):
+    """Rows of ' -1' + id + columns*12-char values -> (int64 ids, float64 (n, columns)); vectorised when
+    every row has the fixed width, otherwise field by field."""
+    count = len(lines)
+    if count == 0:
+        return numpy.zeros((0,), dtype=numpy.int64), numpy.zeros((0, columns), dtype=numpy.float64)
+    width = 3 + id_width + 12 * columns
+    try:
+        stripped = [l.rstrip(b"\r\n") for l in lines]
+        if all(len(l) == width for l in stripped):
+            table = numpy.frombuffer(b"".join(stripped), dtype=numpy.uint8).reshape(count, width)
+            ids = numpy.ascontiguousarray(table[:, 3:3 + id_width]).view("S%d" % id_width).ravel().astype(numpy.int64)
+            values = numpy.empty((count, columns), dtype=numpy.float64)
+            for k in range(columns):
+                start = 3 + id_width + 12 * k
+                values[:, k] = numpy.ascontiguousarray(table[:, start:start + 12]).view("S12").ravel().astype(numpy.float64)
+            return ids, values
+    except (ValueError, TypeError):
+        pass
+    ids = numpy.empty(count, dtype=numpy.int64)
+    values = numpy.full((count, columns), numpy.nan, dtype=numpy.float64)
+    for i, raw in enumerate(lines):
+        text = _text(raw)
+        ids[i] = _int(text[3:3 + id_width])
+        for k in range(columns):
+            start = 3 + id_width + 12 * k
+            values[i, k] = _float(text[start:start + 12])
+    return ids, values
+
+
+def _parse_elements(handle, header_line, offset, model):
+    header = _text(header_line)
     fmt = _format_flag(header)
     if fmt >= 2:
         raise FrdFormatError("binary frd element blocks (FORMAT %d) are not supported; write ASCII results" % fmt)
@@ -276,30 +343,33 @@ def _parse_elements(lines, i, model):
     id_width = 10 if long_format else 5
     per_line = 10 if long_format else 15
     node_index = model.node_index
-    i += 1
-    while i < len(lines):
-        line = lines[i]
+    offset += len(header_line)
+    line = handle.readline()
+    while line:
         record = line[1:3]
-        if record == "-3":
-            i += 1
+        if record == b"-3":
+            offset += len(line)
+            line = handle.readline()
             break
-        if record != "-1":
+        if record != b"-1":
             break
-        number = _int(line[3:3 + id_width])
-        rest = line[3 + id_width:]
+        text = _text(line)
+        number = _int(text[3:3 + id_width])
+        rest = text[3 + id_width:]
         element_type = _int(rest[0:5])
         group = _int(rest[5:10])
         material = _int(rest[10:15])
-        i += 1
+        offset += len(line)
+        line = handle.readline()
         nodes = []
-        while i < len(lines) and lines[i][1:3] == "-2":
-            body = lines[i][3:]
+        while line and line[1:3] == b"-2":
+            body = _text(line)[3:]
             for k in range(per_line):
                 field = body[k * id_width:(k + 1) * id_width]
-                if not field.strip():
-                    continue
-                nodes.append(_int(field))
-            i += 1
+                if field.strip():
+                    nodes.append(int(field))
+            offset += len(line)
+            line = handle.readline()
         mapping = ELEMENT_TYPES.get(element_type)
         if mapping is None:
             model.unknown_element_types.add(element_type)
@@ -323,11 +393,11 @@ def _parse_elements(lines, i, model):
         model.element_materials.append(material)
         model.connectivity.append(rows)
         model.cell_types.append(cell_type)
-    return i
+    return offset, line
 
 
-def _parse_results(lines, i, model, parameters):
-    header = lines[i]
+def _index_results(handle, header_line, offset, model):
+    header = _text(header_line)
     # (1X,' 100','C',6A1,E12.5,I12,20A1,I2,I5,10A1,I2): value [12:24], numnod [24:36], text [36:56],
     # ictype [56:58], numstp [58:63], analys [63:73], format [73:75]
     value = _float(header[12:24])
@@ -338,60 +408,38 @@ def _parse_results(lines, i, model, parameters):
     if fmt >= 2:
         raise FrdFormatError("binary frd result blocks (FORMAT %d) are not supported; write ASCII results" % fmt)
     long_format = fmt == 1
-    id_width = 10 if long_format else 5
-    i += 1
-    # -4 attribute header
-    if i >= len(lines) or lines[i][1:3] != "-4":
-        raise FrdFormatError("result block at line %d has no -4 attribute header" % (i + 1))
-    name = lines[i][5:13].strip()
-    ncomps = _int(lines[i][13:18])
-    irtype = _int(lines[i][18:23])
-    i += 1
+    offset += len(header_line)
+    line = handle.readline()
+    if not line or line[1:3] != b"-4":
+        raise FrdFormatError("result block at byte %d has no -4 attribute header" % offset)
+    text = _text(line)
+    name = text[5:13].strip()
+    irtype = _int(text[18:23])
+    offset += len(line)
+    line = handle.readline()
     components = []
-    while i < len(lines) and lines[i][1:3] == "-5":
-        line = lines[i]
-        component_name = line[5:13].strip()
-        component_type = _int(line[18:23])
-        iexist = _int(line[33:38]) if len(line) >= 34 else 0
-        components.append((component_name, component_type, iexist))
-        i += 1
-    while i < len(lines) and lines[i][1:3] == "-6":
-        i += 1
-    dataset = FrdDataset(name, components)
-    columns = len(dataset.data_components)
-    node_count = len(model.node_index)
-    values = numpy.full((node_count, max(columns, 1)), numpy.nan, dtype=numpy.float64)
-    node_index = model.node_index
-    material_dependent = irtype == 2
-    while i < len(lines):
-        line = lines[i]
+    while line and line[1:3] == b"-5":
+        text = _text(line)
+        components.append((text[5:13].strip(), _int(text[18:23]), _int(text[33:38]) if len(text) >= 34 else 0))
+        offset += len(line)
+        line = handle.readline()
+    while line and line[1:3] == b"-6":
+        offset += len(line)
+        line = handle.readline()
+    data_offset = offset
+    data_length = 0
+    while line:
         record = line[1:3]
-        if record == "-3":
-            i += 1
+        if record == b"-3":
+            offset += len(line)
+            line = handle.readline()
             break
-        if record != "-1":
+        if record != b"-1" and record != b"-2":
             break
-        node = _int(line[3:3 + id_width])
-        row = node_index.get(node)
-        if material_dependent:
-            # -1 NODENR NMATS, then -2 MAT values... : take the first material's values
-            i += 1
-            data = []
-            while i < len(lines) and lines[i][1:3] == "-2" and len(data) < columns:
-                body = lines[i][3 + id_width:]
-                data.extend(_float(body[k * 12:(k + 1) * 12]) for k in range(min(6, columns - len(data))))
-                i += 1
-        else:
-            body = line[3 + id_width:]
-            data = [_float(body[k * 12:(k + 1) * 12]) for k in range(min(6, columns))]
-            i += 1
-            while len(data) < columns and i < len(lines) and lines[i][1:3] == "-2":
-                body = lines[i][3 + id_width:]
-                data.extend(_float(body[k * 12:(k + 1) * 12]) for k in range(min(6, columns - len(data))))
-                i += 1
-        if row is not None and columns:
-            values[row, :len(data)] = data[:columns]
-    dataset.values = values
+        data_length += len(line)
+        offset += len(line)
+        line = handle.readline()
+    dataset = FrdDataset(name, components, irtype, long_format, data_offset, data_length)
     step = None
     for existing in model.steps:
         if existing.number == step_number and existing.value == value:
@@ -401,13 +449,62 @@ def _parse_results(lines, i, model, parameters):
         step = FrdStep(step_number, value, ictype, analysis)
         model.steps.append(step)
     step.datasets.append(dataset)
-    return i
+    return offset, line
 
 
-def _finalise(model):
-    if model.node_numbers is None:
-        model.node_numbers = numpy.zeros((0,), dtype=numpy.int64)
-        model.coordinates = numpy.zeros((0, 3), dtype=numpy.float64)
+def _parse_values(block, dataset, model):
+    """Values of one result block for every mesh node (NaN where the block is silent)."""
+    columns = len(dataset.data_components)
+    node_count = len(model.node_numbers)
+    values = numpy.full((node_count, max(columns, 1)), numpy.nan, dtype=numpy.float64)
+    if columns == 0 or not block:
+        return values
+    id_width = 10 if dataset.long_format else 5
+    lines = block.split(b"\n")
+    if lines and not lines[-1]:
+        lines.pop()
+    simple = dataset.irtype != 2 and columns <= 6 and all(l[1:3] == b"-1" for l in lines)
+    if simple:
+        ids, data = _parse_fixed_rows(lines, id_width, columns)
+        lookup = model.row_lookup()
+        if lookup is not None:
+            valid = (ids >= 0) & (ids < len(lookup))
+            rows = numpy.full(len(ids), -1, dtype=numpy.int64)
+            rows[valid] = lookup[ids[valid]]
+        else:
+            rows = numpy.fromiter((model.node_index.get(int(n), -1) for n in ids), dtype=numpy.int64, count=len(ids))
+        known = rows >= 0
+        values[rows[known], :columns] = data[known]
+        return values
+    # General path: continuation lines (-2) for more than six components, material-dependent blocks.
+    i = 0
+    n = len(lines)
+    node_index = model.node_index
+    while i < n:
+        text = _text(lines[i])
+        if text[1:3] != "-1":
+            i += 1
+            continue
+        node = _int(text[3:3 + id_width])
+        row = node_index.get(node)
+        if dataset.irtype == 2:
+            i += 1
+            data = []
+            while i < n and lines[i][1:3] == b"-2" and len(data) < columns:
+                body = _text(lines[i])[3 + id_width:]
+                data.extend(_float(body[k * 12:(k + 1) * 12]) for k in range(min(6, columns - len(data))))
+                i += 1
+        else:
+            body = text[3 + id_width:]
+            data = [_float(body[k * 12:(k + 1) * 12]) for k in range(min(6, columns))]
+            i += 1
+            while len(data) < columns and i < n and lines[i][1:3] == b"-2":
+                body = _text(lines[i])[3 + id_width:]
+                data.extend(_float(body[k * 12:(k + 1) * 12]) for k in range(min(6, columns - len(data))))
+                i += 1
+        if row is not None:
+            values[row, :len(data)] = data[:columns]
+    return values
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -450,6 +547,7 @@ def build_grid(model, step, selected_names=None):
 
     field_data = grid.GetFieldData()
     if step is not None:
+        model.load_step(step)
         for dataset in step.datasets:
             if selected_names is not None and dataset.name not in selected_names:
                 continue
