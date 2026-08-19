@@ -100,12 +100,12 @@ internal sealed class ParaViewStateBuilder
         return id;
     }
 
-    /// <summary>Adds a filter in the sources group with an Input proxy property.</summary>
+    /// <summary>Adds a filter (XML group "filters", as ParaView saves them) with an Input proxy property.</summary>
     public int AddFilter(string type, string registrationName, int inputId, params (string Name, string[] Values)[] properties)
     {
         var id = m_nextId++;
         var builder = new StringBuilder();
-        builder.Append($"  <Proxy group=\"sources\" type=\"{type}\" id=\"{id}\" servers=\"1\">\n");
+        builder.Append($"  <Proxy group=\"filters\" type=\"{type}\" id=\"{id}\" servers=\"1\">\n");
         builder.Append($"    <Property name=\"Input\" id=\"{id}.Input\" number_of_elements=\"1\">\n");
         builder.Append($"      <Proxy value=\"{inputId}\" output_port=\"0\"/>\n");
         builder.Append("    </Property>\n");

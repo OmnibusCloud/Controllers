@@ -72,7 +72,7 @@ public sealed class ParaViewTaskSplitterTests
     #region Tests
 
     [Test]
-    public void SubsetsContainExactlyTheTimestepsFilesPlusStaticsTest()
+    public void SubsetsContainTheTimestepsFilesPlusStaticsPlusSeriesAnchorsTest()
     {
         var tasks = ParaViewTaskSplitter.Split(Scene(), Report(0, 1, 2), Options());
 
@@ -80,14 +80,31 @@ public sealed class ParaViewTaskSplitterTests
 
         string[] Paths(int i) => tasks[i].Attachments.Select(me => me.LogicalPath).ToArray();
 
+        // Series anchors (first member of 'series' and of 'coarse') ride with every task — ParaView's
+        // series readers open the first piece at load. 'fallback' has no association: whole group everywhere.
         Assert.Multiple(() =>
         {
             Assert.That(Paths(0), Is.EquivalentTo(new[] { "data/mesh.vtu", "data/series.pvd", "data/series_0.vtu", "data/coarse_a.vtu", "data/fallback_x.vtu", "data/fallback_y.vtu", "textures/wood.png" }));
-            Assert.That(Paths(1), Is.EquivalentTo(new[] { "data/mesh.vtu", "data/series.pvd", "data/series_1.vtu", "data/coarse_a.vtu", "data/fallback_x.vtu", "data/fallback_y.vtu", "textures/wood.png" }));
-            Assert.That(Paths(2), Is.EquivalentTo(new[] { "data/mesh.vtu", "data/series.pvd", "data/series_2.vtu", "data/coarse_b.vtu", "data/fallback_x.vtu", "data/fallback_y.vtu", "textures/wood.png" }));
+            Assert.That(Paths(1), Is.EquivalentTo(new[] { "data/mesh.vtu", "data/series.pvd", "data/series_0.vtu", "data/series_1.vtu", "data/coarse_a.vtu", "data/fallback_x.vtu", "data/fallback_y.vtu", "textures/wood.png" }));
+            Assert.That(Paths(2), Is.EquivalentTo(new[] { "data/mesh.vtu", "data/series.pvd", "data/series_0.vtu", "data/series_2.vtu", "data/coarse_a.vtu", "data/coarse_b.vtu", "data/fallback_x.vtu", "data/fallback_y.vtu", "textures/wood.png" }));
             Assert.That(tasks[0].SubsetBytes, Is.EqualTo(100 + 1000 + 10 + 200 + 50 + 5 + 6 + 7));
-            Assert.That(tasks[2].SubsetBytes, Is.EqualTo(100 + 1000 + 10 + 400 + 60 + 5 + 6 + 7));
+            Assert.That(tasks[2].SubsetBytes, Is.EqualTo(100 + 1000 + 10 + 200 + 400 + 50 + 60 + 5 + 6 + 7));
         });
+    }
+
+    [Test]
+    public void SeriesAnchorIsTheLowestOrdinalThenPackageOrderTest()
+    {
+        var scene = Scene();
+        // Reorder ordinals of the 'series' group: series_2 declared as ordinal 0.
+        scene.Attachments.Single(me => me.LogicalPath == "data/series_2.vtu").SeriesOrdinal = 0;
+        scene.Attachments.Single(me => me.LogicalPath == "data/series_0.vtu").SeriesOrdinal = 7;
+        scene.Attachments.Single(me => me.LogicalPath == "data/series_1.vtu").SeriesOrdinal = 7;
+
+        var index = new ParaViewAttachmentSubsetIndex(scene.Attachments);
+
+        Assert.That(index.Anchors, Is.EqualTo(new[] { "data/series_2.vtu", "data/coarse_a.vtu", "data/fallback_x.vtu" }));
+        Assert.That(index.SubsetOf(1).Select(me => me.LogicalPath), Does.Contain("data/series_2.vtu").And.Contain("data/series_1.vtu").And.Not.Contain("data/series_0.vtu"));
     }
 
     [Test]

@@ -92,8 +92,9 @@ public sealed class ParaViewTaskExecutorTests
         var image = ParaViewImageInfo.TryRead(m_blobs.GetStoredPath(result.ImageBlobId));
         Assert.That(image, Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 64, 48, false)));
 
-        // Only the subset was requested from blob storage: the state + the one attachment of timestep 1.
-        Assert.That(m_blobs.Requests, Is.EquivalentTo(new[] { task.StateBlobId, task.Attachments.Single().BlobId }));
+        // Only the subset was requested from blob storage: the state, the series anchor (piece 0) and the piece of timestep 1.
+        Assert.That(task.Attachments.Select(me => me.LogicalPath), Is.EquivalentTo(new[] { "data/field_0.vtu", "data/field_1.vtu" }));
+        Assert.That(m_blobs.Requests, Is.EquivalentTo(new[] { task.StateBlobId }.Concat(task.Attachments.Select(me => me.BlobId))));
 
         // The workspace is gone.
         Assert.That(Directory.Exists(Path.Combine(m_tempStorage.RootPath, "witcloud_paraview")) && Directory.EnumerateFileSystemEntries(Path.Combine(m_tempStorage.RootPath, "witcloud_paraview"), "*", SearchOption.AllDirectories).Any(File.Exists), Is.False);
@@ -166,7 +167,8 @@ public sealed class ParaViewTaskExecutorTests
     [Test]
     public async Task FileSeriesWithOnlyItsOwnPieceMaterializedIsAcceptedTest()
     {
-        // A file-series reader lists every piece; task 1 materializes only field_1 (+ nothing else).
+        // A file-series reader lists every piece; task 1 materializes only its own piece plus the series
+        // anchor (piece 0, which ParaView opens at load) — never the whole series.
         var state = new ParaViewStateBuilder().WithTimesteps(0, 1, 2);
         var reader = state.AddReader("XMLUnstructuredGridReader", "field", "data/field_0.vtu", "data/field_1.vtu", "data/field_2.vtu");
         state.AddRepresentation("UnstructuredGridRepresentation", reader);
@@ -176,7 +178,8 @@ public sealed class ParaViewTaskExecutorTests
         var result = await m_executor.ExecuteAsync(task, Guid.NewGuid(), m_fakePvpython, CancellationToken.None);
 
         Assert.That(result.TimestepIndex, Is.EqualTo(1));
-        Assert.That(m_blobs.Requests, Is.EquivalentTo(new[] { task.StateBlobId, task.Attachments.Single().BlobId }));
+        Assert.That(task.Attachments.Select(me => me.LogicalPath), Is.EquivalentTo(new[] { "data/field_0.vtu", "data/field_1.vtu" }));
+        Assert.That(m_blobs.Requests, Is.EquivalentTo(new[] { task.StateBlobId }.Concat(task.Attachments.Select(me => me.BlobId))));
     }
 
     [Test]

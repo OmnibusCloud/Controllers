@@ -529,6 +529,8 @@ class ParaviewValidationReport:
     height: _Optional[int] = None
     #: Resolved output format.
     format: _Optional[ParaViewImageFormat] = None
+    #: Logical paths of the series anchors — the first file of every series group, which ParaView's series readers open at load and which therefore ships with every task.
+    series_anchors: list[str] = _field(default_factory=list)
 
     def to_json(self) -> dict[str, _Any]:
         """The wire object of this value (camelCase, enum names, None omitted)."""
@@ -549,6 +551,7 @@ class ParaviewValidationReport:
             "width": self.width,
             "height": self.height,
             "format": (None if self.format is None else _enum_to_json(self.format)),
+            "seriesAnchors": (None if self.series_anchors is None else list(self.series_anchors)),
         })
 
     @classmethod
@@ -571,6 +574,7 @@ class ParaviewValidationReport:
             width=data.get("width"),
             height=data.get("height"),
             format=(None if data.get("format") is None else _enum_from_json(ParaViewImageFormat, data.get("format"))),
+            series_anchors=([] if data.get("seriesAnchors") is None else list(data.get("seriesAnchors"))),
         )
 
     def to_parameter(self) -> dict[str, _Any]:

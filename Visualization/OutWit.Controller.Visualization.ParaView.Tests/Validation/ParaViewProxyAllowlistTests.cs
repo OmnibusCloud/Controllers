@@ -15,23 +15,28 @@ public sealed class ParaViewProxyAllowlistTests
         Assert.Multiple(() =>
         {
             Assert.That(allowlist.RuntimeVersion, Is.EqualTo(ParaViewRuntimeInfo.RUNTIME_SERIES));
+            Assert.That(allowlist.Origin, Is.EqualTo("generated"), "the embedded allowlist must be the artifact generated from the fixture corpus with the pinned runtime");
             Assert.That(allowlist.Proxies, Does.Contain("sources/XMLUnstructuredGridReader"));
+            Assert.That(allowlist.Proxies, Does.Contain("sources/PVDReader"));
+            Assert.That(allowlist.Proxies, Does.Contain("filters/Contour"));
             Assert.That(allowlist.Proxies, Does.Contain("views/RenderView"));
             Assert.That(allowlist.Proxies, Does.Contain("misc/TimeKeeper"));
-            Assert.That(allowlist.Proxies, Does.Not.Contain("sources/ProgrammableFilter"));
-            Assert.That(allowlist.PluginProxies.Keys, Does.Contain(ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME));
+            Assert.That(allowlist.Proxies, Does.Not.Contain("filters/ProgrammableFilter"));
+            Assert.That(allowlist.Proxies, Does.Not.Contain("sources/ProgrammableSource"));
         });
     }
 
     [Test]
     public void PluginProxiesRequireTheirPluginTest()
     {
-        var allowlist = ParaViewProxyAllowlist.LoadEmbedded(ParaViewRuntimeInfo.RUNTIME_SERIES);
+        var allowlist = new ParaViewProxyAllowlist("6.1", "test", ["views/RenderView"],
+            new Dictionary<string, IReadOnlyList<string>> { [ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME] = ["sources/OmnibusCloudFrdReader"] });
 
         Assert.Multiple(() =>
         {
             Assert.That(allowlist.Allows("sources/OmnibusCloudFrdReader", []), Is.False);
             Assert.That(allowlist.Allows("sources/OmnibusCloudFrdReader", [ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME]), Is.True);
+            Assert.That(allowlist.Allows("views/RenderView", []), Is.True);
             Assert.That(allowlist.EffectiveKeys([ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME]), Does.Contain("sources/OmnibusCloudFrdReader"));
             Assert.That(allowlist.EffectiveKeys([]), Does.Not.Contain("sources/OmnibusCloudFrdReader"));
         });

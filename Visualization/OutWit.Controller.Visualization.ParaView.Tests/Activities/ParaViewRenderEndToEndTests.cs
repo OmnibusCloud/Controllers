@@ -136,21 +136,23 @@ public sealed class ParaViewRenderEndToEndTests
             Assert.That(image, Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 32, 16, false)));
         }
 
-        // Download accounting: every series piece was requested exactly once (by its own task), the
-        // static mesh once per task, the state once by Validate plus once per task — nothing else.
+        // Download accounting: pieces 1 and 2 were requested exactly once (by their own task), the
+        // series anchor (piece 0) and the static mesh once per task, the state once by Validate plus
+        // once per task — nothing else.
         var requests = m_blobs.Requests.GroupBy(me => me).ToDictionary(me => me.Key, me => me.Count());
         Assert.Multiple(() =>
         {
-            Assert.That(requests[package.BlobOf("data/field_0.vtu")], Is.EqualTo(1));
+            Assert.That(requests[package.BlobOf("data/field_0.vtu")], Is.EqualTo(3));
             Assert.That(requests[package.BlobOf("data/field_1.vtu")], Is.EqualTo(1));
             Assert.That(requests[package.BlobOf("data/field_2.vtu")], Is.EqualTo(1));
             Assert.That(requests[package.BlobOf("data/mesh.vtu")], Is.EqualTo(3));
             Assert.That(requests[scene.StateBlobId], Is.EqualTo(4));
             Assert.That(requests.Keys, Is.SubsetOf(new[] { scene.StateBlobId }.Concat(package.Attachments.Select(me => me.BlobId))));
+            Assert.That(report.SeriesAnchors, Is.EqualTo(new[] { "data/field_0.vtu" }));
         });
 
         foreach (var task in tasks!.Select(me => me!))
-            Assert.That(task.Attachments.Select(me => me.LogicalPath), Is.EquivalentTo(new[] { "data/mesh.vtu", $"data/field_{task.TimestepIndex}.vtu" }));
+            Assert.That(task.Attachments.Select(me => me.LogicalPath), Is.EquivalentTo(new[] { "data/mesh.vtu", "data/field_0.vtu", $"data/field_{task.TimestepIndex}.vtu" }.Distinct()));
     }
 
     [Test]

@@ -24,7 +24,7 @@ public sealed class ParaViewModelWireLayoutTests
         [typeof(ParaViewFrameSelectionData)] = 5,
         [typeof(ParaViewRenderTaskData)] = 14,
         [typeof(ParaViewRenderResultData)] = 14,
-        [typeof(ParaViewValidationReportData)] = 16,
+        [typeof(ParaViewValidationReportData)] = 17,
     };
 
     [Test]

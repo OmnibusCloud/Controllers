@@ -39,7 +39,8 @@ public sealed partial class ParaViewValidationReportData : ModelBase
                && RuntimeVersion.Is(other.RuntimeVersion)
                && Width.Is(other.Width)
                && Height.Is(other.Height)
-               && Format.Is(other.Format);
+               && Format.Is(other.Format)
+               && SeriesAnchors.Is(other.SeriesAnchors);
     }
 
     /// <inheritdoc />
@@ -62,7 +63,8 @@ public sealed partial class ParaViewValidationReportData : ModelBase
             RuntimeVersion = RuntimeVersion,
             Width = Width,
             Height = Height,
-            Format = Format
+            Format = Format,
+            SeriesAnchors = [.. SeriesAnchors]
         };
     }
 
@@ -165,6 +167,13 @@ public sealed partial class ParaViewValidationReportData : ModelBase
     /// </summary>
     [MemoryPackOrder(15)]
     public ParaViewImageFormat Format { get; set; }
+
+    /// <summary>
+    /// Logical paths of the series anchors — the first file of every series group, which ParaView's
+    /// series readers open at load and which therefore ships with every task.
+    /// </summary>
+    [MemoryPackOrder(16)]
+    public List<string> SeriesAnchors { get; set; } = [];
 
     #endregion
 }

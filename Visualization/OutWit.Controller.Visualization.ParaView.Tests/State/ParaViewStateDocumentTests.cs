@@ -24,7 +24,7 @@ public sealed class ParaViewStateDocumentTests
         {
             Assert.That(document.Version, Is.EqualTo("6.1.1"));
             Assert.That(document.Proxies.Select(me => me.Key), Does.Contain("sources/XMLUnstructuredGridReader"));
-            Assert.That(document.Proxies.Select(me => me.Key), Does.Contain("sources/Contour"));
+            Assert.That(document.Proxies.Select(me => me.Key), Does.Contain("filters/Contour"));
             Assert.That(document.Proxies.Select(me => me.Key), Does.Contain("views/RenderView"));
             Assert.That(document.ViewNames, Is.EqualTo(new[] { "RenderView1" }));
             Assert.That(document.TimestepValues, Is.EqualTo(new[] { 0.0, 0.5, 1.0 }));

@@ -64,12 +64,14 @@ class StubProperty(object):
 
 
 class StubProxy(object):
-    def __init__(self, group, xml_type, proxy_id, name, props):
+    def __init__(self, group, xml_type, proxy_id, name, props, collection=None):
         self.group = group
         self.xml_type = xml_type
         self.id = proxy_id
         self.name = name
         self.props = props
+        # Like ParaView: filters carry XML group "filters" but are REGISTERED in the "sources" collection.
+        self.collection = collection or group
 
     def GetXMLGroup(self):
         return self.group
@@ -96,8 +98,8 @@ class StubRenderWindow(object):
 
 
 class StubView(StubProxy):
-    def __init__(self, group, xml_type, proxy_id, name, props):
-        StubProxy.__init__(self, group, xml_type, proxy_id, name, props)
+    def __init__(self, group, xml_type, proxy_id, name, props, collection=None):
+        StubProxy.__init__(self, group, xml_type, proxy_id, name, props, collection)
         self.ViewSize = [0, 0]
         self.ViewTime = 0.0
 
@@ -138,10 +140,12 @@ def load_state(path):
         raw = handle.read()
     root = ET.fromstring(raw)
     names = {}
+    collections = {}
     for state in root.findall("ServerManagerState"):
         for collection in state.findall("ProxyCollection"):
             for item in collection.findall("Item"):
                 names[item.get("id", "")] = item.get("name", "")
+                collections[item.get("id", "")] = collection.get("name", "")
         for proxy in state.findall("Proxy"):
             group = proxy.get("group", "")
             xml_type = proxy.get("type", "")
@@ -150,12 +154,13 @@ def load_state(path):
             for prop in proxy.findall("Property"):
                 props[prop.get("name", "")] = [e.get("value", "") for e in prop.findall("Element")]
             name = names.get(proxy_id, "%s%s" % (xml_type, proxy_id))
+            collection = collections.get(proxy_id, group)
             if group == "views":
-                view = StubView(group, xml_type, proxy_id, name, props)
+                view = StubView(group, xml_type, proxy_id, name, props, collection)
                 Registry.views[name] = view
                 Registry.proxies.append(view)
             else:
-                Registry.proxies.append(StubProxy(group, xml_type, proxy_id, name, props))
+                Registry.proxies.append(StubProxy(group, xml_type, proxy_id, name, props, collection))
             if group == "misc" and xml_type == "TimeKeeper":
                 Registry.timesteps = [float(v) for v in props.get("TimestepValues", [])]
     if b"STUB-VTK-ERROR" in raw:
@@ -248,11 +253,11 @@ class _ProxyManager(object):
         return groups
 
     def GetProxiesInGroup(self, group):
-        return {(proxy.name, proxy.id): proxy for proxy in _stub.Registry.proxies if proxy.group == group}
+        return {(proxy.name, proxy.id): proxy for proxy in _stub.Registry.proxies if proxy.collection == group}
 
     def GetProxy(self, group, name):
         for proxy in _stub.Registry.proxies:
-            if proxy.group == group and proxy.name == name:
+            if proxy.collection == group and proxy.name == name:
                 return proxy
         return None
 

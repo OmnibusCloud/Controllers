@@ -121,7 +121,7 @@ public sealed class ParaViewRunnerScriptTests
 
         Assert.That(exitCode, Is.EqualTo(3));
         Assert.That(status!.Stage, Is.EqualTo("validate"));
-        Assert.That(status.Error, Does.Contain("sources/SomeExoticFilter"));
+        Assert.That(status.Error, Does.Contain("filters/SomeExoticFilter"));
     }
 
     [Test]

@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<VTKFile type="RectilinearGrid" version="0.1" byte_order="LittleEndian" header_type="UInt32" compressor="vtkZLibDataCompressor">
+  <RectilinearGrid WholeExtent="0 8 0 6 0 4">
+    <Piece Extent="0 8 0 6 0 4"                                                       >
+      <PointData Scalars="height">
+        <DataArray type="Float64" Name="height" format="appended" RangeMin="0"                    RangeMax="12"                   offset="0"                   />
+      </PointData>
+      <CellData>
+      </CellData>
+      <Coordinates>
+        <DataArray type="Float64" Name="Array 000002006FAD5CF0" format="appended" RangeMin=""                     RangeMax=""                     offset="272"                 />
+        <DataArray type="Float64" Name="Array 000002006FAD3340" format="appended" RangeMin=""                     RangeMax=""                     offset="356"                 />
+        <DataArray type="Float64" Name="Array 000002006FAD3EC0" format="appended" RangeMin=""                     RangeMax=""                     offset="432"                 />
+      </Coordinates>
+    </Piece>
+  </RectilinearGrid>
+  <AppendedData encoding="base64">
+   _AQAAAACAAADYCQAAugAAAA==eJzt0zkOwjAQQNEIIYQQQuz7GpZwC+Zoc0SOQElJQUFBQZE/EoW7ceHCaV5kydGPrSmK/+d140Vq2tjHMc5xjXt8sP+DTda7OMQpLnGLB4nTUUqcjqPE6ThJnI5zpI4L3jmfNzZY7+AAJ7jATa3a95/s/2KL9R6OcIYr3PEd+09nh5YSpUPtvJ0dauft7FC7d2eH2r3nOQ13pDqn3o4K85wGO5KdU2eH2r3nOQ13pDqn3o6r/ADIG47DAQAAAACAAABIAAAALAAAAA==eJxjYICAWTNBYKc9hL5pf/YMCLyB8n/aQ1SxOEDEeRwg4sJQWtIBAIBrITU=AQAAAACAAAA4AAAAJQAAAA==eJxjYIAAE2MQOGwPoR/bz5oJAl+hfGYHiCo+B4i4qAMAclkPBg==AQAAAACAAAAoAAAAHQAAAA==eJxjYICAWTNB4KQ9hH5pf/YMCPyB8jkdAEcxE0M=
+  </AppendedData>
+</VTKFile>

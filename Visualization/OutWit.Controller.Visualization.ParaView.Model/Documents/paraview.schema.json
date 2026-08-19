@@ -535,6 +535,14 @@
           "description": "Resolved output format.",
           "x-oc-clr-name": "Format",
           "$ref": "#/$defs/ParaViewImageFormat"
+        },
+        "seriesAnchors": {
+          "description": "Logical paths of the series anchors — the first file of every series group, which ParaView's series readers open at load and which therefore ships with every task.",
+          "x-oc-clr-name": "SeriesAnchors",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },

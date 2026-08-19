@@ -1,0 +1,39 @@
+{
+  "paraview": "paraview version 6.1.1",
+  "data": [
+    "data/grid.vtr",
+    "data/series/series.pvd",
+    "data/series/series_000.vti",
+    "data/series/series_001.vti",
+    "data/series/series_002.vti",
+    "data/series/series_003.vti",
+    "data/series/series_004.vti",
+    "data/tets.vtu",
+    "data/wavelet.vti"
+  ],
+  "states": [
+    "vti_contour.pvsm",
+    "vti_volume.pvsm",
+    "vtu_slice_clip_glyph.pvsm",
+    "vtr_surface.pvsm",
+    "pvd_series.pvsm",
+    "file_series.pvsm",
+    "sphere_static.pvsm"
+  ],
+  "timesteps": {
+    "pvd_series": [
+      0.0,
+      0.5,
+      1.0,
+      1.5,
+      2.0
+    ],
+    "file_series": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ]
+  }
+}

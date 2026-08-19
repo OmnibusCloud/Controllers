@@ -704,6 +704,8 @@ struct paraview_validation_report {
     std::optional<int32_t> height;
     /// Resolved output format.
     std::optional<para_view_image_format> format;
+    /// Logical paths of the series anchors — the first file of every series group, which ParaView's series readers open at load and which therefore ships with every task.
+    std::vector<std::string> series_anchors;
 
     /// Writes the wire object of this value into a writer.
     void write_json(detail::json_writer& w) const {
@@ -786,6 +788,12 @@ struct paraview_validation_report {
             w.key("format");
             w.value(to_string((*format)));
         }
+        w.key("seriesAnchors");
+        w.begin_array();
+        for (const auto& item0 : series_anchors) {
+            w.value(item0);
+        }
+        w.end_array();
         w.end_object();
     }
 

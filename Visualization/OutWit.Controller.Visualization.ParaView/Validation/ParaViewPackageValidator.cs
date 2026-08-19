@@ -74,6 +74,7 @@ public sealed class ParaViewPackageValidator
 
         var timestepCount = Math.Max(1, timeline.Count);
         ValidateTimestepAssociations(scene, timestepCount, errors, fallbacks);
+        var anchors = new ParaViewAttachmentSubsetIndex(scene.Attachments).Anchors;
 
         if (errors.Count == 0)
             indices = ParaViewFrameSelectionResolver.Resolve(options.Frames, timestepCount, errors);
@@ -95,7 +96,8 @@ public sealed class ParaViewPackageValidator
             RuntimeVersion = ParaViewRuntimeInfo.RUNTIME_VERSION,
             Width = options.Width,
             Height = options.Height,
-            Format = options.Format
+            Format = options.Format,
+            SeriesAnchors = [.. anchors]
         };
     }
 

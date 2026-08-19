@@ -3,11 +3,15 @@ using OutWit.Controller.Visualization.ParaView.Model;
 namespace OutWit.Controller.Visualization.ParaView.Tasks;
 
 /// <summary>
-/// One pass over the attachments: the always-included set and a timestep → attachments map, so a
-/// package of many attachments and many timesteps splits in O(attachments + outputs) lookups.
-/// Attachments keep their package order inside every subset.
+/// One pass over the attachments: the always-included set (statics, series indexes, series anchors)
+/// and a timestep → attachments map, so a package of many attachments and many timesteps splits in
+/// O(attachments + outputs) lookups. Attachments keep their package order inside every subset.
+/// The <b>series anchor</b> is the first member of every series group (lowest ordinal, then package
+/// order): ParaView's PVD and file-series readers open the first file of a series when the state
+/// loads, whatever timestep is rendered — verified against ParaView 6.1.1 — so it ships with every
+/// task at the cost of one extra piece per task, keeping per-task data O(1) in the series length.
 /// </summary>
-internal sealed class ParaViewAttachmentSubsetIndex
+public sealed class ParaViewAttachmentSubsetIndex
 {
     #region Fields
 
@@ -15,16 +19,35 @@ internal sealed class ParaViewAttachmentSubsetIndex
 
     private readonly Dictionary<int, List<(int Order, ParaViewAttachmentRefData Attachment)>> m_byTimestep = new();
 
+    private readonly List<string> m_anchors = [];
+
     #endregion
 
     #region Constructors
 
+    /// <summary>
+    /// Indexes the attachments of one package.
+    /// </summary>
+    /// <param name="attachments">All package attachments in package order.</param>
     public ParaViewAttachmentSubsetIndex(IEnumerable<ParaViewAttachmentRefData> attachments)
     {
-        var order = 0;
-        foreach (var attachment in attachments)
+        var list = attachments.ToList();
+
+        var anchors = new HashSet<ParaViewAttachmentRefData>(ReferenceEqualityComparer.Instance);
+        foreach (var group in list
+                     .Select((attachment, position) => (attachment, position))
+                     .Where(me => !string.IsNullOrEmpty(me.attachment.SeriesGroup) && me.attachment.Role != ParaViewAttachmentRole.SeriesIndex)
+                     .GroupBy(me => me.attachment.SeriesGroup, StringComparer.Ordinal))
         {
-            if (attachment.Role == ParaViewAttachmentRole.SeriesIndex || attachment.TimestepIndices.Count == 0)
+            var anchor = group.OrderBy(me => me.attachment.SeriesOrdinal).ThenBy(me => me.position).First().attachment;
+            anchors.Add(anchor);
+            m_anchors.Add(anchor.LogicalPath);
+        }
+
+        var order = 0;
+        foreach (var attachment in list)
+        {
+            if (attachment.Role == ParaViewAttachmentRole.SeriesIndex || attachment.TimestepIndices.Count == 0 || anchors.Contains(attachment))
             {
                 m_always.Add((order, attachment));
             }
@@ -32,13 +55,13 @@ internal sealed class ParaViewAttachmentSubsetIndex
             {
                 foreach (var timestep in attachment.TimestepIndices.Distinct())
                 {
-                    if (!m_byTimestep.TryGetValue(timestep, out var list))
+                    if (!m_byTimestep.TryGetValue(timestep, out var members))
                     {
-                        list = [];
-                        m_byTimestep[timestep] = list;
+                        members = [];
+                        m_byTimestep[timestep] = members;
                     }
 
-                    list.Add((order, attachment));
+                    members.Add((order, attachment));
                 }
             }
 
@@ -66,6 +89,13 @@ internal sealed class ParaViewAttachmentSubsetIndex
             .Select(me => (ParaViewAttachmentRefData)me.Attachment.Clone())
             .ToList();
     }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>Logical paths of the series anchors (one per series group), in package order.</summary>
+    public IReadOnlyList<string> Anchors => m_anchors;
 
     #endregion
 }

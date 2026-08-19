@@ -31,7 +31,12 @@ public sealed class ParaViewPackageValidatorTests
     {
         m_root = Path.Combine(Path.GetTempPath(), $"pv_validate_{Guid.NewGuid():N}");
         m_blobs = new ParaViewTestBlobService(Path.Combine(m_root, "blobs"));
-        m_validator = new ParaViewPackageValidator(ParaViewProxyAllowlist.LoadEmbedded(ParaViewRuntimeInfo.RUNTIME_SERIES), bundledReaderVersion: "1.2.0");
+        // The embedded (generated) allowlist plus the reader plugin's proxy, so the plugin mechanics are
+        // testable before the reader milestone ships the plugin and its own corpus states.
+        var embedded = ParaViewProxyAllowlist.Bundled;
+        var allowlist = new ParaViewProxyAllowlist(embedded.RuntimeVersion, embedded.Origin, embedded.Proxies,
+            new Dictionary<string, IReadOnlyList<string>> { [ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME] = ["sources/OmnibusCloudFrdReader"] });
+        m_validator = new ParaViewPackageValidator(allowlist, bundledReaderVersion: "1.2.0");
     }
 
     [TearDown]
@@ -203,7 +208,7 @@ public sealed class ParaViewPackageValidatorTests
         var report = ValidateState(state);
 
         Assert.That(report.IsValid, Is.False);
-        Assert.That(report.Errors, Has.Some.Contains("sources/SomeExoticFilter").And.Some.Contains("allowlist"));
+        Assert.That(report.Errors, Has.Some.Contains("filters/SomeExoticFilter").And.Some.Contains("allowlist"));
     }
 
     [Test]
@@ -289,9 +294,11 @@ public sealed class ParaViewPackageValidatorTests
     [Test]
     public void SlashInANonFilePropertyIsNotAPathTest()
     {
+        // Allowlisted proxies carrying slash-y, drive-y and URI-like values in NON-file properties
+        // (a Calculator function is "p/rho"; the validator must not mistake them for paths).
         var state = ParaViewStateBuilder.Typical("data/field.vtu");
-        state.AddFilter("Calculator", "Calculator1", 1000, ("Function", ["p/rho"]), ("ResultArrayName", ["ratio 1/2"]));
-        state.AddProxy("sources", "TextSource", ("Text", ["step 1/2 of C:/nothing"]));
+        state.AddFilter("Clip", "Clip1", 1000, ("Scalars", ["POINTS", "p/rho"]), ("Value", ["1/2"]));
+        state.AddProxy("sources", "SphereSource", ("Name", ["step 1/2 of C:/nothing file://x"]));
         var report = ValidateState(state);
 
         Assert.That(report.IsValid, Is.True, string.Join("; ", report.Errors));

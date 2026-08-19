@@ -13,8 +13,6 @@ internal sealed class ParaViewStateDocumentParser
 {
     #region Constants
 
-    private const string ROOT_ELEMENT = "ParaView";
-
     private const string STATE_ELEMENT = "ServerManagerState";
 
     private const string PROXY_ELEMENT = "Proxy";
@@ -71,10 +69,13 @@ internal sealed class ParaViewStateDocumentParser
     /// <exception cref="ParaViewStateFormatException">A structural limit or a prohibited construct was hit.</exception>
     public ParaViewStateDocument Parse()
     {
-        if (!ReadToElement() || m_reader.Name != ROOT_ELEMENT)
-            throw new ParaViewStateFormatException($"state root element must be <{ROOT_ELEMENT}>");
+        // The GUI saves <ParaView>, pvpython saves <GenericParaViewApplication>: the contract is the
+        // ServerManagerState child, not the root tag.
+        if (!ReadToElement())
+            throw new ParaViewStateFormatException("state has no root element");
 
         var rootDepth = m_reader.Depth;
+        var stateSeen = false;
 
         while (m_reader.Read())
         {
@@ -85,10 +86,14 @@ internal sealed class ParaViewStateDocumentParser
 
             if (m_reader.Depth == rootDepth + 1 && m_reader.Name == STATE_ELEMENT)
             {
+                stateSeen = true;
                 m_version = m_reader.GetAttribute("version") ?? string.Empty;
                 ParseState(m_reader.Depth);
             }
         }
+
+        if (!stateSeen)
+            throw new ParaViewStateFormatException($"state carries no <{STATE_ELEMENT}> element");
 
         return new ParaViewStateDocument(m_version, m_proxies, m_collections, m_hasCustomDefinitions);
     }
@@ -119,7 +124,9 @@ internal sealed class ParaViewStateDocumentParser
                     break;
 
                 case CUSTOM_DEFINITIONS_ELEMENT:
-                    m_hasCustomDefinitions = true;
+                    // Every saved state carries an empty <CustomProxyDefinitions/>; only a populated one embeds definitions.
+                    if (!m_reader.IsEmptyElement)
+                        m_hasCustomDefinitions = HasChildElements(m_reader.Depth);
                     break;
             }
         }
@@ -214,6 +221,23 @@ internal sealed class ParaViewStateDocumentParser
         }
 
         m_collections[name] = items;
+    }
+
+    private bool HasChildElements(int depth)
+    {
+        var found = false;
+        while (m_reader.Read())
+        {
+            Guard();
+
+            if (m_reader.NodeType == XmlNodeType.EndElement && m_reader.Depth == depth)
+                break;
+
+            if (m_reader.NodeType == XmlNodeType.Element)
+                found = true;
+        }
+
+        return found;
     }
 
     private bool ReadToElement()

@@ -283,13 +283,17 @@ def resolve_state(task):
     except ET.ParseError as e:
         raise RunnerError("state is not well-formed XML: %s" % e, EXIT_POLICY)
 
-    if root.tag != "ParaView":
-        raise RunnerError("state root element must be <ParaView>", EXIT_POLICY)
+    # The GUI saves <ParaView>, pvpython saves <GenericParaViewApplication>; the contract is the
+    # ServerManagerState child, not the root tag.
+    states_found = root.findall("ServerManagerState")
+    if not states_found:
+        raise RunnerError("state carries no <ServerManagerState> element", EXIT_POLICY)
 
     rewritten = 0
     missing = []
-    for state in root.findall("ServerManagerState"):
-        if state.find("CustomProxyDefinitions") is not None:
+    for state in states_found:
+        definitions = state.find("CustomProxyDefinitions")
+        if definitions is not None and len(list(definitions)) > 0:
             raise RunnerError("state embeds custom proxy definitions", EXIT_POLICY)
         for proxy in state.findall("Proxy"):
             group = proxy.get("group", "")
@@ -367,21 +371,32 @@ class VtkErrorObserver(object):
                 from paraview.vtk import vtkOutputWindow  # type: ignore
             except Exception:
                 return False
+        callback = self._on_error
+        try:
+            # The error text travels as call data; VTK hands it to Python only when the observer
+            # declares the call data type.
+            from vtkmodules.util.misc import calldata_type
+            from vtkmodules.vtkCommonCore import VTK_STRING
+            callback = calldata_type(VTK_STRING)(self._on_error_with_text)
+        except Exception:
+            pass
         try:
             window = vtkOutputWindow.GetInstance()
-            window.AddObserver("ErrorEvent", self._on_error)
+            window.AddObserver("ErrorEvent", callback)
             return True
         except Exception:
             return False
 
+    def _on_error_with_text(self, caller, event, text):
+        self._record(text)
+
     def _on_error(self, caller, event, *args):
+        text = args[0] if args and isinstance(args[0], str) else ""
+        self._record(text)
+
+    def _record(self, text):
         try:
-            text = ""
-            if args and isinstance(args[0], str):
-                text = args[0]
-            elif hasattr(caller, "GetText"):
-                text = caller.GetText() or ""
-            self.errors.append((text or "vtk error").strip()[:500])
+            self.errors.append((str(text) if text else "vtk error").strip()[:500])
         except Exception:
             self.errors.append("vtk error")
 
