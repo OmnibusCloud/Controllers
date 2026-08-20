@@ -40,6 +40,9 @@ public static class ParaViewRenderingBackend
     /// <summary>Wall-clock limit of one probe render (startup + trivial scene).</summary>
     public static readonly TimeSpan PROBE_WALL_CLOCK_LIMIT = TimeSpan.FromMinutes(2);
 
+    /// <summary>Consecutive probe processes that must all succeed before EGL is accepted.</summary>
+    public const int PROBE_ATTEMPTS = 2;
+
     /// <summary>Renderer substrings that mean software rasterization even behind an EGL window.</summary>
     private static readonly string[] SOFTWARE_RENDERER_MARKERS = ["llvmpipe", "softpipe", "swrast", "software rasterizer", "mesa offscreen"];
 
@@ -149,6 +152,30 @@ public static class ParaViewRenderingBackend
     }
 
     /// <summary>
+    /// Whether the window class is the EGL GPU attempt.
+    /// </summary>
+    /// <param name="openGlWindow">A resolved window class or null.</param>
+    /// <returns>True for <see cref="EGL_WINDOW"/>.</returns>
+    public static bool IsEglWindow(string? openGlWindow)
+    {
+        return string.Equals(openGlWindow, EGL_WINDOW, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Permanently (for this node process) demotes the pvpython to OSMesa. The probe certifies one
+    /// trivial render — it cannot certify the thousandth: production showed a driver whose EGL passed
+    /// the probe and then segfaulted real tasks. Callers demote on the FIRST EGL runner failure and
+    /// retry the work on software, so a flaky EGL stack costs one crashed subprocess, not a job.
+    /// </summary>
+    /// <param name="pvpythonPath">Resolved pvpython executable.</param>
+    /// <param name="logger">Optional logger.</param>
+    public static void Demote(string pvpythonPath, ILogger? logger)
+    {
+        CACHE[pvpythonPath] = ParaViewRunnerEnvironment.OSMESA_WINDOW;
+        logger?.LogWarning("ParaView rendering backend demoted to {Window} on this node (EGL failed at work time)", ParaViewRunnerEnvironment.OSMESA_WINDOW);
+    }
+
+    /// <summary>
     /// Forgets probe results (tests; a controller reload also starts a fresh process, which clears it naturally).
     /// </summary>
     public static void ResetCache()
@@ -168,17 +195,24 @@ public static class ParaViewRenderingBackend
     {
         try
         {
-            var status = await ProbeAsync(pvpythonPath, tempStorage, EGL_WINDOW, logger, cancellationToken);
-            if (status == null)
-                return false;
+            // Two separate probe processes must both succeed: rapid context creation is exactly
+            // where flaky EGL stacks fall over, and every production task is a fresh process.
+            for (var attempt = 0; attempt < PROBE_ATTEMPTS; attempt++)
+            {
+                var status = await ProbeAsync(pvpythonPath, tempStorage, EGL_WINDOW, logger, cancellationToken);
+                var accepted = status != null
+                               && string.Equals(status.RenderWindow, EGL_WINDOW, StringComparison.Ordinal)
+                               && IsHardwareRenderer(status.Renderer);
 
-            var accepted = string.Equals(status.RenderWindow, EGL_WINDOW, StringComparison.Ordinal)
-                           && IsHardwareRenderer(status.Renderer);
+                logger?.LogInformation("ParaView GPU probe {Attempt}/{Attempts}: window '{Window}', renderer '{Renderer}' — {Verdict}",
+                    attempt + 1, PROBE_ATTEMPTS, status?.RenderWindow ?? "none", status?.Renderer ?? "none",
+                    accepted ? "hardware EGL" : "falling back to OSMesa");
 
-            logger?.LogInformation("ParaView GPU probe: window '{Window}', renderer '{Renderer}' — {Verdict}",
-                status.RenderWindow, status.Renderer, accepted ? "hardware EGL accepted" : "falling back to OSMesa");
+                if (!accepted)
+                    return false;
+            }
 
-            return accepted;
+            return true;
         }
         catch (OperationCanceledException)
         {

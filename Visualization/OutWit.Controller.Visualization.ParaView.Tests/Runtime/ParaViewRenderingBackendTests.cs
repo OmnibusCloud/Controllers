@@ -1,5 +1,11 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using OutWit.Controller.Visualization.ParaView.Model;
 using OutWit.Controller.Visualization.ParaView.Runtime;
+using OutWit.Controller.Visualization.ParaView.Tasks;
+using OutWit.Controller.Visualization.ParaView.Tests.Mock;
 using OutWit.Controller.Visualization.ParaView.Tests.Utils;
+using OutWit.Controller.Visualization.ParaView.Validation;
+using OutWit.Engine.Data.Benchmark;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Visualization.ParaView.Tests.Runtime;
@@ -120,6 +126,87 @@ public sealed class ParaViewRenderingBackendTests
             m_fakePvpython, tempStorage, ParaViewRenderingBackend.EGL_WINDOW, null, CancellationToken.None);
 
         Assert.That(status, Is.Null);
+    }
+
+    #endregion
+
+    #region Demotion Tests
+
+    [Test]
+    public async Task TaskFailingOnEglDemotesTheNodeAndRetriesOnSoftwareTest()
+    {
+        // The production incident, replayed: EGL passes the probe (here: forced via the override),
+        // then the real task's runner dies like a segfault. One local retry on OSMesa must succeed
+        // and the job must never see the crash.
+        Environment.SetEnvironmentVariable(ParaViewRenderingBackend.ENV_OPENGL_WINDOW, ParaViewRenderingBackend.EGL_WINDOW);
+        var blobs = new ParaViewTestBlobService(Path.Combine(m_root, "blobs"));
+        var tempStorage = new WitTempStorageDefault(Path.Combine(m_root, "temp"));
+        var executor = new ParaViewTaskExecutor(blobs, tempStorage, ParaViewProxyAllowlist.LoadEmbedded(ParaViewRuntimeInfo.RUNTIME_SERIES), NullLogger.Instance);
+
+        var state = ParaViewStateBuilder.Typical("data/field_0.vtu").WithExtraStateContent("<!-- FAKE-EGL-CRASH -->").Build();
+        var task = BuildTask(blobs, state);
+
+        var result = await executor.ExecuteAsync(task, Guid.NewGuid(), m_fakePvpython, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Width, Is.EqualTo(64), "the OSMesa retry must produce the real result");
+            Assert.That(result.Height, Is.EqualTo(48));
+        });
+    }
+
+    [Test]
+    public async Task BenchmarkFailingOnEglDemotesAndMeasuresOnSoftwareTest()
+    {
+        Environment.SetEnvironmentVariable(ParaViewRenderingBackend.ENV_OPENGL_WINDOW, ParaViewRenderingBackend.EGL_WINDOW);
+        var tempStorage = new WitTempStorageDefault(Path.Combine(m_root, "fake-egl-crash", "temp"));
+        var options = new WitBenchmarkOptions { MinDuration = TimeSpan.FromMilliseconds(1), WarmupIterations = 1 };
+
+        var result = await ParaViewBenchmark.MeasureAsync(m_fakePvpython, tempStorage, options, null, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Rate, Is.GreaterThan(0), "the OSMesa re-measure must yield a real rate");
+            Assert.That(result.Iterations, Is.EqualTo(ParaViewBenchmark.MIN_CYCLES));
+        });
+    }
+
+    [Test]
+    public void NonEglFailuresAreNotSwallowedByTheRetryTest()
+    {
+        // A genuine scene failure on the software path must still surface as an error - the retry
+        // exists only for the EGL edge.
+        Environment.SetEnvironmentVariable(ParaViewRenderingBackend.ENV_OPENGL_WINDOW, ParaViewRunnerEnvironment.OSMESA_WINDOW);
+        var blobs = new ParaViewTestBlobService(Path.Combine(m_root, "blobs"));
+        var tempStorage = new WitTempStorageDefault(Path.Combine(m_root, "temp"));
+        var executor = new ParaViewTaskExecutor(blobs, tempStorage, ParaViewProxyAllowlist.LoadEmbedded(ParaViewRuntimeInfo.RUNTIME_SERIES), NullLogger.Instance);
+
+        var state = ParaViewStateBuilder.Typical("data/field_0.vtu").WithExtraStateContent("<!-- FAKE-FAIL -->").Build();
+        var task = BuildTask(blobs, state);
+
+        Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(task, Guid.NewGuid(), m_fakePvpython, CancellationToken.None));
+    }
+
+    #endregion
+
+    #region Tools
+
+    private ParaViewRenderTaskData BuildTask(ParaViewTestBlobService blobs, string stateXml)
+    {
+        var package = new ParaViewPackageBuilder(Path.Combine(m_root, "pkg_" + Guid.NewGuid().ToString("N")), blobs)
+            .AddFile("data/field_0.vtu", "field 0", seriesGroup: "field", timestepIndices: [0]);
+        var scene = package.BuildScene(stateXml, timestepValues: [0]);
+        var options = new ParaViewOutputOptionsData { ViewId = "RenderView1", Width = 64, Height = 48 };
+        var report = new ParaViewValidationReportData
+        {
+            IsValid = true,
+            ResolvedViewId = "RenderView1",
+            ResolvedTimestepIndices = [0],
+            TimestepValues = [0],
+            PackageDigest = ParaViewPackageDigest.ComputePackageDigest(scene)
+        };
+
+        return ParaViewTaskSplitter.Split(scene, report, options).Single();
     }
 
     #endregion

@@ -14,6 +14,7 @@
 //   FAKE-WRONG-SIZE    renders one pixel wider than requested (output validation must reject);
 //   FAKE-NO-STATUS     renders, exits 0, writes no status (adapter must reject);
 //   FAKE-EXTRA-OUTPUT  renders and leaves an extra file in the output directory (must reject);
+//   FAKE-EGL-CRASH     dies like a segfault (exit 1, no status) when VTK_DEFAULT_OPENGL_WINDOW=vtkEGLRenderWindow;
 //   anything else      renders a solid image of the requested size.
 //
 // When the script is benchmark_frames.py the fake runs its benchmark mode instead (see FakeBenchmark).
@@ -126,6 +127,14 @@ var stateText = File.ReadAllText(statePath);
 
 if (stateText.Contains("FAKE-FAIL", StringComparison.Ordinal))
     return Fail("load-state", "fake failure requested by the state", 3);
+
+// A flaky EGL stack: dies like a segfault (no status at all) ONLY when the EGL window is requested.
+if (stateText.Contains("FAKE-EGL-CRASH", StringComparison.Ordinal)
+    && Environment.GetEnvironmentVariable("VTK_DEFAULT_OPENGL_WINDOW") == "vtkEGLRenderWindow")
+{
+    Console.Error.WriteLine("error: exception occurred: Segmentation fault");
+    return 1;
+}
 
 if (stateText.Contains("FAKE-HANG", StringComparison.Ordinal))
 {

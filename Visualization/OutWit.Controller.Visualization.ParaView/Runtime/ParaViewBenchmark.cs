@@ -116,32 +116,19 @@ public static class ParaViewBenchmark
 
         var arguments = BuildArguments(runnerPath, taskFilePath);
         var openGlWindow = await ParaViewRenderingBackend.ResolveWindowAsync(pvpythonPath, tempStorage, logger, cancellationToken);
-        var environment = ParaViewRunnerEnvironment.Build(
-            pvpythonPath, workspace.HomeDirectory, workspace.TempDirectory, openGlWindow);
 
-        for (var index = 0; index < warmupCycles; index++)
-            await RunCycleAsync(pvpythonPath, arguments, workspace, environment, statusFilePath, logger, cancellationToken);
-
-        var cycles = 0;
-        var renderSeconds = 0.0;
-        ParaViewBenchmarkRunData lastCycle = null!;
-        var stopwatch = Stopwatch.StartNew();
-
-        while (cycles < MAX_CYCLES)
+        try
         {
-            lastCycle = await RunCycleAsync(pvpythonPath, arguments, workspace, environment, statusFilePath, logger, cancellationToken);
-            cycles++;
-            renderSeconds += lastCycle.RenderSeconds;
-
-            if (cycles >= MIN_CYCLES && stopwatch.Elapsed >= target)
-                break;
+            return await MeasureCyclesAsync(pvpythonPath, arguments, workspace, statusFilePath, openGlWindow, warmupCycles, target, logger, cancellationToken);
         }
-
-        stopwatch.Stop();
-        if (stopwatch.Elapsed <= TimeSpan.Zero)
-            throw new InvalidOperationException($"ParaView.RenderFrame benchmark: {cycles} cycle(s) took no measurable time — nothing to measure.");
-
-        return ToResult(lastCycle, cycles, stopwatch.Elapsed, renderSeconds);
+        catch (InvalidOperationException error) when (ParaViewRenderingBackend.IsEglWindow(openGlWindow))
+        {
+            // Same self-healing as the task path: a flaky EGL stack demotes the node and the
+            // benchmark measures the backend tasks will actually use.
+            logger?.LogWarning("ParaView.RenderFrame benchmark: the EGL runner failed ({Message}); demoting this node to OSMesa and re-measuring", error.Message);
+            ParaViewRenderingBackend.Demote(pvpythonPath, logger);
+            return await MeasureCyclesAsync(pvpythonPath, arguments, workspace, statusFilePath, ParaViewRunnerEnvironment.OSMESA_WINDOW, warmupCycles, target, logger, cancellationToken);
+        }
     }
 
     /// <summary>
@@ -220,6 +207,45 @@ public static class ParaViewBenchmark
     #endregion
 
     #region Tools
+
+    private static async Task<WitBenchmarkResult> MeasureCyclesAsync(
+        string pvpythonPath,
+        IReadOnlyList<string> arguments,
+        ParaViewTaskWorkspace workspace,
+        string statusFilePath,
+        string? openGlWindow,
+        int warmupCycles,
+        TimeSpan target,
+        ILogger? logger,
+        CancellationToken cancellationToken)
+    {
+        var environment = ParaViewRunnerEnvironment.Build(
+            pvpythonPath, workspace.HomeDirectory, workspace.TempDirectory, openGlWindow);
+
+        for (var index = 0; index < warmupCycles; index++)
+            await RunCycleAsync(pvpythonPath, arguments, workspace, environment, statusFilePath, logger, cancellationToken);
+
+        var cycles = 0;
+        var renderSeconds = 0.0;
+        ParaViewBenchmarkRunData lastCycle = null!;
+        var stopwatch = Stopwatch.StartNew();
+
+        while (cycles < MAX_CYCLES)
+        {
+            lastCycle = await RunCycleAsync(pvpythonPath, arguments, workspace, environment, statusFilePath, logger, cancellationToken);
+            cycles++;
+            renderSeconds += lastCycle.RenderSeconds;
+
+            if (cycles >= MIN_CYCLES && stopwatch.Elapsed >= target)
+                break;
+        }
+
+        stopwatch.Stop();
+        if (stopwatch.Elapsed <= TimeSpan.Zero)
+            throw new InvalidOperationException($"ParaView.RenderFrame benchmark: {cycles} cycle(s) took no measurable time — nothing to measure.");
+
+        return ToResult(lastCycle, cycles, stopwatch.Elapsed, renderSeconds);
+    }
 
     private static async Task<ParaViewBenchmarkRunData> RunCycleAsync(
         string pvpythonPath,

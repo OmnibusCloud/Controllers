@@ -14,6 +14,7 @@ namespace OutWit.Controller.Visualization.ParaView.Tests.FakePvpython;
 ///   fake-fail      — fails at the build stage (status ok=false, exit 3);
 ///   fake-nostatus  — renders, exits 0, writes no status;
 ///   fake-hang      — hangs like a wedged runner (the cancellation gates must kill the tree);
+///   fake-egl-crash — dies like a segfault (exit 1, no status) when the EGL window is requested;
 ///   anything else is a normal run.
 /// </summary>
 internal static class FakeBenchmark
@@ -27,6 +28,8 @@ internal static class FakeBenchmark
     public const string MODE_NO_STATUS = "fake-nostatus";
 
     public const string MODE_HANG = "fake-hang";
+
+    public const string MODE_EGL_CRASH = "fake-egl-crash";
 
     public const double SIMULATED_SECONDS_PER_FRAME = 0.02;
 
@@ -78,6 +81,13 @@ internal static class FakeBenchmark
             status["error"] = "DISPLAY leaked into the runner environment";
             WriteStatus();
             return 3;
+        }
+
+        if (outputDir.Contains(MODE_EGL_CRASH, StringComparison.OrdinalIgnoreCase)
+            && Environment.GetEnvironmentVariable("VTK_DEFAULT_OPENGL_WINDOW") == "vtkEGLRenderWindow")
+        {
+            Console.Error.WriteLine("error: exception occurred: Segmentation fault");
+            return 1;
         }
 
         if (outputDir.Contains(MODE_FAIL, StringComparison.OrdinalIgnoreCase))

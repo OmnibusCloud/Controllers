@@ -86,26 +86,22 @@ public sealed class ParaViewTaskExecutor
 
         var arguments = BuildArguments(runnerPath, workspace.TaskFilePath);
         var openGlWindow = await ParaViewRenderingBackend.ResolveWindowAsync(pvpythonPath, m_tempStorage, m_logger, cancellationToken);
-        var environment = ParaViewRunnerEnvironment.Build(
-            pvpythonPath, workspace.HomeDirectory, workspace.TempDirectory, openGlWindow);
 
-        var outcome = await ParaViewProcessRunner.RunAsync(
-            pvpythonPath, arguments, workspace.PackageRoot, environment, ParaViewInputLimits.TASK_WALL_CLOCK_LIMIT, m_logger, cancellationToken);
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var status = ParaViewRunnerStatus.TryRead(workspace.StatusFilePath);
-        if (outcome.TimedOut)
-            throw new InvalidOperationException($"ParaView.RenderFrame: the runner exceeded its {ParaViewInputLimits.TASK_WALL_CLOCK_LIMIT.TotalMinutes:0}-minute wall-clock limit and was terminated.{Describe(status, outcome)}");
-
-        if (outcome.ExitCode != 0)
-            throw new InvalidOperationException($"ParaView.RenderFrame: the runner exited with code {outcome.ExitCode}.{Describe(status, outcome)}");
-
-        if (status == null)
-            throw new InvalidOperationException($"ParaView.RenderFrame: the runner exited successfully but wrote no status document.{Describe(null, outcome)}");
-
-        if (!status.Ok)
-            throw new InvalidOperationException($"ParaView.RenderFrame: the runner reported a failure at stage '{status.Stage}': {status.Error}{Describe(null, outcome)}");
+        ParaViewProcessOutcome outcome;
+        ParaViewRunnerStatus status;
+        try
+        {
+            (outcome, status) = await RunRunnerOnceAsync(pvpythonPath, arguments, workspace, openGlWindow, cancellationToken);
+        }
+        catch (InvalidOperationException error) when (ParaViewRenderingBackend.IsEglWindow(openGlWindow))
+        {
+            // Production lesson: a driver's EGL can pass the probe and still segfault real tasks.
+            // One failed subprocess demotes this node to software for the rest of the process
+            // lifetime and the task retries locally — the job never sees the crash.
+            m_logger.LogWarning("ParaView.RenderFrame: the EGL runner failed ({Message}); demoting this node to OSMesa and retrying the task", error.Message);
+            ParaViewRenderingBackend.Demote(pvpythonPath, m_logger);
+            (outcome, status) = await RunRunnerOnceAsync(pvpythonPath, arguments, workspace, ParaViewRunnerEnvironment.OSMESA_WINDOW, cancellationToken);
+        }
 
         // The allowlist, the compatibility policy and the result provenance are tied to the pinned
         // runtime series; the runtime that actually ran is known only here.
@@ -137,6 +133,47 @@ public sealed class ParaViewTaskExecutor
             RenderSeconds = outcome.ElapsedSeconds,
             Diagnostics = Truncate($"stage={status.Stage}; backend={status.Backend}; proxies={status.ProxyCount}; render={status.RenderSeconds:F2}s", ParaViewInputLimits.MAX_DIAGNOSTICS_CHARS)
         };
+    }
+
+    /// <summary>
+    /// One runner invocation with the given window class: build the environment, run, and validate
+    /// exit code and status document. Throws on every failure path.
+    /// </summary>
+    /// <param name="pvpythonPath">Resolved pvpython executable.</param>
+    /// <param name="arguments">Runner arguments.</param>
+    /// <param name="workspace">Task workspace.</param>
+    /// <param name="openGlWindow">Window class to request or null for the platform default.</param>
+    /// <param name="cancellationToken">Kills the runner process tree when signaled.</param>
+    /// <returns>The outcome and the parsed status document.</returns>
+    private async Task<(ParaViewProcessOutcome Outcome, ParaViewRunnerStatus Status)> RunRunnerOnceAsync(
+        string pvpythonPath,
+        IReadOnlyList<string> arguments,
+        ParaViewTaskWorkspace workspace,
+        string? openGlWindow,
+        CancellationToken cancellationToken)
+    {
+        var environment = ParaViewRunnerEnvironment.Build(
+            pvpythonPath, workspace.HomeDirectory, workspace.TempDirectory, openGlWindow);
+
+        var outcome = await ParaViewProcessRunner.RunAsync(
+            pvpythonPath, arguments, workspace.PackageRoot, environment, ParaViewInputLimits.TASK_WALL_CLOCK_LIMIT, m_logger, cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var status = ParaViewRunnerStatus.TryRead(workspace.StatusFilePath);
+        if (outcome.TimedOut)
+            throw new InvalidOperationException($"ParaView.RenderFrame: the runner exceeded its {ParaViewInputLimits.TASK_WALL_CLOCK_LIMIT.TotalMinutes:0}-minute wall-clock limit and was terminated.{Describe(status, outcome)}");
+
+        if (outcome.ExitCode != 0)
+            throw new InvalidOperationException($"ParaView.RenderFrame: the runner exited with code {outcome.ExitCode}.{Describe(status, outcome)}");
+
+        if (status == null)
+            throw new InvalidOperationException($"ParaView.RenderFrame: the runner exited successfully but wrote no status document.{Describe(null, outcome)}");
+
+        if (!status.Ok)
+            throw new InvalidOperationException($"ParaView.RenderFrame: the runner reported a failure at stage '{status.Stage}': {status.Error}{Describe(null, outcome)}");
+
+        return (outcome, status);
     }
 
     /// <summary>
