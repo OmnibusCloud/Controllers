@@ -7,11 +7,13 @@ namespace OutWit.Controller.Visualization.ParaView.Runtime;
 
 /// <summary>
 /// The node benchmark of <c>ParaView.RenderFrame</c>: one pvpython process builds a procedural
-/// Wavelet scene (contours, clip, slice — a representative isosurface workload), renders frames to
-/// PNG at a fixed size while rotating the camera, and reports frames and render-only seconds. The
-/// rate is output pixels per second — the unit the activity's work estimate (pixels + bytes / 64) is
-/// expressed in — so the grid allocator can weigh a fast workstation against a small VM instead of
-/// treating every node as rate 1.0.
+/// Wavelet scene (contours, clip, slice — a representative isosurface workload) and renders frames
+/// to PNG at a fixed size, re-executing the contour pipeline on every frame (one isosurface value
+/// alternates between two fixed levels) exactly as a real task pays for its pipeline in every
+/// process — without that, VTK's filter caching leaves only rasterization + readback in the loop and
+/// a 32-core node measures nearly the same as a 2-core one. The rate is output pixels per second —
+/// the unit the activity's work estimate (pixels + bytes / 64) is expressed in — so the grid
+/// allocator can weigh a fast workstation against a small VM instead of treating every node as 1.0.
 /// </summary>
 public static class ParaViewBenchmark
 {
@@ -20,8 +22,8 @@ public static class ParaViewBenchmark
     /// <summary>Rate unit: output pixels per second of the procedural benchmark scene.</summary>
     public const string UNIT = "paraview-pixels@v1";
 
-    /// <summary>Identifies the procedural scene the rate was measured on.</summary>
-    public const string DATASET_ID = "paraview-benchmark-wavelet@v1";
+    /// <summary>Identifies the measurement procedure; v2 re-executes the pipeline every frame (v1 rates are not comparable).</summary>
+    public const string DATASET_ID = "paraview-benchmark-wavelet@v2";
 
     /// <summary>Embedded resource name of the benchmark runner.</summary>
     public const string RUNNER_RESOURCE = "runner/benchmark_frames.py";

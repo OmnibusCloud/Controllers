@@ -5,7 +5,7 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>ParaView</ControllerName>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <Description>Headless scientific visualization: safely executes OmnibusCloud ParaView packages (a saved .pvsm state plus content-addressed data attachments) and distributes independent rendering tasks across worker nodes. ParaView.Validate treats the state as untrusted input (hardened XML parsing, proxy allowlist, programmable-pipeline rejection, logical-path and plugin-requirement checks, size and resolution limits); ParaView.Split produces deterministic tasks per timestep, each carrying only the attachments its timestep needs (per-task attachment subsetting); ParaView.RenderFrame materializes a task's subset into an isolated package root and renders one output through the controller-owned pvpython runner on the software-rendering baseline; ParaView.Collect returns the ordered frame set. The ParaView runtime ships as per-platform Tier-2 assets, never inside the package.</Description>
     <PackageTags>paraview;vtk;visualization;scientific-visualization;headless;osmesa;distributed-rendering;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>scientific-visualization;paraview-validate;paraview-split;paraview-render-frame;paraview-collect;paraview-collect-still;per-task-attachment-subsetting;software-rendering-baseline</ControllerFeatures>

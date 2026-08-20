@@ -6,12 +6,18 @@
 Builds a procedural scene in-process (no package, no network): a Wavelet of the requested extent
 contoured at several values, clipped and sliced, coloured by the scalar — a representative
 isosurface + geometry workload — then renders frames to PNG at the requested size while rotating the
-camera, exactly like a render task does (SaveScreenshot included, so image readback and encoding are
-part of the measurement). The first frame(s) are warm-up (pipeline execution, GL context); the timed
-loop runs until the target seconds elapse or the frame cap is reached. The status document carries
-frames, render seconds, the render window class (vtkOSOpenGLRenderWindow = software), the ParaView
-version and the scene size; the controller turns it into pixels/second, the unit its work estimate
-(ParaView.RenderFrame: pixels + bytes/64) is expressed in, so the grid allocator can weigh nodes.
+camera. Every frame ALSO re-executes the contour+clip pipeline (one isosurface value alternates
+between two fixed levels), because that is what a real render task pays in every process: without it
+VTK caches the filters after the first frame and the loop times only rasterization + readback + PNG
+encoding, which barely separates a 32-core node from a 2-core one (measured 48 vs 62 ms/frame; with
+re-execution 95 vs 212 ms — the true hardware ratio). SaveScreenshot is included, so image readback
+and encoding are part of the measurement, exactly like a task. The first frame(s) are warm-up
+(initial pipeline execution, GL context); the timed loop runs until the target seconds elapse or the
+frame cap is reached. Determinism: the scene, camera step and the two alternating isosurface sets are
+fixed, so every node times the same frames. The status document carries frames, render seconds, the
+render window class (vtkOSOpenGLRenderWindow = software), the ParaView version and the scene size;
+the controller turns it into pixels/second, the unit its work estimate (ParaView.RenderFrame:
+pixels + bytes/64) is expressed in, so the grid allocator can weigh nodes.
 
 Exit codes: 0 ok, 1 failure (status.json says why), 2 usage.
 """
@@ -68,10 +74,18 @@ def paraview_version(simple):
         return ""
 
 
+BASE_ISOSURFACES = [120.0, 157.0, 200.0, 240.0]
+
+# The first level alternates between base and base+ISO_STEP so every frame invalidates the contour
+# (and the clip downstream) and the pipeline genuinely re-executes — a fixed, hardware-independent
+# cycle of two near-identical workloads.
+ISO_STEP = 1.0
+
+
 def build_scene(simple, extent, width, height):
     wavelet = simple.Wavelet()
     wavelet.WholeExtent = [-extent, extent, -extent, extent, -extent, extent]
-    contour = simple.Contour(Input=wavelet, ContourBy=["POINTS", "RTData"], Isosurfaces=[120.0, 157.0, 200.0, 240.0])
+    contour = simple.Contour(Input=wavelet, ContourBy=["POINTS", "RTData"], Isosurfaces=list(BASE_ISOSURFACES))
     clip = simple.Clip(Input=contour)
     clip.ClipType = "Plane"
     clip.ClipType.Normal = [1.0, 0.3, 0.0]
@@ -88,7 +102,7 @@ def build_scene(simple, extent, width, height):
     simple.ColorBy(slice_display, ("POINTS", "RTData"))
     simple.Show(wavelet, view).SetRepresentationType("Outline")
     simple.ResetCamera(view)
-    return view, wavelet
+    return view, wavelet, contour
 
 
 def main(argv):
@@ -111,28 +125,33 @@ def main(argv):
         status["paraview_version"] = paraview_version(simple)
 
         status["stage"] = "build"
-        view, wavelet = build_scene(simple, task["extent"], task["width"], task["height"])
+        view, wavelet, contour = build_scene(simple, task["extent"], task["width"], task["height"])
         status["points"] = int(wavelet.GetDataInformation().GetNumberOfPoints())
 
         os.makedirs(task["output_dir"], exist_ok=True)
         output = os.path.join(task["output_dir"], "benchmark_frame.png")
         camera = view.GetActiveCamera()
+        frame_counter = [0]
 
-        def render_frame(index):
+        def render_frame():
+            # Flip the first isosurface every call: the counter starts the alternation at +ISO_STEP,
+            # so the very first frame already differs from the build value and re-executes too.
+            frame_counter[0] += 1
+            contour.Isosurfaces = [BASE_ISOSURFACES[0] + (frame_counter[0] % 2) * ISO_STEP] + BASE_ISOSURFACES[1:]
             camera.Azimuth(360.0 / 24.0)
             simple.Render(view)
             simple.SaveScreenshot(output, view, ImageResolution=[task["width"], task["height"]])
 
         status["stage"] = "warmup"
-        for index in range(max(0, task["warmup_frames"])):
-            render_frame(index)
+        for _ in range(max(0, task["warmup_frames"])):
+            render_frame()
         status["render_window"] = view.GetRenderWindow().GetClassName()
 
         status["stage"] = "measure"
         frames = 0
         started = time.perf_counter()
         while frames < task["max_frames"]:
-            render_frame(frames)
+            render_frame()
             frames += 1
             if time.perf_counter() - started >= task["target_seconds"]:
                 break

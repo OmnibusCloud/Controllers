@@ -26,17 +26,26 @@ test harness, the per-platform ParaView runtime assets (`paraview-v0.1.0`) and t
 `ParaView.RenderFrame` is the only distributed activity, so it is the only one with a measured node
 benchmark (`Runtime/ParaViewBenchmark` + the embedded `Runner/benchmark_frames.py`). At startup every
 worker runs the engine's benchmark pass: one pvpython process builds a procedural Wavelet scene
-(61³ points contoured at four values, clipped and sliced) and renders 512×512 PNG frames while rotating
-the camera — `SaveScreenshot` included, so readback and encoding count — for `MinDuration` seconds
-(default 1.5 s from the engine, 3 s fallback, at most 120 frames, 1 warm-up frame). The result is
-`paraview-pixels@v1`: **output pixels per second**, with `render-window`/`render-device`
-(`vtkOSOpenGLRenderWindow` = software), `render-frames`, `render-seconds`, `paraview-version` and
-`scene-points` in `Custom`. A node without a usable runtime reports rate 0.
+(61³ points contoured at four values, clipped and sliced) and renders 512×512 PNG frames while
+rotating the camera. **Every frame re-executes the contour+clip pipeline** (one isosurface value
+alternates between two fixed levels) — the cost a real task pays in every process; without it VTK's
+filter caching leaves only rasterization + readback in the loop and a 32-core node measures nearly
+the same as a 2-core one. `SaveScreenshot` is included, so readback and encoding count. The timed loop
+runs `MinDuration` seconds (default 1.5 s from the engine, 3 s fallback, at most 120 frames, 1 warm-up
+frame); the whole process is ~5–6 s and is killed at 5 minutes. The result is `paraview-pixels@v1`:
+**output pixels per second** on dataset `paraview-benchmark-wavelet@v2`, with
+`render-window`/`render-device` (`vtkOSOpenGLRenderWindow` = software), `render-frames`,
+`render-seconds`, `paraview-version` and `scene-points` in `Custom`. A node without a usable runtime
+reports rate 0.
 
-The work estimate of a task is expressed in the same unit — `pixels + materializedBytes / 64` — so the
-Grid allocator (`WitGridTaskAllocator`: longest-processing-time first, rate-weighted, fewer nodes when
-the makespan does not suffer) hands a GPU workstation proportionally more frames than a software-GL VM.
-Measured: ~11 M px/s on a Windows GPU workstation, ~5.4 M px/s under OSMesa in a 32-core container.
+Determinism: the scene, the camera step and the two alternating isosurface sets are fixed, so every
+node times the same frames (per-frame spread across a full rotation measured within ±10%; the two
+isosurface sets differ by under 1% of workload). The work estimate of a task is expressed in the same
+unit — `pixels + materializedBytes / 64` — so the Grid allocator (`WitGridTaskAllocator`:
+longest-processing-time first, rate-weighted, fewer nodes when the makespan does not suffer) hands a
+GPU workstation proportionally more frames than a software-GL VM. Measured (v2): 5.1 M px/s on a
+Windows GPU workstation, 3.3 M px/s under OSMesa with 32 cores, 1.3 M px/s under OSMesa throttled to
+2 cores — a 3.9 : 2.5 : 1 spread where the cached-pipeline v1 loop saw only 2.6 : 1.3 : 1.
 
 ## Bundled scripts (`OutWit.Controller.Visualization.ParaView.Scripts`)
 
