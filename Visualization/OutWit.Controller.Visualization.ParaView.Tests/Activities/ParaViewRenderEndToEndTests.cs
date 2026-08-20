@@ -218,12 +218,13 @@ public sealed class ParaViewRenderEndToEndTests
     }
 
     [Test]
-    public async Task NodeBenchmarkOfRenderFrameMeasuresPixelsPerSecondTest()
+    public async Task NodeBenchmarkOfRenderFrameMeasuresFullTaskCyclesTest()
     {
         // The engine's per-activity benchmark pass (what every worker runs at startup) must reach the
         // controller's own measurement — not the base adapter's rate-1.0 placeholder that would make the
-        // grid allocator treat every node as equal.
-        var options = new WitBenchmarkOptions { MinDuration = TimeSpan.FromSeconds(1), WarmupIterations = 1 };
+        // grid allocator treat every node as equal. Every iteration is a complete task cycle (a fresh
+        // process per frame), so the rate reflects what this node achieves on real tasks.
+        var options = new WitBenchmarkOptions { MinDuration = TimeSpan.FromMilliseconds(1), WarmupIterations = 1 };
 
         var result = await WitEngineNodeSdk.Instance.RunBenchmark("ParaView.RenderFrame", options);
 
@@ -231,10 +232,11 @@ public sealed class ParaViewRenderEndToEndTests
         {
             Assert.That(result.Unit, Is.EqualTo(ParaViewBenchmark.UNIT));
             Assert.That(result.DatasetId, Is.EqualTo(ParaViewBenchmark.DATASET_ID));
-            Assert.That(result.Iterations, Is.EqualTo(50), "the fake renders 20 ms/frame: 1 s → 50 frames");
-            Assert.That(result.Rate, Is.EqualTo(50 * (double)ParaViewBenchmark.RESOLUTION * ParaViewBenchmark.RESOLUTION / 1.0).Within(1e-3));
-            Assert.That(result.Elapsed, Is.EqualTo(TimeSpan.FromSeconds(1)).Within(TimeSpan.FromMilliseconds(1)));
+            Assert.That(result.Iterations, Is.EqualTo(ParaViewBenchmark.MIN_CYCLES), "a tiny target still measures the minimum cycles");
+            Assert.That(result.Rate, Is.GreaterThan(0));
+            Assert.That(result.Elapsed, Is.GreaterThan(TimeSpan.Zero));
             Assert.That(result.Custom?[ParaViewBenchmark.CUSTOM_RENDER_WINDOW], Is.EqualTo("FakeOffscreenWindow"));
+            Assert.That(result.Custom?[ParaViewBenchmark.CUSTOM_CYCLES], Is.EqualTo(ParaViewBenchmark.MIN_CYCLES.ToString()));
         });
     }
 

@@ -5,13 +5,15 @@ namespace OutWit.Controller.Visualization.ParaView.Tests.FakePvpython;
 /// <summary>
 /// The fake's benchmark mode: selected when the script passed before <c>--task-file</c> is
 /// <c>benchmark_frames.py</c>. Reads the benchmark task document, writes one frame into
-/// <c>output_dir</c>, and reports a deterministic status: <c>frames = min(max_frames, target_seconds / 0.02)</c>
-/// rendered at a simulated 20 ms per frame, so the rate the controller derives is known in advance.
+/// <c>output_dir</c>, and reports a deterministic status: <c>frames = max(1, min(max_frames,
+/// target_seconds / 0.02))</c> at a simulated 20 ms per frame — one frame per process in the
+/// controller's cycle mode.
 ///
-/// Failure modes ride on <c>warmup_frames</c> (the benchmark has no state file to carry markers):
-///   1001 — fails at the build stage (status ok=false, exit 3);
-///   1002 — renders, exits 0, writes no status;
-///   1003 — hangs like a wedged runner (the cancellation gates must kill the tree);
+/// Failure modes ride on markers in the <c>output_dir</c> PATH (tests control the temp-storage root;
+/// the benchmark has no state file to carry state markers):
+///   fake-fail      — fails at the build stage (status ok=false, exit 3);
+///   fake-nostatus  — renders, exits 0, writes no status;
+///   fake-hang      — hangs like a wedged runner (the cancellation gates must kill the tree);
 ///   anything else is a normal run.
 /// </summary>
 internal static class FakeBenchmark
@@ -20,11 +22,11 @@ internal static class FakeBenchmark
 
     public const string SCRIPT_NAME = "benchmark_frames.py";
 
-    public const int MODE_FAIL = 1001;
+    public const string MODE_FAIL = "fake-fail";
 
-    public const int MODE_NO_STATUS = 1002;
+    public const string MODE_NO_STATUS = "fake-nostatus";
 
-    public const int MODE_HANG = 1003;
+    public const string MODE_HANG = "fake-hang";
 
     public const double SIMULATED_SECONDS_PER_FRAME = 0.02;
 
@@ -46,7 +48,6 @@ internal static class FakeBenchmark
         var outputDir = Str("output_dir");
         var width = Int("width", 512);
         var height = Int("height", 512);
-        var warmup = Int("warmup_frames", 1);
         var target = Dbl("target_seconds", 3.0);
         var maxFrames = Int("max_frames", 120);
 
@@ -79,7 +80,7 @@ internal static class FakeBenchmark
             return 3;
         }
 
-        if (warmup == MODE_FAIL)
+        if (outputDir.Contains(MODE_FAIL, StringComparison.OrdinalIgnoreCase))
         {
             status["stage"] = "build";
             status["error"] = "fake benchmark failure requested";
@@ -88,7 +89,7 @@ internal static class FakeBenchmark
             return 3;
         }
 
-        if (warmup == MODE_HANG)
+        if (outputDir.Contains(MODE_HANG, StringComparison.OrdinalIgnoreCase))
         {
             status["stage"] = "measure";
             WriteStatus();
@@ -106,7 +107,7 @@ internal static class FakeBenchmark
         status["render_seconds"] = frames * SIMULATED_SECONDS_PER_FRAME;
         status["output_bytes"] = new FileInfo(Path.Combine(outputDir, "benchmark_frame.png")).Length;
 
-        if (warmup == MODE_NO_STATUS)
+        if (outputDir.Contains(MODE_NO_STATUS, StringComparison.OrdinalIgnoreCase))
             return 0;
 
         WriteStatus();
