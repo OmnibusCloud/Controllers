@@ -21,6 +21,19 @@ test harness, the per-platform ParaView runtime assets (`paraview-v0.1.0`) and t
 | `ParaView.Collect(rendered, options)` → `BlobCollection` | host | Restores task order, fails on missing/duplicate/conflicting identities. |
 | `ParaView.CollectStill(rendered, options)` → `Blob` | host | Exactly one result → one image blob. |
 
+## Rendering backend (GPU/EGL on Linux)
+
+Windows and macOS render through pvpython's platform default (hardware OpenGL where a driver exists).
+On headless Linux the runner historically pinned OSMesa (bundled software GL, works on any node); the
+bundled runtime also carries `vtkEGLRenderWindow`, so `ParaViewRenderingBackend` probes ONCE per node
+process: a trivial render with `VTK_DEFAULT_OPENGL_WINDOW=vtkEGLRenderWindow` must come back with an
+EGL window AND a real hardware OpenGL renderer string (Mesa's EGL silently lands on llvmpipe — a
+GPU-looking window over a software rasterizer is rejected). Any crash or software verdict falls back
+to the certified OSMesa path, so no node is ever excluded. Tasks and the benchmark share the decision,
+so the measured rate always reflects the backend tasks actually use. Operations override:
+`OUTWIT_PVPYTHON_OPENGL_WINDOW=<window class>` pins the choice and skips probing. A Linux node wanting
+GPU rendering needs the driver's EGL stack (GLVND `libegl1` + the vendor library the driver installs).
+
 ## Node benchmark and work distribution
 
 `ParaView.RenderFrame` is the only distributed activity, so it is the only one with a measured node

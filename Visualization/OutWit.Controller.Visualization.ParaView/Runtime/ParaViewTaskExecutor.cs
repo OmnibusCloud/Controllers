@@ -85,8 +85,9 @@ public sealed class ParaViewTaskExecutor
         await File.WriteAllTextAsync(workspace.TaskFilePath, runnerTask.ToJson(), cancellationToken);
 
         var arguments = BuildArguments(runnerPath, workspace.TaskFilePath);
+        var openGlWindow = await ParaViewRenderingBackend.ResolveWindowAsync(pvpythonPath, m_tempStorage, m_logger, cancellationToken);
         var environment = ParaViewRunnerEnvironment.Build(
-            pvpythonPath, workspace.HomeDirectory, workspace.TempDirectory, ParaViewRunnerEnvironment.ForceSoftwareRenderingByDefault());
+            pvpythonPath, workspace.HomeDirectory, workspace.TempDirectory, openGlWindow);
 
         var outcome = await ParaViewProcessRunner.RunAsync(
             pvpythonPath, arguments, workspace.PackageRoot, environment, ParaViewInputLimits.TASK_WALL_CLOCK_LIMIT, m_logger, cancellationToken);

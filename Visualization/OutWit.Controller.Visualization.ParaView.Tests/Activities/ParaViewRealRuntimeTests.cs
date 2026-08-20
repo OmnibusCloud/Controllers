@@ -339,7 +339,7 @@ public sealed class ParaViewRealRuntimeTests
         var temp = Path.Combine(m_root, "kill-tmp");
         Directory.CreateDirectory(home);
         Directory.CreateDirectory(temp);
-        var environment = ParaViewRunnerEnvironment.Build(m_pvpython, home, temp, ParaViewRunnerEnvironment.ForceSoftwareRenderingByDefault());
+        var environment = ParaViewRunnerEnvironment.Build(m_pvpython, home, temp, OperatingSystem.IsLinux() ? ParaViewRunnerEnvironment.OSMESA_WINDOW : null);
         var marker = $"outwit_kill_marker_{Guid.NewGuid():N}";
         var script = Path.Combine(m_root, $"{marker}.py");
         File.WriteAllText(script, "import time\nprint('sleeping', flush=True)\ntime.sleep(120)\n");

@@ -80,7 +80,7 @@ public sealed class ParaViewProcessRunnerTests
             m_fakePvpython,
             ParaViewTaskExecutor.BuildArguments(runnerPath, taskFile),
             Path.Combine(m_root, "package"),
-            ParaViewRunnerEnvironment.Build(m_fakePvpython, m_root, m_root, false),
+            ParaViewRunnerEnvironment.Build(m_fakePvpython, m_root, m_root, null),
             TimeSpan.FromSeconds(2),
             NullLogger.Instance,
             CancellationToken.None);
@@ -94,7 +94,7 @@ public sealed class ParaViewProcessRunnerTests
     {
         var outcome = await ParaViewProcessRunner.RunAsync(
             m_fakePvpython, ["--no-such"], m_root,
-            ParaViewRunnerEnvironment.Build(m_fakePvpython, m_root, m_root, false),
+            ParaViewRunnerEnvironment.Build(m_fakePvpython, m_root, m_root, null),
             TimeSpan.FromSeconds(30), NullLogger.Instance, CancellationToken.None);
 
         Assert.That(outcome.ExitCode, Is.EqualTo(2));

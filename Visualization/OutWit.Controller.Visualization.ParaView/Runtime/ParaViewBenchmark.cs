@@ -115,8 +115,9 @@ public static class ParaViewBenchmark
         await File.WriteAllTextAsync(taskFilePath, BuildTaskJson(workspace.OutputDirectory, statusFilePath), cancellationToken);
 
         var arguments = BuildArguments(runnerPath, taskFilePath);
+        var openGlWindow = await ParaViewRenderingBackend.ResolveWindowAsync(pvpythonPath, tempStorage, logger, cancellationToken);
         var environment = ParaViewRunnerEnvironment.Build(
-            pvpythonPath, workspace.HomeDirectory, workspace.TempDirectory, ParaViewRunnerEnvironment.ForceSoftwareRenderingByDefault());
+            pvpythonPath, workspace.HomeDirectory, workspace.TempDirectory, openGlWindow);
 
         for (var index = 0; index < warmupCycles; index++)
             await RunCycleAsync(pvpythonPath, arguments, workspace, environment, statusFilePath, logger, cancellationToken);

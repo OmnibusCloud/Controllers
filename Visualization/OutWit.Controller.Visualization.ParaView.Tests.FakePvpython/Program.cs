@@ -17,6 +17,7 @@
 //   anything else      renders a solid image of the requested size.
 //
 // When the script is benchmark_frames.py the fake runs its benchmark mode instead (see FakeBenchmark).
+// When the script is gpu_probe.py the fake runs its GPU-probe mode (see FakeGpuProbe).
 
 using System.Text.Json;
 using System.Xml.Linq;
@@ -27,6 +28,10 @@ if (args.Length == 1 && args[0] == "--version")
     Console.WriteLine("paraview version 6.1.1");
     return 0;
 }
+
+var probeScript = args.FirstOrDefault(arg => arg.EndsWith(".py", StringComparison.OrdinalIgnoreCase) && Path.GetFileName(arg).Equals(FakeGpuProbe.SCRIPT_NAME, StringComparison.OrdinalIgnoreCase));
+if (probeScript != null)
+    return FakeGpuProbe.Run(args);
 
 var taskFileIndex = Array.IndexOf(args, "--task-file");
 if (taskFileIndex < 0 || taskFileIndex + 1 >= args.Length)

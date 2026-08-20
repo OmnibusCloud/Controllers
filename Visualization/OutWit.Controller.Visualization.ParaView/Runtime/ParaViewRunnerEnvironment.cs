@@ -45,13 +45,13 @@ public static class ParaViewRunnerEnvironment
     /// <param name="pvpythonPath">Resolved pvpython path (its directory joins PATH).</param>
     /// <param name="homeDirectory">Task-private home directory.</param>
     /// <param name="tempDirectory">Task-private temp directory.</param>
-    /// <param name="forceSoftwareRendering">Select the OSMesa backend through VTK's variable (Linux).</param>
+    /// <param name="openGlWindow">VTK window class to request via <c>VTK_DEFAULT_OPENGL_WINDOW</c> (see <see cref="ParaViewRenderingBackend"/>), or null for pvpython's platform default.</param>
     /// <returns>Variable name → value.</returns>
     public static IReadOnlyDictionary<string, string> Build(
         string pvpythonPath,
         string homeDirectory,
         string tempDirectory,
-        bool forceSoftwareRendering)
+        string? openGlWindow)
     {
         var environment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var binDirectory = Path.GetDirectoryName(pvpythonPath) ?? string.Empty;
@@ -92,22 +92,12 @@ public static class ParaViewRunnerEnvironment
         environment["PYTHONIOENCODING"] = "utf-8";
         environment["PYTHONUTF8"] = "1";
 
-        if (forceSoftwareRendering)
-            environment[VTK_DEFAULT_OPENGL_WINDOW] = OSMESA_WINDOW;
+        if (!string.IsNullOrWhiteSpace(openGlWindow))
+            environment[VTK_DEFAULT_OPENGL_WINDOW] = openGlWindow;
 
         return environment;
     }
 
-    /// <summary>
-    /// The software-rendering baseline applies on Linux (OSMesa is the certified path). Windows and
-    /// macOS run pvpython's offscreen path on the platform's own OpenGL window until their runtime
-    /// assets are certified by the platform-completion milestone.
-    /// </summary>
-    /// <returns>True when VTK_DEFAULT_OPENGL_WINDOW should select OSMesa.</returns>
-    public static bool ForceSoftwareRenderingByDefault()
-    {
-        return RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
-    }
 
     #endregion
 }

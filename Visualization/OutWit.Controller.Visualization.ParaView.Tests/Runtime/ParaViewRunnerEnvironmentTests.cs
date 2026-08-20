@@ -47,7 +47,7 @@ public sealed class ParaViewRunnerEnvironmentTests
             var home = Path.Combine(m_dir, "home");
             var temp = Path.Combine(m_dir, "tmp");
             var pvpython = Path.Combine(m_dir, "rt", "bin", "pvpython");
-            var environment = ParaViewRunnerEnvironment.Build(pvpython, home, temp, forceSoftwareRendering: true);
+            var environment = ParaViewRunnerEnvironment.Build(pvpython, home, temp, ParaViewRunnerEnvironment.OSMESA_WINDOW);
 
             Assert.Multiple(() =>
             {
@@ -74,7 +74,7 @@ public sealed class ParaViewRunnerEnvironmentTests
                 }
             });
 
-            var withoutSoftware = ParaViewRunnerEnvironment.Build(pvpython, home, temp, forceSoftwareRendering: false);
+            var withoutSoftware = ParaViewRunnerEnvironment.Build(pvpython, home, temp, openGlWindow: null);
             Assert.That(withoutSoftware.Keys, Does.Not.Contain(ParaViewRunnerEnvironment.VTK_DEFAULT_OPENGL_WINDOW));
         }
         finally
