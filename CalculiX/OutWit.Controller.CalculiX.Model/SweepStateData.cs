@@ -19,6 +19,12 @@ namespace OutWit.Controller.CalculiX.Model;
 // Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).
 public sealed partial class SweepStateData : ModelBase
 {
+    #region Fields
+
+    private List<SweepResultIndexEntryData>? m_results;
+
+    #endregion
+
     #region Model Base
 
     public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
@@ -79,10 +85,17 @@ public sealed partial class SweepStateData : ModelBase
     /// <summary>
     /// Per-variant result index of everything harvested so far, sorted by
     /// variant — the document-client view of the manifest (appended in the
-    /// same harvest that uploads the blob).
+    /// same harvest that uploads the blob). Null-safe on read: a payload
+    /// written before this member existed (Sweep 0.1.x) deserializes with
+    /// the member absent, and every reader — Is, Clone, the server's door —
+    /// must see an empty index, never a null.
     /// </summary>
     [MemoryPackOrder(5)]
-    public List<SweepResultIndexEntryData> Results { get; set; } = [];
+    public List<SweepResultIndexEntryData> Results
+    {
+        get => m_results ??= [];
+        set => m_results = value;
+    }
 
     #endregion
 }

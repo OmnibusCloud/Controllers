@@ -5,7 +5,7 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>CalculiX</ControllerName>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <Description>Shared data types of the CalculiX solve and Sweep orchestration controllers: the per-variant solve task and result, the response-extraction request, and the sweep plan / state / manifest that carry a parameter study through chunked distributed execution. The sweep state and its result index publish a document vocabulary (sweep.state@1) for non-.NET initiators.</Description>
     <PackageTags>calculix;ccx;fem;sweep;parameter-study;witengine;witcloud;controller;data-types</PackageTags>
   </PropertyGroup>
