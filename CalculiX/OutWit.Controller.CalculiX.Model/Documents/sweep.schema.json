@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:omnibuscloud:documents:sweep",
+  "title": "OmnibusCloud job document vocabulary: sweep",
+  "description": "Published document types of one controller component. Each $defs entry keyed by a type id (<component>.<name>@<major>) is the value shape carried by a job request parameter of kind \"document\" and by the value document of a job variable; each entry keyed by a plain name is an enum referenced by those shapes. Wire convention: camelCase properties, enum member names as strings, null properties omitted.",
+  "x-oc-vocabulary": {
+    "schemaVersion": 1,
+    "component": "sweep",
+    "types": [
+      "sweep.resultIndexEntry@1",
+      "sweep.state@1"
+    ],
+    "source": {
+      "assembly": "OutWit.Controller.CalculiX.Model",
+      "version": "0.2.0"
+    },
+    "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
+  },
+  "$defs": {
+    "sweep.resultIndexEntry@1": {
+      "type": "object",
+      "title": "SweepResultIndexEntry",
+      "x-oc-type-id": "sweep.resultIndexEntry@1",
+      "x-oc-binding-name": "SweepResultIndexEntry",
+      "x-oc-clr": "OutWit.Controller.CalculiX.Model.SweepResultIndexEntryData, OutWit.Controller.CalculiX.Model",
+      "properties": {
+        "variantIndex": {
+          "x-oc-clr-name": "VariantIndex",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "succeeded": {
+          "x-oc-clr-name": "Succeeded",
+          "type": "boolean"
+        },
+        "frdBlobId": {
+          "x-oc-clr-name": "FrdBlobId",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        }
+      }
+    },
+    "sweep.state@1": {
+      "type": "object",
+      "title": "SweepState",
+      "x-oc-type-id": "sweep.state@1",
+      "x-oc-binding-name": "SweepState",
+      "x-oc-clr": "OutWit.Controller.CalculiX.Model.SweepStateData, OutWit.Controller.CalculiX.Model",
+      "properties": {
+        "chunkIndex": {
+          "x-oc-clr-name": "ChunkIndex",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "nextVariantOrdinal": {
+          "x-oc-clr-name": "NextVariantOrdinal",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "completedCount": {
+          "x-oc-clr-name": "CompletedCount",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "failedCount": {
+          "x-oc-clr-name": "FailedCount",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "manifestBlobId": {
+          "x-oc-clr-name": "ManifestBlobId",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "results": {
+          "x-oc-clr-name": "Results",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sweep.resultIndexEntry@1"
+          }
+        }
+      }
+    }
+  }
+}

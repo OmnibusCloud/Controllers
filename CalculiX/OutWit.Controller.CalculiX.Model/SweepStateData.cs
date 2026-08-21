@@ -1,16 +1,21 @@
 using MemoryPack;
+using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
+using OutWit.Common.Collections;
 using OutWit.Common.Values;
 
 namespace OutWit.Controller.CalculiX.Model;
 
 /// <summary>
 /// The sweep's cursor, reassigned once per chunk: which chunk comes next,
-/// running totals, and the blob id of the manifest holding everything
-/// harvested so far. Small by design — a monitoring client polls this
-/// variable and downloads the manifest blob it points at.
+/// running totals, the blob id of the manifest holding everything harvested
+/// so far, and the per-variant result index. Small by design — a monitoring
+/// client polls this variable; managed clients follow the manifest blob for
+/// the full rows, document clients (the door renders this type as
+/// <c>sweep.state@1</c>) read the index directly.
 /// </summary>
 [MemoryPackable]
+[JobDocumentContract("sweep.state@1")]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).
 public sealed partial class SweepStateData : ModelBase
 {
@@ -25,7 +30,8 @@ public sealed partial class SweepStateData : ModelBase
                && NextVariantOrdinal.Is(state.NextVariantOrdinal)
                && CompletedCount.Is(state.CompletedCount)
                && FailedCount.Is(state.FailedCount)
-               && ManifestBlobId.Is(state.ManifestBlobId);
+               && ManifestBlobId.Is(state.ManifestBlobId)
+               && Results.IsSequence(state.Results, tolerance);
     }
 
     public override SweepStateData Clone()
@@ -36,7 +42,8 @@ public sealed partial class SweepStateData : ModelBase
             NextVariantOrdinal = NextVariantOrdinal,
             CompletedCount = CompletedCount,
             FailedCount = FailedCount,
-            ManifestBlobId = ManifestBlobId
+            ManifestBlobId = ManifestBlobId,
+            Results = Results.Select(entry => entry.Clone()).ToList()
         };
     }
 
@@ -68,6 +75,14 @@ public sealed partial class SweepStateData : ModelBase
     /// <summary>Blob id of the latest harvested manifest; null before the first chunk lands.</summary>
     [MemoryPackOrder(4)]
     public Guid? ManifestBlobId { get; set; }
+
+    /// <summary>
+    /// Per-variant result index of everything harvested so far, sorted by
+    /// variant — the document-client view of the manifest (appended in the
+    /// same harvest that uploads the blob).
+    /// </summary>
+    [MemoryPackOrder(5)]
+    public List<SweepResultIndexEntryData> Results { get; set; } = [];
 
     #endregion
 }

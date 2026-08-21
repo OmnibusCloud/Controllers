@@ -153,6 +153,19 @@ public class SweepSolveSkeletonTests
         Assert.That(manifest, Is.Not.Null);
         Assert.That(manifest!.Rows.Select(row => row.VariantIndex), Is.EquivalentTo(Enumerable.Range(0, values.Length)));
 
+        // The document-client view: the state's result index mirrors the
+        // manifest, sorted by variant, with the same artifact ids.
+        Assert.That(state.Results.Select(entry => entry.VariantIndex),
+            Is.EqualTo(Enumerable.Range(0, values.Length)), "the index is cumulative and sorted");
+        Assert.That(state.Results.Single(entry => entry.VariantIndex == 3).Succeeded, Is.False);
+        Assert.That(state.Results.Single(entry => entry.VariantIndex == 3).FrdBlobId, Is.Null);
+        foreach (var entry in state.Results.Where(entry => entry.VariantIndex != 3))
+        {
+            var row = manifest.Rows.Single(candidate => candidate.VariantIndex == entry.VariantIndex);
+            Assert.That(entry.Succeeded, Is.True, $"variant #{entry.VariantIndex}");
+            Assert.That(entry.FrdBlobId, Is.EqualTo(row.FrdBlobId), $"variant #{entry.VariantIndex}");
+        }
+
         var failed = manifest.Rows.Single(row => row.VariantIndex == 3);
         Assert.That(failed.Succeeded, Is.False);
         Assert.That(failed.ExitCode, Is.EqualTo(201));

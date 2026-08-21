@@ -77,7 +77,19 @@ internal sealed class WitActivityAdapterSweepHarvest : WitActivityAdapterFunctio
             NextVariantOrdinal = state.NextVariantOrdinal + plan.ChunkSizes[state.ChunkIndex],
             CompletedCount = state.CompletedCount + results.Count(result => result.ExitCode == 0),
             FailedCount = state.FailedCount + results.Count(result => result.ExitCode != 0),
-            ManifestBlobId = manifestBlobId
+            ManifestBlobId = manifestBlobId,
+            // The document-client view of the manifest: the cumulative index
+            // rides the state variable, which the door renders as
+            // sweep.state@1 — the manifest blob itself stays MemoryPack.
+            Results = manifest.Rows
+                .OrderBy(row => row.VariantIndex)
+                .Select(row => new SweepResultIndexEntryData
+                {
+                    VariantIndex = row.VariantIndex,
+                    Succeeded = row.Succeeded,
+                    FrdBlobId = row.FrdBlobId
+                })
+                .ToList()
         };
 
         if (!pool.TrySetValue(activity.ReturnReference, advanced))

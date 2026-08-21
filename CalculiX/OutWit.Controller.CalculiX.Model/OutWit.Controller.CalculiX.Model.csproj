@@ -5,10 +5,16 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>CalculiX</ControllerName>
-    <Version>0.1.1</Version>
-    <Description>Shared data types of the CalculiX solve and Sweep orchestration controllers: the per-variant solve task and result, the response-extraction request, and the sweep plan / state / manifest that carry a parameter study through chunked distributed execution.</Description>
+    <Version>0.2.0</Version>
+    <Description>Shared data types of the CalculiX solve and Sweep orchestration controllers: the per-variant solve task and result, the response-extraction request, and the sweep plan / state / manifest that carry a parameter study through chunked distributed execution. The sweep state and its result index publish a document vocabulary (sweep.state@1) for non-.NET initiators.</Description>
     <PackageTags>calculix;ccx;fem;sweep;parameter-study;witengine;witcloud;controller;data-types</PackageTags>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Publishes the sweep.* document vocabulary (Documents/ committed; CI
+         runs the generator in check mode and fails on drift). -->
+    <PackageReference Include="OutWit.Cloud.Documents.Generator" Version="1.0.0" PrivateAssets="all" />
+  </ItemGroup>
 
   <Import Project="..\..\Build\OutWit.Controller.Model.targets" />
 

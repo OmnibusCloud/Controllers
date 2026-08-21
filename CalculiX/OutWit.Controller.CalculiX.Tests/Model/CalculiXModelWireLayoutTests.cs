@@ -18,9 +18,10 @@ namespace OutWit.Controller.CalculiX.Tests.Model;
 [TestFixture]
 public sealed class CalculiXModelWireLayoutTests
 {
-    // Field counts frozen 2026-08-04 (CalculiX.Model 0.1.1 — the deck-set
-    // append to SweepVariantData). Bump a count ONLY when appending at the
-    // end of that type, and only alongside a server-first rollout.
+    // Field counts frozen 2026-08-21 (CalculiX.Model 0.2.0 — the result-index
+    // append to SweepStateData for the sweep.state@1 document vocabulary).
+    // Bump a count ONLY when appending at the end of that type, and only
+    // alongside a server-first rollout.
     private static readonly IReadOnlyDictionary<Type, int> EXPECTED_FIELD_COUNTS = new Dictionary<Type, int>
     {
         [typeof(CcxExtractionRequestData)] = 1,
@@ -34,7 +35,8 @@ public sealed class CalculiXModelWireLayoutTests
         [typeof(SweepOptionsData)] = 8,
         [typeof(SweepParameterData)] = 2,
         [typeof(SweepPlanData)] = 3,
-        [typeof(SweepStateData)] = 5,
+        [typeof(SweepResultIndexEntryData)] = 3,
+        [typeof(SweepStateData)] = 6,
         [typeof(SweepVariantData)] = 5
     };
 
