@@ -22,9 +22,13 @@ the extraction request. Results return in completion order — consumers map by
 The module carries pinned **ccx 2.22** builds for `win-x64`, `linux-x64` and
 `osx-arm64` as controller data assets, produced and mirrored by
 [OmnibusCloud/CalculiX](https://github.com/OmnibusCloud/CalculiX). Nodes need
-no preinstalled software. CalculiX is GPL-2.0: the asset kit ships the license
-text and the written source offer, and the corresponding source is publicly
-mirrored in that repository's releases.
+no preinstalled software - the macOS kit carries the GCC runtime
+(libgfortran/libgomp/libquadmath/libgcc_s) beside `ccx`, referenced through
+`@loader_path`; `ccx-v2.22-1` had linked them by absolute Homebrew paths and
+every variant on the first Apple Silicon node died with "dyld: Library not
+loaded" (exit 134) - `ccx-v2.22-3`, controller 0.1.8. CalculiX is GPL-2.0: the
+asset kit ships the license text and the written source offer, and the
+corresponding source is publicly mirrored in that repository's releases.
 
 Determinism note: ccx with OpenMP is not bitwise-reproducible across thread
 counts, and the three platform builds add last-digit variation — results are

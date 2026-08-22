@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>CalculiX</ControllerName>
-    <Version>0.1.7</Version>
+    <Version>0.1.8</Version>
     <Description>Runs complete CalculiX (ccx) decks on compute nodes: each solve is one whole deck on one node — the unit of parameter-study throughput. Carries pinned ccx 2.22 builds for every supported node platform as controller assets, so nodes need no preinstalled software; responses are extracted from the result files right on the node.</Description>
     <PackageTags>calculix;ccx;fem;solver;simulation;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>ccx-solve</ControllerFeatures>
@@ -29,23 +29,23 @@
   <ItemGroup>
     <ControllerDataAsset Include="ccx-win-x64">
       <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/CalculiX/ccx-v2.22-1/ccx-win-x64.zip</Uri>
-      <Sha256>0551a313a4e165f7759e7bba0534aa88e41c91a7f56f0268adcc84f4c4f54a17</Sha256>
-      <Size>237061203</Size>
+      <Uri>gh-release://OmnibusCloud/CalculiX/ccx-v2.22-3/ccx-win-x64.zip</Uri>
+      <Sha256>714736c111b542a59890cac42ab5cb3ad513b4c03a4842144ed0461288e86449</Sha256>
+      <Size>237052816</Size>
       <ExtractTo>ccx/windows-x64/</ExtractTo>
     </ControllerDataAsset>
     <ControllerDataAsset Include="ccx-linux-x64">
       <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/CalculiX/ccx-v2.22-1/ccx-linux-x64.zip</Uri>
-      <Sha256>841de697ff1f5a912e664f0abea7b314e2f9108d082fd2ddc559683f3e2dd209</Sha256>
-      <Size>275922761</Size>
+      <Uri>gh-release://OmnibusCloud/CalculiX/ccx-v2.22-3/ccx-linux-x64.zip</Uri>
+      <Sha256>9f03f8841a4f10440cfe187e564a2eaae4b06b80acc004c46aa98f973ecf51ce</Sha256>
+      <Size>275923742</Size>
       <ExtractTo>ccx/linux-x64/</ExtractTo>
     </ControllerDataAsset>
     <ControllerDataAsset Include="ccx-macos-arm64">
       <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/CalculiX/ccx-v2.22-1/ccx-macos-arm64.zip</Uri>
-      <Sha256>241f036a5f47642bce4e68782638fd6f49b6e8ca5a8f336735268b75241511bc</Sha256>
-      <Size>2690218</Size>
+      <Uri>gh-release://OmnibusCloud/CalculiX/ccx-v2.22-3/ccx-macos-arm64.zip</Uri>
+      <Sha256>032c176bf3f2b090a35caaa0c7d457d49abe4371c16b03d1611dcb4b22b09ef1</Sha256>
+      <Size>3633974</Size>
       <ExtractTo>ccx/macos-arm64/</ExtractTo>
     </ControllerDataAsset>
   </ItemGroup>
