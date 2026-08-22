@@ -91,6 +91,34 @@ public static class ParaViewPackageDigest
     }
 
     /// <summary>
+    /// The task identity of a turntable output: the version-1 identity text extended with the orbit
+    /// position and azimuth, so two orbit frames of one timestep stay distinct and a turntable task
+    /// never collides with the plain task of the same timestep.
+    /// </summary>
+    /// <param name="packageDigest">Package digest.</param>
+    /// <param name="datasetId">Dataset identity component (empty in version 1).</param>
+    /// <param name="viewId">Resolved view registration name.</param>
+    /// <param name="timestepIndex">Timestep index.</param>
+    /// <param name="optionsDigest">Output options digest.</param>
+    /// <param name="orbitIndex">Position in the orbit.</param>
+    /// <param name="azimuthDegrees">Camera azimuth of the output.</param>
+    /// <returns>Lower-case hexadecimal SHA-256.</returns>
+    public static string ComputeTaskId(string packageDigest, string datasetId, string viewId, int timestepIndex, string optionsDigest, int orbitIndex, double azimuthDegrees)
+    {
+        var text = string.Join(RECORD_SEPARATOR,
+            "task@1",
+            packageDigest,
+            datasetId,
+            viewId,
+            timestepIndex.ToString(CultureInfo.InvariantCulture),
+            optionsDigest,
+            "orbit",
+            orbitIndex.ToString(CultureInfo.InvariantCulture),
+            azimuthDegrees.ToString("R", CultureInfo.InvariantCulture));
+        return Hash(text);
+    }
+
+    /// <summary>
     /// Lower-case hexadecimal SHA-256 of a file's content.
     /// </summary>
     /// <param name="path">File path.</param>

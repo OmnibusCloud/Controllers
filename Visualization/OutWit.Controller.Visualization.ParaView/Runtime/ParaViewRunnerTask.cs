@@ -99,6 +99,12 @@ public sealed class ParaViewRunnerTask
     /// <summary>Render with a transparent background.</summary>
     public bool TransparentBackground { get; set; }
 
+    /// <summary>Camera azimuth in degrees to apply about the orbit axis before rendering (0: none).</summary>
+    public double CameraAzimuth { get; set; }
+
+    /// <summary>Orbit axis token: view-up (the state's camera view-up), x, y or z (world axes).</summary>
+    public string CameraAxis { get; set; } = ParaViewCameraAxes.VIEW_UP;
+
     /// <summary>Absolute path of the bundled reader to load, null when the package requires none.</summary>
     public string? PluginPath { get; set; }
 

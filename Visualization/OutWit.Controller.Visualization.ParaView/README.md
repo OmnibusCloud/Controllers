@@ -69,6 +69,21 @@ RenderParaViewVideo (ParaViewSceneRef:scene, ParaViewOutputOptions:options, Vide
 ValidateParaViewScene(ParaViewSceneRef:scene, ParaViewOutputOptions:options)           -> ParaViewValidationReport:result
 ```
 
+### Turntable (camera orbit, controller 0.2.0)
+
+`ParaViewOutputOptions.turntable` (`paraview.turntable@1`: `frames`, `degrees`, `timeMode`,
+`axis`) turns the frames and video scripts into a camera orbit without any animation track in the
+state: Split emits one task per orbit output and the node revolves the state's camera about the
+orbit axis through the focal point by `degrees * i / frames` before rendering (`camera_azimuth` /
+`camera_axis` in the task file; about the camera's view-up this is `vtkCamera.Azimuth`, about a world
+axis the camera is rotated rigidly — position and view-up — so a tilted camera keeps its tilt and a
+camera looking straight down the axis rolls instead of degenerating).
+`Fixed` gives every selected timestep a full orbit (one timestep in, a showcase orbit out); `Advancing`
+renders exactly `frames` outputs with the data time spread from the first selected timestep to the
+last. Outputs count against the same per-job limit; the validation report's `outputCount` tells the
+initiator how many frames the job will render. Task identities of orbit outputs carry the orbit
+position and azimuth, so they never collide with the plain task of the same timestep.
+
 ## The runner contract
 
 The node never builds a shell string. It invokes the bundled `pvpython` directly:

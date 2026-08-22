@@ -219,6 +219,8 @@ public sealed class ParaViewTaskExecutor
             Height = task.Options.Height,
             Format = ParaViewImageFormats.WireToken(task.Options.Format),
             TransparentBackground = task.Options.TransparentBackground && ParaViewImageFormats.SupportsTransparency(task.Options.Format),
+            CameraAzimuth = task.Options.Turntable == null ? 0.0 : task.AzimuthDegrees,
+            CameraAxis = ParaViewCameraAxes.WireToken(task.Options.Turntable?.Axis ?? ParaViewTurntableAxis.ViewUp),
             PluginPath = pluginPath,
             AllowedProxies = [.. m_allowlist.EffectiveKeys(requiredPlugins)],
             BlockedProxyTypes = [.. ParaViewProxyPolicy.BLOCKED_PROXY_TYPES.Order(StringComparer.Ordinal)],

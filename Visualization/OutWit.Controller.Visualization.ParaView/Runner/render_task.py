@@ -17,6 +17,8 @@ Responsibilities (docs 03, section 9):
      a client path): a single-valued reference must be a materialized package file, a file series
      must have at least one, and any VTK error during load/render fails the task;
   4. select the declared view and timestep;
+  4a. revolve the state's camera by the task's turntable azimuth about the orbit axis through the
+      focal point (docs 03, section 27, item 1) — an output-side transform, never a state edit;
   5. apply only controller-owned output overrides (size, transparency);
   6. render through SaveScreenshot;
   7. write the bounded machine-readable status document on EVERY exit path;
@@ -27,6 +29,7 @@ Stdlib + paraview only. Compatible with the Python ParaView bundles (3.9+ syntax
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -48,6 +51,7 @@ STAGE_LOAD_PLUGIN = "load-plugin"
 STAGE_LOAD_STATE = "load-state"
 STAGE_VALIDATE = "validate"
 STAGE_SELECT = "select"
+STAGE_ORBIT = "orbit"
 STAGE_RENDER = "render"
 STAGE_VERIFY = "verify-output"
 STAGE_DONE = "done"
@@ -56,6 +60,11 @@ EXIT_OK = 0
 EXIT_FAILURE = 1
 EXIT_USAGE = 2
 EXIT_POLICY = 3
+
+# Turntable axis tokens (ParaViewCameraAxes on the controller side): the state's camera view-up,
+# or a world axis the camera revolves about rigidly.
+CAMERA_AXIS_VIEW_UP = "view-up"
+CAMERA_AXIS_VECTORS = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
 
 # The proxy groups a state can populate — the post-load check covers exactly these. Session-level
 # groups (settings, *_prototypes, materials) are created by the runtime itself, are not state
@@ -206,6 +215,8 @@ class Task(object):
         self.height = int(data["height"])
         self.format = str(data["format"]).lower()
         self.transparent_background = bool(data.get("transparent_background", False))
+        self.camera_azimuth = float(data.get("camera_azimuth", 0.0) or 0.0)
+        self.camera_axis = str(data.get("camera_axis", CAMERA_AXIS_VIEW_UP) or CAMERA_AXIS_VIEW_UP).lower()
         self.plugin_path = data.get("plugin_path", None)
         self.allowed_proxies = set(data.get("allowed_proxies", []))
         self.blocked_proxy_types = set(data.get("blocked_proxy_types", []))
@@ -219,6 +230,10 @@ class Task(object):
             raise RunnerError("output dimensions must be positive", EXIT_USAGE)
         if self.format not in ("png", "jpeg"):
             raise RunnerError("unsupported output format '%s'" % self.format, EXIT_USAGE)
+        if not math.isfinite(self.camera_azimuth):
+            raise RunnerError("camera azimuth must be a finite number of degrees", EXIT_USAGE)
+        if self.camera_axis != CAMERA_AXIS_VIEW_UP and self.camera_axis not in CAMERA_AXIS_VECTORS:
+            raise RunnerError("unsupported camera axis '%s'" % self.camera_axis, EXIT_USAGE)
         if not os.path.isdir(self.package_root):
             raise RunnerError("package root '%s' is not a directory" % self.package_root, EXIT_USAGE)
         if not os.path.isdir(self.work_dir):
@@ -542,6 +557,51 @@ def select_timestep(simple, task, view):
     return value
 
 
+def rotate_about_axis(vector, axis, degrees):
+    """Rodrigues rotation of a vector about a unit axis, right-hand rule (vtkTransform.RotateWXYZ
+    convention, so the world-axis orbit turns the same way vtkCamera.Azimuth does)."""
+    angle = math.radians(degrees)
+    cos_a = math.cos(angle)
+    sin_a = math.sin(angle)
+    ax, ay, az = axis
+    vx, vy, vz = vector
+    dot = ax * vx + ay * vy + az * vz
+    cross = (ay * vz - az * vy, az * vx - ax * vz, ax * vy - ay * vx)
+    return (
+        vx * cos_a + cross[0] * sin_a + ax * dot * (1.0 - cos_a),
+        vy * cos_a + cross[1] * sin_a + ay * dot * (1.0 - cos_a),
+        vz * cos_a + cross[2] * sin_a + az * dot * (1.0 - cos_a),
+    )
+
+
+def orbit_camera(task, view):
+    """Turntable: revolves the view's camera about the orbit axis through its focal point by the
+    task's azimuth. The state's camera (position, focal point, view-up) is the starting frame.
+    About the camera's own view-up this is vtkCamera.Azimuth; about a world axis the camera is
+    rotated rigidly (position AND view-up), so a tilted camera keeps its tilt, the horizon stays
+    where the user left it, and a camera looking straight down the axis rolls instead of
+    degenerating (no view-up reset). Returns True when the camera moved."""
+    if task.camera_azimuth == 0.0:
+        return False
+    try:
+        camera = view.GetActiveCamera()
+    except Exception as e:
+        raise RunnerError("the view exposes no camera to orbit: %s" % e, EXIT_POLICY)
+    if camera is None:
+        raise RunnerError("the view exposes no camera to orbit", EXIT_POLICY)
+    if task.camera_axis == CAMERA_AXIS_VIEW_UP:
+        camera.Azimuth(task.camera_azimuth)
+        return True
+    axis = CAMERA_AXIS_VECTORS[task.camera_axis]
+    position = tuple(camera.GetPosition())
+    focal = tuple(camera.GetFocalPoint())
+    view_up = tuple(camera.GetViewUp())
+    offset = rotate_about_axis((position[0] - focal[0], position[1] - focal[1], position[2] - focal[2]), axis, task.camera_azimuth)
+    camera.SetPosition(focal[0] + offset[0], focal[1] + offset[1], focal[2] + offset[2])
+    camera.SetViewUp(*rotate_about_axis(view_up, axis, task.camera_azimuth))
+    return True
+
+
 def render(simple, task, view):
     view.ViewSize = [task.width, task.height]
     started = time.time()
@@ -608,6 +668,9 @@ def run(task, status):
     status.stage(STAGE_SELECT)
     view = find_view(simple, servermanager, task.view_id)
     select_timestep(simple, task, view)
+
+    status.stage(STAGE_ORBIT)
+    orbit_camera(task, view)
 
     status.stage(STAGE_RENDER)
     seconds = render(simple, task, view)

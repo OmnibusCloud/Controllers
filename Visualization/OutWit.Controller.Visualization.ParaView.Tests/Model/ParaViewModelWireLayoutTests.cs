@@ -13,18 +13,21 @@ namespace OutWit.Controller.Visualization.ParaView.Tests.Model;
 [TestFixture]
 public sealed class ParaViewModelWireLayoutTests
 {
-    // Field counts frozen 2026-08-19 (ParaView.Model 0.1.0).
+    // Field counts frozen 2026-08-19 (ParaView.Model 0.1.0); 2026-08-22 (0.2.0): turntable appended to
+    // the output options (+1), orbit index + azimuth to the render task (+2), output count to the
+    // validation report (+1), and the paraview.turntable@1 document (4).
     private static readonly IReadOnlyDictionary<Type, int> ExpectedFieldCounts = new Dictionary<Type, int>
     {
         [typeof(ParaViewSceneRefData)] = 7,
         [typeof(ParaViewAttachmentRefData)] = 8,
         [typeof(ParaViewRuntimeRequirementData)] = 6,
         [typeof(ParaViewPluginRequirementData)] = 2,
-        [typeof(ParaViewOutputOptionsData)] = 6,
+        [typeof(ParaViewOutputOptionsData)] = 7,
         [typeof(ParaViewFrameSelectionData)] = 5,
-        [typeof(ParaViewRenderTaskData)] = 14,
+        [typeof(ParaViewTurntableData)] = 4,
+        [typeof(ParaViewRenderTaskData)] = 16,
         [typeof(ParaViewRenderResultData)] = 14,
-        [typeof(ParaViewValidationReportData)] = 17,
+        [typeof(ParaViewValidationReportData)] = 18,
     };
 
     [Test]

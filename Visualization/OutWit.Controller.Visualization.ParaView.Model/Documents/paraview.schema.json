@@ -14,11 +14,12 @@
       "paraview.renderResult@1",
       "paraview.runtimeRequirement@1",
       "paraview.sceneRef@1",
+      "paraview.turntable@1",
       "paraview.validationReport@1"
     ],
     "source": {
       "assembly": "OutWit.Controller.Visualization.ParaView.Model",
-      "version": "0.1.0"
+      "version": "0.2.0"
     },
     "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
   },
@@ -139,7 +140,7 @@
     "paraview.outputOptions@1": {
       "type": "object",
       "title": "ParaviewOutputOptions",
-      "description": "What to render from the package: the view, the output size and format, and the timesteps. Everything except Frames is per-output and participates in the task identity; the frame selection determines the task set.",
+      "description": "What to render from the package: the view, the output size and format, and the timesteps. Everything except Frames and Turntable is per-output and participates in the task identity; the frame selection and the turntable determine the task set (a turntable task additionally carries its orbit position in its identity).",
       "x-oc-type-id": "paraview.outputOptions@1",
       "x-oc-binding-name": "ParaviewOutputOptions",
       "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewOutputOptionsData, OutWit.Controller.Visualization.ParaView.Model",
@@ -179,6 +180,18 @@
           "description": "Timesteps to render.",
           "x-oc-clr-name": "Frames",
           "$ref": "#/$defs/paraview.frameSelection@1"
+        },
+        "turntable": {
+          "description": "Optional camera orbit (turntable): null renders the captured camera as is. Appended in Model 0.2.0; an older reader ignores it, an older writer leaves it null.",
+          "x-oc-clr-name": "Turntable",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/paraview.turntable@1"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -411,6 +424,40 @@
         }
       }
     },
+    "paraview.turntable@1": {
+      "type": "object",
+      "title": "ParaviewTurntable",
+      "description": "A camera orbit (\"turntable\") as an output option: the controller renders Frames outputs with the state's camera revolved about the focal point by Degrees in total, at a fixed or an advancing data time (TimeMode). The orbit is an output-side transform of the captured camera — no animation track in the state is needed, one timestep in gives a showcase sequence out. The azimuth of output i of N is Degrees * i / N (the last output stops short of the first, so a 360° orbit loops).",
+      "x-oc-type-id": "paraview.turntable@1",
+      "x-oc-binding-name": "ParaviewTurntable",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewTurntableData, OutWit.Controller.Visualization.ParaView.Model",
+      "properties": {
+        "frames": {
+          "description": "Number of orbit outputs (at least 1; bounded by the per-job output limit together with the selected timesteps).",
+          "x-oc-clr-name": "Frames",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "degrees": {
+          "description": "Total sweep of the orbit in degrees; the sign sets the direction (positive = the camera moves counter-clockwise seen from the orbit axis). Non-zero, at most ten full turns.",
+          "x-oc-clr-name": "Degrees",
+          "type": "number",
+          "format": "double"
+        },
+        "timeMode": {
+          "description": "How the orbit composes with the selected timesteps.",
+          "x-oc-clr-name": "TimeMode",
+          "$ref": "#/$defs/ParaViewTurntableTimeMode"
+        },
+        "axis": {
+          "description": "The orbit axis through the focal point.",
+          "x-oc-clr-name": "Axis",
+          "$ref": "#/$defs/ParaViewTurntableAxis"
+        }
+      }
+    },
     "paraview.validationReport@1": {
       "type": "object",
       "title": "ParaviewValidationReport",
@@ -543,6 +590,14 @@
           "items": {
             "type": "string"
           }
+        },
+        "outputCount": {
+          "description": "Number of outputs (tasks) the job will render: the resolved timesteps, multiplied or replaced by the turntable's orbit frames. 0 when the package is invalid. Appended in Model 0.2.0.",
+          "x-oc-clr-name": "OutputCount",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
         }
       }
     },
@@ -592,6 +647,38 @@
       "x-oc-member-descriptions": {
         "Png": "Lossless PNG (RGB or RGBA when the background is transparent).",
         "Jpeg": "JPEG (RGB; transparency is not representable)."
+      }
+    },
+    "ParaViewTurntableAxis": {
+      "type": "string",
+      "title": "ParaViewTurntableAxis",
+      "description": "The axis a camera orbit (ParaViewTurntableData) revolves about, through the view's focal point.",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewTurntableAxis",
+      "enum": [
+        "ViewUp",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "x-oc-member-descriptions": {
+        "ViewUp": "The view-up vector the state carries for the camera — the orbit keeps the user's framing exactly (the usual choice when the camera was set through the view-direction toolbar).",
+        "X": "The world X axis: the camera revolves rigidly about it through the focal point (position and view-up together), so a tilted camera keeps its tilt and the horizon stays level.",
+        "Y": "The world Y axis: the camera revolves rigidly about it through the focal point (position and view-up together), so a tilted camera keeps its tilt and the horizon stays level.",
+        "Z": "The world Z axis: the camera revolves rigidly about it through the focal point (position and view-up together), so a tilted camera keeps its tilt and the horizon stays level."
+      }
+    },
+    "ParaViewTurntableTimeMode": {
+      "type": "string",
+      "title": "ParaViewTurntableTimeMode",
+      "description": "How a camera orbit (ParaViewTurntableData) composes with the selected timesteps.",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewTurntableTimeMode",
+      "enum": [
+        "Fixed",
+        "Advancing"
+      ],
+      "x-oc-member-descriptions": {
+        "Fixed": "The data time stands still while the camera orbits: every selected timestep receives a full orbit of Frames outputs (usually one timestep in, one showcase orbit out).",
+        "Advancing": "The data time advances along the selected timesteps while the camera completes one orbit: exactly Frames outputs, the first at the first selected timestep, the last at the last, timesteps spread evenly in between (repeated or skipped as the counts dictate)."
       }
     }
   }

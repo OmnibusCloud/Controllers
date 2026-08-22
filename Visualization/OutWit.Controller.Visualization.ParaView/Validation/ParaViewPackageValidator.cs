@@ -76,8 +76,18 @@ public sealed class ParaViewPackageValidator
         ValidateTimestepAssociations(scene, timestepCount, errors, fallbacks);
         var anchors = new ParaViewAttachmentSubsetIndex(scene.Attachments).Anchors;
 
+        long outputCount = 0;
         if (errors.Count == 0)
+        {
             indices = ParaViewFrameSelectionResolver.Resolve(options.Frames, timestepCount, errors);
+            outputCount = ParaViewTurntableResolver.CountOutputs(indices.Count, options.Turntable);
+            if (outputCount > ParaViewInputLimits.MAX_OUTPUTS)
+            {
+                errors.Add($"turntable over {indices.Count} timestep(s) requests {outputCount} outputs, over the {ParaViewInputLimits.MAX_OUTPUTS} outputs per job limit");
+                indices = [];
+                outputCount = 0;
+            }
+        }
 
         return new ParaViewValidationReportData
         {
@@ -97,7 +107,8 @@ public sealed class ParaViewPackageValidator
             Width = options.Width,
             Height = options.Height,
             Format = options.Format,
-            SeriesAnchors = [.. anchors]
+            SeriesAnchors = [.. anchors],
+            OutputCount = errors.Count == 0 ? (int)outputCount : 0
         };
     }
 
@@ -197,6 +208,8 @@ public sealed class ParaViewPackageValidator
 
         if (options.ViewId.Length > ParaViewInputLimits.MAX_VIEW_ID_CHARS)
             errors.Add($"view id exceeds {ParaViewInputLimits.MAX_VIEW_ID_CHARS} characters");
+
+        ParaViewTurntableResolver.Validate(options.Turntable, errors);
     }
 
     private static void ValidateTimestepAssociations(ParaViewSceneRefData scene, int timestepCount, ICollection<string> errors, ICollection<string> fallbacks)

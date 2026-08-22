@@ -185,6 +185,81 @@ public sealed class ParaViewTaskSplitterTests
     }
 
     [Test]
+    public void FixedTurntableGivesEveryTimestepAFullOrbitTest()
+    {
+        var options = Options();
+        options.Turntable = new ParaViewTurntableData { Frames = 3, Degrees = 360.0, TimeMode = ParaViewTurntableTimeMode.Fixed, Axis = ParaViewTurntableAxis.Z };
+
+        var tasks = ParaViewTaskSplitter.Split(Scene(), Report(2, 0), options);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tasks, Has.Count.EqualTo(6));
+            Assert.That(tasks.Select(me => me.TaskIndex), Is.EqualTo(new[] { 0, 1, 2, 3, 4, 5 }));
+            Assert.That(tasks.Select(me => me.TimestepIndex), Is.EqualTo(new[] { 2, 2, 2, 0, 0, 0 }));
+            Assert.That(tasks.Select(me => me.OrbitIndex), Is.EqualTo(new[] { 0, 1, 2, 0, 1, 2 }));
+            Assert.That(tasks.Select(me => me.AzimuthDegrees), Is.EqualTo(new[] { 0.0, 120.0, 240.0, 0.0, 120.0, 240.0 }));
+            Assert.That(tasks.Select(me => me.TaskId).Distinct().Count(), Is.EqualTo(6));
+            Assert.That(tasks.All(me => me.Options.Turntable != null && me.Options.Turntable.Axis == ParaViewTurntableAxis.Z), Is.True);
+            Assert.That(tasks[0].Attachments.Select(me => me.LogicalPath), Is.EqualTo(tasks[1].Attachments.Select(me => me.LogicalPath)));
+            Assert.That(tasks[0].SubsetBytes, Is.EqualTo(tasks[2].SubsetBytes));
+            Assert.That(ReferenceEquals(tasks[0].Attachments[0], tasks[1].Attachments[0]), Is.False);
+        });
+    }
+
+    [Test]
+    public void AdvancingTurntableSpreadsTheTimestepsOverOneOrbitTest()
+    {
+        var options = Options();
+        options.Turntable = new ParaViewTurntableData { Frames = 5, Degrees = -360.0, TimeMode = ParaViewTurntableTimeMode.Advancing };
+
+        var tasks = ParaViewTaskSplitter.Split(Scene(), Report(0, 1, 2), options);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tasks, Has.Count.EqualTo(5));
+            Assert.That(tasks.Select(me => me.TimestepIndex), Is.EqualTo(new[] { 0, 1, 1, 2, 2 }));
+            Assert.That(tasks.Select(me => me.OrbitIndex), Is.EqualTo(new[] { 0, 1, 2, 3, 4 }));
+            Assert.That(tasks.Select(me => me.AzimuthDegrees), Is.EqualTo(new[] { 0.0, -72.0, -144.0, -216.0, -288.0 }));
+            Assert.That(tasks.Select(me => me.TimeValue), Is.EqualTo(new double?[] { 0.0, 0.5, 0.5, 1.0, 1.0 }));
+            Assert.That(tasks.Select(me => me.TaskId).Distinct().Count(), Is.EqualTo(5));
+        });
+    }
+
+    [Test]
+    public void TurntableIdentitiesNeverCollideWithPlainOnesTest()
+    {
+        var plain = ParaViewTaskSplitter.Split(Scene(), Report(1), Options());
+
+        var options = Options();
+        options.Turntable = new ParaViewTurntableData { Frames = 1, Degrees = 360.0 };
+        var orbit = ParaViewTaskSplitter.Split(Scene(), Report(1), options);
+
+        var wider = Options();
+        wider.Turntable = new ParaViewTurntableData { Frames = 2, Degrees = 360.0 };
+        var twoFrames = ParaViewTaskSplitter.Split(Scene(), Report(1), wider);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(orbit, Has.Count.EqualTo(1));
+            Assert.That(orbit[0].AzimuthDegrees, Is.EqualTo(0.0));
+            Assert.That(orbit[0].TaskId, Is.Not.EqualTo(plain[0].TaskId));
+            Assert.That(twoFrames[0].TaskId, Is.EqualTo(orbit[0].TaskId), "orbit position 0 at azimuth 0 is the same output whatever the orbit length");
+            Assert.That(twoFrames[1].TaskId, Is.Not.EqualTo(twoFrames[0].TaskId));
+        });
+    }
+
+    [Test]
+    public void TurntableOutputLimitIsEnforcedTest()
+    {
+        var options = Options();
+        options.Turntable = new ParaViewTurntableData { Frames = ParaViewInputLimits.MAX_OUTPUTS, Degrees = 360.0 };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => ParaViewTaskSplitter.Split(Scene(), Report(0, 1), options));
+        Assert.That(exception!.Message, Does.Contain("exceed"));
+    }
+
+    [Test]
     public void InvalidReportIsRefusedTest()
     {
         var report = Report(0);

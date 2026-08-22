@@ -79,6 +79,47 @@ public sealed class ParaViewPackageValidatorTests
     }
 
     [Test]
+    public void TurntableIsValidatedAndCountedTest()
+    {
+        var package = new ParaViewPackageBuilder(m_root, m_blobs)
+            .AddFile("data/field.vtu", "<VTKFile/>");
+        var scene = package.BuildScene(ParaViewStateBuilder.Typical("data/field.vtu").WithTimesteps(0, 1, 2).Build());
+        var statePath = m_blobs.GetStoredPath(scene.StateBlobId);
+
+        ParaViewOutputOptionsData With(ParaViewTurntableData? turntable) => new()
+        {
+            Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.All },
+            Turntable = turntable
+        };
+
+        var plain = m_validator.Validate(scene, With(null), statePath);
+        var fixedOrbit = m_validator.Validate(scene, With(new ParaViewTurntableData { Frames = 10 }), statePath);
+        var advancing = m_validator.Validate(scene, With(new ParaViewTurntableData { Frames = 10, TimeMode = ParaViewTurntableTimeMode.Advancing }), statePath);
+        var noFrames = m_validator.Validate(scene, With(new ParaViewTurntableData { Frames = 0 }), statePath);
+        var noSweep = m_validator.Validate(scene, With(new ParaViewTurntableData { Degrees = 0.0 }), statePath);
+        var tooWide = m_validator.Validate(scene, With(new ParaViewTurntableData { Degrees = 7200.0 }), statePath);
+        var tooMany = m_validator.Validate(scene, With(new ParaViewTurntableData { Frames = 5000 }), statePath);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(plain.IsValid, Is.True, string.Join("; ", plain.Errors));
+            Assert.That(plain.OutputCount, Is.EqualTo(3));
+            Assert.That(fixedOrbit.IsValid, Is.True, string.Join("; ", fixedOrbit.Errors));
+            Assert.That(fixedOrbit.OutputCount, Is.EqualTo(30));
+            Assert.That(fixedOrbit.ResolvedTimestepIndices, Is.EqualTo(new[] { 0, 1, 2 }));
+            Assert.That(advancing.IsValid, Is.True, string.Join("; ", advancing.Errors));
+            Assert.That(advancing.OutputCount, Is.EqualTo(10));
+            Assert.That(noFrames.IsValid, Is.False);
+            Assert.That(noFrames.Errors, Has.Some.Contains("at least 1 orbit frame"));
+            Assert.That(noSweep.Errors, Has.Some.Contains("non-zero"));
+            Assert.That(tooWide.Errors, Has.Some.Contains("exceeds 3600"));
+            Assert.That(tooMany.IsValid, Is.False);
+            Assert.That(tooMany.Errors, Has.Some.Contains("15000 outputs"));
+            Assert.That(tooMany.OutputCount, Is.EqualTo(0));
+        });
+    }
+
+    [Test]
     public void StaticSceneResolvesOneTimestepTest()
     {
         var package = new ParaViewPackageBuilder(m_root, m_blobs).AddFile("data/field.vtu", "x");

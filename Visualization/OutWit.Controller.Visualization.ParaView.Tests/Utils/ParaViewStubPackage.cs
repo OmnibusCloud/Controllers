@@ -97,14 +97,45 @@ class StubRenderWindow(object):
         return "vtkStubRenderWindow"
 
 
+class StubCamera(object):
+    def __init__(self):
+        self.position = (0.0, 0.0, 10.0)
+        self.focal = (0.0, 0.0, 0.0)
+        self.view_up = (0.0, 1.0, 0.0)
+
+    def GetPosition(self):
+        return self.position
+
+    def GetFocalPoint(self):
+        return self.focal
+
+    def GetViewUp(self):
+        return self.view_up
+
+    def SetPosition(self, x, y, z):
+        self.position = (x, y, z)
+        log("position=%.4f,%.4f,%.4f" % (x, y, z))
+
+    def SetViewUp(self, x, y, z):
+        self.view_up = (x, y, z)
+        log("view_up=%.4f,%.4f,%.4f" % (x, y, z))
+
+    def Azimuth(self, degrees):
+        log("azimuth=%r" % (degrees,))
+
+
 class StubView(StubProxy):
     def __init__(self, group, xml_type, proxy_id, name, props, collection=None):
         StubProxy.__init__(self, group, xml_type, proxy_id, name, props, collection)
         self.ViewSize = [0, 0]
         self.ViewTime = 0.0
+        self.camera = StubCamera()
 
     def GetRenderWindow(self):
         return StubRenderWindow()
+
+    def GetActiveCamera(self):
+        return self.camera
 
 
 class TimeKeeper(object):

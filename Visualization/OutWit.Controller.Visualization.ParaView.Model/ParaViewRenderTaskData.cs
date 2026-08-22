@@ -35,7 +35,9 @@ public sealed partial class ParaViewRenderTaskData : ModelBase
                && Runtime.Is(other.Runtime, tolerance)
                && PackageDigest.Is(other.PackageDigest)
                && DatasetId.Is(other.DatasetId)
-               && SubsetBytes.Is(other.SubsetBytes);
+               && SubsetBytes.Is(other.SubsetBytes)
+               && OrbitIndex.Is(other.OrbitIndex)
+               && AzimuthDegrees.Is(other.AzimuthDegrees, tolerance);
     }
 
     /// <inheritdoc />
@@ -56,7 +58,9 @@ public sealed partial class ParaViewRenderTaskData : ModelBase
             Runtime = (ParaViewRuntimeRequirementData)Runtime.Clone(),
             PackageDigest = PackageDigest,
             DatasetId = DatasetId,
-            SubsetBytes = SubsetBytes
+            SubsetBytes = SubsetBytes,
+            OrbitIndex = OrbitIndex,
+            AzimuthDegrees = AzimuthDegrees
         };
     }
 
@@ -150,6 +154,20 @@ public sealed partial class ParaViewRenderTaskData : ModelBase
     /// </summary>
     [MemoryPackOrder(13)]
     public long SubsetBytes { get; set; }
+
+    /// <summary>
+    /// Position of this task in its camera orbit (0 when the job renders no turntable). Appended in
+    /// Model 0.2.0.
+    /// </summary>
+    [MemoryPackOrder(14)]
+    public int OrbitIndex { get; set; }
+
+    /// <summary>
+    /// Camera azimuth in degrees the node applies to the state's camera about the orbit axis before
+    /// rendering (0 renders the captured camera as is). Appended in Model 0.2.0.
+    /// </summary>
+    [MemoryPackOrder(15)]
+    public double AzimuthDegrees { get; set; }
 
     #endregion
 }

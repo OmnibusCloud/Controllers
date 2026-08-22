@@ -7,8 +7,9 @@ namespace OutWit.Controller.Visualization.ParaView.Model;
 
 /// <summary>
 /// What to render from the package: the view, the output size and format, and the timesteps.
-/// Everything except <see cref="Frames"/> is per-output and participates in the task identity;
-/// the frame selection determines the task set.
+/// Everything except <see cref="Frames"/> and <see cref="Turntable"/> is per-output and
+/// participates in the task identity; the frame selection and the turntable determine the task
+/// set (a turntable task additionally carries its orbit position in its identity).
 /// </summary>
 [JobDocumentContract("paraview.outputOptions@1")]
 [MemoryPackable(GenerateType.VersionTolerant)]
@@ -27,7 +28,8 @@ public sealed partial class ParaViewOutputOptionsData : ModelBase
                && Height.Is(other.Height)
                && Format.Is(other.Format)
                && TransparentBackground.Is(other.TransparentBackground)
-               && Frames.Is(other.Frames, tolerance);
+               && Frames.Is(other.Frames, tolerance)
+               && (Turntable == null ? other.Turntable == null : other.Turntable != null && Turntable.Is(other.Turntable, tolerance));
     }
 
     /// <inheritdoc />
@@ -40,7 +42,8 @@ public sealed partial class ParaViewOutputOptionsData : ModelBase
             Height = Height,
             Format = Format,
             TransparentBackground = TransparentBackground,
-            Frames = (ParaViewFrameSelectionData)Frames.Clone()
+            Frames = (ParaViewFrameSelectionData)Frames.Clone(),
+            Turntable = (ParaViewTurntableData?)Turntable?.Clone()
         };
     }
 
@@ -85,6 +88,13 @@ public sealed partial class ParaViewOutputOptionsData : ModelBase
     /// </summary>
     [MemoryPackOrder(5)]
     public ParaViewFrameSelectionData Frames { get; set; } = new();
+
+    /// <summary>
+    /// Optional camera orbit (turntable): null renders the captured camera as is. Appended in
+    /// Model 0.2.0; an older reader ignores it, an older writer leaves it null.
+    /// </summary>
+    [MemoryPackOrder(6)]
+    public ParaViewTurntableData? Turntable { get; set; }
 
     #endregion
 }

@@ -68,7 +68,9 @@ public sealed class ParaViewRunnerDocumentsTests
             BlockedProxyTypes = [.. ParaViewProxyPolicy.BLOCKED_PROXY_TYPES],
             FileReferenceGroups = ["sources"],
             MaxStateBytes = 123,
-            MaxLogicalPathChars = 77
+            MaxLogicalPathChars = 77,
+            CameraAzimuth = 22.5,
+            CameraAxis = ParaViewCameraAxes.Z
         };
 
         var json = task.ToJson();
@@ -85,6 +87,10 @@ public sealed class ParaViewRunnerDocumentsTests
             Assert.That(restored.AllowedProxies, Is.EqualTo(new[] { "views/RenderView" }));
             Assert.That(json, Does.Contain("\"max_state_bytes\": 123"));
             Assert.That(restored.MaxLogicalPathChars, Is.EqualTo(77));
+            Assert.That(json, Does.Contain("\"camera_azimuth\": 22.5"));
+            Assert.That(json, Does.Contain("\"camera_axis\": \"z\""));
+            Assert.That(restored.CameraAzimuth, Is.EqualTo(22.5));
+            Assert.That(restored.CameraAxis, Is.EqualTo("z"));
         });
     }
 

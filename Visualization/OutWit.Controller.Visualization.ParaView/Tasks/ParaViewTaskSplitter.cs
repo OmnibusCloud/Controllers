@@ -5,8 +5,9 @@ namespace OutWit.Controller.Visualization.ParaView.Tasks;
 
 /// <summary>
 /// Deterministic task generation (docs 03, section 11): one task per resolved timestep of the
-/// resolved view, identities from the package digest + dataset identity (reserved) + view +
-/// timestep + options digest, and — per task — the minimal attachment subset: the files associated
+/// resolved view — or per orbit output when the options carry a turntable (section 27) —
+/// identities from the package digest + dataset identity (reserved) + view + timestep + options
+/// digest (+ orbit position for turntable outputs), and — per task — the minimal attachment subset: the files associated
 /// with the task's timestep plus every attachment not associated with any timestep and every series
 /// index. Limits are enforced before a large collection is allocated.
 /// </summary>
@@ -27,7 +28,7 @@ public static class ParaViewTaskSplitter
     /// <param name="scene">The package reference.</param>
     /// <param name="report">A valid validation report for the same package and options.</param>
     /// <param name="options">The output options.</param>
-    /// <returns>The tasks in render order (view order, then timestep order).</returns>
+    /// <returns>The tasks in render order (view order, then timestep order, then orbit order).</returns>
     /// <exception cref="InvalidOperationException">The report is invalid or a limit is exceeded.</exception>
     public static IReadOnlyList<ParaViewRenderTaskData> Split(
         ParaViewSceneRefData scene,
@@ -54,12 +55,20 @@ public static class ParaViewTaskSplitter
         var optionsDigest = ParaViewPackageDigest.ComputeOptionsDigest(options, report.ResolvedViewId);
         var index = new ParaViewAttachmentSubsetIndex(scene.Attachments);
 
-        var tasks = new List<ParaViewRenderTaskData>(report.ResolvedTimestepIndices.Count);
-        var taskIndex = 0;
+        var plan = ParaViewTurntableResolver.Resolve(report.ResolvedTimestepIndices, options.Turntable);
+        if (plan.Count > ParaViewInputLimits.MAX_OUTPUTS)
+            throw new InvalidOperationException(
+                $"ParaView.Split: {plan.Count} outputs exceed the {ParaViewInputLimits.MAX_OUTPUTS} per job limit.");
 
-        foreach (var timestepIndex in report.ResolvedTimestepIndices)
+        var tasks = new List<ParaViewRenderTaskData>(plan.Count);
+        var taskIndex = 0;
+        var subsets = new Dictionary<int, List<ParaViewAttachmentRefData>>();
+
+        foreach (var step in plan)
         {
-            var subset = index.SubsetOf(timestepIndex);
+            var timestepIndex = step.TimestepIndex;
+            if (!subsets.TryGetValue(timestepIndex, out var subset))
+                subsets[timestepIndex] = subset = index.SubsetOf(timestepIndex);
             var subsetBytes = Math.Max(0, scene.StateSize) + subset.Sum(me => Math.Max(0, me.Size));
 
             if (subsetBytes > ParaViewInputLimits.MAX_TASK_SUBSET_BYTES)
@@ -71,7 +80,9 @@ public static class ParaViewTaskSplitter
 
             tasks.Add(new ParaViewRenderTaskData
             {
-                TaskId = ParaViewPackageDigest.ComputeTaskId(packageDigest, DATASET_ID_V1, report.ResolvedViewId, timestepIndex, optionsDigest),
+                TaskId = options.Turntable == null
+                    ? ParaViewPackageDigest.ComputeTaskId(packageDigest, DATASET_ID_V1, report.ResolvedViewId, timestepIndex, optionsDigest)
+                    : ParaViewPackageDigest.ComputeTaskId(packageDigest, DATASET_ID_V1, report.ResolvedViewId, timestepIndex, optionsDigest, step.OrbitIndex, step.AzimuthDegrees),
                 TaskIndex = taskIndex++,
                 StateBlobId = scene.StateBlobId,
                 StateSha256 = scene.StateSha256,
@@ -80,11 +91,13 @@ public static class ParaViewTaskSplitter
                 TimestepIndex = timestepIndex,
                 TimeValue = timestepIndex < report.TimestepValues.Count ? report.TimestepValues[timestepIndex] : null,
                 Options = taskOptions,
-                Attachments = subset,
+                Attachments = [.. subset.Select(me => (ParaViewAttachmentRefData)me.Clone())],
                 Runtime = (ParaViewRuntimeRequirementData)scene.Runtime.Clone(),
                 PackageDigest = packageDigest,
                 DatasetId = DATASET_ID_V1,
-                SubsetBytes = subsetBytes
+                SubsetBytes = subsetBytes,
+                OrbitIndex = step.OrbitIndex,
+                AzimuthDegrees = step.AzimuthDegrees
             });
         }
 

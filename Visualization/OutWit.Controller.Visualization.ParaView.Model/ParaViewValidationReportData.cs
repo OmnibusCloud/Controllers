@@ -40,7 +40,8 @@ public sealed partial class ParaViewValidationReportData : ModelBase
                && Width.Is(other.Width)
                && Height.Is(other.Height)
                && Format.Is(other.Format)
-               && SeriesAnchors.Is(other.SeriesAnchors);
+               && SeriesAnchors.Is(other.SeriesAnchors)
+               && OutputCount.Is(other.OutputCount);
     }
 
     /// <inheritdoc />
@@ -64,7 +65,8 @@ public sealed partial class ParaViewValidationReportData : ModelBase
             Width = Width,
             Height = Height,
             Format = Format,
-            SeriesAnchors = [.. SeriesAnchors]
+            SeriesAnchors = [.. SeriesAnchors],
+            OutputCount = OutputCount
         };
     }
 
@@ -174,6 +176,13 @@ public sealed partial class ParaViewValidationReportData : ModelBase
     /// </summary>
     [MemoryPackOrder(16)]
     public List<string> SeriesAnchors { get; set; } = [];
+
+    /// <summary>
+    /// Number of outputs (tasks) the job will render: the resolved timesteps, multiplied or replaced
+    /// by the turntable's orbit frames. 0 when the package is invalid. Appended in Model 0.2.0.
+    /// </summary>
+    [MemoryPackOrder(17)]
+    public int OutputCount { get; set; }
 
     #endregion
 }

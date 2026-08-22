@@ -99,6 +99,69 @@ public sealed class ParaViewRunnerScriptTests
     }
 
     [Test]
+    public void RunnerOrbitsTheCameraAboutItsViewUpTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
+        var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
+        task.CameraAzimuth = 135.0;
+        task.CameraAxis = ParaViewCameraAxes.VIEW_UP;
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status!.Ok, Is.True, status.Error);
+
+        // The stub records the orbit: vtkCamera.Azimuth before the render, nothing else touched.
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(log, Does.Contain("azimuth=135.0"));
+            Assert.That(log, Does.Not.Contain("position=").And.Not.Contain("view_up="));
+            Assert.That(log.IndexOf("azimuth=135.0", StringComparison.Ordinal), Is.LessThan(log.IndexOf("render view=", StringComparison.Ordinal)));
+        });
+    }
+
+    [Test]
+    public void RunnerRevolvesTheCameraRigidlyAboutAWorldAxisTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
+        var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
+        task.CameraAzimuth = 90.0;
+        task.CameraAxis = ParaViewCameraAxes.Y;
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status!.Ok, Is.True, status.Error);
+
+        // The stub camera sits at (0,0,10) looking at the origin, up +Y: a 90-degree right-hand turn
+        // about +Y moves it to (10,0,0) and leaves the view-up alone (it lies on the axis).
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(log, Does.Contain("position=10.0000,0.0000,0.0000"));
+            Assert.That(log, Does.Contain("view_up=0.0000,1.0000,0.0000"));
+            Assert.That(log, Does.Not.Contain("azimuth="));
+            Assert.That(log.IndexOf("position=", StringComparison.Ordinal), Is.LessThan(log.IndexOf("render view=", StringComparison.Ordinal)));
+        });
+    }
+
+    [Test]
+    public void RunnerLeavesTheCameraAloneWithoutATurntableTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
+        var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
+
+        var (exitCode, _, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        Assert.That(log, Does.Not.Contain("azimuth=").And.Not.Contain("view_up="));
+    }
+
+    [Test]
     public void RunnerRefusesAReferenceOutsideThePackageBeforeImportingParaViewTest()
     {
         var (task, _) = Prepare(ParaViewStateBuilder.Typical("C:/Users/me/field.vtu").Build(), 0, null, ["data/field.vtu"]);

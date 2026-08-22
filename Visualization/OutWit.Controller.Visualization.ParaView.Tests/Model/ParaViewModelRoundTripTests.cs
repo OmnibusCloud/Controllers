@@ -60,7 +60,8 @@ public sealed class ParaViewModelRoundTripTests
             Height = 480,
             Format = ParaViewImageFormat.Jpeg,
             TransparentBackground = true,
-            Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Explicit, First = 1, Last = 2, Step = 2, Indices = [2, 0] }
+            Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Explicit, First = 1, Last = 2, Step = 2, Indices = [2, 0] },
+            Turntable = new ParaViewTurntableData { Frames = 36, Degrees = -180.0, TimeMode = ParaViewTurntableTimeMode.Advancing, Axis = ParaViewTurntableAxis.Z }
         };
     }
 
@@ -180,6 +181,10 @@ public sealed class ParaViewModelRoundTripTests
             Assert.That(baseline.Is(Mutate(t => t.Options.Width++)), Is.False);
             Assert.That(baseline.Is(Mutate(t => t.Attachments.Clear())), Is.False);
             Assert.That(baseline.Is(Mutate(t => t.SubsetBytes++)), Is.False);
+            Assert.That(baseline.Is(Mutate(t => t.OrbitIndex++)), Is.False);
+            Assert.That(baseline.Is(Mutate(t => t.AzimuthDegrees += 1.0)), Is.False);
+            Assert.That(baseline.Is(Mutate(t => t.Options.Turntable!.Frames++)), Is.False);
+            Assert.That(baseline.Is(Mutate(t => t.Options.Turntable = null)), Is.False);
             Assert.That(baseline.Is(Mutate(t => t.Runtime.Plugins.Clear())), Is.False);
             Assert.That(baseline.Is(Mutate(_ => { })), Is.True);
         });

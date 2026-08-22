@@ -21,6 +21,7 @@ public sealed class ParaViewDocumentsTests
         "paraview.pluginRequirement@1",
         "paraview.outputOptions@1",
         "paraview.frameSelection@1",
+        "paraview.turntable@1",
         "paraview.renderResult@1",
         "paraview.validationReport@1"
     ];

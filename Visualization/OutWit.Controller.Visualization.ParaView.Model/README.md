@@ -31,6 +31,7 @@ documents and read results back as value documents:
 | `paraview.pluginRequirement@1` | `ParaViewPluginRequirementData` |
 | `paraview.outputOptions@1` | `ParaViewOutputOptionsData` |
 | `paraview.frameSelection@1` | `ParaViewFrameSelectionData` |
+| `paraview.turntable@1` | `ParaViewTurntableData` (Model 0.2.0: optional camera orbit inside the output options) |
 | `paraview.renderResult@1` | `ParaViewRenderResultData` |
 | `paraview.validationReport@1` | `ParaViewValidationReportData` |
 
