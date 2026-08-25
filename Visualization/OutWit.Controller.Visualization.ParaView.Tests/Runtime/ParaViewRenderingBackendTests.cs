@@ -187,6 +187,56 @@ public sealed class ParaViewRenderingBackendTests
         Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(task, Guid.NewGuid(), m_fakePvpython, CancellationToken.None));
     }
 
+    [Test]
+    public async Task PolicyFailureOnEglIsTheTasksOwnVerdictNotACrashTest()
+    {
+        // Audit C-M1: the demote-and-retry acts on a CRASH (no status document). A runner that ran
+        // and refused (status ok=false, exit 3) under EGL is the task's own verdict: no retry, no
+        // demotion — the node keeps its EGL window.
+        Environment.SetEnvironmentVariable(ParaViewRenderingBackend.ENV_OPENGL_WINDOW, ParaViewRenderingBackend.EGL_WINDOW);
+        var blobs = new ParaViewTestBlobService(Path.Combine(m_root, "blobs"));
+        var tempStorage = new WitTempStorageDefault(Path.Combine(m_root, "temp"));
+        var executor = new ParaViewTaskExecutor(blobs, tempStorage, ParaViewProxyAllowlist.LoadEmbedded(ParaViewRuntimeInfo.RUNTIME_SERIES), NullLogger.Instance);
+
+        var state = ParaViewStateBuilder.Typical("data/field_0.vtu").WithExtraStateContent("<!-- FAKE-FAIL -->").Build();
+        var task = BuildTask(blobs, state);
+
+        var error = Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(task, Guid.NewGuid(), m_fakePvpython, CancellationToken.None));
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(error, Is.Not.InstanceOf<ParaViewRunnerCrashedException>(), "a refusal with a status document is not a crash");
+            Assert.That(error!.Message, Does.Contain("exited with code 3").And.Contain("load-state"));
+            Assert.That(await ParaViewRenderingBackend.ResolveWindowAsync(m_fakePvpython, tempStorage, null, CancellationToken.None),
+                Is.EqualTo(ParaViewRenderingBackend.EGL_WINDOW), "no demotion on a policy failure");
+        });
+    }
+
+    [Test]
+    public async Task CrashOnEglDemotesEvenAPinnedNodeTest()
+    {
+        // Audit C-M8: a pinned OUTWIT_PVPYTHON_OPENGL_WINDOW used to make Demote() a no-op, so a
+        // flaky pinned node ran every task twice forever. A crash outranks the pin for the rest of
+        // the process.
+        Environment.SetEnvironmentVariable(ParaViewRenderingBackend.ENV_OPENGL_WINDOW, ParaViewRenderingBackend.EGL_WINDOW);
+        var blobs = new ParaViewTestBlobService(Path.Combine(m_root, "blobs"));
+        var tempStorage = new WitTempStorageDefault(Path.Combine(m_root, "temp"));
+        var executor = new ParaViewTaskExecutor(blobs, tempStorage, ParaViewProxyAllowlist.LoadEmbedded(ParaViewRuntimeInfo.RUNTIME_SERIES), NullLogger.Instance);
+
+        Assert.That(await ParaViewRenderingBackend.ResolveWindowAsync(m_fakePvpython, tempStorage, null, CancellationToken.None),
+            Is.EqualTo(ParaViewRenderingBackend.EGL_WINDOW), "the pin holds before any crash");
+
+        var state = ParaViewStateBuilder.Typical("data/field_0.vtu").WithExtraStateContent("<!-- FAKE-EGL-CRASH -->").Build();
+        var result = await executor.ExecuteAsync(BuildTask(blobs, state), Guid.NewGuid(), m_fakePvpython, CancellationToken.None);
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(result.Width, Is.EqualTo(64), "the software retry produced the frame");
+            Assert.That(await ParaViewRenderingBackend.ResolveWindowAsync(m_fakePvpython, tempStorage, null, CancellationToken.None),
+                Is.EqualTo(ParaViewRunnerEnvironment.OSMESA_WINDOW), "the demotion outranks the pinned window");
+        });
+    }
+
     #endregion
 
     #region Tools

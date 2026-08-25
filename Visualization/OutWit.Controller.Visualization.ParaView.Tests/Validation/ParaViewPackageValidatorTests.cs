@@ -242,6 +242,25 @@ public sealed class ParaViewPackageValidatorTests
     }
 
     [Test]
+    public void LoadMaterialsWithAPathIsRejectedTest()
+    {
+        // Audit C-H1: materials/MaterialLibrary is allowlisted and sits outside the file-reference
+        // groups, so its LoadMaterials path never met a path gate — a non-empty value must be refused
+        // on the host exactly like an executable property; the empty default of every real state
+        // stays inert.
+        var armed = ParaViewStateBuilder.Typical("data/field.vtu");
+        armed.AddProxy("materials", "MaterialLibrary", ("LoadMaterials", ["/etc/passwd"]));
+        var report = ValidateState(armed);
+
+        Assert.That(report.IsValid, Is.False);
+        Assert.That(report.Errors, Has.Some.Contains("materials/MaterialLibrary").And.Some.Contains("executable property 'LoadMaterials'"));
+
+        var inert = ParaViewStateBuilder.Typical("data/field.vtu");
+        inert.AddProxy("materials", "MaterialLibrary", ("LoadMaterials", [""]));
+        Assert.That(ValidateState(inert).IsValid, Is.True, "an empty LoadMaterials is what every saved state carries");
+    }
+
+    [Test]
     public void UnknownProxyTypeIsRejectedByTheAllowlistTest()
     {
         var state = ParaViewStateBuilder.Typical("data/field.vtu");

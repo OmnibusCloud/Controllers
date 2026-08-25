@@ -134,6 +134,24 @@ round trip; an index below `-count` is still "outside the timeline", and an expl
 one timestep twice through both forms is still a repeat. The document does not change (the members
 were `int` already); a 0.4.0 host rejects a negative index as before.
 
+### Hardening after the 2026-08-22 audit (controller 0.4.3)
+
+- **C-H1** `LoadMaterials` (on the allowlisted `materials/MaterialLibrary`, which lives outside the
+  file-reference groups) is a blocked property: a non-empty value is refused by the host and by the
+  runner's pre- and post-load scans like a script property; the empty value every saved state carries
+  stays inert. The corpus guard asserts no allowlisted proxy outside the file-reference groups carries
+  a path-valued property.
+- **C-M1** the EGL demote-and-retry acts only on a CRASH — the runner died without writing its status
+  document (`ParaViewRunnerCrashedException`). A policy refusal, a usage error or the wall-clock limit
+  is the task's own verdict and is never retried; the same rule governs `Compose`.
+- **C-M2** the retry starts from a clean slate (`ParaViewTaskWorkspace.ClearAttemptArtifacts`: status
+  document + every output of the crashed attempt), so a second attempt's error can never blame the first.
+- **C-M8** a crash outranks a pinned `OUTWIT_PVPYTHON_OPENGL_WINDOW`: once demoted, the node stays on
+  software for the rest of the process even with the pin.
+- **C-H2** off Windows (no kill-on-close job object) `render_task.py` and `compose_scene.py` run a
+  parent watchdog thread: when the controller process is gone (`getppid()` changed) the runner leaves
+  through `os._exit` at once instead of pinning the node until the wall-clock limit.
+
 ## The runner contract
 
 The node never builds a shell string. It invokes the bundled `pvpython` directly:

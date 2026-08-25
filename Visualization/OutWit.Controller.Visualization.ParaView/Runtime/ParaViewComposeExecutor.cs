@@ -108,11 +108,12 @@ public sealed class ParaViewComposeExecutor
         {
             (outcome, status) = await RunComposeOnceAsync(pvpythonPath, arguments, workspace, openGlWindow, m_logger, cancellationToken);
         }
-        catch (InvalidOperationException error) when (ParaViewRenderingBackend.IsEglWindow(openGlWindow))
+        catch (ParaViewRunnerCrashedException error) when (ParaViewRenderingBackend.IsEglWindow(openGlWindow))
         {
-            // The same self-healing as the render path: a flaky EGL stack demotes the node and the
-            // composition retries on the software window.
-            m_logger.LogWarning("{ActivityName}: the EGL composer failed ({Message}); demoting this node to OSMesa and retrying", ACTIVITY_NAME, error.Message);
+            // The same self-healing as the render path: a flaky EGL stack CRASHES the composer (no
+            // status document), the node demotes and the composition retries on the software window
+            // from a clean slate; a policy refusal or the wall-clock limit is never retried (C-M1).
+            m_logger.LogWarning("{ActivityName}: the EGL composer crashed ({Message}); demoting this node to OSMesa and retrying", ACTIVITY_NAME, error.Message);
             ParaViewRenderingBackend.Demote(pvpythonPath, m_logger);
             File.Delete(workspace.ComposeStatusFilePath);
             if (File.Exists(workspace.StatePath))
@@ -182,6 +183,11 @@ public sealed class ParaViewComposeExecutor
         var status = ParaViewComposeStatus.TryRead(workspace.ComposeStatusFilePath);
         if (outcome.TimedOut)
             throw new InvalidOperationException($"{ACTIVITY_NAME}: the composer exceeded its {ParaViewInputLimits.TASK_WALL_CLOCK_LIMIT.TotalMinutes:0}-minute wall-clock limit and was terminated.{Describe(status, outcome)}");
+
+        // A non-zero exit without a status document = the interpreter never reached the finally
+        // that writes it: a crash.
+        if (status == null && outcome.ExitCode != 0)
+            throw new ParaViewRunnerCrashedException($"{ACTIVITY_NAME}: the composer died without writing a status document (exit code {outcome.ExitCode}).{Describe(null, outcome)}");
 
         if (outcome.ExitCode != 0)
             throw new InvalidOperationException($"{ACTIVITY_NAME}: the composer exited with code {outcome.ExitCode}.{Describe(status, outcome)}");

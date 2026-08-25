@@ -152,6 +152,23 @@ public sealed class ParaViewTaskWorkspace : IDisposable
     /// </summary>
     /// <param name="task">The task.</param>
     /// <returns>Absolute output path.</returns>
+    /// <summary>
+    /// Removes what a runner attempt left behind — the status document and every file in the output
+    /// directory — so a retry starts from a clean slate and its own verdict can never be confused
+    /// with the previous attempt's (audit C-M2). The materialized package is untouched.
+    /// </summary>
+    public void ClearAttemptArtifacts()
+    {
+        if (File.Exists(StatusFilePath))
+            File.Delete(StatusFilePath);
+
+        if (!Directory.Exists(OutputDirectory))
+            return;
+
+        foreach (var file in Directory.EnumerateFiles(OutputDirectory))
+            File.Delete(file);
+    }
+
     public string OutputPathFor(ParaViewRenderTaskData task)
     {
         // A camera move renders several outputs of one timestep: the orbit position keeps their

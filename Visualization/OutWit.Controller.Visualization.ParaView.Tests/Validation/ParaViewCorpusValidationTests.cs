@@ -89,6 +89,27 @@ public sealed class ParaViewCorpusValidationTests
                         Assert.That(ParaViewLogicalPath.Check(value), Is.Null, $"{stateName}: {proxy.Key}.{property.Name} = {value}");
                 }
             }
+
+            // Audit C-H1 guard: outside the file-reference groups no allowlisted proxy of a real state
+            // carries a path-valued property — the material library's LoadMaterials is empty in every
+            // state ParaView saves (a value there is refused as an executable property), and nothing
+            // else names a file. A new ParaView series that starts saving such a value fails here first.
+            foreach (var proxy in document.Proxies.Where(me => !ParaViewProxyPolicy.FILE_REFERENCE_GROUPS.Contains(me.Group, StringComparer.Ordinal)))
+            {
+                foreach (var property in proxy.Properties)
+                {
+                    var pathShaped = property.Name == "LoadMaterials"
+                                     || property.HasFileDomain
+                                     || ParaViewProxyPolicy.FILE_PROPERTY_NAMES.Contains(property.Name)
+                                     || property.Name.EndsWith("FileName", StringComparison.Ordinal)
+                                     || property.Name.EndsWith("FileNames", StringComparison.Ordinal);
+                    if (!pathShaped)
+                        continue;
+
+                    Assert.That(property.Values.All(string.IsNullOrWhiteSpace), Is.True,
+                        $"{stateName}: {proxy.Key}.{property.Name} carries a value outside the file-reference groups — no path gate covers it");
+                }
+            }
         }
     }
 

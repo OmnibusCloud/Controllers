@@ -33,6 +33,7 @@ import json
 import math
 import os
 import sys
+import threading
 import time
 import traceback
 
@@ -705,6 +706,29 @@ def run(task, status):
     status.set("ok", True)
 
 
+def start_parent_watchdog(interval_seconds=2.0):
+    """Off Windows the controller cannot tie this process to its own lifetime (the kill-on-close job
+    object is a Windows facility), so a node process that crashes or is SIGKILLed mid-composition
+    would leave a pvpython tree pinning the node (audit C-H2). A daemon thread watches the parent
+    pid: when it changes (the parent died and we were re-parented) the process leaves at once through
+    os._exit — no interpreter shutdown, which has been seen to deadlock on Linux."""
+    if os.name == "nt":
+        return
+    parent = os.getppid()
+
+    def watch():
+        while True:
+            time.sleep(interval_seconds)
+            if os.getppid() != parent:
+                sys.stderr.write("compose_scene: parent process %d is gone; exiting\n" % parent)
+                sys.stderr.flush()
+                os._exit(EXIT_FAILURE)
+
+    thread = threading.Thread(target=watch, name="parent-watchdog")
+    thread.daemon = True
+    thread.start()
+
+
 def main(argv):
     parser = argparse.ArgumentParser(prog="compose_scene.py", add_help=True)
     parser.add_argument("--task-file", required=True, help="path of the compose task JSON written by the controller")
@@ -713,6 +737,7 @@ def main(argv):
     except SystemExit:
         return EXIT_USAGE
 
+    start_parent_watchdog()
     status = Status()
     status_path = None
     state_path = None

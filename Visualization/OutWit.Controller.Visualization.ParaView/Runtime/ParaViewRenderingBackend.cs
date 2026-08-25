@@ -48,6 +48,10 @@ public static class ParaViewRenderingBackend
 
     private static readonly ConcurrentDictionary<string, string?> CACHE = new(StringComparer.OrdinalIgnoreCase);
 
+    // Runtimes whose EGL crashed at work time in this process: software for the rest of the
+    // process lifetime, whatever the pinned window says (audit C-M8).
+    private static readonly ConcurrentDictionary<string, bool> DEMOTED = new(StringComparer.OrdinalIgnoreCase);
+
     private static readonly JsonSerializerOptions JSON_OPTIONS = new() { PropertyNameCaseInsensitive = true };
 
     #endregion
@@ -69,6 +73,11 @@ public static class ParaViewRenderingBackend
         ILogger? logger,
         CancellationToken cancellationToken)
     {
+        // A crash at work time outranks a pinned window: a pinned flaky node would otherwise run every
+        // task twice forever, the demotion never sticking (audit C-M8).
+        if (DEMOTED.ContainsKey(pvpythonPath))
+            return ParaViewRunnerEnvironment.OSMESA_WINDOW;
+
         var forced = Environment.GetEnvironmentVariable(ENV_OPENGL_WINDOW);
         if (!string.IsNullOrWhiteSpace(forced))
             return forced.Trim();
@@ -172,15 +181,18 @@ public static class ParaViewRenderingBackend
     public static void Demote(string pvpythonPath, ILogger? logger)
     {
         CACHE[pvpythonPath] = ParaViewRunnerEnvironment.OSMESA_WINDOW;
-        logger?.LogWarning("ParaView rendering backend demoted to {Window} on this node (EGL failed at work time)", ParaViewRunnerEnvironment.OSMESA_WINDOW);
+        DEMOTED[pvpythonPath] = true;
+        logger?.LogWarning("ParaView rendering backend demoted to {Window} on this node (EGL crashed at work time; a pinned {Variable} is overridden for the rest of this process)",
+            ParaViewRunnerEnvironment.OSMESA_WINDOW, ENV_OPENGL_WINDOW);
     }
 
     /// <summary>
-    /// Forgets probe results (tests; a controller reload also starts a fresh process, which clears it naturally).
+    /// Forgets probe results and demotions (tests; a controller reload also starts a fresh process, which clears them naturally).
     /// </summary>
     public static void ResetCache()
     {
         CACHE.Clear();
+        DEMOTED.Clear();
     }
 
     #endregion

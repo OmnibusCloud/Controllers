@@ -93,13 +93,17 @@ public sealed class ParaViewTaskExecutor
         {
             (outcome, status) = await RunRunnerOnceAsync(pvpythonPath, arguments, workspace, openGlWindow, cancellationToken);
         }
-        catch (InvalidOperationException error) when (ParaViewRenderingBackend.IsEglWindow(openGlWindow))
+        catch (ParaViewRunnerCrashedException error) when (ParaViewRenderingBackend.IsEglWindow(openGlWindow))
         {
             // Production lesson: a driver's EGL can pass the probe and still segfault real tasks.
-            // One failed subprocess demotes this node to software for the rest of the process
-            // lifetime and the task retries locally — the job never sees the crash.
-            m_logger.LogWarning("ParaView.RenderFrame: the EGL runner failed ({Message}); demoting this node to OSMesa and retrying the task", error.Message);
+            // One CRASHED subprocess (no status document — a segfault, an abort) demotes this node
+            // to software for the rest of the process lifetime and the task retries locally — the
+            // job never sees the crash. A policy refusal, a usage error or the wall-clock limit is
+            // the task's own verdict and is never retried (audit C-M1); the retry starts from a
+            // clean slate so nothing of the crashed attempt can be mistaken for its own (C-M2).
+            m_logger.LogWarning("ParaView.RenderFrame: the EGL runner crashed ({Message}); demoting this node to OSMesa and retrying the task", error.Message);
             ParaViewRenderingBackend.Demote(pvpythonPath, m_logger);
+            workspace.ClearAttemptArtifacts();
             (outcome, status) = await RunRunnerOnceAsync(pvpythonPath, arguments, workspace, ParaViewRunnerEnvironment.OSMESA_WINDOW, cancellationToken);
         }
 
@@ -163,6 +167,11 @@ public sealed class ParaViewTaskExecutor
         var status = ParaViewRunnerStatus.TryRead(workspace.StatusFilePath);
         if (outcome.TimedOut)
             throw new InvalidOperationException($"ParaView.RenderFrame: the runner exceeded its {ParaViewInputLimits.TASK_WALL_CLOCK_LIMIT.TotalMinutes:0}-minute wall-clock limit and was terminated.{Describe(status, outcome)}");
+
+        // The runner writes its status in a finally block, so a non-zero exit WITHOUT a status means
+        // the interpreter never got there — the process died (a segfault, an abort, an OOM kill).
+        if (status == null && outcome.ExitCode != 0)
+            throw new ParaViewRunnerCrashedException($"ParaView.RenderFrame: the runner died without writing a status document (exit code {outcome.ExitCode}).{Describe(null, outcome)}");
 
         if (outcome.ExitCode != 0)
             throw new InvalidOperationException($"ParaView.RenderFrame: the runner exited with code {outcome.ExitCode}.{Describe(status, outcome)}");

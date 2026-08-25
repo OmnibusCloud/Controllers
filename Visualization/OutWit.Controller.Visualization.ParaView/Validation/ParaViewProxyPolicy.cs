@@ -40,7 +40,12 @@ public static class ParaViewProxyPolicy
         "RequestUpdateExtentScript",
         "UpdateExtentScript",
         "PythonPath",
-        "PythonScript"
+        "PythonScript",
+        // materials/MaterialLibrary (allowlisted, present in every real state) takes client paths
+        // through LoadMaterials and lives outside the file-reference groups, so neither path gate
+        // sees it; a non-empty value hands an arbitrary path to ParaView at load (audit C-H1). Empty
+        // (every corpus state) stays inert.
+        "LoadMaterials"
     };
 
     /// <summary>

@@ -35,6 +35,7 @@ import math
 import os
 import re
 import sys
+import threading
 import time
 import traceback
 import xml.etree.ElementTree as ET
@@ -738,6 +739,29 @@ def run(task, status):
     status.set("ok", True)
 
 
+def start_parent_watchdog(interval_seconds=2.0):
+    """Off Windows the controller cannot tie this process to its own lifetime (the kill-on-close job
+    object is a Windows facility), so a node process that crashes or is SIGKILLed mid-task would leave
+    a pvpython tree pinning the node (audit C-H2). A daemon thread watches the parent pid: when it
+    changes (the parent died and we were re-parented to init or a subreaper) the process leaves at
+    once through os._exit — no interpreter shutdown, which has been seen to deadlock on Linux."""
+    if os.name == "nt":
+        return
+    parent = os.getppid()
+
+    def watch():
+        while True:
+            time.sleep(interval_seconds)
+            if os.getppid() != parent:
+                sys.stderr.write("render_task: parent process %d is gone; exiting\n" % parent)
+                sys.stderr.flush()
+                os._exit(EXIT_FAILURE)
+
+    thread = threading.Thread(target=watch, name="parent-watchdog")
+    thread.daemon = True
+    thread.start()
+
+
 def main(argv):
     parser = argparse.ArgumentParser(prog="render_task.py", add_help=True)
     parser.add_argument("--task-file", required=True, help="path of the task JSON written by the controller")
@@ -746,6 +770,7 @@ def main(argv):
     except SystemExit:
         return EXIT_USAGE
 
+    start_parent_watchdog()
     status = Status()
     status_path = None
     exit_code = EXIT_FAILURE
