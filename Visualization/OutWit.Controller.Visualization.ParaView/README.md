@@ -121,6 +121,16 @@ last. Outputs count against the same per-job limit; the validation report's `out
 initiator how many frames the job will render. Task identities of orbit outputs carry the orbit
 position and azimuth, so they never collide with the plain task of the same timestep.
 
+### Frame indices from the end (controller 0.4.1)
+
+A frame selection's indices may be negative, Python style: `-1` is the last timestep of the resolved
+timeline, `-count` the first (`Single.First`, `Range.First`/`Last`, `Explicit.Indices` alike). A
+client that does not know how many timesteps the data carries — WitSweep rendering a variant's
+`.frd` by blob reference through a composed scene — asks for the last one with `First = -1` and no
+round trip; an index below `-count` is still "outside the timeline", and an explicit list that names
+one timestep twice through both forms is still a repeat. The document does not change (the members
+were `int` already); a 0.4.0 host rejects a negative index as before.
+
 ## The runner contract
 
 The node never builds a shell string. It invokes the bundled `pvpython` directly:

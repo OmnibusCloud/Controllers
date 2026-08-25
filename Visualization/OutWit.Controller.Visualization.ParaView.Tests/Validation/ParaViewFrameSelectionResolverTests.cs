@@ -46,6 +46,25 @@ public sealed class ParaViewFrameSelectionResolverTests
     }
 
     [Test]
+    public void NegativeIndicesCountFromTheEndTest()
+    {
+        var errors = new List<string>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ParaViewFrameSelectionResolver.Resolve(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Single, First = -1 }, 10, errors), Is.EqualTo(new[] { 9 }), "-1 is the last timestep");
+            Assert.That(ParaViewFrameSelectionResolver.Resolve(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Single, First = -10 }, 10, errors), Is.EqualTo(new[] { 0 }), "-count is the first");
+            Assert.That(ParaViewFrameSelectionResolver.Resolve(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Single, First = -1 }, 1, errors), Is.EqualTo(new[] { 0 }), "a static scene has one timestep, the last one");
+            Assert.That(ParaViewFrameSelectionResolver.Resolve(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Single, First = -1 }, 0, errors), Is.EqualTo(new[] { 0 }), "an unknown timeline counts as one timestep");
+            Assert.That(ParaViewFrameSelectionResolver.Resolve(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Range, First = -3, Last = -1, Step = 1 }, 10, errors), Is.EqualTo(new[] { 7, 8, 9 }), "a range from the end");
+            Assert.That(ParaViewFrameSelectionResolver.Resolve(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Range, First = 8, Last = -1, Step = 1 }, 10, errors), Is.EqualTo(new[] { 8, 9 }), "a range to the end");
+            Assert.That(ParaViewFrameSelectionResolver.Resolve(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Explicit, Indices = [-1, 0] }, 10, errors), Is.EqualTo(new[] { 9, 0 }), "explicit indices keep their order");
+        });
+
+        Assert.That(errors, Is.Empty);
+    }
+
+    [Test]
     public void RangeOverflowsAreRejectedNotLoopedTest()
     {
         var errors = new List<string>();
@@ -67,7 +86,8 @@ public sealed class ParaViewFrameSelectionResolverTests
             Assert.That(Errors(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Explicit }, 10), Has.Some.Contains("lists no"));
             Assert.That(Errors(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Explicit, Indices = [1, 1] }, 10), Has.Some.Contains("repeats"));
             Assert.That(Errors(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Single, First = 10 }, 10), Has.Some.Contains("outside the timeline"));
-            Assert.That(Errors(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Single, First = -1 }, 10), Has.Some.Contains("outside the timeline"));
+            Assert.That(Errors(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Single, First = -11 }, 10), Has.Some.Contains("outside the timeline"));
+            Assert.That(Errors(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Explicit, Indices = [-1, 9] }, 10), Has.Some.Contains("repeats"));
             Assert.That(Errors(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Range, First = 0, Last = ParaViewInputLimits.MAX_OUTPUTS + 5 }, ParaViewInputLimits.MAX_OUTPUTS + 10), Has.Some.Contains("more than"));
             Assert.That(Errors(new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.All }, ParaViewInputLimits.MAX_OUTPUTS + 1), Has.Some.Contains("limit"));
         });

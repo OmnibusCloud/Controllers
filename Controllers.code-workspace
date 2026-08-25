@@ -1,0 +1,41 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../OutWit/WitCloud"
+		},
+		{
+			"path": "../../OutWit/WitEngine"
+		},
+		{
+			"path": "../../OutWit/WitCloud.Portal"
+		},
+		{
+			"path": "../Blender"
+		},
+		{
+			"path": "../3ds-Max"
+		},
+		{
+			"path": "../../OutWit/Common"
+		},
+		{
+			"path": "../../OutWit/WitCloud.Test"
+		},
+		{
+			"path": "../Simulation"
+		},
+		{
+			"path": "../../OutWit/WitMath"
+		},
+		{
+			"path": "../WitSweep"
+		},
+		{
+			"path": "../../OutWit/WitLicense"
+		}
+	],
+	"settings": {}
+}

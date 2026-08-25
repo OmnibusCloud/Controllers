@@ -26,7 +26,7 @@ public static class ParaViewFrameSelectionResolver
         switch (selection.Mode)
         {
             case ParaViewFrameSelectionMode.Single:
-                indices.Add(selection.First);
+                indices.Add(FromEnd(selection.First, count));
                 break;
 
             case ParaViewFrameSelectionMode.Range:
@@ -36,25 +36,28 @@ public static class ParaViewFrameSelectionResolver
                     return [];
                 }
 
-                if (selection.Last < selection.First)
+                var first = FromEnd(selection.First, count);
+                var last = FromEnd(selection.Last, count);
+
+                if (last < first)
                 {
                     errors.Add($"frame selection range is empty: last ({selection.Last}) is before first ({selection.First})");
                     return [];
                 }
 
-                if (((long)selection.Last - selection.First) / selection.Step + 1 > ParaViewInputLimits.MAX_OUTPUTS)
+                if (((long)last - first) / selection.Step + 1 > ParaViewInputLimits.MAX_OUTPUTS)
                 {
                     errors.Add($"frame selection requests more than {ParaViewInputLimits.MAX_OUTPUTS} outputs");
                     return [];
                 }
 
-                if (selection.First < 0 || selection.Last >= count)
+                if (first < 0 || last >= count)
                 {
                     errors.Add($"frame selection range {selection.First}..{selection.Last} is outside the timeline of {count} timestep(s)");
                     return [];
                 }
 
-                for (long index = selection.First; index <= selection.Last; index += selection.Step)
+                for (long index = first; index <= last; index += selection.Step)
                     indices.Add((int)index);
                 break;
 
@@ -81,13 +84,14 @@ public static class ParaViewFrameSelectionResolver
                     return [];
                 }
 
-                if (selection.Indices.Distinct().Count() != selection.Indices.Count)
+                var explicitIndices = selection.Indices.Select(index => FromEnd(index, count)).ToList();
+                if (explicitIndices.Distinct().Count() != explicitIndices.Count)
                 {
                     errors.Add("explicit frame selection repeats a timestep index");
                     return [];
                 }
 
-                indices.AddRange(selection.Indices);
+                indices.AddRange(explicitIndices);
                 break;
 
             default:
@@ -103,6 +107,16 @@ public static class ParaViewFrameSelectionResolver
         }
 
         return indices;
+    }
+
+    // Negative indices count from the end, Python style: -1 is the last
+    // timestep, -count the first (0.4.1). A client that does not know how
+    // many timesteps the data carries — WitSweep rendering a variant's .frd
+    // by blob reference — asks for "the last one" without a round trip. A
+    // value below -count stays negative and fails the range check below.
+    private static int FromEnd(int index, int count)
+    {
+        return index < 0 && index >= -count ? index + count : index;
     }
 
     #endregion
