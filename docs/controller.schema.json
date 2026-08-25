@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/blob/main/docs/controller.schema.json",
+  "title": "WitEngine controller manifest",
+  "description": "The controller.json file bundled at the root of every WitEngine controller module. Emitted by Build/OutWit.Controller.Manifest.targets from per-csproj metadata at build time; read at runtime by OutWit.Engine.Assets (for dataAssets resolution) and OutWit.Cloud.Data (for the rest of the metadata). Extra properties not described here pass through both readers untouched.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["name", "version", "description"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "PascalCase controller identifier. Sourced from <ControllerName> in the csproj. Must match the [WitPluginManifest] name attribute on the controller's host class and is what consumers reference via <ControllerDependency Include=\"<name>\" />.",
+      "examples": ["Variables", "Grid", "Render"]
+    },
+    "assemblyName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Physical .NET assembly filename (without extension) at the root of the module. Sourced from <AssemblyName> (which defaults to the csproj filename, e.g. OutWit.Controller.Render). Used by the loader to discover the entry assembly inside <name>.module/.",
+      "examples": ["OutWit.Controller.Variables", "OutWit.Controller.Render"]
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$",
+      "description": "Semantic version string. Sourced from <Version> in the csproj. Used by the dependency resolver — consumers declare a minimum version, the resolver picks the highest matching one. Pre-release / build-metadata suffixes (1.2.0-rc.1, 1.2.0+sha.abcd) are allowed.",
+      "examples": ["1.0.0", "1.15.2", "2.0.0-rc.1"]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One-line summary shown in the controller browser / package listings. Sourced from <Description>."
+    },
+    "authors": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
+      "description": "Author names or organizations. Sourced from <Authors> in the csproj (semicolon-separated); empty array when <Authors> is unset."
+    },
+    "copyright": {
+      "type": "string",
+      "description": "Copyright notice. Sourced from <Copyright> in the csproj. Omitted from the manifest when the property is unset."
+    },
+    "projectUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Project homepage URL. Sourced from <PackageProjectUrl>."
+    },
+    "repositoryUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Source repository URL. Sourced from <RepositoryUrl>."
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license expression. Sourced from <PackageLicenseExpression>. The shared Build/OutWit.Controller.props injects MIT by default for first-party controllers.",
+      "examples": ["MIT", "Apache-2.0", "BSD-3-Clause"]
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
+      "description": "Free-form search tags. Sourced from <PackageTags> (semicolon-separated). Conventionally includes \"witengine\", \"witcloud\", \"controller\" plus per-controller topical tags."
+    },
+    "features": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
+      "description": "Stable capability identifiers a consumer can match against (\"render-frame\", \"sparse-matrix\", \"tiled-still\", ...). Sourced from <ControllerFeatures>. Treated as a public API surface — once added, removing one is a breaking change."
+    },
+    "useCases": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Human-readable use-case summaries for the controller browser. Sourced from <ControllerUseCases>. No stability contract — purely descriptive."
+    },
+    "runtimeTargets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/runtimeTarget" },
+      "description": "Platforms the controller declares support for. Sourced from <ControllerRuntimeTarget> items. Empty array means platform-agnostic (a pure-.NET controller with no native assets). RIDs listed here gate which <ControllerDataAsset> entries get resolved on the current host."
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+      },
+      "description": "Controller-to-controller version constraints. Keys are controller `name`s, values are minimum versions. Sourced from <ControllerDependency Include=\"...\" MinimumVersion=\"...\" /> items. Resolver picks the highest installed version that is >= the constraint.",
+      "examples": [
+        { "Variables": "1.0.0", "Special": "1.0.0" }
+      ]
+    },
+    "dataAssets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dataAsset" },
+      "description": "External blobs (native runtimes, datasets, reference scenes) fetched at consumer-build time by OutWit.Engine.Assets.ResolveControllerAssetsTask. Sourced from <ControllerDataAsset> items. Empty for Tier-1 controllers; non-empty for Tier-2 (Render, Matrices).\n\nWhen non-empty: the consumer-side build/<id>.targets imports this manifest from content/module/controller.json, fetches each entry that matches the host RID (or runtimeIdentifier == \"any\"), verifies SHA256, and extracts into the module's <extractTo> path."
+    }
+  },
+  "$defs": {
+    "runtimeTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rid", "os", "architecture"],
+      "properties": {
+        "rid": {
+          "type": "string",
+          "minLength": 1,
+          "description": ".NET runtime identifier — `win-x64`, `linux-x64`, `osx-arm64`, etc. Matches the values used in <ControllerDataAsset RuntimeIdentifier=\"...\" />."
+        },
+        "os": {
+          "type": "string",
+          "enum": ["windows", "linux", "macos"],
+          "description": "Lower-case OS family."
+        },
+        "architecture": {
+          "type": "string",
+          "enum": ["x64", "x86", "arm64", "arm"],
+          "description": "Lower-case CPU architecture."
+        }
+      }
+    },
+    "dataAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "uri", "sha256"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable identifier within the manifest, used for per-asset diagnostics and to disambiguate multi-platform variants (e.g. `blender-win-x64` vs `blender-linux-x64`)."
+        },
+        "runtimeIdentifier": {
+          "type": "string",
+          "default": "any",
+          "description": "Which RID this asset is needed on. `any` (default) means every host fetches it; a specific RID like `win-x64` gates the asset to that platform only. Must either be `any` or appear in the `runtimeTargets[*].rid` list."
+        },
+        "uri": {
+          "type": "string",
+          "format": "uri",
+          "description": "Where to fetch the asset. Schemes understood by the built-in resolvers:\n- `gh-release://<owner>/<repo>/<tag>/<file>` — GitHub Release artefact.\n- `https://...` — arbitrary HTTPS URL.\n- `file://...` — local path (typically for inline-packed Path-B contributor zips).\n\nThird parties can plug additional resolvers via OutWit.Engine.Assets."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "description": "Hex SHA-256 digest of the asset bytes. Verified after download; mismatch aborts the fetch. The outwit-assets-pack author tool computes and writes this; manual edits should be 64 lowercase hex chars."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Expected size of the asset in bytes. Informational — drives progress reporting and pre-flight disk-space estimation. The author tool fills this in alongside the SHA."
+        },
+        "extractTo": {
+          "type": "string",
+          "default": ".",
+          "description": "Relative path inside the controller's `.module/` directory where the asset (or, for archives, the extracted contents) should land. `.` means the module root. Leading slashes / path-traversal segments are rejected by the resolver."
+        },
+        "required": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true (default), the controller cannot run without this asset and the resolver fails loudly on fetch errors. When false, the asset is best-effort — used for optional benchmark fixtures or platform variants the current host doesn't strictly need."
+        }
+      }
+    }
+  }
+}
