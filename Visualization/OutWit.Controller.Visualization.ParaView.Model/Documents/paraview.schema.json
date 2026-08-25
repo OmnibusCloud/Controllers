@@ -20,7 +20,7 @@
     ],
     "source": {
       "assembly": "OutWit.Controller.Visualization.ParaView.Model",
-      "version": "0.3.0"
+      "version": "0.4.0"
     },
     "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
   },
@@ -489,7 +489,7 @@
     "paraview.turntable@1": {
       "type": "object",
       "title": "ParaviewTurntable",
-      "description": "A camera orbit (\"turntable\") as an output option: the controller renders Frames outputs with the state's camera revolved about the focal point by Degrees in total, at a fixed or an advancing data time (TimeMode). The orbit is an output-side transform of the captured camera — no animation track in the state is needed, one timestep in gives a showcase sequence out. The azimuth of output i of N is Degrees * i / N (the last output stops short of the first, so a 360° orbit loops).",
+      "description": "A camera move as an output option — the turntable of controller 0.2.0 generalised in 0.4.0 (docs 06, part B): the controller renders Frames outputs with the state's camera moved about the focal point — revolved by Degrees in total about the orbit axis, raised by ElevationDegrees in total about the camera's right axis, and moved toward or away from the focal point until its distance is DollyFactor times the start — at a fixed or an advancing data time (TimeMode). Every move is an output-side transform of the captured camera: no animation track in the state, one timestep in gives a showcase sequence out. The azimuth of output i of N is Degrees * i / N (the last output stops short of the first, so a 360° orbit loops); elevation and dolly progress as i / (N - 1) so the last output reaches the full move. With Oscillate every component sways instead: sin(2πi/N) / 2 of its total, back and forth around the captured framing, a seamless loop. The presets of a client (orbit, rise, spiral, approach, rock) are combinations of these members.",
       "x-oc-type-id": "paraview.turntable@1",
       "x-oc-binding-name": "ParaviewTurntable",
       "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewTurntableData, OutWit.Controller.Visualization.ParaView.Model",
@@ -503,7 +503,7 @@
           "maximum": 2147483647
         },
         "degrees": {
-          "description": "Total sweep of the orbit in degrees; the sign sets the direction (positive = the camera moves counter-clockwise seen from the orbit axis). Non-zero, at most ten full turns.",
+          "description": "Total sweep of the orbit in degrees; the sign sets the direction (positive = the camera moves counter-clockwise seen from the orbit axis). Zero when the move has no orbit (a pure rise or approach); at most ten full turns either way.",
           "x-oc-clr-name": "Degrees",
           "type": "number",
           "format": "double"
@@ -517,6 +517,23 @@
           "description": "The orbit axis through the focal point.",
           "x-oc-clr-name": "Axis",
           "$ref": "#/$defs/ParaViewTurntableAxis"
+        },
+        "elevationDegrees": {
+          "description": "Total rise of the camera in degrees about its own right axis through the focal point (positive = the camera climbs toward the view-up, toward a top-down view; negative = it dives). 0 keeps the captured height; at most ±170 so the move never crosses the pole. Appended in Model 0.4.0.",
+          "x-oc-clr-name": "ElevationDegrees",
+          "type": "number",
+          "format": "double"
+        },
+        "dollyFactor": {
+          "description": "The camera's distance to the focal point at the end of the move, relative to the captured distance: 0.5 halves it (an approach), 2 doubles it (a retreat), 1 keeps it. Between 0.05 and 20. Appended in Model 0.4.0.",
+          "x-oc-clr-name": "DollyFactor",
+          "type": "number",
+          "format": "double"
+        },
+        "oscillate": {
+          "description": "Whether the move sways back and forth around the captured framing (a seamless rocking loop: every component follows sin(2πi/N) / 2 of its total) instead of progressing from the captured framing to the full move. Appended in Model 0.4.0.",
+          "x-oc-clr-name": "Oscillate",
+          "type": "boolean"
         }
       }
     },

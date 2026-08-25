@@ -3,11 +3,12 @@ using OutWit.Controller.Visualization.ParaView.Model;
 namespace OutWit.Controller.Visualization.ParaView.Validation;
 
 /// <summary>
-/// Turns an output option's turntable into the ordered list of (timestep, azimuth) outputs over the
-/// resolved timesteps (docs 03, section 27 item 1): a fixed data time gives every selected timestep
-/// a full orbit, an advancing data time spreads the selected timesteps over one orbit. Validates
-/// the turntable's bounds before any task is allocated. Without a turntable the plan is the
-/// timestep list itself, azimuth 0.
+/// Turns an output option's camera move (the "turntable" document) into the ordered list of
+/// (timestep, azimuth, elevation, dolly) outputs over the resolved timesteps (docs 03, section 27
+/// item 1; docs 06, part B): a fixed data time gives every selected timestep the full move, an
+/// advancing data time spreads the selected timesteps over one move. Validates the move's bounds
+/// before any task is allocated. Without a move the plan is the timestep list itself, camera as
+/// captured.
 /// </summary>
 public static class ParaViewTurntableResolver
 {
@@ -15,6 +16,15 @@ public static class ParaViewTurntableResolver
 
     /// <summary>Largest total sweep accepted, in degrees (ten full turns either way).</summary>
     public const double MAX_ABS_DEGREES = 3600.0;
+
+    /// <summary>Largest total rise accepted, in degrees either way (a rigid rotation past the pole flips the framing).</summary>
+    public const double MAX_ABS_ELEVATION_DEGREES = 170.0;
+
+    /// <summary>Smallest end distance factor accepted.</summary>
+    public const double MIN_DOLLY_FACTOR = 0.05;
+
+    /// <summary>Largest end distance factor accepted.</summary>
+    public const double MAX_DOLLY_FACTOR = 20.0;
 
     #endregion
 
@@ -35,10 +45,23 @@ public static class ParaViewTurntableResolver
         else if (turntable.Frames > ParaViewInputLimits.MAX_OUTPUTS)
             errors.Add($"turntable requests {turntable.Frames} orbit frames, over the {ParaViewInputLimits.MAX_OUTPUTS} outputs per job limit");
 
-        if (double.IsNaN(turntable.Degrees) || double.IsInfinity(turntable.Degrees) || turntable.Degrees == 0.0)
-            errors.Add($"turntable sweep must be a non-zero number of degrees, got {turntable.Degrees}");
+        if (!double.IsFinite(turntable.Degrees))
+            errors.Add($"turntable sweep must be a finite number of degrees, got {turntable.Degrees}");
         else if (Math.Abs(turntable.Degrees) > MAX_ABS_DEGREES)
             errors.Add($"turntable sweep of {turntable.Degrees} degrees exceeds {MAX_ABS_DEGREES}");
+
+        if (!double.IsFinite(turntable.ElevationDegrees))
+            errors.Add($"camera elevation must be a finite number of degrees, got {turntable.ElevationDegrees}");
+        else if (Math.Abs(turntable.ElevationDegrees) > MAX_ABS_ELEVATION_DEGREES)
+            errors.Add($"camera elevation of {turntable.ElevationDegrees} degrees exceeds ±{MAX_ABS_ELEVATION_DEGREES}");
+
+        if (!double.IsFinite(turntable.DollyFactor) || turntable.DollyFactor < MIN_DOLLY_FACTOR || turntable.DollyFactor > MAX_DOLLY_FACTOR)
+            errors.Add($"camera dolly factor must be between {MIN_DOLLY_FACTOR} and {MAX_DOLLY_FACTOR}, got {turntable.DollyFactor}");
+
+        if (double.IsFinite(turntable.Degrees) && turntable.Degrees == 0.0
+            && double.IsFinite(turntable.ElevationDegrees) && turntable.ElevationDegrees == 0.0
+            && double.IsFinite(turntable.DollyFactor) && turntable.DollyFactor == 1.0)
+            errors.Add("the camera move moves nothing: zero sweep, zero elevation and a dolly factor of 1");
 
         if (!Enum.IsDefined(turntable.TimeMode))
             errors.Add($"unknown turntable time mode {turntable.TimeMode}");
@@ -92,7 +115,7 @@ public static class ParaViewTurntableResolver
                 var position = frames > 1
                     ? (int)Math.Round(i * (double)last / (frames - 1), MidpointRounding.AwayFromZero)
                     : 0;
-                steps.Add(new ParaViewOrbitStep(timestepIndices[position], i, Azimuth(turntable, i, frames)));
+                steps.Add(MoveAt(turntable, timestepIndices[position], i, frames));
             }
 
             return steps;
@@ -101,19 +124,41 @@ public static class ParaViewTurntableResolver
         foreach (var index in timestepIndices)
         {
             for (var i = 0; i < frames; i++)
-                steps.Add(new ParaViewOrbitStep(index, i, Azimuth(turntable, i, frames)));
+                steps.Add(MoveAt(turntable, index, i, frames));
         }
 
         return steps;
     }
 
-    #endregion
-
-    #region Tools
-
-    private static double Azimuth(ParaViewTurntableData turntable, int orbitIndex, int frames)
+    /// <summary>
+    /// The camera move of output <paramref name="orbitIndex"/> of <paramref name="frames"/>: the
+    /// azimuth progresses as <c>i / N</c> (cyclic: a 360° orbit loops), the elevation and the dolly
+    /// as <c>i / (N - 1)</c> (the last output reaches the full move); with <see cref="ParaViewTurntableData.Oscillate"/>
+    /// every component sways by <c>sin(2πi/N) / 2</c> of its total around the captured framing.
+    /// </summary>
+    /// <param name="turntable">The move.</param>
+    /// <param name="timestepIndex">The output's timestep.</param>
+    /// <param name="orbitIndex">Position in the move.</param>
+    /// <param name="frames">Number of outputs of the move.</param>
+    /// <returns>The output.</returns>
+    public static ParaViewOrbitStep MoveAt(ParaViewTurntableData turntable, int timestepIndex, int orbitIndex, int frames)
     {
-        return turntable.Degrees * orbitIndex / frames;
+        double cyclic;
+        double reaching;
+        if (turntable.Oscillate)
+        {
+            cyclic = reaching = Math.Sin(2.0 * Math.PI * orbitIndex / frames) / 2.0;
+        }
+        else
+        {
+            cyclic = (double)orbitIndex / frames;
+            reaching = frames > 1 ? (double)orbitIndex / (frames - 1) : 0.0;
+        }
+
+        var azimuth = turntable.Degrees * cyclic;
+        var elevation = turntable.ElevationDegrees * reaching;
+        var dolly = turntable.DollyFactor == 1.0 ? 1.0 : Math.Pow(turntable.DollyFactor, turntable.Oscillate ? 2.0 * reaching : reaching);
+        return new ParaViewOrbitStep(timestepIndex, orbitIndex, azimuth, elevation, dolly);
     }
 
     #endregion

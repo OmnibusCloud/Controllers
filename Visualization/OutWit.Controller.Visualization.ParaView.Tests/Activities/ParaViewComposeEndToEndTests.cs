@@ -199,6 +199,34 @@ public sealed class ParaViewComposeEndToEndTests
     }
 
     [Test]
+    public async Task DataFramesJobWithARiseRendersEveryOutputOfTheMoveTest()
+    {
+        var package = NewPackage().AddFile(LOGICAL_PATH, FAKE_FRD + "FAKE-TIMESTEPS=1\n");
+        var options = new ParaViewOutputOptionsData
+        {
+            Width = 16,
+            Height = 8,
+            Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Single, First = 0 },
+            Turntable = new ParaViewTurntableData { Frames = 3, Degrees = 0.0, ElevationDegrees = 60.0, DollyFactor = 0.5 }
+        };
+
+        var job = m_engine.Compile(Script("RenderParaViewDataFrames.wit"));
+        var status = await m_engine.ScheduleAndWaitAsync(job, DataScene(package), options);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+
+        var tasks = (job.Variables["tasks"].Value as IReadOnlyList<ParaViewRenderTaskData?>)!.Select(me => me!).ToList();
+        var result = job.Variables["result"].Value as IReadOnlyList<Guid?>;
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Has.Count.EqualTo(3), "a pure rise (no sweep) is a move too");
+            Assert.That(tasks.Select(me => me.ElevationDegrees), Is.EqualTo(new[] { 0.0, 30.0, 60.0 }).Within(1e-9));
+            Assert.That(tasks.Select(me => me.DollyFactor), Is.EqualTo(new[] { 1.0, Math.Sqrt(0.5), 0.5 }).Within(1e-9));
+            Assert.That(tasks.Select(me => me.TaskId).Distinct().Count(), Is.EqualTo(3));
+        });
+    }
+
+    [Test]
     public async Task ValidateDataJobReturnsTheReportOfTheComposedStateTest()
     {
         var package = NewPackage().AddFile(LOGICAL_PATH, FAKE_FRD);

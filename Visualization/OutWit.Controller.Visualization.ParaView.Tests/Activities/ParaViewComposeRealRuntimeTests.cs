@@ -187,7 +187,8 @@ public sealed class ParaViewComposeRealRuntimeTests
             Width = 96,
             Height = 64,
             Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Single, First = 0 },
-            Turntable = new ParaViewTurntableData { Frames = 4, Degrees = 360 }
+            // A spiral with an approach: orbit + rise + dolly through the real runtime's camera.
+            Turntable = new ParaViewTurntableData { Frames = 4, Degrees = 360, ElevationDegrees = 30.0, DollyFactor = 0.6 }
         };
 
         var job = m_engine.Compile(Script("RenderParaViewDataFrames.wit"));

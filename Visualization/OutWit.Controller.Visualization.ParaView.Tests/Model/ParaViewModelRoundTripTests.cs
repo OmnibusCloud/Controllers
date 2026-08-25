@@ -77,7 +77,7 @@ public sealed class ParaViewModelRoundTripTests
             Format = ParaViewImageFormat.Jpeg,
             TransparentBackground = true,
             Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.Explicit, First = 1, Last = 2, Step = 2, Indices = [2, 0] },
-            Turntable = new ParaViewTurntableData { Frames = 36, Degrees = -180.0, TimeMode = ParaViewTurntableTimeMode.Advancing, Axis = ParaViewTurntableAxis.Z }
+            Turntable = new ParaViewTurntableData { Frames = 36, Degrees = -180.0, TimeMode = ParaViewTurntableTimeMode.Advancing, Axis = ParaViewTurntableAxis.Z, ElevationDegrees = 45.0, DollyFactor = 0.5, Oscillate = true }
         };
     }
 

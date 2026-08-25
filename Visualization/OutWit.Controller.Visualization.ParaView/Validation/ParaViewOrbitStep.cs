@@ -8,4 +8,4 @@ namespace OutWit.Controller.Visualization.ParaView.Validation;
 /// <param name="TimestepIndex">Index into the resolved timeline.</param>
 /// <param name="OrbitIndex">Position of the output in its orbit, 0-based.</param>
 /// <param name="AzimuthDegrees">Camera azimuth about the orbit axis, degrees.</param>
-public readonly record struct ParaViewOrbitStep(int TimestepIndex, int OrbitIndex, double AzimuthDegrees);
+public readonly record struct ParaViewOrbitStep(int TimestepIndex, int OrbitIndex, double AzimuthDegrees, double ElevationDegrees = 0.0, double DollyFactor = 1.0);

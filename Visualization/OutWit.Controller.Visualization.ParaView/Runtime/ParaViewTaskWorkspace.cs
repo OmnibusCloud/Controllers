@@ -154,7 +154,12 @@ public sealed class ParaViewTaskWorkspace : IDisposable
     /// <returns>Absolute output path.</returns>
     public string OutputPathFor(ParaViewRenderTaskData task)
     {
-        return Path.Combine(OutputDirectory, $"frame_{task.TimestepIndex:D6}.{ParaViewImageFormats.Extension(task.Options.Format)}");
+        // A camera move renders several outputs of one timestep: the orbit position keeps their
+        // file (and blob) names distinct.
+        var name = task.Options.Turntable == null
+            ? $"frame_{task.TimestepIndex:D6}"
+            : $"frame_{task.TimestepIndex:D6}_{task.OrbitIndex:D4}";
+        return Path.Combine(OutputDirectory, $"{name}.{ParaViewImageFormats.Extension(task.Options.Format)}");
     }
 
     #endregion

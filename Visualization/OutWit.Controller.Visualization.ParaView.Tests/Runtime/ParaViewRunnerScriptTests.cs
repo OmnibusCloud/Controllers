@@ -149,6 +149,82 @@ public sealed class ParaViewRunnerScriptTests
     }
 
     [Test]
+    public void RunnerRaisesTheCameraRigidlyAboutItsRightAxisTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
+        var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
+        task.CameraElevation = 90.0;
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status!.Ok, Is.True, status.Error);
+
+        // The stub camera sits at (0,0,10) looking at the origin, up +Y: a 90-degree rise about the
+        // right axis (view-up x direction = -X) lifts it to (0,10,0) looking straight down, and the
+        // view-up follows rigidly to -Z - no view-up reset, no flip.
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(log, Does.Contain("position=0.0000,10.0000,0.0000"));
+            Assert.That(log, Does.Contain("view_up=0.0000,0.0000,-1.0000"));
+            Assert.That(log, Does.Not.Contain("azimuth="));
+        });
+    }
+
+    [Test]
+    public void RunnerDolliesTheCameraTowardTheFocalPointTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
+        var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
+        task.CameraDolly = 0.5;
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status!.Ok, Is.True, status.Error);
+
+        // Half the distance: (0,0,10) -> (0,0,5); the view-up is untouched.
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(log, Does.Contain("position=0.0000,0.0000,5.0000"));
+            Assert.That(log, Does.Not.Contain("view_up=").And.Not.Contain("azimuth="));
+        });
+    }
+
+    [Test]
+    public void RunnerAppliesAzimuthThenElevationThenDollyTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
+        var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
+        task.CameraAzimuth = 90.0;
+        task.CameraAxis = ParaViewCameraAxes.Y;
+        task.CameraElevation = 90.0;
+        task.CameraDolly = 0.5;
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status!.Ok, Is.True, status.Error);
+
+        // Azimuth 90 about +Y: (0,0,10) -> (10,0,0), up stays +Y; rise 90 about the new right axis
+        // (+Y x direction(-X) = +Z): (10,0,0) -> (0,10,0), up -> -X... then half the distance.
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        var lines = log.Split('\n').Select(me => me.TrimEnd('\r')).Where(me => me.StartsWith("position=", StringComparison.Ordinal)).ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(lines, Has.Count.EqualTo(3), "azimuth, elevation, dolly each move the position once");
+            Assert.That(lines[0], Is.EqualTo("position=10.0000,0.0000,0.0000"));
+            Assert.That(lines[1], Is.EqualTo("position=0.0000,10.0000,0.0000"));
+            Assert.That(lines[2], Is.EqualTo("position=0.0000,5.0000,0.0000"));
+        });
+    }
+
+    [Test]
     public void RunnerLeavesTheCameraAloneWithoutATurntableTest()
     {
         var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();

@@ -37,7 +37,9 @@ public sealed partial class ParaViewRenderTaskData : ModelBase
                && DatasetId.Is(other.DatasetId)
                && SubsetBytes.Is(other.SubsetBytes)
                && OrbitIndex.Is(other.OrbitIndex)
-               && AzimuthDegrees.Is(other.AzimuthDegrees, tolerance);
+               && AzimuthDegrees.Is(other.AzimuthDegrees, tolerance)
+               && ElevationDegrees.Is(other.ElevationDegrees, tolerance)
+               && DollyFactor.Is(other.DollyFactor, tolerance);
     }
 
     /// <inheritdoc />
@@ -60,7 +62,9 @@ public sealed partial class ParaViewRenderTaskData : ModelBase
             DatasetId = DatasetId,
             SubsetBytes = SubsetBytes,
             OrbitIndex = OrbitIndex,
-            AzimuthDegrees = AzimuthDegrees
+            AzimuthDegrees = AzimuthDegrees,
+            ElevationDegrees = ElevationDegrees,
+            DollyFactor = DollyFactor
         };
     }
 
@@ -168,6 +172,20 @@ public sealed partial class ParaViewRenderTaskData : ModelBase
     /// </summary>
     [MemoryPackOrder(15)]
     public double AzimuthDegrees { get; set; }
+
+    /// <summary>
+    /// Camera elevation in degrees the node applies about the camera's right axis before
+    /// rendering (0 keeps the captured height). Appended in Model 0.4.0.
+    /// </summary>
+    [MemoryPackOrder(16)]
+    public double ElevationDegrees { get; set; }
+
+    /// <summary>
+    /// Factor the node applies to the camera's distance from the focal point before rendering
+    /// (1 keeps the captured distance). Appended in Model 0.4.0.
+    /// </summary>
+    [MemoryPackOrder(17)]
+    public double DollyFactor { get; set; } = 1.0;
 
     #endregion
 }

@@ -17,8 +17,10 @@ Responsibilities (docs 03, section 9):
      a client path): a single-valued reference must be a materialized package file, a file series
      must have at least one, and any VTK error during load/render fails the task;
   4. select the declared view and timestep;
-  4a. revolve the state's camera by the task's turntable azimuth about the orbit axis through the
-      focal point (docs 03, section 27, item 1) — an output-side transform, never a state edit;
+  4a. move the state's camera by the task's camera move (docs 03, section 27, item 1; docs 06,
+      part B): revolve it by the azimuth about the orbit axis through the focal point, raise it by
+      the elevation about its right axis, scale its distance to the focal point by the dolly
+      factor — an output-side transform, never a state edit;
   5. apply only controller-owned output overrides (size, transparency);
   6. render through SaveScreenshot;
   7. write the bounded machine-readable status document on EVERY exit path;
@@ -217,6 +219,8 @@ class Task(object):
         self.transparent_background = bool(data.get("transparent_background", False))
         self.camera_azimuth = float(data.get("camera_azimuth", 0.0) or 0.0)
         self.camera_axis = str(data.get("camera_axis", CAMERA_AXIS_VIEW_UP) or CAMERA_AXIS_VIEW_UP).lower()
+        self.camera_elevation = float(data.get("camera_elevation", 0.0) or 0.0)
+        self.camera_dolly = float(data.get("camera_dolly", 1.0) or 1.0)
         self.plugin_path = data.get("plugin_path", None)
         self.allowed_proxies = set(data.get("allowed_proxies", []))
         self.blocked_proxy_types = set(data.get("blocked_proxy_types", []))
@@ -232,6 +236,10 @@ class Task(object):
             raise RunnerError("unsupported output format '%s'" % self.format, EXIT_USAGE)
         if not math.isfinite(self.camera_azimuth):
             raise RunnerError("camera azimuth must be a finite number of degrees", EXIT_USAGE)
+        if not math.isfinite(self.camera_elevation):
+            raise RunnerError("camera elevation must be a finite number of degrees", EXIT_USAGE)
+        if not math.isfinite(self.camera_dolly) or self.camera_dolly <= 0.0:
+            raise RunnerError("camera dolly factor must be a positive finite number", EXIT_USAGE)
         if self.camera_axis != CAMERA_AXIS_VIEW_UP and self.camera_axis not in CAMERA_AXIS_VECTORS:
             raise RunnerError("unsupported camera axis '%s'" % self.camera_axis, EXIT_USAGE)
         if not os.path.isdir(self.package_root):
@@ -574,31 +582,72 @@ def rotate_about_axis(vector, axis, degrees):
     )
 
 
+def _cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def _normalized(v):
+    length = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+    if length <= 0.0:
+        return None
+    return (v[0] / length, v[1] / length, v[2] / length)
+
+
 def orbit_camera(task, view):
-    """Turntable: revolves the view's camera about the orbit axis through its focal point by the
-    task's azimuth. The state's camera (position, focal point, view-up) is the starting frame.
-    About the camera's own view-up this is vtkCamera.Azimuth; about a world axis the camera is
-    rotated rigidly (position AND view-up), so a tilted camera keeps its tilt, the horizon stays
-    where the user left it, and a camera looking straight down the axis rolls instead of
-    degenerating (no view-up reset). Returns True when the camera moved."""
-    if task.camera_azimuth == 0.0:
+    """The camera move (turntable generalised): revolves the view's camera about the orbit axis
+    through its focal point by the task's azimuth, raises it about its own right axis by the
+    elevation, and scales its distance to the focal point by the dolly factor. The state's camera
+    (position, focal point, view-up) is the starting frame. About the camera's own view-up the
+    azimuth is vtkCamera.Azimuth; about a world axis the camera is rotated rigidly (position AND
+    view-up), so a tilted camera keeps its tilt, the horizon stays where the user left it, and a
+    camera looking straight down the axis rolls instead of degenerating (no view-up reset). The
+    elevation is always a rigid rotation about the right axis (view-up x view direction), so the
+    view-up follows and the framing never flips at the pole. Returns True when the camera moved."""
+    if task.camera_azimuth == 0.0 and task.camera_elevation == 0.0 and task.camera_dolly == 1.0:
         return False
     try:
         camera = view.GetActiveCamera()
     except Exception as e:
-        raise RunnerError("the view exposes no camera to orbit: %s" % e, EXIT_POLICY)
+        raise RunnerError("the view exposes no camera to move: %s" % e, EXIT_POLICY)
     if camera is None:
-        raise RunnerError("the view exposes no camera to orbit", EXIT_POLICY)
-    if task.camera_axis == CAMERA_AXIS_VIEW_UP:
-        camera.Azimuth(task.camera_azimuth)
-        return True
-    axis = CAMERA_AXIS_VECTORS[task.camera_axis]
-    position = tuple(camera.GetPosition())
-    focal = tuple(camera.GetFocalPoint())
-    view_up = tuple(camera.GetViewUp())
-    offset = rotate_about_axis((position[0] - focal[0], position[1] - focal[1], position[2] - focal[2]), axis, task.camera_azimuth)
-    camera.SetPosition(focal[0] + offset[0], focal[1] + offset[1], focal[2] + offset[2])
-    camera.SetViewUp(*rotate_about_axis(view_up, axis, task.camera_azimuth))
+        raise RunnerError("the view exposes no camera to move", EXIT_POLICY)
+
+    if task.camera_azimuth != 0.0:
+        if task.camera_axis == CAMERA_AXIS_VIEW_UP:
+            camera.Azimuth(task.camera_azimuth)
+        else:
+            axis = CAMERA_AXIS_VECTORS[task.camera_axis]
+            position = tuple(camera.GetPosition())
+            focal = tuple(camera.GetFocalPoint())
+            view_up = tuple(camera.GetViewUp())
+            offset = rotate_about_axis((position[0] - focal[0], position[1] - focal[1], position[2] - focal[2]), axis, task.camera_azimuth)
+            camera.SetPosition(focal[0] + offset[0], focal[1] + offset[1], focal[2] + offset[2])
+            camera.SetViewUp(*rotate_about_axis(view_up, axis, task.camera_azimuth))
+
+    if task.camera_elevation != 0.0:
+        position = tuple(camera.GetPosition())
+        focal = tuple(camera.GetFocalPoint())
+        view_up = tuple(camera.GetViewUp())
+        direction = (focal[0] - position[0], focal[1] - position[1], focal[2] - position[2])
+        right = _normalized(_cross(view_up, direction))
+        if right is None:
+            raise RunnerError("the camera looks along its own view-up; no right axis to raise it about", EXIT_POLICY)
+        offset = rotate_about_axis((position[0] - focal[0], position[1] - focal[1], position[2] - focal[2]), right, task.camera_elevation)
+        camera.SetPosition(focal[0] + offset[0], focal[1] + offset[1], focal[2] + offset[2])
+        camera.SetViewUp(*rotate_about_axis(view_up, right, task.camera_elevation))
+
+    if task.camera_dolly != 1.0:
+        position = tuple(camera.GetPosition())
+        focal = tuple(camera.GetFocalPoint())
+        camera.SetPosition(
+            focal[0] + (position[0] - focal[0]) * task.camera_dolly,
+            focal[1] + (position[1] - focal[1]) * task.camera_dolly,
+            focal[2] + (position[2] - focal[2]) * task.camera_dolly)
+        try:
+            if camera.GetParallelProjection():
+                camera.SetParallelScale(camera.GetParallelScale() * task.camera_dolly)
+        except Exception:
+            pass
     return True
 
 

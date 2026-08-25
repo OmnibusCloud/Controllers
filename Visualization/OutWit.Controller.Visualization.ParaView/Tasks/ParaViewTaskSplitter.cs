@@ -1,4 +1,5 @@
 using OutWit.Controller.Visualization.ParaView.Model;
+using OutWit.Controller.Visualization.ParaView.Runtime;
 using OutWit.Controller.Visualization.ParaView.Validation;
 
 namespace OutWit.Controller.Visualization.ParaView.Tasks;
@@ -82,7 +83,7 @@ public static class ParaViewTaskSplitter
             {
                 TaskId = options.Turntable == null
                     ? ParaViewPackageDigest.ComputeTaskId(packageDigest, DATASET_ID_V1, report.ResolvedViewId, timestepIndex, optionsDigest)
-                    : ParaViewPackageDigest.ComputeTaskId(packageDigest, DATASET_ID_V1, report.ResolvedViewId, timestepIndex, optionsDigest, step.OrbitIndex, step.AzimuthDegrees),
+                    : ParaViewPackageDigest.ComputeTaskId(packageDigest, DATASET_ID_V1, report.ResolvedViewId, timestepIndex, optionsDigest, step, ParaViewCameraAxes.WireToken(options.Turntable.Axis), options.Turntable.TimeMode),
                 TaskIndex = taskIndex++,
                 StateBlobId = scene.StateBlobId,
                 StateSha256 = scene.StateSha256,
@@ -97,7 +98,9 @@ public static class ParaViewTaskSplitter
                 DatasetId = DATASET_ID_V1,
                 SubsetBytes = subsetBytes,
                 OrbitIndex = step.OrbitIndex,
-                AzimuthDegrees = step.AzimuthDegrees
+                AzimuthDegrees = step.AzimuthDegrees,
+                ElevationDegrees = step.ElevationDegrees,
+                DollyFactor = step.DollyFactor
             });
         }
 

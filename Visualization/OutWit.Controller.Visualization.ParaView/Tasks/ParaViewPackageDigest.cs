@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using OutWit.Controller.Visualization.ParaView.Model;
+using OutWit.Controller.Visualization.ParaView.Validation;
 
 namespace OutWit.Controller.Visualization.ParaView.Tasks;
 
@@ -91,19 +92,22 @@ public static class ParaViewPackageDigest
     }
 
     /// <summary>
-    /// The task identity of a turntable output: the version-1 identity text extended with the orbit
-    /// position and azimuth, so two orbit frames of one timestep stay distinct and a turntable task
-    /// never collides with the plain task of the same timestep.
+    /// The task identity of a camera-move output: the version-1 identity text extended with the
+    /// position in the move, the camera transform of the output (azimuth, elevation, dolly) and the
+    /// move's frame of reference (orbit axis, time mode), so two outputs of one timestep stay
+    /// distinct, a move task never collides with the plain task of the same timestep, and the same
+    /// azimuth about a different axis is a different picture with a different identity.
     /// </summary>
     /// <param name="packageDigest">Package digest.</param>
     /// <param name="datasetId">Dataset identity component (empty in version 1).</param>
     /// <param name="viewId">Resolved view registration name.</param>
     /// <param name="timestepIndex">Timestep index.</param>
     /// <param name="optionsDigest">Output options digest.</param>
-    /// <param name="orbitIndex">Position in the orbit.</param>
-    /// <param name="azimuthDegrees">Camera azimuth of the output.</param>
+    /// <param name="step">The output's position and camera transform.</param>
+    /// <param name="axisToken">The orbit axis token (ParaViewCameraAxes).</param>
+    /// <param name="timeMode">The move's time mode.</param>
     /// <returns>Lower-case hexadecimal SHA-256.</returns>
-    public static string ComputeTaskId(string packageDigest, string datasetId, string viewId, int timestepIndex, string optionsDigest, int orbitIndex, double azimuthDegrees)
+    public static string ComputeTaskId(string packageDigest, string datasetId, string viewId, int timestepIndex, string optionsDigest, ParaViewOrbitStep step, string axisToken, ParaViewTurntableTimeMode timeMode)
     {
         var text = string.Join(RECORD_SEPARATOR,
             "task@1",
@@ -113,8 +117,12 @@ public static class ParaViewPackageDigest
             timestepIndex.ToString(CultureInfo.InvariantCulture),
             optionsDigest,
             "orbit",
-            orbitIndex.ToString(CultureInfo.InvariantCulture),
-            azimuthDegrees.ToString("R", CultureInfo.InvariantCulture));
+            step.OrbitIndex.ToString(CultureInfo.InvariantCulture),
+            step.AzimuthDegrees.ToString("R", CultureInfo.InvariantCulture),
+            step.ElevationDegrees.ToString("R", CultureInfo.InvariantCulture),
+            step.DollyFactor.ToString("R", CultureInfo.InvariantCulture),
+            axisToken,
+            timeMode.ToString());
         return Hash(text);
     }
 

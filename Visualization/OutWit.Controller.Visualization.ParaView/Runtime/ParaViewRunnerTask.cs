@@ -105,6 +105,12 @@ public sealed class ParaViewRunnerTask
     /// <summary>Orbit axis token: view-up (the state's camera view-up), x, y or z (world axes).</summary>
     public string CameraAxis { get; set; } = ParaViewCameraAxes.VIEW_UP;
 
+    /// <summary>Camera elevation in degrees about the camera's right axis (0: none). Controller 0.4.0.</summary>
+    public double CameraElevation { get; set; }
+
+    /// <summary>Factor applied to the camera's distance from the focal point (1: none). Controller 0.4.0.</summary>
+    public double CameraDolly { get; set; } = 1.0;
+
     /// <summary>Absolute path of the bundled reader to load, null when the package requires none.</summary>
     public string? PluginPath { get; set; }
 

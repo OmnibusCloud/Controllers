@@ -111,7 +111,7 @@ public sealed class ParaViewPackageValidatorTests
             Assert.That(advancing.OutputCount, Is.EqualTo(10));
             Assert.That(noFrames.IsValid, Is.False);
             Assert.That(noFrames.Errors, Has.Some.Contains("at least 1 orbit frame"));
-            Assert.That(noSweep.Errors, Has.Some.Contains("non-zero"));
+            Assert.That(noSweep.Errors, Has.Some.Contains("moves nothing"));
             Assert.That(tooWide.Errors, Has.Some.Contains("exceeds 3600"));
             Assert.That(tooMany.IsValid, Is.False);
             Assert.That(tooMany.Errors, Has.Some.Contains("15000 outputs"));

@@ -24,8 +24,10 @@ public sealed class ParaViewModelWireLayoutTests
         [typeof(ParaViewPluginRequirementData)] = 2,
         [typeof(ParaViewOutputOptionsData)] = 7,
         [typeof(ParaViewFrameSelectionData)] = 5,
-        [typeof(ParaViewTurntableData)] = 4,
-        [typeof(ParaViewRenderTaskData)] = 16,
+        // 2026-08-25 (0.4.0): camera moves - elevation, dolly, oscillate appended to the turntable (+3),
+        // elevation + dolly to the render task (+2).
+        [typeof(ParaViewTurntableData)] = 7,
+        [typeof(ParaViewRenderTaskData)] = 18,
         [typeof(ParaViewRenderResultData)] = 14,
         [typeof(ParaViewValidationReportData)] = 18,
         // 2026-08-25 (0.3.0): the paraview.dataScene@1 document (9).

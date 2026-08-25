@@ -91,7 +91,22 @@ a colour array the data does not carry fails the job naming the arrays that exis
 never creates a proxy outside the allowlist — and if it ever did, the node's own validator pass
 refuses the state before it is published. Cost: one compose cycle (seconds) before the fan-out.
 
-### Turntable (camera orbit, controller 0.2.0)
+### Camera moves — turntable, rise, spiral, approach, rock (controller 0.4.0)
+
+The `paraview.turntable@1` document grew three members in Model 0.4.0 (docs 06, part B):
+`elevationDegrees` (total rise about the camera's right axis, ±170°), `dollyFactor` (end distance
+to the focal point relative to the captured one, 0.05..20) and `oscillate` (sway back and forth
+around the captured framing instead of progressing to the full move). Azimuth progresses as
+`i / N` (cyclic — a 360° orbit loops), elevation and dolly as `i / (N - 1)` (the last output reaches
+the full move); oscillating moves follow `sin(2πi/N) / 2` of every total. A client's presets are
+combinations: orbit = degrees only; rise = elevation only; spiral = both; approach = dolly only;
+rock = degrees + oscillate. The node applies azimuth (as below), then a rigid rotation of position
+and view-up about the camera's right axis (`camera_elevation`), then the distance factor
+(`camera_dolly`, parallel scale scaled alike). Task identities carry the full transform AND the
+orbit axis / time mode, and every output of one timestep has its own file name
+(`frame_<timestep>_<orbit>`), so the outputs of two different moves never collide or overwrite.
+
+#### The original turntable semantics (controller 0.2.0)
 
 `ParaViewOutputOptions.turntable` (`paraview.turntable@1`: `frames`, `degrees`, `timeMode`,
 `axis`) turns the frames and video scripts into a camera orbit without any animation track in the

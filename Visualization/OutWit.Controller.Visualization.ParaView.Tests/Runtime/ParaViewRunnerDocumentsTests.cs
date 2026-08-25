@@ -70,7 +70,9 @@ public sealed class ParaViewRunnerDocumentsTests
             MaxStateBytes = 123,
             MaxLogicalPathChars = 77,
             CameraAzimuth = 22.5,
-            CameraAxis = ParaViewCameraAxes.Z
+            CameraAxis = ParaViewCameraAxes.Z,
+            CameraElevation = 12.5,
+            CameraDolly = 0.75
         };
 
         var json = task.ToJson();
@@ -91,6 +93,10 @@ public sealed class ParaViewRunnerDocumentsTests
             Assert.That(json, Does.Contain("\"camera_axis\": \"z\""));
             Assert.That(restored.CameraAzimuth, Is.EqualTo(22.5));
             Assert.That(restored.CameraAxis, Is.EqualTo("z"));
+            Assert.That(json, Does.Contain("\"camera_elevation\": 12.5"));
+            Assert.That(json, Does.Contain("\"camera_dolly\": 0.75"));
+            Assert.That(restored.CameraElevation, Is.EqualTo(12.5));
+            Assert.That(restored.CameraDolly, Is.EqualTo(0.75));
         });
     }
 
