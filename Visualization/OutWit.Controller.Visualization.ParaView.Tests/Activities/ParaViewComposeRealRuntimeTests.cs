@@ -159,7 +159,9 @@ public sealed class ParaViewComposeRealRuntimeTests
         Assert.Multiple(() =>
         {
             Assert.That(ParaViewImageInfo.TryRead(m_blobs.GetStoredPath(blobId)), Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 320, 240, false)));
-            Assert.That(scene.PackageManifestJson, Does.Contain("\"colorArray\":\""), "the first point array was chosen");
+            // 0.4.2: the default colouring is the first RESULT array — the reader's NodeNumber
+            // (its first point array) is bookkeeping and must never be the picture.
+            Assert.That(scene.PackageManifestJson, Does.Contain("\"colorArray\":\"DISP\""), "the first result array was chosen, not NodeNumber");
             Assert.That(scene.Attachments.Single().Sha256, Has.Length.EqualTo(64));
         });
     }

@@ -381,9 +381,27 @@ def inspect(simple, reader, task, status):
     return times, points, cells
 
 
+# The arrays the bundled reader (and VTK itself) attach for bookkeeping — ids, types, groups,
+# ghost marks. Never a default colouring: a picture coloured by node number shows the mesh
+# numbering, not the physics (0.4.2 — the WitSweep one-click coloured a heat run by NodeNumber).
+BOOKKEEPING_ARRAYS = frozenset((
+    "NodeNumber", "ElementNumber", "ElementType", "ElementGroup", "Material",
+    "vtkOriginalPointIds", "vtkOriginalCellIds", "vtkGhostType", "vtkValidPointMask",
+))
+
+
+def default_color_array(names):
+    """The first array that carries a result rather than bookkeeping; None when there is none."""
+    for name in names:
+        if name not in BOOKKEEPING_ARRAYS:
+            return name
+    return None
+
+
 def choose_color_array(task, points, cells):
     """The array to colour by: the named one (which must exist in its association) or the first
-    point array, then the first cell array; None for a solid colour."""
+    RESULT array — point arrays first, then cell arrays, bookkeeping arrays skipped; None for a
+    solid colour."""
     if task.color_array_name:
         available = points if task.color_association == ASSOCIATION_POINTS else cells
         if task.color_array_name not in available:
@@ -393,10 +411,12 @@ def choose_color_array(task, points, cells):
                    ", ".join(points) or "none", ", ".join(cells) or "none"),
                 EXIT_POLICY)
         return task.color_association, task.color_array_name
-    if points:
-        return ASSOCIATION_POINTS, points[0]
-    if cells:
-        return ASSOCIATION_CELLS, cells[0]
+    point_array = default_color_array(points)
+    if point_array is not None:
+        return ASSOCIATION_POINTS, point_array
+    cell_array = default_color_array(cells)
+    if cell_array is not None:
+        return ASSOCIATION_CELLS, cell_array
     return None, ""
 
 

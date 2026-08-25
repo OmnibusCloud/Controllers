@@ -87,7 +87,10 @@ the state (the Blender-bake shape), and from there the chain is byte-for-byte th
 frame, `RenderFrame` renders, `Collect` orders. The plugin's `RenderParaView*` scripts are untouched:
 no delegate, no compose, no extra task. The camera and the colour range are baked into the state,
 so every frame shares the framing; the timeline comes from the reader (the state's TimeKeeper);
-a colour array the data does not carry fails the job naming the arrays that exist. The composer
+a colour array the data does not carry fails the job naming the arrays that exist; with no array
+named, the composer colours by the first RESULT array (point arrays first, then cell arrays) and
+never by the reader's bookkeeping arrays — `NodeNumber`, `ElementNumber`, `ElementType`,
+`ElementGroup`, `Material` (0.4.2; before that a bare heat run came out coloured by node number). The composer
 never creates a proxy outside the allowlist — and if it ever did, the node's own validator pass
 refuses the state before it is published. Cost: one compose cycle (seconds) before the fan-out.
 
