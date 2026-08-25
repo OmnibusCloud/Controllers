@@ -5,8 +5,8 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>ParaView</ControllerName>
-    <Version>0.2.0</Version>
-    <Description>Shared data types for the OutWit.Controller.Visualization.ParaView controller — the visualization package reference (state blob + content-addressed attachments with file-series/timestep metadata + runtime requirements), output options and frame selection, the per-task payload the host splits for worker nodes (state, view, timestep, and the task's minimal attachment subset), the per-frame render result, and the validation report. The request and result DTOs are published as [JobDocumentContract] types (paraview.*@1) with the schema fragment and C++/Python bindings shipped under documents/, so non-.NET initiators (the ParaView C++/Qt plugin) drive the controller through the native SDK's job request documents.</Description>
+    <Version>0.3.0</Version>
+    <Description>Shared data types for the OutWit.Controller.Visualization.ParaView controller — the visualization package reference (state blob + content-addressed attachments with file-series/timestep metadata + runtime requirements), output options and frame selection, the per-task payload the host splits for worker nodes (state, view, timestep, and the task's minimal attachment subset), the per-frame render result, the validation report, and (0.3.0) the data scene a bare result is composed from on the fleet. The request and result DTOs are published as [JobDocumentContract] types (paraview.*@1) with the schema fragment and C++/Python bindings shipped under documents/, so non-.NET initiators (the ParaView C++/Qt plugin) drive the controller through the native SDK's job request documents.</Description>
     <PackageTags>paraview;visualization;scientific-visualization;vtk;witengine;witcloud;controller;data-types;job-documents</PackageTags>
     <!-- The vocabulary artifacts carry the authors' summaries. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

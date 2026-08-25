@@ -18,6 +18,7 @@ test harness, the per-platform ParaView runtime assets (`paraview-v0.1.0`) and t
 | `ParaView.Validate(ParaViewSceneRef scene, ParaViewOutputOptions options)` → `ParaViewValidationReport` | host | Treats the package as untrusted input: package reference, attachments and logical paths, runtime requirement (exact ParaView major.minor, allowlisted plugins only), output options and limits, then the state — hardened XML parse (no DTD/entities, depth/count/size bounds), proxy allowlist, programmable-pipeline rejection, file references against the package, views, timeline, frame selection. Downloads only the state. An invalid package is a *completed* activity with an invalid report. |
 | `ParaView.Split(scene, report, options)` → `ParaViewRenderTaskCollection` | host | Deterministic tasks — one per resolved timestep of the resolved view; identity = package digest + dataset identity (reserved, empty) + view + timestep + options digest; **each task carries only the attachments its timestep needs** (series pieces by `TimestepIndices`, plus statics and series indexes). Refuses an invalid report. |
 | `ParaView.RenderFrame(ParaViewRenderTask task)` → `ParaViewRenderResult` | node | Materializes the state and the task's subset into an isolated, task-unique package root (digests verified while copying, nothing outside the subset requested), writes the controller-owned runner, runs `pvpython` under an allowlisted environment, interprets exit code + status document, validates the output (signature, dimensions, alpha, no stray files), publishes it. Cancellation and the wall-clock limit kill the whole process tree; the workspace is deleted on every path. |
+| `ParaView.Compose(ParaViewDataScene data, ParaViewOutputOptions options)` → `ParaViewSceneRef` | node | **0.3.0.** Composes a scene from BARE data — one blob-referenced CalculiX `.frd` plus the presentation choices of a data scene (colour array, colour-map preset, representation, scalar bar, camera direction, fit) — into a REAL saved state: materializes the data, runs the controller-owned composer (`compose_scene.py`: bundled reader → representation → colouring with one baked colour range → camera fitted to the union of the data bounds → `SaveState`, absolute data path rewritten to the logical path), hashes and publishes the state, stamps the data digest, and returns an ordinary package reference — after running it through the host validator itself, so a state the allowlist would refuse never leaves the node. One task per job through `Grid.Delegate()`. |
 | `ParaView.Collect(rendered, options)` → `BlobCollection` | host | Restores task order, fails on missing/duplicate/conflicting identities. |
 | `ParaView.CollectStill(rendered, options)` → `Blob` | host | Exactly one result → one image blob. |
 
@@ -67,7 +68,28 @@ RenderParaViewFrames(ParaViewSceneRef:scene, ParaViewOutputOptions:options)     
 RenderParaViewStill (ParaViewSceneRef:scene, ParaViewOutputOptions:options)            -> Blob:result
 RenderParaViewVideo (ParaViewSceneRef:scene, ParaViewOutputOptions:options, VideoOptions:video) -> Blob:result   (Render.EncodeVideo; requires the Render controller)
 ValidateParaViewScene(ParaViewSceneRef:scene, ParaViewOutputOptions:options)           -> ParaViewValidationReport:result
+
+RenderParaViewDataFrames(ParaViewDataScene:data, ParaViewOutputOptions:options)        -> BlobCollection:result   (0.2.0 of the scripts)
+RenderParaViewDataStill (ParaViewDataScene:data, ParaViewOutputOptions:options)        -> Blob:result
+RenderParaViewDataVideo (ParaViewDataScene:data, ParaViewOutputOptions:options, VideoOptions:video) -> Blob:result
+ValidateParaViewData    (ParaViewDataScene:data, ParaViewOutputOptions:options)        -> ParaViewValidationReport:result
 ```
+
+### Composed scenes — bare data in, the same chain out (controller 0.3.0)
+
+The `*Data*` scripts take `paraview.dataScene@1` instead of a package: one attachment (a CalculiX
+`.frd` result already in blob storage — the sweep's `FrdBlobId`, no client upload) plus bounded
+presentation choices (`colorArrayName`, `colorAssociation`, `colorComponent`, `colormapPreset` from an
+allowlist, `representation`, `showScalarBar`, `cameraDirection`, `fitTo`). Their first line is
+`ParaViewSceneRef:scene = Grid.Delegate() => ParaView.Compose(data, options)`: ONE node task composes
+the state (the Blender-bake shape), and from there the chain is byte-for-byte the plain one —
+`Validate` validates a real `.pvsm` with the same allowlist, `Split` fans out by timestep × orbit
+frame, `RenderFrame` renders, `Collect` orders. The plugin's `RenderParaView*` scripts are untouched:
+no delegate, no compose, no extra task. The camera and the colour range are baked into the state,
+so every frame shares the framing; the timeline comes from the reader (the state's TimeKeeper);
+a colour array the data does not carry fails the job naming the arrays that exist. The composer
+never creates a proxy outside the allowlist — and if it ever did, the node's own validator pass
+refuses the state before it is published. Cost: one compose cycle (seconds) before the fan-out.
 
 ### Turntable (camera orbit, controller 0.2.0)
 
@@ -221,20 +243,22 @@ subset, 32 MiB state, 10 000 attachments, 10 000 outputs, 16 384 px per dimensio
 Packages follow folders (namespace = `OutWit.Controller.Visualization.ParaView.<Folder>`):
 
 ```
-Activities/    WitActivityParaView{Validate,Split,RenderFrame,Collect,CollectStill}
+Activities/    WitActivityParaView{Validate,Split,RenderFrame,Collect,CollectStill,Compose}
 Adapters/      WitActivityAdapterParaView{...} — the executors
-Variables/     WitVariableParaView{SceneRef,OutputOptions,ValidationReport,RenderTask,RenderResult}
+Variables/     WitVariableParaView{SceneRef,DataScene,OutputOptions,ValidationReport,RenderTask,RenderResult}
 Collections/   WitVariableParaView{RenderTaskCollection,RenderResultCollection}
 State/         ParaViewStateDocument (+Parser, Proxy, Property, CollectionItem, FormatException) — the hardened .pvsm reader
 Validation/    ParaViewPackageValidator, ParaViewProxyAllowlist (+Document), ParaViewProxyPolicy, ParaViewLogicalPath,
-               ParaViewCompatibility, ParaViewInputLimits, ParaViewFrameSelectionResolver
+               ParaViewCompatibility, ParaViewInputLimits, ParaViewFrameSelectionResolver, ParaViewDataSceneValidator
 Tasks/         ParaViewTaskSplitter, ParaViewAttachmentSubsetIndex, ParaViewPackageDigest, ParaViewResultOrdering
 Runtime/       ParaViewRuntimeInfo, ParaViewBinaryResolver, ParaViewRunnerEnvironment, ParaViewRunnerTask/Status (the documents),
-               ParaViewTaskWorkspace, ParaViewTaskExecutor
+               ParaViewTaskWorkspace, ParaViewTaskExecutor, ParaViewComposeTask/Status/Tokens, ParaViewComposeExecutor,
+               ParaViewComposeBenchmark, ParaViewMaterializedAttachment
 Processes/     ParaViewProcessRunner, ParaViewProcessOutcome, ParaViewProcessOutputTail, ProcessTreeGuard
 Output/        ParaViewImageInfo, ParaViewImageFormats, ParaViewOutputValidator
 Utils/         NullBlobService
-Runner/        render_task.py (embedded)
+Runner/        render_task.py, compose_scene.py (embedded)
+Fixtures/      benchmark.frd (embedded; the compose benchmark's data — the corpus static.frd)
 Plugins/       omnibuscloud_frd_reader.py (embedded; byte-identical with the GUI plugin's copy)
 Allowlists/    paraview-6.1.json (embedded; generated from the fixture corpus by RuntimeTools/generate_allowlist.py)
 RuntimeTools/  author-side: corpus + allowlist generators, frd fixtures + reader proof, runtime trimming, closure reports

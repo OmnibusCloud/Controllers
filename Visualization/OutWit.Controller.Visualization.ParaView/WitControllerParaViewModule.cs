@@ -16,7 +16,8 @@ namespace OutWit.Controller.Visualization.ParaView;
 /// WitEngine controller module for headless scientific visualization with ParaView: validates
 /// visualization packages, splits them into per-timestep tasks with per-task attachment subsets,
 /// renders tasks through the controller-owned pvpython runner on worker nodes, and collects the
-/// ordered frame set.
+/// ordered frame set. From 0.3.0 it also COMPOSES a scene from bare data (ParaView.Compose, one node
+/// task per job through Grid.Delegate) into the same package reference the chain consumes.
 /// </summary>
 [WitPluginManifest(ControllerBuildInfo.NAME, Version = ControllerBuildInfo.VERSION)]
 [WitPluginDependency("Variables", MinimumVersion = "1.0.0")]
@@ -43,11 +44,13 @@ public class WitControllerParaViewModule : WitPluginBase, IWitControllerNode, IW
         services.AddActivityAdapter<WitActivityParaViewValidate, WitActivityAdapterParaViewValidate>();
         services.AddActivityAdapter<WitActivityParaViewSplit, WitActivityAdapterParaViewSplit>();
         services.AddActivityAdapter<WitActivityParaViewRenderFrame, WitActivityAdapterParaViewRenderFrame>();
+        services.AddActivityAdapter<WitActivityParaViewCompose, WitActivityAdapterParaViewCompose>();
         services.AddActivityAdapter<WitActivityParaViewCollect, WitActivityAdapterParaViewCollect>();
         services.AddActivityAdapter<WitActivityParaViewCollectStill, WitActivityAdapterParaViewCollectStill>();
 
         // Variables
         services.AddVariable<WitVariableParaViewSceneRef>();
+        services.AddVariable<WitVariableParaViewDataScene>();
         services.AddVariable<WitVariableParaViewOutputOptions>();
         services.AddVariable<WitVariableParaViewValidationReport>();
         services.AddVariable<WitVariableParaViewRenderTask>();

@@ -51,6 +51,22 @@ public sealed class ParaViewModelRoundTripTests
         };
     }
 
+    public static ParaViewDataSceneData DataScene()
+    {
+        return new ParaViewDataSceneData
+        {
+            Attachments = [Attachment(1)],
+            ColorArrayName = "NDTEMP",
+            ColorAssociation = ParaViewColorAssociation.Cells,
+            ColorComponent = 2,
+            ColormapPreset = "Viridis",
+            Representation = ParaViewSceneRepresentation.SurfaceWithEdges,
+            ShowScalarBar = false,
+            CameraDirection = ParaViewCameraDirection.MinusY,
+            FitTo = ParaViewCameraFit.LastTimestep
+        };
+    }
+
     public static ParaViewOutputOptionsData Options()
     {
         return new ParaViewOutputOptionsData
@@ -148,6 +164,9 @@ public sealed class ParaViewModelRoundTripTests
 
     [Test]
     public void RenderResultRoundTripsTest() => AssertRoundTrip(Result());
+
+    [Test]
+    public void DataSceneRoundTripsTest() => AssertRoundTrip(DataScene());
 
     [Test]
     public void ValidationReportRoundTripsTest() => AssertRoundTrip(Report());

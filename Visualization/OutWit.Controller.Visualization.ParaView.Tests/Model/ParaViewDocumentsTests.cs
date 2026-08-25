@@ -23,7 +23,8 @@ public sealed class ParaViewDocumentsTests
         "paraview.frameSelection@1",
         "paraview.turntable@1",
         "paraview.renderResult@1",
-        "paraview.validationReport@1"
+        "paraview.validationReport@1",
+        "paraview.dataScene@1"
     ];
 
     private string m_documentsDir = null!;

@@ -38,6 +38,10 @@ public sealed class ParaViewScriptsCompileTests
     [TestCase("RenderParaViewStill.wit", new[] { "scene", "options", "report", "tasks", "rendered", "result" })]
     [TestCase("RenderParaViewVideo.wit", new[] { "scene", "options", "video", "report", "tasks", "rendered", "frames", "result" })]
     [TestCase("ValidateParaViewScene.wit", new[] { "scene", "options", "result" })]
+    [TestCase("RenderParaViewDataFrames.wit", new[] { "data", "options", "scene", "report", "tasks", "rendered", "result" })]
+    [TestCase("RenderParaViewDataStill.wit", new[] { "data", "options", "scene", "report", "tasks", "rendered", "result" })]
+    [TestCase("RenderParaViewDataVideo.wit", new[] { "data", "options", "video", "scene", "report", "tasks", "rendered", "frames", "result" })]
+    [TestCase("ValidateParaViewData.wit", new[] { "data", "options", "scene", "result" })]
     public void BundledScriptCompilesTest(string fileName, string[] expectedVariables)
     {
         var path = Path.Combine(m_scriptsPath, fileName);

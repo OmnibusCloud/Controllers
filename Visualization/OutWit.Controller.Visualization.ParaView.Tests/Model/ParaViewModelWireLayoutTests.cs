@@ -28,6 +28,8 @@ public sealed class ParaViewModelWireLayoutTests
         [typeof(ParaViewRenderTaskData)] = 16,
         [typeof(ParaViewRenderResultData)] = 14,
         [typeof(ParaViewValidationReportData)] = 18,
+        // 2026-08-25 (0.3.0): the paraview.dataScene@1 document (9).
+        [typeof(ParaViewDataSceneData)] = 9,
     };
 
     [Test]

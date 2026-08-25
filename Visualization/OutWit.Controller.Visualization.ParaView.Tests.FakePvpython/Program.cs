@@ -19,6 +19,7 @@
 //
 // When the script is benchmark_frames.py the fake runs its benchmark mode instead (see FakeBenchmark).
 // When the script is gpu_probe.py the fake runs its GPU-probe mode (see FakeGpuProbe).
+// When the script is compose_scene.py the fake runs its compose mode (see FakeCompose).
 
 using System.Text.Json;
 using System.Xml.Linq;
@@ -61,6 +62,9 @@ catch (Exception e)
 
 if (string.Equals(Path.GetFileName(scriptPath), FakeBenchmark.SCRIPT_NAME, StringComparison.OrdinalIgnoreCase))
     return FakeBenchmark.Run(task);
+
+if (string.Equals(Path.GetFileName(scriptPath), FakeCompose.SCRIPT_NAME, StringComparison.OrdinalIgnoreCase))
+    return FakeCompose.Run(task);
 
 string Str(string name) => task.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
 int Int(string name) => task.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number ? value.GetInt32() : 0;

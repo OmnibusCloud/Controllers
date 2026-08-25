@@ -52,6 +52,8 @@ public sealed class ParaViewTaskWorkspace : IDisposable
         StatePath = Path.Combine(root, STATE_FILE_NAME);
         TaskFilePath = Path.Combine(root, ParaViewRunnerTask.FILE_NAME);
         StatusFilePath = Path.Combine(root, ParaViewRunnerStatus.FILE_NAME);
+        ComposeTaskFilePath = Path.Combine(root, ParaViewComposeTask.FILE_NAME);
+        ComposeStatusFilePath = Path.Combine(root, ParaViewComposeStatus.FILE_NAME);
 
         foreach (var directory in new[] { PackageRoot, OutputDirectory, HomeDirectory, TempDirectory, RunnerDirectory, PluginsDirectory })
             Directory.CreateDirectory(directory);
@@ -92,22 +94,38 @@ public sealed class ParaViewTaskWorkspace : IDisposable
         var materialized = 0;
         foreach (var attachment in task.Attachments)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var target = ParaViewLogicalPath.ResolveUnder(PackageRoot, attachment.LogicalPath);
-            if (File.Exists(target))
-                throw new InvalidOperationException($"attachment '{attachment.LogicalPath}' would overwrite an already materialized file");
-
-            var directory = Path.GetDirectoryName(target)
-                            ?? throw new InvalidOperationException($"attachment '{attachment.LogicalPath}' has no parent directory");
-            Directory.CreateDirectory(directory);
-
-            var source = await blobService.GetLocalPathAsync(attachment.BlobId);
-            await CopyVerifiedAsync(source, target, attachment.Sha256, attachment.Size, attachment.LogicalPath, cancellationToken);
+            await MaterializeAttachmentAsync(blobService, attachment, cancellationToken);
             materialized++;
         }
 
         return materialized;
+    }
+
+    /// <summary>
+    /// Materializes one attachment at its logical path under the package root: traversal-guarded,
+    /// hashed while copied, rejected on a declared digest or size mismatch. An attachment declared
+    /// without a digest (a data scene the composer stamps) is copied and its actual digest returned.
+    /// </summary>
+    /// <param name="blobService">Blob storage.</param>
+    /// <param name="attachment">The attachment.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The materialized path with the digest and size the copy actually had.</returns>
+    /// <exception cref="InvalidOperationException">A digest, size or path rule is violated.</exception>
+    public async Task<ParaViewMaterializedAttachment> MaterializeAttachmentAsync(IWitBlobService blobService, ParaViewAttachmentRefData attachment, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var target = ParaViewLogicalPath.ResolveUnder(PackageRoot, attachment.LogicalPath);
+        if (File.Exists(target))
+            throw new InvalidOperationException($"attachment '{attachment.LogicalPath}' would overwrite an already materialized file");
+
+        var directory = Path.GetDirectoryName(target)
+                        ?? throw new InvalidOperationException($"attachment '{attachment.LogicalPath}' has no parent directory");
+        Directory.CreateDirectory(directory);
+
+        var source = await blobService.GetLocalPathAsync(attachment.BlobId);
+        var (sha256, size) = await CopyVerifiedAsync(source, target, attachment.Sha256, attachment.Size, attachment.LogicalPath, cancellationToken);
+        return new ParaViewMaterializedAttachment(attachment.LogicalPath, target, sha256, size);
     }
 
     /// <summary>
@@ -123,6 +141,7 @@ public sealed class ParaViewTaskWorkspace : IDisposable
         var text = ParaViewRuntimeInfo.ReadEmbeddedText(resourceName)
                    ?? throw new InvalidOperationException($"this ParaView controller build carries no '{resourceName}'");
 
+        Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, fileName);
         File.WriteAllText(path, text);
         return path;
@@ -142,7 +161,7 @@ public sealed class ParaViewTaskWorkspace : IDisposable
 
     #region Tools
 
-    private static async Task CopyVerifiedAsync(string source, string target, string expectedSha256, long expectedSize, string label, CancellationToken cancellationToken)
+    private static async Task<(string Sha256, long Size)> CopyVerifiedAsync(string source, string target, string expectedSha256, long expectedSize, string label, CancellationToken cancellationToken)
     {
         var sourceInfo = new FileInfo(source);
         if (!sourceInfo.Exists)
@@ -170,6 +189,8 @@ public sealed class ParaViewTaskWorkspace : IDisposable
             File.Delete(target);
             throw new InvalidOperationException($"{label}: content digest mismatch (declared {expectedSha256}, got {actual})");
         }
+
+        return (actual, sourceInfo.Length);
     }
 
     #endregion
@@ -225,6 +246,12 @@ public sealed class ParaViewTaskWorkspace : IDisposable
 
     /// <summary>Status file path.</summary>
     public string StatusFilePath { get; }
+
+    /// <summary>Compose task file path (ParaView.Compose).</summary>
+    public string ComposeTaskFilePath { get; }
+
+    /// <summary>Compose status file path (ParaView.Compose).</summary>
+    public string ComposeStatusFilePath { get; }
 
     #endregion
 }

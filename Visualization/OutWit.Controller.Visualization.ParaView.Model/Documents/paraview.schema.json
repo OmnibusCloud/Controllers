@@ -8,6 +8,7 @@
     "component": "paraview",
     "types": [
       "paraview.attachmentRef@1",
+      "paraview.dataScene@1",
       "paraview.frameSelection@1",
       "paraview.outputOptions@1",
       "paraview.pluginRequirement@1",
@@ -19,7 +20,7 @@
     ],
     "source": {
       "assembly": "OutWit.Controller.Visualization.ParaView.Model",
-      "version": "0.2.0"
+      "version": "0.3.0"
     },
     "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
   },
@@ -84,6 +85,67 @@
           "format": "int32",
           "minimum": -2147483648,
           "maximum": 2147483647
+        }
+      }
+    },
+    "paraview.dataScene@1": {
+      "type": "object",
+      "title": "ParaviewDataScene",
+      "description": "A scene to be COMPOSED on the fleet from bare data (docs 06, part A): one blob-referenced data attachment plus the presentation choices a user makes in the GUI's first minute — what to colour by, which colour map, surface or edges, whether to show the scalar bar, where the camera looks from and which timesteps it must fit. ParaView.Compose turns it into an ordinary ParaViewSceneRefData (a real saved state ParaView wrote itself) on one node, and the unchanged validate → split → render chain takes it from there. Nothing here is a path, a script, or a proxy definition: every member is a bounded value the composer maps onto ParaView API calls, never onto code.",
+      "x-oc-type-id": "paraview.dataScene@1",
+      "x-oc-binding-name": "ParaviewDataScene",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewDataSceneData, OutWit.Controller.Visualization.ParaView.Model",
+      "properties": {
+        "attachments": {
+          "description": "The data the scene is composed from, as blob references with logical paths. Version 1 admits exactly one ReaderInput CalculiX .frd result; its Sha256 and Size may be left empty — the composer stamps the values it materialized.",
+          "x-oc-clr-name": "Attachments",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/paraview.attachmentRef@1"
+          }
+        },
+        "colorArrayName": {
+          "description": "The data array to colour the surface by (for example NDTEMP, DISP, STRESS). Empty selects the first point array the data carries; a named array that the data does not carry fails the composition (the job reports the arrays that exist).",
+          "x-oc-clr-name": "ColorArrayName",
+          "type": "string"
+        },
+        "colorAssociation": {
+          "description": "Whether ColorArrayName names a point or a cell array.",
+          "x-oc-clr-name": "ColorAssociation",
+          "$ref": "#/$defs/ParaViewColorAssociation"
+        },
+        "colorComponent": {
+          "description": "The component of a multi-component array to colour by: -1 for the magnitude (the default), otherwise the zero-based component index.",
+          "x-oc-clr-name": "ColorComponent",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "colormapPreset": {
+          "description": "A ParaView colour-map preset name from the controller's allowlist (for example Cool to Warm, Viridis (matplotlib), Jet); empty keeps ParaView's default.",
+          "x-oc-clr-name": "ColormapPreset",
+          "type": "string"
+        },
+        "representation": {
+          "description": "How the data is drawn.",
+          "x-oc-clr-name": "Representation",
+          "$ref": "#/$defs/ParaViewSceneRepresentation"
+        },
+        "showScalarBar": {
+          "description": "Whether the colour legend (scalar bar) of the coloured array is shown.",
+          "x-oc-clr-name": "ShowScalarBar",
+          "type": "boolean"
+        },
+        "cameraDirection": {
+          "description": "The direction the camera looks from before it is fitted to the data.",
+          "x-oc-clr-name": "CameraDirection",
+          "$ref": "#/$defs/ParaViewCameraDirection"
+        },
+        "fitTo": {
+          "description": "Which timesteps the camera (and the colour range) must accommodate.",
+          "x-oc-clr-name": "FitTo",
+          "$ref": "#/$defs/ParaViewCameraFit"
         }
       }
     },
@@ -617,6 +679,60 @@
         "Auxiliary": "A file the state references that is not read through a reader input (textures, lookup table presets, fonts); static, present in every task's subset."
       }
     },
+    "ParaViewCameraDirection": {
+      "type": "string",
+      "title": "ParaViewCameraDirection",
+      "description": "The direction a composed scene's camera looks from before it is fitted to the data (the standard view buttons of the GUI). The camera move of the output options (turntable) revolves this framing at render time.",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewCameraDirection",
+      "enum": [
+        "Isometric",
+        "PlusX",
+        "MinusX",
+        "PlusY",
+        "MinusY",
+        "PlusZ",
+        "MinusZ"
+      ],
+      "x-oc-member-descriptions": {
+        "Isometric": "From the (+1, +1, +1) octant, Z up — the classic engineering isometric.",
+        "PlusX": "Looking along -X from +X.",
+        "MinusX": "Looking along +X from -X.",
+        "PlusY": "Looking along -Y from +Y.",
+        "MinusY": "Looking along +Y from -Y.",
+        "PlusZ": "Looking along -Z from +Z (top view).",
+        "MinusZ": "Looking along +Z from -Z (bottom view)."
+      }
+    },
+    "ParaViewCameraFit": {
+      "type": "string",
+      "title": "ParaViewCameraFit",
+      "description": "Which timesteps a composed scene's camera framing and colour range must accommodate. The composer inspects the data at the chosen timesteps once, bakes one camera and one colour range into the state, and every rendered frame then shares them — no per-frame drift.",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewCameraFit",
+      "enum": [
+        "AllTimesteps",
+        "LastTimestep",
+        "FirstTimestep"
+      ],
+      "x-oc-member-descriptions": {
+        "AllTimesteps": "The union of the data bounds and array ranges over the timeline (sampled when it is long).",
+        "LastTimestep": "The last timestep only — the final result of a transient solve.",
+        "FirstTimestep": "The first timestep only."
+      }
+    },
+    "ParaViewColorAssociation": {
+      "type": "string",
+      "title": "ParaViewColorAssociation",
+      "description": "Where the array a composed scene colours by lives.",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewColorAssociation",
+      "enum": [
+        "Points",
+        "Cells"
+      ],
+      "x-oc-member-descriptions": {
+        "Points": "A point (nodal) array — the CalculiX result blocks (NDTEMP, DISP, STRESS, ...).",
+        "Cells": "A cell (element) array."
+      }
+    },
     "ParaViewFrameSelectionMode": {
       "type": "string",
       "title": "ParaViewFrameSelectionMode",
@@ -647,6 +763,22 @@
       "x-oc-member-descriptions": {
         "Png": "Lossless PNG (RGB or RGBA when the background is transparent).",
         "Jpeg": "JPEG (RGB; transparency is not representable)."
+      }
+    },
+    "ParaViewSceneRepresentation": {
+      "type": "string",
+      "title": "ParaViewSceneRepresentation",
+      "description": "How a composed scene draws its data (ParaView representation types).",
+      "x-oc-clr": "OutWit.Controller.Visualization.ParaView.Model.ParaViewSceneRepresentation",
+      "enum": [
+        "Surface",
+        "SurfaceWithEdges",
+        "Wireframe"
+      ],
+      "x-oc-member-descriptions": {
+        "Surface": "Shaded surface.",
+        "SurfaceWithEdges": "Shaded surface with the mesh edges drawn.",
+        "Wireframe": "Edges only."
       }
     },
     "ParaViewTurntableAxis": {

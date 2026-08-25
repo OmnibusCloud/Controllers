@@ -39,6 +39,15 @@ public static class ParaViewRuntimeInfo
     /// <summary>File name of the bundled reader inside a task's plugin directory.</summary>
     public const string FRD_READER_FILE_NAME = "omnibuscloud_frd_reader.py";
 
+    /// <summary>Embedded resource name of the controller-owned scene composer (ParaView.Compose).</summary>
+    public const string COMPOSE_RUNNER_RESOURCE = "runner/compose_scene.py";
+
+    /// <summary>File name of the composer inside a task's work directory.</summary>
+    public const string COMPOSE_RUNNER_FILE_NAME = "compose_scene.py";
+
+    /// <summary>Embedded resource name of the small CalculiX result the compose benchmark opens.</summary>
+    public const string BENCHMARK_FRD_RESOURCE = "fixtures/benchmark.frd";
+
     #endregion
 
     #region Fields

@@ -34,6 +34,7 @@ documents and read results back as value documents:
 | `paraview.turntable@1` | `ParaViewTurntableData` (Model 0.2.0: optional camera orbit inside the output options) |
 | `paraview.renderResult@1` | `ParaViewRenderResultData` |
 | `paraview.validationReport@1` | `ParaViewValidationReportData` |
+| `paraview.dataScene@1` | `ParaViewDataSceneData` (Model 0.3.0: bare data + presentation choices, composed on the fleet by `ParaView.Compose` into a `paraview.sceneRef@1`) |
 
 `Documents/` holds the generated artifacts (`paraview.schema.json`, `paraview_documents.hpp`,
 `paraview_documents.py`), regenerated on every build by `OutWit.Cloud.Documents.Generator` and
