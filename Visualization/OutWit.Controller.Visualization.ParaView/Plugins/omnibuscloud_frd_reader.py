@@ -22,7 +22,7 @@ strictly increasing; otherwise (repeated frequencies of degenerate modes, static
 the 1-based step ordinal is used and the actual value is kept in field data "StepValue".
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 paraview_plugin_name = "OmnibusCloudFrdReader"
 paraview_plugin_version = __version__
@@ -246,7 +246,12 @@ def parse_frd(path):
     """Indexes an ASCII frd file: mesh in memory, result blocks located for FrdModel.load_step."""
     model = FrdModel(path)
     with open(path, "rb") as handle:
-        _index_file(handle, model)
+        try:
+            _index_file(handle, model)
+        except (ValueError, IndexError, TypeError) as error:
+            # A malformed numeric field or a record shorter than its layout is a format error
+            # with a position, never a raw traceback out of the reader (audit P-H6).
+            raise FrdFormatError("malformed record near byte %d: %s" % (handle.tell(), error))
     if model.node_numbers is None:
         model.node_numbers = numpy.zeros((0,), dtype=numpy.int64)
         model.coordinates = numpy.zeros((0, 3), dtype=numpy.float64)
@@ -294,6 +299,10 @@ def _parse_nodes(handle, header_line, offset, model):
         lines.append(line)
         offset += len(line)
         line = handle.readline()
+    if not line:
+        # A file cut mid-block would otherwise become a truncated mesh with NaN coordinates and
+        # exit 0 - a wrong picture on a render node (audit P-H5).
+        raise FrdFormatError("the node block ends at byte %d without its -3 terminator (truncated file?)" % offset)
     if line[1:3] == b"-3":
         offset += len(line)
         line = handle.readline()
@@ -326,7 +335,10 @@ def _parse_fixed_rows(lines, id_width, columns):
     ids = numpy.empty(count, dtype=numpy.int64)
     values = numpy.full((count, columns), numpy.nan, dtype=numpy.float64)
     for i, raw in enumerate(lines):
-        text = _text(raw)
+        text = _text(raw).rstrip("\r\n")
+        if len(text) < width:
+            # A short -1 record is a cut file, never a node with fewer coordinates (audit P-H5).
+            raise FrdFormatError("short -1 record (%d of %d characters) in row %d of a fixed-column block" % (len(text), width, i + 1))
         ids[i] = _int(text[3:3 + id_width])
         for k in range(columns):
             start = 3 + id_width + 12 * k
@@ -393,6 +405,8 @@ def _parse_elements(handle, header_line, offset, model):
         model.element_materials.append(material)
         model.connectivity.append(rows)
         model.cell_types.append(cell_type)
+    if not line:
+        raise FrdFormatError("the element block ends at byte %d without its -3 terminator (truncated file?)" % offset)
     return offset, line
 
 
@@ -428,17 +442,21 @@ def _index_results(handle, header_line, offset, model):
         line = handle.readline()
     data_offset = offset
     data_length = 0
+    terminated = False
     while line:
         record = line[1:3]
         if record == b"-3":
             offset += len(line)
             line = handle.readline()
+            terminated = True
             break
         if record != b"-1" and record != b"-2":
             break
         data_length += len(line)
         offset += len(line)
         line = handle.readline()
+    if not terminated and not line:
+        raise FrdFormatError("the result block '%s' ends at byte %d without its -3 terminator (truncated file?)" % (name, offset))
     dataset = FrdDataset(name, components, irtype, long_format, data_offset, data_length)
     step = None
     for existing in model.steps:
@@ -679,7 +697,7 @@ if _PARAVIEW:
                 return None
             try:
                 model = parse_frd(self._filename)
-            except FrdFormatError as error:
+            except (FrdFormatError, OSError) as error:
                 from paraview import print_error
                 print_error("OmnibusCloudFrdReader: %s: %s" % (self._filename, error))
                 return None

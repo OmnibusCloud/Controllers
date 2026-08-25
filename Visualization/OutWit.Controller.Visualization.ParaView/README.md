@@ -151,6 +151,10 @@ were `int` already); a 0.4.0 host rejects a negative index as before.
 - **C-H2** off Windows (no kill-on-close job object) `render_task.py` and `compose_scene.py` run a
   parent watchdog thread: when the controller process is gone (`getppid()` changed) the runner leaves
   through `os._exit` at once instead of pinning the node until the wall-clock limit.
+- **P-H5 / P-H6 (reader 1.0.1, controller 0.4.4)** the bundled `.frd` reader refuses a node, element
+  or result block that ends without its `-3` terminator and a `-1` record cut mid-line (a truncated
+  file was a silently truncated mesh with NaN coordinates and exit 0), and a malformed numeric field
+  surfaces as an `FrdFormatError` with a byte position instead of a raw `ValueError`.
 
 ## The runner contract
 

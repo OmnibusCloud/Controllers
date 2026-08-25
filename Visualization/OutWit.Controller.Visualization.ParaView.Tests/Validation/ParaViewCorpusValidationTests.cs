@@ -221,7 +221,11 @@ public sealed class ParaViewCorpusValidationTests
     public void ReaderStatesAreValidWithThePluginRequirementTest()
     {
         Assert.That(ParaViewCorpus.ReaderStates, Has.Count.GreaterThanOrEqualTo(4));
-        Assert.That(ParaViewCorpus.ReaderVersion(), Is.EqualTo(ParaViewRuntimeInfo.BundledReaderVersion()), "corpus generated with the bundled reader version");
+        // The corpus may lag the bundled reader (a reader fix ships without regenerating the corpus)
+        // but never lead it: a state requiring a newer reader than the bundle would be refused.
+        var corpusReader = Version.Parse(ParaViewCorpus.ReaderVersion() ?? "0.0.0");
+        var bundledReader = Version.Parse(ParaViewRuntimeInfo.BundledReaderVersion() ?? "0.0.0");
+        Assert.That(corpusReader, Is.LessThanOrEqualTo(bundledReader), "corpus generated with a reader no newer than the bundled one");
 
         foreach (var stateName in ParaViewCorpus.ReaderStates)
         {

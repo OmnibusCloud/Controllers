@@ -45,7 +45,7 @@ public sealed class ParaViewRuntimeInfoTests
             // plugin requirement, the allowlist key and this constant must all spell the same name.
             Assert.That(reader, Does.Contain($"paraview_plugin_name = \"{ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME}\""));
             Assert.That(reader, Does.Contain($"name=\"{ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME}\""), "the proxy XML name");
-            Assert.That(ParaViewRuntimeInfo.BundledReaderVersion(), Is.EqualTo("1.0.0"));
+            Assert.That(ParaViewRuntimeInfo.BundledReaderVersion(), Is.EqualTo("1.0.1"));
             Assert.That(ParaViewProxyAllowlist.Bundled.PluginProxies, Contains.Key(ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME));
             Assert.That(ParaViewProxyAllowlist.Bundled.PluginProxies[ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME], Is.EqualTo(new[] { $"sources/{ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME}" }));
         });
