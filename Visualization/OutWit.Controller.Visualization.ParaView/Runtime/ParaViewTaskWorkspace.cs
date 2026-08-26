@@ -86,13 +86,37 @@ public sealed class ParaViewTaskWorkspace : IDisposable
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>The number of attachments materialized.</returns>
     /// <exception cref="InvalidOperationException">A digest, size or path rule is violated.</exception>
-    public async Task<int> MaterializeAsync(IWitBlobService blobService, ParaViewRenderTaskData task, CancellationToken cancellationToken)
+    public Task<int> MaterializeAsync(IWitBlobService blobService, ParaViewRenderTaskData task, CancellationToken cancellationToken)
     {
-        var stateSource = await blobService.GetLocalPathAsync(task.StateBlobId);
-        await CopyVerifiedAsync(stateSource, StatePath, task.StateSha256, task.StateSize, "state", cancellationToken);
+        return MaterializeAsync(blobService, task.StateBlobId, task.StateSha256, task.StateSize, task.Attachments, cancellationToken);
+    }
+
+    /// <summary>
+    /// Materializes a batch's state and attachment union — once for every output of the chunk.
+    /// </summary>
+    /// <param name="blobService">Blob storage.</param>
+    /// <param name="batch">The batch.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The number of attachments materialized.</returns>
+    /// <exception cref="InvalidOperationException">A digest, size or path rule is violated.</exception>
+    public Task<int> MaterializeAsync(IWitBlobService blobService, ParaViewRenderTaskBatchData batch, CancellationToken cancellationToken)
+    {
+        return MaterializeAsync(blobService, batch.StateBlobId, batch.StateSha256, batch.StateSize, batch.Attachments, cancellationToken);
+    }
+
+    private async Task<int> MaterializeAsync(
+        IWitBlobService blobService,
+        Guid stateBlobId,
+        string stateSha256,
+        long stateSize,
+        IReadOnlyList<ParaViewAttachmentRefData> attachments,
+        CancellationToken cancellationToken)
+    {
+        var stateSource = await blobService.GetLocalPathAsync(stateBlobId);
+        await CopyVerifiedAsync(stateSource, StatePath, stateSha256, stateSize, "state", cancellationToken);
 
         var materialized = 0;
-        foreach (var attachment in task.Attachments)
+        foreach (var attachment in attachments)
         {
             await MaterializeAttachmentAsync(blobService, attachment, cancellationToken);
             materialized++;
@@ -148,11 +172,6 @@ public sealed class ParaViewTaskWorkspace : IDisposable
     }
 
     /// <summary>
-    /// The output path of the task inside the output directory.
-    /// </summary>
-    /// <param name="task">The task.</param>
-    /// <returns>Absolute output path.</returns>
-    /// <summary>
     /// Removes what a runner attempt left behind — the status document and every file in the output
     /// directory — so a retry starts from a clean slate and its own verdict can never be confused
     /// with the previous attempt's (audit C-M2). The materialized package is untouched.
@@ -169,6 +188,12 @@ public sealed class ParaViewTaskWorkspace : IDisposable
             File.Delete(file);
     }
 
+    /// <summary>
+    /// The output path of a task inside the output directory: the timestep, plus the orbit
+    /// position under a camera move, so every output of a batch has its own file (and blob) name.
+    /// </summary>
+    /// <param name="task">The task.</param>
+    /// <returns>Absolute output path.</returns>
     public string OutputPathFor(ParaViewRenderTaskData task)
     {
         // A camera move renders several outputs of one timestep: the orbit position keeps their

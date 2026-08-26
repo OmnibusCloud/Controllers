@@ -110,17 +110,22 @@ public sealed class ParaViewRenderEndToEndTests
         var job = m_engine.Compile(Script("RenderParaViewFrames.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status}: {status.Message}");
 
         var report = job.Variables["report"].Value as ParaViewValidationReportData;
-        var tasks = job.Variables["tasks"].Value as IReadOnlyList<ParaViewRenderTaskData?>;
-        var rendered = job.Variables["rendered"].Value as IReadOnlyList<ParaViewRenderResultData?>;
+        var batches = job.Variables["tasks"].Value as IReadOnlyList<ParaViewRenderTaskBatchData?>;
+        var renderedBatches = job.Variables["rendered"].Value as IReadOnlyList<ParaViewRenderResultBatchData?>;
         var result = job.Variables["result"].Value as IReadOnlyList<Guid?>;
 
+        // Three outputs split per output (ceil(3 / 24) = 1): the batch shape with one-output batches.
+        var tasks = batches?.Where(me => me != null).SelectMany(me => me!.Tasks).ToList();
+        var rendered = renderedBatches?.Where(me => me != null).SelectMany(me => me!.Results).ToList();
         Assert.Multiple(() =>
         {
             Assert.That(report, Is.Not.Null);
             Assert.That(report!.IsValid, Is.True, string.Join("; ", report.Errors));
+            Assert.That(batches, Has.Count.EqualTo(3));
+            Assert.That(batches!.All(me => me!.Tasks.Count == 1), Is.True);
             Assert.That(tasks, Has.Count.EqualTo(3));
             Assert.That(rendered, Has.Count.EqualTo(3));
             Assert.That(result, Has.Count.EqualTo(3));
@@ -152,8 +157,61 @@ public sealed class ParaViewRenderEndToEndTests
             Assert.That(report.SeriesAnchors, Is.EqualTo(new[] { "data/field_0.vtu" }));
         });
 
-        foreach (var task in tasks!.Select(me => me!))
-            Assert.That(task.Attachments.Select(me => me.LogicalPath), Is.EquivalentTo(new[] { "data/mesh.vtu", "data/field_0.vtu", $"data/field_{task.TimestepIndex}.vtu" }.Distinct()));
+        foreach (var batch in batches!.Select(me => me!))
+            Assert.That(batch.Attachments.Select(me => me.LogicalPath), Is.EquivalentTo(new[] { "data/mesh.vtu", "data/field_0.vtu", $"data/field_{batch.Tasks[0].TimestepIndex}.vtu" }.Distinct()));
+    }
+
+    [Test]
+    public async Task LongFramesJobRendersInBatchesWithUnionDownloadsTest()
+    {
+        // FrameBatch through the whole engine: 30 timesteps split into chunks of 2 (ceil(30 / 24)),
+        // each chunk one pvpython process over the union of its two subsets - the static mesh and
+        // the series anchor are fetched once per CHUNK (15×), every other piece exactly once, and the
+        // collected frame set is complete and in timestep order.
+        const int timesteps = 30;
+        var package = NewPackage().AddFile("data/mesh.vtu", "static mesh");
+        for (var i = 0; i < timesteps; i++)
+            package.AddFile($"data/field_{i}.vtu", $"field {i}", seriesGroup: "field", timestepIndices: [i]);
+
+        var state = new ParaViewStateBuilder().WithTimesteps(Enumerable.Range(0, timesteps).Select(i => i * 0.1).ToArray());
+        var mesh = state.AddReader("XMLUnstructuredGridReader", "mesh.vtu", "data/mesh.vtu");
+        state.AddRepresentation("UnstructuredGridRepresentation", mesh);
+        state.AddRenderView();
+        var scene = package.BuildScene(state.Build());
+        var options = new ParaViewOutputOptionsData { Width = 16, Height = 8, Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.All } };
+
+        m_blobs.ClearRequests();
+        var job = m_engine.Compile(Script("RenderParaViewFrames.wit"));
+        var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status}: {status.Message}");
+
+        var batches = job.Variables["tasks"].Value as IReadOnlyList<ParaViewRenderTaskBatchData?>;
+        var renderedBatches = job.Variables["rendered"].Value as IReadOnlyList<ParaViewRenderResultBatchData?>;
+        var result = job.Variables["result"].Value as IReadOnlyList<Guid?>;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(batches, Has.Count.EqualTo(15));
+            Assert.That(batches!.All(me => me!.Tasks.Count == 2), Is.True, "chunks of two");
+            Assert.That(renderedBatches, Has.Count.EqualTo(15));
+            Assert.That(result, Has.Count.EqualTo(timesteps));
+        });
+
+        var ordered = renderedBatches!.SelectMany(me => me!.Results).OrderBy(me => me.TaskIndex).ToList();
+        Assert.That(ordered.Select(me => me.TimestepIndex), Is.EqualTo(Enumerable.Range(0, timesteps)));
+        Assert.That(result!.Select(me => me!.Value), Is.EqualTo(ordered.Select(me => me.ImageBlobId)));
+        Assert.That(result.Select(me => me!.Value).Distinct().Count(), Is.EqualTo(timesteps), "one blob per frame");
+
+        var requests = m_blobs.Requests.GroupBy(me => me).ToDictionary(me => me.Key, me => me.Count());
+        Assert.Multiple(() =>
+        {
+            Assert.That(requests[package.BlobOf("data/mesh.vtu")], Is.EqualTo(15), "the static mesh once per chunk");
+            Assert.That(requests[package.BlobOf("data/field_0.vtu")], Is.EqualTo(15), "the series anchor once per chunk");
+            for (var i = 1; i < timesteps; i++)
+                Assert.That(requests[package.BlobOf($"data/field_{i}.vtu")], Is.EqualTo(1), $"piece {i} exactly once");
+            Assert.That(requests[scene.StateBlobId], Is.EqualTo(16), "the state once by Validate plus once per chunk");
+        });
     }
 
     [Test]
@@ -166,7 +224,7 @@ public sealed class ParaViewRenderEndToEndTests
         var job = m_engine.Compile(Script("RenderParaViewStill.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status}: {status.Message}");
 
         var result = job.Variables["result"].Value;
         Assert.That(result, Is.TypeOf<Guid>());
@@ -184,7 +242,7 @@ public sealed class ParaViewRenderEndToEndTests
         var job = m_engine.Compile(Script("ValidateParaViewScene.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, scene, new ParaViewOutputOptionsData());
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status}: {status.Message}");
 
         var report = job.Variables["result"].Value as ParaViewValidationReportData;
         Assert.That(report, Is.Not.Null);
@@ -241,11 +299,30 @@ public sealed class ParaViewRenderEndToEndTests
     }
 
     [Test]
+    public async Task NodeBenchmarkOfRenderFrameBatchMeasuresTheBatchShapeTest()
+    {
+        // The batch activity has its own measured rate: cycles of one process rendering several
+        // frames, named by the batch dataset so the allocator never mixes it with the v3 rate.
+        var options = new WitBenchmarkOptions { MinDuration = TimeSpan.FromMilliseconds(1), WarmupIterations = 1 };
+
+        var result = await WitEngineNodeSdk.Instance.RunBenchmark("ParaView.RenderFrameBatch", options);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Unit, Is.EqualTo(ParaViewBenchmark.UNIT));
+            Assert.That(result.DatasetId, Is.EqualTo(ParaViewBenchmark.BATCH_DATASET_ID));
+            Assert.That(result.Iterations, Is.EqualTo(ParaViewBenchmark.MIN_CYCLES));
+            Assert.That(result.Rate, Is.GreaterThan(0));
+            Assert.That(result.Custom?[ParaViewBenchmark.CUSTOM_FRAMES_PER_CYCLE], Is.EqualTo(ParaViewBenchmark.BATCH_CYCLE_FRAMES.ToString()));
+        });
+    }
+
+    [Test]
     public async Task OtherParaViewActivitiesKeepTheDefaultBenchmarkTest()
     {
-        // Planning, validation and assembly run on the host; only RenderFrame is distributed, so only it
-        // needs a measured rate. The others must still answer the benchmark pass without failing.
-        foreach (var activity in WitEngineNodeSdk.Instance.RegisteredActivities.Where(me => me.StartsWith("ParaView.", StringComparison.Ordinal) && me != "ParaView.RenderFrame"))
+        // Planning, validation and assembly run on the host; only the render activities are distributed,
+        // so only they need a measured rate. The others must still answer the benchmark pass without failing.
+        foreach (var activity in WitEngineNodeSdk.Instance.RegisteredActivities.Where(me => me.StartsWith("ParaView.", StringComparison.Ordinal) && me != "ParaView.RenderFrame" && me != "ParaView.RenderFrameBatch"))
         {
             var result = await WitEngineNodeSdk.Instance.RunBenchmark(activity, (WitBenchmarkOptions)WitBenchmarkOptions.Default);
             Assert.That(result.Rate, Is.GreaterThan(0), $"{activity} must report a schedulable rate");

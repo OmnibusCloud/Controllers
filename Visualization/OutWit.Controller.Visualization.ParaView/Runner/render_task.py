@@ -1,14 +1,18 @@
 """OmnibusCloud ParaView task runner (controller-owned, never user-supplied).
 
-Invoked by the ParaView controller's RenderFrame adapter as
+Invoked by the ParaView controller's RenderFrame / RenderFrameBatch adapters as
 
     pvpython --force-offscreen-rendering --disable-registry render_task.py --task-file <task.json>
 
 with an allowlisted environment and cwd = the task's package root. Everything the run needs is
-in the task file (see ParaViewRunnerTask on the controller side): the materialized state, the
-package root every logical path resolves under, the view, the timestep, the output size/format/
-path, the optional bundled reader to load, and the effective proxy allowlist plus the blocked
-proxy/property lists for the post-load runtime check.
+in the task file (see ParaViewRunnerTask on the controller side, schema 2): the materialized
+state, the package root every logical path resolves under, the view, the output size/format, the
+optional bundled reader to load, the effective proxy allowlist plus the blocked proxy/property
+lists for the post-load runtime check, and the OUTPUTS to render - one for a single-frame task,
+a chunk for a batch (FrameBatch, docs 03, section 27, item 2). The state loads and validates
+once per process; every output then selects its timestep, moves the camera from the state's
+captured framing, renders to its own file and verifies it. A batch is all-or-nothing: one
+failed output fails the process and nothing of it is published.
 
 Responsibilities (docs 03, section 9):
   1. touch no user configuration and no plugin path other than the controller-owned one;
@@ -16,14 +20,16 @@ Responsibilities (docs 03, section 9):
   3. resolve the state's logical file references under the package root (the state never carries
      a client path): a single-valued reference must be a materialized package file, a file series
      must have at least one, and any VTK error during load/render fails the task;
-  4. select the declared view and timestep;
-  4a. move the state's camera by the task's camera move (docs 03, section 27, item 1; docs 06,
+  4. select the declared view, then per output its timestep;
+  4a. move the state's camera by the output's camera move (docs 03, section 27, item 1; docs 06,
       part B): revolve it by the azimuth about the orbit axis through the focal point, raise it by
       the elevation about its right axis, scale its distance to the focal point by the dolly
-      factor — an output-side transform, never a state edit;
+      factor — an output-side transform from the captured framing, never a state edit; the
+      captured framing is restored before every further output;
   5. apply only controller-owned output overrides (size, transparency);
-  6. render through SaveScreenshot;
-  7. write the bounded machine-readable status document on EVERY exit path;
+  6. render every output through SaveScreenshot;
+  7. write the bounded machine-readable status document (per-output verdicts included) on EVERY
+     exit path;
   8. exit non-zero on any discrepancy, publishing nothing.
 
 Stdlib + paraview only. Compatible with the Python ParaView bundles (3.9+ syntax).
@@ -40,7 +46,8 @@ import time
 import traceback
 import xml.etree.ElementTree as ET
 
-STATUS_SCHEMA = 1
+STATUS_SCHEMA = 2
+TASK_SCHEMA = 2
 MAX_ERROR_CHARS = 4000
 DEFAULT_MAX_STATE_BYTES = 32 * 1024 * 1024
 DEFAULT_MAX_LOGICAL_PATH_CHARS = 1024
@@ -105,10 +112,21 @@ class Status(object):
             "backend": "",
             "vtk_errors": 0,
             "missing_references": 0,
+            "outputs": [],
         }
 
     def stage(self, name):
         self.data["stage"] = name
+
+    def output(self, index, ok, stage, error, render_seconds):
+        """Records one output's verdict (schema 2); a batch's task-level ok needs every output ok."""
+        self.data["outputs"].append({
+            "index": int(index),
+            "ok": bool(ok),
+            "stage": stage,
+            "error": (error or "")[:MAX_ERROR_CHARS],
+            "render_seconds": round(float(render_seconds), 3),
+        })
 
     def set(self, key, value):
         self.data[key] = value
@@ -190,38 +208,65 @@ def check_logical_path(value, max_chars=DEFAULT_MAX_LOGICAL_PATH_CHARS):
 # Task
 # ---------------------------------------------------------------------------------------------
 
+class Output(object):
+    """One output of the task (schema 2): its timestep, camera move and file."""
+
+    REQUIRED = ("output_path", "timestep_index")
+
+    def __init__(self, data, position):
+        if not isinstance(data, dict):
+            raise RunnerError("output %d is not a JSON object" % position, EXIT_USAGE)
+        for key in self.REQUIRED:
+            if key not in data:
+                raise RunnerError("output %d lacks '%s'" % (position, key), EXIT_USAGE)
+        self.index = int(data.get("index", position))
+        self.task_id = data.get("task_id", "")
+        self.output_path = data["output_path"]
+        self.timestep_index = int(data["timestep_index"])
+        self.time_value = data.get("time_value", None)
+        self.camera_azimuth = float(data.get("camera_azimuth", 0.0) or 0.0)
+        self.camera_axis = str(data.get("camera_axis", CAMERA_AXIS_VIEW_UP) or CAMERA_AXIS_VIEW_UP).lower()
+        self.camera_elevation = float(data.get("camera_elevation", 0.0) or 0.0)
+        self.camera_dolly = float(data.get("camera_dolly", 1.0) or 1.0)
+
+        if not math.isfinite(self.camera_azimuth):
+            raise RunnerError("output %d: camera azimuth must be a finite number of degrees" % self.index, EXIT_USAGE)
+        if not math.isfinite(self.camera_elevation):
+            raise RunnerError("output %d: camera elevation must be a finite number of degrees" % self.index, EXIT_USAGE)
+        if not math.isfinite(self.camera_dolly) or self.camera_dolly <= 0.0:
+            raise RunnerError("output %d: camera dolly factor must be a positive finite number" % self.index, EXIT_USAGE)
+        if self.camera_axis != CAMERA_AXIS_VIEW_UP and self.camera_axis not in CAMERA_AXIS_VECTORS:
+            raise RunnerError("output %d: unsupported camera axis '%s'" % (self.index, self.camera_axis), EXIT_USAGE)
+
+    def moves_camera(self):
+        return self.camera_azimuth != 0.0 or self.camera_elevation != 0.0 or self.camera_dolly != 1.0
+
+
 class Task(object):
-    """The parsed task file."""
+    """The parsed task file: the shared inputs and the outputs to render in order."""
 
     REQUIRED = (
-        "schema", "state_path", "package_root", "work_dir", "output_path", "status_path",
-        "view_id", "timestep_index", "width", "height", "format",
+        "schema", "state_path", "package_root", "work_dir", "status_path",
+        "view_id", "width", "height", "format", "outputs",
     )
 
     def __init__(self, data):
         for key in self.REQUIRED:
             if key not in data:
                 raise RunnerError("task file lacks '%s'" % key, EXIT_USAGE)
-        if data["schema"] != 1:
+        if data["schema"] != TASK_SCHEMA:
             raise RunnerError("unsupported task file schema %r" % (data["schema"],), EXIT_USAGE)
 
         self.task_id = data.get("task_id", "")
         self.state_path = data["state_path"]
         self.package_root = data["package_root"]
         self.work_dir = data["work_dir"]
-        self.output_path = data["output_path"]
         self.status_path = data["status_path"]
         self.view_id = data["view_id"]
-        self.timestep_index = int(data["timestep_index"])
-        self.time_value = data.get("time_value", None)
         self.width = int(data["width"])
         self.height = int(data["height"])
         self.format = str(data["format"]).lower()
         self.transparent_background = bool(data.get("transparent_background", False))
-        self.camera_azimuth = float(data.get("camera_azimuth", 0.0) or 0.0)
-        self.camera_axis = str(data.get("camera_axis", CAMERA_AXIS_VIEW_UP) or CAMERA_AXIS_VIEW_UP).lower()
-        self.camera_elevation = float(data.get("camera_elevation", 0.0) or 0.0)
-        self.camera_dolly = float(data.get("camera_dolly", 1.0) or 1.0)
         self.plugin_path = data.get("plugin_path", None)
         self.allowed_proxies = set(data.get("allowed_proxies", []))
         self.blocked_proxy_types = set(data.get("blocked_proxy_types", []))
@@ -235,22 +280,24 @@ class Task(object):
             raise RunnerError("output dimensions must be positive", EXIT_USAGE)
         if self.format not in ("png", "jpeg"):
             raise RunnerError("unsupported output format '%s'" % self.format, EXIT_USAGE)
-        if not math.isfinite(self.camera_azimuth):
-            raise RunnerError("camera azimuth must be a finite number of degrees", EXIT_USAGE)
-        if not math.isfinite(self.camera_elevation):
-            raise RunnerError("camera elevation must be a finite number of degrees", EXIT_USAGE)
-        if not math.isfinite(self.camera_dolly) or self.camera_dolly <= 0.0:
-            raise RunnerError("camera dolly factor must be a positive finite number", EXIT_USAGE)
-        if self.camera_axis != CAMERA_AXIS_VIEW_UP and self.camera_axis not in CAMERA_AXIS_VECTORS:
-            raise RunnerError("unsupported camera axis '%s'" % self.camera_axis, EXIT_USAGE)
+        outputs = data["outputs"]
+        if not isinstance(outputs, list) or not outputs:
+            raise RunnerError("task file lists no outputs", EXIT_USAGE)
+        self.outputs = [Output(entry, position) for position, entry in enumerate(outputs)]
         if not os.path.isdir(self.package_root):
             raise RunnerError("package root '%s' is not a directory" % self.package_root, EXIT_USAGE)
         if not os.path.isdir(self.work_dir):
             raise RunnerError("work dir '%s' is not a directory" % self.work_dir, EXIT_USAGE)
         if not os.path.isfile(self.state_path):
             raise RunnerError("state file '%s' does not exist" % self.state_path, EXIT_USAGE)
-        if not is_inside(self.output_path, self.work_dir):
-            raise RunnerError("output path escapes the work directory", EXIT_POLICY)
+        seen = set()
+        for output in self.outputs:
+            if not is_inside(output.output_path, self.work_dir):
+                raise RunnerError("output %d: output path escapes the work directory" % output.index, EXIT_POLICY)
+            key = _norm(output.output_path)
+            if key in seen:
+                raise RunnerError("output %d: output path is used twice in the task" % output.index, EXIT_POLICY)
+            seen.add(key)
         if not is_inside(self.status_path, self.work_dir):
             raise RunnerError("status path escapes the work directory", EXIT_POLICY)
         if self.plugin_path is not None:
@@ -531,10 +578,10 @@ def find_view(simple, servermanager, view_id):
     return view
 
 
-def select_timestep(simple, task, view):
-    """Selects the task's timestep. The live TimeKeeper is authoritative when it carries a timeline:
-    the index must be in range and agree with the task's time value. When it carries none (a
-    static scene, or a runtime that does not expose the timeline) the task's time value, resolved
+def select_timestep(simple, output, view):
+    """Selects the output's timestep. The live TimeKeeper is authoritative when it carries a timeline:
+    the index must be in range and agree with the output's time value. When it carries none (a
+    static scene, or a runtime that does not expose the timeline) the output's time value, resolved
     host-side from the producer's timeline, is applied as the animation time."""
     keeper = simple.GetTimeKeeper()
     try:
@@ -542,15 +589,15 @@ def select_timestep(simple, task, view):
     except Exception:
         times = []
     if times:
-        if task.timestep_index < 0 or task.timestep_index >= len(times):
-            raise RunnerError("timestep index %d is outside the timeline of %d timestep(s)" % (task.timestep_index, len(times)), EXIT_POLICY)
-        value = float(times[task.timestep_index])
-        if task.time_value is not None and abs(float(task.time_value) - value) > 1e-9 * max(1.0, abs(value)):
-            raise RunnerError("timestep index %d has time %r in the state but the task expects %r" % (task.timestep_index, value, float(task.time_value)), EXIT_POLICY)
+        if output.timestep_index < 0 or output.timestep_index >= len(times):
+            raise RunnerError("timestep index %d is outside the timeline of %d timestep(s)" % (output.timestep_index, len(times)), EXIT_POLICY)
+        value = float(times[output.timestep_index])
+        if output.time_value is not None and abs(float(output.time_value) - value) > 1e-9 * max(1.0, abs(value)):
+            raise RunnerError("timestep index %d has time %r in the state but the task expects %r" % (output.timestep_index, value, float(output.time_value)), EXIT_POLICY)
     else:
-        if task.timestep_index != 0 and task.time_value is None:
-            raise RunnerError("the state has no timeline but timestep index %d was requested" % task.timestep_index, EXIT_POLICY)
-        value = None if task.time_value is None else float(task.time_value)
+        if output.timestep_index != 0 and output.time_value is None:
+            raise RunnerError("the state has no timeline but timestep index %d was requested" % output.timestep_index, EXIT_POLICY)
+        value = None if output.time_value is None else float(output.time_value)
     if value is None:
         return None
     scene = simple.GetAnimationScene()
@@ -594,17 +641,54 @@ def _normalized(v):
     return (v[0] / length, v[1] / length, v[2] / length)
 
 
+def capture_camera(view):
+    """The state's captured framing (position, focal point, view-up, parallel scale) - what every
+    output's camera move starts from. None when the view exposes no camera; attributes the runtime
+    (or the test stub) lacks are simply not captured."""
+    try:
+        camera = view.GetActiveCamera()
+    except Exception:
+        return None
+    if camera is None:
+        return None
+    snapshot = {}
+    for key, getter in (("position", "GetPosition"), ("focal", "GetFocalPoint"), ("view_up", "GetViewUp")):
+        try:
+            snapshot[key] = tuple(getattr(camera, getter)())
+        except Exception:
+            pass
+    try:
+        snapshot["parallel_scale"] = float(camera.GetParallelScale())
+    except Exception:
+        pass
+    return snapshot
+
+
+def restore_camera(view, snapshot):
+    """Puts the camera back to the captured framing before the next output's move (a batch renders
+    several outputs from one loaded state; the moves are absolute, never cumulative)."""
+    if not snapshot:
+        return
+    camera = view.GetActiveCamera()
+    for key, setter in (("position", "SetPosition"), ("focal", "SetFocalPoint"), ("view_up", "SetViewUp")):
+        if key in snapshot and hasattr(camera, setter):
+            getattr(camera, setter)(*snapshot[key])
+    if "parallel_scale" in snapshot and hasattr(camera, "SetParallelScale"):
+        camera.SetParallelScale(snapshot["parallel_scale"])
+
+
 def orbit_camera(task, view):
     """The camera move (turntable generalised): revolves the view's camera about the orbit axis
-    through its focal point by the task's azimuth, raises it about its own right axis by the
+    through its focal point by the output's azimuth, raises it about its own right axis by the
     elevation, and scales its distance to the focal point by the dolly factor. The state's camera
     (position, focal point, view-up) is the starting frame. About the camera's own view-up the
     azimuth is vtkCamera.Azimuth; about a world axis the camera is rotated rigidly (position AND
     view-up), so a tilted camera keeps its tilt, the horizon stays where the user left it, and a
     camera looking straight down the axis rolls instead of degenerating (no view-up reset). The
     elevation is always a rigid rotation about the right axis (view-up x view direction), so the
-    view-up follows and the framing never flips at the pole. Returns True when the camera moved."""
-    if task.camera_azimuth == 0.0 and task.camera_elevation == 0.0 and task.camera_dolly == 1.0:
+    view-up follows and the framing never flips at the pole. Returns True when the camera moved.
+    `task` is the output here (its camera_* fields)."""
+    if not task.moves_camera():
         return False
     try:
         camera = view.GetActiveCamera()
@@ -652,14 +736,14 @@ def orbit_camera(task, view):
     return True
 
 
-def render(simple, task, view):
+def render(simple, task, output, view):
     view.ViewSize = [task.width, task.height]
     started = time.time()
     simple.Render(view)
     kwargs = {"ImageResolution": [task.width, task.height]}
     if task.format == "png":
         kwargs["TransparentBackground"] = 1 if task.transparent_background else 0
-    simple.SaveScreenshot(task.output_path, view, **kwargs)
+    simple.SaveScreenshot(output.output_path, view, **kwargs)
     return time.time() - started
 
 
@@ -671,13 +755,13 @@ def backend_name(view):
         return ""
 
 
-def verify_output(task):
-    if not os.path.isfile(task.output_path):
+def verify_output(task, output):
+    if not os.path.isfile(output.output_path):
         raise RunnerError("no output file was written")
-    size = os.path.getsize(task.output_path)
+    size = os.path.getsize(output.output_path)
     if size <= 0:
         raise RunnerError("the output file is empty")
-    with open(task.output_path, "rb") as handle:
+    with open(output.output_path, "rb") as handle:
         head = handle.read(8)
     if task.format == "png" and head[:8] != b"\x89PNG\r\n\x1a\n":
         raise RunnerError("the output is not a PNG")
@@ -717,21 +801,52 @@ def run(task, status):
 
     status.stage(STAGE_SELECT)
     view = find_view(simple, servermanager, task.view_id)
-    select_timestep(simple, task, view)
-
-    status.stage(STAGE_ORBIT)
-    orbit_camera(task, view)
-
-    status.stage(STAGE_RENDER)
-    seconds = render(simple, task, view)
-    status.set("render_seconds", round(seconds, 3))
-    status.set("backend", backend_name(view))
-
-    status.stage(STAGE_VERIFY)
-    status.set("vtk_errors", len(observer.errors))
     if observer.errors:
-        raise RunnerError("VTK reported %d error(s) during load/render; first: %s" % (len(observer.errors), observer.errors[0]))
-    verify_output(task)
+        status.set("vtk_errors", len(observer.errors))
+        raise RunnerError("VTK reported %d error(s) during load; first: %s" % (len(observer.errors), observer.errors[0]))
+
+    # Every output starts from the state's captured framing: a batch renders several outputs from
+    # one loaded state, and the camera moves are absolute, not cumulative.
+    home = capture_camera(view)
+    moved = False
+    total_seconds = 0.0
+    total = len(task.outputs)
+    for output in task.outputs:
+        stage = STAGE_SELECT
+        errors_before = len(observer.errors)
+        seconds = 0.0
+        try:
+            status.stage(STAGE_SELECT)
+            if moved:
+                restore_camera(view, home)
+                moved = False
+            select_timestep(simple, output, view)
+
+            stage = STAGE_ORBIT
+            status.stage(STAGE_ORBIT)
+            moved = orbit_camera(output, view)
+
+            stage = STAGE_RENDER
+            status.stage(STAGE_RENDER)
+            seconds = render(simple, task, output, view)
+            total_seconds += seconds
+            status.set("render_seconds", round(total_seconds, 3))
+            status.set("backend", backend_name(view))
+
+            stage = STAGE_VERIFY
+            status.stage(STAGE_VERIFY)
+            status.set("vtk_errors", len(observer.errors))
+            new_errors = observer.errors[errors_before:]
+            if new_errors:
+                raise RunnerError("VTK reported %d error(s) during render; first: %s" % (len(new_errors), new_errors[0]))
+            verify_output(task, output)
+        except RunnerError as e:
+            status.output(output.index, False, stage, str(e), seconds)
+            raise RunnerError("output %d of %d (timestep %d): %s" % (output.index + 1, total, output.timestep_index, e), e.exit_code)
+        status.output(output.index, True, STAGE_DONE, "", seconds)
+        sys.stdout.write("render_task: output %d/%d (timestep %d) done in %.2f s\n" % (output.index + 1, total, output.timestep_index, seconds))
+        sys.stdout.flush()
+
     status.set("width", task.width)
     status.set("height", task.height)
 

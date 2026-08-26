@@ -54,11 +54,8 @@ public sealed class ParaViewRunnerDocumentsTests
             StatePath = "/w/state.pvsm",
             PackageRoot = "/w/package",
             WorkDir = "/w",
-            OutputPath = "/w/out/frame_000001.png",
             StatusPath = "/w/status.json",
             ViewId = "RenderView1",
-            TimestepIndex = 1,
-            TimeValue = 0.5,
             Width = 320,
             Height = 200,
             Format = "png",
@@ -69,10 +66,22 @@ public sealed class ParaViewRunnerDocumentsTests
             FileReferenceGroups = ["sources"],
             MaxStateBytes = 123,
             MaxLogicalPathChars = 77,
-            CameraAzimuth = 22.5,
-            CameraAxis = ParaViewCameraAxes.Z,
-            CameraElevation = 12.5,
-            CameraDolly = 0.75
+            Outputs =
+            [
+                new ParaViewRunnerOutput
+                {
+                    Index = 0,
+                    TaskId = "abc",
+                    OutputPath = "/w/out/frame_000001.png",
+                    TimestepIndex = 1,
+                    TimeValue = 0.5,
+                    CameraAzimuth = 22.5,
+                    CameraAxis = ParaViewCameraAxes.Z,
+                    CameraElevation = 12.5,
+                    CameraDolly = 0.75
+                },
+                new ParaViewRunnerOutput { Index = 1, TaskId = "def", OutputPath = "/w/out/frame_000002.png", TimestepIndex = 2, TimeValue = 1.0 }
+            ]
         };
 
         var json = task.ToJson();
@@ -80,23 +89,47 @@ public sealed class ParaViewRunnerDocumentsTests
 
         Assert.Multiple(() =>
         {
+            Assert.That(json, Does.Contain("\"schema\": 2"));
             Assert.That(json, Does.Contain("\"task_id\""));
+            Assert.That(json, Does.Contain("\"outputs\""));
             Assert.That(json, Does.Contain("\"timestep_index\": 1"));
             Assert.That(json, Does.Contain("\"plugin_path\": null"));
             Assert.That(json, Does.Contain("\"transparent_background\": true"));
             Assert.That(restored.ViewId, Is.EqualTo("RenderView1"));
-            Assert.That(restored.TimeValue, Is.EqualTo(0.5));
+            Assert.That(restored.Outputs, Has.Count.EqualTo(2));
+            Assert.That(restored.Outputs[0].TimeValue, Is.EqualTo(0.5));
+            Assert.That(restored.Outputs[1].TimestepIndex, Is.EqualTo(2));
             Assert.That(restored.AllowedProxies, Is.EqualTo(new[] { "views/RenderView" }));
             Assert.That(json, Does.Contain("\"max_state_bytes\": 123"));
             Assert.That(restored.MaxLogicalPathChars, Is.EqualTo(77));
             Assert.That(json, Does.Contain("\"camera_azimuth\": 22.5"));
             Assert.That(json, Does.Contain("\"camera_axis\": \"z\""));
-            Assert.That(restored.CameraAzimuth, Is.EqualTo(22.5));
-            Assert.That(restored.CameraAxis, Is.EqualTo("z"));
+            Assert.That(restored.Outputs[0].CameraAzimuth, Is.EqualTo(22.5));
+            Assert.That(restored.Outputs[0].CameraAxis, Is.EqualTo("z"));
             Assert.That(json, Does.Contain("\"camera_elevation\": 12.5"));
             Assert.That(json, Does.Contain("\"camera_dolly\": 0.75"));
-            Assert.That(restored.CameraElevation, Is.EqualTo(12.5));
-            Assert.That(restored.CameraDolly, Is.EqualTo(0.75));
+            Assert.That(restored.Outputs[0].CameraElevation, Is.EqualTo(12.5));
+            Assert.That(restored.Outputs[0].CameraDolly, Is.EqualTo(0.75));
+            Assert.That(restored.Outputs[1].CameraDolly, Is.EqualTo(1.0));
+        });
+    }
+
+    [Test]
+    public void RunnerStatusReadsThePerOutputVerdictsTest()
+    {
+        var path = Path.Combine(m_dir, "status.json");
+        File.WriteAllText(path, "{\"schema\":2,\"ok\":false,\"stage\":\"render\",\"error\":\"output 2 of 2: boom\",\"render_seconds\":0.5,\"outputs\":[{\"index\":0,\"ok\":true,\"stage\":\"done\",\"error\":\"\",\"render_seconds\":0.5},{\"index\":1,\"ok\":false,\"stage\":\"render\",\"error\":\"boom\",\"render_seconds\":0.0}]}");
+
+        var status = ParaViewRunnerStatus.TryRead(path);
+
+        Assert.That(status, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(status!.Ok, Is.False);
+            Assert.That(status.Outputs, Has.Count.EqualTo(2));
+            Assert.That(status.Outputs[0].Ok, Is.True);
+            Assert.That(status.FirstFailedOutput()?.Index, Is.EqualTo(1));
+            Assert.That(status.FirstFailedOutput()?.Error, Is.EqualTo("boom"));
         });
     }
 

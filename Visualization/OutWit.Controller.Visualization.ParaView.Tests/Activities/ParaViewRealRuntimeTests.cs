@@ -3,6 +3,9 @@ using OutWit.Controller.Visualization.ParaView.Model;
 using OutWit.Controller.Visualization.ParaView.Output;
 using OutWit.Controller.Visualization.ParaView.Processes;
 using OutWit.Controller.Visualization.ParaView.Runtime;
+using OutWit.Controller.Visualization.ParaView.Tasks;
+using OutWit.Controller.Visualization.ParaView.Validation;
+using OutWit.Engine.Data.Utils;
 using OutWit.Controller.Visualization.ParaView.Tests.Mock;
 using OutWit.Controller.Visualization.ParaView.Tests.Utils;
 using OutWit.Engine.Data.Benchmark;
@@ -155,7 +158,7 @@ public sealed class ParaViewRealRuntimeTests
             Assert.That(requests[scene.StateBlobId], Is.EqualTo(6));
         });
 
-        var rendered = (job.Variables["rendered"].Value as IReadOnlyList<ParaViewRenderResultData?>)!.Select(me => me!).OrderBy(me => me.TaskIndex).ToList();
+        var rendered = (job.Variables["rendered"].Value as IReadOnlyList<ParaViewRenderResultBatchData?>)!.SelectMany(me => me!.Results).OrderBy(me => me.TaskIndex).ToList();
         Assert.That(rendered.Select(me => me.TimeValue), Is.EqualTo(new double?[] { 0.0, 0.5, 1.0, 1.5, 2.0 }));
     }
 
@@ -240,7 +243,7 @@ public sealed class ParaViewRealRuntimeTests
         var digests = result.Select(me => Digest(m_blobs.GetStoredPath(me!.Value))).ToList();
         Assert.That(digests.Distinct().Count(), Is.EqualTo(frameCount), "every step of the reader's time series must render differently");
 
-        var rendered = (job.Variables["rendered"].Value as IReadOnlyList<ParaViewRenderResultData?>)!.Select(me => me!).OrderBy(me => me.TaskIndex).ToList();
+        var rendered = (job.Variables["rendered"].Value as IReadOnlyList<ParaViewRenderResultBatchData?>)!.SelectMany(me => me!.Results).OrderBy(me => me.TaskIndex).ToList();
         Assert.That(rendered.Select(me => me.TimeValue!.Value), Is.EqualTo(ParaViewCorpus.TimelineOf(stateName)).Within(1e-9));
     }
 
@@ -398,6 +401,93 @@ public sealed class ParaViewRealRuntimeTests
     }
 
     #endregion
+
+    [Test]
+    public async Task BatchOfFiveFramesRendersInOneProcessThroughTheRealRuntimeTest()
+    {
+        // FrameBatch on the real runtime: the whole PVD series as ONE chunk - one pvpython process,
+        // one materialization of index + every piece, five distinct frames in timestep order - and,
+        // for the record, the same five frames as five single-frame tasks: the batch pays process
+        // startup once, which is the whole point (docs 03, section 27, item 2).
+        var (scene, package) = ParaViewCorpus.BuildScene(ParaViewCorpus.PVD_SERIES, Path.Combine(m_root, "pvd_batch"), m_blobs);
+        var options = new ParaViewOutputOptionsData { Width = 160, Height = 120, Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.All } };
+
+        var validate = m_engine.Compile(Script("ValidateParaViewScene.wit"));
+        var validated = await m_engine.ScheduleAndWaitAsync(validate, scene, options);
+        Assert.That(validated.Result, Is.EqualTo(WitProcessingResult.Completed), $"{validated.Result}: {validated.Message}");
+        var report = (validate.Variables["result"].Value as ParaViewValidationReportData)!;
+        Assert.That(report.IsValid, Is.True, string.Join("; ", report.Errors));
+
+        var tasks = ParaViewTaskSplitter.Split(scene, report, options);
+        var batch = ParaViewTaskSplitter.Chunk(scene, tasks, tasks.Count).Single();
+        Assert.That(batch.Tasks, Has.Count.EqualTo(5));
+
+        var tempStorage = new WitTempStorageDefault(Path.Combine(m_root, "batch_temp"));
+        var executor = new ParaViewTaskExecutor(m_blobs, tempStorage, ParaViewProxyAllowlist.Bundled, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+
+        m_blobs.ClearRequests();
+        var batchClock = System.Diagnostics.Stopwatch.StartNew();
+        var result = await executor.ExecuteBatchAsync(batch, Guid.NewGuid(), m_pvpython, CancellationToken.None);
+        batchClock.Stop();
+
+        Assert.That(result.Results, Has.Count.EqualTo(5));
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Results.Select(me => me.TimestepIndex), Is.EqualTo(new[] { 0, 1, 2, 3, 4 }));
+            Assert.That(result.Results.Select(me => me.TimeValue), Is.EqualTo(new double?[] { 0.0, 0.5, 1.0, 1.5, 2.0 }));
+            Assert.That(result.Results.Select(me => me.RuntimeVersion), Has.All.StartWith(ParaViewRuntimeInfo.RUNTIME_SERIES));
+            Assert.That(result.Results.Select(me => me.Diagnostics), Has.All.Contain("stage=done"));
+        });
+        foreach (var rendered in result.Results)
+            Assert.That(ParaViewImageInfo.TryRead(m_blobs.GetStoredPath(rendered.ImageBlobId)), Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 160, 120, false)));
+
+        // Every timestep really rendered its own piece: five distinct frames (the corpus contours a
+        // wavelet whose amplitude grows per step).
+        var digests = result.Results.Select(me => Digest(m_blobs.GetStoredPath(me.ImageBlobId))).ToList();
+        Assert.That(digests.Distinct().Count(), Is.EqualTo(5), "frames of different timesteps must differ");
+
+        // One materialization: the index, every piece and the state exactly once.
+        var requests = m_blobs.Requests.GroupBy(me => me).ToDictionary(me => me.Key, me => me.Count());
+        Assert.Multiple(() =>
+        {
+            Assert.That(requests[package.BlobOf("data/series/series.pvd")], Is.EqualTo(1));
+            for (var i = 0; i < 5; i++)
+                Assert.That(requests[package.BlobOf($"data/series/series_{i:D3}.vti")], Is.EqualTo(1), $"piece {i}");
+            Assert.That(requests[scene.StateBlobId], Is.EqualTo(1));
+        });
+
+        // The same five frames one process each, for the record (not asserted - timing is the node's).
+        var singleClock = System.Diagnostics.Stopwatch.StartNew();
+        var singles = new List<ParaViewRenderResultData>();
+        foreach (var task in tasks)
+            singles.Add(await executor.ExecuteAsync(task, Guid.NewGuid(), m_pvpython, CancellationToken.None));
+        singleClock.Stop();
+
+        Assert.That(singles.Select(me => Digest(m_blobs.GetStoredPath(me.ImageBlobId))), Is.EqualTo(digests), "a batch renders exactly what five single tasks render");
+        TestContext.Out.WriteLine($"FrameBatch: 5 frames in one process {batchClock.Elapsed.TotalSeconds:F2} s vs five processes {singleClock.Elapsed.TotalSeconds:F2} s ({singleClock.Elapsed.TotalSeconds / batchClock.Elapsed.TotalSeconds:F1}x)");
+    }
+
+    [Test]
+    public async Task BatchBenchmarkMeasuresEightFramesPerCycleThroughTheRealRuntimeTest()
+    {
+        // The batch activity's benchmark on the real runtime: a cycle is one process rendering eight
+        // frames (the runner's loop must honour the frame cap, not the target seconds).
+        var options = new WitBenchmarkOptions { MinDuration = TimeSpan.FromMilliseconds(1), WarmupIterations = 1 };
+        var tempStorage = new WitTempStorageDefault(Path.Combine(m_root, "batch_benchmark"));
+
+        var single = await ParaViewBenchmark.MeasureAsync(m_pvpython, tempStorage, options, null, CancellationToken.None);
+        var result = await ParaViewBenchmark.MeasureAsync(m_pvpython, tempStorage, options, null, CancellationToken.None, ParaViewBenchmark.BATCH_CYCLE_FRAMES, "ParaView.RenderFrameBatch");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.DatasetId, Is.EqualTo(ParaViewBenchmark.BATCH_DATASET_ID));
+            Assert.That(result.Iterations, Is.EqualTo(ParaViewBenchmark.MIN_CYCLES));
+            Assert.That(result.Custom?[ParaViewBenchmark.CUSTOM_FRAMES_PER_CYCLE], Is.EqualTo(ParaViewBenchmark.BATCH_CYCLE_FRAMES.ToString()));
+            Assert.That(result.Rate, Is.GreaterThan(single.Rate), "eight frames per process amortize the startup the single-frame cycle pays every frame");
+        });
+
+        TestContext.Out.WriteLine($"ParaView.RenderFrame: {single.Rate:N0} px/s (cycle {single.Custom?[ParaViewBenchmark.CUSTOM_CYCLE_SECONDS]} s) | ParaView.RenderFrameBatch: {result.Rate:N0} px/s (cycle {result.Custom?[ParaViewBenchmark.CUSTOM_CYCLE_SECONDS]} s for {ParaViewBenchmark.BATCH_CYCLE_FRAMES} frames, render {result.Custom?[ParaViewBenchmark.CUSTOM_RENDER_SECONDS]} s)");
+    }
 
     #region Tools
 

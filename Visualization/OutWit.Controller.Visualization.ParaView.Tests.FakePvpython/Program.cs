@@ -2,26 +2,30 @@
 // invoked with:
 //   fake-pvpython [pvpython options] <render_task.py> --task-file <task.json>
 //   fake-pvpython --version
-// and the runner's document contract: reads the snake_case task file, writes the snake_case
-// status file on every exit path, renders into task.output_path, exit code forwarded.
+// and the runner's document contract (schema 2): reads the snake_case task file — the shared
+// state/view/size/format plus the OUTPUTS list — writes the snake_case status file (per-output
+// verdicts included) on every exit path, renders every output into its own path, exit code forwarded.
 //
 // Like the real runner it parses the state and resolves every file reference under the package
 // root: a single-valued reference must be a materialized package file, a multi-valued one (a file
 // series) must have at least one — the e2e proof that a task's attachment subset suffices.
 // Behaviours are driven by markers in the STATE text:
-//   FAKE-FAIL          fails at load-state: status ok=false, exit 3, no output;
-//   FAKE-HANG          sleeps like a wedged runner — the cancellation gates kill the tree;
-//   FAKE-WRONG-SIZE    renders one pixel wider than requested (output validation must reject);
-//   FAKE-NO-STATUS     renders, exits 0, writes no status (adapter must reject);
-//   FAKE-EXTRA-OUTPUT  renders and leaves an extra file in the output directory (must reject);
-//   FAKE-EGL-CRASH     dies like a segfault (exit 1, no status) when VTK_DEFAULT_OPENGL_WINDOW=vtkEGLRenderWindow;
-//   anything else      renders a solid image of the requested size.
+//   FAKE-FAIL            fails at load-state: status ok=false, exit 3, no output;
+//   FAKE-HANG            sleeps like a wedged runner — the cancellation gates kill the tree;
+//   FAKE-WRONG-SIZE      renders one pixel wider than requested (output validation must reject);
+//   FAKE-NO-STATUS       renders, exits 0, writes no status (adapter must reject);
+//   FAKE-EXTRA-OUTPUT    renders and leaves an extra file in the output directory (must reject);
+//   FAKE-EGL-CRASH       dies like a segfault (exit 1, no status) when VTK_DEFAULT_OPENGL_WINDOW=vtkEGLRenderWindow;
+//   FAKE-FAIL-OUTPUT-<n> renders the outputs before index n, fails output n at render (status
+//                        outputs[n].ok=false, task ok=false, exit 1) — a batch is all-or-nothing;
+//   anything else        renders a solid image of the requested size per output.
 //
 // When the script is benchmark_frames.py the fake runs its benchmark mode instead (see FakeBenchmark).
 // When the script is gpu_probe.py the fake runs its GPU-probe mode (see FakeGpuProbe).
 // When the script is compose_scene.py the fake runs its compose mode (see FakeCompose).
 
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using OutWit.Controller.Visualization.ParaView.Tests.FakePvpython;
 
@@ -66,17 +70,18 @@ if (string.Equals(Path.GetFileName(scriptPath), FakeBenchmark.SCRIPT_NAME, Strin
 if (string.Equals(Path.GetFileName(scriptPath), FakeCompose.SCRIPT_NAME, StringComparison.OrdinalIgnoreCase))
     return FakeCompose.Run(task);
 
-string Str(string name) => task.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
-int Int(string name) => task.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number ? value.GetInt32() : 0;
-bool Bool(string name) => task.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
-HashSet<string> Set(string name) => task.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array
+string Str(JsonElement element, string name) => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
+int Int(JsonElement element, string name) => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number ? value.GetInt32() : 0;
+bool Bool(JsonElement element, string name) => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
+HashSet<string> Set(JsonElement element, string name) => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array
     ? value.EnumerateArray().Select(me => me.GetString() ?? string.Empty).ToHashSet(StringComparer.Ordinal)
     : [];
 
-var statusPath = Str("status_path");
+var statusPath = Str(task, "status_path");
+var outputStatuses = new List<Dictionary<string, object?>>();
 var status = new Dictionary<string, object?>
 {
-    ["schema"] = 1,
+    ["schema"] = 2,
     ["ok"] = false,
     ["stage"] = "load-task",
     ["error"] = "",
@@ -86,7 +91,8 @@ var status = new Dictionary<string, object?>
     ["render_seconds"] = 0.0,
     ["width"] = 0,
     ["height"] = 0,
-    ["backend"] = "FakeOffscreenWindow"
+    ["backend"] = "FakeOffscreenWindow",
+    ["outputs"] = outputStatuses
 };
 
 int Fail(string stage, string error, int exitCode)
@@ -104,19 +110,23 @@ void WriteStatus()
         File.WriteAllText(statusPath, JsonSerializer.Serialize(status));
 }
 
-if (Int("schema") != 1)
+if (Int(task, "schema") != 2)
     return Fail("load-task", "unsupported task schema", 2);
 
-var statePath = Str("state_path");
-var packageRoot = Str("package_root");
-var outputPath = Str("output_path");
-var width = Int("width");
-var height = Int("height");
-var format = Str("format");
-var transparent = Bool("transparent_background");
-var timestepIndex = Int("timestep_index");
-var fileReferenceGroups = Set("file_reference_groups");
-var filePropertyNames = Set("file_property_names");
+var statePath = Str(task, "state_path");
+var packageRoot = Str(task, "package_root");
+var width = Int(task, "width");
+var height = Int(task, "height");
+var format = Str(task, "format");
+var transparent = Bool(task, "transparent_background");
+var fileReferenceGroups = Set(task, "file_reference_groups");
+var filePropertyNames = Set(task, "file_property_names");
+
+var outputs = task.TryGetProperty("outputs", out var outputsElement) && outputsElement.ValueKind == JsonValueKind.Array
+    ? outputsElement.EnumerateArray().ToList()
+    : [];
+if (outputs.Count == 0)
+    return Fail("load-task", "task file lists no outputs", 2);
 
 if (!File.Exists(statePath))
     return Fail("load-task", $"state file '{statePath}' does not exist", 2);
@@ -129,7 +139,7 @@ if (Environment.GetEnvironmentVariable("DISPLAY") != null)
 
 var stateText = File.ReadAllText(statePath);
 
-if (stateText.Contains("FAKE-FAIL", StringComparison.Ordinal))
+if (stateText.Contains("FAKE-FAIL", StringComparison.Ordinal) && !stateText.Contains("FAKE-FAIL-OUTPUT", StringComparison.Ordinal))
     return Fail("load-state", "fake failure requested by the state", 3);
 
 // A flaky EGL stack: dies like a segfault (no status at all) ONLY when the EGL window is requested.
@@ -191,24 +201,48 @@ catch (Exception e)
 status["proxy_count"] = proxyCount;
 status["stage"] = "render";
 
-var renderWidth = stateText.Contains("FAKE-WRONG-SIZE", StringComparison.Ordinal) ? width + 1 : width;
-try
-{
-    var started = DateTime.UtcNow;
-    if (format == "jpeg")
-        FakeImageWriter.WriteJpegHeaderOnly(outputPath, renderWidth, height);
-    else
-        FakeImageWriter.WritePng(outputPath, renderWidth, height, transparent, (byte)(timestepIndex * 37 % 256));
+var failOutput = -1;
+var failMatch = Regex.Match(stateText, @"FAKE-FAIL-OUTPUT-(\d+)");
+if (failMatch.Success)
+    failOutput = int.Parse(failMatch.Groups[1].Value);
 
-    status["render_seconds"] = (DateTime.UtcNow - started).TotalSeconds;
-}
-catch (Exception e)
+var renderWidth = stateText.Contains("FAKE-WRONG-SIZE", StringComparison.Ordinal) ? width + 1 : width;
+var totalSeconds = 0.0;
+foreach (var output in outputs)
 {
-    return Fail("render", $"cannot write the output: {e.Message}", 1);
+    var index = Int(output, "index");
+    var outputPath = Str(output, "output_path");
+    var timestepIndex = Int(output, "timestep_index");
+
+    if (index == failOutput)
+    {
+        outputStatuses.Add(new Dictionary<string, object?> { ["index"] = index, ["ok"] = false, ["stage"] = "render", ["error"] = $"fake failure requested for output {index}", ["render_seconds"] = 0.0 });
+        return Fail("render", $"output {index + 1} of {outputs.Count} (timestep {timestepIndex}): fake failure requested for output {index}", 1);
+    }
+
+    try
+    {
+        var started = DateTime.UtcNow;
+        if (format == "jpeg")
+            FakeImageWriter.WriteJpegHeaderOnly(outputPath, renderWidth, height);
+        else
+            FakeImageWriter.WritePng(outputPath, renderWidth, height, transparent, (byte)((timestepIndex * 37 + index * 11) % 256));
+
+        var seconds = (DateTime.UtcNow - started).TotalSeconds;
+        totalSeconds += seconds;
+        status["render_seconds"] = totalSeconds;
+        outputStatuses.Add(new Dictionary<string, object?> { ["index"] = index, ["ok"] = true, ["stage"] = "done", ["error"] = "", ["render_seconds"] = seconds });
+        Console.WriteLine($"render_task: output {index + 1}/{outputs.Count} (timestep {timestepIndex}) done in {seconds:F2} s");
+    }
+    catch (Exception e)
+    {
+        outputStatuses.Add(new Dictionary<string, object?> { ["index"] = index, ["ok"] = false, ["stage"] = "render", ["error"] = e.Message, ["render_seconds"] = 0.0 });
+        return Fail("render", $"cannot write the output: {e.Message}", 1);
+    }
 }
 
 if (stateText.Contains("FAKE-EXTRA-OUTPUT", StringComparison.Ordinal))
-    File.WriteAllText(Path.Combine(Path.GetDirectoryName(outputPath)!, "stray.txt"), "stray");
+    File.WriteAllText(Path.Combine(Path.GetDirectoryName(Str(outputs[0], "output_path"))!, "stray.txt"), "stray");
 
 status["stage"] = "done";
 status["ok"] = true;

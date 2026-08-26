@@ -89,6 +89,46 @@ public sealed class ParaViewBenchmarkTests
     }
 
     [Test]
+    public async Task MeasureAsyncOnTheBatchShapeRendersSeveralFramesPerCycleTest()
+    {
+        // ParaView.RenderFrameBatch: every cycle is one process rendering BATCH_CYCLE_FRAMES frames,
+        // the rate counts all of them, and the dataset names the shape so v3 rates are never mixed in.
+        var options = new WitBenchmarkOptions { MinDuration = TimeSpan.FromMilliseconds(1), WarmupIterations = 1 };
+
+        var result = await ParaViewBenchmark.MeasureAsync(m_fakePvpython, m_tempStorage, options, null, CancellationToken.None, ParaViewBenchmark.BATCH_CYCLE_FRAMES, "ParaView.RenderFrameBatch");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Iterations, Is.EqualTo(ParaViewBenchmark.MIN_CYCLES));
+            Assert.That(result.DatasetId, Is.EqualTo(ParaViewBenchmark.BATCH_DATASET_ID));
+            Assert.That(result.Unit, Is.EqualTo(ParaViewBenchmark.UNIT));
+            Assert.That(result.Rate, Is.EqualTo(ParaViewBenchmark.MIN_CYCLES * (double)ParaViewBenchmark.BATCH_CYCLE_FRAMES * ParaViewBenchmark.CYCLE_WIDTH * ParaViewBenchmark.CYCLE_HEIGHT / result.Elapsed.TotalSeconds).Within(1.0));
+            Assert.That(result.Custom![ParaViewBenchmark.CUSTOM_FRAMES_PER_CYCLE], Is.EqualTo(ParaViewBenchmark.BATCH_CYCLE_FRAMES.ToString()));
+            // The fake reports 20 ms per frame: eight frames per cycle, two cycles.
+            Assert.That(double.Parse(result.Custom[ParaViewBenchmark.CUSTOM_RENDER_SECONDS], CultureInfo.InvariantCulture),
+                Is.EqualTo(ParaViewBenchmark.MIN_CYCLES * ParaViewBenchmark.BATCH_CYCLE_FRAMES * 0.02).Within(1e-6));
+        });
+    }
+
+    [Test]
+    public void BuildTaskJsonForTheBatchShapeLetsTheFrameCapDecideTest()
+    {
+        var json = ParaViewBenchmark.BuildTaskJson("/w/out", "/w/status.json", ParaViewBenchmark.BATCH_CYCLE_FRAMES);
+        var document = System.Text.Json.JsonDocument.Parse(json).RootElement;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(document.GetProperty("max_frames").GetInt32(), Is.EqualTo(ParaViewBenchmark.BATCH_CYCLE_FRAMES));
+            Assert.That(document.GetProperty("target_seconds").GetDouble(), Is.GreaterThan(3600.0), "the timed loop must not stop before the frame cap");
+            Assert.That(document.GetProperty("warmup_frames").GetInt32(), Is.EqualTo(0));
+        });
+
+        var single = System.Text.Json.JsonDocument.Parse(ParaViewBenchmark.BuildTaskJson("/w/out", "/w/status.json")).RootElement;
+        Assert.That(single.GetProperty("max_frames").GetInt32(), Is.EqualTo(1));
+        Assert.That(single.GetProperty("target_seconds").GetDouble(), Is.EqualTo(0.0));
+    }
+
+    [Test]
     public async Task MeasureAsyncStopsAtTheCycleCapWhenTheTargetIsLongTest()
     {
         // Fake cycles are ~0.1 s of process spawn; a 60 s target would run forever without the cap.

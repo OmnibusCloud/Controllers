@@ -205,9 +205,106 @@ public sealed class ParaViewTaskExecutorTests
         Assert.That(DateTime.UtcNow - started, Is.LessThan(TimeSpan.FromSeconds(60)));
     }
 
+    [Test]
+    public async Task BatchRendersEveryOutputInOneProcessAndPublishesEachTest()
+    {
+        // FrameBatch: three timesteps in one runner invocation - the state and the attachment UNION
+        // materialized once (the series anchor appears once, not once per output), one blob per output,
+        // task indices and identities carried through.
+        var batch = BuildBatch(SeriesState(), [0, 1, 2]);
+
+        var result = await m_executor.ExecuteBatchAsync(batch, Guid.NewGuid(), m_fakePvpython, CancellationToken.None);
+
+        Assert.That(result.Results, Has.Count.EqualTo(3));
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Results.Select(me => me.TaskIndex), Is.EqualTo(new[] { 0, 1, 2 }));
+            Assert.That(result.Results.Select(me => me.TimestepIndex), Is.EqualTo(new[] { 0, 1, 2 }));
+            Assert.That(result.Results.Select(me => me.TaskId), Is.EqualTo(batch.Tasks.Select(me => me.TaskId)));
+            Assert.That(result.Results.Select(me => me.ImageBlobId).Distinct().Count(), Is.EqualTo(3));
+            Assert.That(result.Results.Select(me => me.Diagnostics), Has.All.Contain("stage=done"));
+            Assert.That(result.Results[2].Diagnostics, Does.Contain("batch=3/3"));
+            Assert.That(result.Results.All(me => me.RenderSeconds > 0), Is.True);
+        });
+
+        foreach (var rendered in result.Results)
+            Assert.That(ParaViewImageInfo.TryRead(m_blobs.GetStoredPath(rendered.ImageBlobId)), Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 64, 48, false)));
+
+        Assert.That(batch.Attachments.Select(me => me.LogicalPath), Is.EquivalentTo(new[] { "data/field_0.vtu", "data/field_1.vtu", "data/field_2.vtu" }));
+        Assert.That(m_blobs.Requests, Is.EquivalentTo(new[] { batch.StateBlobId }.Concat(batch.Attachments.Select(me => me.BlobId))), "the state and every piece exactly once");
+        Assert.That(Directory.EnumerateFileSystemEntries(Path.Combine(m_tempStorage.RootPath, "witcloud_paraview"), "*", SearchOption.AllDirectories).Any(File.Exists), Is.False, "the workspace is gone");
+    }
+
+    [Test]
+    public void OneBadOutputFailsTheWholeBatchAndPublishesNothingTest()
+    {
+        // All-or-nothing: the runner fails the second output; the first one rendered, but no blob
+        // of the batch is published and the message names the output.
+        var batch = BuildBatch(SeriesState("<!-- FAKE-FAIL-OUTPUT-1 -->"), [0, 1, 2]);
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(() => m_executor.ExecuteBatchAsync(batch, Guid.NewGuid(), m_fakePvpython, CancellationToken.None));
+
+        Assert.That(exception!.Message, Does.Contain("exited with code 1").And.Contain("output 2 of 3").And.Contain("output 1: [render]"));
+        Assert.That(Directory.EnumerateFiles(Path.Combine(m_root, "blobs")), Is.Empty, "nothing of the batch was published");
+    }
+
+    [Test]
+    public void StrayOutputIsRejectedForABatchTest()
+    {
+        var batch = BuildBatch(SeriesState("<!-- FAKE-EXTRA-OUTPUT -->"), [0, 1]);
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(() => m_executor.ExecuteBatchAsync(batch, Guid.NewGuid(), m_fakePvpython, CancellationToken.None));
+
+        Assert.That(exception!.Message, Does.Contain("stray.txt"));
+        Assert.That(Directory.EnumerateFiles(Path.Combine(m_root, "blobs")), Is.Empty);
+    }
+
+    [Test]
+    public void WrongOutputSizeNamesTheOutputOfABatchTest()
+    {
+        var batch = BuildBatch(SeriesState("<!-- FAKE-WRONG-SIZE -->"), [0, 1]);
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(() => m_executor.ExecuteBatchAsync(batch, Guid.NewGuid(), m_fakePvpython, CancellationToken.None));
+
+        Assert.That(exception!.Message, Does.Contain("output 1 of 2").And.Contain("65x48"));
+    }
+
     #endregion
 
     #region Tools
+
+    private static string SeriesState(string extra = "")
+    {
+        var state = new ParaViewStateBuilder().WithTimesteps(0, 1, 2);
+        var reader = state.AddReader("XMLUnstructuredGridReader", "field", "data/field_0.vtu", "data/field_1.vtu", "data/field_2.vtu");
+        state.AddRepresentation("UnstructuredGridRepresentation", reader);
+        state.AddRenderView();
+        if (extra.Length > 0)
+            state.WithExtraStateContent(extra);
+        return state.Build();
+    }
+
+    private ParaViewRenderTaskBatchData BuildBatch(string stateXml, int[] timestepIndices)
+    {
+        var package = new ParaViewPackageBuilder(Path.Combine(m_root, "pkg_" + Guid.NewGuid().ToString("N")), m_blobs)
+            .AddFile("data/field_0.vtu", "field 0", seriesGroup: "field", timestepIndices: [0])
+            .AddFile("data/field_1.vtu", "field 1", seriesGroup: "field", timestepIndices: [1])
+            .AddFile("data/field_2.vtu", "field 2", seriesGroup: "field", timestepIndices: [2]);
+        var scene = package.BuildScene(stateXml, timestepValues: [0, 1, 2]);
+        var options = new ParaViewOutputOptionsData { ViewId = "RenderView1", Width = 64, Height = 48 };
+        var report = new ParaViewValidationReportData
+        {
+            IsValid = true,
+            ResolvedViewId = "RenderView1",
+            ResolvedTimestepIndices = [.. timestepIndices],
+            TimestepValues = [0, 1, 2],
+            PackageDigest = ParaViewPackageDigest.ComputePackageDigest(scene)
+        };
+
+        m_blobs.ClearRequests();
+        var tasks = ParaViewTaskSplitter.Split(scene, report, options);
+        return ParaViewTaskSplitter.Chunk(scene, tasks, tasks.Count).Single();
+    }
 
     private ParaViewRenderTaskData BuildTask(string stateXml, int timestepIndex = 0, ParaViewImageFormat format = ParaViewImageFormat.Png, bool transparent = false)
     {

@@ -32,6 +32,10 @@ public sealed class ParaViewModelWireLayoutTests
         [typeof(ParaViewValidationReportData)] = 18,
         // 2026-08-25 (0.3.0): the paraview.dataScene@1 document (9).
         [typeof(ParaViewDataSceneData)] = 9,
+        // 2026-08-26 (0.5.0, FrameBatch): the render batch (11) and its result wrapper (1) - new
+        // types, nothing appended to the existing ones.
+        [typeof(ParaViewRenderTaskBatchData)] = 11,
+        [typeof(ParaViewRenderResultBatchData)] = 1,
     };
 
     [Test]

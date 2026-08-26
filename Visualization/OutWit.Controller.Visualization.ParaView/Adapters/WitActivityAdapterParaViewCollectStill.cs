@@ -43,7 +43,8 @@ internal sealed class WitActivityAdapterParaViewCollectStill : WitActivityAdapte
         IWitActivityStatus? activityStatus,
         WitProcessingStatus status)
     {
-        if (!pool.TryGetCollection<ParaViewRenderResultData>(activity.Results, out var results) || results == null)
+        // Either shape: per-frame results (ParaView.RenderFrame) or batch results (ParaView.RenderFrameBatch).
+        if (!ParaViewResultFlattener.TryFlatten(pool, activity.Results, out var results) || results == null)
             throw new InvalidOperationException("Failed to get ParaViewRenderResultCollection parameter 'results'");
 
         if (!pool.TryGetValue(activity.Options, out ParaViewOutputOptionsData? options) || options == null)

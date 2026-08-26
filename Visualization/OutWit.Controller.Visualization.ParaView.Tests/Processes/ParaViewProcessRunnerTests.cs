@@ -68,12 +68,12 @@ public sealed class ParaViewProcessRunnerTests
             StatePath = state,
             PackageRoot = Path.Combine(m_root, "package"),
             WorkDir = m_root,
-            OutputPath = Path.Combine(m_root, "out.png"),
             StatusPath = Path.Combine(m_root, "status.json"),
             ViewId = "RenderView1",
             Width = 4,
             Height = 4,
-            FileReferenceGroups = ["sources"]
+            FileReferenceGroups = ["sources"],
+            Outputs = [new ParaViewRunnerOutput { OutputPath = Path.Combine(m_root, "out.png") }]
         }.ToJson());
 
         var outcome = await ParaViewProcessRunner.RunAsync(

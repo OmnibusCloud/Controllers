@@ -7,12 +7,15 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.Visualization.ParaView.Runtime;
 
 /// <summary>
-/// The node benchmark of <c>ParaView.RenderFrame</c>: N complete task cycles, each one a FRESH
-/// pvpython process that builds the procedural Wavelet scene (contours, clip, slice) and renders one
-/// 1920×1080 PNG — exactly the shape of a production task, where every frame pays process startup,
-/// scene/pipeline execution, render and readback. The rate is output pixels per second of the whole
-/// cycle. Measuring only a steady-state render loop (the v2 dataset) overrated GPU nodes badly: a
-/// real small-frame task is startup-dominated (~2.5 s of a ~3 s cycle), which a per-frame loop never
+/// The node benchmark of the ParaView render activities: N complete task cycles, each one a FRESH
+/// pvpython process that builds the procedural Wavelet scene (contours, clip, slice) and renders
+/// 1920×1080 PNG frames — exactly the shape of a production task, where every process pays startup,
+/// scene/pipeline execution, render and readback. <c>ParaView.RenderFrame</c> measures one frame per
+/// cycle (dataset v3); <c>ParaView.RenderFrameBatch</c> measures <see cref="BATCH_CYCLE_FRAMES"/> frames
+/// per cycle (dataset v4-batch), the shape a chunk runs in, so each activity's rate predicts what the
+/// node achieves on its own tasks. The rate is output pixels per second of the whole cycle.
+/// Measuring only a steady-state render loop (the v2 dataset) overrated GPU nodes badly: a real
+/// single-frame task is startup-dominated (~2.5 s of a ~3 s cycle), which a per-frame loop never
 /// sees — the fleet's software-GL Linux node ran tasks at 70% of the GPU workstation's speed while
 /// its v2 rate said 45%.
 /// </summary>
@@ -25,6 +28,12 @@ public static class ParaViewBenchmark
 
     /// <summary>Identifies the measurement procedure; v3 measures whole task cycles — fresh process per frame (v1/v2 rates are not comparable).</summary>
     public const string DATASET_ID = "paraview-benchmark-wavelet@v3";
+
+    /// <summary>The batch shape: whole cycles of one process rendering <see cref="BATCH_CYCLE_FRAMES"/> frames (controller 0.5.0).</summary>
+    public const string BATCH_DATASET_ID = "paraview-benchmark-wavelet@v4-batch";
+
+    /// <summary>Frames one batch-benchmark cycle renders in its single process — a representative chunk.</summary>
+    public const int BATCH_CYCLE_FRAMES = 8;
 
     /// <summary>Embedded resource name of the benchmark runner.</summary>
     public const string RUNNER_RESOURCE = "runner/benchmark_frames.py";
@@ -59,7 +68,7 @@ public static class ParaViewBenchmark
     /// <summary>Timed duration when the engine passes no positive MinDuration.</summary>
     public static readonly TimeSpan FALLBACK_TARGET = TimeSpan.FromSeconds(5);
 
-    /// <summary>Wall-clock limit of ONE cycle (startup + scene + one frame).</summary>
+    /// <summary>Wall-clock limit of ONE cycle (startup + scene + its frames).</summary>
     public static readonly TimeSpan CYCLE_WALL_CLOCK_LIMIT = TimeSpan.FromMinutes(5);
 
     /// <summary>Custom result keys (mirrors the Render controller's vocabulary).</summary>
@@ -69,18 +78,27 @@ public static class ParaViewBenchmark
     public const string CUSTOM_CYCLES = "task-cycles";
     public const string CUSTOM_CYCLE_SECONDS = "cycle-seconds";
     public const string CUSTOM_RENDER_SECONDS = "render-seconds";
+    public const string CUSTOM_FRAMES_PER_CYCLE = "frames-per-cycle";
     public const string CUSTOM_PARAVIEW_VERSION = "paraview-version";
     public const string CUSTOM_SCENE_POINTS = "scene-points";
 
     private const string SOFTWARE_RENDER_WINDOW = "vtkOSOpenGLRenderWindow";
+
+    private const string DEFAULT_ACTIVITY_NAME = "ParaView.RenderFrame";
+
+    /// <summary>
+    /// The runner's timed loop stops at the target seconds OR the frame cap; a cycle of several frames
+    /// wants the cap to decide, so its target is effectively unbounded.
+    /// </summary>
+    private const double UNTIL_FRAME_CAP_SECONDS = 1e6;
 
     #endregion
 
     #region Functions
 
     /// <summary>
-    /// Runs the benchmark through the resolved pvpython: warm-up cycle(s), then timed full task
-    /// cycles until the target duration (and at least <see cref="MIN_CYCLES"/>) or <see cref="MAX_CYCLES"/>.
+    /// Runs the single-frame benchmark of <c>ParaView.RenderFrame</c>: warm-up cycle(s), then timed
+    /// full task cycles until the target duration (and at least <see cref="MIN_CYCLES"/>) or <see cref="MAX_CYCLES"/>.
     /// </summary>
     /// <param name="pvpythonPath">Resolved pvpython executable.</param>
     /// <param name="tempStorage">Node temp storage the benchmark workspace is created under.</param>
@@ -90,15 +108,44 @@ public static class ParaViewBenchmark
     /// <returns>The measured rate (pixels/second of complete cycles) with the run metadata in <see cref="WitBenchmarkResult.Custom"/>.</returns>
     /// <exception cref="InvalidOperationException">pvpython is missing, or a cycle failed, timed out, or wrote no usable status.</exception>
     /// <exception cref="OperationCanceledException">The benchmark was cancelled.</exception>
-    public static async Task<WitBenchmarkResult> MeasureAsync(
+    public static Task<WitBenchmarkResult> MeasureAsync(
         string pvpythonPath,
         IWitTempStorage tempStorage,
         IWitBenchmarkOptions? options,
         ILogger? logger,
         CancellationToken cancellationToken)
     {
+        return MeasureAsync(pvpythonPath, tempStorage, options, logger, cancellationToken, 1, DEFAULT_ACTIVITY_NAME);
+    }
+
+    /// <summary>
+    /// Runs the benchmark with <paramref name="framesPerCycle"/> frames per process — 1 for the
+    /// single-frame activity, <see cref="BATCH_CYCLE_FRAMES"/> for the batch activity.
+    /// </summary>
+    /// <param name="pvpythonPath">Resolved pvpython executable.</param>
+    /// <param name="tempStorage">Node temp storage the benchmark workspace is created under.</param>
+    /// <param name="options">Engine benchmark options or null for defaults.</param>
+    /// <param name="logger">Optional logger.</param>
+    /// <param name="cancellationToken">Kills the runner process tree when signaled.</param>
+    /// <param name="framesPerCycle">Frames every cycle's process renders (at least 1).</param>
+    /// <param name="activityName">Activity name for messages.</param>
+    /// <returns>The measured rate with the run metadata.</returns>
+    /// <exception cref="InvalidOperationException">pvpython is missing, or a cycle failed, timed out, or wrote no usable status.</exception>
+    /// <exception cref="OperationCanceledException">The benchmark was cancelled.</exception>
+    public static async Task<WitBenchmarkResult> MeasureAsync(
+        string pvpythonPath,
+        IWitTempStorage tempStorage,
+        IWitBenchmarkOptions? options,
+        ILogger? logger,
+        CancellationToken cancellationToken,
+        int framesPerCycle,
+        string activityName)
+    {
+        if (framesPerCycle < 1)
+            throw new ArgumentOutOfRangeException(nameof(framesPerCycle), framesPerCycle, "a cycle renders at least one frame");
+
         if (!File.Exists(pvpythonPath))
-            throw new InvalidOperationException($"ParaView.RenderFrame benchmark: pvpython '{pvpythonPath}' does not exist.");
+            throw new InvalidOperationException($"{activityName} benchmark: pvpython '{pvpythonPath}' does not exist.");
 
         IWitBenchmarkOptions benchmarkOptions = options ?? WitBenchmarkOptions.Default;
         var target = benchmarkOptions.MinDuration <= TimeSpan.Zero
@@ -112,22 +159,23 @@ public static class ParaViewBenchmark
         var taskFilePath = Path.Combine(workspace.Root, TASK_FILE_NAME);
         var statusFilePath = Path.Combine(workspace.Root, STATUS_FILE_NAME);
 
-        await File.WriteAllTextAsync(taskFilePath, BuildTaskJson(workspace.OutputDirectory, statusFilePath), cancellationToken);
+        await File.WriteAllTextAsync(taskFilePath, BuildTaskJson(workspace.OutputDirectory, statusFilePath, framesPerCycle), cancellationToken);
 
         var arguments = BuildArguments(runnerPath, taskFilePath);
         var openGlWindow = await ParaViewRenderingBackend.ResolveWindowAsync(pvpythonPath, tempStorage, logger, cancellationToken);
+        var run = new CycleRun(pvpythonPath, arguments, workspace, statusFilePath, framesPerCycle, activityName, logger);
 
         try
         {
-            return await MeasureCyclesAsync(pvpythonPath, arguments, workspace, statusFilePath, openGlWindow, warmupCycles, target, logger, cancellationToken);
+            return await MeasureCyclesAsync(run, openGlWindow, warmupCycles, target, cancellationToken);
         }
         catch (InvalidOperationException error) when (ParaViewRenderingBackend.IsEglWindow(openGlWindow))
         {
             // Same self-healing as the task path: a flaky EGL stack demotes the node and the
             // benchmark measures the backend tasks will actually use.
-            logger?.LogWarning("ParaView.RenderFrame benchmark: the EGL runner failed ({Message}); demoting this node to OSMesa and re-measuring", error.Message);
+            logger?.LogWarning("{Activity} benchmark: the EGL runner failed ({Message}); demoting this node to OSMesa and re-measuring", activityName, error.Message);
             ParaViewRenderingBackend.Demote(pvpythonPath, logger);
-            return await MeasureCyclesAsync(pvpythonPath, arguments, workspace, statusFilePath, ParaViewRunnerEnvironment.OSMESA_WINDOW, warmupCycles, target, logger, cancellationToken);
+            return await MeasureCyclesAsync(run, ParaViewRunnerEnvironment.OSMESA_WINDOW, warmupCycles, target, cancellationToken);
         }
     }
 
@@ -135,8 +183,9 @@ public static class ParaViewBenchmark
     /// The result a node reports when it has no usable ParaView runtime: rate 0 keeps the allocator
     /// from handing it work (the engine interprets 0 as "cannot run this activity").
     /// </summary>
+    /// <param name="datasetId">The dataset of the activity's shape.</param>
     /// <returns>A zero-rate result in the benchmark's unit.</returns>
-    public static WitBenchmarkResult CreateUnavailableResult()
+    public static WitBenchmarkResult CreateUnavailableResult(string datasetId = DATASET_ID)
     {
         return new WitBenchmarkResult
         {
@@ -144,7 +193,7 @@ public static class ParaViewBenchmark
             Unit = UNIT,
             Elapsed = TimeSpan.Zero,
             Iterations = 0,
-            DatasetId = DATASET_ID
+            DatasetId = datasetId
         };
     }
 
@@ -155,17 +204,18 @@ public static class ParaViewBenchmark
     /// <param name="cycles">Timed cycle count.</param>
     /// <param name="elapsed">Total wall time of the timed cycles.</param>
     /// <param name="renderSeconds">Sum of in-process render seconds across the timed cycles (shows the startup share).</param>
+    /// <param name="framesPerCycle">Frames every cycle rendered.</param>
     /// <returns>The result (rate in pixels/second of complete cycles, metadata in Custom).</returns>
-    public static WitBenchmarkResult ToResult(ParaViewBenchmarkRunData lastCycle, int cycles, TimeSpan elapsed, double renderSeconds)
+    public static WitBenchmarkResult ToResult(ParaViewBenchmarkRunData lastCycle, int cycles, TimeSpan elapsed, double renderSeconds, int framesPerCycle = 1)
     {
         return new WitBenchmarkResult
         {
-            Rate = cycles * (double)CYCLE_WIDTH * CYCLE_HEIGHT / elapsed.TotalSeconds,
+            Rate = cycles * (double)framesPerCycle * CYCLE_WIDTH * CYCLE_HEIGHT / elapsed.TotalSeconds,
             Unit = UNIT,
             Elapsed = elapsed,
             Iterations = cycles,
-            DatasetId = DATASET_ID,
-            Custom = BuildCustom(lastCycle, cycles, elapsed, renderSeconds)
+            DatasetId = framesPerCycle == 1 ? DATASET_ID : BATCH_DATASET_ID,
+            Custom = BuildCustom(lastCycle, cycles, elapsed, renderSeconds, framesPerCycle)
         };
     }
 
@@ -181,21 +231,24 @@ public static class ParaViewBenchmark
     }
 
     /// <summary>
-    /// The task document of one cycle: exactly one frame, no in-process warm-up or timed loop — the
-    /// cycle boundary (and the startup cost) lives in this class, not in the runner.
+    /// The task document of one cycle: exactly <paramref name="framesPerCycle"/> frames, no in-process
+    /// warm-up — the cycle boundary (and the startup cost) lives in this class, not in the runner. A
+    /// single frame stops the runner's loop through a zero target; several frames let the frame cap
+    /// decide.
     /// </summary>
     /// <param name="outputDirectory">Where the benchmark frame is written.</param>
     /// <param name="statusFilePath">Where the runner writes its status.</param>
+    /// <param name="framesPerCycle">Frames the cycle renders.</param>
     /// <returns>JSON text.</returns>
-    public static string BuildTaskJson(string outputDirectory, string statusFilePath)
+    public static string BuildTaskJson(string outputDirectory, string statusFilePath, int framesPerCycle = 1)
     {
         var document = new Dictionary<string, object>
         {
             ["width"] = CYCLE_WIDTH,
             ["height"] = CYCLE_HEIGHT,
             ["warmup_frames"] = 0,
-            ["target_seconds"] = 0.0,
-            ["max_frames"] = 1,
+            ["target_seconds"] = framesPerCycle <= 1 ? 0.0 : UNTIL_FRAME_CAP_SECONDS,
+            ["max_frames"] = Math.Max(1, framesPerCycle),
             ["extent"] = WAVELET_EXTENT,
             ["output_dir"] = outputDirectory,
             ["status_path"] = statusFilePath
@@ -208,22 +261,27 @@ public static class ParaViewBenchmark
 
     #region Tools
 
+    private sealed record CycleRun(
+        string PvpythonPath,
+        IReadOnlyList<string> Arguments,
+        ParaViewTaskWorkspace Workspace,
+        string StatusFilePath,
+        int FramesPerCycle,
+        string ActivityName,
+        ILogger? Logger);
+
     private static async Task<WitBenchmarkResult> MeasureCyclesAsync(
-        string pvpythonPath,
-        IReadOnlyList<string> arguments,
-        ParaViewTaskWorkspace workspace,
-        string statusFilePath,
+        CycleRun run,
         string? openGlWindow,
         int warmupCycles,
         TimeSpan target,
-        ILogger? logger,
         CancellationToken cancellationToken)
     {
         var environment = ParaViewRunnerEnvironment.Build(
-            pvpythonPath, workspace.HomeDirectory, workspace.TempDirectory, openGlWindow);
+            run.PvpythonPath, run.Workspace.HomeDirectory, run.Workspace.TempDirectory, openGlWindow);
 
         for (var index = 0; index < warmupCycles; index++)
-            await RunCycleAsync(pvpythonPath, arguments, workspace, environment, statusFilePath, logger, cancellationToken);
+            await RunCycleAsync(run, environment, cancellationToken);
 
         var cycles = 0;
         var renderSeconds = 0.0;
@@ -232,7 +290,7 @@ public static class ParaViewBenchmark
 
         while (cycles < MAX_CYCLES)
         {
-            lastCycle = await RunCycleAsync(pvpythonPath, arguments, workspace, environment, statusFilePath, logger, cancellationToken);
+            lastCycle = await RunCycleAsync(run, environment, cancellationToken);
             cycles++;
             renderSeconds += lastCycle.RenderSeconds;
 
@@ -242,48 +300,44 @@ public static class ParaViewBenchmark
 
         stopwatch.Stop();
         if (stopwatch.Elapsed <= TimeSpan.Zero)
-            throw new InvalidOperationException($"ParaView.RenderFrame benchmark: {cycles} cycle(s) took no measurable time — nothing to measure.");
+            throw new InvalidOperationException($"{run.ActivityName} benchmark: {cycles} cycle(s) took no measurable time — nothing to measure.");
 
-        return ToResult(lastCycle, cycles, stopwatch.Elapsed, renderSeconds);
+        return ToResult(lastCycle, cycles, stopwatch.Elapsed, renderSeconds, run.FramesPerCycle);
     }
 
     private static async Task<ParaViewBenchmarkRunData> RunCycleAsync(
-        string pvpythonPath,
-        IReadOnlyList<string> arguments,
-        ParaViewTaskWorkspace workspace,
+        CycleRun run,
         IReadOnlyDictionary<string, string> environment,
-        string statusFilePath,
-        ILogger? logger,
         CancellationToken cancellationToken)
     {
-        if (File.Exists(statusFilePath))
-            File.Delete(statusFilePath);
+        if (File.Exists(run.StatusFilePath))
+            File.Delete(run.StatusFilePath);
 
         var outcome = await ParaViewProcessRunner.RunAsync(
-            pvpythonPath, arguments, workspace.PackageRoot, environment, CYCLE_WALL_CLOCK_LIMIT, logger, cancellationToken);
+            run.PvpythonPath, run.Arguments, run.Workspace.PackageRoot, environment, CYCLE_WALL_CLOCK_LIMIT, run.Logger, cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var data = ParaViewBenchmarkRunData.TryRead(statusFilePath);
+        var data = ParaViewBenchmarkRunData.TryRead(run.StatusFilePath);
         if (outcome.TimedOut)
-            throw new InvalidOperationException($"ParaView.RenderFrame benchmark: a cycle exceeded its {CYCLE_WALL_CLOCK_LIMIT.TotalMinutes:0}-minute wall-clock limit and was terminated.{Describe(data, outcome)}");
+            throw new InvalidOperationException($"{run.ActivityName} benchmark: a cycle exceeded its {CYCLE_WALL_CLOCK_LIMIT.TotalMinutes:0}-minute wall-clock limit and was terminated.{Describe(data, outcome)}");
 
         if (outcome.ExitCode != 0)
-            throw new InvalidOperationException($"ParaView.RenderFrame benchmark: the runner exited with code {outcome.ExitCode}.{Describe(data, outcome)}");
+            throw new InvalidOperationException($"{run.ActivityName} benchmark: the runner exited with code {outcome.ExitCode}.{Describe(data, outcome)}");
 
         if (data == null)
-            throw new InvalidOperationException($"ParaView.RenderFrame benchmark: the runner exited successfully but wrote no status document.{Describe(null, outcome)}");
+            throw new InvalidOperationException($"{run.ActivityName} benchmark: the runner exited successfully but wrote no status document.{Describe(null, outcome)}");
 
         if (!data.Ok)
-            throw new InvalidOperationException($"ParaView.RenderFrame benchmark: the runner reported a failure at stage '{data.Stage}': {data.Error}{Describe(null, outcome)}");
+            throw new InvalidOperationException($"{run.ActivityName} benchmark: the runner reported a failure at stage '{data.Stage}': {data.Error}{Describe(null, outcome)}");
 
-        if (data.Frames != 1)
-            throw new InvalidOperationException($"ParaView.RenderFrame benchmark: a cycle rendered {data.Frames} frame(s) instead of exactly one.{Describe(null, outcome)}");
+        if (data.Frames != run.FramesPerCycle)
+            throw new InvalidOperationException($"{run.ActivityName} benchmark: a cycle rendered {data.Frames} frame(s) instead of exactly {run.FramesPerCycle}.{Describe(null, outcome)}");
 
         return data;
     }
 
-    private static IReadOnlyDictionary<string, string> BuildCustom(ParaViewBenchmarkRunData lastCycle, int cycles, TimeSpan elapsed, double renderSeconds)
+    private static IReadOnlyDictionary<string, string> BuildCustom(ParaViewBenchmarkRunData lastCycle, int cycles, TimeSpan elapsed, double renderSeconds, int framesPerCycle)
     {
         var renderWindow = string.IsNullOrWhiteSpace(lastCycle.RenderWindow) ? "unknown" : lastCycle.RenderWindow;
         var device = string.Equals(renderWindow, SOFTWARE_RENDER_WINDOW, StringComparison.Ordinal) ? "CPU" : "GPU";
@@ -296,6 +350,7 @@ public static class ParaViewBenchmark
             [CUSTOM_CYCLES] = cycles.ToString(System.Globalization.CultureInfo.InvariantCulture),
             [CUSTOM_CYCLE_SECONDS] = (elapsed.TotalSeconds / Math.Max(1, cycles)).ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
             [CUSTOM_RENDER_SECONDS] = renderSeconds.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+            [CUSTOM_FRAMES_PER_CYCLE] = framesPerCycle.ToString(System.Globalization.CultureInfo.InvariantCulture),
             [CUSTOM_PARAVIEW_VERSION] = string.IsNullOrWhiteSpace(lastCycle.ParaviewVersion) ? "unknown" : lastCycle.ParaviewVersion,
             [CUSTOM_SCENE_POINTS] = lastCycle.Points.ToString(System.Globalization.CultureInfo.InvariantCulture)
         };

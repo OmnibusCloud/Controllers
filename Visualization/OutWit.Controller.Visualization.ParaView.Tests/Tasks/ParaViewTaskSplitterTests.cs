@@ -72,6 +72,126 @@ public sealed class ParaViewTaskSplitterTests
     #region Tests
 
     [Test]
+    public void ChunkGroupsConsecutiveOutputsWithTheUnionOfTheirSubsetsTest()
+    {
+        // FrameBatch: a chunk hoists the shared state/options/runtime, carries the UNION of its
+        // members' subsets in package order (anchors, statics and indexes once), and lists its
+        // members with empty attachment lists and their global task indices intact.
+        var scene = Scene();
+        var tasks = ParaViewTaskSplitter.Split(scene, Report(0, 1, 2), Options());
+
+        var batches = ParaViewTaskSplitter.Chunk(scene, tasks, 2);
+
+        Assert.That(batches, Has.Count.EqualTo(2));
+        var first = batches[0];
+        var second = batches[1];
+        Assert.Multiple(() =>
+        {
+            Assert.That(first.BatchIndex, Is.EqualTo(0));
+            Assert.That(second.BatchIndex, Is.EqualTo(1));
+            Assert.That(first.Tasks.Select(me => me.TaskIndex), Is.EqualTo(new[] { 0, 1 }));
+            Assert.That(second.Tasks.Select(me => me.TaskIndex), Is.EqualTo(new[] { 2 }));
+            Assert.That(first.Tasks.Select(me => me.TaskId), Is.EqualTo(tasks.Take(2).Select(me => me.TaskId)));
+            Assert.That(first.Tasks.All(me => me.Attachments.Count == 0), Is.True, "members carry no attachments of their own");
+            Assert.That(first.StateBlobId, Is.EqualTo(scene.StateBlobId));
+            Assert.That(first.Options.ViewId, Is.EqualTo("RenderView1"));
+            Assert.That(first.PackageDigest, Is.EqualTo(tasks[0].PackageDigest));
+            Assert.That(first.Runtime.Is(scene.Runtime), Is.True);
+        });
+
+        var expectedUnion = tasks[0].Attachments.Concat(tasks[1].Attachments)
+            .GroupBy(me => me.LogicalPath).Select(me => me.First())
+            .OrderBy(me => scene.Attachments.FindIndex(a => a.LogicalPath == me.LogicalPath))
+            .ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(first.Attachments.Select(me => me.LogicalPath), Is.EqualTo(expectedUnion.Select(me => me.LogicalPath)), "the union in package order");
+            Assert.That(first.Attachments.Select(me => me.LogicalPath), Does.Contain("data/series_0.vtu").And.Contain("data/series_1.vtu").And.Not.Contain("data/series_2.vtu"));
+            Assert.That(first.SubsetBytes, Is.EqualTo(scene.StateSize + expectedUnion.Sum(me => me.Size)));
+            Assert.That(second.Attachments.Select(me => me.LogicalPath), Is.EquivalentTo(tasks[2].Attachments.Select(me => me.LogicalPath)));
+            Assert.That(second.SubsetBytes, Is.EqualTo(tasks[2].SubsetBytes));
+        });
+    }
+
+    [Test]
+    public void SplitBatchedFollowsThePolicyAndKeepsASmallJobPerOutputTest()
+    {
+        var tasks = ParaViewTaskSplitter.Split(Scene(), Report(0, 1, 2), Options());
+
+        var batches = ParaViewTaskSplitter.SplitBatched(Scene(), Report(0, 1, 2), Options());
+
+        Assert.That(batches, Has.Count.EqualTo(3), "ceil(3 / 24) = 1 output per chunk");
+        Assert.Multiple(() =>
+        {
+            Assert.That(batches.Select(me => me.Tasks.Single().TaskId), Is.EqualTo(tasks.Select(me => me.TaskId)));
+            for (var i = 0; i < 3; i++)
+            {
+                Assert.That(batches[i].Attachments.Select(me => me.LogicalPath), Is.EquivalentTo(tasks[i].Attachments.Select(me => me.LogicalPath)));
+                Assert.That(batches[i].SubsetBytes, Is.EqualTo(tasks[i].SubsetBytes));
+            }
+        });
+    }
+
+    [Test]
+    public void ChunkClosesEarlyWhenTheUnionWouldExceedTheSubsetLimitTest()
+    {
+        // Two per-timestep pieces (no series group, so no anchor rides along) each just over half the
+        // per-task limit fit alone but not together: the chunk of two becomes two chunks of one - a
+        // batch never materializes more than a task may.
+        var half = ParaViewInputLimits.MAX_TASK_SUBSET_BYTES / 2 - 40;
+        var scene = new ParaViewSceneRefData
+        {
+            StateBlobId = Guid.NewGuid(),
+            StateSha256 = new string('a', 64),
+            StateSize = 100,
+            Attachments =
+            [
+                Attachment("data/big_0.vtu", half, timesteps: [0]),
+                Attachment("data/big_1.vtu", half, timesteps: [1])
+            ]
+        };
+        var report = new ParaViewValidationReportData
+        {
+            IsValid = true,
+            ResolvedViewId = "RenderView1",
+            ResolvedTimestepIndices = [0, 1],
+            TimestepValues = [0.0, 0.5],
+            PackageDigest = ParaViewPackageDigest.ComputePackageDigest(scene)
+        };
+        var tasks = ParaViewTaskSplitter.Split(scene, report, Options());
+        Assert.That(tasks, Has.Count.EqualTo(2), "each task alone is within the limit");
+
+        var batches = ParaViewTaskSplitter.Chunk(scene, tasks, 2);
+
+        Assert.That(batches, Has.Count.EqualTo(2));
+        Assert.That(batches.Select(me => me.Tasks.Single().TaskIndex), Is.EqualTo(new[] { 0, 1 }));
+    }
+
+    [Test]
+    public void BatchOfATaskCarriesItsSubsetTest()
+    {
+        var task = ParaViewTaskSplitter.Split(Scene(), Report(0, 1, 2), Options())[1];
+
+        var batch = ParaViewTaskSplitter.BatchOf(task);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(batch.BatchIndex, Is.EqualTo(1));
+            Assert.That(batch.Tasks.Single().TaskId, Is.EqualTo(task.TaskId));
+            Assert.That(batch.Tasks.Single().Attachments, Is.Empty);
+            Assert.That(batch.Attachments.Select(me => me.LogicalPath), Is.EqualTo(task.Attachments.Select(me => me.LogicalPath)));
+            Assert.That(batch.SubsetBytes, Is.EqualTo(task.SubsetBytes));
+            Assert.That(batch.Options.Is(task.Options), Is.True);
+        });
+    }
+
+    [Test]
+    public void ChunkRefusesASizeBelowOneTest()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => ParaViewTaskSplitter.Chunk(Scene(), [], 0));
+    }
+
+    [Test]
     public void SubsetsContainTheTimestepsFilesPlusStaticsPlusSeriesAnchorsTest()
     {
         var tasks = ParaViewTaskSplitter.Split(Scene(), Report(0, 1, 2), Options());

@@ -123,6 +123,41 @@ public sealed class ParaViewModelRoundTripTests
         };
     }
 
+    public static ParaViewRenderTaskBatchData RenderTaskBatch()
+    {
+        var first = RenderTask();
+        var second = RenderTask();
+        second.TaskId = new string('4', 64);
+        second.TaskIndex = 4;
+        second.TimestepIndex = 3;
+        second.TimeValue = 0.5;
+        first.Attachments = [];
+        second.Attachments = [];
+
+        return new ParaViewRenderTaskBatchData
+        {
+            BatchIndex = 1,
+            StateBlobId = first.StateBlobId,
+            StateSha256 = first.StateSha256,
+            StateSize = first.StateSize,
+            Options = Options(),
+            Attachments = [Attachment(2), Attachment(3)],
+            Runtime = Scene().Runtime,
+            PackageDigest = new string('9', 64),
+            DatasetId = "",
+            SubsetBytes = 7777,
+            Tasks = [first, second]
+        };
+    }
+
+    public static ParaViewRenderResultBatchData ResultBatch()
+    {
+        var second = Result();
+        second.TaskIndex = 5;
+        second.TaskId = new string('5', 64);
+        return new ParaViewRenderResultBatchData { Results = [Result(), second] };
+    }
+
     public static ParaViewValidationReportData Report()
     {
         return new ParaViewValidationReportData
@@ -170,6 +205,44 @@ public sealed class ParaViewModelRoundTripTests
 
     [Test]
     public void ValidationReportRoundTripsTest() => AssertRoundTrip(Report());
+
+    [Test]
+    public void RenderTaskBatchRoundTripsTest() => AssertRoundTrip(RenderTaskBatch());
+
+    [Test]
+    public void RenderResultBatchRoundTripsTest() => AssertRoundTrip(ResultBatch());
+
+    [Test]
+    public void BatchIsDetectsEveryMemberChangeTest()
+    {
+        var baseline = RenderTaskBatch();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(baseline.Is(Mutate(b => b.BatchIndex++)), Is.False);
+            Assert.That(baseline.Is(Mutate(b => b.StateSize++)), Is.False);
+            Assert.That(baseline.Is(Mutate(b => b.Options.Height++)), Is.False);
+            Assert.That(baseline.Is(Mutate(b => b.Attachments.RemoveAt(0))), Is.False);
+            Assert.That(baseline.Is(Mutate(b => b.Runtime.Plugins.Clear())), Is.False);
+            Assert.That(baseline.Is(Mutate(b => b.PackageDigest = "x")), Is.False);
+            Assert.That(baseline.Is(Mutate(b => b.SubsetBytes++)), Is.False);
+            Assert.That(baseline.Is(Mutate(b => b.Tasks[1].TimestepIndex++)), Is.False);
+            Assert.That(baseline.Is(Mutate(b => b.Tasks.RemoveAt(1))), Is.False);
+            Assert.That(baseline.Is(Mutate(_ => { })), Is.True);
+        });
+
+        var results = ResultBatch();
+        var changed = (ParaViewRenderResultBatchData)results.Clone();
+        changed.Results[1].ImageBlobId = Guid.NewGuid();
+        Assert.That(results.Is(changed), Is.False);
+
+        ParaViewRenderTaskBatchData Mutate(Action<ParaViewRenderTaskBatchData> change)
+        {
+            var copy = (ParaViewRenderTaskBatchData)baseline.Clone();
+            change(copy);
+            return copy;
+        }
+    }
 
     [Test]
     public void CloneIsIndependentTest()

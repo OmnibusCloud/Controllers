@@ -108,6 +108,138 @@ public static class ParaViewTaskSplitter
     }
 
     /// <summary>
+    /// Splits a validated package into batches (FrameBatch, docs 03, section 27, item 2): the tasks
+    /// of <see cref="Split"/> grouped into consecutive chunks sized by <see cref="ParaViewChunkPolicy"/>,
+    /// each chunk carrying the union of its outputs' attachment subsets.
+    /// </summary>
+    /// <param name="scene">The package reference.</param>
+    /// <param name="report">A valid validation report for the same package and options.</param>
+    /// <param name="options">The output options.</param>
+    /// <returns>The batches in render order; the tasks inside keep their global task index.</returns>
+    /// <exception cref="InvalidOperationException">The report is invalid or a limit is exceeded.</exception>
+    public static IReadOnlyList<ParaViewRenderTaskBatchData> SplitBatched(
+        ParaViewSceneRefData scene,
+        ParaViewValidationReportData report,
+        ParaViewOutputOptionsData options)
+    {
+        var tasks = Split(scene, report, options);
+        return Chunk(scene, tasks, ParaViewChunkPolicy.ComputeChunkSize(tasks.Count));
+    }
+
+    /// <summary>
+    /// Groups tasks (in their render order) into consecutive chunks of at most
+    /// <paramref name="chunkSize"/> outputs; a chunk also closes early when the next output's
+    /// attachments would push the chunk's union over the per-task byte limit, so a batch never
+    /// materializes more than a single task is allowed to. Each chunk hoists the shared state, options
+    /// and runtime, carries the union of its members' subsets in package order, and lists its members
+    /// with EMPTY attachment lists.
+    /// </summary>
+    /// <param name="scene">The package reference (state size, attachment order).</param>
+    /// <param name="tasks">The tasks of <see cref="Split"/>, with their subsets.</param>
+    /// <param name="chunkSize">Maximum outputs per chunk (at least 1).</param>
+    /// <returns>The batches.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The chunk size is below 1.</exception>
+    public static IReadOnlyList<ParaViewRenderTaskBatchData> Chunk(
+        ParaViewSceneRefData scene,
+        IReadOnlyList<ParaViewRenderTaskData> tasks,
+        int chunkSize)
+    {
+        if (chunkSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(chunkSize), chunkSize, "a chunk holds at least one output");
+
+        var packageOrder = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var i = 0; i < scene.Attachments.Count; i++)
+            packageOrder.TryAdd(scene.Attachments[i].LogicalPath, i);
+
+        var stateBytes = Math.Max(0, scene.StateSize);
+        var batches = new List<ParaViewRenderTaskBatchData>();
+        var members = new List<ParaViewRenderTaskData>();
+        var union = new Dictionary<string, ParaViewAttachmentRefData>(StringComparer.Ordinal);
+        var unionBytes = 0L;
+
+        void Flush()
+        {
+            if (members.Count == 0)
+                return;
+
+            var first = members[0];
+            batches.Add(new ParaViewRenderTaskBatchData
+            {
+                BatchIndex = batches.Count,
+                StateBlobId = first.StateBlobId,
+                StateSha256 = first.StateSha256,
+                StateSize = first.StateSize,
+                Options = (ParaViewOutputOptionsData)first.Options.Clone(),
+                Attachments = [.. union.Values
+                    .OrderBy(me => packageOrder.TryGetValue(me.LogicalPath, out var position) ? position : int.MaxValue)
+                    .ThenBy(me => me.LogicalPath, StringComparer.Ordinal)
+                    .Select(me => (ParaViewAttachmentRefData)me.Clone())],
+                Runtime = (ParaViewRuntimeRequirementData)first.Runtime.Clone(),
+                PackageDigest = first.PackageDigest,
+                DatasetId = first.DatasetId,
+                SubsetBytes = stateBytes + unionBytes,
+                Tasks = [.. members]
+            });
+
+            members = [];
+            union = new Dictionary<string, ParaViewAttachmentRefData>(StringComparer.Ordinal);
+            unionBytes = 0;
+        }
+
+        foreach (var task in tasks)
+        {
+            var additions = task.Attachments.Where(me => !union.ContainsKey(me.LogicalPath)).ToList();
+            var additionalBytes = additions.Sum(me => Math.Max(0, me.Size));
+
+            if (members.Count > 0
+                && (members.Count >= chunkSize || ParaViewChunkPolicy.ExceedsSubsetLimit(stateBytes + unionBytes, additionalBytes)))
+            {
+                Flush();
+                additions = [.. task.Attachments];
+                additionalBytes = additions.Sum(me => Math.Max(0, me.Size));
+            }
+
+            foreach (var attachment in additions)
+                union[attachment.LogicalPath] = attachment;
+            unionBytes += additionalBytes;
+
+            var member = (ParaViewRenderTaskData)task.Clone();
+            member.Attachments = [];
+            members.Add(member);
+        }
+
+        Flush();
+        return batches;
+    }
+
+    /// <summary>
+    /// The one-output batch of a single task — what ParaView.RenderFrame runs through the same
+    /// node pipeline as a chunk.
+    /// </summary>
+    /// <param name="task">The task with its attachment subset.</param>
+    /// <returns>A batch holding exactly this task.</returns>
+    public static ParaViewRenderTaskBatchData BatchOf(ParaViewRenderTaskData task)
+    {
+        var member = (ParaViewRenderTaskData)task.Clone();
+        member.Attachments = [];
+
+        return new ParaViewRenderTaskBatchData
+        {
+            BatchIndex = task.TaskIndex,
+            StateBlobId = task.StateBlobId,
+            StateSha256 = task.StateSha256,
+            StateSize = task.StateSize,
+            Options = (ParaViewOutputOptionsData)task.Options.Clone(),
+            Attachments = [.. task.Attachments.Select(me => (ParaViewAttachmentRefData)me.Clone())],
+            Runtime = (ParaViewRuntimeRequirementData)task.Runtime.Clone(),
+            PackageDigest = task.PackageDigest,
+            DatasetId = task.DatasetId,
+            SubsetBytes = task.SubsetBytes,
+            Tasks = [member]
+        };
+    }
+
+    /// <summary>
     /// The minimal attachment subset of one timestep: every attachment with no timestep association
     /// (static inputs, series indexes, auxiliary files, fallback groups) plus the attachments
     /// associated with the timestep. Order follows the package's attachment order.

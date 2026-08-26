@@ -88,7 +88,7 @@ public sealed class ParaViewRunnerScriptTests
             Assert.That(status.Backend, Is.EqualTo("vtkStubRenderWindow"));
         });
 
-        var image = ParaViewImageInfo.TryRead(task.OutputPath);
+        var image = ParaViewImageInfo.TryRead(task.Outputs[0].OutputPath);
         Assert.That(image, Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 48, 32, false)));
 
         // The stub records what the runner asked for.
@@ -103,8 +103,8 @@ public sealed class ParaViewRunnerScriptTests
     {
         var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
         var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
-        task.CameraAzimuth = 135.0;
-        task.CameraAxis = ParaViewCameraAxes.VIEW_UP;
+        task.Outputs[0].CameraAzimuth = 135.0;
+        task.Outputs[0].CameraAxis = ParaViewCameraAxes.VIEW_UP;
         File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
 
         var (exitCode, status, stderr) = Run(task);
@@ -127,8 +127,8 @@ public sealed class ParaViewRunnerScriptTests
     {
         var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
         var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
-        task.CameraAzimuth = 90.0;
-        task.CameraAxis = ParaViewCameraAxes.Y;
+        task.Outputs[0].CameraAzimuth = 90.0;
+        task.Outputs[0].CameraAxis = ParaViewCameraAxes.Y;
         File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
 
         var (exitCode, status, stderr) = Run(task);
@@ -153,7 +153,7 @@ public sealed class ParaViewRunnerScriptTests
     {
         var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
         var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
-        task.CameraElevation = 90.0;
+        task.Outputs[0].CameraElevation = 90.0;
         File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
 
         var (exitCode, status, stderr) = Run(task);
@@ -178,7 +178,7 @@ public sealed class ParaViewRunnerScriptTests
     {
         var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
         var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
-        task.CameraDolly = 0.5;
+        task.Outputs[0].CameraDolly = 0.5;
         File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
 
         var (exitCode, status, stderr) = Run(task);
@@ -200,10 +200,10 @@ public sealed class ParaViewRunnerScriptTests
     {
         var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
         var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
-        task.CameraAzimuth = 90.0;
-        task.CameraAxis = ParaViewCameraAxes.Y;
-        task.CameraElevation = 90.0;
-        task.CameraDolly = 0.5;
+        task.Outputs[0].CameraAzimuth = 90.0;
+        task.Outputs[0].CameraAxis = ParaViewCameraAxes.Y;
+        task.Outputs[0].CameraElevation = 90.0;
+        task.Outputs[0].CameraDolly = 0.5;
         File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
 
         var (exitCode, status, stderr) = Run(task);
@@ -235,6 +235,99 @@ public sealed class ParaViewRunnerScriptTests
         Assert.That(exitCode, Is.EqualTo(0), stderr);
         var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
         Assert.That(log, Does.Not.Contain("azimuth=").And.Not.Contain("view_up="));
+    }
+
+    [Test]
+    public void RunnerRendersABatchOfOutputsFromOneLoadedStateTest()
+    {
+        // FrameBatch: three outputs in one process - the state loads once, every output selects its
+        // own timestep, the camera move of each starts from the captured framing (restored between
+        // outputs, never cumulative), every output gets its own file and verdict.
+        var state = new ParaViewStateBuilder().WithTimesteps(0, 0.5, 1.0);
+        var reader = state.AddReader("XMLUnstructuredGridReader", "field", "data/field_0.vtu", "data/field_1.vtu", "data/field_2.vtu");
+        state.AddRepresentation("UnstructuredGridRepresentation", reader);
+        state.AddRenderView();
+        var (task, workDir) = Prepare(state.Build(), timestepIndex: 0, timeValue: 0.0, materialize: ["data/field_0.vtu", "data/field_1.vtu", "data/field_2.vtu"]);
+        task.Outputs =
+        [
+            new ParaViewRunnerOutput { Index = 0, TaskId = "a", OutputPath = Path.Combine(workDir, "out", "frame_000000.png"), TimestepIndex = 0, TimeValue = 0.0, CameraAzimuth = 90.0, CameraAxis = ParaViewCameraAxes.Y },
+            new ParaViewRunnerOutput { Index = 1, TaskId = "b", OutputPath = Path.Combine(workDir, "out", "frame_000001.png"), TimestepIndex = 1, TimeValue = 0.5 },
+            new ParaViewRunnerOutput { Index = 2, TaskId = "c", OutputPath = Path.Combine(workDir, "out", "frame_000002.png"), TimestepIndex = 2, TimeValue = 1.0, CameraDolly = 0.5 }
+        ];
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(status!.Ok, Is.True, status.Error);
+            Assert.That(status.Outputs.Select(me => me.Index), Is.EqualTo(new[] { 0, 1, 2 }));
+            Assert.That(status.Outputs.All(me => me.Ok && me.Stage == "done"), Is.True);
+            Assert.That(status.RenderSeconds, Is.EqualTo(status.Outputs.Sum(me => me.RenderSeconds)).Within(0.01));
+        });
+
+        foreach (var output in task.Outputs)
+            Assert.That(ParaViewImageInfo.TryRead(output.OutputPath), Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 48, 32, false)), output.OutputPath);
+
+        // One load, three timesteps in order; the first output's world-axis orbit moved the camera to
+        // (10,0,0), the second output starts again from the captured (0,0,10) - restored, not moved on -
+        // and the third dollies from the captured framing to (0,0,5).
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        var positions = log.Split('\n').Select(me => me.TrimEnd('\r')).Where(me => me.StartsWith("position=", StringComparison.Ordinal)).ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(log.Split("load_state=").Length - 1, Is.EqualTo(1), "the state loads once per process");
+            Assert.That(log, Does.Contain("animation_time=0.0").And.Contain("animation_time=0.5").And.Contain("animation_time=1.0"));
+            Assert.That(positions, Is.EqualTo(new[] { "position=10.0000,0.0000,0.0000", "position=0.0000,0.0000,10.0000", "position=0.0000,0.0000,5.0000" }));
+            Assert.That(log.Split("save_screenshot=").Length - 1, Is.EqualTo(3));
+        });
+    }
+
+    [Test]
+    public void RunnerFailsTheWholeBatchOnOneBadOutputTest()
+    {
+        // All-or-nothing: the second output's timestep lies outside the timeline; the first rendered,
+        // the status names the failed output, the exit code is the policy refusal.
+        var (task, workDir) = Prepare(ParaViewStateBuilder.Typical("data/field.vtu").WithTimesteps(0, 1).Build(), timestepIndex: 0, timeValue: 0.0, materialize: ["data/field.vtu"]);
+        task.Outputs =
+        [
+            new ParaViewRunnerOutput { Index = 0, OutputPath = Path.Combine(workDir, "out", "frame_000000.png"), TimestepIndex = 0, TimeValue = 0.0 },
+            new ParaViewRunnerOutput { Index = 1, OutputPath = Path.Combine(workDir, "out", "frame_000007.png"), TimestepIndex = 7, TimeValue = 7.0 }
+        ];
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(status!.Ok, Is.False);
+            Assert.That(status.Error, Does.Contain("output 2 of 2").And.Contain("outside the timeline"));
+            Assert.That(status.Outputs.Select(me => (me.Index, me.Ok)), Is.EqualTo(new[] { (0, true), (1, false) }));
+            Assert.That(status.FirstFailedOutput()!.Stage, Is.EqualTo("select"));
+        });
+    }
+
+    [Test]
+    public void RunnerRefusesAnOutputPathUsedTwiceTest()
+    {
+        var (task, workDir) = Prepare(ParaViewStateBuilder.Typical("data/field.vtu").Build(), 0, null, ["data/field.vtu"]);
+        task.Outputs =
+        [
+            new ParaViewRunnerOutput { Index = 0, OutputPath = Path.Combine(workDir, "out", "frame.png"), TimestepIndex = 0 },
+            new ParaViewRunnerOutput { Index = 1, OutputPath = Path.Combine(workDir, "out", "frame.png"), TimestepIndex = 0 }
+        ];
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        // A task-file refusal happens before the status path is known: the verdict travels through
+        // the exit code and stderr, like every other task-file error.
+        var (exitCode, _, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(stderr, Does.Contain("used twice"));
     }
 
     [Test]
@@ -337,11 +430,8 @@ public sealed class ParaViewRunnerScriptTests
             StatePath = statePath,
             PackageRoot = packageRoot,
             WorkDir = workDir,
-            OutputPath = Path.Combine(workDir, "out", "frame.png"),
             StatusPath = Path.Combine(workDir, "status.json"),
             ViewId = viewId,
-            TimestepIndex = timestepIndex,
-            TimeValue = timeValue,
             Width = 48,
             Height = 32,
             Format = "png",
@@ -351,7 +441,8 @@ public sealed class ParaViewRunnerScriptTests
             FilePropertyNames = [.. ParaViewProxyPolicy.FILE_PROPERTY_NAMES],
             FileReferenceGroups = [.. ParaViewProxyPolicy.FILE_REFERENCE_GROUPS],
             MaxStateBytes = ParaViewInputLimits.MAX_STATE_BYTES,
-            MaxLogicalPathChars = ParaViewInputLimits.MAX_LOGICAL_PATH_CHARS
+            MaxLogicalPathChars = ParaViewInputLimits.MAX_LOGICAL_PATH_CHARS,
+            Outputs = [new ParaViewRunnerOutput { Index = 0, TaskId = "t", OutputPath = Path.Combine(workDir, "out", "frame.png"), TimestepIndex = timestepIndex, TimeValue = timeValue }]
         };
 
         File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());

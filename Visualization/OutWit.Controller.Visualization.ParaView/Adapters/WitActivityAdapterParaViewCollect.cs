@@ -10,8 +10,9 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.Visualization.ParaView.Adapters;
 
 /// <summary>
-/// Adapter for <see cref="WitActivityParaViewCollect"/>: orders the results by task index, fails on
-/// missing, duplicate or conflicting identities, and returns the image blobs as the frame set.
+/// Adapter for <see cref="WitActivityParaViewCollect"/>: flattens per-frame or batch results, orders
+/// them by task index, fails on missing, duplicate or conflicting identities, and returns the image
+/// blobs as the frame set.
 /// </summary>
 internal sealed class WitActivityAdapterParaViewCollect : WitActivityAdapterFunction<WitActivityParaViewCollect>
 {
@@ -44,8 +45,9 @@ internal sealed class WitActivityAdapterParaViewCollect : WitActivityAdapterFunc
         IWitActivityStatus? activityStatus,
         WitProcessingStatus status)
     {
-        if (!pool.TryGetCollection<ParaViewRenderResultData>(activity.Results, out var results) || results == null)
-            throw new InvalidOperationException("Failed to get ParaViewRenderResultCollection parameter 'results'");
+        // Either shape: per-frame results (ParaView.RenderFrame) or batch results (ParaView.RenderFrameBatch).
+        if (!ParaViewResultFlattener.TryFlatten(pool, activity.Results, out var results) || results == null)
+            throw new InvalidOperationException("Failed to get ParaViewRenderResultCollection or ParaViewRenderResultBatchCollection parameter 'results'");
 
         if (!pool.TryGetValue(activity.Options, out ParaViewOutputOptionsData? options) || options == null)
             throw new InvalidOperationException("Failed to get ParaViewOutputOptions parameter 'options'");

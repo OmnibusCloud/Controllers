@@ -108,7 +108,7 @@ public sealed class ParaViewComposeEndToEndTests
         var job = m_engine.Compile(Script("RenderParaViewDataStill.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, data, options);
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status}: {status.Message}");
 
         var scene = job.Variables["scene"].Value as ParaViewSceneRefData;
         var report = job.Variables["report"].Value as ParaViewValidationReportData;
@@ -152,18 +152,18 @@ public sealed class ParaViewComposeEndToEndTests
         var job = m_engine.Compile(Script("RenderParaViewDataFrames.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, DataScene(package), options);
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status}: {status.Message}");
 
-        var tasks = job.Variables["tasks"].Value as IReadOnlyList<ParaViewRenderTaskData?>;
+        var batches = job.Variables["tasks"].Value as IReadOnlyList<ParaViewRenderTaskBatchData?>;
         var result = job.Variables["result"].Value as IReadOnlyList<Guid?>;
         Assert.Multiple(() =>
         {
-            Assert.That(tasks, Has.Count.EqualTo(4), "one task per timestep the composer reported");
+            Assert.That(batches, Has.Count.EqualTo(4), "one task per timestep the composer reported, one output per batch below the policy's target");
             Assert.That(result, Has.Count.EqualTo(4));
         });
 
-        foreach (var task in tasks!.Select(me => me!))
-            Assert.That(task.Attachments.Select(me => me.LogicalPath), Is.EqualTo(new[] { LOGICAL_PATH }), "the .frd is timestep-independent: every task carries it");
+        foreach (var batch in batches!.Select(me => me!))
+            Assert.That(batch.Attachments.Select(me => me.LogicalPath), Is.EqualTo(new[] { LOGICAL_PATH }), "the .frd is timestep-independent: every batch carries it");
 
         foreach (var blobId in result!.Select(me => me!.Value))
             Assert.That(ParaViewImageInfo.TryRead(m_blobs.GetStoredPath(blobId)), Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 16, 8, false)));
@@ -185,7 +185,7 @@ public sealed class ParaViewComposeEndToEndTests
         var job = m_engine.Compile(Script("RenderParaViewDataFrames.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, DataScene(package), options);
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status}: {status.Message}");
 
         var scene = (job.Variables["scene"].Value as ParaViewSceneRefData)!;
         var result = job.Variables["result"].Value as IReadOnlyList<Guid?>;
@@ -213,9 +213,9 @@ public sealed class ParaViewComposeEndToEndTests
         var job = m_engine.Compile(Script("RenderParaViewDataFrames.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, DataScene(package), options);
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status}: {status.Message}");
 
-        var tasks = (job.Variables["tasks"].Value as IReadOnlyList<ParaViewRenderTaskData?>)!.Select(me => me!).ToList();
+        var tasks = (job.Variables["tasks"].Value as IReadOnlyList<ParaViewRenderTaskBatchData?>)!.SelectMany(me => me!.Tasks).ToList();
         var result = job.Variables["result"].Value as IReadOnlyList<Guid?>;
         Assert.Multiple(() =>
         {
@@ -234,7 +234,7 @@ public sealed class ParaViewComposeEndToEndTests
         var job = m_engine.Compile(Script("ValidateParaViewData.wit"));
         var status = await m_engine.ScheduleAndWaitAsync(job, DataScene(package), new ParaViewOutputOptionsData());
 
-        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status}: {status.Message}");
 
         var report = job.Variables["result"].Value as ParaViewValidationReportData;
         Assert.That(report, Is.Not.Null);

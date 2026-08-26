@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>ParaView</ControllerName>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Description>Bundled .wit scripts for the OutWit.Controller.Visualization.ParaView controller — RenderParaViewFrames (validate → split into per-timestep tasks with attachment subsets → Grid.ForEach ParaView.RenderFrame → ordered frame set), RenderParaViewStill (one image), RenderParaViewVideo (frames encoded through Render.EncodeVideo; requires the Render controller), ValidateParaViewScene (the validation report alone, for initiators that preflight a package), and — from 0.2.0 — the composed-scene entry points for bare data: RenderParaViewDataStill/Frames/Video and ValidateParaViewData (Grid.Delegate ParaView.Compose builds the state on one node, then the same chain).</Description>
     <PackageTags>paraview;visualization;scripts;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
@@ -12,7 +12,7 @@
   <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md):
        these scripts bind to the ParaView controller's 0.x activity surface. -->
   <ItemGroup>
-    <PackageReference Include="OutWit.Controller.Visualization.ParaView" Version="[0.3.0, 1.0.0)" />
+    <PackageReference Include="OutWit.Controller.Visualization.ParaView" Version="[0.5.0, 1.0.0)" />
   </ItemGroup>
 
   <!-- Source of truth lives next to the ParaView controller. Pack as content so

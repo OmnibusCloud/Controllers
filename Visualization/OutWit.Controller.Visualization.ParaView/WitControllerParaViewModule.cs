@@ -17,7 +17,10 @@ namespace OutWit.Controller.Visualization.ParaView;
 /// visualization packages, splits them into per-timestep tasks with per-task attachment subsets,
 /// renders tasks through the controller-owned pvpython runner on worker nodes, and collects the
 /// ordered frame set. From 0.3.0 it also COMPOSES a scene from bare data (ParaView.Compose, one node
-/// task per job through Grid.Delegate) into the same package reference the chain consumes.
+/// task per job through Grid.Delegate) into the same package reference the chain consumes. From
+/// 0.5.0 the bundled animation scripts render in BATCHES (ParaView.SplitBatched +
+/// ParaView.RenderFrameBatch): several outputs per pvpython process, so process startup — the
+/// dominant cost of a one-frame task — is paid once per chunk.
 /// </summary>
 [WitPluginManifest(ControllerBuildInfo.NAME, Version = ControllerBuildInfo.VERSION)]
 [WitPluginDependency("Variables", MinimumVersion = "1.0.0")]
@@ -44,6 +47,8 @@ public class WitControllerParaViewModule : WitPluginBase, IWitControllerNode, IW
         services.AddActivityAdapter<WitActivityParaViewValidate, WitActivityAdapterParaViewValidate>();
         services.AddActivityAdapter<WitActivityParaViewSplit, WitActivityAdapterParaViewSplit>();
         services.AddActivityAdapter<WitActivityParaViewRenderFrame, WitActivityAdapterParaViewRenderFrame>();
+        services.AddActivityAdapter<WitActivityParaViewSplitBatched, WitActivityAdapterParaViewSplitBatched>();
+        services.AddActivityAdapter<WitActivityParaViewRenderFrameBatch, WitActivityAdapterParaViewRenderFrameBatch>();
         services.AddActivityAdapter<WitActivityParaViewCompose, WitActivityAdapterParaViewCompose>();
         services.AddActivityAdapter<WitActivityParaViewCollect, WitActivityAdapterParaViewCollect>();
         services.AddActivityAdapter<WitActivityParaViewCollectStill, WitActivityAdapterParaViewCollectStill>();
@@ -55,8 +60,12 @@ public class WitControllerParaViewModule : WitPluginBase, IWitControllerNode, IW
         services.AddVariable<WitVariableParaViewValidationReport>();
         services.AddVariable<WitVariableParaViewRenderTask>();
         services.AddVariable<WitVariableParaViewRenderResult>();
+        services.AddVariable<WitVariableParaViewRenderTaskBatch>();
+        services.AddVariable<WitVariableParaViewRenderResultBatch>();
         services.AddCollection<WitVariableParaViewRenderTaskCollection>();
         services.AddCollection<WitVariableParaViewRenderResultCollection>();
+        services.AddCollection<WitVariableParaViewRenderTaskBatchCollection>();
+        services.AddCollection<WitVariableParaViewRenderResultBatchCollection>();
     }
 
     #endregion

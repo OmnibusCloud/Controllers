@@ -2,10 +2,10 @@ Job:RenderParaViewDataVideo(ParaViewDataScene:data, ParaViewOutputOptions:option
 {
     ParaViewSceneRef:scene = Grid.Delegate() => ParaView.Compose(data, options);
     ParaViewValidationReport:report = ParaView.Validate(scene, options);
-    ParaViewRenderTaskCollection:tasks = ParaView.Split(scene, report, options);
+    ParaViewRenderTaskBatchCollection:tasks = ParaView.SplitBatched(scene, report, options);
 
-    ParaViewRenderResultCollection:rendered = Grid.ForEach(task in tasks)
-        => ParaView.RenderFrame(task);
+    ParaViewRenderResultBatchCollection:rendered = Grid.ForEach(task in tasks)
+        => ParaView.RenderFrameBatch(task);
 
     BlobCollection:frames = ParaView.Collect(rendered, options);
     Blob:result = Render.EncodeVideo(frames, video);

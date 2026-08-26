@@ -7,14 +7,17 @@ namespace OutWit.Controller.Visualization.ParaView.Runtime;
 /// The runner contract, adapter → runner: one JSON task file carrying everything the controller-owned
 /// pvpython runner needs (docs 03, section 9 — the same inputs as the documented argument list,
 /// carried as one bounded document so no value is ever shell-parsed), including the effective proxy
-/// allowlist and the blocked proxy/property lists for the post-load runtime check.
+/// allowlist and the blocked proxy/property lists for the post-load runtime check. Schema 2 (controller
+/// 0.5.0, FrameBatch): the state, view, size, format and policy lists are shared once, and the outputs
+/// the process renders — one for ParaView.RenderFrame, a chunk for ParaView.RenderFrameBatch — travel
+/// as <see cref="Outputs"/>, each with its timestep, camera move and file.
 /// </summary>
 public sealed class ParaViewRunnerTask
 {
     #region Constants
 
     /// <summary>Version of the task file contract.</summary>
-    public const int SCHEMA_VERSION = 1;
+    public const int SCHEMA_VERSION = 2;
 
     /// <summary>File name of the task file inside the work directory.</summary>
     public const string FILE_NAME = "task.json";
@@ -60,7 +63,7 @@ public sealed class ParaViewRunnerTask
     /// <summary>Task file contract version.</summary>
     public int Schema { get; set; } = SCHEMA_VERSION;
 
-    /// <summary>Task identity (diagnostics only).</summary>
+    /// <summary>Identity of the task or batch (diagnostics only; the first output's task identity).</summary>
     public string TaskId { get; set; } = string.Empty;
 
     /// <summary>Absolute path of the materialized state inside the package root.</summary>
@@ -69,23 +72,14 @@ public sealed class ParaViewRunnerTask
     /// <summary>Absolute package root every logical path resolves under.</summary>
     public string PackageRoot { get; set; } = string.Empty;
 
-    /// <summary>Absolute task work directory (output and status must stay inside it).</summary>
+    /// <summary>Absolute task work directory (outputs and status must stay inside it).</summary>
     public string WorkDir { get; set; } = string.Empty;
-
-    /// <summary>Absolute output image path inside the work directory.</summary>
-    public string OutputPath { get; set; } = string.Empty;
 
     /// <summary>Absolute path the runner writes its status document to.</summary>
     public string StatusPath { get; set; } = string.Empty;
 
     /// <summary>Registration name of the view to render.</summary>
     public string ViewId { get; set; } = string.Empty;
-
-    /// <summary>Timestep index to select.</summary>
-    public int TimestepIndex { get; set; }
-
-    /// <summary>Physical time value of the timestep, null for a static scene.</summary>
-    public double? TimeValue { get; set; }
 
     /// <summary>Output width.</summary>
     public int Width { get; set; }
@@ -98,18 +92,6 @@ public sealed class ParaViewRunnerTask
 
     /// <summary>Render with a transparent background.</summary>
     public bool TransparentBackground { get; set; }
-
-    /// <summary>Camera azimuth in degrees to apply about the orbit axis before rendering (0: none).</summary>
-    public double CameraAzimuth { get; set; }
-
-    /// <summary>Orbit axis token: view-up (the state's camera view-up), x, y or z (world axes).</summary>
-    public string CameraAxis { get; set; } = ParaViewCameraAxes.VIEW_UP;
-
-    /// <summary>Camera elevation in degrees about the camera's right axis (0: none). Controller 0.4.0.</summary>
-    public double CameraElevation { get; set; }
-
-    /// <summary>Factor applied to the camera's distance from the focal point (1: none). Controller 0.4.0.</summary>
-    public double CameraDolly { get; set; } = 1.0;
 
     /// <summary>Absolute path of the bundled reader to load, null when the package requires none.</summary>
     public string? PluginPath { get; set; }
@@ -134,6 +116,13 @@ public sealed class ParaViewRunnerTask
 
     /// <summary>Maximum logical path length (mirrors the host limit).</summary>
     public int MaxLogicalPathChars { get; set; }
+
+    /// <summary>
+    /// The outputs to render in order, each with its timestep, camera move and file — one for a
+    /// single-frame task, the chunk for a batch. The state loads once; every output selects,
+    /// moves the camera from the state's captured framing, renders and verifies.
+    /// </summary>
+    public List<ParaViewRunnerOutput> Outputs { get; set; } = [];
 
     #endregion
 }
