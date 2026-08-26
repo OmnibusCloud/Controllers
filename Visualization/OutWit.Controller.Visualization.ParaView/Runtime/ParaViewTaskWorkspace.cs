@@ -189,6 +189,15 @@ public sealed class ParaViewTaskWorkspace : IDisposable
         if (!sourceInfo.Exists)
             throw new InvalidOperationException($"{label}: blob storage resolved no local file");
 
+        // Defense in depth behind the host validator (audit C-M5): an UNDECLARED size (0) or digest
+        // (empty) is the compose contract's "the node stamps it"; a declared-but-malformed one is a
+        // corrupt declaration and fails closed — never a silently skipped check.
+        if (expectedSize < 0)
+            throw new InvalidOperationException($"{label}: declares a negative size ({expectedSize})");
+
+        if (expectedSha256.Length > 0 && !ParaViewPackageDigest.IsSha256Hex(expectedSha256))
+            throw new InvalidOperationException($"{label}: declares a malformed SHA-256 '{(expectedSha256.Length > 16 ? expectedSha256[..16] + "…" : expectedSha256)}'");
+
         if (expectedSize > 0 && sourceInfo.Length != expectedSize)
             throw new InvalidOperationException($"{label}: declared {expectedSize} bytes, blob holds {sourceInfo.Length}");
 

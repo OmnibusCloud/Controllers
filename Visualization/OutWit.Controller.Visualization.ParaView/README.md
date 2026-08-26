@@ -155,6 +155,15 @@ were `int` already); a 0.4.0 host rejects a negative index as before.
   or result block that ends without its `-3` terminator and a `-1` record cut mid-line (a truncated
   file was a silently truncated mesh with NaN coordinates and exit 0), and a malformed numeric field
   surfaces as an `FrdFormatError` with a byte position instead of a raw `ValueError`.
+- **C-M5 (controller 0.4.5)** node-side materialization fails closed on a corrupt declaration: a
+  negative size or a non-empty malformed SHA-256 refuses the attachment (an EMPTY digest / zero size
+  is the compose contract's "the node stamps it" and stays allowed). Wave 2 coverage:
+  `ParaViewResultOrdering` (frame-set holes, duplicates, empty images, duplicate identities),
+  `ProcessTreeGuard` (a child assigned to the job dies when the job closes), the workspace's
+  fail-closed branches, and a host↔runner parity table that runs one list of logical paths through
+  `ParaViewLogicalPath.Check` and `render_task.check_logical_path` (a python on PATH) — the two
+  hand-mirrored rule sets must agree on every verdict. `InternalsVisibleTo` opens the internal
+  seams to the test project as in the Render family.
 
 ## The runner contract
 

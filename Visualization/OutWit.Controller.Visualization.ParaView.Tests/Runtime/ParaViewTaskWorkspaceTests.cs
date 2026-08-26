@@ -1,4 +1,6 @@
+using OutWit.Controller.Visualization.ParaView.Model;
 using OutWit.Controller.Visualization.ParaView.Runtime;
+using OutWit.Controller.Visualization.ParaView.Tests.Mock;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Visualization.ParaView.Tests.Runtime;
@@ -52,4 +54,69 @@ public sealed class ParaViewTaskWorkspaceTests
         Directory.Delete(workspace.OutputDirectory, recursive: true);
         Assert.DoesNotThrow(workspace.ClearAttemptArtifacts);
     }
+
+    #region Materialization declarations (audit C-M5 - fail closed)
+
+    [Test]
+    public async Task UndeclaredDigestAndSizeAreStampedFromTheBlobTest()
+    {
+        // The compose contract: a data scene may leave sha/size empty and the node stamps them.
+        var (workspace, blobs, blobId) = await ArrangeAsync("undeclared", "twelve bytes"u8.ToArray());
+
+        var materialized = await workspace.MaterializeAttachmentAsync(
+            blobs, new ParaViewAttachmentRefData { BlobId = blobId, LogicalPath = "data/result.frd" }, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(materialized.Size, Is.EqualTo(12));
+            Assert.That(materialized.Sha256, Has.Length.EqualTo(64));
+            Assert.That(File.Exists(materialized.Path), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task MalformedDeclaredDigestFailsClosedTest()
+    {
+        var (workspace, blobs, blobId) = await ArrangeAsync("malformed-sha", "bytes"u8.ToArray());
+
+        var error = Assert.ThrowsAsync<InvalidOperationException>(() => workspace.MaterializeAttachmentAsync(
+            blobs, new ParaViewAttachmentRefData { BlobId = blobId, LogicalPath = "data/result.frd", Sha256 = "not-a-digest" }, CancellationToken.None));
+
+        Assert.That(error!.Message, Does.Contain("malformed SHA-256"));
+        Assert.That(File.Exists(Path.Combine(workspace.PackageRoot, "data", "result.frd")), Is.False, "nothing is materialized on a corrupt declaration");
+    }
+
+    [Test]
+    public async Task NegativeDeclaredSizeFailsClosedTest()
+    {
+        var (workspace, blobs, blobId) = await ArrangeAsync("negative-size", "bytes"u8.ToArray());
+
+        var error = Assert.ThrowsAsync<InvalidOperationException>(() => workspace.MaterializeAttachmentAsync(
+            blobs, new ParaViewAttachmentRefData { BlobId = blobId, LogicalPath = "data/result.frd", Size = -1 }, CancellationToken.None));
+
+        Assert.That(error!.Message, Does.Contain("negative size"));
+    }
+
+    [Test]
+    public async Task WellFormedWrongDigestIsStillAMismatchTest()
+    {
+        var (workspace, blobs, blobId) = await ArrangeAsync("wrong-sha", "bytes"u8.ToArray());
+
+        var error = Assert.ThrowsAsync<InvalidOperationException>(() => workspace.MaterializeAttachmentAsync(
+            blobs, new ParaViewAttachmentRefData { BlobId = blobId, LogicalPath = "data/result.frd", Sha256 = new string('a', 64) }, CancellationToken.None));
+
+        Assert.That(error!.Message, Does.Contain("content digest mismatch"));
+        Assert.That(File.Exists(Path.Combine(workspace.PackageRoot, "data", "result.frd")), Is.False, "a mismatching copy is removed");
+    }
+
+    private async Task<(ParaViewTaskWorkspace Workspace, ParaViewTestBlobService Blobs, Guid BlobId)> ArrangeAsync(string label, byte[] bytes)
+    {
+        var tempStorage = new WitTempStorageDefault(Path.Combine(m_root, label, "temp"));
+        var workspace = ParaViewTaskWorkspace.Create(tempStorage, Guid.NewGuid(), 0);
+        var blobs = new ParaViewTestBlobService(Path.Combine(m_root, label, "blobs"));
+        var blobId = await blobs.UploadBytesAsync(bytes, "result.frd");
+        return (workspace, blobs, blobId);
+    }
+
+    #endregion
 }
