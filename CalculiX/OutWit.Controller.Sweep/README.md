@@ -14,7 +14,7 @@ harvested so far observable while the sweep runs.
 | `Sweep.InitState(plan) → SweepState` | The zero cursor. |
 | `Sweep.ChunkCount(plan) → Int` | Loop bound of the bundled script. |
 | `Sweep.MakeChunk(plan, state) → CcxTaskCollection` | Materializes the next chunk's variant decks by plain token substitution (this side never parses a deck) and builds their solve tasks. |
-| `Sweep.Harvest(plan, state, wave) → SweepState` | Appends the chunk's results — states, measured solve times, response rows, artifact blob ids — to the manifest blob; returns the advanced cursor. |
+| `Sweep.Harvest(plan, state, wave) → SweepState` | Appends the chunk's results — states, measured solve times, response rows, artifact blob ids — to the manifest blob; returns the advanced cursor. Since 0.2.2 every index entry also carries the variant's label from its parameter values ("XMAX=300, T=250", `SweepVariantLabel`), so document clients - the ParaView plugin's variant picker - name variants instead of numbering them. |
 | `Sweep.Finish(plan, state) → Blob` | Returns the final manifest blob. |
 
 ## Why chunks
