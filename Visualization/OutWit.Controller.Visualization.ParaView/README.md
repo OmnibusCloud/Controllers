@@ -369,7 +369,10 @@ timesteps differ (the series contours a wavelet of growing amplitude, so a task 
 anchor piece would be caught). Two batch cases render the PVD series as ONE chunk through the real
 runtime (five distinct frames, one materialization, and the same frames as five single tasks — 4.8×
 faster on the dev box) and measure the batch benchmark (8 frames per cycle, a higher rate than the
-single-frame cycle). It auto-skips without a runtime; point `OUTWIT_PVPYTHON` at one or place
+single-frame cycle). On the production fleet (2026-08-26, three nodes, controller 0.5.0) the
+60-frame scale job went from 88 s to 34 s wall (2.6×; 20 chunks of 3 balanced 9/6/5, nodes finishing
+within 3 s of each other) and the nodes' batch rates are 5.8–6.4× their single-frame rates.
+It auto-skips without a runtime; point `OUTWIT_PVPYTHON` at one or place
 a runtime under `@Prerequisites/paraview/<platform>`. When no view is requested the validator renders
 the first 3D render view, not the first registered view (the GUI lists chart and spreadsheet views ahead
 of it).
