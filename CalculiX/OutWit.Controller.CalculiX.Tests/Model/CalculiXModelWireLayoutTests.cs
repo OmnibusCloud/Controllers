@@ -35,7 +35,7 @@ public sealed class CalculiXModelWireLayoutTests
         [typeof(SweepOptionsData)] = 8,
         [typeof(SweepParameterData)] = 2,
         [typeof(SweepPlanData)] = 3,
-        [typeof(SweepResultIndexEntryData)] = 3,
+        [typeof(SweepResultIndexEntryData)] = 4,
         [typeof(SweepStateData)] = 6,
         [typeof(SweepVariantData)] = 5
     };

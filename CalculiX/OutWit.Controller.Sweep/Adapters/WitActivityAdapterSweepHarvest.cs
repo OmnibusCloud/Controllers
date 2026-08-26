@@ -3,6 +3,7 @@ using MemoryPack;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.CalculiX.Model;
 using OutWit.Controller.Sweep.Activities;
+using OutWit.Controller.Sweep.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -87,7 +88,9 @@ internal sealed class WitActivityAdapterSweepHarvest : WitActivityAdapterFunctio
                 {
                     VariantIndex = row.VariantIndex,
                     Succeeded = row.Succeeded,
-                    FrdBlobId = row.FrdBlobId
+                    FrdBlobId = row.FrdBlobId,
+                    // The label a document client shows instead of the number (item #13).
+                    Label = SweepVariantLabel.Of(plan.Options, row.VariantIndex)
                 })
                 .ToList()
         };

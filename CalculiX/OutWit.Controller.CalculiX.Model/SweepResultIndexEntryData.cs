@@ -25,7 +25,8 @@ public sealed partial class SweepResultIndexEntryData : ModelBase
 
         return VariantIndex.Is(entry.VariantIndex)
                && Succeeded.Is(entry.Succeeded)
-               && FrdBlobId.Is(entry.FrdBlobId);
+               && FrdBlobId.Is(entry.FrdBlobId)
+               && Label.Is(entry.Label);
     }
 
     public override SweepResultIndexEntryData Clone()
@@ -34,13 +35,15 @@ public sealed partial class SweepResultIndexEntryData : ModelBase
         {
             VariantIndex = VariantIndex,
             Succeeded = Succeeded,
-            FrdBlobId = FrdBlobId
+            FrdBlobId = FrdBlobId,
+            Label = Label
         };
     }
 
     public override string ToString()
     {
-        return $"variant #{VariantIndex}: {(Succeeded ? "done" : "failed")}";
+        var label = string.IsNullOrEmpty(Label) ? string.Empty : $" ({Label})";
+        return $"variant #{VariantIndex}{label}: {(Succeeded ? "done" : "failed")}";
     }
 
     #endregion
@@ -58,6 +61,15 @@ public sealed partial class SweepResultIndexEntryData : ModelBase
     /// <summary>Blob id of the variant's .frd artifact; null when the solve produced none.</summary>
     [MemoryPackOrder(2)]
     public Guid? FrdBlobId { get; set; }
+
+    /// <summary>
+    /// Human-readable identity of the variant from the study's parameters ("XMAX=300, T=250"),
+    /// so a document client can label it instead of numbering it (audit item #13). Empty for a
+    /// deck-set study and for states written before Sweep 0.2.2 - readers fall back to the
+    /// number. Appended (order 3): older readers skip it, older writers leave it empty.
+    /// </summary>
+    [MemoryPackOrder(3)]
+    public string Label { get; set; } = string.Empty;
 
     #endregion
 }

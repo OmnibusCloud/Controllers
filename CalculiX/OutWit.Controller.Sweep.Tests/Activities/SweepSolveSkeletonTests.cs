@@ -159,6 +159,8 @@ public class SweepSolveSkeletonTests
             Is.EqualTo(Enumerable.Range(0, values.Length)), "the index is cumulative and sorted");
         Assert.That(state.Results.Single(entry => entry.VariantIndex == 3).Succeeded, Is.False);
         Assert.That(state.Results.Single(entry => entry.VariantIndex == 3).FrdBlobId, Is.Null);
+        Assert.That(state.Results.Select(entry => entry.Label),
+            Is.EqualTo(values.Select(value => $"E-modulus={value}")), "the index labels every variant by its parameter values (item #13)");
         foreach (var entry in state.Results.Where(entry => entry.VariantIndex != 3))
         {
             var row = manifest.Rows.Single(candidate => candidate.VariantIndex == entry.VariantIndex);

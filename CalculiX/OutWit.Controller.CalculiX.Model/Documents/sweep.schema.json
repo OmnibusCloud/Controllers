@@ -12,7 +12,7 @@
     ],
     "source": {
       "assembly": "OutWit.Controller.CalculiX.Model",
-      "version": "0.2.1"
+      "version": "0.2.2"
     },
     "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
   },
@@ -42,6 +42,10 @@
             "null"
           ],
           "format": "uuid"
+        },
+        "label": {
+          "x-oc-clr-name": "Label",
+          "type": "string"
         }
       }
     },

@@ -55,7 +55,7 @@ public sealed partial class SweepStateDataTests
         var state = new SweepStateData
         {
             ChunkIndex = 1,
-            Results = [new SweepResultIndexEntryData { VariantIndex = 0, Succeeded = true, FrdBlobId = Guid.NewGuid() }]
+            Results = [new SweepResultIndexEntryData { VariantIndex = 0, Succeeded = true, FrdBlobId = Guid.NewGuid(), Label = "XMAX=300" }]
         };
 
         var copy = MemoryPackSerializer.Deserialize<SweepStateData>(MemoryPackSerializer.Serialize(state));
@@ -63,6 +63,7 @@ public sealed partial class SweepStateDataTests
         Assert.That(copy, Is.Not.Null);
         Assert.That(copy!.Is(state), Is.True);
         Assert.That(copy.Results, Has.Count.EqualTo(1));
+        Assert.That(copy.Results[0].Label, Is.EqualTo("XMAX=300"));
     }
 
     #endregion
