@@ -42,16 +42,31 @@ CONSUMER="$WORK/consumer"
 rm -rf "$FEED" "$CONSUMER"
 mkdir -p "$FEED" "$CONSUMER"
 
+# The versions come from the csproj files, never from what sits in bin/Release: that folder keeps
+# every nupkg ever packed, and "the first one ls prints" is the OLDEST (0.1.0) - a consumer built
+# against it verified nothing about the current controller. The Scripts package has its own
+# version line (it ranges over the controller version) since 0.2.0.
+csproj_version() {
+  sed -n 's/.*<Version>\([0-9][0-9.]*\)<\/Version>.*/\1/p' "$1" | head -1
+}
+MODEL_VERSION="$(csproj_version "$VIS/OutWit.Controller.Visualization.ParaView.Model/OutWit.Controller.Visualization.ParaView.Model.csproj")"
+VERSION="$(csproj_version "$VIS/OutWit.Controller.Visualization.ParaView/OutWit.Controller.Visualization.ParaView.csproj")"
+SCRIPTS_VERSION="$(csproj_version "$VIS/OutWit.Controller.Visualization.ParaView.Scripts/OutWit.Controller.Visualization.ParaView.Scripts.csproj")"
+if [ -z "$MODEL_VERSION" ] || [ -z "$VERSION" ] || [ -z "$SCRIPTS_VERSION" ]; then
+  echo "could not read the package versions from the csproj files"; exit 2
+fi
+echo "package versions: Model $MODEL_VERSION, controller $VERSION, Scripts $SCRIPTS_VERSION"
+
 echo "== 1. build Release (GeneratePackageOnBuild packs; 'dotnet pack' alone does NOT rebuild a stale Release output) and collect into $FEED"
-for project in OutWit.Controller.Visualization.ParaView.Model OutWit.Controller.Visualization.ParaView OutWit.Controller.Visualization.ParaView.Scripts; do
+for entry in "OutWit.Controller.Visualization.ParaView.Model:$MODEL_VERSION" "OutWit.Controller.Visualization.ParaView:$VERSION" "OutWit.Controller.Visualization.ParaView.Scripts:$SCRIPTS_VERSION"; do
+  project="${entry%%:*}"
+  version="${entry##*:}"
   dotnet build "$VIS/$project/$project.csproj" -c Release --nologo -v q
-  cp "$VIS/$project/bin/Release/$project".[0-9]*.nupkg "$FEED/"
+  cp "$VIS/$project/bin/Release/$project.$version.nupkg" "$FEED/"
 done
 ls -la "$FEED"/*.nupkg
-VERSION="$(ls "$FEED"/OutWit.Controller.Visualization.ParaView.[0-9]*.nupkg | sed -E 's/.*ParaView\.([0-9][^/]*)\.nupkg/\1/' | head -1)"
-echo "controller package version: $VERSION"
 
-echo "== 2. consumer build (fetches the runtime assets from the paraview-v$VERSION release)"
+echo "== 2. consumer build (fetches the runtime assets from the paraview-v<assets> release named in the controller csproj)"
 cat > "$CONSUMER/nuget.config" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>
@@ -71,8 +86,8 @@ cat > "$CONSUMER/Consumer.csproj" <<EOF
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="OutWit.Controller.Visualization.ParaView" Version="$VERSION" />
-    <PackageReference Include="OutWit.Controller.Visualization.ParaView.Scripts" Version="$VERSION" />
+    <PackageReference Include="OutWit.Controller.Visualization.ParaView" Version="[$VERSION]" />
+    <PackageReference Include="OutWit.Controller.Visualization.ParaView.Scripts" Version="[$SCRIPTS_VERSION]" />
     <PackageReference Include="OutWit.Controller.Grid" Version="1.*" />
     <PackageReference Include="OutWit.Controller.Variables" Version="1.*" />
   </ItemGroup>
