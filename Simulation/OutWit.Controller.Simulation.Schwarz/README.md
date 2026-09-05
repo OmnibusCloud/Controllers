@@ -7,8 +7,10 @@ every round solves them across the pool, boundary strips are exchanged through
 the server, and convergence control runs server-side. Designed for on-premise
 LAN pools, where frequent small rounds are cheap.
 
-**Version 0.1.7** (numerical core `OutWit.Math.Simulation` 0.3.0,
-`OutWit.Controller.Simulation.Schwarz.Scripts` 0.1.1).
+**Version 0.1.8** (numerical core `OutWit.Math.Simulation` 0.3.0,
+`OutWit.Controller.Simulation.Schwarz.Scripts` 0.1.1). 0.1.8 carries no functional
+change over 0.1.7: it is the version step that drove the WitCloud controller rollout
+fence drill (a served-version bump that every node must re-install and re-benchmark).
 
 **Status: v0.1 — algorithm complete and gate-tested, not yet published to a
 public feed.** Distributed runs reproduce the in-memory reference **bitwise**

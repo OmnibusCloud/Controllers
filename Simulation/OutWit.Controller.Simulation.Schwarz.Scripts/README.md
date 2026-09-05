@@ -99,7 +99,7 @@ did not change the script text does not touch the staged file.
 ## Versioning and controller pairing
 
 Current versions: this package **0.1.1**, controller
-`OutWit.Controller.Simulation.Schwarz` **0.1.7**, shared
+`OutWit.Controller.Simulation.Schwarz` **0.1.8**, shared
 numerical core `OutWit.Math.Simulation.Model` + `OutWit.Math.Simulation`
 **0.3.0** (contract and numerics, versioned in lockstep). Both Simulation
 controllers and their Scripts packages are published to the OmnibusCloud
