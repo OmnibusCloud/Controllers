@@ -7,11 +7,13 @@ Crank–Nicolson integrator while a cheap coarse propagator runs serially on the
 server and drives the correction. Designed for crowd/WAN pools, where few rounds
 with chunky transfers beat many small ones.
 
-**Version 0.1.7** (numerical core `OutWit.Math.Simulation` 0.3.0,
-`OutWit.Controller.Simulation.Parareal.Scripts` 0.1.1).
+**Version 1.0.0** (numerical core `OutWit.Math.Simulation` 0.3.1,
+`OutWit.Controller.Simulation.Parareal.Scripts` 1.0.0). 1.0.0 is the 0.1.7 code
+unchanged: the algorithm and its gates were finished on the 0.1 line, and the major
+version marks the controller as released rather than in work.
 
-**Status: v0.1 — algorithm complete and gate-tested, not yet published to a
-public feed.** Distributed runs reproduce the in-memory reference **bitwise**;
+**Status: released — algorithm complete and gate-tested, published on nuget.org and
+the OmnibusCloud organization feed.** Distributed runs reproduce the in-memory reference **bitwise**;
 the exact-slab property (after k iterations, slabs 0..k−1 equal the serial fine
 integration exactly) holds to the last bit; a second run on warm caches is
 bitwise identical to the first; a node failure mid-wave is absorbed by

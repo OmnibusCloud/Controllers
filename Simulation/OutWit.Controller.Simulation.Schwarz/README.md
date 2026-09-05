@@ -7,13 +7,13 @@ every round solves them across the pool, boundary strips are exchanged through
 the server, and convergence control runs server-side. Designed for on-premise
 LAN pools, where frequent small rounds are cheap.
 
-**Version 0.1.8** (numerical core `OutWit.Math.Simulation` 0.3.0,
-`OutWit.Controller.Simulation.Schwarz.Scripts` 0.1.1). 0.1.8 carries no functional
-change over 0.1.7: it is the version step that drove the WitCloud controller rollout
-fence drill (a served-version bump that every node must re-install and re-benchmark).
+**Version 1.0.0** (numerical core `OutWit.Math.Simulation` 0.3.1,
+`OutWit.Controller.Simulation.Schwarz.Scripts` 1.0.0). 1.0.0 is the 0.1.7 code
+unchanged: the algorithm and its gates were finished on the 0.1 line, and the major
+version marks the controller as released rather than in work.
 
-**Status: v0.1 — algorithm complete and gate-tested, not yet published to a
-public feed.** Distributed runs reproduce the in-memory reference **bitwise**
+**Status: released — algorithm complete and gate-tested, published on nuget.org and
+the OmnibusCloud organization feed.** Distributed runs reproduce the in-memory reference **bitwise**
 and match the single-machine reference solver to within the gated 1e-9 relative;
 a second run on warm factorization caches is bitwise identical to the first; a
 node failure mid-wave is absorbed by reassignment with a bitwise-identical

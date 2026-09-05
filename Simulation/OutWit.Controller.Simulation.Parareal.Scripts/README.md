@@ -100,13 +100,13 @@ did not change the script text does not touch the staged file.
 
 ## Versioning and controller pairing
 
-Current versions: this package **0.1.1**, controller
-`OutWit.Controller.Simulation.Parareal` **0.1.7**, shared
-numerical core `OutWit.Math.Simulation.Model` + `OutWit.Math.Simulation`
-**0.3.0** (contract and numerics, versioned in lockstep). Both Simulation
-controllers and their Scripts packages are published to the OmnibusCloud
-organization feed rather than nuget.org; the numerical core comes from the
-separate private WitMath feed.
+Current versions: this package **1.0.0**, controller
+`OutWit.Controller.Simulation.Parareal` **1.0.0** (the compatibility marker binds this
+package to that controller line, `[1.0.0, 2.0.0)`), shared numerical core
+`OutWit.Math.Simulation.Model` + `OutWit.Math.Simulation` **0.3.1** (contract and
+numerics, versioned in lockstep). Both Simulation controllers and their Scripts
+packages are published on nuget.org and on the OmnibusCloud organization feed; the
+numerical core comes from the separate private WitMath feed.
 
 **The script ships separately from the controller, and that is deliberate.**
 A `.wit` script resolves activities by name at runtime, through the engine
