@@ -54,6 +54,13 @@ internal sealed class WitActivityAdapterPararealSlice : WitActivityAdapterFuncti
         // BEFORE any propagation is scheduled.
         PararealOptionsValidator.Validate(options, slabs, kernel.FineProblem.Geometry.NodeCount);
 
+        // Not an error, but the one shape that makes a parareal run serial on the server: G on the
+        // fine grid. Auto coarsening tries 2, 3, 4; when none divides (n-1) the warning names the
+        // fix (WitCloud P0.1 finding F-9: 28 s before the first wave at 40^3).
+        var coarseningWarning = PararealOptionsValidator.DescribeDegenerateCoarsening(kernel.Coarsening, kernel.FineProblem.Geometry.NodeCount);
+        if (coarseningWarning != null)
+            Logger.LogWarning("Parareal.Slice: {Warning}", coarseningWarning);
+
         // The last boundary is pinned to TotalTime exactly (TotalTime·N/N may
         // round differently) — task δt and the kernel cache key derive from it.
         var boundaries = Enumerable.Range(0, slabs + 1).Select(i => options.TotalTime * i / slabs).ToList();

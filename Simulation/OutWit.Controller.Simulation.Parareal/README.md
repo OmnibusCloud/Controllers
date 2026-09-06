@@ -7,15 +7,18 @@ Crank–Nicolson integrator while a cheap coarse propagator runs serially on the
 server and drives the correction. Designed for crowd/WAN pools, where few rounds
 with chunky transfers beat many small ones.
 
-**Version 1.0.1** (numerical core `OutWit.Math.Simulation` 0.3.2,
+**Version 1.0.2** (numerical core `OutWit.Math.Simulation` 0.3.3,
 `OutWit.Controller.Simulation.Parareal.Scripts` 1.0.0). 1.0.0 was the 0.1.7 code
 unchanged: the algorithm and its gates were finished on the 0.1 line, and the major
-version marks the controller as released rather than in work. 1.0.1 takes core 0.3.2,
+version marks the controller as released rather than in work. 1.0.1 took core 0.3.2,
 whose kernel factorizes the fine propagator only on first use: the server-side
 activities (`Slice`, `Init`, `Correct`) drive the coarse propagator alone, so a job no
 longer pays a full fine factorization on the server before its first wave (28 s at
-40^3 on the production box, WitCloud P0.1 baseline 2026-09-05, finding F-3). Node-side
-`Propagate` and the results are unchanged.
+40^3 on the production box, WitCloud P0.1 baseline 2026-09-05, finding F-3). 1.0.2 takes
+core 0.3.3: auto coarsening tries 2, 3 and 4 instead of 2 alone, and `Slice` warns when the
+coarse propagator still ends up on the fine grid (finding F-9 — at 40 nodes per axis the
+old rule fell back to 1 and the server paid a full-size factorization and a full-size
+sweep per iteration). Node-side `Propagate` and the results are unchanged.
 
 **Status: released — algorithm complete and gate-tested, published on nuget.org and
 the OmnibusCloud organization feed.** Distributed runs reproduce the in-memory reference **bitwise**;
@@ -155,7 +158,7 @@ What is still required:
 | `Slabs` | `0` (auto = 4) | time slab count, ideally about the usable pool size |
 | `Eps` | `1e-6` | relative correction-norm stop |
 | `MaxIterations` | `10` | iteration budget K |
-| `Coarsening` | `0` (auto) | spatial coarsening factor of the coarse propagator; auto takes 2 when `(n−1)` is even on every active axis and falls back to 1 (G on the fine grid) otherwise |
+| `Coarsening` | `0` (auto) | spatial coarsening factor of the coarse propagator; auto takes the first of 2, 3, 4 that divides `(n−1)` on every active axis and falls back to 1 (G on the fine grid) when none does — **size grids so that `(n−1)` has such a factor** (41, 49, 57 … nodes per axis, not 40, 48, 56 with a prime cell count): with factor 1 the server factorizes a full-size operator before the first wave and sweeps the full grid on every iteration (`Slice` logs a warning above 4096 nodes) |
 | `SliceByBenchmark` | `false` | **RESERVED, not consumed in v1** — benchmark-proportional slab sizing |
 | `TotalTime` | `1` | simulated horizon T |
 | `FineStepsPerSlab` | `10` | Crank–Nicolson steps per slab; `δt = TotalTime / (Slabs · FineStepsPerSlab)` |
