@@ -7,10 +7,15 @@ Crank–Nicolson integrator while a cheap coarse propagator runs serially on the
 server and drives the correction. Designed for crowd/WAN pools, where few rounds
 with chunky transfers beat many small ones.
 
-**Version 1.0.0** (numerical core `OutWit.Math.Simulation` 0.3.1,
-`OutWit.Controller.Simulation.Parareal.Scripts` 1.0.0). 1.0.0 is the 0.1.7 code
+**Version 1.0.1** (numerical core `OutWit.Math.Simulation` 0.3.2,
+`OutWit.Controller.Simulation.Parareal.Scripts` 1.0.0). 1.0.0 was the 0.1.7 code
 unchanged: the algorithm and its gates were finished on the 0.1 line, and the major
-version marks the controller as released rather than in work.
+version marks the controller as released rather than in work. 1.0.1 takes core 0.3.2,
+whose kernel factorizes the fine propagator only on first use: the server-side
+activities (`Slice`, `Init`, `Correct`) drive the coarse propagator alone, so a job no
+longer pays a full fine factorization on the server before its first wave (28 s at
+40^3 on the production box, WitCloud P0.1 baseline 2026-09-05, finding F-3). Node-side
+`Propagate` and the results are unchanged.
 
 **Status: released — algorithm complete and gate-tested, published on nuget.org and
 the OmnibusCloud organization feed.** Distributed runs reproduce the in-memory reference **bitwise**;
