@@ -36,6 +36,11 @@ internal sealed class WitActivityAdapterPararealMakeTasks : WitActivityAdapterFu
         if (!pool.TrySetCollection(activity.ReturnReference, tasks))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
 
+        // The first report claims the job's progress bar for this controller; later iterations are
+        // reported by Parareal.Correct, once their correction is known.
+        if (state.Round == 0)
+            JobProgressReporter.Report(ProcessingManager, status.JobId, 0.0, PararealProgress.DescribeFirstIteration(plan));
+
         await Task.CompletedTask;
     }
 

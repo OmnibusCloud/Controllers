@@ -194,6 +194,36 @@ residual after each round). It is written only on the full-field result;
 per-subdomain slices carry none. An **absent** record means the producer
 recorded nothing — never read it as "did not converge".
 
+## Job progress
+
+The engine counts progress in script stages, and the round loop is one stage
+however many rounds it runs. So the controller reports the job's progress
+itself, from its server-side activities, through the host's job-progress sink
+(`ReportJobProgress` on the engine's processing manager). The sink is looked up
+by reflection: a host without it keeps showing its own stage progress, and the
+controller loads and solves exactly as before.
+
+| Reported by | Progress | Stage text |
+|---|---|---|
+| `Schwarz.MakeTasks` (round 0) | 0 | `round 1: factorizing 4 subdomains` |
+| `Schwarz.Advance` | `k·f / (k + f)` after `k` rounds | `round 12: residual 3.10E-03, target 4.25E-05` |
+| `Schwarz.MakeFinalTasks` | `k / (k + 1)` | `final pass: collecting the field from 4 subdomains` |
+| `Schwarz.Assemble` | 1 | `field assembled` |
+
+`f = ln(R₀ / R_best) / ln(1 / Eps)` is how far the residual has travelled
+towards the target on a logarithmic scale. Restricted Additive Schwarz contracts
+the residual by a near-constant factor per round, so `f` tracks the share of
+rounds done and `k / f` estimates their total; the final pass counts as one more
+round. On a 64³ mesh in four subdomains, `f` stayed within 2.5% of the share of
+rounds done from the second round on. The value depends on the round state alone
+and never decreases (`R_best` is the lowest residual so far). The first round
+also factorizes every subdomain; that cost depends on the mesh and is not
+modelled, so the progress does not move during it.
+
+The reports describe one solve and assume it is the whole job, as in the
+bundled script. A script that runs several solves in one job reaches the end of
+the bar in the first of them and stays there.
+
 ## Running the algorithm in one process
 
 `SchwarzInMemorySolver.Solve` is the same iteration the script drives, without

@@ -36,6 +36,8 @@ internal sealed class WitActivityAdapterSchwarzMakeFinalTasks : WitActivityAdapt
         if (!pool.TrySetCollection(activity.ReturnReference, tasks))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
 
+        JobProgressReporter.Report(ProcessingManager, status.JobId, SchwarzProgress.BeforeFinalPass(state), SchwarzProgress.DescribeFinalPass(plan));
+
         await Task.CompletedTask;
     }
 

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using OutWit.Math.Simulation;
 using OutWit.Math.Simulation.Parareal;
 using OutWit.Controller.Simulation.Parareal.Activities;
+using OutWit.Controller.Simulation.Parareal.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -80,6 +81,8 @@ internal sealed class WitActivityAdapterPararealCollect : WitActivityAdapterFunc
 
         if (!pool.TrySetValue(activity.ReturnReference, timelineBlobId))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+
+        JobProgressReporter.Report(ProcessingManager, status.JobId, 1.0, PararealProgress.DescribeCollected());
     }
 
     #endregion
