@@ -113,6 +113,8 @@ internal sealed class WitActivityAdapterPararealCorrect : WitActivityAdapterFunc
 
         if (!pool.TrySetValue(activity.ReturnReference, next2))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+
+        JobProgressReporter.Report(ProcessingManager, status.JobId, PararealProgress.AfterIteration(plan, next2), PararealProgress.DescribeIteration(next2));
     }
 
     private async Task<double[]> DownloadFieldAsync(Guid blobId)

@@ -221,6 +221,36 @@ relative criterion) and `History` (the max successive-correction norm after each
 iteration). An **absent** record means the producer recorded nothing — never
 read it as "did not converge".
 
+## Job progress
+
+The engine counts progress in script stages, and the iteration loop is one stage
+however many iterations it runs. So the controller reports the job's progress
+itself, from its server-side activities, through the host's job-progress sink
+(`ReportJobProgress` on the engine's processing manager). The sink is looked up
+by reflection: a host without it keeps showing its own stage progress, and the
+controller loads and solves exactly as before.
+
+| Reported by | Progress | Stage text |
+|---|---|---|
+| `Parareal.MakeTasks` (round 0) | 0 | `iteration 1: propagating 4 time slabs` |
+| `Parareal.Correct` | waves done / all waves, after each iteration | `iteration 2: correction 3.11E-01, target 3.00E-04` |
+| `Parareal.MakeSnapshotTasks` | iteration waves / all waves | `snapshot pass: recomputing 4 time slabs` |
+| `Parareal.Collect` | 1 | `timeline collected` |
+
+A solve is `K` iteration waves and one snapshot wave. A wave runs its slabs in
+parallel and takes about as long as one slab, except the first iteration (every
+node also factorizes the fine propagator) and the snapshot wave (every slab is
+recomputed with snapshots on), which weigh two ordinary waves each. `K` is at
+most `Slabs + 1` — each iteration makes one more slab exact, and the one after
+the last changes nothing; once two corrections are known, their ratio projects
+the iteration that reaches `Eps × Scale`. On a 32³ mesh over 4000 steps in four
+slabs this reads 25%, 37.5%, 50%, 62.5% and 75% after the five iterations, against
+26%, 39%, 52%, 64% and 76% of the time measured from the loop's start. The value depends on the plan
+and the iteration state alone, and never decreases.
+
+The reports describe one solve and assume it is the whole job, as in the bundled script. A script that
+runs several solves in one job reaches the end of the bar in the first of them and stays there.
+
 ## Running the algorithm in one process
 
 `PararealInMemorySolver.Solve` is the same iteration the script drives, without

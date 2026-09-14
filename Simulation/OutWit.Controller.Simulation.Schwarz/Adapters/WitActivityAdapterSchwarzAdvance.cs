@@ -3,6 +3,7 @@ using System.Linq;
 using Microsoft.Extensions.Logging;
 using OutWit.Math.Simulation;
 using OutWit.Controller.Simulation.Schwarz.Activities;
+using OutWit.Controller.Simulation.Schwarz.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -73,6 +74,8 @@ internal sealed class WitActivityAdapterSchwarzAdvance : WitActivityAdapterFunct
 
         if (!pool.TrySetValue(activity.ReturnReference, next))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+
+        JobProgressReporter.Report(ProcessingManager, status.JobId, SchwarzProgress.AfterRound(next), SchwarzProgress.DescribeRound(next));
 
         await Task.CompletedTask;
     }

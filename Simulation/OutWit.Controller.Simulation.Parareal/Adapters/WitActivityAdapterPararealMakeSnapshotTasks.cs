@@ -36,6 +36,8 @@ internal sealed class WitActivityAdapterPararealMakeSnapshotTasks : WitActivityA
         if (!pool.TrySetCollection(activity.ReturnReference, tasks))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
 
+        JobProgressReporter.Report(ProcessingManager, status.JobId, PararealProgress.BeforeSnapshotPass(state), PararealProgress.DescribeSnapshotPass(plan));
+
         await Task.CompletedTask;
     }
 
