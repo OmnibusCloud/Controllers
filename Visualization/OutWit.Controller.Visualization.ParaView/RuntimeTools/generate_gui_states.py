@@ -46,6 +46,10 @@ def main():
     reader_dir = os.path.join(states_dir, "OmnibusCloudFrdReader")
     os.makedirs(out_dir, exist_ok=True)
     plugin = os.environ.get("OUTWIT_GUI_PLUGIN")
+    # OUTWIT_GUI_ONLY=<name.pvsm>[;<name.pvsm>...]: re-save only the named core states and skip
+    # the GUI-native scenes, so a fixture added later (the OpenFOAM case) gets its GUI twin
+    # without rewriting every other GUI state.
+    only = [name.strip() for name in os.environ.get("OUTWIT_GUI_ONLY", "").split(";") if name.strip()]
     wavelet_file = os.path.join(corpus, "data", "wavelet.vti").replace("\\", "/")
     log = open(os.path.join(out_dir, "generate_gui_states.log"), "w", encoding="utf-8")
 
@@ -59,8 +63,10 @@ def main():
         say("ParaView", pv.GetParaViewSourceVersion(), "corpus", corpus)
         sources = []
         for name in sorted(f for f in os.listdir(states_dir) if f.endswith(".pvsm")):
+            if only and name not in only:
+                continue
             sources.append((name, os.path.join(states_dir, name), False))
-        if plugin and os.path.isdir(reader_dir):
+        if plugin and os.path.isdir(reader_dir) and not only:
             pv.LoadPlugin(os.path.abspath(plugin), remote=False, ns=globals())
             for name in sorted(f for f in os.listdir(reader_dir) if f.endswith(".pvsm") and not f.startswith("gui_")):
                 sources.append((name, os.path.join(reader_dir, name), True))
@@ -136,7 +142,7 @@ def main():
             chart_display.SeriesVisibility = ["RTData"]
             pv.SetActiveView(view)
 
-        for name, build in (("gui_native", gui_native), ("gui_filters", gui_filters), ("gui_chart", gui_chart)):
+        for name, build in (() if only else (("gui_native", gui_native), ("gui_filters", gui_filters), ("gui_chart", gui_chart))):
             try:
                 pv.ResetSession()
                 view = pv.GetActiveViewOrCreate("RenderView")

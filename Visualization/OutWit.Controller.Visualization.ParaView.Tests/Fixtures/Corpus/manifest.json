@@ -17,6 +17,23 @@
     "data/frd/tet4_c3d4.frd",
     "data/frd/transient_heat.frd",
     "data/grid.vtr",
+    "data/openfoam/box/0.5/U",
+    "data/openfoam/box/0.5/p",
+    "data/openfoam/box/0/U",
+    "data/openfoam/box/0/p",
+    "data/openfoam/box/1/U",
+    "data/openfoam/box/1/p",
+    "data/openfoam/box/1/polyMesh/points",
+    "data/openfoam/box/box.foam",
+    "data/openfoam/box/constant/polyMesh/boundary",
+    "data/openfoam/box/constant/polyMesh/faces",
+    "data/openfoam/box/constant/polyMesh/neighbour",
+    "data/openfoam/box/constant/polyMesh/owner",
+    "data/openfoam/box/constant/polyMesh/points",
+    "data/openfoam/box/constant/transportProperties",
+    "data/openfoam/box/system/controlDict",
+    "data/openfoam/box/system/fvSchemes",
+    "data/openfoam/box/system/fvSolution",
     "data/series/series.pvd",
     "data/series/series_000.vti",
     "data/series/series_001.vti",
@@ -37,7 +54,8 @@
     "OmnibusCloudFrdReader/frd_static.pvsm",
     "OmnibusCloudFrdReader/frd_transient.pvsm",
     "OmnibusCloudFrdReader/frd_modes.pvsm",
-    "OmnibusCloudFrdReader/frd_quadratic.pvsm"
+    "OmnibusCloudFrdReader/frd_quadratic.pvsm",
+    "openfoam_box.pvsm"
   ],
   "timesteps": {
     "pvd_series": [
@@ -66,6 +84,10 @@
       2.0,
       3.0,
       4.0
+    ],
+    "openfoam_box": [
+      0.5,
+      1.0
     ]
   },
   "plugins": {

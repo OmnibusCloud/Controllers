@@ -105,6 +105,7 @@ public sealed class ParaViewRealRuntimeTests
     [TestCase(ParaViewCorpus.VTU_SLICE_CLIP_GLYPH)]
     [TestCase(ParaViewCorpus.VTR_SURFACE)]
     [TestCase(ParaViewCorpus.SPHERE_STATIC)]
+    [TestCase(ParaViewCorpus.OPENFOAM_BOX)]
     public async Task StillRendersThroughTheRealRuntimeTest(string stateName)
     {
         var (scene, _) = ParaViewCorpus.BuildScene(stateName, Path.Combine(m_root, Path.GetFileNameWithoutExtension(stateName)), m_blobs);
@@ -163,6 +164,41 @@ public sealed class ParaViewRealRuntimeTests
     }
 
     [Test]
+    public async Task OpenFoamCaseRendersEveryTimeWithSubsetOnlyDownloadsTest()
+    {
+        // The native OpenFOAM reader over a case tree materialized at its logical paths (controller
+        // 1.0.0): both times render through the bundled runtime, the frames differ (p is a wave that
+        // travels with the time and the mesh moves at time 1), and every task downloads the statics
+        // (stub, system/, mesh, the first time directory) while only the second task fetches time 1.
+        var (scene, package) = ParaViewCorpus.BuildScene(ParaViewCorpus.OPENFOAM_BOX, Path.Combine(m_root, "openfoam"), m_blobs);
+        var options = new ParaViewOutputOptionsData { Width = 160, Height = 120, Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.All } };
+
+        m_blobs.ClearRequests();
+        var job = m_engine.Compile(Script("RenderParaViewFrames.wit"));
+        var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), $"{status.Result}: {status.Message}");
+
+        var result = (job.Variables["result"].Value as IReadOnlyList<Guid?>)!;
+        Assert.That(result, Has.Count.EqualTo(2));
+        foreach (var blobId in result)
+            Assert.That(ParaViewImageInfo.TryRead(m_blobs.GetStoredPath(blobId!.Value)), Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 160, 120, false)));
+        Assert.That(result.Select(me => Digest(m_blobs.GetStoredPath(me!.Value))).Distinct().Count(), Is.EqualTo(2), "the two times must render differently");
+
+        var requests = m_blobs.Requests.GroupBy(me => me).ToDictionary(me => me.Key, me => me.Count());
+        Assert.Multiple(() =>
+        {
+            foreach (var logicalPath in ParaViewCorpus.OpenFoamStatics)
+                Assert.That(requests[package.BlobOf(logicalPath)], Is.EqualTo(2), logicalPath);
+            foreach (var logicalPath in ParaViewCorpus.OpenFoamSecondTime)
+                Assert.That(requests[package.BlobOf(logicalPath)], Is.EqualTo(1), logicalPath);
+        });
+
+        var rendered = (job.Variables["rendered"].Value as IReadOnlyList<ParaViewRenderResultBatchData?>)!.SelectMany(me => me!.Results).OrderBy(me => me.TaskIndex).ToList();
+        Assert.That(rendered.Select(me => me.TimeValue), Is.EqualTo(new double?[] { 0.5, 1.0 }));
+    }
+
+    [Test]
     public async Task FileSeriesRendersAMiddleFrameWithAnchorAndOwnPieceTest()
     {
         var (scene, package) = ParaViewCorpus.BuildScene(ParaViewCorpus.FILE_SERIES, Path.Combine(m_root, "files"), m_blobs);
@@ -193,6 +229,7 @@ public sealed class ParaViewRealRuntimeTests
     [TestCase(ParaViewCorpus.GUI_FILTERS)]
     [TestCase(ParaViewCorpus.GUI_CHART)]
     [TestCase(ParaViewCorpus.GUI_FOLDER + "/" + ParaViewCorpus.VTU_SLICE_CLIP_GLYPH)]
+    [TestCase(ParaViewCorpus.GUI_FOLDER + "/" + ParaViewCorpus.OPENFOAM_BOX)]
     public async Task GuiSavedStateRendersThroughTheRealRuntimeTest(string stateName)
     {
         // A state the ParaView GUI saved (root <ParaView>, legends, annotations, a chart view next to

@@ -7,9 +7,10 @@ tasks across worker nodes. The companion
 carries the shared data types and the `paraview.*@1` job document vocabulary for non-.NET initiators
 (the ParaView GUI plugin).
 
-**Status: in development.** The controller shape, validation, splitting, the node runner contract, the
-test harness, the per-platform ParaView runtime assets (`paraview-v0.1.0`) and the bundled OmnibusCloud
-`.frd` reader are complete; distributed animation at scale and the platform completion pass follow.
+**Status: 1.0.0.** The controller shape, validation, splitting (per output and batched), the node runner
+contract, the test harness, the per-platform ParaView runtime assets (`paraview-v0.1.0`), the bundled
+OmnibusCloud `.frd` reader, composed scenes, camera moves and the native OpenFOAM reader are complete
+and in production behind the ParaView GUI plugin and WitSweep.
 
 ## Activities
 
@@ -178,6 +179,26 @@ were `int` already); a 0.4.0 host rejects a negative index as before.
   `ParaViewLogicalPath.Check` and `render_task.check_logical_path` (a python on PATH) — the two
   hand-mirrored rule sets must agree on every verdict. `InternalsVisibleTo` opens the internal
   seams to the test project as in the Render family.
+
+### OpenFOAM cases through the native reader (controller 1.0.0)
+
+ParaView's built-in `sources/OpenFOAMReader` (vtkPOpenFOAMReader) is allowlisted from 1.0.0: the
+fixture corpus carries a synthetic case (`RuntimeTools/generate_openfoam_case.py` writes a 4x3x2
+hex block, times 0 / 0.5 / 1, the mesh moving at 1 - no OpenFOAM installation needed;
+`generate_openfoam_fixtures.py` adds it to a corpus with the pinned pvpython) with a pvpython-saved
+and a GUI-saved state, and the allowlist was regenerated over it (the reader was the only addition -
+its representation is the unstructured-grid one every corpus state already used). Nothing else
+changed on the server: a case travels as ordinary per-file attachments at logical paths that keep the
+tree's shape under the package root, the reader resolves the case from its stub (or from
+`system/controlDict`, which it accepts as well) relative to the materialized file, and per-task
+subsetting works unchanged - the producing plugin puts the case in ONE series group with the
+statics (stub, `system/`, `constant/` dictionaries and mesh, the first listed time directory, which
+the reader scans whenever the state loads) at empty timestep indices and every later time
+directory at its timeline index, so a task materializes the case minus the other times
+(`ParaViewCorpusValidationTests.OpenFoamCaseSplitsIntoStaticsAndTheOwnTimeDirectoryTest`; the
+real-runtime proof renders both times with subset-only downloads and distinct frames). The
+runtime asset is unchanged (`paraview-v0.1.0`): the reader lives in the core VTK IO libraries the
+trim keeps on every platform.
 
 ## The runner contract
 
