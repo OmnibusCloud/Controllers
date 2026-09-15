@@ -170,6 +170,40 @@ public sealed class ParaViewCorpusValidationTests
     }
 
     [Test]
+    public void OpenFoamCaseSplitsIntoStaticsAndTheOwnTimeDirectoryTest()
+    {
+        // The native OpenFOAM reader over a case tree (controller 1.0.0): the state references only
+        // the stub; system/, the dictionaries and the mesh travel as ungrouped auxiliaries, the time
+        // directories as one series group - the first listed one static, the second with its own index
+        // and its moved polyMesh/points - so a task materializes the case minus the other times. No
+        // anchor cost: the anchor is a file of the static first time directory.
+        var (scene, _) = ParaViewCorpus.BuildScene(ParaViewCorpus.OPENFOAM_BOX, Path.Combine(m_root, "openfoam"), m_blobs);
+        var options = new ParaViewOutputOptionsData { Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.All } };
+
+        var report = m_validator.Validate(scene, options, m_blobs.GetStoredPath(scene.StateBlobId));
+
+        Assert.That(report.IsValid, Is.True, string.Join("; ", report.Errors));
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.Warnings, Is.Empty, "case files in the series group raise no 'not referenced' warning");
+            Assert.That(report.Fallbacks, Is.Empty, "the group carries per-timestep associations");
+            Assert.That(report.TimestepValues, Is.EqualTo(new[] { 0.5, 1.0 }));
+            Assert.That(report.ProxyTypes, Does.Contain("sources/OpenFOAMReader"));
+            Assert.That(report.SeriesAnchors, Is.EqualTo(new[] { "data/openfoam/box/0.5/U" }), "the anchor is a file of the static first time directory: no extra transfer");
+        });
+
+        var tasks = ParaViewTaskSplitter.Split(scene, report, options);
+
+        Assert.That(tasks, Has.Count.EqualTo(2));
+        Assert.Multiple(() =>
+        {
+            Assert.That(tasks[0].Attachments.Select(me => me.LogicalPath), Is.EquivalentTo(ParaViewCorpus.OpenFoamStatics));
+            Assert.That(tasks[1].Attachments.Select(me => me.LogicalPath), Is.EquivalentTo(ParaViewCorpus.OpenFoamStatics.Concat(ParaViewCorpus.OpenFoamSecondTime)));
+            Assert.That(tasks[1].TimeValue, Is.EqualTo(1.0));
+        });
+    }
+
+    [Test]
     public void GuiSavedStatesParseRenderAndValidateLikeTheirPvpythonTwinsTest()
     {
         // What a real client sends: states the ParaView GUI saved (root <ParaView>, CameraWidgetViewLinks /

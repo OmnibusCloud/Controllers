@@ -30,6 +30,9 @@ internal static class ParaViewCorpus
 
     public const string SPHERE_STATIC = "sphere_static.pvsm";
 
+    /// <summary>The OpenFOAM case behind ParaView's native reader (generate_openfoam_fixtures.py): a 4x3x2 hex block, times 0.5 and 1, the mesh moving at 1.</summary>
+    public const string OPENFOAM_BOX = "openfoam_box.pvsm";
+
     /// <summary>Folder of the states that need the bundled reader (named after the plugin).</summary>
     public const string FRD_READER_FOLDER = "OmnibusCloudFrdReader";
 
@@ -52,12 +55,21 @@ internal static class ParaViewCorpus
 
     private const string SERIES_GROUP = "series";
 
+    private const string OPENFOAM_GROUP = "openfoam";
+
+    private const string OPENFOAM_CASE = "data/openfoam/box";
+
     #endregion
 
     #region Functions
 
     /// <summary>Root of the committed corpus in the test output.</summary>
     public static string Root => Path.Combine(AppContext.BaseDirectory, "Fixtures", "Corpus");
+
+    /// <summary>The logical paths of the OpenFOAM case's static files (every task) and of its second time (timestep 1 only).</summary>
+    public static IReadOnlyList<string> OpenFoamStatics => FilesOf(OPENFOAM_BOX).Where(me => me.TimestepIndices.Length == 0).Select(me => me.LogicalPath).ToList();
+
+    public static IReadOnlyList<string> OpenFoamSecondTime => FilesOf(OPENFOAM_BOX).Where(me => me.TimestepIndices.Length > 0).Select(me => me.LogicalPath).ToList();
 
     /// <summary>All core state file names of the corpus (no plugin needed).</summary>
     public static IReadOnlyList<string> States => Directory.GetFiles(Path.Combine(Root, "states"), "*.pvsm").Select(Path.GetFileName).Select(me => me!).Order().ToList();
@@ -136,6 +148,33 @@ internal static class ParaViewCorpus
             ],
             FILE_SERIES => [.. Enumerable.Range(0, 5).Select(i => ($"data/series/series_{i:D3}.vti", ParaViewAttachmentRole.ReaderInput, SERIES_GROUP, new[] { i }, i))],
             SPHERE_STATIC => [],
+            // What the plugin's OpenFOAM resolver stages: the stub, system/, the constant/ dictionaries and
+            // mesh, the first listed time directory (static: the reader scans it at load, SkipZeroTime leaves
+            // 0/ home), then time 1 with its own timeline index and its moved polyMesh/points - one series
+            // group per case, statics at ordinal 0.
+            // What the plugin's OpenFOAM resolver stages: the stub as the reader input the state names,
+            // system/, the constant/ dictionaries and the mesh as ungrouped auxiliaries (static, no
+            // "not referenced" warning), and the time directories as the case's series group - the
+            // first listed one static (the reader scans it at load; SkipZeroTime leaves 0/ home), time 1
+            // with its own timeline index and its moved polyMesh/points.
+            OPENFOAM_BOX =>
+            [
+                ($"{OPENFOAM_CASE}/box.foam", ParaViewAttachmentRole.ReaderInput, "", [], 0),
+                ($"{OPENFOAM_CASE}/system/controlDict", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ($"{OPENFOAM_CASE}/system/fvSchemes", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ($"{OPENFOAM_CASE}/system/fvSolution", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ($"{OPENFOAM_CASE}/constant/transportProperties", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ($"{OPENFOAM_CASE}/constant/polyMesh/boundary", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ($"{OPENFOAM_CASE}/constant/polyMesh/faces", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ($"{OPENFOAM_CASE}/constant/polyMesh/neighbour", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ($"{OPENFOAM_CASE}/constant/polyMesh/owner", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ($"{OPENFOAM_CASE}/constant/polyMesh/points", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ($"{OPENFOAM_CASE}/0.5/U", ParaViewAttachmentRole.ReaderInput, OPENFOAM_GROUP, [], 0),
+                ($"{OPENFOAM_CASE}/0.5/p", ParaViewAttachmentRole.ReaderInput, OPENFOAM_GROUP, [], 0),
+                ($"{OPENFOAM_CASE}/1/U", ParaViewAttachmentRole.ReaderInput, OPENFOAM_GROUP, [1], 1),
+                ($"{OPENFOAM_CASE}/1/p", ParaViewAttachmentRole.ReaderInput, OPENFOAM_GROUP, [1], 1),
+                ($"{OPENFOAM_CASE}/1/polyMesh/points", ParaViewAttachmentRole.ReaderInput, OPENFOAM_GROUP, [1], 0)
+            ],
             FRD_STATIC => [("data/frd/static.frd", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
             FRD_TRANSIENT => [("data/frd/transient_heat.frd", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
             FRD_MODES => [("data/frd/freq.frd", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
@@ -153,6 +192,7 @@ internal static class ParaViewCorpus
         {
             PVD_SERIES => [0.0, 0.5, 1.0, 1.5, 2.0],
             FILE_SERIES => [0, 1, 2, 3, 4],
+            OPENFOAM_BOX => [0.5, 1.0],
             FRD_TRANSIENT => [0.2, 0.4, 0.6, 0.8, 1.0],
             FRD_MODES => [1, 2, 3, 4],
             FRD_STATIC or FRD_QUADRATIC => [1.0], // a single-step result: the reader reports its one step value
