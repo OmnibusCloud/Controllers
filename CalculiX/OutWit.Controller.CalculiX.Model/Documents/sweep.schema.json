@@ -12,7 +12,7 @@
     ],
     "source": {
       "assembly": "OutWit.Controller.CalculiX.Model",
-      "version": "0.2.2"
+      "version": "1.0.0"
     },
     "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
   },
