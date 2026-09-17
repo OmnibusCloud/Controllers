@@ -35,6 +35,16 @@ build and Windows workers were rated below Linux ones by the same factor -
 the asset kit ships the license text and the written source offer, and the
 corresponding source is publicly mirrored in that repository's releases.
 
+Node benchmark: `Ccx.Solve` is ranked by the reference deck (a 20³-node static
+cube embedded in the module) in unit `ccx-static@ref20-v2`. The first solve is
+an untimed warm-up - it is the first start of the freshly installed kit, and
+its cold page cache and antivirus scan once rated a Ryzen 9 5950X at 1.36 s
+against the 0.75 s it takes from then on; the rate is 1 / the median of three
+to five timed solves (1.5 s target), so one stall does not move it and a busy
+machine is still rated as busy. `ref20-v1` (controller 1.0.1 and earlier)
+timed one cold solve. The Custom bag carries the run times (`runs_s`,
+`median_s`, `warmup_s`) and the solved maximum displacement (`checksum`).
+
 Determinism note: ccx with OpenMP is not bitwise-reproducible across thread
 counts, and the three platform builds add last-digit variation — results are
 stable to engineering tolerance, and the controller's tests assert tolerance,

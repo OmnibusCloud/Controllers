@@ -9,6 +9,9 @@
 //   - any other deck "solves": the .frd echoes the deck text verbatim (which
 //     lets tests assert placeholder substitution end-to-end through blobs),
 //     plus a minimal .dat.
+// A cold first start can be simulated for the benchmark tests: when
+// FAKE_CCX_COLD_MARKER names a file that does not exist yet, the run
+// creates it and first sleeps FAKE_CCX_COLD_DELAY_MS milliseconds.
 
 if (args.Length != 1)
 {
@@ -26,6 +29,14 @@ if (!File.Exists(deckPath))
 }
 
 var deckText = File.ReadAllText(deckPath);
+
+var coldMarker = Environment.GetEnvironmentVariable("FAKE_CCX_COLD_MARKER");
+if (!string.IsNullOrEmpty(coldMarker) && !File.Exists(coldMarker))
+{
+    File.WriteAllText(coldMarker, string.Empty);
+    if (int.TryParse(Environment.GetEnvironmentVariable("FAKE_CCX_COLD_DELAY_MS"), out var coldDelay) && coldDelay > 0)
+        Thread.Sleep(coldDelay);
+}
 
 if (deckText.Contains("FAKE-FAIL", StringComparison.Ordinal))
 {

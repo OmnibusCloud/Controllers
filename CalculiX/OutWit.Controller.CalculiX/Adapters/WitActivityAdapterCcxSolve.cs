@@ -129,11 +129,11 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
             return OutWit.Engine.Data.Benchmark.WitBenchmarkResult.Default;
         }
 
-        var result = await CcxBenchmark.MeasureAsync(solverPath, cancellationToken);
+        var result = await CcxBenchmark.MeasureAsync(solverPath, options, cancellationToken);
 
         Logger.LogInformation(
-            "Ccx.Solve benchmark: {Rate:F3} {Unit} ({Elapsed} for the reference solve)",
-            result.Rate, result.Unit, result.Elapsed);
+            "Ccx.Solve benchmark: {Rate:F3} {Unit} (median of {Runs} reference solves: {RunTimes} s; warm-up {Warmup} s)",
+            result.Rate, result.Unit, result.Iterations, result.Custom?["runs_s"], result.Custom?["warmup_s"]);
 
         return result;
     }
