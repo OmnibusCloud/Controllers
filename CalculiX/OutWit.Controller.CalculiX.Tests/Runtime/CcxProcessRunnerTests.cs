@@ -31,6 +31,30 @@ public class CcxProcessRunnerTests
     #region Cancellation Tests
 
     [Test]
+    public void TheSolverStartsWithoutAConsoleWindowAndWithTheHostContractTest()
+    {
+        // Without CreateNoWindow a console program started by the windowed worker client gets a
+        // console of its own - about 0.45 s per ccx start on Windows 11.
+        var startInfo = CcxProcessRunner.CreateStartInfo("ccx", "job", m_jobDirectory, 3);
+
+        Assert.That(startInfo.CreateNoWindow, Is.True);
+        Assert.That(startInfo.UseShellExecute, Is.False);
+        Assert.That(startInfo.RedirectStandardOutput, Is.True);
+        Assert.That(startInfo.RedirectStandardError, Is.True);
+        Assert.That(startInfo.WorkingDirectory, Is.EqualTo(m_jobDirectory));
+        Assert.That(startInfo.ArgumentList, Is.EqualTo(new[] { "job" }));
+        Assert.That(startInfo.EnvironmentVariables["OMP_NUM_THREADS"], Is.EqualTo("3"));
+    }
+
+    [Test]
+    public void ZeroThreadsMeansAllCoresTest()
+    {
+        var startInfo = CcxProcessRunner.CreateStartInfo("ccx", "job", m_jobDirectory, 0);
+
+        Assert.That(startInfo.EnvironmentVariables["OMP_NUM_THREADS"], Is.EqualTo(Environment.ProcessorCount.ToString()));
+    }
+
+    [Test]
     public async Task CancellationKillsARunningSolveTest()
     {
         var solutionRoot = CalculiXTestPaths.FindSolutionRoot();

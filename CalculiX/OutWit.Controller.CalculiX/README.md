@@ -45,6 +45,13 @@ machine is still rated as busy. `ref20-v1` (controller 1.0.1 and earlier)
 timed one cold solve. The Custom bag carries the run times (`runs_s`,
 `median_s`, `warmup_s`) and the solved maximum displacement (`checksum`).
 
+ccx is started without a console window (`CreateNoWindow`). The worker client
+is a windowed application with no console of its own, so before controller
+1.0.3 every `ccx.exe` it launched got a fresh console, which cost about 0.45 s
+per start on Windows 11: the reference cube took 1.13-1.23 s from the client
+against 0.69-0.76 s with the flag, and every sweep variant on a Windows node
+paid it.
+
 Determinism note: ccx with OpenMP is not bitwise-reproducible across thread
 counts, and the three platform builds add last-digit variation — results are
 stable to engineering tolerance, and the controller's tests assert tolerance,
