@@ -1,12 +1,14 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using OutWit.Controller.CalculiX.Extraction;
 using OutWit.Engine.Data.Benchmark;
+using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.CalculiX.Runtime;
 
 /// <summary>
-/// Node benchmark of the Ccx.Solve activity: one complete run of a fixed
+/// Node benchmark of the Ccx.Solve activity: complete runs of a fixed
 /// reference deck (a 20³-node static cube, embedded in the assembly so it
 /// travels with the module unconditionally) through the same solver and the
 /// same thread policy the real solves use. Rate is solves per second against
@@ -15,12 +17,46 @@ namespace OutWit.Controller.CalculiX.Runtime;
 /// same computation, not just the same duration (stable to engineering
 /// tolerance across platforms — ccx is not bitwise-reproducible).
 /// </summary>
+/// <remarks>
+/// The benchmark runs right after the module is installed, so the first solve
+/// is the first start of freshly extracted binaries: cold page cache, and on
+/// Windows an antivirus scan of a few hundred megabytes of MKL. Scored as it
+/// was in <c>ref20-v1</c>, that one cold run rated a Ryzen 9 5950X at 1.36 s
+/// against the 0.87–0.92 s the same installed kit takes from then on, and the
+/// allocator ranks nodes by this number alone. So the first run is a warm-up
+/// that is not timed, and the rate comes from the median of several timed
+/// runs: a single stall does not move it, while a machine that is busy most of
+/// the time is still rated as busy (the best run would hide that).
+/// </remarks>
 public static class CcxBenchmark
 {
     #region Constants
 
     /// <summary>Ranking scale id; nodes are compared only within one unit string.</summary>
-    public const string UNIT = "ccx-static@ref20-v1";
+    /// <remarks>v2: one untimed warm-up, rate from the median of the timed runs (v1 timed one cold run).</remarks>
+    public const string UNIT = "ccx-static@ref20-v2";
+
+    /// <summary>Untimed solves before measuring (the engine's WarmupIterations may ask for more).</summary>
+    public const int WARMUP_RUNS = 1;
+
+    /// <summary>Upper bound on warm-up solves, whatever the options ask for.</summary>
+    public const int MAX_WARMUP_RUNS = 3;
+
+    /// <summary>Timed solves at least; the median of three already ignores one stall.</summary>
+    public const int MIN_RUNS = 3;
+
+    /// <summary>Timed solves at most, reached only when the runs are shorter than the target.</summary>
+    public const int MAX_RUNS = 5;
+
+    /// <summary>Target of the timed runs when the engine's options give none.</summary>
+    public static readonly TimeSpan FALLBACK_TARGET = TimeSpan.FromSeconds(1.5);
+
+    /// <summary>
+    /// Timed-run budget on a slow node: once the timed runs have taken this long,
+    /// no further run starts even below <see cref="MIN_RUNS"/> (a node that needs
+    /// a minute per reference solve is ranked well enough by one or two).
+    /// </summary>
+    public static readonly TimeSpan SLOW_NODE_BUDGET = TimeSpan.FromSeconds(60);
 
     private const string DECK_RESOURCE = "benchmark.inp";
 
@@ -33,14 +69,18 @@ public static class CcxBenchmark
     #region Functions
 
     /// <summary>
-    /// Runs the reference solve once and scores it.
+    /// Runs the reference solve: warm-up first, then timed runs, and scores the median.
     /// </summary>
     /// <param name="solverPath">Full path of the ccx executable.</param>
+    /// <param name="options">Engine benchmark options (target duration, warm-up count) or null for the defaults.</param>
     /// <param name="cancellationToken">Kills the solver process tree when signaled.</param>
     /// <returns>The measured score.</returns>
-    /// <exception cref="InvalidOperationException">The reference solve did not finish cleanly.</exception>
-    public static async Task<WitBenchmarkResult> MeasureAsync(string solverPath, CancellationToken cancellationToken = default)
+    /// <exception cref="InvalidOperationException">A reference solve did not finish cleanly.</exception>
+    public static async Task<WitBenchmarkResult> MeasureAsync(string solverPath, IWitBenchmarkOptions? options = null, CancellationToken cancellationToken = default)
     {
+        var target = options is { MinDuration.Ticks: > 0 } ? options.MinDuration : FALLBACK_TARGET;
+        var warmupRuns = System.Math.Clamp(System.Math.Max(WARMUP_RUNS, options?.WarmupIterations ?? 0), WARMUP_RUNS, MAX_WARMUP_RUNS);
+
         var scratchDirectory = Path.Combine(Path.GetTempPath(), SCRATCH_ROOT, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratchDirectory);
 
@@ -53,12 +93,24 @@ public static class CcxBenchmark
                 await resource.CopyToAsync(deck, cancellationToken);
             }
 
-            var stopwatch = Stopwatch.StartNew();
-            var outcome = await CcxProcessRunner.RunAsync(solverPath, JOB_NAME, scratchDirectory, threads: 0, cancellationToken);
-            stopwatch.Stop();
+            var warmup = TimeSpan.Zero;
+            for (var index = 0; index < warmupRuns; index++)
+                warmup += await SolveAsync(solverPath, scratchDirectory, cancellationToken);
 
-            if (outcome.ExitCode != 0)
-                throw new InvalidOperationException($"Reference solve exited {outcome.ExitCode}: {outcome.LogTail}");
+            var runs = new List<TimeSpan>();
+            var timed = TimeSpan.Zero;
+            while (runs.Count < MAX_RUNS)
+            {
+                var run = await SolveAsync(solverPath, scratchDirectory, cancellationToken);
+                runs.Add(run);
+                timed += run;
+
+                if (runs.Count >= MIN_RUNS && timed >= target)
+                    break;
+
+                if (timed >= SLOW_NODE_BUDGET)
+                    break;
+            }
 
             var custom = new Dictionary<string, string>
             {
@@ -66,28 +118,11 @@ public static class CcxBenchmark
                 ["elements"] = "6859"
             };
 
-            var frdPath = Path.Combine(scratchDirectory, $"{JOB_NAME}.frd");
-            if (File.Exists(frdPath))
-            {
-                var displacement = FrdResultReader.Read(frdPath)
-                    .LastOrDefault(block => block.Name == "DISP" && block.Components.Count >= 3);
+            var checksum = ReadChecksum(Path.Combine(scratchDirectory, $"{JOB_NAME}.frd"));
+            if (checksum != null)
+                custom["checksum"] = checksum;
 
-                if (displacement != null)
-                {
-                    var checksum = displacement.Values.Values.Max(values =>
-                        System.Math.Sqrt(values[0] * values[0] + values[1] * values[1] + values[2] * values[2]));
-                    custom["checksum"] = checksum.ToString("E6", System.Globalization.CultureInfo.InvariantCulture);
-                }
-            }
-
-            return new WitBenchmarkResult
-            {
-                Rate = 1.0 / stopwatch.Elapsed.TotalSeconds,
-                Unit = UNIT,
-                Elapsed = stopwatch.Elapsed,
-                Iterations = 1,
-                Custom = custom
-            };
+            return ToResult(runs, warmup, custom);
         }
         finally
         {
@@ -100,6 +135,101 @@ public static class CcxBenchmark
                 // Scratch cleanup is best-effort; the OS temp reaper covers stragglers.
             }
         }
+    }
+
+    /// <summary>
+    /// Scores the timed runs: rate = 1 / median run, elapsed = all timed runs,
+    /// iterations = timed run count; the run times go into the Custom bag.
+    /// </summary>
+    /// <param name="runs">Wall time of every timed solve (at least one).</param>
+    /// <param name="warmup">Total wall time of the untimed warm-up solves.</param>
+    /// <param name="custom">Extra metadata to carry (deck size, checksum); may be null.</param>
+    /// <returns>The benchmark result in <see cref="UNIT"/>.</returns>
+    /// <exception cref="ArgumentException">No run, or a run that took no measurable time.</exception>
+    public static WitBenchmarkResult ToResult(IReadOnlyList<TimeSpan> runs, TimeSpan warmup, IReadOnlyDictionary<string, string>? custom = null)
+    {
+        if (runs.Count == 0)
+            throw new ArgumentException("the benchmark needs at least one timed run", nameof(runs));
+
+        var median = Median(runs);
+        if (median <= TimeSpan.Zero)
+            throw new ArgumentException("the timed runs took no measurable time", nameof(runs));
+
+        var bag = custom?.ToDictionary(pair => pair.Key, pair => pair.Value) ?? new Dictionary<string, string>();
+        bag["median_s"] = Seconds(median);
+        bag["runs_s"] = string.Join(";", runs.Select(Seconds));
+        bag["warmup_s"] = Seconds(warmup);
+
+        return new WitBenchmarkResult
+        {
+            Rate = 1.0 / median.TotalSeconds,
+            Unit = UNIT,
+            Elapsed = runs.Aggregate(TimeSpan.Zero, (sum, run) => sum + run),
+            Iterations = runs.Count,
+            Custom = bag
+        };
+    }
+
+    /// <summary>
+    /// The median of the run times (the mean of the two middle ones for an even count).
+    /// </summary>
+    /// <param name="runs">Run times, at least one.</param>
+    /// <returns>The median.</returns>
+    public static TimeSpan Median(IReadOnlyList<TimeSpan> runs)
+    {
+        var sorted = runs.OrderBy(run => run).ToArray();
+        var middle = sorted.Length / 2;
+
+        return sorted.Length % 2 == 1
+            ? sorted[middle]
+            : TimeSpan.FromTicks((sorted[middle - 1].Ticks + sorted[middle].Ticks) / 2);
+    }
+
+    private static async Task<TimeSpan> SolveAsync(string solverPath, string scratchDirectory, CancellationToken cancellationToken)
+    {
+        ClearArtifacts(scratchDirectory);
+
+        var stopwatch = Stopwatch.StartNew();
+        var outcome = await CcxProcessRunner.RunAsync(solverPath, JOB_NAME, scratchDirectory, threads: 0, cancellationToken);
+        stopwatch.Stop();
+
+        if (outcome.ExitCode != 0)
+            throw new InvalidOperationException($"Reference solve exited {outcome.ExitCode}: {outcome.LogTail}");
+
+        return stopwatch.Elapsed;
+    }
+
+    private static void ClearArtifacts(string scratchDirectory)
+    {
+        // Every run starts from the deck alone, like a real solve in a fresh job directory.
+        var deckName = $"{JOB_NAME}.inp";
+        foreach (var file in Directory.EnumerateFiles(scratchDirectory))
+        {
+            if (!string.Equals(Path.GetFileName(file), deckName, StringComparison.OrdinalIgnoreCase))
+                File.Delete(file);
+        }
+    }
+
+    private static string? ReadChecksum(string frdPath)
+    {
+        if (!File.Exists(frdPath))
+            return null;
+
+        var displacement = FrdResultReader.Read(frdPath)
+            .LastOrDefault(block => block.Name == "DISP" && block.Components.Count >= 3);
+
+        if (displacement == null)
+            return null;
+
+        var checksum = displacement.Values.Values.Max(values =>
+            System.Math.Sqrt(values[0] * values[0] + values[1] * values[1] + values[2] * values[2]));
+
+        return checksum.ToString("E6", CultureInfo.InvariantCulture);
+    }
+
+    private static string Seconds(TimeSpan value)
+    {
+        return value.TotalSeconds.ToString("F3", CultureInfo.InvariantCulture);
     }
 
     #endregion
