@@ -26,8 +26,13 @@ no preinstalled software - the macOS kit carries the GCC runtime
 (libgfortran/libgomp/libquadmath/libgcc_s) beside `ccx`, referenced through
 `@loader_path`; `ccx-v2.22-1` had linked them by absolute Homebrew paths and
 every variant on the first Apple Silicon node died with "dyld: Library not
-loaded" (exit 134) - `ccx-v2.22-3`, controller 0.1.8. CalculiX is GPL-2.0: the
-asset kit ships the license text and the written source offer, and the
+loaded" (exit 134) - `ccx-v2.22-3`, controller 0.1.8. The Windows kit is built
+on MSYS2 winpthreads 13.0.0.r488: the 14.x runtime turns every uncontended
+mutex into a kernel wait, and libgfortran takes one per Fortran I/O statement,
+so `ccx-v2.22-3` ran the reference cube 1.8x slower than upstream's own Windows
+build and Windows workers were rated below Linux ones by the same factor -
+`ccx-v2.22-4`, controller 1.0.1, results byte-identical. CalculiX is GPL-2.0:
+the asset kit ships the license text and the written source offer, and the
 corresponding source is publicly mirrored in that repository's releases.
 
 Determinism note: ccx with OpenMP is not bitwise-reproducible across thread
