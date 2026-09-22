@@ -54,6 +54,7 @@ public static class CcxProcessRunner
         var stopwatch = Stopwatch.StartNew();
 
         process.Start();
+        LowerPriority(process);
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
@@ -96,6 +97,34 @@ public static class CcxProcessRunner
     /// <param name="jobDirectory">Directory holding the deck; results land here.</param>
     /// <param name="threads">OMP thread count; 0 = all cores of this machine.</param>
     /// <returns>The start info <see cref="RunAsync"/> launches.</returns>
+    /// <summary>
+    /// The priority a solve runs at. A worker is often somebody's desktop: a solve or the
+    /// benchmark (35-70 s on the 40-cube) takes every core it is given, and at normal priority
+    /// the person at the keyboard waits behind it. Below normal, the interactive programs get
+    /// the CPU first and the solve takes what is left - all of it on an idle machine, so the
+    /// rate does not change there. Best-effort: a platform that refuses keeps normal.
+    /// </summary>
+    public const ProcessPriorityClass SOLVE_PRIORITY = ProcessPriorityClass.BelowNormal;
+
+    /// <summary>
+    /// Applies <see cref="SOLVE_PRIORITY"/> to a started solver process.
+    /// </summary>
+    /// <param name="process">The running ccx process.</param>
+    /// <returns>True when the priority was lowered.</returns>
+    public static bool LowerPriority(Process process)
+    {
+        try
+        {
+            process.PriorityClass = SOLVE_PRIORITY;
+            return true;
+        }
+        catch
+        {
+            // Not permitted here, or the process already exited; the solve runs at normal priority.
+            return false;
+        }
+    }
+
     /// <summary>
     /// The thread count "all cores" resolves to on this machine (see <see cref="MAX_DEFAULT_THREADS"/>).
     /// </summary>
