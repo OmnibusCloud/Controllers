@@ -18,8 +18,21 @@ public class WitGridTaskGroup : IEnumerable<WitGridTask>
     #region Constructors
 
     public WitGridTaskGroup(IWitEngineActivityNode node)
+        : this(node, node.BenchmarkResult.Rate)
+    {
+    }
+
+    /// <summary>
+    /// A group whose planning rate differs from the node's own benchmark rate: the allocator
+    /// hands an unmeasured node the slowest measured rate, so an unknown machine is never
+    /// assumed to be the fastest one.
+    /// </summary>
+    /// <param name="node">The node the group is planned for.</param>
+    /// <param name="rate">The rate the plan assumes for it (work units per second).</param>
+    public WitGridTaskGroup(IWitEngineActivityNode node, double rate)
     {
         Node = node;
+        Rate = Math.Max(rate, ModelBase.DEFAULT_TOLERANCE);
     }
 
     #endregion
@@ -59,7 +72,7 @@ public class WitGridTaskGroup : IEnumerable<WitGridTask>
     
     public int Count => m_tasks.Count;
 
-    public double Rate => Math.Max(Node.BenchmarkResult.Rate, ModelBase.DEFAULT_TOLERANCE);
+    public double Rate { get; }
 
     #endregion
 }

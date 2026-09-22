@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Grid</ControllerName>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Description>Shared task and allocator types for the OutWit.Controller.Grid controller — host-side in adapters, node-side in distributed batch processing.</Description>
     <PackageTags>grid;layout;foreach;witengine;witcloud;controller;data-types</PackageTags>
   </PropertyGroup>
