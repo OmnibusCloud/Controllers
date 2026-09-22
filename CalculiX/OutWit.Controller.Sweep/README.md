@@ -25,7 +25,14 @@ everything already computed, and a monitoring client sees per-variant states
 mid-run. Sizing is progressive — small first chunk (feedback in minutes, a
 broken scenario burns a handful of variants, not the night), geometric growth
 to a cap (near-optimal allocator packing for the bulk; the cap bounds both
-cancellation loss and a failed node's recompute radius).
+cancellation loss and a failed node's recompute radius). A chunk is also a
+wave: the grid places its tasks on at most as many machines as the chunk has
+tasks, so the plan never opens narrower than the fleet - `Sweep.Plan` asks the
+engine how many machines can take a solve of the job (local nodes and the
+handles other clouds offer) and raises the first chunk, and the cap with it,
+to that width. A client's larger first chunk stays as asked. (Before 1.0.1 a
+first chunk of two on a six-machine fleet left four machines idle for the
+first waves, the strongest ones among them.)
 
 A variant whose solver exits nonzero is recorded as a **failed row** in the
 manifest — it never fails the task, so one bad variant cannot poison its node

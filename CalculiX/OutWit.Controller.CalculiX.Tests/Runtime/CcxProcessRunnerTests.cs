@@ -47,11 +47,41 @@ public class CcxProcessRunnerTests
     }
 
     [Test]
-    public void ZeroThreadsMeansAllCoresTest()
+    public void ZeroThreadsMeansAllCoresUpToTheCapTest()
     {
         var startInfo = CcxProcessRunner.CreateStartInfo("ccx", "job", m_jobDirectory, 0);
 
-        Assert.That(startInfo.EnvironmentVariables["OMP_NUM_THREADS"], Is.EqualTo(Environment.ProcessorCount.ToString()));
+        var expected = Math.Min(Environment.ProcessorCount, CcxProcessRunner.MAX_DEFAULT_THREADS);
+        Assert.That(startInfo.EnvironmentVariables["OMP_NUM_THREADS"], Is.EqualTo(expected.ToString()));
+        Assert.That(CcxProcessRunner.DefaultThreads(), Is.EqualTo(expected).And.InRange(1, CcxProcessRunner.MAX_DEFAULT_THREADS));
+    }
+
+    [Test]
+    public void ASolverProcessRunsBelowNormalPriorityTest()
+    {
+        var solutionRoot = CalculiXTestPaths.FindSolutionRoot();
+        if (solutionRoot == null)
+            Assert.Ignore("Solution root not found");
+
+        var fakeCcx = CalculiXTestPaths.FindFakeCcxPath(solutionRoot);
+        if (fakeCcx == null)
+            Assert.Ignore("fake-ccx not built");
+
+        // A wedged fake solve stays alive long enough to read its priority back.
+        File.WriteAllText(Path.Combine(m_jobDirectory, "job.inp"), "** FAKE-HANG\n");
+        using var process = new Process { StartInfo = CcxProcessRunner.CreateStartInfo(fakeCcx, "job", m_jobDirectory, 1) };
+        process.Start();
+        try
+        {
+            var lowered = CcxProcessRunner.LowerPriority(process);
+
+            Assert.That(lowered, Is.True);
+            Assert.That(process.PriorityClass, Is.EqualTo(CcxProcessRunner.SOLVE_PRIORITY));
+        }
+        finally
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+        }
     }
 
     [Test]

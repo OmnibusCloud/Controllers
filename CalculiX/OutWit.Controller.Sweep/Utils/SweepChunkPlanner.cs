@@ -31,10 +31,28 @@ public static class SweepChunkPlanner
     /// <returns>Chunk sizes, summing exactly to the variant count.</returns>
     public static List<int> Sizes(int firstChunkSize, int maxChunkSize, int totalVariants)
     {
+        return Sizes(firstChunkSize, maxChunkSize, totalVariants, availableNodes: 0);
+    }
+
+    /// <summary>
+    /// Computes the chunk sizes covering the whole variant table, no chunk narrower than the
+    /// machines that can work on it. A chunk is a wave: the grid places its tasks on at most
+    /// as many nodes as the chunk has tasks, so a first chunk of two on a six-node fleet left
+    /// four machines idle (2026-09-22, production: the two strongest Windows workers never got
+    /// a task in a 12-variant sweep). The client's first chunk stays the floor for feedback
+    /// speed; the fleet width raises it, and the cap rises with it.
+    /// </summary>
+    /// <param name="firstChunkSize">First chunk size; 0 = default.</param>
+    /// <param name="maxChunkSize">Chunk size cap; 0 = default.</param>
+    /// <param name="totalVariants">Variant count of the study.</param>
+    /// <param name="availableNodes">Machines eligible for the solves (local and offered); 0 = unknown.</param>
+    /// <returns>Chunk sizes, summing exactly to the variant count.</returns>
+    public static List<int> Sizes(int firstChunkSize, int maxChunkSize, int totalVariants, int availableNodes)
+    {
         if (totalVariants <= 0)
             throw new ArgumentOutOfRangeException(nameof(totalVariants), "A sweep needs at least one variant.");
 
-        var first = firstChunkSize > 0 ? firstChunkSize : DEFAULT_FIRST_CHUNK_SIZE;
+        var first = System.Math.Max(firstChunkSize > 0 ? firstChunkSize : DEFAULT_FIRST_CHUNK_SIZE, System.Math.Max(availableNodes, 0));
         var max = maxChunkSize > 0 ? maxChunkSize : DEFAULT_MAX_CHUNK_SIZE;
 
         if (max < first)

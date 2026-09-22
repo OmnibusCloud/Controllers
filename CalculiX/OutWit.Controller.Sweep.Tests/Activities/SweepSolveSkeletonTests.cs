@@ -136,7 +136,9 @@ public class SweepSolveSkeletonTests
 
         var plan = job.Variables["plan"].Value as SweepPlanData;
         Assert.That(plan, Is.Not.Null);
-        Assert.That(plan!.ChunkSizes, Is.EqualTo(new[] { 2, 3, 2 }));
+        // The client asked for chunks 2..3; the test host offers three mock nodes, so the plan
+        // opens as wide as the fleet: three, three, and the last one.
+        Assert.That(plan!.ChunkSizes, Is.EqualTo(new[] { 3, 3, 1 }));
 
         var state = job.Variables["state"].Value as SweepStateData;
         Assert.That(state, Is.Not.Null);

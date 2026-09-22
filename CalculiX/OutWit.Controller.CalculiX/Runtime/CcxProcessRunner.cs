@@ -13,6 +13,15 @@ public static class CcxProcessRunner
 
     private const int LOG_TAIL_LINES = 60;
 
+    /// <summary>
+    /// The OpenMP thread count a solve gets when the caller asks for "all cores": the logical
+    /// cores of the machine, capped here. PARDISO on the decks this controller runs saturates
+    /// at eight to sixteen threads; on a 32-thread desktop the SMT siblings cost 7-12 %
+    /// (Ryzen 9 5950X, 2026-09-22: 0.67 s at 8, 0.75 s at 32 on the reference cube; 8.4 s vs
+    /// 9.0 s on a 64k-node cube).
+    /// </summary>
+    public const int MAX_DEFAULT_THREADS = 16;
+
     #endregion
 
     #region Functions
@@ -45,6 +54,7 @@ public static class CcxProcessRunner
         var stopwatch = Stopwatch.StartNew();
 
         process.Start();
+        LowerPriority(process);
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
@@ -87,6 +97,43 @@ public static class CcxProcessRunner
     /// <param name="jobDirectory">Directory holding the deck; results land here.</param>
     /// <param name="threads">OMP thread count; 0 = all cores of this machine.</param>
     /// <returns>The start info <see cref="RunAsync"/> launches.</returns>
+    /// <summary>
+    /// The priority a solve runs at. A worker is often somebody's desktop: a solve or the
+    /// benchmark (35-70 s on the 40-cube) takes every core it is given, and at normal priority
+    /// the person at the keyboard waits behind it. Below normal, the interactive programs get
+    /// the CPU first and the solve takes what is left - all of it on an idle machine, so the
+    /// rate does not change there. Best-effort: a platform that refuses keeps normal.
+    /// </summary>
+    public const ProcessPriorityClass SOLVE_PRIORITY = ProcessPriorityClass.BelowNormal;
+
+    /// <summary>
+    /// Applies <see cref="SOLVE_PRIORITY"/> to a started solver process.
+    /// </summary>
+    /// <param name="process">The running ccx process.</param>
+    /// <returns>True when the priority was lowered.</returns>
+    public static bool LowerPriority(Process process)
+    {
+        try
+        {
+            process.PriorityClass = SOLVE_PRIORITY;
+            return true;
+        }
+        catch
+        {
+            // Not permitted here, or the process already exited; the solve runs at normal priority.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The thread count "all cores" resolves to on this machine (see <see cref="MAX_DEFAULT_THREADS"/>).
+    /// </summary>
+    /// <returns>The logical core count, at most the cap, at least one.</returns>
+    public static int DefaultThreads()
+    {
+        return Math.Clamp(Environment.ProcessorCount, 1, MAX_DEFAULT_THREADS);
+    }
+
     public static ProcessStartInfo CreateStartInfo(string solverPath, string jobName, string jobDirectory, int threads)
     {
         var startInfo = new ProcessStartInfo(solverPath)
@@ -100,7 +147,7 @@ public static class CcxProcessRunner
 
         startInfo.ArgumentList.Add(jobName);
         startInfo.EnvironmentVariables["OMP_NUM_THREADS"] =
-            (threads > 0 ? threads : Environment.ProcessorCount).ToString();
+            (threads > 0 ? threads : DefaultThreads()).ToString();
 
         return startInfo;
     }
