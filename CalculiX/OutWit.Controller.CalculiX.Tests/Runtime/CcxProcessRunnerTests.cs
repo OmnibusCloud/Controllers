@@ -47,11 +47,13 @@ public class CcxProcessRunnerTests
     }
 
     [Test]
-    public void ZeroThreadsMeansAllCoresTest()
+    public void ZeroThreadsMeansAllCoresUpToTheCapTest()
     {
         var startInfo = CcxProcessRunner.CreateStartInfo("ccx", "job", m_jobDirectory, 0);
 
-        Assert.That(startInfo.EnvironmentVariables["OMP_NUM_THREADS"], Is.EqualTo(Environment.ProcessorCount.ToString()));
+        var expected = Math.Min(Environment.ProcessorCount, CcxProcessRunner.MAX_DEFAULT_THREADS);
+        Assert.That(startInfo.EnvironmentVariables["OMP_NUM_THREADS"], Is.EqualTo(expected.ToString()));
+        Assert.That(CcxProcessRunner.DefaultThreads(), Is.EqualTo(expected).And.InRange(1, CcxProcessRunner.MAX_DEFAULT_THREADS));
     }
 
     [Test]

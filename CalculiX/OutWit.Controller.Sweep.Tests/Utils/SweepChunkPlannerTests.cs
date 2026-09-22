@@ -8,6 +8,42 @@ public class SweepChunkPlannerTests
     #region Schedule Tests
 
     [Test]
+    public void TheFleetWidthRaisesANarrowFirstChunkTest()
+    {
+        // Six machines, a client asking for a first chunk of two: the first wave would idle
+        // four of them, so the plan opens at six and grows from there.
+        var sizes = SweepChunkPlanner.Sizes(firstChunkSize: 2, maxChunkSize: 48, totalVariants: 12, availableNodes: 6);
+
+        Assert.That(sizes, Is.EqualTo(new[] { 6, 6 }));
+    }
+
+    [Test]
+    public void AWiderClientChunkStaysAndTheCapRisesWithTheWidthTest()
+    {
+        var wide = SweepChunkPlanner.Sizes(firstChunkSize: 10, maxChunkSize: 48, totalVariants: 30, availableNodes: 6);
+        Assert.That(wide, Is.EqualTo(new[] { 10, 20 }));
+
+        // The harness asked for chunks of at most three; on a six-machine fleet the cap follows the width.
+        var capped = SweepChunkPlanner.Sizes(firstChunkSize: 2, maxChunkSize: 3, totalVariants: 12, availableNodes: 6);
+        Assert.That(capped, Is.EqualTo(new[] { 6, 6 }));
+    }
+
+    [Test]
+    public void AnUnknownFleetLeavesThePlanAsAskedTest()
+    {
+        Assert.That(SweepChunkPlanner.Sizes(2, 3, 12, availableNodes: 0), Is.EqualTo(SweepChunkPlanner.Sizes(2, 3, 12)));
+        Assert.That(SweepChunkPlanner.Sizes(2, 3, 12, availableNodes: -1), Is.EqualTo(SweepChunkPlanner.Sizes(2, 3, 12)));
+    }
+
+    [Test]
+    public void WidenedSizesStillSumToTheVariantCountTest()
+    {
+        foreach (var total in new[] { 1, 5, 12, 100 })
+        foreach (var nodes in new[] { 1, 6, 40 })
+            Assert.That(SweepChunkPlanner.Sizes(2, 48, total, nodes).Sum(), Is.EqualTo(total), $"total {total}, nodes {nodes}");
+    }
+
+    [Test]
     public void SizesGrowGeometricallyToTheCapTest()
     {
         var sizes = SweepChunkPlanner.Sizes(firstChunkSize: 10, maxChunkSize: 80, totalVariants: 300);

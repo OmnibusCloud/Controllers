@@ -32,7 +32,9 @@ public class CcxBenchmarkTests
         Assert.That(result.Iterations, Is.InRange(CcxBenchmark.MIN_RUNS, CcxBenchmark.MAX_RUNS));
         Assert.That(result.Elapsed, Is.GreaterThan(TimeSpan.Zero));
         Assert.That(result.Custom, Is.Not.Null);
-        Assert.That(result.Custom!["nodes"], Is.EqualTo("8000"));
+        Assert.That(result.Custom!["nodes"], Is.EqualTo(CcxReferenceDeck.NODES.ToString()));
+        Assert.That(result.Custom["elements"], Is.EqualTo(CcxReferenceDeck.ELEMENTS.ToString()));
+        Assert.That(result.Custom["threads"], Is.EqualTo(CcxProcessRunner.DefaultThreads().ToString()));
         Assert.That(result.Custom["runs_s"].Split(';'), Has.Length.EqualTo(result.Iterations));
         Assert.That(result.Custom.ContainsKey("warmup_s"), Is.True);
     }

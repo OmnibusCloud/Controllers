@@ -3,6 +3,7 @@ using OutWit.Controller.CalculiX.Model;
 using OutWit.Controller.Sweep.Activities;
 using OutWit.Controller.Sweep.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
+using OutWit.Engine.Data.Processing;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
@@ -13,10 +14,11 @@ internal sealed class WitActivityAdapterSweepPlan : WitActivityAdapterFunction<W
 {
     #region Constructors
 
-    public WitActivityAdapterSweepPlan(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
+    public WitActivityAdapterSweepPlan(IWitProcessingManager processingManager, IWitBlobService blobService, IWitNodesManager nodesManager, ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        NodesManager = nodesManager;
     }
 
     #endregion
@@ -73,12 +75,21 @@ internal sealed class WitActivityAdapterSweepPlan : WitActivityAdapterFunction<W
             SweepDeckTemplating.ValidateTemplate(deckText, options.Parameters);
         }
 
+        // The fleet width: every machine that may take a solve of this job, local nodes and the
+        // handles other clouds offer alike. A chunk is a wave, so a chunk narrower than the
+        // fleet leaves machines idle; the planner raises the first chunk to the width.
+        var availableNodes = await CountAvailableNodesAsync();
+
         var plan = new SweepPlanData
         {
             BaseDeckBlobId = baseDeckBlobId,
             Options = options,
-            ChunkSizes = SweepChunkPlanner.Sizes(options.FirstChunkSize, options.MaxChunkSize, options.Variants.Count)
+            ChunkSizes = SweepChunkPlanner.Sizes(options.FirstChunkSize, options.MaxChunkSize, options.Variants.Count, availableNodes)
         };
+
+        Logger.LogInformation(
+            "Sweep plan: {Variants} variant(s), {Nodes} eligible machine(s), chunks [{Chunks}] (client asked first {First}, max {Max})",
+            options.Variants.Count, availableNodes, string.Join(", ", plan.ChunkSizes), options.FirstChunkSize, options.MaxChunkSize);
 
         if (!pool.TrySetValue(activity.ReturnReference, plan))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
@@ -118,7 +129,29 @@ internal sealed class WitActivityAdapterSweepPlan : WitActivityAdapterFunction<W
 
     #region Properties
 
+    /// <summary>
+    /// How many machines could take a solve of this job right now: the engine's compatible
+    /// node query for the job itself (required controllers, the rollout fence, schedules and
+    /// remote handles all apply). Zero when the query is unavailable, which leaves the plan as
+    /// the client asked.
+    /// </summary>
+    private async Task<int> CountAvailableNodesAsync()
+    {
+        try
+        {
+            var nodes = await NodesManager.GetCompatibleNodes(typeof(object), WitProcessingOptions.Default);
+            return nodes.Count;
+        }
+        catch (Exception e)
+        {
+            Logger.LogWarning(e, "Sweep plan: the eligible machine count is unavailable; the chunk plan stays as the client asked");
+            return 0;
+        }
+    }
+
     private IWitBlobService BlobService { get; }
+
+    private IWitNodesManager NodesManager { get; }
 
     #endregion
 }
