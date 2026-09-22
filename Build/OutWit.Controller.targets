@@ -92,12 +92,14 @@
   </Target>
 
   <!-- Zips the staged module dir into $(SolutionDir)@Zips/<Cfg>/<name>.zip.
-       Used by the BlobCacheService path on WitCloud server-side. -->
+       Used by the BlobCacheService path on WitCloud server-side. Packed by our own task
+       (sorted entries, fixed timestamps): the same module gives the same bytes on every
+       machine, so a cloud that compares archives sees no phantom rebuilds. -->
   <Target Name="ControllerPackZip" AfterTargets="ControllerPostBuild">
     <MakeDir Directories="$(ControllerZipOutputDir)" />
-    <ZipDirectory SourceDirectory="$(ControllerModuleOutputDir)"
-                  DestinationFile="$(ControllerZipOutputDir)$(ControllerZipName)"
-                  Overwrite="true" />
+    <DeterministicZipDirectory SourceDirectory="$(ControllerModuleOutputDir)"
+                               DestinationFile="$(ControllerZipOutputDir)$(ControllerZipName)"
+                               Overwrite="true" />
   </Target>
 
   <!-- Packs the staged module dir into nupkg's content/module/ + writes an

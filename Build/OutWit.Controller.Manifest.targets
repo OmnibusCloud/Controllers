@@ -4,6 +4,19 @@
     <ControllerBuildInfoSourcePath Condition="'$(ControllerBuildInfoSourcePath)' == ''">$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\ControllerBuildInfo.g.cs</ControllerBuildInfoSourcePath>
   </PropertyGroup>
 
+  <!-- The build's own tasks, compiled from Build/OutWit.Controller.BuildTasks.cs: the manifest
+       stamp (build + content digest) and the deterministic zip. -->
+  <UsingTask TaskName="OutWit.Controller.Build.StampControllerManifest" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <Task>
+      <Code Type="Class" Language="cs" Source="$(MSBuildThisFileDirectory)OutWit.Controller.BuildTasks.cs" />
+    </Task>
+  </UsingTask>
+  <UsingTask TaskName="OutWit.Controller.Build.DeterministicZipDirectory" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <Task>
+      <Code Type="Class" Language="cs" Source="$(MSBuildThisFileDirectory)OutWit.Controller.BuildTasks.cs" />
+    </Task>
+  </UsingTask>
+
   <!-- Default metadata for ControllerDataAsset items (Step 6 of the asset-architecture work).
        Authors only need to set Include + Uri + Sha256; the rest pick up sensible defaults
        matching the AssetEntry defaults in OutWit.Engine.Assets. -->
@@ -75,6 +88,11 @@
       <_ControllerManifestLines Include="  &quot;name&quot;: &quot;$(ControllerName)&quot;," />
       <_ControllerManifestLines Include="  &quot;assemblyName&quot;: &quot;$(AssemblyName)&quot;," />
       <_ControllerManifestLines Include="  &quot;version&quot;: &quot;$(Version)&quot;," />
+      <!-- Filled in after the module is staged (ControllerStampManifest): the build stamp for
+           people and the content digest of the shipped files for machines (WitCloud verifies it
+           against the archive it holds and compares builds across clouds by it). -->
+      <_ControllerManifestLines Include="  &quot;build&quot;: &quot;@CONTROLLER_BUILD@&quot;," />
+      <_ControllerManifestLines Include="  &quot;contentDigest&quot;: &quot;@CONTROLLER_CONTENT_DIGEST@&quot;," />
       <_ControllerManifestLines Include="  &quot;description&quot;: &quot;$(_ControllerDescriptionEscaped)&quot;," />
       <_ControllerManifestLines Include="  &quot;authors&quot;: [ $(_ControllerAuthorsJson) ]," />
       <_ControllerManifestLines Include="  &quot;copyright&quot;: &quot;$(_ControllerCopyrightEscaped)&quot;," />
@@ -91,5 +109,37 @@
     </ItemGroup>
 
     <WriteLinesToFile File="$(ControllerManifestOutputPath)" Overwrite="true" Lines="@(_ControllerManifestLines)" />
+  </Target>
+
+  <!-- Stamps the STAGED module's controller.json (not the obj copy, which keeps the placeholders
+       so the next incremental copy is a no-op) once every file of the module is in place: the
+       main assembly, a companion Model's assembly (staged by its own project first, it is a
+       ProjectReference), Resources/. Runs before the zip and before the nupkg collects the
+       module. The digest leaves out Resources/ because the nupkg does; WitCloud computes the
+       same value over the archive it seeds and warns when the two differ. -->
+  <Target Name="ControllerStampManifest"
+          AfterTargets="ControllerPostBuild;ControllerStageSourceResources"
+          BeforeTargets="ControllerPackZip;ControllerPackModuleContents"
+          Condition="Exists('$(ControllerModuleOutputDir)controller.json')">
+    <Exec Command="git rev-parse --short=10 HEAD" ConsoleToMSBuild="true" ContinueOnError="true" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low" WorkingDirectory="$(MSBuildProjectDirectory)">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_ControllerGitCommit" />
+    </Exec>
+    <Exec Command="git status --porcelain --untracked-files=no" ConsoleToMSBuild="true" ContinueOnError="true" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low" WorkingDirectory="$(MSBuildProjectDirectory)">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_ControllerGitDirty" />
+    </Exec>
+    <PropertyGroup>
+      <_ControllerGitCommit Condition="'$(_ControllerGitCommit)' == ''">unknown</_ControllerGitCommit>
+      <_ControllerGitCommit Condition="'$(_ControllerGitDirty)' != ''">$(_ControllerGitCommit)+dirty</_ControllerGitCommit>
+      <_ControllerBuildRun Condition="'$(GITHUB_RUN_ID)' != ''">run $(GITHUB_RUN_ID)</_ControllerBuildRun>
+      <_ControllerBuildRun Condition="'$(GITHUB_RUN_ID)' == ''">local</_ControllerBuildRun>
+      <ControllerBuildStamp Condition="'$(ControllerBuildStamp)' == ''">$(_ControllerGitCommit) $([System.DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mmZ")) $(_ControllerBuildRun)</ControllerBuildStamp>
+    </PropertyGroup>
+    <StampControllerManifest ModuleDirectory="$(ControllerModuleOutputDir)"
+                             ManifestFile="$(ControllerModuleOutputDir)controller.json"
+                             Build="$(ControllerBuildStamp)"
+                             ExcludedFolders="Resources">
+      <Output TaskParameter="ContentDigest" PropertyName="ControllerContentDigest" />
+    </StampControllerManifest>
+    <Message Importance="high" Text="$(ControllerName) $(Version): build '$(ControllerBuildStamp)', content digest $(ControllerContentDigest)" />
   </Target>
 </Project>
