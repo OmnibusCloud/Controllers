@@ -99,7 +99,7 @@ namespace OutWit.Controller.Build
     /// Writes the build stamp and the content digest into the module's controller.json by
     /// replacing the placeholders the manifest generator left there.
     /// </summary>
-    public class StampControllerManifest : Task
+    public class StampControllerManifest : Microsoft.Build.Utilities.Task
     {
         public const string BUILD_PLACEHOLDER = "@CONTROLLER_BUILD@";
         public const string DIGEST_PLACEHOLDER = "@CONTROLLER_CONTENT_DIGEST@";
@@ -159,7 +159,7 @@ namespace OutWit.Controller.Build
     /// A drop-in for ZipDirectory whose output does not depend on the machine: entries sorted
     /// by relative path, forward slashes, a fixed timestamp, no directory entries.
     /// </summary>
-    public class DeterministicZipDirectory : Task
+    public class DeterministicZipDirectory : Microsoft.Build.Utilities.Task
     {
         public static readonly DateTimeOffset ENTRY_TIME = new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
