@@ -53,6 +53,19 @@ internal sealed class FakeKit : IDisposable
         foreach (var library in new[] { "libforces.so", "libfieldFunctionObjects.so", "libsampling.so" })
             File.WriteAllText(Path.Combine(libBin, library), string.Empty);
 
+        // The benchmark's reference case, in the shape the real kit ships it:
+        // controlDict with an endTime the benchmark rewrites, an fvSolution
+        // with residualControl it removes, initial fields under 0.orig.
+        var pitzDaily = Path.Combine(project, "tutorials", "incompressible", "simpleFoam", "pitzDaily");
+        Directory.CreateDirectory(Path.Combine(pitzDaily, "system"));
+        Directory.CreateDirectory(Path.Combine(pitzDaily, "0.orig"));
+        Directory.CreateDirectory(Path.Combine(pitzDaily, "constant"));
+        File.WriteAllText(Path.Combine(pitzDaily, "system", "controlDict"), "application     simpleFoam;\nstartTime       0;\nendTime         2000;\nwriteInterval   100;\n");
+        File.WriteAllText(Path.Combine(pitzDaily, "system", "fvSolution"), "SIMPLE\n{\n    residualControl\n    {\n        p               1e-2;\n        U               1e-3;\n    }\n}\n");
+        File.WriteAllText(Path.Combine(pitzDaily, "system", "blockMeshDict"), "vertices ();\n");
+        File.WriteAllText(Path.Combine(pitzDaily, "0.orig", "U"), "internalField uniform (0 0 0);\n");
+        File.WriteAllText(Path.Combine(pitzDaily, "constant", "transportProperties"), "nu 1e-05;\n");
+
         // The apphost carries the name of its managed assembly (fake-foam.dll)
         // and looks for it and the runtime config beside itself, whatever the
         // apphost file is called - so one copy of those serves every utility.
