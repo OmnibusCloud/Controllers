@@ -33,20 +33,24 @@ accept, a path with a space (OpenFOAM strips whitespace from paths).
 
 ## Bundled kit
 
-The module carries pinned **OpenFOAM v2606** kits for `linux-x64` and
-`osx-arm64` as controller data assets, produced and mirrored by
-[OmnibusCloud/OpenFOAM](https://github.com/OmnibusCloud/OpenFOAM) (the
-Windows kit joins with its release). Nodes need no preinstalled software: the
-kit bundles Open MPI 4.1.8, scotch and fftw, and is relocatable by
-environment - the kit's `KIT.env` records the exact environment its build
-established, the controller substitutes the kit folder and the task's scratch
-and sets the result on the solver process, with `HOME` and `TMPDIR` inside
-the scratch. Nothing is sourced on a node; a run writes into the case
-directory and the scratch and nowhere else. On Windows the kit runs on the
-node's own MS-MPI where the machine owner has installed it, serially otherwise.
-OpenFOAM is GPL-3.0: the kit ships the licence text and the written source
-offer, and the corresponding source is publicly mirrored in that repository's
-releases.
+The module carries pinned **OpenFOAM v2606** kits for `win-x64`, `linux-x64`
+and `osx-arm64` as controller data assets, produced and mirrored by
+[OmnibusCloud/OpenFOAM](https://github.com/OmnibusCloud/OpenFOAM). Nodes need
+no preinstalled software: the Linux and macOS kits bundle Open MPI 4.1.8,
+scotch and fftw, and every kit is relocatable by environment - the kit's
+`KIT.env` records the exact environment its build established, the controller
+substitutes the kit folder and the task's scratch and sets the result on the
+solver process, with `HOME` and `TMPDIR` inside the scratch. Nothing is
+sourced on a node; a run writes into the case directory and the scratch and
+nowhere else. The Windows kit is cross-compiled from the same pinned source
+with MinGW-w64 and ships two Pstream libraries: the serial one is in place as
+shipped, and when the node has Microsoft MPI installed (MS-MPI is the machine
+owner's to install; its licence allows redistributing only its installer) the
+controller copies the MS-MPI one over it once, at module install, and runs
+parallel steps under the node's `mpiexec`; a node without MS-MPI runs every
+step serially. OpenFOAM is GPL-3.0: the kit ships the licence text and the
+written source offer, and the corresponding source is publicly mirrored in
+that repository's releases.
 
 Node benchmark: `Foam.Run` is ranked by pitzDaily from the kit's own
 tutorials, meshed once and then solved serially for a fixed 50 iterations, in

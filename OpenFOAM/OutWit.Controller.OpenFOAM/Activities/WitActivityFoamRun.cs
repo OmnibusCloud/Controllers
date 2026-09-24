@@ -20,7 +20,7 @@ namespace OutWit.Controller.OpenFOAM.Activities;
 [Activity("Foam.Run")]
 [CanRunInParallelOnClient(false)]
 [RequiresResources(MinRamMb = 4096, MinTempStorageMb = 4096)]
-[RequiresOs(Platform = "Linux,OSX")]
+[RequiresOs(Platform = "Windows,Linux,OSX")]
 [MemoryPackable]
 public sealed partial class WitActivityFoamRun : WitActivityFunction
 {
