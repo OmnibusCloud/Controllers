@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Mock;
@@ -205,7 +206,15 @@ public class FoamKitOracleTests
         Assert.That(result.ExitCode, Is.Not.EqualTo(0), "an inlet at 1e6 m/s under FOAM_SIGFPE is a crash, not a result");
         Assert.That(result.FailedStep, Is.EqualTo("simpleFoam"));
         Assert.That(result.Converged, Is.False);
-        Assert.That(result.ArtifactBlobId, Is.Null);
+
+        // The policy asked for logs, so the failed run still delivers them -
+        // and only them: the real solver's crash log, no time directory.
+        Assert.That(result.ArtifactBlobId, Is.Not.Null);
+        using var archive = ZipFile.OpenRead(m_blobs.GetStoredPath(result.ArtifactBlobId!.Value));
+        var entries = archive.Entries.Select(entry => entry.FullName).ToList();
+        Assert.That(entries, Does.Contain("log.simpleFoam").And.Contain("log.blockMesh").And.Contain("system/controlDict"));
+        Assert.That(entries.Where(entry => char.IsAsciiDigit(entry[0])), Is.Empty);
+        Assert.That(entries, Does.Not.Contain("constant/polyMesh/points"), "the mesh the policy asked for travels only with a finished run");
     }
 
     #endregion
