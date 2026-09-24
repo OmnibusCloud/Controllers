@@ -92,6 +92,20 @@ jobs:
           if (-not (Test-Path "$kit\openfoam\${{ matrix.platform }}\KIT.env")) { throw "KIT.env missing after unpack" }
           "OUTWIT_OPENFOAM=$kit\openfoam\${{ matrix.platform }}" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+      # AspectInjector (a build-time dependency of OutWit.Common) ships a native
+      # osx-arm64 helper that Apple Silicon kills on launch ("Killed: 9") when
+      # its signature is missing or invalid, and the Model project's build dies
+      # with AI_FAIL. An ad-hoc signature after the restore is enough.
+      - name: Restore and sign the AspectInjector helper (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          dotnet restore OpenFOAM/OutWit.Controller.OpenFOAM.Tests/OutWit.Controller.OpenFOAM.Tests.csproj
+          for helper in "$HOME"/.nuget/packages/aspectinjector/*/build/_bin/osx-arm64/AspectInjector; do
+            chmod +x "$helper"
+            codesign --force -s - "$helper"
+            codesign --verify --verbose "$helper"
+          done
+
       - name: Build the controller and its tests
         run: dotnet build OpenFOAM/OutWit.Controller.OpenFOAM.Tests/OutWit.Controller.OpenFOAM.Tests.csproj -c Release
 
