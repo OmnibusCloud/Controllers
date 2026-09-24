@@ -9,6 +9,9 @@
 //     cancellation gates kill it through the process tree;
 //   - a file containing "FAKE-ECHO" prints every environment variable it
 //     was given (the environment tests read them back);
+//   - a file containing "FAKE-COEFFS" also writes a force-coefficient
+//     history under postProcessing/coeffs/<n>/coefficient.dat, in the shape
+//     the forceCoeffs function object writes;
 //   - otherwise it "solves" ITERATIONS steps (system/fake may say
 //     "ITERATIONS=n"), converging on the last one, and writes <n>/U.
 
@@ -69,6 +72,15 @@ Console.WriteLine();
 var timeDirectory = Path.Combine(caseDirectory, iterations.ToString());
 Directory.CreateDirectory(timeDirectory);
 File.WriteAllText(Path.Combine(timeDirectory, "U"), "FoamFile { class volVectorField; object U; }\ninternalField uniform (1 0 0);\n");
+
+if (text.Contains("FAKE-COEFFS", StringComparison.Ordinal))
+{
+    var coeffs = Path.Combine(caseDirectory, "postProcessing", "coeffs", iterations.ToString());
+    Directory.CreateDirectory(coeffs);
+    File.WriteAllText(Path.Combine(coeffs, "coefficient.dat"),
+        "# Force coefficients\n# Time        \tCd            \tCl            \tCmPitch\n" +
+        $"{iterations - 1}\t0.44\t0.10\t0.01\n{iterations}\t0.418\t0.092\t0.009\n");
+}
 
 Console.WriteLine("End");
 return 0;
