@@ -17,14 +17,14 @@ on:
       kit_release:
         description: 'Release tag in OmnibusCloud/OpenFOAM whose kits to test'
         required: true
-        default: 'openfoam-v2606-2'
+        default: 'openfoam-v2606-3'
   pull_request:
     paths:
       - 'OpenFOAM/**'
       - '.github/workflows/openfoam-oracle.yml'
 
 env:
-  KIT_RELEASE: ${{ inputs.kit_release || 'openfoam-v2606-2' }}
+  KIT_RELEASE: ${{ inputs.kit_release || 'openfoam-v2606-3' }}
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   DOTNET_NOLOGO: 1
 
