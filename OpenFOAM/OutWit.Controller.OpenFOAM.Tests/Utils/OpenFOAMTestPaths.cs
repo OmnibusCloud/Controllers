@@ -6,6 +6,21 @@ internal static class OpenFOAMTestPaths
 {
     #region Functions
 
+    public static string? FindControllersPath()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir, "@Controllers", "Debug");
+            if (Directory.Exists(candidate))
+                return candidate;
+
+            dir = Path.GetDirectoryName(dir);
+        }
+
+        return null;
+    }
+
     public static string? FindSolutionRoot()
     {
         var dir = TestContext.CurrentContext.TestDirectory;
