@@ -42,6 +42,8 @@ public class FoamProcessRunnerTests
         var environment = new Dictionary<string, string>
         {
             ["PATH"] = FoamKitEnvironment.SystemPath(),
+            // The fake solver is a .NET apphost; see OpenFOAMTestPaths.DotnetRoot.
+            ["DOTNET_ROOT"] = OpenFOAMTestPaths.DotnetRoot(),
             ["HOME"] = Path.GetTempPath(),
             ["FOAM_SIGFPE"] = "true"
         };

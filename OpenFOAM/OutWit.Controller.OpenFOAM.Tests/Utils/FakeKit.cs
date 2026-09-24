@@ -91,7 +91,9 @@ internal sealed class FakeKit : IDisposable
             "TMPDIR=@SCRATCH@/tmp\n" +
             "FOAM_SIGFPE=true\n" +
             $"KIT_EXECUTABLE_DIRS=@KIT@/{PROJECT}/platforms/{PLATFORM_FOLDER}/bin\n" +
-            "KIT_PLATFORM=fake\n");
+            "KIT_PLATFORM=fake\n" +
+            // The fake solver's own runtime need, declared where a real kit declares its library paths.
+            $"DOTNET_ROOT={OpenFOAMTestPaths.DotnetRoot()}\n");
 
         return new FakeKit(root, fakeFoamPath);
     }

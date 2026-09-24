@@ -67,6 +67,28 @@ internal static class OpenFOAMTestPaths
     }
 
     /// <summary>
+    /// The root of the .NET installation this test process runs on. The fake
+    /// solver is a .NET apphost: the controller hands a solver nothing but the
+    /// kit's environment and the system PATH, so the apphost finds its runtime
+    /// only through DOTNET_ROOT - which a fake kit therefore carries the way a
+    /// real kit carries its library paths. Without it a machine whose dotnet
+    /// is not at the default location (GitHub's macOS runners install it under
+    /// the runner's home) fails every fake run with the apphost's
+    /// "runtime not found" code, 0x80008083, seen as exit 131.
+    /// </summary>
+    /// <returns>The directory holding <c>dotnet</c> and <c>shared/</c>.</returns>
+    public static string DotnetRoot()
+    {
+        // <root>/shared/Microsoft.NETCore.App/<version>/ -> <root>
+        var runtime = Path.TrimEndingDirectorySeparator(RuntimeEnvironment.GetRuntimeDirectory());
+        var root = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(runtime)));
+        if (root != null && File.Exists(Path.Combine(root, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet")))
+            return root;
+
+        return Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? root ?? string.Empty;
+    }
+
+    /// <summary>
     /// A fresh temporary directory without a space in its path (OpenFOAM's
     /// rule), removed by the caller.
     /// </summary>
