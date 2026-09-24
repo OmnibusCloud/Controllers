@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.OpenFOAM\OutWit.Controller.OpenFOAM.csproj" />
+    <ProjectReference Include="..\OutWit.Controller.OpenFOAM.Tests.FakeFoam\OutWit.Controller.OpenFOAM.Tests.FakeFoam.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ExcludedControllerModule Include="render.module" />
+    <ExcludedControllerModule Include="renderdcc.module" />
+    <ExcludedControllerModule Include="schwarz.module" />
+    <ExcludedControllerModule Include="parareal.module" />
+    <ExcludedControllerModule Include="sweep.module" />
+    <ExcludedControllerModule Include="calculix.module" />
+  </ItemGroup>
+
+</Project>

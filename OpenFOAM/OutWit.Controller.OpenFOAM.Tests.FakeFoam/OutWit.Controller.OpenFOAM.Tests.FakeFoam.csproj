@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Test-only stand-in for an OpenFOAM solver: honors the controller's
+       contract (cwd = the case, the log on stdout in OpenFOAM's shape, a time
+       directory written) so the runner and the readers can be tested without
+       a 500 MB kit. Never packed, never shipped. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>fake-foam</AssemblyName>
+  </PropertyGroup>
+
+</Project>

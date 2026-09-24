@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Model.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ControllerName>OpenFOAM</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Shared data types of the OpenFOAM case controller: one variant's run as a self-contained work item (the base case files, the token substitutions, the allow-listed recipe, the response request, the artifact policy) and its outcome (per-step exit codes and times, convergence facts, the extracted response row, the artifact reference). Consumed by the node controller, by the Sweep orchestration controller and by client applications that read case-sweep manifests.</Description>
+    <PackageTags>openfoam;cfd;case;sweep;parameter-study;witengine;witcloud;controller;data-types</PackageTags>
+  </PropertyGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Model.targets" />
+
+  <!-- A shared model must not stage its deps.json into a module: the client
+       install pipeline infers the root assembly from THE single deps.json it
+       finds, and a second one breaks that inference (the defect that once
+       froze controller updates fleet-wide). Resolution roots at the
+       controller DLL; the model rides as a plain dependency. -->
+  <Target Name="ModelDropDepsJson" BeforeTargets="ModelPostBuild">
+    <ItemGroup>
+      <ModelModuleFile Remove="$(TargetDir)$(TargetName).deps.json" />
+    </ItemGroup>
+  </Target>
+
+</Project>
