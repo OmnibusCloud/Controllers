@@ -46,6 +46,13 @@ internal sealed class FakeKit : IDisposable
         foreach (var utility in utilities.Append("simpleFoam").Distinct())
             File.Copy(fakeFoamPath, Path.Combine(appBin, utility + extension), overwrite: true);
 
+        // The libraries the response function objects name: the inspector
+        // checks every libs entry against the kit.
+        var libBin = Path.Combine(project, "platforms", PLATFORM_FOLDER, "lib");
+        Directory.CreateDirectory(libBin);
+        foreach (var library in new[] { "libforces.so", "libfieldFunctionObjects.so", "libsampling.so" })
+            File.WriteAllText(Path.Combine(libBin, library), string.Empty);
+
         // The apphost carries the name of its managed assembly (fake-foam.dll)
         // and looks for it and the runtime config beside itself, whatever the
         // apphost file is called - so one copy of those serves every utility.

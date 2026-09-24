@@ -81,7 +81,7 @@ public class FoamCaseSessionTests
                 ]
             },
             Threads = 2,
-            Extraction = new FoamExtractionRequestData { Responses = [new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs }] },
+            Extraction = new FoamExtractionRequestData { Responses = [new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["wall"] }] },
             ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.Latest, Logs = true, PostProcessing = true },
             CellCount = 12225,
             SolverClass = "incompressible-steady"

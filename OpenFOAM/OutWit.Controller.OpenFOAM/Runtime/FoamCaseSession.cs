@@ -65,6 +65,7 @@ public sealed class FoamCaseSession
             var rejections = new List<string>();
             rejections.AddRange(FoamRecipeValidator.Validate(task.Recipe, Kit));
             rejections.AddRange(await FoamCaseMaterializer.MaterializeAsync(task, caseDirectory, BlobService, cancellationToken));
+            rejections.AddRange(FoamFunctionObjectWriter.Write(caseDirectory, task.Extraction));
             if (rejections.Count == 0)
                 rejections.AddRange(FoamCaseInspector.Inspect(caseDirectory, KitHasLibrary));
 
@@ -163,30 +164,49 @@ public sealed class FoamCaseSession
         result.ArtifactBytes = bytes;
     }
 
+    /// <summary>
+    /// Whether a <c>libs</c> entry names a library of the kit. OpenFOAM
+    /// accepts the entry as <c>"libforces.so"</c> or as the bare
+    /// <c>forces</c>; the file in the kit is <c>libforces.so</c> (Linux),
+    /// <c>libforces.dylib</c> (macOS) or <c>libforces.dll</c> (Windows).
+    /// </summary>
     private bool KitHasLibrary(string library)
     {
         var libbin = Kit.Environment.Get("FOAM_LIBBIN", Kit.Root);
-        if (libbin == null)
+        if (libbin == null || !Directory.Exists(libbin))
             return false;
 
-        var stem = Path.GetFileNameWithoutExtension(library.Trim('"'));
-        return Directory.Exists(libbin)
-               && Directory.EnumerateFiles(libbin, stem + ".*", SearchOption.AllDirectories).Any();
+        var name = library.Trim('"');
+        var stem = Path.GetFileNameWithoutExtension(name);
+        if (stem.EndsWith(".so", StringComparison.Ordinal))
+            stem = stem[..^3];
+        if (stem.StartsWith("lib", StringComparison.Ordinal))
+            stem = stem[3..];
+        if (stem.Length == 0)
+            return false;
+
+        return Directory.EnumerateFiles(libbin, $"lib{stem}.*", SearchOption.AllDirectories).Any()
+               || Directory.EnumerateFiles(libbin, $"{stem}.*", SearchOption.AllDirectories).Any();
     }
 
     /// <summary>
     /// A private scratch for the run, under the node's temp. No space in the
-    /// path (plan D-16: OpenFOAM strips whitespace from paths); a node whose
-    /// temp has one cannot run cases, and says so.
+    /// path (plan D-16: OpenFOAM strips whitespace from paths): on Windows a
+    /// temp under a profile with a space is used through its 8.3 short form;
+    /// a node whose temp has a space and no short form cannot run cases, and
+    /// says so.
     /// </summary>
     /// <returns>The scratch directory, created.</returns>
-    /// <exception cref="InvalidOperationException">The temp path contains a space.</exception>
+    /// <exception cref="InvalidOperationException">The temp path contains a space and has no space-free form.</exception>
     public static string CreateScratch()
     {
-        var scratch = Path.Combine(Path.GetTempPath(), SCRATCH_ROOT, Guid.NewGuid().ToString("N"));
-        if (scratch.Contains(' '))
-            throw new InvalidOperationException($"The node's temp path contains a space ('{Path.GetTempPath()}'); OpenFOAM cannot run under it. Point TMPDIR/TEMP at a space-free directory.");
+        var root = Path.Combine(Path.GetTempPath(), SCRATCH_ROOT);
+        Directory.CreateDirectory(root);
 
+        var usable = FoamScratchPath.WithoutSpaces(root)
+            ?? throw new InvalidOperationException($"The node's temp path contains a space ('{Path.GetTempPath()}') and has no short form; OpenFOAM cannot run under it. Point TMPDIR/TEMP at a space-free directory.");
+
+        var scratch = Path.Combine(usable, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(scratch, "home"));
         Directory.CreateDirectory(Path.Combine(scratch, "tmp"));
         return scratch;
