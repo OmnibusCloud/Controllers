@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Runtime;
@@ -44,8 +45,9 @@ public class FoamCaseSessionTests
         if (fakeFoam == null)
             Assert.Ignore("fake-foam not built");
 
-        if (Path.GetTempPath().Contains(' '))
-            Assert.Ignore("the temp path contains a space; OpenFOAM's rule (D-16) refuses it by design");
+        // On Windows the scratch takes the 8.3 form of a spaced temp path; elsewhere there is no such form.
+        if (Path.GetTempPath().Contains(' ') && !OperatingSystem.IsWindows())
+            Assert.Ignore("the temp path contains a space; OpenFOAM strips whitespace from paths, so the controller refuses it by design");
 
         m_kit = FakeKit.Create(fakeFoam, "blockMesh", "simpleFoam", "checkMesh");
         return new FoamCaseSession(m_kit.Resolve(), m_blobs);
@@ -136,7 +138,9 @@ public class FoamCaseSessionTests
         var entries = archive.Entries.Select(entry => entry.FullName).ToList();
         Assert.That(entries, Does.Contain("4/U").And.Contain("log.simpleFoam").And.Contain("postProcessing/coeffs/4/coefficient.dat").And.Contain("case.foam"));
         Assert.That(entries, Does.Contain("constant/transportProperties"));
-        Assert.That(entries, Does.Not.Contain("system/fake").Or.Contain("system/fake"), "system/ travels whole");
+        Assert.That(entries, Does.Contain("system/controlDict").And.Contain("system/fake").And.Contain("system/coeffs"), "system/ travels whole, the written function object included");
+        Assert.That(entries, Does.Not.Contain("log.checkMesh").Or.Contain("log.checkMesh"), "logs travel by policy; this policy asked for them");
+        Assert.That(entries, Does.Contain("log.blockMesh").And.Contain("log.checkMesh"));
     }
 
     [Test]
@@ -202,8 +206,10 @@ public class FoamCaseSessionTests
     public async Task AFailedSolveIsDataWithTheStepAndTheTailTest()
     {
         var session = RequireSession();
+        var task = PitzTask("FAKE-FAIL\n");
+        task.ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.Latest, PostProcessing = true };
 
-        var result = await session.RunAsync(PitzTask("FAKE-FAIL\n"));
+        var result = await session.RunAsync(task);
 
         Assert.That(result.Rejections, Is.Empty);
         Assert.That(result.FailedStep, Is.EqualTo("blockMesh"));
@@ -211,8 +217,39 @@ public class FoamCaseSessionTests
         Assert.That(result.LogTail, Does.Contain("FOAM FATAL ERROR"));
         Assert.That(result.Steps, Has.Count.EqualTo(1));
         Assert.That(result.Converged, Is.False);
-        Assert.That(result.ArtifactBlobId, Is.Null, "no artifact of a failed run");
+        Assert.That(result.ArtifactBlobId, Is.Null, "no artifact of a failed run unless its logs were asked for");
         Assert.That(result.ResponseRow, Is.Null);
+    }
+
+    [Test]
+    public async Task AFailedRunStillDeliversItsLogsWhenTheyWereAskedForTest()
+    {
+        var session = RequireSession();
+        var task = PitzTask("FAKE-FAIL\n");
+        task.ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.All, Mesh = true, Logs = true, PostProcessing = true };
+
+        var result = await session.RunAsync(task);
+
+        Assert.That(result.FailedStep, Is.EqualTo("blockMesh"));
+        Assert.That(result.ArtifactBlobId, Is.Not.Null, "a diverged run is explained by its logs, not by sixty lines of tail");
+        Assert.That(result.ArtifactBytes, Is.GreaterThan(0));
+        using var archive = ZipFile.OpenRead(m_blobs.GetStoredPath(result.ArtifactBlobId!.Value));
+        var entries = archive.Entries.Select(entry => entry.FullName).ToList();
+        Assert.That(entries, Does.Contain("log.blockMesh").And.Contain("system/controlDict").And.Contain("case.foam"));
+        Assert.That(entries.Where(entry => char.IsAsciiDigit(entry[0])), Is.Empty, "a logs-only artifact: no time directories even when the policy asked for all of them");
+    }
+
+    [Test]
+    public void CancellationSurfacesAsCancellationNotAsAFailedVariantTest()
+    {
+        var session = RequireSession();
+        var task = PitzTask("FAKE-HANG\n");
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(700));
+        var stopwatch = Stopwatch.StartNew();
+
+        Assert.CatchAsync<OperationCanceledException>(() => session.RunAsync(task, cts.Token));
+
+        Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(30)), "the hung step outlived its cancellation");
     }
 
     [Test]

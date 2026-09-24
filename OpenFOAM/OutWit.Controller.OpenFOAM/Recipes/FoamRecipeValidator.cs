@@ -25,6 +25,9 @@ public static class FoamRecipeValidator
 
     private static readonly Regex WORD = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>A number, which may start with a minus and is a value, not a flag (<c>-time -1</c>).</summary>
+    private static readonly Regex NUMBER = new(@"^-?\d+(\.\d+)?([eE][-+]?\d+)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     /// <summary>Upper bound on the steps of one recipe; a longer one is a script, not a recipe.</summary>
     public const int MAX_STEPS = 32;
 
@@ -71,6 +74,22 @@ public static class FoamRecipeValidator
         return findings;
     }
 
+    /// <summary>
+    /// Whether a path-like value would leave the case directory: absolute,
+    /// drive-rooted, or with a '..' segment.
+    /// </summary>
+    /// <param name="value">An argument value.</param>
+    /// <returns>True when it escapes.</returns>
+    public static bool IsPathEscape(string value)
+    {
+        if (value.StartsWith('/') || value.StartsWith('\\'))
+            return true;
+        if (value.Length >= 2 && char.IsAsciiLetter(value[0]) && value[1] == ':')
+            return true;
+
+        return value.Split('/', '\\').Any(segment => segment == "..");
+    }
+
     private static void ValidateStep(FoamStepData step, int number, FoamKit? kit, List<string> findings)
     {
         var name = step.Utility;
@@ -109,6 +128,9 @@ public static class FoamRecipeValidator
                 continue;
             }
 
+            if (NUMBER.IsMatch(argument))
+                continue;
+
             if (argument.StartsWith('-'))
             {
                 if (!FLAG.IsMatch(argument))
@@ -125,22 +147,6 @@ public static class FoamRecipeValidator
             else if (IsPathEscape(argument))
                 findings.Add($"{prefix} ({name}): '{argument}' points outside the case directory.");
         }
-    }
-
-    /// <summary>
-    /// Whether a path-like value would leave the case directory: absolute,
-    /// drive-rooted, or with a '..' segment.
-    /// </summary>
-    /// <param name="value">An argument value.</param>
-    /// <returns>True when it escapes.</returns>
-    public static bool IsPathEscape(string value)
-    {
-        if (value.StartsWith('/') || value.StartsWith('\\'))
-            return true;
-        if (value.Length >= 2 && char.IsAsciiLetter(value[0]) && value[1] == ':')
-            return true;
-
-        return value.Split('/', '\\').Any(segment => segment == "..");
     }
 
     #endregion

@@ -6,9 +6,11 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 
 /// <summary>
 /// Zips the part of a finished case the artifact policy asks for. Always:
-/// <c>system/</c>, the dictionaries of <c>constant/</c> and an empty
-/// <c>case.foam</c> stub, so whatever travels opens in ParaView as a case.
-/// By policy: the time directories (latest or all), <c>constant/polyMesh</c>,
+/// <c>system/</c>, <c>constant/</c> without the mesh and without the geometry
+/// inputs (the surfaces snappyHexMesh reads are the user's own files, tens of
+/// megabytes, and would travel back in every variant), and an empty
+/// <c>case.foam</c> stub, so whatever travels opens in ParaView as a case. By
+/// policy: the time directories (latest or all), <c>constant/polyMesh</c>,
 /// the step logs, <c>postProcessing/</c>. Never the <c>processor*</c> trees:
 /// the reconstructed case is what a person opens.
 /// </summary>
@@ -18,6 +20,9 @@ public static class FoamArtifactPacker
 
     /// <summary>The stub file ParaView's reader opens.</summary>
     public const string STUB = "case.foam";
+
+    /// <summary>Subtrees of <c>constant/</c> that are inputs, never results: left out of every artifact.</summary>
+    public static readonly IReadOnlyList<string> GEOMETRY_INPUTS = ["triSurface/", "extendedFeatureEdgeMesh/", "geometry/"];
 
     #endregion
 
@@ -67,7 +72,11 @@ public static class FoamArtifactPacker
         {
             foreach (var file in Directory.EnumerateFiles(constant, "*", SearchOption.AllDirectories))
             {
-                var inMesh = Path.GetRelativePath(constant, file).Replace('\\', '/').StartsWith("polyMesh/", StringComparison.Ordinal);
+                var relative = Path.GetRelativePath(constant, file).Replace('\\', '/');
+                var inMesh = relative.StartsWith("polyMesh/", StringComparison.Ordinal);
+                var isGeometryInput = GEOMETRY_INPUTS.Any(prefix => relative.StartsWith(prefix, StringComparison.Ordinal));
+                if (isGeometryInput)
+                    continue;
                 if (!inMesh || policy.Mesh)
                     selected.Add(file);
             }

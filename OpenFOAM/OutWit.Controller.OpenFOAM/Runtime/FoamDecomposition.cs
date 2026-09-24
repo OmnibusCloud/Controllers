@@ -3,8 +3,8 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 /// <summary>
 /// The decomposition every parallel run uses: scotch, over the rank count
 /// the controller decided. Written over the case's own decomposeParDict by
-/// design (requirements FR-F12): the user's machine count is not the node's,
-/// and one method on every platform is what the kit ships (no kahip, plan D-17).
+/// design: the user's machine count is not the node's, and one method on
+/// every platform is what the kit ships (scotch; no kahip).
 /// </summary>
 public static class FoamDecomposition
 {

@@ -351,6 +351,43 @@ jobs:
             exit 1
           fi
 
+      # The OpenFOAM kits are not staged by outwit-assets-pack: they are the
+      # release assets of OmnibusCloud/OpenFOAM, and the csproj pins their
+      # release tag, names and hashes. The guard checks that release, not ours.
+      - name: Verify kit release assets exist (OpenFOAM)
+        if: inputs.pushToNuGet && env.PROJECT == 'OutWit.Controller.OpenFOAM'
+        shell: bash
+        run: |
+          set -e
+          csproj="${{ steps.paths.outputs.csproj }}"
+          missing=0
+          checked=0
+          # Every gh-release://owner/repo/tag/asset <Uri> of a ControllerDataAsset
+          # in the csproj must answer 200 as a release download.
+          for uri in $(grep -o '<Uri>gh-release://[^<]*</Uri>' "$csproj" | sed -e 's#<Uri>gh-release://##' -e 's#</Uri>##'); do
+            checked=$((checked+1))
+            owner_repo=$(echo "$uri" | cut -d/ -f1-2)
+            tag=$(echo "$uri" | cut -d/ -f3)
+            asset=$(echo "$uri" | cut -d/ -f4-)
+            url="https://github.com/${owner_repo}/releases/download/${tag}/${asset}"
+            code=$(curl -s -L -o /dev/null -w "%{http_code}" "$url")
+            if [ "$code" = "200" ]; then
+              echo "  OK   $asset  ($owner_repo @ $tag)"
+            else
+              echo "  FAIL $asset  (HTTP $code at $url)"
+              missing=$((missing+1))
+            fi
+          done
+          if [ "$checked" -eq 0 ]; then
+            echo "::error::no gh-release:// <Uri> found in $csproj - the kit assets are not declared."
+            exit 1
+          fi
+          if [ "$missing" -gt 0 ]; then
+            echo ""
+            echo "::error::$missing kit asset(s) missing in OmnibusCloud/OpenFOAM releases. Release the kits there first."
+            exit 1
+          fi
+
       - name: Add GitHub Packages source
         if: inputs.pushToGitHubPackages
         run: >

@@ -41,8 +41,9 @@ public static class FoamKitIntegrity
     /// </summary>
     /// <param name="kitRoot">The kit folder.</param>
     /// <param name="sampleSize">How many listed files to hash besides the ones always checked.</param>
-    /// <returns>Findings, one per missing or altered file; empty when the sample is intact. A kit without a BUILDINFO is one finding.</returns>
-    public static IReadOnlyList<string> Check(string kitRoot, int sampleSize = SAMPLE_SIZE)
+    /// <param name="mutablePaths">Relative paths the controller itself rewrites after unpacking (the Windows Pstream); never sampled.</param>
+    /// <returns>Findings, one per missing, altered or unreadable file; empty when the sample is intact. A kit without a BUILDINFO is one finding.</returns>
+    public static IReadOnlyList<string> Check(string kitRoot, int sampleSize = SAMPLE_SIZE, IReadOnlyCollection<string>? mutablePaths = null)
     {
         var findings = new List<string>();
         var manifest = Path.Combine(kitRoot, BUILDINFO);
@@ -59,7 +60,10 @@ public static class FoamKitIntegrity
             return findings;
         }
 
-        foreach (var (relativePath, expected) in Sample(listed, sampleSize))
+        var excluded = new HashSet<string>(mutablePaths ?? [], StringComparer.Ordinal);
+        var candidates = listed.Where(entry => !excluded.Contains(entry.RelativePath)).ToList();
+
+        foreach (var (relativePath, expected) in Sample(candidates, sampleSize))
         {
             var path = Path.Combine(kitRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(path))
@@ -69,9 +73,17 @@ public static class FoamKitIntegrity
             }
 
             string actual;
-            using (var stream = File.OpenRead(path))
+            try
             {
+                using var stream = File.OpenRead(path);
                 actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // A locked or unreadable file is a finding, not an infrastructure
+                // failure: the node says which file, and the next resolution retries.
+                findings.Add($"{relativePath}: could not be read ({e.Message}).");
+                continue;
             }
 
             if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))

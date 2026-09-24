@@ -41,13 +41,20 @@ public static class FoamFunctionObjectWriter
         if (request == null || request.Responses.Count == 0)
             return [];
 
-        var findings = Validate(request);
+        var findings = Validate(request).ToList();
+        var system = Path.Combine(caseDirectory, "system");
+
+        // A response never overwrites a file the user shipped under the same name.
+        foreach (var response in request.Responses)
+        {
+            if (File.Exists(Path.Combine(system, response.Name)))
+                findings.Add($"Response '{response.Name}': the case already carries system/{response.Name}; choose another response name.");
+        }
+
         if (findings.Count > 0)
             return findings;
 
-        var system = Path.Combine(caseDirectory, "system");
         Directory.CreateDirectory(system);
-
         foreach (var response in request.Responses)
             File.WriteAllText(Path.Combine(system, response.Name), Render(response), new UTF8Encoding(false));
 

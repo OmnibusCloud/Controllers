@@ -50,11 +50,11 @@ public sealed class FoamCaseSession
     /// <param name="task">The task.</param>
     /// <param name="cancellationToken">Reaches the running step's process tree.</param>
     /// <returns>The result, refused, failed or complete.</returns>
-    /// <exception cref="InvalidOperationException">The scratch path is unusable (a space in it, plan D-16).</exception>
+    /// <exception cref="InvalidOperationException">The node's temp path contains a space and has no space-free form.</exception>
     public async Task<FoamResultData> RunAsync(FoamTaskData task, CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        var scratch = CreateScratch();
+        var scratch = FoamScratchPath.CreateScratch(SCRATCH_ROOT);
         var caseDirectory = Path.Combine(scratch, CASE_DIRECTORY);
         Directory.CreateDirectory(caseDirectory);
 
@@ -93,12 +93,18 @@ public sealed class FoamCaseSession
             result.FailedStep = report.FailedStep;
             result.LogTail = report.LogTail;
 
-            ReadFacts(result, caseDirectory, recipe);
+            ReadFacts(result, caseDirectory, recipe, report);
 
             if (report.Succeeded)
             {
                 result.ResponseRow = ExtractResponses(caseDirectory, task.Extraction);
                 await UploadArtifactAsync(result, caseDirectory, scratch, task.ArtifactPolicy, cancellationToken);
+            }
+            else if (task.ArtifactPolicy?.Logs == true)
+            {
+                // A failed run still owes its logs when they were asked for: a
+                // diverged six-hour transient is not explained by sixty lines of tail.
+                await UploadArtifactAsync(result, caseDirectory, scratch, new FoamArtifactPolicyData { Logs = true }, cancellationToken);
             }
 
             result.TotalSeconds = stopwatch.Elapsed.TotalSeconds;
@@ -110,32 +116,14 @@ public sealed class FoamCaseSession
         }
     }
 
-    /// <summary>
-    /// A private scratch for the run, under the node's temp. No space in the
-    /// path (plan D-16: OpenFOAM strips whitespace from paths): on Windows a
-    /// temp under a profile with a space is used through its 8.3 short form;
-    /// a node whose temp has a space and no short form cannot run cases, and
-    /// says so.
-    /// </summary>
-    /// <returns>The scratch directory, created.</returns>
-    /// <exception cref="InvalidOperationException">The temp path contains a space and has no space-free form.</exception>
-    public static string CreateScratch()
+    private void ReadFacts(FoamResultData result, string caseDirectory, FoamRecipeData recipe, FoamRunReport report)
     {
-        var root = Path.Combine(Path.GetTempPath(), SCRATCH_ROOT);
-        Directory.CreateDirectory(root);
-
-        var usable = FoamScratchPath.WithoutSpaces(root)
-            ?? throw new InvalidOperationException($"The node's temp path contains a space ('{Path.GetTempPath()}') and has no short form; OpenFOAM cannot run under it. Point TMPDIR/TEMP at a space-free directory.");
-
-        var scratch = Path.Combine(usable, Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(scratch, "home"));
-        Directory.CreateDirectory(Path.Combine(scratch, "tmp"));
-        return scratch;
-    }
-
-    private void ReadFacts(FoamResultData result, string caseDirectory, FoamRecipeData recipe)
-    {
-        var solverLog = FoamLogReader.Read(Path.Combine(caseDirectory, $"log.{recipe.Application}"));
+        // The solver's own log: the first step that runs the application as a
+        // solve (a later "<solver> -postProcess" step is a post step and has a
+        // log of its own).
+        var solverLogPath = report.LogPathOf(step => step.Utility == recipe.Application && !step.Arguments.Contains("-postProcess"))
+                            ?? Path.Combine(caseDirectory, $"log.{recipe.Application}");
+        var solverLog = FoamLogReader.Read(solverLogPath);
         result.Iterations = solverLog.Iterations;
         result.FinalTime = solverLog.FinalTime;
         result.Converged = solverLog.Converged && !solverLog.Fatal && !solverLog.FloatingPointException;
@@ -143,12 +131,15 @@ public sealed class FoamCaseSession
             .Select(residual => new FoamResponseValueData { Name = $"residual.{residual.Key}", Value = residual.Value })
             .ToList();
 
-        var (verdict, checkedCells) = FoamCheckMeshReader.Read(Path.Combine(caseDirectory, "log.checkMesh"));
+        var checkMeshLog = report.LogPathOf(step => step.Utility == "checkMesh") ?? Path.Combine(caseDirectory, "log.checkMesh");
+        var (verdict, checkedCells) = FoamCheckMeshReader.Read(checkMeshLog);
         result.CheckMeshVerdict = verdict;
 
+        // Only the logs this run wrote: the base tree may not carry logs at all
+        // (the materializer refuses them), so these are the steps' own.
         var warnings = 0;
         long cells = checkedCells;
-        foreach (var log in Directory.EnumerateFiles(caseDirectory, "log.*"))
+        foreach (var log in report.LogPaths)
         {
             var facts = FoamLogReader.Read(log);
             warnings += facts.WarningCount;

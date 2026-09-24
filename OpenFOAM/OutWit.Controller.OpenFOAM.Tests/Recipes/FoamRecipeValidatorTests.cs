@@ -1,5 +1,6 @@
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Recipes;
+using OutWit.Controller.OpenFOAM.Tests.Utils;
 
 namespace OutWit.Controller.OpenFOAM.Tests.Recipes;
 
@@ -114,15 +115,52 @@ public class FoamRecipeValidatorTests
     }
 
     [Test]
-    public void SolverNamesAreRecognisedByShapeTest()
+    public void NegativeNumbersAreValuesNotFlagsTest()
     {
-        Assert.That(FoamAllowList.IsSolverName("simpleFoam"), Is.True);
-        Assert.That(FoamAllowList.IsSolverName("rhoPimpleFoam"), Is.True);
-        Assert.That(FoamAllowList.IsSolverName("MPPICFoam"), Is.True);
-        Assert.That(FoamAllowList.IsSolverName("blockMesh"), Is.False);
-        Assert.That(FoamAllowList.IsSolverName("potentialFoam"), Is.False, "a utility of the list, not a solver");
-        Assert.That(FoamAllowList.IsSolverName("Foam"), Is.False);
-        Assert.That(FoamAllowList.IsSolverName("simple-Foam"), Is.False);
+        var recipe = MotorBike();
+        recipe.Steps[9].Arguments = ["-func", "forceCoeffs", "-time", "-1", "-scale", "-1.5e-3"];
+
+        Assert.That(FoamRecipeValidator.Validate(recipe), Is.Empty);
+
+        recipe.Steps[9].Arguments = ["-time", "-1abc"];
+        Assert.That(FoamRecipeValidator.Validate(recipe), Has.Exactly(1).Items.And.Some.Contains("-1abc"));
+    }
+
+    [Test]
+    public void TheKitDecidesWhetherAnAllowedStepCanRunTest()
+    {
+        var solutionRoot = OpenFOAMTestPaths.FindSolutionRoot();
+        if (solutionRoot == null)
+            Assert.Ignore("Solution root not found");
+
+        var fakeFoam = OpenFOAMTestPaths.FindFakeFoamPath(solutionRoot);
+        if (fakeFoam == null)
+            Assert.Ignore("fake-foam not built");
+
+        using var fake = FakeKit.Create(fakeFoam, "blockMesh", "simpleFoam");
+        var kit = fake.Resolve();
+        var recipe = new FoamRecipeData
+        {
+            Application = "pisoFoam",
+            Steps = [new FoamStepData { Utility = "blockMesh" }, new FoamStepData { Utility = "checkMesh" }, new FoamStepData { Utility = "pisoFoam" }]
+        };
+
+        var findings = FoamRecipeValidator.Validate(recipe, kit);
+
+        Assert.That(findings, Has.Count.EqualTo(3));
+        Assert.That(findings, Has.Some.EqualTo("The kit has no solver 'pisoFoam'."));
+        Assert.That(findings, Has.Some.EqualTo("Step 2: the kit has no 'checkMesh'."));
+        Assert.That(findings, Has.Some.EqualTo("Step 3: the kit has no 'pisoFoam'."));
+    }
+
+    [Test]
+    public void ARecipeLongerThanTheCapIsRefusedTest()
+    {
+        var recipe = MotorBike();
+        while (recipe.Steps.Count <= FoamRecipeValidator.MAX_STEPS)
+            recipe.Steps.Insert(0, new FoamStepData { Utility = "checkMesh" });
+
+        Assert.That(FoamRecipeValidator.Validate(recipe), Has.Some.Contains($"at most {FoamRecipeValidator.MAX_STEPS}"));
     }
 
     #endregion

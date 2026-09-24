@@ -40,6 +40,9 @@ jobs:
           - os: macos-14
             kit: openfoam-macos-arm64
             platform: macos-arm64
+          - os: windows-2022
+            kit: openfoam-windows-x64
+            platform: windows-x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -53,6 +56,7 @@ jobs:
       # unpacks it: no mode bits kept (the resolver restores the executable
       # bits from KIT.env), under a path without a space.
       - name: Fetch the kit
+        if: runner.os != 'Windows'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -64,6 +68,29 @@ jobs:
           find "$RUNNER_TEMP/kit" -type f -exec chmod a-x {} +
           test -f "$RUNNER_TEMP/kit/openfoam/${{ matrix.platform }}/KIT.env"
           echo "OUTWIT_OPENFOAM=$RUNNER_TEMP/kit/openfoam/${{ matrix.platform }}" >> "$GITHUB_ENV"
+
+      # The Windows runner has no MS-MPI, so this is the serial path of the
+      # oracle (the parallel case is skipped by the tests when the kit reports
+      # no launcher); the kit's own CI proves the MS-MPI path. The kit lives
+      # under a short path: OpenFOAM strips whitespace from paths and the
+      # runner's temp is already space-free, but a short root keeps the logs
+      # readable.
+      - name: Fetch the kit (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dl = "C:\kitdl"; $kit = "C:\kit"
+          New-Item -ItemType Directory -Force $dl, $kit | Out-Null
+          gh release download $env:KIT_RELEASE --repo OmnibusCloud/OpenFOAM --pattern "${{ matrix.kit }}.zip" --pattern SHA256SUMS --dir $dl
+          if ($LASTEXITCODE -ne 0) { throw "gh release download failed" }
+          $expected = (Select-String -Path "$dl\SHA256SUMS" -Pattern "${{ matrix.kit }}.zip").Line.Split(' ')[0]
+          $actual = (Get-FileHash "$dl\${{ matrix.kit }}.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($expected -ne $actual) { throw "checksum mismatch: expected $expected, got $actual" }
+          Expand-Archive "$dl\${{ matrix.kit }}.zip" -DestinationPath $kit
+          if (-not (Test-Path "$kit\openfoam\${{ matrix.platform }}\KIT.env")) { throw "KIT.env missing after unpack" }
+          "OUTWIT_OPENFOAM=$kit\openfoam\${{ matrix.platform }}" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Build the controller and its tests
         run: dotnet build OpenFOAM/OutWit.Controller.OpenFOAM.Tests/OutWit.Controller.OpenFOAM.Tests.csproj -c Release

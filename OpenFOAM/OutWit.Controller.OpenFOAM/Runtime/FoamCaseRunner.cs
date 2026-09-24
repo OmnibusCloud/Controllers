@@ -60,6 +60,7 @@ public sealed class FoamCaseRunner
             Logger?.LogInformation("Foam.Run: no MPI launcher on this node ({Platform}) - the parallel steps run serially.", Kit.Platform);
 
         var report = new FoamRunReport();
+        var logCounts = new Dictionary<string, int>(StringComparer.Ordinal);
 
         foreach (var step in recipe.Steps)
         {
@@ -73,17 +74,17 @@ public sealed class FoamCaseRunner
 
             var runParallel = parallel && step.Parallel;
             var (fileName, arguments) = CommandLine(step, runParallel);
-            var logPath = Path.Combine(CaseDirectory, $"log.{step.Utility}");
+            var logPath = Path.Combine(CaseDirectory, LogName(step.Utility, logCounts));
 
             var outcome = await FoamProcessRunner.RunAsync(fileName, arguments, CaseDirectory, Environment, logPath, cancellationToken);
 
-            report.Steps.Add(new FoamStepOutcomeData
+            report.Add(step, new FoamStepOutcomeData
             {
                 Utility = step.Utility,
                 Ranks = runParallel ? Ranks : 1,
                 ExitCode = outcome.ExitCode,
                 Seconds = outcome.ElapsedSeconds
-            });
+            }, logPath);
 
             if (outcome.ExitCode != 0)
             {
@@ -130,18 +131,36 @@ public sealed class FoamCaseRunner
         return (Kit.MpiLauncher, arguments);
     }
 
+    /// <summary>
+    /// The log file name of a step: OpenFOAM's own <c>log.&lt;utility&gt;</c>
+    /// for the first run of a utility, <c>log.&lt;utility&gt;.2</c> and so on
+    /// for later runs of the same one - a solver followed by its
+    /// <c>-postProcess</c> form keeps both logs, and the solve's facts are
+    /// read from the solve's.
+    /// </summary>
+    /// <param name="utility">The step's utility.</param>
+    /// <param name="counts">How many times each utility has run so far; updated.</param>
+    /// <returns>The file name, relative to the case.</returns>
+    public static string LogName(string utility, Dictionary<string, int> counts)
+    {
+        counts.TryGetValue(utility, out var seen);
+        counts[utility] = seen + 1;
+
+        return seen == 0 ? $"log.{utility}" : $"log.{utility}.{seen + 1}";
+    }
+
     #endregion
 
     #region Properties
+
+    /// <summary>Ranks the parallel steps run on.</summary>
+    public int Ranks { get; }
 
     private FoamKit Kit { get; }
 
     private string CaseDirectory { get; }
 
     private IReadOnlyDictionary<string, string> Environment { get; }
-
-    /// <summary>Ranks the parallel steps run on.</summary>
-    public int Ranks { get; }
 
     private ILogger? Logger { get; }
 

@@ -122,6 +122,18 @@ public class FoamFunctionObjectWriterTests
     }
 
     [Test]
+    public void AResponseNamedLikeAFileTheCaseShipsIsRefusedAndNothingIsWrittenTest()
+    {
+        File.WriteAllText(Path.Combine(m_case, "system", "coeffs"), "the user's own dictionary\n");
+
+        var findings = FoamFunctionObjectWriter.Write(m_case, MotorBikeRequest());
+
+        Assert.That(findings, Is.EqualTo(new[] { "Response 'coeffs': the case already carries system/coeffs; choose another response name." }));
+        Assert.That(File.ReadAllText(Path.Combine(m_case, "system", "coeffs")), Is.EqualTo("the user's own dictionary\n"), "the user's file is untouched");
+        Assert.That(File.Exists(Path.Combine(m_case, "system", "inletP")), Is.False, "the other responses are not written either");
+    }
+
+    [Test]
     public void ANullOrEmptyRequestWritesNothingTest()
     {
         Assert.That(FoamFunctionObjectWriter.Write(m_case, null), Is.Empty);

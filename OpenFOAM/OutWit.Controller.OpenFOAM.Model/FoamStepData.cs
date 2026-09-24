@@ -7,10 +7,12 @@ namespace OutWit.Controller.OpenFOAM.Model;
 
 /// <summary>
 /// One step of a recipe: an allow-listed OpenFOAM utility or solver with its
-/// arguments, serial or parallel. A parallel step runs under the kit's MPI
-/// launcher with <c>-parallel</c> appended; the node writes the decomposition
-/// dictionary itself. There is no free-form command: a step the allow-list
-/// does not know is refused by name before anything runs.
+/// arguments, serial or parallel. A parallel step runs under the platform's
+/// MPI launcher (the kit's own <c>mpirun</c> on Linux and macOS, the node's
+/// MS-MPI <c>mpiexec</c> on Windows) with <c>-parallel</c> appended; the node
+/// writes the decomposition dictionary itself, and a node without a launcher
+/// runs the step serially. There is no free-form command: a step the
+/// allow-list does not know is refused by name before anything runs.
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).

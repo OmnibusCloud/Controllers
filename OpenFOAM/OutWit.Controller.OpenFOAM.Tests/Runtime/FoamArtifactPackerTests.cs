@@ -16,7 +16,7 @@ public class FoamArtifactPackerTests
     {
         m_scratch = OpenFOAMTestPaths.CreateScratch("foam-pack");
         m_case = Path.Combine(m_scratch, "case");
-        foreach (var relative in new[] { "system/controlDict", "constant/transportProperties", "constant/polyMesh/points", "0/U", "100/U", "250/U", "250/p", "processor0/250/U", "postProcessing/coeffs/250/coefficient.dat", "log.blockMesh", "log.simpleFoam" })
+        foreach (var relative in new[] { "system/controlDict", "constant/transportProperties", "constant/polyMesh/points", "constant/triSurface/motorBike.obj.gz", "constant/extendedFeatureEdgeMesh/motorBike.eMesh", "constant/geometry/wing.stl", "0/U", "100/U", "250/U", "250/p", "processor0/250/U", "postProcessing/coeffs/250/coefficient.dat", "log.blockMesh", "log.simpleFoam" })
         {
             var path = Path.Combine(m_case, relative.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -60,6 +60,27 @@ public class FoamArtifactPackerTests
         Assert.That(entries, Does.Not.Contain("processor0/250/U"));
         Assert.That(entries, Does.Not.Contain("postProcessing/coeffs/250/coefficient.dat"));
         Assert.That(entries, Does.Contain(FoamArtifactPacker.STUB));
+    }
+
+    [Test]
+    public void TheGeometryInputsNeverTravelBackTest()
+    {
+        // The surfaces snappyHexMesh reads are the user's own files, tens of
+        // megabytes each, and would come back in every variant's artifact.
+        var everything = Entries(new FoamArtifactPolicyData { Times = FoamArtifactTimes.All, Mesh = true, Logs = true, PostProcessing = true });
+
+        Assert.That(everything, Does.Not.Contain("constant/triSurface/motorBike.obj.gz"));
+        Assert.That(everything, Does.Not.Contain("constant/extendedFeatureEdgeMesh/motorBike.eMesh"));
+        Assert.That(everything, Does.Not.Contain("constant/geometry/wing.stl"));
+        Assert.That(everything, Does.Contain("constant/transportProperties").And.Contain("constant/polyMesh/points"));
+    }
+
+    [Test]
+    public void ALogsOnlyPolicyIsTheCaseSkeletonAndTheLogsTest()
+    {
+        var entries = Entries(new FoamArtifactPolicyData { Logs = true });
+
+        Assert.That(entries, Is.EqualTo(new[] { FoamArtifactPacker.STUB, "constant/transportProperties", "log.blockMesh", "log.simpleFoam", "system/controlDict" }));
     }
 
     [Test]

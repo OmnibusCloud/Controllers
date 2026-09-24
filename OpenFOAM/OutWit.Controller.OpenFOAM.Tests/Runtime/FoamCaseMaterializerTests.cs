@@ -56,6 +56,14 @@ public class FoamCaseMaterializerTests
     [TestCase("C:/Windows/x", "inside the case")]
     [TestCase("system//controlDict", "empty or '.' segments")]
     [TestCase("./system/controlDict", "empty or '.' segments")]
+    [TestCase("log.simpleFoam", "earlier run")]
+    [TestCase("log.blockMesh.2", "earlier run")]
+    [TestCase("logs/simpleFoam.txt", null)]
+    [TestCase("postProcessing/coeffs/0/coefficient.dat", "earlier run")]
+    [TestCase("processor0/0/U", "decomposed case")]
+    [TestCase("processor12/constant/polyMesh/points", "decomposed case")]
+    [TestCase("processorX/0/U", null)]
+    [TestCase("constant/triSurface/motorBike.obj.gz", null)]
     public void PathRulesAreAppliedTest(string relativePath, string? expectedFragment)
     {
         var finding = FoamCaseMaterializer.ValidatePath(relativePath);
@@ -120,6 +128,30 @@ public class FoamCaseMaterializerTests
         Assert.That(findings, Has.Some.Contains("../escape"));
         Assert.That(File.Exists(Path.Combine(m_case, "system", "controlDict")), Is.True);
         Assert.That(File.Exists(Path.Combine(m_root, "escape")), Is.False, "nothing is written outside the case");
+    }
+
+    [Test]
+    public async Task AReadOnlyBlobLandsWritableTest()
+    {
+        // A blob cache may keep its files read-only; the case is the run's to
+        // write into and the scratch cleanup's to delete.
+        var file = BlobFile("constant/polyMesh/points", "points\n");
+        File.SetAttributes(m_blobs.GetStoredPath(file.BlobId), FileAttributes.ReadOnly);
+        var task = new FoamTaskData { BaseFiles = [file] };
+
+        try
+        {
+            var findings = await FoamCaseMaterializer.MaterializeAsync(task, m_case, m_blobs);
+
+            Assert.That(findings, Is.Empty);
+            var target = Path.Combine(m_case, "constant", "polyMesh", "points");
+            Assert.That(File.GetAttributes(target) & FileAttributes.ReadOnly, Is.EqualTo((FileAttributes)0));
+            File.WriteAllText(target, "rewritten\n");
+        }
+        finally
+        {
+            File.SetAttributes(m_blobs.GetStoredPath(file.BlobId), FileAttributes.Normal);
+        }
     }
 
     [Test]

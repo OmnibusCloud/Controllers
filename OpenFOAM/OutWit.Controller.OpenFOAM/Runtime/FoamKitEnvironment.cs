@@ -171,6 +171,20 @@ public sealed class FoamKitEnvironment
     }
 
     /// <summary>
+    /// The system part of PATH the controller appends: where the platform's
+    /// own tools live and nothing else. A node service's PATH is never inherited.
+    /// </summary>
+    /// <returns>A PATH fragment.</returns>
+    public static string SystemPath()
+    {
+        if (!OperatingSystem.IsWindows())
+            return "/usr/local/bin:/usr/bin:/bin";
+
+        var systemRoot = System.Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows";
+        return $@"{systemRoot}\System32;{systemRoot}";
+    }
+
+    /// <summary>
     /// Splits a list-valued variable. The RAW value is split, before the kit
     /// folder is substituted: it holds @KIT@-relative entries and no drive
     /// letters, so the separator is whichever the kit's platform wrote (':'
@@ -190,20 +204,6 @@ public sealed class FoamKitEnvironment
             .Split(separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(entry => entry.Replace(KIT_TOKEN, kit))
             .ToList();
-    }
-
-    /// <summary>
-    /// The system part of PATH the controller appends: where the platform's
-    /// own tools live and nothing else. A node service's PATH is never inherited.
-    /// </summary>
-    /// <returns>A PATH fragment.</returns>
-    public static string SystemPath()
-    {
-        if (!OperatingSystem.IsWindows())
-            return "/usr/local/bin:/usr/bin:/bin";
-
-        var systemRoot = System.Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows";
-        return $@"{systemRoot}\System32;{systemRoot}";
     }
 
     private static string ToKitPath(string path)

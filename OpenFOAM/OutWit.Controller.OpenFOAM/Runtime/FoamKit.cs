@@ -22,23 +22,69 @@ public sealed class FoamKit
     #region Constructors
 
     /// <summary>
-    /// Describes a kit.
+    /// Describes a kit, with the MPI launcher this platform offers for it.
     /// </summary>
     /// <param name="root">The kit folder (the one holding KIT.env).</param>
     /// <param name="environment">Its parsed KIT.env.</param>
     /// <exception cref="InvalidDataException">KIT.env names no FOAM_APPBIN.</exception>
     public FoamKit(string root, FoamKitEnvironment environment)
+        : this(root, environment, FindMpiLauncher(environment, Path.GetFullPath(root)))
+    {
+    }
+
+    /// <summary>
+    /// Describes a kit with an explicit launcher decision - the resolver's,
+    /// which on Windows also depends on whether the MS-MPI Pstream could be
+    /// put in place.
+    /// </summary>
+    /// <param name="root">The kit folder (the one holding KIT.env).</param>
+    /// <param name="environment">Its parsed KIT.env.</param>
+    /// <param name="mpiLauncher">Full path of the MPI launcher, or null when parallel steps cannot run on this node.</param>
+    /// <exception cref="InvalidDataException">KIT.env names no FOAM_APPBIN.</exception>
+    public FoamKit(string root, FoamKitEnvironment environment, string? mpiLauncher)
     {
         Root = Path.GetFullPath(root);
         Environment = environment;
         Platform = environment.Get(FoamKitEnvironment.PLATFORM) ?? string.Empty;
         AppBin = environment.Get("FOAM_APPBIN", Root) ?? throw new InvalidDataException("KIT.env names no FOAM_APPBIN.");
-        MpiLauncher = FindMpiLauncher(environment, Root);
+        MpiLauncher = mpiLauncher;
     }
 
     #endregion
 
     #region Functions
+
+    /// <summary>
+    /// The MPI launcher this platform offers for a kit: the kit's own
+    /// <c>mpirun</c> on Linux and macOS (from the PATH entries of KIT.env);
+    /// on Windows the node's <c>mpiexec.exe</c> where Microsoft's installer
+    /// put it (MS-MPI is never bundled - KIT_MPI=msmpi-external).
+    /// </summary>
+    /// <param name="environment">The kit's KIT.env.</param>
+    /// <param name="root">The kit folder, absolute.</param>
+    /// <returns>Full path of the launcher, or null when there is none.</returns>
+    public static string? FindMpiLauncher(FoamKitEnvironment environment, string root)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var bin = System.Environment.GetEnvironmentVariable(MSMPI_BIN, EnvironmentVariableTarget.Machine)
+                      ?? System.Environment.GetEnvironmentVariable(MSMPI_BIN);
+            if (string.IsNullOrEmpty(bin))
+                return null;
+
+            var mpiexec = Path.Combine(bin, MPIEXEC);
+            return File.Exists(mpiexec) ? mpiexec : null;
+        }
+
+        foreach (var directory in environment.PathEntries(root))
+        {
+            var candidate = Path.Combine(directory, MPIRUN);
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// The full path of an executable of the kit.
@@ -73,32 +119,6 @@ public sealed class FoamKit
             environment[MSMPI_BIN] = Path.GetDirectoryName(MpiLauncher) ?? string.Empty;
 
         return environment;
-    }
-
-    private static string? FindMpiLauncher(FoamKitEnvironment environment, string root)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            // MS-MPI is the node's own, never bundled (the Windows kit's
-            // KIT.env says KIT_MPI=msmpi-external): the launcher is where
-            // Microsoft's installer put it, or there is none.
-            var bin = System.Environment.GetEnvironmentVariable(MSMPI_BIN, EnvironmentVariableTarget.Machine)
-                      ?? System.Environment.GetEnvironmentVariable(MSMPI_BIN);
-            if (string.IsNullOrEmpty(bin))
-                return null;
-
-            var mpiexec = Path.Combine(bin, MPIEXEC);
-            return File.Exists(mpiexec) ? mpiexec : null;
-        }
-
-        foreach (var directory in environment.PathEntries(root))
-        {
-            var candidate = Path.Combine(directory, MPIRUN);
-            if (File.Exists(candidate))
-                return candidate;
-        }
-
-        return null;
     }
 
     #endregion

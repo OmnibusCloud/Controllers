@@ -4,8 +4,8 @@ using System.Text.RegularExpressions;
 namespace OutWit.Controller.OpenFOAM.Recipes;
 
 /// <summary>
-/// The node-side rejects of plan D-14, applied to the materialised case
-/// before anything runs: run-time code (<c>codeStream</c>, <c>#codeStream</c>,
+/// The node-side rejects, applied to the materialised case before anything
+/// runs: run-time code (<c>codeStream</c>, <c>#codeStream</c>,
 /// <c>coded*</c> conditions and function objects, <c>#calc</c>, a
 /// <c>dynamicCode/</c> directory), libraries outside the kit, includes
 /// outside the case, a decomposed-only case, a missing application. The kit
@@ -26,7 +26,11 @@ public static class FoamCaseInspector
 
     private static readonly Regex LIBS = new(@"(?<![A-Za-z0-9_])libs\s*\(([^)]*)\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private static readonly Regex INCLUDE = new(@"#include(?:IfPresent|Func)?\s+""([^""]+)""", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    /// <summary>Every include directive OpenFOAM knows, quoted target captured: #include, #sinclude, #includeIfPresent, #includeFunc, #includeEtc.</summary>
+    private static readonly Regex INCLUDE = new(@"#s?include(?:IfPresent|Func|Etc)?\s+""([^""]+)""", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>The case-root prefixes OpenFOAM expands: the rest of the path must still stay inside the case.</summary>
+    private static readonly string[] CASE_PREFIXES = ["$FOAM_CASE/", "${FOAM_CASE}/", "<case>/"];
 
     private static readonly Regex APPLICATION = new(@"(?m)^\s*application\s+([A-Za-z0-9_]+)\s*;", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -97,10 +101,8 @@ public static class FoamCaseInspector
             foreach (Match match in INCLUDE.Matches(stripped))
             {
                 var target = match.Groups[1].Value;
-                if (target.StartsWith("$FOAM_CASE", StringComparison.Ordinal) || target.StartsWith("<case>", StringComparison.Ordinal))
-                    continue;
-                if (FoamRecipeValidator.IsPathEscape(target) || target.StartsWith('$') || target.StartsWith('~'))
-                    findings.Add($"{relative}:{LineOf(stripped, match.Index)}: #include \"{target}\" reaches outside the case.");
+                if (!StaysInsideTheCase(target))
+                    findings.Add($"{relative}:{LineOf(stripped, match.Index)}: {match.Value.Split(' ', '\t')[0]} \"{target}\" reaches outside the case.");
             }
         }
 
@@ -120,6 +122,34 @@ public static class FoamCaseInspector
 
         var match = APPLICATION.Match(StripComments(File.ReadAllText(controlDict)));
         return match.Success ? match.Groups[1].Value : null;
+    }
+
+    /// <summary>
+    /// Whether an include target resolves inside the case. A case-root prefix
+    /// ($FOAM_CASE/, ${FOAM_CASE}/, &lt;case&gt;/) is stripped and the rest judged
+    /// like any relative path, so "$FOAM_CASE/../x" is refused; an #includeEtc
+    /// target is a path under the kit's etc/ and is judged the same way; any
+    /// other variable or a home-relative path is refused - what it expands to
+    /// on a node is not the user's to decide.
+    /// </summary>
+    /// <param name="target">The quoted include target.</param>
+    /// <returns>True when the include cannot leave the case (or the kit's etc/ for #includeEtc).</returns>
+    public static bool StaysInsideTheCase(string target)
+    {
+        var path = target;
+        foreach (var prefix in CASE_PREFIXES)
+        {
+            if (path.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                path = path[prefix.Length..];
+                break;
+            }
+        }
+
+        if (path.Length == 0 || path.StartsWith('$') || path.StartsWith('~') || path.StartsWith('<'))
+            return false;
+
+        return !FoamRecipeValidator.IsPathEscape(path);
     }
 
     private static IEnumerable<string> ScannableFiles(string root)

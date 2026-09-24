@@ -1,4 +1,6 @@
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using OutWit.Controller.OpenFOAM.Runtime;
 
 namespace OutWit.Controller.OpenFOAM.Tests.Utils;
 
@@ -6,14 +8,22 @@ internal static class OpenFOAMTestPaths
 {
     #region Functions
 
+    /// <summary>
+    /// Locates the staged controller modules (@Controllers/&lt;configuration&gt;),
+    /// preferring the configuration this test assembly was built in.
+    /// </summary>
+    /// <returns>The module folder, or null when nothing is staged.</returns>
     public static string? FindControllersPath()
     {
         var dir = AppContext.BaseDirectory;
         while (dir != null)
         {
-            var candidate = Path.Combine(dir, "@Controllers", "Debug");
-            if (Directory.Exists(candidate))
-                return candidate;
+            foreach (var configuration in Configurations())
+            {
+                var candidate = Path.Combine(dir, "@Controllers", configuration);
+                if (Directory.Exists(candidate))
+                    return candidate;
+            }
 
             dir = Path.GetDirectoryName(dir);
         }
@@ -46,11 +56,7 @@ internal static class OpenFOAMTestPaths
         var exeName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "fake-foam.exe" : "fake-foam";
         var projectDir = Path.Combine(solutionRoot, "OpenFOAM", "OutWit.Controller.OpenFOAM.Tests.FakeFoam", "bin");
 
-        var ownConfiguration = AppContext.BaseDirectory.Contains($"{Path.DirectorySeparatorChar}Release{Path.DirectorySeparatorChar}")
-            ? "Release"
-            : "Debug";
-
-        foreach (var configuration in new[] { ownConfiguration, "Debug", "Release" })
+        foreach (var configuration in Configurations())
         {
             var candidate = Path.Combine(projectDir, configuration, "net10.0", exeName);
             if (File.Exists(candidate))
@@ -73,6 +79,27 @@ internal static class OpenFOAMTestPaths
         return directory;
     }
 
+    /// <summary>
+    /// Writes a BUILDINFO.txt over a kit folder in the shape the pack step
+    /// writes it: a header, then the SHA-256 of every file.
+    /// </summary>
+    /// <param name="kitRoot">The kit folder.</param>
+    public static void WriteBuildInfo(string kitRoot)
+    {
+        var lines = new List<string> { "OpenFOAM v2606 (api 2606) - OmnibusCloud kit", "platform: test", "", "sha256 of every file (relative to the kit folder):" };
+        foreach (var file in Directory.EnumerateFiles(kitRoot, "*", SearchOption.AllDirectories).OrderBy(path => path, StringComparer.Ordinal))
+        {
+            if (Path.GetFileName(file) == FoamKitIntegrity.BUILDINFO)
+                continue;
+
+            var relative = Path.GetRelativePath(kitRoot, file).Replace('\\', '/');
+            using var stream = File.OpenRead(file);
+            lines.Add($"{Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant()}  {relative}");
+        }
+
+        File.WriteAllLines(Path.Combine(kitRoot, FoamKitIntegrity.BUILDINFO), lines);
+    }
+
     public static void TryDelete(string directory)
     {
         try
@@ -85,6 +112,15 @@ internal static class OpenFOAMTestPaths
         catch (UnauthorizedAccessException)
         {
         }
+    }
+
+    private static IEnumerable<string> Configurations()
+    {
+        var own = AppContext.BaseDirectory.Contains($"{Path.DirectorySeparatorChar}Release{Path.DirectorySeparatorChar}")
+            ? "Release"
+            : "Debug";
+
+        return new[] { own, "Debug", "Release" }.Distinct();
     }
 
     #endregion

@@ -9,8 +9,11 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 /// Builds a variant's case directory from the task: every base file at its
 /// relative path (from the node's blob cache, so a sweep fetches the base
 /// tree once), the templated files instantiated with the variant's values.
-/// A file path that would leave the case, a path with a space (plan D-16), or
-/// a token left without a value refuses the variant here, before anything runs.
+/// A file path that would leave the case, a path with a space (OpenFOAM strips
+/// whitespace from paths), a leftover of an earlier run (a log, a
+/// <c>postProcessing/</c> or <c>processor*</c> tree, which would pass for this
+/// run's), or a token left without a value refuses the variant here, before
+/// anything runs.
 /// </summary>
 public static class FoamCaseMaterializer
 {
@@ -55,6 +58,8 @@ public static class FoamCaseMaterializer
             if (!file.Templated)
             {
                 File.Copy(source, target, overwrite: true);
+                // The blob cache may keep its files read-only; the case is ours to write and to delete.
+                File.SetAttributes(target, FileAttributes.Normal);
                 continue;
             }
 
@@ -88,6 +93,14 @@ public static class FoamCaseMaterializer
             return $"{relativePath}: a case file path must stay inside the case directory.";
         if (relativePath.Split('/').Any(segment => segment.Length == 0 || segment == "."))
             return $"{relativePath}: a case file path must not have empty or '.' segments.";
+
+        var first = relativePath.Split('/')[0];
+        if (!relativePath.Contains('/') && first.StartsWith("log.", StringComparison.Ordinal))
+            return $"{relativePath}: a log of an earlier run does not belong in the base case.";
+        if (first == "postProcessing")
+            return $"{relativePath}: postProcessing/ of an earlier run does not belong in the base case (its values would pass for this run's).";
+        if (first.StartsWith("processor", StringComparison.Ordinal) && first.Length > 9 && first[9..].All(char.IsAsciiDigit))
+            return $"{relativePath}: a decomposed case (processor*/) is not accepted; submit the reconstructed case.";
 
         return null;
     }

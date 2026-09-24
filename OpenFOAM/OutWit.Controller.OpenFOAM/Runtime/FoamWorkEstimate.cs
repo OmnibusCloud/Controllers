@@ -4,7 +4,7 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 
 /// <summary>
 /// The relative cost of a variant for the scheduler, from the task's scalars
-/// alone (requirements CR-F4: never from the case tree): cells against a
+/// alone (never from the case tree, which the scheduler must not open): cells against a
 /// reference mesh, a factor for the solver class, a surcharge when every
 /// variant meshes again. Initial values, to be recalibrated against the
 /// oracle cases; an unknown class counts as steady incompressible.

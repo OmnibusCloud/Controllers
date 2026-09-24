@@ -4,8 +4,9 @@ Runs complete [OpenFOAM®](https://www.openfoam.com/) cases on WitCloud
 compute nodes. One run = one whole case on one node - meshing, decomposition,
 the solver and the post step, through an allow-listed recipe; case support is
 whatever the pinned kit solves. The win is throughput across many independent
-runs, which is exactly what the companion `OutWit.Controller.Sweep`
-orchestrates into parameter studies.
+runs: the activity is built to be the case backend the companion
+`OutWit.Controller.Sweep` fans parameter studies out over (that integration
+follows in a later release; today `Foam.Run` is driven through `Grid.ForEach`).
 
 ## Activity
 
@@ -26,31 +27,41 @@ The kit ships no compiler, so anything that compiles C++ at run time is
 refused before the first process starts, with file and line: `codeStream`,
 `#codeStream`, `#calc` (`#eval` is the in-built evaluator and is allowed),
 `coded*` conditions and function objects, a `dynamicCode/` directory. Also
-refused: `libs` entries naming libraries outside the kit, `#include` paths
-outside the case, a decomposed-only case, a recipe step outside the
-allow-list (`FoamAllowList`), an argument the allow-list's grammar does not
-accept, a path with a space (OpenFOAM strips whitespace from paths).
+refused: `libs` entries naming libraries outside the kit, include directives
+(`#include`, `#sinclude`, `#includeIfPresent`, `#includeEtc`, `#includeFunc`)
+whose target leaves the case, a decomposed-only case, a recipe step outside
+the allow-list (`FoamAllowList`), an argument the allow-list's grammar does
+not accept, a path with a space (OpenFOAM strips whitespace from paths), and
+leftovers of an earlier run in the base case (`log.*`, `postProcessing/`,
+`processor*/`), which would pass for this run's. A response name that
+collides with a file the case ships under `system/` is refused rather than
+overwritten.
 
 ## Bundled kit
 
 The module carries pinned **OpenFOAM v2606** kits for `win-x64`, `linux-x64`
 and `osx-arm64` as controller data assets, produced and mirrored by
 [OmnibusCloud/OpenFOAM](https://github.com/OmnibusCloud/OpenFOAM). Nodes need
-no preinstalled software: the Linux and macOS kits bundle Open MPI 4.1.8,
+no preinstalled OpenFOAM: the Linux and macOS kits bundle Open MPI 4.1.8,
 scotch and fftw, and every kit is relocatable by environment - the kit's
 `KIT.env` records the exact environment its build established, the controller
 substitutes the kit folder and the task's scratch and sets the result on the
 solver process, with `HOME` and `TMPDIR` inside the scratch. Nothing is
 sourced on a node; a run writes into the case directory and the scratch and
-nowhere else. The Windows kit is cross-compiled from the same pinned source
-with MinGW-w64 and ships two Pstream libraries: the serial one is in place as
-shipped, and when the node has Microsoft MPI installed (MS-MPI is the machine
-owner's to install; its licence allows redistributing only its installer) the
-controller copies the MS-MPI one over it once, at module install, and runs
+nowhere else (the kit folder itself changes only once, when the kit is first
+resolved on a node: the Unix executable bits a zip does not keep are
+restored, and on Windows the Pstream swap below is made). The Windows kit is
+cross-compiled from the same pinned source with MinGW-w64 and ships two
+Pstream libraries: the serial one is in place as shipped, and when the node
+has Microsoft MPI installed (MS-MPI is the machine owner's to install; its
+licence allows redistributing only its installer) the controller copies the
+MS-MPI one over it on the first resolution of the kit (idempotent) and runs
 parallel steps under the node's `mpiexec`; a node without MS-MPI runs every
-step serially. OpenFOAM is GPL-3.0: the kit ships the licence text and the
-written source offer, and the corresponding source is publicly mirrored in
-that repository's releases.
+step serially. Before a kit is used the controller spot-checks it against its
+own `BUILDINFO.txt` (a sample of the listed hashes) and refuses a kit that is
+short of a file or carries an altered one, naming the file. OpenFOAM is
+GPL-3.0: the kit ships the licence text and the written source offer, and the
+corresponding source is publicly mirrored in that repository's releases.
 
 Node benchmark: `Foam.Run` is ranked by pitzDaily from the kit's own
 tutorials, meshed once and then solved serially for a fixed 50 iterations, in
@@ -66,6 +77,6 @@ OpenCFD® trade marks.
 ## Dependencies
 
 `Variables` (module dependency). The shared data types live in
-`OutWit.Controller.OpenFOAM.Model`, consumed by this controller, by the Sweep
-orchestration controller, and by client applications reading case-sweep
-manifests.
+`OutWit.Controller.OpenFOAM.Model`, consumed by this controller and, once the
+Sweep integration lands, by the Sweep orchestration controller and by client
+applications composing case sweeps.

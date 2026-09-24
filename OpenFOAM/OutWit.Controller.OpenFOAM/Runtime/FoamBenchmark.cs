@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using OutWit.Controller.OpenFOAM.Extraction;
+using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Engine.Data.Benchmark;
 using OutWit.Engine.Interfaces;
 
@@ -80,10 +82,10 @@ public static class FoamBenchmark
         if (!Directory.Exists(source))
             throw new InvalidOperationException($"The kit carries no {TUTORIAL} under {tutorials}.");
 
-        var scratch = Path.Combine(Path.GetTempPath(), SCRATCH_ROOT, Guid.NewGuid().ToString("N"));
+        // The same scratch rule as a case run: under the node's temp, no space
+        // in the path (the 8.3 form on Windows), home and tmp inside.
+        var scratch = FoamScratchPath.CreateScratch(SCRATCH_ROOT);
         var caseDirectory = Path.Combine(scratch, "pitzDaily");
-        Directory.CreateDirectory(Path.Combine(scratch, "home"));
-        Directory.CreateDirectory(Path.Combine(scratch, "tmp"));
 
         try
         {
@@ -190,7 +192,7 @@ public static class FoamBenchmark
     private static async Task<TimeSpan> SolveAsync(FoamKit kit, string caseDirectory, IReadOnlyDictionary<string, string> environment, CancellationToken cancellationToken)
     {
         // Every run starts from the mesh and the initial fields alone, like a real run.
-        foreach (var directory in FoamArtifactPacker.TimeDirectories(caseDirectory, Model.FoamArtifactTimes.All))
+        foreach (var directory in FoamArtifactPacker.TimeDirectories(caseDirectory, FoamArtifactTimes.All))
         {
             if (Path.GetFileName(directory) != "0")
                 Directory.Delete(directory, recursive: true);
@@ -219,13 +221,13 @@ public static class FoamBenchmark
         // convergence controls are removed so no node stops early either.
         var controlDict = Path.Combine(caseDirectory, "system", "controlDict");
         var text = File.ReadAllText(controlDict);
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"(?m)^(\s*endTime\s+)\S+;", $"${{1}}{ITERATIONS};");
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"(?m)^(\s*writeInterval\s+)\S+;", $"${{1}}{ITERATIONS};");
+        text = Regex.Replace(text, @"(?m)^(\s*endTime\s+)\S+;", $"${{1}}{ITERATIONS};");
+        text = Regex.Replace(text, @"(?m)^(\s*writeInterval\s+)\S+;", $"${{1}}{ITERATIONS};");
         File.WriteAllText(controlDict, text);
 
         var fvSolution = Path.Combine(caseDirectory, "system", "fvSolution");
         var solution = File.ReadAllText(fvSolution);
-        solution = System.Text.RegularExpressions.Regex.Replace(solution, @"residualControl\s*\{[^}]*\}", string.Empty);
+        solution = Regex.Replace(solution, @"residualControl\s*\{[^}]*\}", string.Empty);
         File.WriteAllText(fvSolution, solution);
 
         var orig = Path.Combine(caseDirectory, "0.orig");

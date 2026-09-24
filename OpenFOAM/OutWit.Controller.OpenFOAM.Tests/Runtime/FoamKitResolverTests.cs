@@ -7,14 +7,41 @@ namespace OutWit.Controller.OpenFOAM.Tests.Runtime;
 [NonParallelizable]
 public class FoamKitResolverTests
 {
+    private static readonly string PROBE = Path.Combine(Path.GetTempPath(), "nowhere", "controller.dll");
+
+    private string? m_previousKitPath;
     private FakeKit? m_kit;
+
+    [SetUp]
+    public void Setup()
+    {
+        m_previousKitPath = Environment.GetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH);
+    }
 
     [TearDown]
     public void TearDown()
     {
-        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, null);
+        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, m_previousKitPath);
         m_kit?.Dispose();
     }
+
+    #region Tools
+
+    private FakeKit RequireKit(params string[] utilities)
+    {
+        var solutionRoot = OpenFOAMTestPaths.FindSolutionRoot();
+        if (solutionRoot == null)
+            Assert.Ignore("Solution root not found");
+
+        var fakeFoam = OpenFOAMTestPaths.FindFakeFoamPath(solutionRoot);
+        if (fakeFoam == null)
+            Assert.Ignore("fake-foam not built");
+
+        m_kit = FakeKit.Create(fakeFoam, utilities);
+        return m_kit;
+    }
+
+    #endregion
 
     #region Resolution Tests
 
@@ -36,6 +63,7 @@ public class FoamKitResolverTests
         // A bare assembly path with no openfoam/ folder next to it: the
         // resolver reports absence instead of throwing - the adapter turns
         // that into its own loud error.
+        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, null);
         var probe = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "controller.dll");
 
         Assert.That(FoamKitResolver.Resolve(probe), Is.Null);
@@ -44,21 +72,14 @@ public class FoamKitResolverTests
     [Test]
     public void TheOverrideNamesTheKitAndAWrongOneFailsLoudlyTest()
     {
-        var solutionRoot = OpenFOAMTestPaths.FindSolutionRoot();
-        if (solutionRoot == null)
-            Assert.Ignore("Solution root not found");
+        var fake = RequireKit("blockMesh");
+        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, fake.Root);
 
-        var fakeFoam = OpenFOAMTestPaths.FindFakeFoamPath(solutionRoot);
-        if (fakeFoam == null)
-            Assert.Ignore("fake-foam not built");
-
-        m_kit = FakeKit.Create(fakeFoam, "blockMesh");
-        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, m_kit.Root);
-
-        var kit = FoamKitResolver.Resolve(Path.Combine(Path.GetTempPath(), "nowhere", "controller.dll"));
+        // A kit without a BUILDINFO (this one) is accepted unchecked, with a warning.
+        var kit = FoamKitResolver.Resolve(PROBE);
 
         Assert.That(kit, Is.Not.Null);
-        Assert.That(kit!.Root, Is.EqualTo(Path.GetFullPath(m_kit.Root)));
+        Assert.That(kit!.Root, Is.EqualTo(Path.GetFullPath(fake.Root)));
         Assert.That(kit.Platform, Is.EqualTo("fake"));
         Assert.That(kit.HasExecutable("blockMesh"), Is.True);
         Assert.That(kit.HasExecutable("snappyHexMesh"), Is.False);
@@ -69,7 +90,7 @@ public class FoamKitResolverTests
         try
         {
             Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, empty);
-            Assert.That(FoamKitResolver.Resolve(Path.Combine(Path.GetTempPath(), "nowhere", "controller.dll")), Is.Null);
+            Assert.That(FoamKitResolver.Resolve(PROBE), Is.Null);
         }
         finally
         {
@@ -78,15 +99,27 @@ public class FoamKitResolverTests
     }
 
     [Test]
+    public void AKitWithAnUnusableEnvironmentFileIsAbsenceNotAnExceptionTest()
+    {
+        var root = OpenFOAMTestPaths.CreateScratch("foam-broken-kit");
+        try
+        {
+            File.WriteAllText(Path.Combine(root, FoamKitEnvironment.FILE_NAME), "# no WM_PROJECT_DIR, no PATH\nKIT_PLATFORM=fake\n");
+            Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, root);
+
+            Assert.That(FoamKitResolver.Resolve(PROBE), Is.Null);
+        }
+        finally
+        {
+            OpenFOAMTestPaths.TryDelete(root);
+        }
+    }
+
+    [Test]
     public void TheModuleLayoutIsFoundNextToTheAssemblyTest()
     {
-        var solutionRoot = OpenFOAMTestPaths.FindSolutionRoot();
-        if (solutionRoot == null)
-            Assert.Ignore("Solution root not found");
-
-        var fakeFoam = OpenFOAMTestPaths.FindFakeFoamPath(solutionRoot);
-        if (fakeFoam == null)
-            Assert.Ignore("fake-foam not built");
+        var fake = RequireKit("blockMesh");
+        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, null);
 
         var runtimeFolder = FoamKitResolver.ResolveCurrentRuntimeFolder();
         if (runtimeFolder == null)
@@ -95,13 +128,12 @@ public class FoamKitResolverTests
         // openfoam/<runtime-folder>/ beside the controller assembly, as the
         // asset pipeline extracts the archive (ExtractTo=".", the archive
         // carrying openfoam/<platform>/ itself).
-        m_kit = FakeKit.Create(fakeFoam, "blockMesh");
         var module = OpenFOAMTestPaths.CreateScratch("foam-module");
         try
         {
             var target = Path.Combine(module, "openfoam", runtimeFolder);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            Directory.Move(m_kit.Root, target);
+            Directory.Move(fake.Root, target);
 
             var kit = FoamKitResolver.Resolve(Path.Combine(module, "OutWit.Controller.OpenFOAM.dll"));
 
@@ -112,6 +144,48 @@ public class FoamKitResolverTests
         {
             OpenFOAMTestPaths.TryDelete(module);
         }
+    }
+
+    #endregion
+
+    #region Integrity Tests
+
+    [Test]
+    public void ATamperedKitIsRefusedAndAcceptedAgainOnceRepairedTest()
+    {
+        var fake = RequireKit("blockMesh");
+        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, fake.Root);
+        OpenFOAMTestPaths.WriteBuildInfo(fake.Root);
+
+        var envFile = Path.Combine(fake.Root, FoamKitEnvironment.FILE_NAME);
+        var original = File.ReadAllText(envFile);
+        File.AppendAllText(envFile, "TAMPERED=1\n");
+
+        Assert.That(FoamKitResolver.Resolve(PROBE), Is.Null, "an altered KIT.env refuses the kit");
+
+        // The refusal is not cached: a repaired kit is accepted at the next resolution.
+        File.WriteAllText(envFile, original);
+
+        Assert.That(FoamKitResolver.Resolve(PROBE), Is.Not.Null);
+    }
+
+    [Test]
+    public void ThePstreamTheControllerSwapsIsExemptFromTheIntegrityCheckTest()
+    {
+        var fake = RequireKit("blockMesh");
+        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, fake.Root);
+
+        // The one file of a kit that is meant to change after unpacking: the
+        // Windows Pstream the controller copies the MS-MPI variant over. A
+        // kit this small is sampled whole, so without the exemption the
+        // swapped file would be a finding.
+        var pstream = $"{FakeKit.AppBinRelative}/libPstream.dll";
+        fake.AppendEnvironment($"KIT_PSTREAM_TARGET=@KIT@/{pstream}");
+        File.WriteAllText(fake.PathOf(pstream), "serial Pstream");
+        OpenFOAMTestPaths.WriteBuildInfo(fake.Root);
+        File.WriteAllText(fake.PathOf(pstream), "MS-MPI Pstream, copied over by the controller");
+
+        Assert.That(FoamKitResolver.Resolve(PROBE), Is.Not.Null);
     }
 
     #endregion

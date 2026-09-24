@@ -36,6 +36,7 @@ public class FoamRunEndToEndTests
     private FoamTestBlobService m_blobService = null!;
     private FakeKit m_kit = null!;
     private IWitEngine m_engine = null!;
+    private string? m_previousKitPath;
 
     #endregion
 
@@ -57,9 +58,10 @@ public class FoamRunEndToEndTests
             Assert.Ignore("fake-foam not built");
 
         if (Path.GetTempPath().Contains(' ') && !OperatingSystem.IsWindows())
-            Assert.Ignore("the temp path contains a space; OpenFOAM's rule (D-16) refuses it by design");
+            Assert.Ignore("the temp path contains a space; OpenFOAM strips whitespace from paths, so the controller refuses it by design");
 
         m_kit = FakeKit.Create(fakeFoam, "blockMesh", "simpleFoam");
+        m_previousKitPath = Environment.GetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH);
         Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, m_kit.Root);
 
         m_blobStoragePath = Path.Combine(Path.GetTempPath(), $"witcloud_foam_blobtest_{Guid.NewGuid():N}");
@@ -85,7 +87,8 @@ public class FoamRunEndToEndTests
     [OneTimeTearDown]
     public void TearDown()
     {
-        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, null);
+        // Restored, not cleared: a developer's own override (or the oracle's) outlives this fixture.
+        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, m_previousKitPath);
         m_kit?.Dispose();
 
         if (m_blobStoragePath != null && Directory.Exists(m_blobStoragePath))
@@ -192,7 +195,8 @@ public class FoamRunEndToEndTests
         Assert.That(failed.ExitCode, Is.EqualTo(1));
         Assert.That(failed.FailedStep, Is.EqualTo("blockMesh"), "every fake utility reads the same control file");
         Assert.That(failed.LogTail, Does.Contain("FOAM FATAL ERROR"));
-        Assert.That(failed.ArtifactBlobId, Is.Null);
+        Assert.That(failed.ArtifactBlobId, Is.Not.Null, "the policy asked for logs, and a failed run still owes them");
+        Assert.That(failed.ArtifactBytes, Is.LessThan(good.ArtifactBytes), "logs only: no time directory travels back from a failed run");
 
         var refused = byIndex[2];
         Assert.That(refused.Rejections, Has.Exactly(1).Items);

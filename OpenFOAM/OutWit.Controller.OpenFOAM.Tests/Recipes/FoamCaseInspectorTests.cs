@@ -92,6 +92,49 @@ public class FoamCaseInspectorTests
     }
 
     [Test]
+    public void EveryIncludeDirectiveIsCheckedAndTheCasePrefixDoesNotHideAnEscapeTest()
+    {
+        Write("system/fvSolution",
+            "#include \"$FOAM_CASE/../shared/solution\"\n" +
+            "#include \"${FOAM_CASE}/system/local\"\n" +
+            "#sinclude \"../optional/dict\"\n" +
+            "#includeIfPresent \"<case>/system/present\"\n" +
+            "#includeIfPresent \"<case>/../absent\"\n" +
+            "#includeEtc \"../etc/escape\"\n" +
+            "#includeEtc \"caseDicts/setConstraintTypes\"\n" +
+            "#include \"$HOME/.OpenFOAM/dict\"\n" +
+            "#include \"~OpenFOAM/dict\"\n" +
+            "#include \"<etc>/caseDicts/x\"\n" +
+            "solvers { }\n");
+
+        var findings = FoamCaseInspector.Inspect(m_case);
+
+        Assert.That(findings, Has.Count.EqualTo(7));
+        Assert.That(findings, Has.Some.Contains("$FOAM_CASE/../shared/solution").And.Some.Contains("#include"));
+        Assert.That(findings, Has.Some.Contains("../optional/dict").And.Some.Contains("#sinclude"));
+        Assert.That(findings, Has.Some.Contains("<case>/../absent").And.Some.Contains("#includeIfPresent"));
+        Assert.That(findings, Has.Some.Contains("../etc/escape").And.Some.Contains("#includeEtc"));
+        Assert.That(findings, Has.Some.Contains("$HOME/.OpenFOAM/dict"));
+        Assert.That(findings, Has.Some.Contains("~OpenFOAM/dict"));
+        Assert.That(findings, Has.Some.Contains("<etc>/caseDicts/x"));
+        Assert.That(findings, Has.None.Contains("system/local").And.None.Contains("system/present").And.None.Contains("setConstraintTypes"));
+    }
+
+    [Test]
+    public void TheCaseRuleIsAnsweredForATargetAloneTest()
+    {
+        Assert.That(FoamCaseInspector.StaysInsideTheCase("system/local"), Is.True);
+        Assert.That(FoamCaseInspector.StaysInsideTheCase("$FOAM_CASE/system/local"), Is.True);
+        Assert.That(FoamCaseInspector.StaysInsideTheCase("<case>/0/U"), Is.True);
+        Assert.That(FoamCaseInspector.StaysInsideTheCase("$FOAM_CASE/../x"), Is.False);
+        Assert.That(FoamCaseInspector.StaysInsideTheCase("$FOAM_CASE"), Is.False, "the bare variable is not a file");
+        Assert.That(FoamCaseInspector.StaysInsideTheCase("$FOAM_CASE/$WM_PROJECT_DIR/x"), Is.False);
+        Assert.That(FoamCaseInspector.StaysInsideTheCase("/abs/x"), Is.False);
+        Assert.That(FoamCaseInspector.StaysInsideTheCase("C:/x"), Is.False);
+        Assert.That(FoamCaseInspector.StaysInsideTheCase(string.Empty), Is.False);
+    }
+
+    [Test]
     public void ADecomposedOnlyCaseAndAMissingApplicationAreRefusedTest()
     {
         Directory.Delete(Path.Combine(m_case, "0"), recursive: true);

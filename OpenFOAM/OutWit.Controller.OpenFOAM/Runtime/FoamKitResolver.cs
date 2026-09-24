@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
@@ -10,7 +11,8 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 /// sits at openfoam/&lt;runtime-folder&gt;/ next to the controller assembly.
 /// Zip extraction keeps no Unix mode bits, so the resolver marks the files of
 /// the directories KIT.env names executable; on Windows it puts the MS-MPI
-/// Pstream in place when the node has MS-MPI (plan D-21), once.
+/// Pstream in place when the node has MS-MPI. Both are idempotent and cheap
+/// when already done, so they run on every resolution.
 /// </summary>
 public static class FoamKitResolver
 {
@@ -36,7 +38,8 @@ public static class FoamKitResolver
 
     #region Fields
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> INTEGRITY = new(StringComparer.Ordinal);
+    /// <summary>The kit folders this process has checked and accepted; a refusal is never remembered.</summary>
+    private static readonly ConcurrentDictionary<string, bool> INTACT = new(StringComparer.Ordinal);
 
     #endregion
 
@@ -62,8 +65,17 @@ public static class FoamKitResolver
             return null;
         }
 
-        var environment = FoamKitEnvironment.Load(envFile);
-        var kit = new FoamKit(root, environment);
+        FoamKit kit;
+        try
+        {
+            var environment = FoamKitEnvironment.Load(envFile);
+            kit = new FoamKit(root, environment);
+        }
+        catch (InvalidDataException e)
+        {
+            logger?.LogWarning("Foam.Run: the kit at {Root} has an unusable KIT.env: {Reason}", root, e.Message);
+            return null;
+        }
 
         if (!kit.HasExecutable(PROBE_EXECUTABLE))
         {
@@ -75,7 +87,15 @@ public static class FoamKitResolver
             return null;
 
         EnsureExecutables(kit, logger);
-        EnsurePstream(kit, logger);
+
+        // Windows: parallel steps are offered only when the MS-MPI Pstream is
+        // in place. A launcher without it would run every parallel step
+        // against the serial Pstream and fail every variant.
+        if (kit.SupportsParallel && OperatingSystem.IsWindows() && !EnsurePstream(kit, logger))
+        {
+            logger?.LogWarning("Foam.Run: MS-MPI is installed but the MS-MPI Pstream could not be put in place; this node runs every step serially.");
+            kit = new FoamKit(kit.Root, kit.Environment, null);
+        }
 
         return kit;
     }
@@ -84,30 +104,37 @@ public static class FoamKitResolver
     /// The integrity spot check, once per kit folder per process: a kit that
     /// is short of a file or carries an altered one is refused here, with the
     /// file named, rather than failing in the middle of a case. A kit without
-    /// a BUILDINFO (a test kit) is accepted with a warning.
+    /// a BUILDINFO (a test kit) is accepted with a warning. Only an acceptance
+    /// is remembered: a file locked by a scanner now may be free at the next
+    /// resolution, and a kit that is truly altered is refused again then.
     /// </summary>
     /// <param name="kit">The kit.</param>
     /// <param name="logger">Diagnostics sink.</param>
     /// <returns>True when the kit may be used.</returns>
     public static bool IsIntact(FoamKit kit, ILogger? logger = null)
     {
-        return INTEGRITY.GetOrAdd(kit.Root, root =>
+        if (INTACT.ContainsKey(kit.Root))
+            return true;
+
+        // The Pstream the controller swaps on Windows is the one file of the
+        // kit that is meant to change after unpacking.
+        var mutable = kit.Environment.Get(PSTREAM_TARGET) is { } target
+            ? new[] { target.Replace(FoamKitEnvironment.KIT_TOKEN + "/", string.Empty) }
+            : [];
+        var findings = FoamKitIntegrity.Check(kit.Root, FoamKitIntegrity.SAMPLE_SIZE, mutable);
+
+        if (findings.Count == 1 && findings[0].Contains("carries no", StringComparison.Ordinal))
+            logger?.LogWarning("Foam.Run: {Finding} The kit at {Root} is used unchecked.", findings[0], kit.Root);
+        else if (findings.Count > 0)
         {
-            var findings = FoamKitIntegrity.Check(root);
-            if (findings.Count == 0)
-                return true;
-
-            if (findings.Count == 1 && findings[0].Contains("carries no", StringComparison.Ordinal))
-            {
-                logger?.LogWarning("Foam.Run: {Finding} The kit at {Root} is used unchecked.", findings[0], root);
-                return true;
-            }
-
             foreach (var finding in findings)
-                logger?.LogError("Foam.Run: the kit at {Root} is not intact - {Finding}", root, finding);
+                logger?.LogError("Foam.Run: the kit at {Root} is not intact - {Finding}", kit.Root, finding);
 
             return false;
-        });
+        }
+
+        INTACT.TryAdd(kit.Root, true);
+        return true;
     }
 
     /// <summary>
@@ -132,7 +159,8 @@ public static class FoamKitResolver
 
     /// <summary>
     /// Marks every file of the directories KIT.env names as executable (Linux,
-    /// macOS). Idempotent: skipped when the probe executable already has the bit.
+    /// macOS). Idempotent: a directory whose first file already has the bit is
+    /// skipped.
     /// </summary>
     /// <param name="kit">The kit.</param>
     /// <param name="logger">Diagnostics sink.</param>
@@ -145,12 +173,16 @@ public static class FoamKitResolver
         var marked = 0;
         try
         {
-            if (HasExecuteBit(kit.ExecutablePath(PROBE_EXECUTABLE)))
-                return 0;
-
+            // Idempotent per directory, not per kit: an interrupted first pass
+            // must not leave the launcher's directory unmarked forever because
+            // the solver's directory was done.
             foreach (var directory in kit.Environment.ExecutableDirectories(kit.Root))
             {
                 if (!Directory.Exists(directory))
+                    continue;
+
+                var first = Directory.EnumerateFiles(directory).FirstOrDefault();
+                if (first == null || HasExecuteBit(first))
                     continue;
 
                 foreach (var file in Directory.EnumerateFiles(directory))
@@ -239,7 +271,7 @@ public static class FoamKitResolver
 
     private static bool HasExecuteBit(string path)
     {
-        return File.Exists(path) && (File.GetUnixFileMode(path) & UnixFileMode.UserExecute) != 0;
+        return !OperatingSystem.IsWindows() && File.Exists(path) && (File.GetUnixFileMode(path) & UnixFileMode.UserExecute) != 0;
     }
 
     private static bool SameContent(string first, string second)

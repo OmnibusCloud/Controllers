@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Utils;
 
@@ -20,7 +19,7 @@ public class FoamKitIntegrityTests
         for (var index = 0; index < 100; index++)
             File.WriteAllText(Path.Combine(m_kit, "OpenFOAM-v2606", "lib", $"lib{index:D3}.so"), $"library {index}\n");
 
-        WriteBuildInfo();
+        OpenFOAMTestPaths.WriteBuildInfo(m_kit);
     }
 
     [TearDown]
@@ -28,26 +27,6 @@ public class FoamKitIntegrityTests
     {
         OpenFOAMTestPaths.TryDelete(m_kit);
     }
-
-    #region Tools
-
-    private void WriteBuildInfo()
-    {
-        var lines = new List<string> { "OpenFOAM v2606 (api 2606) - OmnibusCloud kit", "platform: test", "", "sha256 of every file (relative to the kit folder):" };
-        foreach (var file in Directory.EnumerateFiles(m_kit, "*", SearchOption.AllDirectories).OrderBy(path => path, StringComparer.Ordinal))
-        {
-            if (Path.GetFileName(file) == FoamKitIntegrity.BUILDINFO)
-                continue;
-
-            var relative = Path.GetRelativePath(m_kit, file).Replace('\\', '/');
-            using var stream = File.OpenRead(file);
-            lines.Add($"{Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant()}  {relative}");
-        }
-
-        File.WriteAllLines(Path.Combine(m_kit, FoamKitIntegrity.BUILDINFO), lines);
-    }
-
-    #endregion
 
     #region Integrity Tests
 
@@ -97,6 +76,29 @@ public class FoamKitIntegrityTests
 
         Assert.That(findings, Has.Count.GreaterThanOrEqualTo(FoamKitIntegrity.SAMPLE_SIZE - 2));
         Assert.That(findings, Has.All.Contains("missing from the kit"));
+    }
+
+    [Test]
+    public void AMutablePathIsNeverSampledTest()
+    {
+        // The file the controller itself rewrites after unpacking (the Windows
+        // Pstream) is excluded by its kit-relative path; every other altered
+        // file is still a finding. The swapped file is one the sample looks
+        // at; the clobbered one is an always-checked file, so it is a finding
+        // whatever the exemption does to the sample's positions.
+        var listed = FoamKitIntegrity.Parse(File.ReadAllLines(Path.Combine(m_kit, FoamKitIntegrity.BUILDINFO)));
+        var swapped = FoamKitIntegrity.Sample(listed, FoamKitIntegrity.SAMPLE_SIZE)
+            .Select(entry => entry.RelativePath)
+            .First(path => path.Contains("/lib/", StringComparison.Ordinal));
+        const string clobbered = "OpenFOAM-v2606/etc/controlDict";
+        File.WriteAllText(Path.Combine(m_kit, swapped.Replace('/', Path.DirectorySeparatorChar)), "swapped by the controller\n");
+        File.WriteAllText(Path.Combine(m_kit, clobbered.Replace('/', Path.DirectorySeparatorChar)), "clobbered by something else\n");
+
+        var withoutExemption = FoamKitIntegrity.Check(m_kit);
+        var withExemption = FoamKitIntegrity.Check(m_kit, FoamKitIntegrity.SAMPLE_SIZE, [swapped]);
+
+        Assert.That(withoutExemption.Select(finding => finding.Split(':')[0]), Is.EquivalentTo(new[] { swapped, clobbered }));
+        Assert.That(withExemption.Select(finding => finding.Split(':')[0]), Is.EqualTo(new[] { clobbered }));
     }
 
     [Test]

@@ -13,7 +13,7 @@ namespace OutWit.Controller.OpenFOAM.Tests.Oracle;
 /// the resolver honours - and is skipped everywhere else, so the ordinary
 /// test run never needs 500 MB of solver. The numbers asserted are the ones
 /// the kit's acceptance recorded (pitzDaily converges at iteration 281
-/// serially and 288-289 on four ranks, the acceptance of 2026-09-23).
+/// serially and 288-289 on four ranks, when the kit was accepted).
 /// </summary>
 [TestFixture]
 [Category("Kit")]
@@ -181,7 +181,7 @@ public class FoamKitOracleTests
         Assert.That(parallel.Steps.Single(step => step.Utility == "simpleFoam").Ranks, Is.EqualTo(2));
         Assert.That(parallel.Converged, Is.True);
 
-        // The determinism tolerance of G0: a residual-controlled run stops
+        // The determinism tolerance: a residual-controlled run stops
         // at a slightly different iteration per decomposition; the converged
         // responses agree to engineering tolerance.
         var serialP = Value(serial, "inletP.");
