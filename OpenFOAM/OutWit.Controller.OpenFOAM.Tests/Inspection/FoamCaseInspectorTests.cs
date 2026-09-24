@@ -1,7 +1,7 @@
-using OutWit.Controller.OpenFOAM.Recipes;
+using OutWit.Controller.OpenFOAM.Inspection;
 using OutWit.Controller.OpenFOAM.Tests.Utils;
 
-namespace OutWit.Controller.OpenFOAM.Tests.Recipes;
+namespace OutWit.Controller.OpenFOAM.Tests.Inspection;
 
 [TestFixture]
 public class FoamCaseInspectorTests

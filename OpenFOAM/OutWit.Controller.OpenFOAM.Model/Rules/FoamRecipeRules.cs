@@ -1,18 +1,21 @@
 using System.Text.RegularExpressions;
-using OutWit.Controller.OpenFOAM.Model;
-using OutWit.Controller.OpenFOAM.Runtime;
 
-namespace OutWit.Controller.OpenFOAM.Recipes;
+namespace OutWit.Controller.OpenFOAM.Model.Rules;
 
 /// <summary>
-/// Validates a recipe before the first process starts: every step against
-/// the allow-list and the argument grammar, the application against the kit.
-/// The wording is the same the initiator's preflight uses, so a user sees the
-/// same sentence on the client and in a refused variant's result.
+/// The rules a recipe obeys: every step against the allow-list and the
+/// argument grammar, the application a solver that some step runs. The same
+/// code runs on the node before the first process starts, in the Sweep host
+/// when a study is planned and in the initiator's preflight, so a user reads
+/// the same sentence wherever a recipe is refused. Whether the kit carries an
+/// executable is asked through a predicate: the rules know no kit.
 /// </summary>
-public static class FoamRecipeValidator
+public static class FoamRecipeRules
 {
     #region Constants
+
+    /// <summary>Upper bound on the steps of one recipe; a longer one is a script, not a recipe.</summary>
+    public const int MAX_STEPS = 32;
 
     /// <summary>A flag: a dash, a letter, then letters, digits or dashes.</summary>
     private static readonly Regex FLAG = new("^-[A-Za-z][A-Za-z0-9-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -28,9 +31,6 @@ public static class FoamRecipeValidator
     /// <summary>A number, which may start with a minus and is a value, not a flag (<c>-time -1</c>).</summary>
     private static readonly Regex NUMBER = new(@"^-?\d+(\.\d+)?([eE][-+]?\d+)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    /// <summary>Upper bound on the steps of one recipe; a longer one is a script, not a recipe.</summary>
-    public const int MAX_STEPS = 32;
-
     #endregion
 
     #region Functions
@@ -39,9 +39,9 @@ public static class FoamRecipeValidator
     /// Validates a recipe.
     /// </summary>
     /// <param name="recipe">The recipe; null is a finding.</param>
-    /// <param name="kit">The kit the steps will run under, when known; its executables are checked.</param>
+    /// <param name="hasExecutable">Answers whether the kit the steps will run under carries an executable; null skips the kit checks.</param>
     /// <returns>Findings, one sentence each; empty when the recipe may run.</returns>
-    public static IReadOnlyList<string> Validate(FoamRecipeData? recipe, FoamKit? kit = null)
+    public static IReadOnlyList<string> Validate(FoamRecipeData? recipe, Func<string, bool>? hasExecutable = null)
     {
         var findings = new List<string>();
 
@@ -55,7 +55,7 @@ public static class FoamRecipeValidator
             findings.Add("The recipe names no application.");
         else if (!FoamAllowList.IsSolverName(recipe.Application))
             findings.Add($"'{recipe.Application}' is not a solver name (a solver's name ends in 'Foam').");
-        else if (kit != null && !kit.HasExecutable(recipe.Application))
+        else if (hasExecutable != null && !hasExecutable(recipe.Application))
             findings.Add($"The kit has no solver '{recipe.Application}'.");
 
         if (recipe.Steps.Count == 0)
@@ -64,7 +64,7 @@ public static class FoamRecipeValidator
             findings.Add($"The recipe has {recipe.Steps.Count} steps; at most {MAX_STEPS} are allowed.");
 
         for (var index = 0; index < recipe.Steps.Count; index++)
-            ValidateStep(recipe.Steps[index], index + 1, kit, findings);
+            ValidateStep(recipe.Steps[index], index + 1, hasExecutable, findings);
 
         if (recipe.Steps.Count > 0
             && !string.IsNullOrEmpty(recipe.Application)
@@ -74,23 +74,7 @@ public static class FoamRecipeValidator
         return findings;
     }
 
-    /// <summary>
-    /// Whether a path-like value would leave the case directory: absolute,
-    /// drive-rooted, or with a '..' segment.
-    /// </summary>
-    /// <param name="value">An argument value.</param>
-    /// <returns>True when it escapes.</returns>
-    public static bool IsPathEscape(string value)
-    {
-        if (value.StartsWith('/') || value.StartsWith('\\'))
-            return true;
-        if (value.Length >= 2 && char.IsAsciiLetter(value[0]) && value[1] == ':')
-            return true;
-
-        return value.Split('/', '\\').Any(segment => segment == "..");
-    }
-
-    private static void ValidateStep(FoamStepData step, int number, FoamKit? kit, List<string> findings)
+    private static void ValidateStep(FoamStepData step, int number, Func<string, bool>? hasExecutable, List<string> findings)
     {
         var name = step.Utility;
         var prefix = $"Step {number}";
@@ -114,7 +98,7 @@ public static class FoamRecipeValidator
             return;
         }
 
-        if (kit != null && !kit.HasExecutable(name))
+        if (hasExecutable != null && !hasExecutable(name))
             findings.Add($"{prefix}: the kit has no '{name}'.");
 
         if (step.Parallel && !FoamAllowList.IsParallelCapable(name))
@@ -144,7 +128,7 @@ public static class FoamRecipeValidator
 
             if (!VALUE.IsMatch(argument))
                 findings.Add($"{prefix} ({name}): '{argument}' is not a value the allow-list accepts.");
-            else if (IsPathEscape(argument))
+            else if (FoamCasePathRules.IsPathEscape(argument))
                 findings.Add($"{prefix} ({name}): '{argument}' points outside the case directory.");
         }
     }

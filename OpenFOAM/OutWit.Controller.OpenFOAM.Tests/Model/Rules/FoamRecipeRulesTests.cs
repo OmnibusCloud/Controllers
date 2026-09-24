@@ -1,11 +1,11 @@
 using OutWit.Controller.OpenFOAM.Model;
-using OutWit.Controller.OpenFOAM.Recipes;
+using OutWit.Controller.OpenFOAM.Model.Rules;
 using OutWit.Controller.OpenFOAM.Tests.Utils;
 
-namespace OutWit.Controller.OpenFOAM.Tests.Recipes;
+namespace OutWit.Controller.OpenFOAM.Tests.Model.Rules;
 
 [TestFixture]
-public class FoamRecipeValidatorTests
+public class FoamRecipeRulesTests
 {
     #region Tools
 
@@ -38,7 +38,7 @@ public class FoamRecipeValidatorTests
     [Test]
     public void TheMotorBikeRecipeIsAcceptedTest()
     {
-        var findings = FoamRecipeValidator.Validate(MotorBike());
+        var findings = FoamRecipeRules.Validate(MotorBike());
 
         Assert.That(findings, Is.Empty);
     }
@@ -46,7 +46,7 @@ public class FoamRecipeValidatorTests
     [Test]
     public void AMissingRecipeIsOneFindingTest()
     {
-        var findings = FoamRecipeValidator.Validate(null);
+        var findings = FoamRecipeRules.Validate(null);
 
         Assert.That(findings, Is.EqualTo(new[] { "The task carries no recipe." }));
     }
@@ -57,7 +57,7 @@ public class FoamRecipeValidatorTests
         var recipe = MotorBike();
         recipe.Steps.Insert(0, new FoamStepData { Utility = "foamyHexMesh" });
 
-        var findings = FoamRecipeValidator.Validate(recipe);
+        var findings = FoamRecipeRules.Validate(recipe);
 
         Assert.That(findings, Has.Exactly(1).Items);
         Assert.That(findings[0], Does.Contain("foamyHexMesh").And.Contain("allow-list"));
@@ -69,7 +69,7 @@ public class FoamRecipeValidatorTests
         var recipe = MotorBike();
         recipe.Steps[1].Arguments = ["-dict", "system/blockMeshDict;rm", "../outside/dict", "/etc/passwd", "\"quoted\""];
 
-        var findings = FoamRecipeValidator.Validate(recipe);
+        var findings = FoamRecipeRules.Validate(recipe);
 
         Assert.That(findings, Has.Count.EqualTo(4));
         Assert.That(findings, Has.Some.Contains("system/blockMeshDict;rm"));
@@ -84,7 +84,7 @@ public class FoamRecipeValidatorTests
         var recipe = MotorBike();
         recipe.Steps[6].Arguments = ["-case", "elsewhere", "-decomposeParDict", "system/other", "-parallel"];
 
-        var findings = FoamRecipeValidator.Validate(recipe);
+        var findings = FoamRecipeRules.Validate(recipe);
 
         Assert.That(findings, Has.Count.EqualTo(3));
         Assert.That(findings, Has.Some.Contains("-case"));
@@ -98,7 +98,7 @@ public class FoamRecipeValidatorTests
         var recipe = MotorBike();
         recipe.Steps[1].Parallel = true; // blockMesh
 
-        var findings = FoamRecipeValidator.Validate(recipe);
+        var findings = FoamRecipeRules.Validate(recipe);
 
         Assert.That(findings, Is.EqualTo(new[] { "Step 2: 'blockMesh' does not run in parallel." }));
     }
@@ -108,10 +108,10 @@ public class FoamRecipeValidatorTests
     {
         var recipe = MotorBike();
         recipe.Application = "blockMesh";
-        Assert.That(FoamRecipeValidator.Validate(recipe), Has.Some.Contains("not a solver name"));
+        Assert.That(FoamRecipeRules.Validate(recipe), Has.Some.Contains("not a solver name"));
 
         recipe.Application = "pisoFoam";
-        Assert.That(FoamRecipeValidator.Validate(recipe), Has.Some.Contains("No step runs the application 'pisoFoam'"));
+        Assert.That(FoamRecipeRules.Validate(recipe), Has.Some.Contains("No step runs the application 'pisoFoam'"));
     }
 
     [Test]
@@ -120,10 +120,10 @@ public class FoamRecipeValidatorTests
         var recipe = MotorBike();
         recipe.Steps[9].Arguments = ["-func", "forceCoeffs", "-time", "-1", "-scale", "-1.5e-3"];
 
-        Assert.That(FoamRecipeValidator.Validate(recipe), Is.Empty);
+        Assert.That(FoamRecipeRules.Validate(recipe), Is.Empty);
 
         recipe.Steps[9].Arguments = ["-time", "-1abc"];
-        Assert.That(FoamRecipeValidator.Validate(recipe), Has.Exactly(1).Items.And.Some.Contains("-1abc"));
+        Assert.That(FoamRecipeRules.Validate(recipe), Has.Exactly(1).Items.And.Some.Contains("-1abc"));
     }
 
     [Test]
@@ -145,7 +145,7 @@ public class FoamRecipeValidatorTests
             Steps = [new FoamStepData { Utility = "blockMesh" }, new FoamStepData { Utility = "checkMesh" }, new FoamStepData { Utility = "pisoFoam" }]
         };
 
-        var findings = FoamRecipeValidator.Validate(recipe, kit);
+        var findings = FoamRecipeRules.Validate(recipe, kit.HasExecutable);
 
         Assert.That(findings, Has.Count.EqualTo(3));
         Assert.That(findings, Has.Some.EqualTo("The kit has no solver 'pisoFoam'."));
@@ -157,10 +157,10 @@ public class FoamRecipeValidatorTests
     public void ARecipeLongerThanTheCapIsRefusedTest()
     {
         var recipe = MotorBike();
-        while (recipe.Steps.Count <= FoamRecipeValidator.MAX_STEPS)
+        while (recipe.Steps.Count <= FoamRecipeRules.MAX_STEPS)
             recipe.Steps.Insert(0, new FoamStepData { Utility = "checkMesh" });
 
-        Assert.That(FoamRecipeValidator.Validate(recipe), Has.Some.Contains($"at most {FoamRecipeValidator.MAX_STEPS}"));
+        Assert.That(FoamRecipeRules.Validate(recipe), Has.Some.Contains($"at most {FoamRecipeRules.MAX_STEPS}"));
     }
 
     #endregion

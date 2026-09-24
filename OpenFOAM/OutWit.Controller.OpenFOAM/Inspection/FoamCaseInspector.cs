@@ -1,7 +1,8 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using OutWit.Controller.OpenFOAM.Model.Rules;
 
-namespace OutWit.Controller.OpenFOAM.Recipes;
+namespace OutWit.Controller.OpenFOAM.Inspection;
 
 /// <summary>
 /// The node-side rejects, applied to the materialised case before anything
@@ -149,7 +150,7 @@ public static class FoamCaseInspector
         if (path.Length == 0 || path.StartsWith('$') || path.StartsWith('~') || path.StartsWith('<'))
             return false;
 
-        return !FoamRecipeValidator.IsPathEscape(path);
+        return !FoamCasePathRules.IsPathEscape(path);
     }
 
     private static IEnumerable<string> ScannableFiles(string root)

@@ -1,6 +1,6 @@
-using OutWit.Controller.OpenFOAM.Recipes;
+using OutWit.Controller.OpenFOAM.Model.Rules;
 
-namespace OutWit.Controller.OpenFOAM.Tests.Recipes;
+namespace OutWit.Controller.OpenFOAM.Tests.Model.Rules;
 
 [TestFixture]
 public class FoamAllowListTests

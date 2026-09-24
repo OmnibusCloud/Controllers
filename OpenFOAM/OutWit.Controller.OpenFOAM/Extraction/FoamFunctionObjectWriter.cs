@@ -1,6 +1,6 @@
 using System.Text;
-using System.Text.RegularExpressions;
 using OutWit.Controller.OpenFOAM.Model;
+using OutWit.Controller.OpenFOAM.Model.Rules;
 
 namespace OutWit.Controller.OpenFOAM.Extraction;
 
@@ -11,23 +11,11 @@ namespace OutWit.Controller.OpenFOAM.Extraction;
 /// <c>-postProcess</c> form, for the quantities that need the turbulence
 /// model) looks first, before its own <c>etc/caseDicts</c>. The user's files
 /// are never edited: a response is a file of its own beside them, and the
-/// recipe's post step names it.
+/// recipe's post step names it. What a request may say is
+/// <see cref="FoamResponseRules"/>; this class only renders it.
 /// </summary>
 public static class FoamFunctionObjectWriter
 {
-    #region Constants
-
-    private static readonly Regex WORD = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private static readonly Regex OPERATION = new("^[A-Za-z][A-Za-z0-9]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    /// <summary>A dictionary entry value: words, numbers, vectors and lists in parentheses - no braces, no semicolons, no code.</summary>
-    private static readonly Regex VALUE = new(@"^[A-Za-z0-9_.,:+\-eE() \t]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private const string PROBE_LOCATIONS = "probeLocations";
-
-    #endregion
-
     #region Functions
 
     /// <summary>
@@ -41,7 +29,7 @@ public static class FoamFunctionObjectWriter
         if (request == null || request.Responses.Count == 0)
             return [];
 
-        var findings = Validate(request).ToList();
+        var findings = FoamResponseRules.Validate(request).ToList();
         var system = Path.Combine(caseDirectory, "system");
 
         // A response never overwrites a file the user shipped under the same name.
@@ -57,86 +45,6 @@ public static class FoamFunctionObjectWriter
         Directory.CreateDirectory(system);
         foreach (var response in request.Responses)
             File.WriteAllText(Path.Combine(system, response.Name), Render(response), new UTF8Encoding(false));
-
-        return findings;
-    }
-
-    /// <summary>
-    /// Validates a request without writing.
-    /// </summary>
-    /// <param name="request">The request.</param>
-    /// <returns>Findings, one sentence each.</returns>
-    public static IReadOnlyList<string> Validate(FoamExtractionRequestData request)
-    {
-        var findings = new List<string>();
-        var names = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var response in request.Responses)
-        {
-            var prefix = $"Response '{response.Name}'";
-
-            if (!WORD.IsMatch(response.Name))
-            {
-                findings.Add($"Response name '{response.Name}' is not a word (letters, digits, underscore).");
-                continue;
-            }
-
-            if (!names.Add(response.Name))
-                findings.Add($"{prefix} is requested twice.");
-
-            switch (response.Kind)
-            {
-                case FoamResponseKind.ForceCoeffs:
-                case FoamResponseKind.Forces:
-                    if (response.Patches.Count == 0)
-                        findings.Add($"{prefix}: {response.Kind} needs at least one patch.");
-                    break;
-
-                case FoamResponseKind.PatchValue:
-                    if (response.Patches.Count != 1)
-                        findings.Add($"{prefix}: a patch value names exactly one patch (request one response per patch).");
-                    if (response.Fields.Count == 0)
-                        findings.Add($"{prefix}: a patch value needs at least one field.");
-                    if (!OPERATION.IsMatch(response.Operation))
-                        findings.Add($"{prefix}: '{response.Operation}' is not an operation (areaAverage, areaIntegrate, min, max, ...).");
-                    break;
-
-                case FoamResponseKind.VolumeValue:
-                    if (response.Fields.Count == 0)
-                        findings.Add($"{prefix}: a volume value needs at least one field.");
-                    if (!OPERATION.IsMatch(response.Operation))
-                        findings.Add($"{prefix}: '{response.Operation}' is not an operation (volAverage, volIntegrate, min, max, ...).");
-                    break;
-
-                case FoamResponseKind.FieldMinMax:
-                    if (response.Fields.Count == 0)
-                        findings.Add($"{prefix}: a min/max needs at least one field.");
-                    break;
-
-                case FoamResponseKind.Probe:
-                    if (response.Fields.Count == 0)
-                        findings.Add($"{prefix}: a probe needs at least one field.");
-                    if (response.Parameters.All(parameter => parameter.Name != PROBE_LOCATIONS))
-                        findings.Add($"{prefix}: a probe needs a '{PROBE_LOCATIONS}' parameter.");
-                    break;
-
-                default:
-                    findings.Add($"{prefix}: unknown kind {response.Kind}.");
-                    break;
-            }
-
-            foreach (var patch in response.Patches.Where(patch => !WORD.IsMatch(patch) && !IsQuotedRegex(patch)))
-                findings.Add($"{prefix}: '{patch}' is not a patch name.");
-            foreach (var field in response.Fields.Where(field => !WORD.IsMatch(field) && field != "U" && field != "p"))
-                findings.Add($"{prefix}: '{field}' is not a field name.");
-            foreach (var parameter in response.Parameters)
-            {
-                if (!WORD.IsMatch(parameter.Name))
-                    findings.Add($"{prefix}: parameter '{parameter.Name}' is not a keyword.");
-                else if (!VALUE.IsMatch(parameter.Value))
-                    findings.Add($"{prefix}: the value of '{parameter.Name}' is not a plain dictionary value.");
-            }
-        }
 
         return findings;
     }
@@ -205,15 +113,6 @@ public static class FoamFunctionObjectWriter
     private static string List(string keyword, IReadOnlyList<string> items)
     {
         return $"{keyword,-16}({string.Join(' ', items)});\n";
-    }
-
-    private static bool IsQuotedRegex(string patch)
-    {
-        // OpenFOAM accepts a quoted regular expression as a patch selector:
-        // "(motorBike|wall).*" - letters, digits and the regex characters, no
-        // whitespace, no code.
-        return patch.Length > 2 && patch[0] == '"' && patch[^1] == '"'
-               && Regex.IsMatch(patch[1..^1], @"^[A-Za-z0-9_.|*+?()\[\]^$\-]+$");
     }
 
     #endregion

@@ -5,8 +5,8 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>OpenFOAM</ControllerName>
-    <Version>0.1.0</Version>
-    <Description>Shared data types of the OpenFOAM case controller: one variant's run as a self-contained work item (the base case files, the token substitutions, the allow-listed recipe, the response request, the artifact policy) and its outcome (per-step exit codes and times, convergence facts, the extracted response row, the artifact reference). Consumed by the node controller, by the Sweep orchestration controller and by client applications that read case-sweep manifests.</Description>
+    <Version>1.0.0</Version>
+    <Description>Shared data types of the OpenFOAM case controller and the rules a case obeys: the case (base files, allow-listed recipe, response request, artifact policy), one variant's run (the case and its token values) and its outcome (per-step exit codes and times, convergence facts, the extracted response row, the artifact reference); the allow-list, recipe grammar, case-path, response and token-coverage rules shared by the node, the Sweep host and client preflight. Consumed by the node controller, the Sweep orchestration controller and client applications.</Description>
     <PackageTags>openfoam;cfd;case;sweep;parameter-study;witengine;witcloud;controller;data-types</PackageTags>
   </PropertyGroup>
 

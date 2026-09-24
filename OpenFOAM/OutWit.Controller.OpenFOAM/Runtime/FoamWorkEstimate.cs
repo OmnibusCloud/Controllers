@@ -39,19 +39,19 @@ public static class FoamWorkEstimate
     #region Functions
 
     /// <summary>
-    /// Estimates a task's work.
+    /// Estimates one run of a case.
     /// </summary>
-    /// <param name="task">The task; its CellCount, SolverClass and Recipe.MeshesPerVariant are read.</param>
-    /// <returns>A positive relative cost; <see cref="UNKNOWN"/> when the cell count is missing.</returns>
-    public static double Estimate(FoamTaskData task)
+    /// <param name="data">The case; its CellCount, SolverClass and Recipe.MeshesPerVariant are read. Null is unknown.</param>
+    /// <returns>A positive relative cost; <see cref="UNKNOWN"/> when the case or its cell count is missing.</returns>
+    public static double Estimate(FoamCaseData? data)
     {
-        if (task.CellCount <= 0)
+        if (data == null || data.CellCount <= 0)
             return UNKNOWN;
 
-        var factor = SOLVER_CLASS_FACTORS.TryGetValue(task.SolverClass, out var known) ? known : 1.0;
-        var meshing = task.Recipe?.MeshesPerVariant == true ? MESHING_FACTOR : 1.0;
+        var factor = SOLVER_CLASS_FACTORS.TryGetValue(data.SolverClass, out var known) ? known : 1.0;
+        var meshing = data.Recipe?.MeshesPerVariant == true ? MESHING_FACTOR : 1.0;
 
-        return task.CellCount / REFERENCE_CELLS * factor * meshing;
+        return data.CellCount / REFERENCE_CELLS * factor * meshing;
     }
 
     #endregion

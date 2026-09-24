@@ -53,11 +53,31 @@ public class FoamCaseSessionTests
         return new FoamCaseSession(m_kit.Resolve(), m_blobs);
     }
 
-    private FoamTaskData PitzTask(string fakeControl, bool templated = true)
+    private static FoamTaskData Task(FoamCaseData data, params FoamTokenValueData[] substitutions)
     {
         return new FoamTaskData
         {
             VariantIndex = 3,
+            Case = data,
+            Substitutions = substitutions.Length > 0
+                ? [.. substitutions]
+                :
+                [
+                    new FoamTokenValueData { Token = "{{oc1}}", Value = "1e-05" },
+                    new FoamTokenValueData { Token = "{{oc2}}", Value = "10" }
+                ]
+        };
+    }
+
+    private FoamTaskData PitzTask(string fakeControl, bool templated = true)
+    {
+        return Task(PitzCase(fakeControl, templated));
+    }
+
+    private FoamCaseData PitzCase(string fakeControl, bool templated = true)
+    {
+        return new FoamCaseData
+        {
             BaseFiles =
             [
                 BlobFile("system/controlDict", "FoamFile { object controlDict; }\napplication simpleFoam;\nendTime 5;\n"),
@@ -66,11 +86,6 @@ public class FoamCaseSessionTests
                 BlobFile("system/fake", fakeControl),
                 BlobFile("constant/transportProperties", "nu {{oc1}};\n", templated),
                 BlobFile("0/U", "internalField uniform ({{oc2}} 0 0);\n", templated)
-            ],
-            Substitutions =
-            [
-                new FoamTokenValueData { Token = "{{oc1}}", Value = "1e-05" },
-                new FoamTokenValueData { Token = "{{oc2}}", Value = "10" }
             ],
             Recipe = new FoamRecipeData
             {
@@ -147,10 +162,10 @@ public class FoamCaseSessionTests
     public async Task TheSubstitutedFilesReachTheSolverTest()
     {
         var session = RequireSession();
-        var task = PitzTask("FAKE-ECHO\nITERATIONS=1\n");
-        task.ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.Latest };
+        var data = PitzCase("FAKE-ECHO\nITERATIONS=1\n");
+        data.ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.Latest };
 
-        var result = await session.RunAsync(task);
+        var result = await session.RunAsync(Task(data));
 
         Assert.That(result.Rejections, Is.Empty);
         using var archive = ZipFile.OpenRead(m_blobs.GetStoredPath(result.ArtifactBlobId!.Value));
@@ -162,10 +177,10 @@ public class FoamCaseSessionTests
     public async Task ACaseWithRunTimeCodeIsRefusedBeforeAnythingRunsTest()
     {
         var session = RequireSession();
-        var task = PitzTask("ITERATIONS=1\n");
-        task.BaseFiles.Add(BlobFile("0/p", "internalField #codeStream { code #{ os << 0; #}; };\n"));
+        var data = PitzCase("ITERATIONS=1\n");
+        data.BaseFiles.Add(BlobFile("0/p", "internalField #codeStream { code #{ os << 0; #}; };\n"));
 
-        var result = await session.RunAsync(task);
+        var result = await session.RunAsync(Task(data));
 
         Assert.That(result.Rejections, Has.Exactly(1).Items);
         Assert.That(result.Rejections[0], Does.StartWith("0/p:1:").And.Contain("codeStream"));
@@ -178,8 +193,7 @@ public class FoamCaseSessionTests
     public async Task AVariantMissingATokenValueIsRefusedTest()
     {
         var session = RequireSession();
-        var task = PitzTask("ITERATIONS=1\n");
-        task.Substitutions.RemoveAt(1);
+        var task = Task(PitzCase("ITERATIONS=1\n"), new FoamTokenValueData { Token = "{{oc1}}", Value = "1e-05" });
 
         var result = await session.RunAsync(task);
 
@@ -191,11 +205,15 @@ public class FoamCaseSessionTests
     public async Task ARecipeOutsideTheAllowListIsRefusedTogetherWithFileFindingsTest()
     {
         var session = RequireSession();
-        var task = PitzTask("ITERATIONS=1\n");
-        task.Recipe!.Steps.Insert(0, new FoamStepData { Utility = "foamyHexMesh" });
-        task.BaseFiles[0].RelativePath = "../system/controlDict";
+        var data = PitzCase("ITERATIONS=1\n");
+        data.Recipe = new FoamRecipeData
+        {
+            Application = "simpleFoam",
+            Steps = [new FoamStepData { Utility = "foamyHexMesh" }, new FoamStepData { Utility = "simpleFoam" }]
+        };
+        data.BaseFiles[0].RelativePath = "../system/controlDict";
 
-        var result = await session.RunAsync(task);
+        var result = await session.RunAsync(Task(data));
 
         Assert.That(result.Rejections, Has.Count.EqualTo(2));
         Assert.That(result.Rejections, Has.Some.Contains("foamyHexMesh"));
@@ -206,10 +224,10 @@ public class FoamCaseSessionTests
     public async Task AFailedSolveIsDataWithTheStepAndTheTailTest()
     {
         var session = RequireSession();
-        var task = PitzTask("FAKE-FAIL\n");
-        task.ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.Latest, PostProcessing = true };
+        var data = PitzCase("FAKE-FAIL\n");
+        data.ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.Latest, PostProcessing = true };
 
-        var result = await session.RunAsync(task);
+        var result = await session.RunAsync(Task(data));
 
         Assert.That(result.Rejections, Is.Empty);
         Assert.That(result.FailedStep, Is.EqualTo("blockMesh"));
@@ -225,10 +243,10 @@ public class FoamCaseSessionTests
     public async Task AFailedRunStillDeliversItsLogsWhenTheyWereAskedForTest()
     {
         var session = RequireSession();
-        var task = PitzTask("FAKE-FAIL\n");
-        task.ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.All, Mesh = true, Logs = true, PostProcessing = true };
+        var data = PitzCase("FAKE-FAIL\n");
+        data.ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.All, Mesh = true, Logs = true, PostProcessing = true };
 
-        var result = await session.RunAsync(task);
+        var result = await session.RunAsync(Task(data));
 
         Assert.That(result.FailedStep, Is.EqualTo("blockMesh"));
         Assert.That(result.ArtifactBlobId, Is.Not.Null, "a diverged run is explained by its logs, not by sixty lines of tail");
@@ -256,11 +274,11 @@ public class FoamCaseSessionTests
     public async Task AnEmptyArtifactPolicyUploadsNothingTest()
     {
         var session = RequireSession();
-        var task = PitzTask("ITERATIONS=1\n");
-        task.ArtifactPolicy = null;
-        task.Extraction = null;
+        var data = PitzCase("ITERATIONS=1\n");
+        data.ArtifactPolicy = null;
+        data.Extraction = null;
 
-        var result = await session.RunAsync(task);
+        var result = await session.RunAsync(Task(data));
 
         Assert.That(result.ExitCode, Is.EqualTo(0));
         Assert.That(result.ArtifactBlobId, Is.Null);

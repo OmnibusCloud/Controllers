@@ -116,17 +116,20 @@ public class FoamRunEndToEndTests
         return new FoamTaskData
         {
             VariantIndex = index,
-            BaseFiles = files,
             Substitutions = [new FoamTokenValueData { Token = "{{oc1}}", Value = fakeControl }],
-            Recipe = new FoamRecipeData
+            Case = new FoamCaseData
             {
-                Application = "simpleFoam",
-                Steps = [new FoamStepData { Utility = "blockMesh" }, new FoamStepData { Utility = "simpleFoam" }]
-            },
-            Threads = 1,
-            ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.Latest, Logs = true },
-            CellCount = 12225,
-            SolverClass = "incompressible-steady"
+                BaseFiles = files,
+                Recipe = new FoamRecipeData
+                {
+                    Application = "simpleFoam",
+                    Steps = [new FoamStepData { Utility = "blockMesh" }, new FoamStepData { Utility = "simpleFoam" }]
+                },
+                Threads = 1,
+                ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.Latest, Logs = true },
+                CellCount = 12225,
+                SolverClass = "incompressible-steady"
+            }
         };
     }
 

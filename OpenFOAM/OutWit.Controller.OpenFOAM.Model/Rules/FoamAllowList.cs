@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace OutWit.Controller.OpenFOAM.Recipes;
+namespace OutWit.Controller.OpenFOAM.Model.Rules;
 
 /// <summary>
 /// What a recipe may run. Utilities by name; solvers by shape (a kit

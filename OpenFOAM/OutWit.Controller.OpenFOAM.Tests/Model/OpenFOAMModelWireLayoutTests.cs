@@ -22,6 +22,7 @@ public sealed class OpenFOAMModelWireLayoutTests
     private static readonly IReadOnlyDictionary<Type, int> EXPECTED_FIELD_COUNTS = new Dictionary<Type, int>
     {
         [typeof(FoamArtifactPolicyData)] = 4,
+        [typeof(FoamCaseData)] = 8,
         [typeof(FoamExtractionRequestData)] = 1,
         [typeof(FoamFileRefData)] = 5,
         [typeof(FoamNamedValueData)] = 2,
@@ -32,7 +33,7 @@ public sealed class OpenFOAMModelWireLayoutTests
         [typeof(FoamResultData)] = 17,
         [typeof(FoamStepData)] = 3,
         [typeof(FoamStepOutcomeData)] = 4,
-        [typeof(FoamTaskData)] = 10,
+        [typeof(FoamTaskData)] = 3,
         [typeof(FoamTokenValueData)] = 2
     };
 
