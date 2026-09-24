@@ -12,29 +12,6 @@ namespace OutWit.Controller.OpenFOAM.Adapters;
 
 internal sealed class WitActivityAdapterFoamRun : WitActivityAdapterFunction<WitActivityFoamRun>
 {
-    #region Constants
-
-    /// <summary>Cell count the work estimate is normalized to.</summary>
-    private const double REFERENCE_CELLS = 100_000;
-
-    /// <summary>
-    /// Cost of a variant relative to a steady incompressible run of the same
-    /// mesh, by the task's solver class. Initial values, to be recalibrated
-    /// against the oracle cases; an unknown class counts as steady.
-    /// </summary>
-    private static readonly IReadOnlyDictionary<string, double> SOLVER_CLASS_FACTORS = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
-    {
-        ["incompressible-steady"] = 1.0,
-        ["incompressible-transient"] = 6.0,
-        ["compressible-steady"] = 2.0,
-        ["compressible-transient"] = 10.0,
-        ["multiphase-transient"] = 12.0,
-        ["thermal-steady"] = 1.5,
-        ["thermal-transient"] = 8.0
-    };
-
-    #endregion
-
     #region Constructors
 
     public WitActivityAdapterFoamRun(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
@@ -90,13 +67,10 @@ internal sealed class WitActivityAdapterFoamRun : WitActivityAdapterFunction<Wit
 
     protected override double EstimateWork(WitActivityFoamRun activity, IWitVariablesCollection pool)
     {
-        if (!pool.TryGetValue(activity.Task, out FoamTaskData? task) || task == null || task.CellCount <= 0)
-            return 1.0;
+        if (!pool.TryGetValue(activity.Task, out FoamTaskData? task) || task == null)
+            return FoamWorkEstimate.UNKNOWN;
 
-        var factor = SOLVER_CLASS_FACTORS.TryGetValue(task.SolverClass ?? string.Empty, out var known) ? known : 1.0;
-        var meshing = task.Recipe?.MeshesPerVariant == true ? 1.5 : 1.0;
-
-        return task.CellCount / REFERENCE_CELLS * factor * meshing;
+        return FoamWorkEstimate.Estimate(task);
     }
 
     #endregion

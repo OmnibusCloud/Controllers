@@ -5,21 +5,6 @@ using OutWit.Common.Values;
 namespace OutWit.Controller.OpenFOAM.Model;
 
 /// <summary>
-/// Which time directories of a finished case travel back.
-/// </summary>
-public enum FoamArtifactTimes
-{
-    /// <summary>No time directory.</summary>
-    None = 0,
-
-    /// <summary>The latest written time only.</summary>
-    Latest = 1,
-
-    /// <summary>Every written time (transient runs: large).</summary>
-    All = 2
-}
-
-/// <summary>
 /// What of a finished case is zipped and uploaded as the variant's artifact.
 /// The result row travels regardless; the artifact is what a person opens in
 /// ParaView afterwards, and every part of it is paid for in upload time and

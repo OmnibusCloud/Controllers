@@ -39,6 +39,7 @@ public static class FoamProcessRunner
     /// <param name="logPath">Where the merged output goes; null keeps the tail only.</param>
     /// <param name="cancellationToken">Kills the whole process tree when signaled.</param>
     /// <returns>The run's outcome.</returns>
+    /// <exception cref="System.ComponentModel.Win32Exception">The executable does not exist or cannot be started.</exception>
     public static async Task<FoamRunOutcome> RunAsync(
         string fileName,
         IReadOnlyList<string> arguments,

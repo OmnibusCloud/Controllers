@@ -100,13 +100,13 @@ public class FoamRunEndToEndTests
     {
         var files = new List<FoamFileRefData>
         {
-            File("system/controlDict", "FoamFile { object controlDict; }\napplication simpleFoam;\nendTime 3;\n"),
-            File("system/fvSchemes", "ddtSchemes { default steadyState; }\n"),
-            File("system/fvSolution", "solvers { }\n"),
+            BlobFile("system/controlDict", "FoamFile { object controlDict; }\napplication simpleFoam;\nendTime 3;\n"),
+            BlobFile("system/fvSchemes", "ddtSchemes { default steadyState; }\n"),
+            BlobFile("system/fvSolution", "solvers { }\n"),
             // The fake solver's control file is the templated file: the token
             // decides per variant whether the "solve" succeeds or diverges.
-            File("system/fake", "{{oc1}}\nITERATIONS=3\n", templated: true),
-            File("0/U", "internalField uniform (10 0 0);\n")
+            BlobFile("system/fake", "{{oc1}}\nITERATIONS=3\n", templated: true),
+            BlobFile("0/U", "internalField uniform (10 0 0);\n")
         };
         files.AddRange(extraFiles);
 
@@ -127,7 +127,7 @@ public class FoamRunEndToEndTests
         };
     }
 
-    private FoamFileRefData File(string relativePath, string text, bool templated = false)
+    private FoamFileRefData BlobFile(string relativePath, string text, bool templated = false)
     {
         return new FoamFileRefData
         {
@@ -160,7 +160,7 @@ public class FoamRunEndToEndTests
         {
             Variant(0, "FAKE-COEFFS"),
             Variant(1, "FAKE-FAIL"),
-            Variant(2, "plain", File("0/p", "internalField #codeStream { code #{ os << 0; #}; };\n"))
+            Variant(2, "plain", BlobFile("0/p", "internalField #codeStream { code #{ os << 0; #}; };\n"))
         };
 
         var job = m_engine.Compile(SCRIPT);
@@ -185,7 +185,7 @@ public class FoamRunEndToEndTests
         Assert.That(good.Iterations, Is.EqualTo(3));
         Assert.That(good.Steps.Select(step => step.Utility), Is.EqualTo(new[] { "blockMesh", "simpleFoam" }));
         Assert.That(good.ArtifactBlobId, Is.Not.Null);
-        Assert.That(System.IO.File.Exists(m_blobService.GetStoredPath(good.ArtifactBlobId!.Value)), Is.True, "the artifact travelled through the blob service");
+        Assert.That(File.Exists(m_blobService.GetStoredPath(good.ArtifactBlobId!.Value)), Is.True, "the artifact travelled through the blob service");
 
         var failed = byIndex[1];
         Assert.That(failed.Rejections, Is.Empty);

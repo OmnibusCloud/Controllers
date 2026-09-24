@@ -26,6 +26,7 @@ public sealed class FoamKit
     /// </summary>
     /// <param name="root">The kit folder (the one holding KIT.env).</param>
     /// <param name="environment">Its parsed KIT.env.</param>
+    /// <exception cref="InvalidDataException">KIT.env names no FOAM_APPBIN.</exception>
     public FoamKit(string root, FoamKitEnvironment environment)
     {
         Root = Path.GetFullPath(root);

@@ -48,7 +48,7 @@ public static class FoamCaseMaterializer
             cancellationToken.ThrowIfCancellationRequested();
 
             var target = Path.Combine(root, file.RelativePath.Replace('/', Path.DirectorySeparatorChar));
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(target) ?? root);
 
             var source = await blobService.GetLocalPathAsync(file.BlobId);
 

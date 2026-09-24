@@ -46,8 +46,9 @@ public static class FoamDecomposition
     /// <returns>The dictionary's path.</returns>
     public static string WriteDecomposeParDict(string caseDirectory, int ranks)
     {
-        var path = Path.Combine(caseDirectory, "system", "decomposeParDict");
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var system = Path.Combine(caseDirectory, "system");
+        Directory.CreateDirectory(system);
+        var path = Path.Combine(system, "decomposeParDict");
         File.WriteAllText(path, Dictionary(ranks));
         return path;
     }

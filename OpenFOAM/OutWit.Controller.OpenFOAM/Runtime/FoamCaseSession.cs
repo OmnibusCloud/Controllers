@@ -76,7 +76,8 @@ public sealed class FoamCaseSession
                 return result;
             }
 
-            var recipe = task.Recipe!;
+            // The validator refused a task without a recipe above; this is the invariant, not a branch.
+            var recipe = task.Recipe ?? throw new InvalidOperationException("The task carries no recipe.");
             var ranks = FoamDecomposition.Ranks(task.Threads);
             var environment = Kit.EnvironmentFor(scratch);
             var runner = new FoamCaseRunner(Kit, caseDirectory, environment, ranks, Logger);
@@ -107,6 +108,29 @@ public sealed class FoamCaseSession
         {
             TryDeleteScratch(scratch);
         }
+    }
+
+    /// <summary>
+    /// A private scratch for the run, under the node's temp. No space in the
+    /// path (plan D-16: OpenFOAM strips whitespace from paths): on Windows a
+    /// temp under a profile with a space is used through its 8.3 short form;
+    /// a node whose temp has a space and no short form cannot run cases, and
+    /// says so.
+    /// </summary>
+    /// <returns>The scratch directory, created.</returns>
+    /// <exception cref="InvalidOperationException">The temp path contains a space and has no space-free form.</exception>
+    public static string CreateScratch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), SCRATCH_ROOT);
+        Directory.CreateDirectory(root);
+
+        var usable = FoamScratchPath.WithoutSpaces(root)
+            ?? throw new InvalidOperationException($"The node's temp path contains a space ('{Path.GetTempPath()}') and has no short form; OpenFOAM cannot run under it. Point TMPDIR/TEMP at a space-free directory.");
+
+        var scratch = Path.Combine(usable, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(scratch, "home"));
+        Directory.CreateDirectory(Path.Combine(scratch, "tmp"));
+        return scratch;
     }
 
     private void ReadFacts(FoamResultData result, string caseDirectory, FoamRecipeData recipe)
@@ -187,29 +211,6 @@ public sealed class FoamCaseSession
 
         return Directory.EnumerateFiles(libbin, $"lib{stem}.*", SearchOption.AllDirectories).Any()
                || Directory.EnumerateFiles(libbin, $"{stem}.*", SearchOption.AllDirectories).Any();
-    }
-
-    /// <summary>
-    /// A private scratch for the run, under the node's temp. No space in the
-    /// path (plan D-16: OpenFOAM strips whitespace from paths): on Windows a
-    /// temp under a profile with a space is used through its 8.3 short form;
-    /// a node whose temp has a space and no short form cannot run cases, and
-    /// says so.
-    /// </summary>
-    /// <returns>The scratch directory, created.</returns>
-    /// <exception cref="InvalidOperationException">The temp path contains a space and has no space-free form.</exception>
-    public static string CreateScratch()
-    {
-        var root = Path.Combine(Path.GetTempPath(), SCRATCH_ROOT);
-        Directory.CreateDirectory(root);
-
-        var usable = FoamScratchPath.WithoutSpaces(root)
-            ?? throw new InvalidOperationException($"The node's temp path contains a space ('{Path.GetTempPath()}') and has no short form; OpenFOAM cannot run under it. Point TMPDIR/TEMP at a space-free directory.");
-
-        var scratch = Path.Combine(usable, Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(scratch, "home"));
-        Directory.CreateDirectory(Path.Combine(scratch, "tmp"));
-        return scratch;
     }
 
     private void TryDeleteScratch(string directory)

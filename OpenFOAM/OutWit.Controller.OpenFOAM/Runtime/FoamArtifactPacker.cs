@@ -100,17 +100,20 @@ public static class FoamArtifactPacker
         if (times == FoamArtifactTimes.None)
             return [];
 
-        var numeric = Directory.EnumerateDirectories(caseDirectory)
-            .Select(directory => (Directory: directory, Time: ParseTime(Path.GetFileName(directory))))
-            .Where(entry => entry.Time.HasValue)
-            .OrderBy(entry => entry.Time!.Value)
-            .Select(entry => entry.Directory)
-            .ToList();
+        var numeric = new List<(string Directory, double Time)>();
+        foreach (var directory in Directory.EnumerateDirectories(caseDirectory))
+        {
+            if (ParseTime(Path.GetFileName(directory)) is { } time)
+                numeric.Add((directory, time));
+        }
 
-        if (numeric.Count == 0)
+        numeric.Sort((left, right) => left.Time.CompareTo(right.Time));
+        var ordered = numeric.Select(entry => entry.Directory).ToList();
+
+        if (ordered.Count == 0)
             return [];
 
-        return times == FoamArtifactTimes.All ? numeric : [numeric[^1]];
+        return times == FoamArtifactTimes.All ? ordered : [ordered[^1]];
     }
 
     private static double? ParseTime(string name)

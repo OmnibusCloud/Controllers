@@ -73,8 +73,9 @@ public static class FoamBenchmark
         var target = options is { MinDuration.Ticks: > 0 } ? options.MinDuration : FALLBACK_TARGET;
         var warmupRuns = Math.Clamp(Math.Max(WARMUP_RUNS, options?.WarmupIterations ?? 0), WARMUP_RUNS, MAX_WARMUP_RUNS);
 
-        var tutorials = kit.Environment.Get("FOAM_TUTORIALS", kit.Root)
-                        ?? Path.Combine(kit.Environment.Get("WM_PROJECT_DIR", kit.Root)!, "tutorials");
+        var project = kit.Environment.Get("WM_PROJECT_DIR", kit.Root)
+                      ?? throw new InvalidOperationException("KIT.env names no WM_PROJECT_DIR.");
+        var tutorials = kit.Environment.Get("FOAM_TUTORIALS", kit.Root) ?? Path.Combine(project, "tutorials");
         var source = Path.Combine(tutorials, TUTORIAL.Replace('/', Path.DirectorySeparatorChar));
         if (!Directory.Exists(source))
             throw new InvalidOperationException($"The kit carries no {TUTORIAL} under {tutorials}.");
