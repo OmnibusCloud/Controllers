@@ -27,9 +27,15 @@ public static class FoamLogReader
 
     private const string FATAL = "--> FOAM FATAL";
 
-    private const string SIGFPE = "sigFpe";
-
-    private const string FPE = "Floating point exception";
+    /// <summary>
+    /// The signal handler's frame in the stack trace a trapped floating-point
+    /// exception prints - the one line that only a sprung trap writes. Every
+    /// log opens with the trap being ARMED ("trapFpe: Floating point exception
+    /// trapping enabled (FOAM_SIGFPE)"), so neither the bare word "sigFpe" nor
+    /// the phrase "Floating point exception" tells a crash from a normal run
+    /// (the first two oracle runs against the real kit, 2026-09-24).
+    /// </summary>
+    private const string SIGFPE = "sigFpe::sigHandler";
 
     #endregion
 
@@ -94,7 +100,7 @@ public static class FoamLogReader
                 facts.WarningCount++;
             else if (line.StartsWith(FATAL, StringComparison.Ordinal))
                 facts.Fatal = true;
-            else if (line.Contains(SIGFPE, StringComparison.Ordinal) || line.Contains(FPE, StringComparison.Ordinal))
+            else if (line.Contains(SIGFPE, StringComparison.Ordinal))
                 facts.FloatingPointException = true;
             else if (CONVERGED.IsMatch(line))
                 facts.Converged = true;
