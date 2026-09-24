@@ -47,6 +47,12 @@
     <Project Path="CalculiX/OutWit.Controller.Sweep.Scripts/OutWit.Controller.Sweep.Scripts.csproj" />
     <Project Path="CalculiX/OutWit.Controller.Sweep.Tests/OutWit.Controller.Sweep.Tests.csproj" />
   </Folder>
+  <Folder Name="/OpenFOAM/">
+    <Project Path="OpenFOAM/OutWit.Controller.OpenFOAM/OutWit.Controller.OpenFOAM.csproj" />
+    <Project Path="OpenFOAM/OutWit.Controller.OpenFOAM.Model/OutWit.Controller.OpenFOAM.Model.csproj" />
+    <Project Path="OpenFOAM/OutWit.Controller.OpenFOAM.Tests/OutWit.Controller.OpenFOAM.Tests.csproj" />
+    <Project Path="OpenFOAM/OutWit.Controller.OpenFOAM.Tests.FakeFoam/OutWit.Controller.OpenFOAM.Tests.FakeFoam.csproj" />
+  </Folder>
   <Folder Name="/Visualization/">
     <Project Path="Visualization/OutWit.Controller.Visualization.ParaView/OutWit.Controller.Visualization.ParaView.csproj" />
     <Project Path="Visualization/OutWit.Controller.Visualization.ParaView.Model/OutWit.Controller.Visualization.ParaView.Model.csproj" />

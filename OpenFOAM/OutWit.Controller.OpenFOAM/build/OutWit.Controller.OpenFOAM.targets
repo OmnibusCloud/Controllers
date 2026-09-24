@@ -1,0 +1,46 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.OpenFOAM NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+
+      Tier-2 controller with per-platform external assets (pinned OpenFOAM
+      kits for linux-x64 / osx-arm64; win-x64 with its release).
+
+      ResolveForAllPlatforms="true": the typical consumer is a WitCloud-style
+      distribution host that serves per-platform module archives to worker
+      nodes, so it needs every platform's kit in its openfoam.module/ folder,
+      not just the host's own RID.
+  -->
+
+  <PropertyGroup>
+    <_OutWitOpenFOAMModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitOpenFOAMModulePackageContent>
+    <_OutWitOpenFOAMModuleOutputDir>$(OutputPath)@Controllers\openfoam.module\</_OutWitOpenFOAMModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyOpenFOAMModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitOpenFOAMModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitOpenFOAMFiles Include="$(_OutWitOpenFOAMModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitOpenFOAMFiles)"
+        DestinationFiles="@(_OutWitOpenFOAMFiles->'$(_OutWitOpenFOAMModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.OpenFOAM: staged module to '$(_OutWitOpenFOAMModuleOutputDir)'." />
+  </Target>
+
+  <Target Name="OutWitResolveOpenFOAMAssets"
+          AfterTargets="OutWitCopyOpenFOAMModule"
+          Condition="Exists('$(_OutWitOpenFOAMModuleOutputDir)controller.json')">
+    <ResolveControllerAssetsTask
+        ManifestPath="$(_OutWitOpenFOAMModuleOutputDir)controller.json"
+        OutputPath="$(OutputPath)@Controllers\"
+        ResolveForAllPlatforms="true" />
+  </Target>
+
+</Project>

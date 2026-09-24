@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.props" />
+
+  <PropertyGroup>
+    <ControllerName>OpenFOAM</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Runs complete OpenFOAM cases on compute nodes: each run is one whole case on one node - meshing, decomposition, the solver, the post step - through an allow-listed recipe, the unit of parameter-study throughput. Carries pinned OpenFOAM v2606 kits for every supported node platform as controller assets, so nodes need no preinstalled OpenFOAM (parallel steps on Windows additionally need Microsoft MPI on the node); responses are read from the finished case right on the node. OpenFOAM is a registered trademark of OpenCFD Limited; this offering is not approved or endorsed by OpenCFD Limited.</Description>
+    <PackageTags>openfoam;cfd;solver;simulation;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>foam-run</ControllerFeatures>
+    <ControllerUseCases>Whole-case OpenFOAM runs fanned out across a pool; intended as a case backend of the Sweep parameter-study controller</ControllerUseCases>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.OpenFOAM.Model\OutWit.Controller.OpenFOAM.Model.csproj" />
+  </ItemGroup>
+
+  <!-- Pinned OpenFOAM kits, one per supported node platform, published by the
+       OmnibusCloud/OpenFOAM repository (which also carries the GPL source
+       mirror and the build that made them). Fetched at consumer build time by
+       ResolveControllerAssetsTask, never packed into the nupkg. Each archive
+       carries its platform folder (openfoam/<platform>/KIT.env ...), so it is
+       extracted at the module root and the node-side resolver probes
+       openfoam/<runtime-folder>/. One release for the three platforms
+       (openfoam-v2606-3, the first with a Windows kit). -->
+  <ItemGroup>
+    <ControllerDataAsset Include="openfoam-win-x64">
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/OpenFOAM/openfoam-v2606-3/openfoam-windows-x64.zip</Uri>
+      <Sha256>c5a15181284c72283ca21736202c437c32a60364b4f7d4ca95cefaddcf416732</Sha256>
+      <Size>219997998</Size>
+      <ExtractTo>.</ExtractTo>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="openfoam-linux-x64">
+      <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/OpenFOAM/openfoam-v2606-3/openfoam-linux-x64.zip</Uri>
+      <Sha256>a226745d96d349bdfb93b71ce134211ee88ecefd06b676ed24fcd6a1ddd60be4</Sha256>
+      <Size>158775869</Size>
+      <ExtractTo>.</ExtractTo>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="openfoam-macos-arm64">
+      <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/OpenFOAM/openfoam-v2606-3/openfoam-macos-arm64.zip</Uri>
+      <Sha256>d441210c597000f48cae20a99e4493838a8cf460061f7ffeeacf48369d20e8ab</Sha256>
+      <Size>114973148</Size>
+      <ExtractTo>.</ExtractTo>
+    </ControllerDataAsset>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.OpenFOAM.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
+
+</Project>

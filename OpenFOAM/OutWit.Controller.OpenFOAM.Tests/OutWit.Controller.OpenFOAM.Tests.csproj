@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.OpenFOAM\OutWit.Controller.OpenFOAM.csproj" />
+  </ItemGroup>
+
+  <!-- Build-only references: these projects must be built (so their PostBuild
+       populates @Controllers/<Cfg>/<name>.module/ and the fake solver exists)
+       but their DLLs are not pulled into the test compile output. Variables
+       and Grid are the script-level dependencies of the engine gate (typed
+       variables, Grid.ForEach). -->
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.OpenFOAM.Tests.FakeFoam\OutWit.Controller.OpenFOAM.Tests.FakeFoam.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ExcludedControllerModule Include="render.module" />
+    <ExcludedControllerModule Include="renderdcc.module" />
+    <ExcludedControllerModule Include="schwarz.module" />
+    <ExcludedControllerModule Include="parareal.module" />
+    <ExcludedControllerModule Include="sweep.module" />
+    <ExcludedControllerModule Include="calculix.module" />
+  </ItemGroup>
+
+</Project>

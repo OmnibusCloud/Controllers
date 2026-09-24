@@ -29,6 +29,7 @@ the table.
 | `OutWit.Controller.Simulation.Schwarz` ([`Simulation/`](Simulation/))                               | v1.0.1 — nuget.org + OmnibusCloud org feed                                                                                                                                      | 1    | Distributed stationary solves — steady heat / Poisson-class fields on structured Cartesian or axisymmetric (r-z) grids — via overlapping Schwarz domain decomposition. LAN-profile. |
 | `OutWit.Controller.Simulation.Parareal` ([`Simulation/`](Simulation/))                              | v1.0.3 — nuget.org + OmnibusCloud org feed                                                                                                                                      | 1    | Distributed transient solves — heat / diffusion over a time horizon — via parareal parallel-in-time integration. Crowd/WAN-profile. |
 | `OutWit.Controller.Visualization.ParaView` ([`Visualization/`](Visualization/))                    | in development — not yet published                                                                                                                                   | 2    | Headless scientific visualization: validates OmnibusCloud ParaView packages (state + content-addressed data) as untrusted input, splits them into per-timestep tasks with per-task attachment subsets, renders through a controller-owned pvpython runner on the software-rendering baseline. Per-platform ParaView runtimes ship via GitHub Release (runtime-proof milestone). |
+| `OutWit.Controller.OpenFOAM` ([`OpenFOAM/`](OpenFOAM/))                                            | in development — not yet published                                                                                                                                   | 2    | Whole-case OpenFOAM® runs on compute nodes: one case per node through an allow-listed recipe (meshing, decomposition, solver, post step), run-time code refused before anything runs, convergence facts and requested responses read on the node. Pinned OpenFOAM v2606 kits for Windows / Linux / macOS ship as release assets of [OmnibusCloud/OpenFOAM](https://github.com/OmnibusCloud/OpenFOAM). |
 
 Each controller comes with a companion `OutWit.Controller.<Name>.Model`
 NuGet that contains shared data types — referenced transitively by
@@ -234,6 +235,12 @@ canonical minimal Model shape.
 │   ├── OutWit.Controller.Visualization.ParaView.Tests/
 │   └── OutWit.Controller.Visualization.ParaView.Tests.FakePvpython/  # Test-only pvpython stand-in (never shipped)
 │
+├── OpenFOAM/                        # Whole-case OpenFOAM runs (Tier-2: pinned kits from OmnibusCloud/OpenFOAM releases)
+│   ├── OutWit.Controller.OpenFOAM/          # Foam.Run activity: recipe validation, case inspection, kit runtime, extraction
+│   ├── OutWit.Controller.OpenFOAM.Model/    # Task / result / recipe / response data types
+│   ├── OutWit.Controller.OpenFOAM.Tests/    # Unit + engine-gate tests, plus the real-kit oracle (Category=Kit)
+│   └── OutWit.Controller.OpenFOAM.Tests.FakeFoam/  # Test-only solver stand-in (never shipped)
+│
 ├── Simulation/                      # Distributed numerical simulation (org-feed packages)
 │                                    # model + numerics come from OutWit.Math.Simulation[.Model] (private feed)
 │   ├── OutWit.Controller.Simulation.Schwarz/  # Stationary solves (domain decomposition)
@@ -250,7 +257,8 @@ canonical minimal Model shape.
 ├── .github/workflows/
 │   ├── publish.yml                          # Unified publish pipeline (any controller / model / tool)
 │   ├── verify-render-consumer.yml           # Cold-build smoke test of the published Render package
-│   └── verify-scripts-consumer.yml          # Cold-build smoke test of a published Scripts package
+│   ├── verify-scripts-consumer.yml          # Cold-build smoke test of a published Scripts package
+│   └── openfoam-oracle.yml                  # The OpenFOAM controller against the real kits (Linux, macOS, Windows)
 │
 ├── OutWit.slnx                              # Solution file (SLNX format, .NET 10)
 ├── LICENSE                                  # MIT
@@ -328,9 +336,10 @@ See [Tools/OutWit.Controller.Pack/README.md](Tools/OutWit.Controller.Pack/README
 
 | Workflow                            | Trigger                       | Purpose                                                                                           |
 | ----------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------- |
-| [`publish.yml`](.github/workflows/publish.yml)                       | `workflow_dispatch`             | Publish any project. Tier-2 controllers (Render) have a release-assets-exist guard before the nuget.org push. |
+| [`publish.yml`](.github/workflows/publish.yml)                       | `workflow_dispatch`             | Publish any project. Tier-2 controllers (Render, ParaView, OpenFOAM) have a release-assets-exist guard before the nuget.org push. |
 | [`verify-render-consumer.yml`](.github/workflows/verify-render-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference the published Render package, assert every external asset materialised. |
 | [`verify-scripts-consumer.yml`](.github/workflows/verify-scripts-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference a published Scripts package, assert the staged `@Scripts/*.wit` layout matches what WitCloud's ScriptSeeder expects. |
+| [`openfoam-oracle.yml`](.github/workflows/openfoam-oracle.yml) | PR touching `OpenFOAM/**`, `workflow_dispatch` | The OpenFOAM controller against the real v2606 kits downloaded from OmnibusCloud/OpenFOAM: pitzDaily through `Foam.Run` serially and on two ranks (Linux, macOS), serially on Windows, plus the whole ordinary test run per platform. |
 
 A separate external smoke test lives outside this repository: it
 consumes the nuget.org-published controllers in a single `dotnet build`
