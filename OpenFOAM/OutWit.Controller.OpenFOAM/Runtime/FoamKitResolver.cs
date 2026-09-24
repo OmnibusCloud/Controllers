@@ -34,6 +34,12 @@ public static class FoamKitResolver
 
     #endregion
 
+    #region Fields
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> INTEGRITY = new(StringComparer.Ordinal);
+
+    #endregion
+
     #region Functions
 
     /// <summary>
@@ -65,10 +71,43 @@ public static class FoamKitResolver
             return null;
         }
 
+        if (!IsIntact(kit, logger))
+            return null;
+
         EnsureExecutables(kit, logger);
         EnsurePstream(kit, logger);
 
         return kit;
+    }
+
+    /// <summary>
+    /// The integrity spot check, once per kit folder per process: a kit that
+    /// is short of a file or carries an altered one is refused here, with the
+    /// file named, rather than failing in the middle of a case. A kit without
+    /// a BUILDINFO (a test kit) is accepted with a warning.
+    /// </summary>
+    /// <param name="kit">The kit.</param>
+    /// <param name="logger">Diagnostics sink.</param>
+    /// <returns>True when the kit may be used.</returns>
+    public static bool IsIntact(FoamKit kit, ILogger? logger = null)
+    {
+        return INTEGRITY.GetOrAdd(kit.Root, root =>
+        {
+            var findings = FoamKitIntegrity.Check(root);
+            if (findings.Count == 0)
+                return true;
+
+            if (findings.Count == 1 && findings[0].Contains("carries no", StringComparison.Ordinal))
+            {
+                logger?.LogWarning("Foam.Run: {Finding} The kit at {Root} is used unchecked.", findings[0], root);
+                return true;
+            }
+
+            foreach (var finding in findings)
+                logger?.LogError("Foam.Run: the kit at {Root} is not intact - {Finding}", root, finding);
+
+            return false;
+        });
     }
 
     /// <summary>
