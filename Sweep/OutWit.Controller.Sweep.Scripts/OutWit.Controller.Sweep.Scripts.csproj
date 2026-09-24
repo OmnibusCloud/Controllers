@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.props" />
+
+  <PropertyGroup>
+    <ControllerName>Sweep</ControllerName>
+    <Version>2.0.0</Version>
+    <Description>Bundled .wit scripts for the OutWit.Controller.Sweep controller - one chunked parameter-study job per solver family: SweepCalculiX (Ccx.Solve) and SweepOpenFOAM (Foam.Run).</Description>
+    <PackageTags>sweep;parameter-study;scripts;calculix;openfoam;witengine;witcloud;controller</PackageTags>
+  </PropertyGroup>
+
+  <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md).
+       ENABLE AT FIRST PUBLISH: the referenced controller package does not exist
+       on any feed yet, so the marker would break restore until then.
+  <ItemGroup>
+    <PackageReference Include="OutWit.Controller.Sweep" Version="[2.0.0, 3.0.0)" />
+  </ItemGroup>
+  -->
+
+  <ItemGroup>
+    <None Include="..\OutWit.Controller.Sweep\Scripts\*.wit"
+          Pack="true"
+          PackagePath="content/scripts/" />
+
+    <None Include="build\OutWit.Controller.Sweep.Scripts.targets"
+          Pack="true"
+          PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.targets" />
+
+</Project>

@@ -1,35 +1,35 @@
 using System.Reflection;
-using OutWit.Controller.CalculiX.Model;
+using OutWit.Controller.Sweep.Model;
 
-namespace OutWit.Controller.CalculiX.Tests.Model;
+namespace OutWit.Controller.Sweep.Tests.Model;
 
 /// <summary>
-/// Wire-layout guard for the CalculiX.Model MemoryPack types — the same
-/// discipline as Render's: these ride the DEFAULT (non VersionTolerant)
-/// MemoryPack format, whose reader hard-fails on a payload with unknown
-/// members, so the ONLY safe evolution is to append a new member at the
-/// very end AND deploy the server before any client that writes it. This
-/// test freezes every type's member count and checks the
-/// <c>MemoryPackOrder</c> values stay a contiguous 0..n-1 run — an
-/// accidental insert, reorder, gap or silent append trips it. Update a
-/// frozen count ONLY together with an append-at-the-end change and a
-/// server-first rollout.
+/// Wire-layout guard for the Sweep.Model MemoryPack types. They ride the
+/// DEFAULT (non version-tolerant) MemoryPack format, whose reader hard-fails
+/// on a payload with unknown members, so the only safe evolution is to append
+/// a member at the very end and deploy the server before any client that
+/// writes it. This test freezes every type's member count and checks the
+/// <c>MemoryPackOrder</c> values stay a contiguous 0..n-1 run - an
+/// accidental insert, reorder, gap or silent append trips it.
 /// </summary>
 [TestFixture]
-public sealed class CalculiXModelWireLayoutTests
+public sealed class SweepModelWireLayoutTests
 {
-    // Field counts frozen 2026-09-24 (CalculiX.Model 2.0.0 - the sweep types
-    // moved to OutWit.Controller.Sweep.Model, which freezes them itself).
-    // Bump a count ONLY when appending at the end of that type, and only
-    // alongside a server-first rollout.
+    // Field counts frozen 2026-09-24 (Sweep.Model 2.0.0, the family-neutral
+    // sweep). Bump a count ONLY when appending at the end of that type.
     private static readonly IReadOnlyDictionary<Type, int> EXPECTED_FIELD_COUNTS = new Dictionary<Type, int>
     {
-        [typeof(CcxExtractionRequestData)] = 1,
-        [typeof(CcxProbeData)] = 3,
-        [typeof(CcxResponseRowData)] = 1,
-        [typeof(CcxResponseValueData)] = 2,
-        [typeof(CcxResultData)] = 7,
-        [typeof(CcxTaskData)] = 6
+        [typeof(SweepArtifactData)] = 3,
+        [typeof(SweepCalculiXDeckData)] = 4,
+        [typeof(SweepCalculiXStudyData)] = 6,
+        [typeof(SweepManifestData)] = 1,
+        [typeof(SweepManifestRowData)] = 4,
+        [typeof(SweepOptionsData)] = 6,
+        [typeof(SweepParameterData)] = 2,
+        [typeof(SweepPlanData)] = 2,
+        [typeof(SweepResultIndexEntryData)] = 4,
+        [typeof(SweepStateData)] = 7,
+        [typeof(SweepVariantData)] = 2
     };
 
     #region Layout Tests
@@ -47,7 +47,7 @@ public sealed class CalculiXModelWireLayoutTests
         }
 
         Assert.That(mismatches, Is.Empty,
-            "A CalculiX.Model wire type changed its member count. Append new members at the END only, " +
+            "A Sweep.Model wire type changed its member count. Append new members at the END only, " +
             "deploy the server before any client that writes them, then update the frozen count here.");
     }
 
@@ -56,7 +56,7 @@ public sealed class CalculiXModelWireLayoutTests
     {
         var offenders = new List<string>();
 
-        foreach (var type in typeof(CcxTaskData).Assembly.GetTypes())
+        foreach (var type in typeof(SweepOptionsData).Assembly.GetTypes())
         {
             if (!IsMemoryPackable(type))
                 continue;
@@ -70,19 +70,30 @@ public sealed class CalculiXModelWireLayoutTests
             var orders = OrderedMembers(type)
                 .Select(GetMemoryPackOrder)
                 .Where(order => order.HasValue)
-                .Select(order => order!.Value)
+                .Select(order => order ?? -1)
                 .OrderBy(order => order)
                 .ToArray();
 
-            var expected = Enumerable.Range(0, orders.Length).ToArray();
-            if (!orders.SequenceEqual(expected))
-                offenders.Add(
-                    $"{type.Name}: orders [{string.Join(", ", orders)}] are not a contiguous 0..{orders.Length - 1} run");
+            if (!orders.SequenceEqual(Enumerable.Range(0, orders.Length)))
+                offenders.Add($"{type.Name}: orders [{string.Join(", ", orders)}] are not a contiguous 0..{orders.Length - 1} run");
         }
 
         Assert.That(offenders, Is.Empty,
             "MemoryPackOrder values must be a contiguous 0..n-1 run (no gaps, duplicates, or reorders) " +
             "so the wire layout stays append-only.");
+    }
+
+    [Test]
+    public void TheEnumsKeepTheirValuesTest()
+    {
+        // Enum members travel as numbers on the MemoryPack wire and as names
+        // in the documents: neither a renumbering nor a rename is harmless.
+        Assert.That(Enum.GetValues<SweepFamily>().Select(value => ((int)value, value.ToString())),
+            Is.EqualTo(new[] { (0, "CalculiX"), (1, "OpenFOAM") }));
+        Assert.That(Enum.GetValues<SweepOutcome>().Select(value => ((int)value, value.ToString())),
+            Is.EqualTo(new[] { (0, "Succeeded"), (1, "Failed"), (2, "Refused") }));
+        Assert.That(Enum.GetValues<SweepArtifactKind>().Select(value => ((int)value, value.ToString())),
+            Is.EqualTo(new[] { (0, "CalculiXFrd"), (1, "CalculiXDat"), (2, "OpenFOAMCase") }));
     }
 
     #endregion

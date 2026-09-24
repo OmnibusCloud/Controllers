@@ -70,4 +70,6 @@ not bits.
 
 `Variables` (module dependency). The shared data types live in
 `OutWit.Controller.CalculiX.Model`, consumed by this controller, by the Sweep
-orchestration controller, and by client applications reading sweep manifests.
+orchestration controller (a CalculiX study carries the extraction request;
+its manifest rows carry the `CcxResultData` verbatim) and by client
+applications. The sweep's own types live in `OutWit.Controller.Sweep.Model`.

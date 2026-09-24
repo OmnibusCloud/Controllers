@@ -4,9 +4,10 @@ Runs complete [OpenFOAM®](https://www.openfoam.com/) cases on WitCloud
 compute nodes. One run = one whole case on one node - meshing, decomposition,
 the solver and the post step, through an allow-listed recipe; case support is
 whatever the pinned kit solves. The win is throughput across many independent
-runs: the activity is built to be the case backend the companion
-`OutWit.Controller.Sweep` fans parameter studies out over (that integration
-follows in a later release; today `Foam.Run` is driven through `Grid.ForEach`).
+runs, which is what the companion `OutWit.Controller.Sweep` orchestrates into
+parameter studies (its `SweepOpenFOAM.wit` fans a case study out to
+`Foam.Run`); any script can also drive `Foam.Run` directly through
+`Grid.ForEach`.
 
 ## Activity
 
@@ -84,7 +85,8 @@ OpenCFD® trade marks.
 
 ## Dependencies
 
-`Variables` (module dependency). The shared data types live in
-`OutWit.Controller.OpenFOAM.Model`, consumed by this controller and, once the
-Sweep integration lands, by the Sweep orchestration controller and by client
-applications composing case sweeps.
+`Variables` (module dependency). The shared data types and the case rules
+live in `OutWit.Controller.OpenFOAM.Model`, consumed by this controller, by
+the Sweep orchestration controller (an OpenFOAM study carries a
+`FoamCaseData`; its manifest rows carry the `FoamResultData` verbatim) and by
+client applications composing case sweeps.

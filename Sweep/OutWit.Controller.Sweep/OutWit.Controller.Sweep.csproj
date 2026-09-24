@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.props" />
+
+  <PropertyGroup>
+    <ControllerName>Sweep</ControllerName>
+    <Version>2.0.0</Version>
+    <Description>Host-side orchestration of parameter studies for every solver family the host knows - CalculiX decks and OpenFOAM cases - with one activity vocabulary: validates the study and its family block up front, fans each chunk out with Grid.ForEach to the family's node activity, and harvests the results into a manifest blob after every chunk, each row the sweep's verdict and the node's own result, so partial results are first-class and progress is observable while the sweep runs. Progressive chunk sizing: the first chunk as wide as the fleet, geometric growth to a cap.</Description>
+    <PackageTags>sweep;parameter-study;doe;calculix;ccx;openfoam;cfd;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>sweep-solve</ControllerFeatures>
+    <ControllerUseCases>Material/load/thickness studies over CalculiX decks and inlet/model/mesh studies over OpenFOAM cases, fanned across a pool; night-batch parameter sweeps with partial harvest</ControllerUseCases>
+  </PropertyGroup>
+
+  <!-- Host-only module (IWitControllerHost alone), so the host-only Grid and
+       Special dependencies are declarable honestly — the node-side loader
+       never sees this module. -->
+  <ItemGroup>
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+    <ControllerDependency Include="Grid" MinimumVersion="1.0.0" />
+    <ControllerDependency Include="Special" MinimumVersion="1.0.0" />
+    <ControllerDependency Include="CalculiX" MinimumVersion="1.1.0" />
+    <ControllerDependency Include="OpenFOAM" MinimumVersion="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.Sweep.Model\OutWit.Controller.Sweep.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.Sweep.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
+
+</Project>

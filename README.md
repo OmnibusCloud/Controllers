@@ -29,6 +29,8 @@ the table.
 | `OutWit.Controller.Simulation.Schwarz` ([`Simulation/`](Simulation/))                               | v1.0.1 — nuget.org + OmnibusCloud org feed                                                                                                                                      | 1    | Distributed stationary solves — steady heat / Poisson-class fields on structured Cartesian or axisymmetric (r-z) grids — via overlapping Schwarz domain decomposition. LAN-profile. |
 | `OutWit.Controller.Simulation.Parareal` ([`Simulation/`](Simulation/))                              | v1.0.3 — nuget.org + OmnibusCloud org feed                                                                                                                                      | 1    | Distributed transient solves — heat / diffusion over a time horizon — via parareal parallel-in-time integration. Crowd/WAN-profile. |
 | `OutWit.Controller.Visualization.ParaView` ([`Visualization/`](Visualization/))                    | in development — not yet published                                                                                                                                   | 2    | Headless scientific visualization: validates OmnibusCloud ParaView packages (state + content-addressed data) as untrusted input, splits them into per-timestep tasks with per-task attachment subsets, renders through a controller-owned pvpython runner on the software-rendering baseline. Per-platform ParaView runtimes ship via GitHub Release (runtime-proof milestone). |
+| [`OutWit.Controller.CalculiX`](https://www.nuget.org/packages/OutWit.Controller.CalculiX) ([`CalculiX/`](CalculiX/)) | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.CalculiX.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.CalculiX) | 2    | Whole-deck CalculiX (ccx 2.22) solves on compute nodes, responses extracted on the node. Pinned ccx builds for Windows / Linux / macOS ship as release assets of [OmnibusCloud/CalculiX](https://github.com/OmnibusCloud/CalculiX). |
+| [`OutWit.Controller.Sweep`](https://www.nuget.org/packages/OutWit.Controller.Sweep) ([`Sweep/`](Sweep/)) | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Sweep.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Sweep) | 1    | Host-side parameter studies for every solver family - CalculiX decks and OpenFOAM cases - with one activity vocabulary: the study validated up front, chunks fanned out with `Grid.ForEach`, a manifest of every harvested variant after each chunk (partial results survive cancellation), the `sweep.state@2` document for non-.NET clients. Version 2.0 (the family-neutral sweep) is in development. |
 | `OutWit.Controller.OpenFOAM` ([`OpenFOAM/`](OpenFOAM/))                                            | in development — not yet published                                                                                                                                   | 2    | Whole-case OpenFOAM® runs on compute nodes: one case per node through an allow-listed recipe (meshing, decomposition, solver, post step), run-time code refused before anything runs, convergence facts and requested responses read on the node. Pinned OpenFOAM v2606 kits for Windows / Linux / macOS ship as release assets of [OmnibusCloud/OpenFOAM](https://github.com/OmnibusCloud/OpenFOAM). |
 
 Each controller comes with a companion `OutWit.Controller.<Name>.Model`
@@ -235,9 +237,21 @@ canonical minimal Model shape.
 │   ├── OutWit.Controller.Visualization.ParaView.Tests/
 │   └── OutWit.Controller.Visualization.ParaView.Tests.FakePvpython/  # Test-only pvpython stand-in (never shipped)
 │
+├── CalculiX/                        # Whole-deck CalculiX solves (Tier-2: pinned ccx from OmnibusCloud/CalculiX releases)
+│   ├── OutWit.Controller.CalculiX/          # Ccx.Solve activity: ccx runtime, response extraction, benchmark
+│   ├── OutWit.Controller.CalculiX.Model/    # Task / result / extraction data types
+│   ├── OutWit.Controller.CalculiX.Tests/
+│   └── OutWit.Controller.CalculiX.Tests.FakeCcx/  # Test-only solver stand-in (never shipped)
+│
+├── Sweep/                           # Parameter studies over every solver family (host-only)
+│   ├── OutWit.Controller.Sweep/             # Sweep.* activities, the solver families (ISweepFamily), the bundled scripts
+│   ├── OutWit.Controller.Sweep.Model/       # Study / plan / state / manifest data types + the sweep.* document vocabulary
+│   ├── OutWit.Controller.Sweep.Scripts/     # SweepCalculiX.wit, SweepOpenFOAM.wit (content-only nupkg)
+│   └── OutWit.Controller.Sweep.Tests/       # Engine gates for both families, the fault gate, model and family tests
+│
 ├── OpenFOAM/                        # Whole-case OpenFOAM runs (Tier-2: pinned kits from OmnibusCloud/OpenFOAM releases)
-│   ├── OutWit.Controller.OpenFOAM/          # Foam.Run activity: recipe validation, case inspection, kit runtime, extraction
-│   ├── OutWit.Controller.OpenFOAM.Model/    # Task / result / recipe / response data types
+│   ├── OutWit.Controller.OpenFOAM/          # Foam.Run activity: case inspection, kit runtime, extraction
+│   ├── OutWit.Controller.OpenFOAM.Model/    # Case / task / result / response data types + the case rules (Rules/)
 │   ├── OutWit.Controller.OpenFOAM.Tests/    # Unit + engine-gate tests, plus the real-kit oracle (Category=Kit)
 │   └── OutWit.Controller.OpenFOAM.Tests.FakeFoam/  # Test-only solver stand-in (never shipped)
 │
@@ -258,7 +272,8 @@ canonical minimal Model shape.
 │   ├── publish.yml                          # Unified publish pipeline (any controller / model / tool)
 │   ├── verify-render-consumer.yml           # Cold-build smoke test of the published Render package
 │   ├── verify-scripts-consumer.yml          # Cold-build smoke test of a published Scripts package
-│   └── openfoam-oracle.yml                  # The OpenFOAM controller against the real kits (Linux, macOS, Windows)
+│   ├── openfoam-oracle.yml                  # The OpenFOAM controller against the real kits (Linux, macOS, Windows)
+│   └── sweep.yml                            # Sweep, CalculiX and OpenFOAM tests on Linux, macOS and Windows
 │
 ├── OutWit.slnx                              # Solution file (SLNX format, .NET 10)
 ├── LICENSE                                  # MIT
@@ -340,6 +355,7 @@ See [Tools/OutWit.Controller.Pack/README.md](Tools/OutWit.Controller.Pack/README
 | [`verify-render-consumer.yml`](.github/workflows/verify-render-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference the published Render package, assert every external asset materialised. |
 | [`verify-scripts-consumer.yml`](.github/workflows/verify-scripts-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference a published Scripts package, assert the staged `@Scripts/*.wit` layout matches what WitCloud's ScriptSeeder expects. |
 | [`openfoam-oracle.yml`](.github/workflows/openfoam-oracle.yml) | PR touching `OpenFOAM/**`, `workflow_dispatch` | The OpenFOAM controller against the real v2606 kits downloaded from OmnibusCloud/OpenFOAM: pitzDaily through `Foam.Run` serially and on two ranks (Linux, macOS), serially on Windows, plus the whole ordinary test run per platform. |
+| [`sweep.yml`](.github/workflows/sweep.yml) | PR touching `Sweep/**`, `CalculiX/**`, `OpenFOAM/**`, `workflow_dispatch` | The sweep and its solver families on Linux, macOS and Windows: the Sweep engine gates for CalculiX and OpenFOAM (fake solvers), the fault gate, the model and family tests, and the CalculiX and OpenFOAM controller tests. |
 
 A separate external smoke test lives outside this repository: it
 consumes the nuget.org-published controllers in a single `dotnet build`

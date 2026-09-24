@@ -45,6 +45,7 @@ on:
           - OutWit.Controller.Render.Model
           - OutWit.Controller.Render.Dcc.Model
           - OutWit.Controller.CalculiX.Model
+          - OutWit.Controller.Sweep.Model
           - OutWit.Controller.Visualization.ParaView.Model
           - OutWit.Controller.OpenFOAM.Model
           # Scripts (content-only nupkgs that ship bundled .wit scripts)

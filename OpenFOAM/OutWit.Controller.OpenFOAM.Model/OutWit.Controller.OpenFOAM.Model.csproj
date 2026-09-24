@@ -23,4 +23,16 @@
     </ItemGroup>
   </Target>
 
+  <!-- The Sweep host controller reads these types (an OpenFOAM study's case
+       rides inside its options, the node's result inside its manifest rows),
+       so the assembly is staged into BOTH module folders. The default
+       ModelPostBuild covers openfoam.module; this covers sweep.module.
+       Deliberately DLL-only. -->
+  <Target Name="ModelPostBuildSweep" AfterTargets="ModelPostBuild">
+    <Copy SourceFiles="$(TargetDir)$(TargetName).dll"
+          DestinationFolder="$(SolutionDir)@Controllers\$(Configuration)\sweep.module\"
+          SkipUnchangedFiles="true"
+          OverwriteReadOnlyFiles="true" />
+  </Target>
+
 </Project>
