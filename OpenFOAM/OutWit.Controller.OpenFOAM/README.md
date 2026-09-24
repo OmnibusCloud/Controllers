@@ -4,9 +4,10 @@ Runs complete [OpenFOAM®](https://www.openfoam.com/) cases on WitCloud
 compute nodes. One run = one whole case on one node - meshing, decomposition,
 the solver and the post step, through an allow-listed recipe; case support is
 whatever the pinned kit solves. The win is throughput across many independent
-runs: the activity is built to be the case backend the companion
-`OutWit.Controller.Sweep` fans parameter studies out over (that integration
-follows in a later release; today `Foam.Run` is driven through `Grid.ForEach`).
+runs, which is what the companion `OutWit.Controller.Sweep` orchestrates into
+parameter studies (its `SweepOpenFOAM.wit` fans a case study out to
+`Foam.Run`); any script can also drive `Foam.Run` directly through
+`Grid.ForEach`.
 
 ## Activity
 
@@ -14,12 +15,20 @@ follows in a later release; today `Foam.Run` is driven through `Grid.ForEach`).
 |---|---|---|
 | `Foam.Run(FoamTask) → FoamResult` | node | Materialise the variant's case from the base files and its token substitutions, refuse it by name if it carries run-time code or an unknown step, run the recipe under the bundled kit in a scratch directory (parallel steps under the kit's MPI on the controller-written `decomposeParDict`, scotch), read the convergence facts from the solver log and the requested responses from `postProcessing/`, zip and upload what the artifact policy asks for. A failed step, a diverged solve or a refused case is **data** in the result, not a task failure. |
 
-The task rides as one envelope (`FoamTaskData`): the base case as blob
-references (the same blobs for every variant, fetched once per node), the
-variant as token values, the recipe, the thread policy, the response request
-and the artifact policy; the cell count and solver class ride as scalars so
-work estimation never opens a file. Results return in completion order -
-consumers map by `VariantIndex`, never positionally.
+A task (`FoamTaskData`) is a case and a variant: the case (`FoamCaseData`,
+the same for every variant of a study) carries the base tree as blob
+references (fetched once per node), the recipe, the rank policy, the response
+request, the artifact policy, and the cell count and solver class as scalars
+so work estimation never opens a file; the variant adds only its token values.
+Results return in completion order - consumers map by `VariantIndex`, never
+positionally.
+
+The rules a case obeys - the allow-list, the recipe grammar, the case paths,
+the response request, the token coverage - live in
+`OutWit.Controller.OpenFOAM.Model` (`Rules/`), so the node, the Sweep host
+and an initiator's preflight refuse the same things with the same sentences.
+What needs the kit or the materialised files (executables, libraries,
+run-time code) is checked here, on the node.
 
 ## What a case may contain
 
@@ -30,7 +39,7 @@ refused before the first process starts, with file and line: `codeStream`,
 refused: `libs` entries naming libraries outside the kit, include directives
 (`#include`, `#sinclude`, `#includeIfPresent`, `#includeEtc`, `#includeFunc`)
 whose target leaves the case, a decomposed-only case, a recipe step outside
-the allow-list (`FoamAllowList`), an argument the allow-list's grammar does
+the allow-list (`FoamAllowList` in the Model), an argument the allow-list's grammar does
 not accept, a path with a space (OpenFOAM strips whitespace from paths), and
 leftovers of an earlier run in the base case (`log.*`, `postProcessing/`,
 `processor*/`), which would pass for this run's. A response name that
@@ -76,7 +85,8 @@ OpenCFD® trade marks.
 
 ## Dependencies
 
-`Variables` (module dependency). The shared data types live in
-`OutWit.Controller.OpenFOAM.Model`, consumed by this controller and, once the
-Sweep integration lands, by the Sweep orchestration controller and by client
-applications composing case sweeps.
+`Variables` (module dependency). The shared data types and the case rules
+live in `OutWit.Controller.OpenFOAM.Model`, consumed by this controller, by
+the Sweep orchestration controller (an OpenFOAM study carries a
+`FoamCaseData`; its manifest rows carry the `FoamResultData` verbatim) and by
+client applications composing case sweeps.

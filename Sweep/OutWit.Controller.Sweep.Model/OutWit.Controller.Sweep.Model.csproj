@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Model.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ControllerName>Sweep</ControllerName>
+    <Version>2.0.0</Version>
+    <Description>Shared data types of the Sweep orchestration controller: a parameter study as data for any solver family - the parameters, the variant table and exactly one family block (a CalculiX template or deck set, an OpenFOAM case) - the immutable plan with its chunk schedule, the cursor state carried across chunks, and the manifest of everything harvested so far, each row the sweep's verdict plus the node's own result. The sweep state and its result index publish a document vocabulary (sweep.state@2) for non-.NET initiators.</Description>
+    <PackageTags>sweep;parameter-study;doe;calculix;openfoam;witengine;witcloud;controller;data-types</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Publishes the sweep.* document vocabulary (Documents/ committed; CI
+         runs the generator in check mode and fails on drift). -->
+    <PackageReference Include="OutWit.Cloud.Documents.Generator" Version="1.0.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- The orchestrator depends on what it orchestrates: the families' task
+       and result types ride inside the sweep's options and manifest rows.
+       Never the other way round - a node module carries no sweep types. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\CalculiX\OutWit.Controller.CalculiX.Model\OutWit.Controller.CalculiX.Model.csproj" />
+    <ProjectReference Include="..\..\OpenFOAM\OutWit.Controller.OpenFOAM.Model\OutWit.Controller.OpenFOAM.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Documents\**" Exclude="Documents\**\__pycache__\**" Pack="true" PackagePath="documents\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Model.targets" />
+
+  <!-- A shared model must not stage its deps.json into a module: the client
+       install pipeline infers the root assembly from THE single deps.json it
+       finds, and a second one breaks that inference (the defect that once
+       froze controller updates fleet-wide). Resolution roots at the
+       controller DLL; the model rides as a plain dependency. -->
+  <Target Name="ModelDropDepsJson" BeforeTargets="ModelPostBuild">
+    <ItemGroup>
+      <ModelModuleFile Remove="$(TargetDir)$(TargetName).deps.json" />
+    </ItemGroup>
+  </Target>
+
+</Project>

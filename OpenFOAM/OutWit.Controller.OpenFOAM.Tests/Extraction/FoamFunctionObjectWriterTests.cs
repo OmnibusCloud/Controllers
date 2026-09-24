@@ -1,6 +1,6 @@
 using OutWit.Controller.OpenFOAM.Extraction;
+using OutWit.Controller.OpenFOAM.Inspection;
 using OutWit.Controller.OpenFOAM.Model;
-using OutWit.Controller.OpenFOAM.Recipes;
 using OutWit.Controller.OpenFOAM.Tests.Utils;
 
 namespace OutWit.Controller.OpenFOAM.Tests.Extraction;

@@ -1,0 +1,23 @@
+Job:SweepOpenFOAM(SweepOptions:opts)
+{
+    SweepPlan:plan = Sweep.Plan(opts);
+    SweepState:state = Sweep.InitState(plan);
+    Int:chunks = Sweep.ChunkCount(plan);
+    FoamTaskCollection:tasks;
+    FoamResultCollection:wave;
+
+    ~ Progressive chunks: each pass takes the next slice of the variant table
+      (the case is the same for every variant; each task adds its token
+      values), fans it out to Foam.Run, and checkpoints everything harvested
+      so far into the manifest blob the state points at. A monitoring client
+      polls the state; whatever it has read survives cancellation. ~
+    Loop(chunks)
+    {
+        tasks = Sweep.MakeChunk(plan, state);
+        wave = Grid.ForEach(task in tasks) => Foam.Run(task);
+        state = Sweep.Harvest(plan, state, wave);
+    }
+
+    Blob:manifest = Sweep.Finish(plan, state);
+    Return(manifest);
+}

@@ -13,12 +13,20 @@ public class FoamDataRoundTripTests
         return new FoamTaskData
         {
             VariantIndex = 7,
+            Substitutions = [new FoamTokenValueData { Token = "{{oc1}}", Value = "12.5" }],
+            Case = CreateCase()
+        };
+    }
+
+    private static FoamCaseData CreateCase()
+    {
+        return new FoamCaseData
+        {
             BaseFiles =
             [
                 new FoamFileRefData { RelativePath = "system/controlDict", BlobId = Guid.NewGuid(), Sha256 = "ab", Size = 120 },
                 new FoamFileRefData { RelativePath = "0/U", BlobId = Guid.NewGuid(), Sha256 = "cd", Size = 340, Templated = true }
             ],
-            Substitutions = [new FoamTokenValueData { Token = "{{oc1}}", Value = "12.5" }],
             Recipe = new FoamRecipeData
             {
                 Application = "simpleFoam",
@@ -85,6 +93,21 @@ public class FoamDataRoundTripTests
     }
 
     [Test]
+    public void CaseSurvivesMemoryPackRoundTripAndClonesIndependentlyTest()
+    {
+        var data = CreateCase();
+        var restored = MemoryPackSerializer.Deserialize<FoamCaseData>(MemoryPackSerializer.Serialize(data));
+
+        Assert.That(restored, Is.Not.Null);
+        Assert.That(restored!.Is(data), Is.True);
+
+        var clone = data.Clone();
+        clone.BaseFiles[1].Templated = false;
+        Assert.That(clone.Is(data), Is.False);
+        Assert.That(data.BaseFiles[1].Templated, Is.True);
+    }
+
+    [Test]
     public void ResultSurvivesMemoryPackRoundTripTest()
     {
         var result = CreateResult();
@@ -117,9 +140,11 @@ public class FoamDataRoundTripTests
 
         Assert.That(clone.Is(task), Is.True);
 
-        clone.Recipe!.Steps[0].Utility = "snappyHexMesh";
+        var changed = CreateCase();
+        changed.Recipe = new FoamRecipeData { Application = "simpleFoam", Steps = [new FoamStepData { Utility = "snappyHexMesh" }] };
+        clone.Case = changed;
         Assert.That(clone.Is(task), Is.False);
-        Assert.That(task.Recipe!.Steps[0].Utility, Is.EqualTo("blockMesh"));
+        Assert.That(task.Case?.Recipe?.Steps[0].Utility, Is.EqualTo("blockMesh"), "the original's case is untouched");
 
         var other = task.Clone();
         other.Substitutions[0].Value = "13";

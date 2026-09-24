@@ -92,22 +92,25 @@ public class FoamKitOracleTests
         return new FoamTaskData
         {
             VariantIndex = 1,
-            BaseFiles = files,
             Substitutions = [new FoamTokenValueData { Token = "{{oc1}}", Value = "10" }],
-            Recipe = new FoamRecipeData { Application = "simpleFoam", Steps = steps },
-            Threads = threads,
-            Extraction = new FoamExtractionRequestData
+            Case = new FoamCaseData
             {
-                Responses =
-                [
-                    // The inlet: the outlet holds p = 0 by its boundary condition, which would compare 0 with 0.
-                    new FoamResponseSpecData { Name = "inletP", Kind = FoamResponseKind.PatchValue, Patches = ["inlet"], Fields = ["p"], Operation = "areaAverage" },
-                    new FoamResponseSpecData { Name = "pRange", Kind = FoamResponseKind.FieldMinMax, Fields = ["p", "U"] }
-                ]
-            },
-            ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.Latest, Mesh = true, Logs = true },
-            CellCount = 12225,
-            SolverClass = "incompressible-steady"
+                BaseFiles = files,
+                Recipe = new FoamRecipeData { Application = "simpleFoam", Steps = steps },
+                Threads = threads,
+                Extraction = new FoamExtractionRequestData
+                {
+                    Responses =
+                    [
+                        // The inlet: the outlet holds p = 0 by its boundary condition, which would compare 0 with 0.
+                        new FoamResponseSpecData { Name = "inletP", Kind = FoamResponseKind.PatchValue, Patches = ["inlet"], Fields = ["p"], Operation = "areaAverage" },
+                        new FoamResponseSpecData { Name = "pRange", Kind = FoamResponseKind.FieldMinMax, Fields = ["p", "U"] }
+                    ]
+                },
+                ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.Latest, Mesh = true, Logs = true },
+                CellCount = 12225,
+                SolverClass = "incompressible-steady"
+            }
         };
     }
 

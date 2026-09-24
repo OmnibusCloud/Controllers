@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.Sweep\OutWit.Controller.Sweep.csproj" />
+    <ProjectReference Include="..\..\CalculiX\OutWit.Controller.CalculiX\OutWit.Controller.CalculiX.csproj" />
+    <ProjectReference Include="..\..\OpenFOAM\OutWit.Controller.OpenFOAM\OutWit.Controller.OpenFOAM.csproj" />
+  </ItemGroup>
+
+  <!-- Build-only references: these projects must be built (so their PostBuild
+       populates @Controllers/<Cfg>/<name>.module/ and the fake solvers exist)
+       but their DLLs are not pulled into the test compile output. CalculiX
+       and OpenFOAM are the node halves the bundled scripts dispatch to;
+       Variables/Grid/Special are the script-level dependencies (typed
+       variables, Grid.ForEach, Loop). -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\CalculiX\OutWit.Controller.CalculiX.Tests.FakeCcx\OutWit.Controller.CalculiX.Tests.FakeCcx.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\OpenFOAM\OutWit.Controller.OpenFOAM.Tests.FakeFoam\OutWit.Controller.OpenFOAM.Tests.FakeFoam.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Special\OutWit.Controller.Special\OutWit.Controller.Special.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <!-- The OpenFOAM tests' fake kit (a kit folder whose executables are the
+       fake solver), shared rather than copied: the sweep's OpenFOAM gate
+       runs Foam.Run against exactly the kit the controller's own tests use. -->
+  <ItemGroup>
+    <Compile Include="..\..\OpenFOAM\OutWit.Controller.OpenFOAM.Tests\Utils\FakeKit.cs" Link="Utils\Shared\FakeKit.cs" />
+    <Compile Include="..\..\OpenFOAM\OutWit.Controller.OpenFOAM.Tests\Utils\OpenFOAMTestPaths.cs" Link="Utils\Shared\OpenFOAMTestPaths.cs" />
+  </ItemGroup>
+
+  <!-- calculix.module and openfoam.module deliberately NOT excluded: the SDK
+       end-to-end tests load them - the bundled scripts dispatch Ccx.Solve and
+       Foam.Run. -->
+  <ItemGroup>
+    <ExcludedControllerModule Include="render.module" />
+    <ExcludedControllerModule Include="renderdcc.module" />
+    <ExcludedControllerModule Include="schwarz.module" />
+    <ExcludedControllerModule Include="parareal.module" />
+  </ItemGroup>
+
+</Project>

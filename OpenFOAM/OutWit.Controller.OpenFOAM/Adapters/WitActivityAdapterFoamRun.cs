@@ -70,7 +70,7 @@ internal sealed class WitActivityAdapterFoamRun : WitActivityAdapterFunction<Wit
         if (!pool.TryGetValue(activity.Task, out FoamTaskData? task) || task == null)
             return FoamWorkEstimate.UNKNOWN;
 
-        return FoamWorkEstimate.Estimate(task);
+        return FoamWorkEstimate.Estimate(task.Case);
     }
 
     #endregion

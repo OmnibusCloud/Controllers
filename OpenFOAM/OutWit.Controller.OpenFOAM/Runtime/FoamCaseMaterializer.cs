@@ -1,6 +1,6 @@
 using System.Text;
 using OutWit.Controller.OpenFOAM.Model;
-using OutWit.Controller.OpenFOAM.Recipes;
+using OutWit.Controller.OpenFOAM.Model.Rules;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.OpenFOAM.Runtime;
@@ -36,12 +36,18 @@ public static class FoamCaseMaterializer
         var findings = new List<string>();
         var root = Path.GetFullPath(caseDirectory);
 
-        if (task.BaseFiles.Count == 0)
+        if (task.Case == null)
+        {
+            findings.Add("The task carries no case.");
+            return findings;
+        }
+
+        if (task.Case.BaseFiles.Count == 0)
             findings.Add("The task carries no case files.");
 
-        foreach (var file in task.BaseFiles)
+        foreach (var file in task.Case.BaseFiles)
         {
-            var finding = ValidatePath(file.RelativePath);
+            var finding = FoamCasePathRules.Validate(file.RelativePath);
             if (finding != null)
             {
                 findings.Add(finding);
@@ -73,36 +79,6 @@ public static class FoamCaseMaterializer
         }
 
         return findings;
-    }
-
-    /// <summary>
-    /// Checks a relative path of the base tree: relative, inside the case,
-    /// forward slashes, no space, no empty segment.
-    /// </summary>
-    /// <param name="relativePath">The path as the task carries it.</param>
-    /// <returns>A finding, or null when the path is acceptable.</returns>
-    public static string? ValidatePath(string relativePath)
-    {
-        if (string.IsNullOrEmpty(relativePath))
-            return "A case file has no path.";
-        if (relativePath.Contains('\\'))
-            return $"{relativePath}: a case file path must use forward slashes.";
-        if (relativePath.Contains(' '))
-            return $"{relativePath}: a case file path must not contain a space (OpenFOAM strips whitespace from paths).";
-        if (FoamRecipeValidator.IsPathEscape(relativePath))
-            return $"{relativePath}: a case file path must stay inside the case directory.";
-        if (relativePath.Split('/').Any(segment => segment.Length == 0 || segment == "."))
-            return $"{relativePath}: a case file path must not have empty or '.' segments.";
-
-        var first = relativePath.Split('/')[0];
-        if (!relativePath.Contains('/') && first.StartsWith("log.", StringComparison.Ordinal))
-            return $"{relativePath}: a log of an earlier run does not belong in the base case.";
-        if (first == "postProcessing")
-            return $"{relativePath}: postProcessing/ of an earlier run does not belong in the base case (its values would pass for this run's).";
-        if (first.StartsWith("processor", StringComparison.Ordinal) && first.Length > 9 && first[9..].All(char.IsAsciiDigit))
-            return $"{relativePath}: a decomposed case (processor*/) is not accepted; submit the reconstructed case.";
-
-        return null;
     }
 
     #endregion

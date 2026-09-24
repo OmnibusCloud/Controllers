@@ -43,39 +43,6 @@ public class FoamCaseMaterializerTests
 
     #endregion
 
-    #region Path Tests
-
-    [TestCase("system/controlDict", null)]
-    [TestCase("0/U", null)]
-    [TestCase("constant/polyMesh/points", null)]
-    [TestCase("", "no path")]
-    [TestCase("system\\controlDict", "forward slashes")]
-    [TestCase("system/control Dict", "space")]
-    [TestCase("../other/controlDict", "inside the case")]
-    [TestCase("/etc/passwd", "inside the case")]
-    [TestCase("C:/Windows/x", "inside the case")]
-    [TestCase("system//controlDict", "empty or '.' segments")]
-    [TestCase("./system/controlDict", "empty or '.' segments")]
-    [TestCase("log.simpleFoam", "earlier run")]
-    [TestCase("log.blockMesh.2", "earlier run")]
-    [TestCase("logs/simpleFoam.txt", null)]
-    [TestCase("postProcessing/coeffs/0/coefficient.dat", "earlier run")]
-    [TestCase("processor0/0/U", "decomposed case")]
-    [TestCase("processor12/constant/polyMesh/points", "decomposed case")]
-    [TestCase("processorX/0/U", null)]
-    [TestCase("constant/triSurface/motorBike.obj.gz", null)]
-    public void PathRulesAreAppliedTest(string relativePath, string? expectedFragment)
-    {
-        var finding = FoamCaseMaterializer.ValidatePath(relativePath);
-
-        if (expectedFragment == null)
-            Assert.That(finding, Is.Null);
-        else
-            Assert.That(finding, Does.Contain(expectedFragment));
-    }
-
-    #endregion
-
     #region Materialisation Tests
 
     [Test]
@@ -84,13 +51,16 @@ public class FoamCaseMaterializerTests
         var binary = new string('\u00FF', 8) + "\0\u0001binary field\r\n";
         var task = new FoamTaskData
         {
-            BaseFiles =
-            [
-                BlobFile("system/controlDict", "application simpleFoam;\r\nendTime {{oc2}};\r\n", templated: true),
-                BlobFile("0/U", "internalField uniform ({{oc1}} 0 0);\n", templated: true),
-                BlobFile("constant/polyMesh/points", binary),
-                BlobFile("constant/transportProperties", "nu {{oc1}};\n")
-            ],
+            Case = new FoamCaseData
+            {
+                BaseFiles =
+                [
+                    BlobFile("system/controlDict", "application simpleFoam;\r\nendTime {{oc2}};\r\n", templated: true),
+                    BlobFile("0/U", "internalField uniform ({{oc1}} 0 0);\n", templated: true),
+                    BlobFile("constant/polyMesh/points", binary),
+                    BlobFile("constant/transportProperties", "nu {{oc1}};\n")
+                ]
+            },
             Substitutions =
             [
                 new FoamTokenValueData { Token = "{{oc1}}", Value = "12.5" },
@@ -112,12 +82,15 @@ public class FoamCaseMaterializerTests
     {
         var task = new FoamTaskData
         {
-            BaseFiles =
-            [
-                BlobFile("0/U", "internalField uniform ({{oc1}} {{oc3}} 0);\n", templated: true),
-                BlobFile("../escape", "x\n"),
-                BlobFile("system/controlDict", "application simpleFoam;\n")
-            ],
+            Case = new FoamCaseData
+            {
+                BaseFiles =
+                [
+                    BlobFile("0/U", "internalField uniform ({{oc1}} {{oc3}} 0);\n", templated: true),
+                    BlobFile("../escape", "x\n"),
+                    BlobFile("system/controlDict", "application simpleFoam;\n")
+                ]
+            },
             Substitutions = [new FoamTokenValueData { Token = "{{oc1}}", Value = "1" }]
         };
 
@@ -137,7 +110,7 @@ public class FoamCaseMaterializerTests
         // write into and the scratch cleanup's to delete.
         var file = BlobFile("constant/polyMesh/points", "points\n");
         File.SetAttributes(m_blobs.GetStoredPath(file.BlobId), FileAttributes.ReadOnly);
-        var task = new FoamTaskData { BaseFiles = [file] };
+        var task = new FoamTaskData { Case = new FoamCaseData { BaseFiles = [file] } };
 
         try
         {
@@ -155,11 +128,13 @@ public class FoamCaseMaterializerTests
     }
 
     [Test]
-    public async Task ATaskWithoutFilesIsAFindingTest()
+    public async Task ATaskWithoutACaseOrWithoutFilesIsAFindingTest()
     {
-        var findings = await FoamCaseMaterializer.MaterializeAsync(new FoamTaskData(), m_case, m_blobs);
+        var noCase = await FoamCaseMaterializer.MaterializeAsync(new FoamTaskData(), m_case, m_blobs);
+        var noFiles = await FoamCaseMaterializer.MaterializeAsync(new FoamTaskData { Case = new FoamCaseData() }, m_case, m_blobs);
 
-        Assert.That(findings, Is.EqualTo(new[] { "The task carries no case files." }));
+        Assert.That(noCase, Is.EqualTo(new[] { "The task carries no case." }));
+        Assert.That(noFiles, Is.EqualTo(new[] { "The task carries no case files." }));
     }
 
     #endregion

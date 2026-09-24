@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:omnibuscloud:documents:sweep",
+  "title": "OmnibusCloud job document vocabulary: sweep",
+  "description": "Published document types of one controller component. Each $defs entry keyed by a type id (<component>.<name>@<major>) is the value shape carried by a job request parameter of kind \"document\" and by the value document of a job variable; each entry keyed by a plain name is an enum referenced by those shapes. Wire convention: camelCase properties, enum member names as strings, null properties omitted.",
+  "x-oc-vocabulary": {
+    "schemaVersion": 1,
+    "component": "sweep",
+    "types": [
+      "sweep.artifact@1",
+      "sweep.resultIndexEntry@2",
+      "sweep.state@2"
+    ],
+    "source": {
+      "assembly": "OutWit.Controller.Sweep.Model",
+      "version": "2.0.0"
+    },
+    "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
+  },
+  "$defs": {
+    "sweep.artifact@1": {
+      "type": "object",
+      "title": "SweepArtifact",
+      "x-oc-type-id": "sweep.artifact@1",
+      "x-oc-binding-name": "SweepArtifact",
+      "x-oc-clr": "OutWit.Controller.Sweep.Model.SweepArtifactData, OutWit.Controller.Sweep.Model",
+      "properties": {
+        "kind": {
+          "x-oc-clr-name": "Kind",
+          "$ref": "#/$defs/SweepArtifactKind"
+        },
+        "blobId": {
+          "x-oc-clr-name": "BlobId",
+          "type": "string",
+          "format": "uuid"
+        },
+        "bytes": {
+          "x-oc-clr-name": "Bytes",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        }
+      }
+    },
+    "sweep.resultIndexEntry@2": {
+      "type": "object",
+      "title": "SweepResultIndexEntryV2",
+      "x-oc-type-id": "sweep.resultIndexEntry@2",
+      "x-oc-binding-name": "SweepResultIndexEntryV2",
+      "x-oc-clr": "OutWit.Controller.Sweep.Model.SweepResultIndexEntryData, OutWit.Controller.Sweep.Model",
+      "properties": {
+        "variantIndex": {
+          "x-oc-clr-name": "VariantIndex",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "outcome": {
+          "x-oc-clr-name": "Outcome",
+          "$ref": "#/$defs/SweepOutcome"
+        },
+        "label": {
+          "x-oc-clr-name": "Label",
+          "type": "string"
+        },
+        "artifacts": {
+          "x-oc-clr-name": "Artifacts",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sweep.artifact@1"
+          }
+        }
+      }
+    },
+    "sweep.state@2": {
+      "type": "object",
+      "title": "SweepStateV2",
+      "x-oc-type-id": "sweep.state@2",
+      "x-oc-binding-name": "SweepStateV2",
+      "x-oc-clr": "OutWit.Controller.Sweep.Model.SweepStateData, OutWit.Controller.Sweep.Model",
+      "properties": {
+        "chunkIndex": {
+          "x-oc-clr-name": "ChunkIndex",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "nextVariantOrdinal": {
+          "x-oc-clr-name": "NextVariantOrdinal",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "succeededCount": {
+          "x-oc-clr-name": "SucceededCount",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "failedCount": {
+          "x-oc-clr-name": "FailedCount",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "refusedCount": {
+          "x-oc-clr-name": "RefusedCount",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "manifestBlobId": {
+          "x-oc-clr-name": "ManifestBlobId",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "results": {
+          "x-oc-clr-name": "Results",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sweep.resultIndexEntry@2"
+          }
+        }
+      }
+    },
+    "SweepArtifactKind": {
+      "type": "string",
+      "title": "SweepArtifactKind",
+      "x-oc-clr": "OutWit.Controller.Sweep.Model.SweepArtifactKind",
+      "enum": [
+        "CalculiXFrd",
+        "CalculiXDat",
+        "OpenFOAMCase"
+      ]
+    },
+    "SweepOutcome": {
+      "type": "string",
+      "title": "SweepOutcome",
+      "x-oc-clr": "OutWit.Controller.Sweep.Model.SweepOutcome",
+      "enum": [
+        "Succeeded",
+        "Failed",
+        "Refused"
+      ]
+    }
+  }
+}

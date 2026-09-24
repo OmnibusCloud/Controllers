@@ -4,11 +4,11 @@
 
   <PropertyGroup>
     <ControllerName>OpenFOAM</ControllerName>
-    <Version>0.1.0</Version>
+    <Version>1.0.0</Version>
     <Description>Runs complete OpenFOAM cases on compute nodes: each run is one whole case on one node - meshing, decomposition, the solver, the post step - through an allow-listed recipe, the unit of parameter-study throughput. Carries pinned OpenFOAM v2606 kits for every supported node platform as controller assets, so nodes need no preinstalled OpenFOAM (parallel steps on Windows additionally need Microsoft MPI on the node); responses are read from the finished case right on the node. OpenFOAM is a registered trademark of OpenCFD Limited; this offering is not approved or endorsed by OpenCFD Limited.</Description>
     <PackageTags>openfoam;cfd;solver;simulation;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>foam-run</ControllerFeatures>
-    <ControllerUseCases>Whole-case OpenFOAM runs fanned out across a pool; intended as a case backend of the Sweep parameter-study controller</ControllerUseCases>
+    <ControllerUseCases>Whole-case OpenFOAM runs fanned out across a pool; the case backend of the Sweep parameter-study controller</ControllerUseCases>
   </PropertyGroup>
 
   <ItemGroup>

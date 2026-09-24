@@ -7,10 +7,9 @@ namespace OutWit.Controller.OpenFOAM.Model;
 
 /// <summary>
 /// One variant's run as a self-contained work item - the single argument a
-/// Grid.ForEach transformer receives. The base case travels as file
-/// references (the same blobs for every variant of a sweep, so a node fetches
-/// them once), the variant as token substitutions; cell count and solver class
-/// ride as explicit scalars so work estimation never opens a file.
+/// Grid.ForEach transformer receives: the case (shared by every variant of a
+/// study, so its base files travel once per node) and the variant's token
+/// values, applied to the case's templated files on the node.
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).
@@ -24,15 +23,8 @@ public sealed partial class FoamTaskData : ModelBase
             return false;
 
         return VariantIndex.Is(task.VariantIndex)
-               && BaseFiles.IsSequence(task.BaseFiles, tolerance)
-               && Substitutions.IsSequence(task.Substitutions, tolerance)
-               && Recipe.Check(task.Recipe)
-               && Threads.Is(task.Threads)
-               && Extraction.Check(task.Extraction)
-               && ArtifactPolicy.Check(task.ArtifactPolicy)
-               && CellCount.Is(task.CellCount)
-               && SolverClass.Is(task.SolverClass)
-               && TimeBudgetSeconds.Is(task.TimeBudgetSeconds, tolerance);
+               && Case.Check(task.Case)
+               && Substitutions.IsSequence(task.Substitutions, tolerance);
     }
 
     public override FoamTaskData Clone()
@@ -40,21 +32,14 @@ public sealed partial class FoamTaskData : ModelBase
         return new FoamTaskData
         {
             VariantIndex = VariantIndex,
-            BaseFiles = BaseFiles.Select(file => file.Clone()).ToList(),
-            Substitutions = Substitutions.Select(substitution => substitution.Clone()).ToList(),
-            Recipe = Recipe?.Clone(),
-            Threads = Threads,
-            Extraction = Extraction?.Clone(),
-            ArtifactPolicy = ArtifactPolicy?.Clone(),
-            CellCount = CellCount,
-            SolverClass = SolverClass,
-            TimeBudgetSeconds = TimeBudgetSeconds
+            Case = Case?.Clone(),
+            Substitutions = Substitutions.Select(substitution => substitution.Clone()).ToList()
         };
     }
 
     public override string ToString()
     {
-        return $"variant #{VariantIndex}: {Recipe?.Application ?? "?"}, {CellCount} cells, {BaseFiles.Count} file(s)";
+        return $"variant #{VariantIndex}: {Case?.ToString() ?? "no case"}, {Substitutions.Count} value(s)";
     }
 
     #endregion
@@ -68,41 +53,13 @@ public sealed partial class FoamTaskData : ModelBase
     [MemoryPackOrder(0)]
     public int VariantIndex { get; set; }
 
-    /// <summary>The base case tree, one reference per file.</summary>
+    /// <summary>The case to run; null is refused on the node.</summary>
     [MemoryPackOrder(1)]
-    public List<FoamFileRefData> BaseFiles { get; set; } = [];
+    public FoamCaseData? Case { get; set; }
 
-    /// <summary>The variant's token values, applied to the templated files.</summary>
+    /// <summary>The variant's token values, applied to the case's templated files.</summary>
     [MemoryPackOrder(2)]
     public List<FoamTokenValueData> Substitutions { get; set; } = [];
-
-    /// <summary>The steps to run; null is refused on the node (there is no default recipe).</summary>
-    [MemoryPackOrder(3)]
-    public FoamRecipeData? Recipe { get; set; }
-
-    /// <summary>MPI ranks for the parallel steps; 0 = the node's cores, capped by the controller.</summary>
-    [MemoryPackOrder(4)]
-    public int Threads { get; set; }
-
-    /// <summary>Responses to extract after the run; null = the convergence facts only.</summary>
-    [MemoryPackOrder(5)]
-    public FoamExtractionRequestData? Extraction { get; set; }
-
-    /// <summary>What of the finished case to zip and upload; null = nothing.</summary>
-    [MemoryPackOrder(6)]
-    public FoamArtifactPolicyData? ArtifactPolicy { get; set; }
-
-    /// <summary>Cell count as the initiator knows it (after refinement where it can tell), for work estimation.</summary>
-    [MemoryPackOrder(7)]
-    public long CellCount { get; set; }
-
-    /// <summary>Solver class for the work estimate (<c>incompressible-steady</c>, <c>multiphase-transient</c>, ...).</summary>
-    [MemoryPackOrder(8)]
-    public string SolverClass { get; set; } = string.Empty;
-
-    /// <summary>The initiator's estimate of the run's wall time in seconds; 0 = unknown.</summary>
-    [MemoryPackOrder(9)]
-    public double TimeBudgetSeconds { get; set; }
 
     #endregion
 }

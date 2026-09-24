@@ -18,8 +18,8 @@ namespace OutWit.Controller.CalculiX.Tests.Model;
 [TestFixture]
 public sealed class CalculiXModelWireLayoutTests
 {
-    // Field counts frozen 2026-08-21 (CalculiX.Model 0.2.0 — the result-index
-    // append to SweepStateData for the sweep.state@1 document vocabulary).
+    // Field counts frozen 2026-09-24 (CalculiX.Model 2.0.0 - the sweep types
+    // moved to OutWit.Controller.Sweep.Model, which freezes them itself).
     // Bump a count ONLY when appending at the end of that type, and only
     // alongside a server-first rollout.
     private static readonly IReadOnlyDictionary<Type, int> EXPECTED_FIELD_COUNTS = new Dictionary<Type, int>
@@ -29,15 +29,7 @@ public sealed class CalculiXModelWireLayoutTests
         [typeof(CcxResponseRowData)] = 1,
         [typeof(CcxResponseValueData)] = 2,
         [typeof(CcxResultData)] = 7,
-        [typeof(CcxTaskData)] = 6,
-        [typeof(SweepManifestData)] = 1,
-        [typeof(SweepManifestRowData)] = 8,
-        [typeof(SweepOptionsData)] = 8,
-        [typeof(SweepParameterData)] = 2,
-        [typeof(SweepPlanData)] = 3,
-        [typeof(SweepResultIndexEntryData)] = 4,
-        [typeof(SweepStateData)] = 6,
-        [typeof(SweepVariantData)] = 5
+        [typeof(CcxTaskData)] = 6
     };
 
     #region Layout Tests
@@ -64,7 +56,7 @@ public sealed class CalculiXModelWireLayoutTests
     {
         var offenders = new List<string>();
 
-        foreach (var type in typeof(SweepOptionsData).Assembly.GetTypes())
+        foreach (var type in typeof(CcxTaskData).Assembly.GetTypes())
         {
             if (!IsMemoryPackable(type))
                 continue;

@@ -2,7 +2,8 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.OpenFOAM.Extraction;
 using OutWit.Controller.OpenFOAM.Model;
-using OutWit.Controller.OpenFOAM.Recipes;
+using OutWit.Controller.OpenFOAM.Inspection;
+using OutWit.Controller.OpenFOAM.Model.Rules;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.OpenFOAM.Runtime;
@@ -62,10 +63,15 @@ public sealed class FoamCaseSession
 
         try
         {
-            var rejections = new List<string>();
-            rejections.AddRange(FoamRecipeValidator.Validate(task.Recipe, Kit));
-            rejections.AddRange(await FoamCaseMaterializer.MaterializeAsync(task, caseDirectory, BlobService, cancellationToken));
-            rejections.AddRange(FoamFunctionObjectWriter.Write(caseDirectory, task.Extraction));
+            // What the case's data decides is decided before a byte is
+            // downloaded; the files' contents (tokens, run-time code) after.
+            var rejections = new List<string>(FoamCaseRules.Validate(task.Case, Kit.HasExecutable));
+            if (rejections.Count == 0)
+            {
+                rejections.AddRange(await FoamCaseMaterializer.MaterializeAsync(task, caseDirectory, BlobService, cancellationToken));
+                rejections.AddRange(FoamFunctionObjectWriter.Write(caseDirectory, task.Case?.Extraction));
+            }
+
             if (rejections.Count == 0)
                 rejections.AddRange(FoamCaseInspector.Inspect(caseDirectory, KitHasLibrary));
 
@@ -76,9 +82,10 @@ public sealed class FoamCaseSession
                 return result;
             }
 
-            // The validator refused a task without a recipe above; this is the invariant, not a branch.
-            var recipe = task.Recipe ?? throw new InvalidOperationException("The task carries no recipe.");
-            var ranks = FoamDecomposition.Ranks(task.Threads);
+            // The case rules refused a task without a case or a recipe above; these are the invariants, not branches.
+            var data = task.Case ?? throw new InvalidOperationException("The task carries no case.");
+            var recipe = data.Recipe ?? throw new InvalidOperationException("The task carries no recipe.");
+            var ranks = FoamDecomposition.Ranks(data.Threads);
             var environment = Kit.EnvironmentFor(scratch);
             var runner = new FoamCaseRunner(Kit, caseDirectory, environment, ranks, Logger);
 
@@ -97,10 +104,10 @@ public sealed class FoamCaseSession
 
             if (report.Succeeded)
             {
-                result.ResponseRow = ExtractResponses(caseDirectory, task.Extraction);
-                await UploadArtifactAsync(result, caseDirectory, scratch, task.ArtifactPolicy, cancellationToken);
+                result.ResponseRow = ExtractResponses(caseDirectory, data.Extraction);
+                await UploadArtifactAsync(result, caseDirectory, scratch, data.ArtifactPolicy, cancellationToken);
             }
-            else if (task.ArtifactPolicy?.Logs == true)
+            else if (data.ArtifactPolicy?.Logs == true)
             {
                 // A failed run still owes its logs when they were asked for: a
                 // diverged six-hour transient is not explained by sixty lines of tail.
