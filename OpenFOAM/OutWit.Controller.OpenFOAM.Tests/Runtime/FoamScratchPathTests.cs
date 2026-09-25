@@ -139,4 +139,71 @@ public class FoamScratchPathTests
     }
 
     #endregion
+
+    #region Depth Tests
+
+    [Test]
+    public void TheReserveLeavesRoomForTheDeepestPathsOfADecomposedCaseTest()
+    {
+        var deepest = new[]
+        {
+            @"\case\processor127\0.000123456789\uniform\functionObjects\functionObjectProperties",
+            @"\case\constant\extendedFeatureEdgeMesh\motorBike.extendedFeatureEdgeMesh",
+            @"\case\postProcessing\forceCoeffs_object\0.000123456789\coefficient.dat"
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(FoamScratchPath.MAX_WINDOWS_SCRATCH, Is.EqualTo(FoamKitPathRules.MAX_WINDOWS_PATH - FoamScratchPath.WINDOWS_CASE_RESERVE),
+                "the budget is derived from what Windows tools can open, not chosen");
+            Assert.That(deepest.Max(path => path.Length), Is.LessThan(FoamScratchPath.WINDOWS_CASE_RESERVE));
+        });
+    }
+
+    [Test]
+    public void AScratchTooDeepForWindowsIsRefusedWithItsLengthTest()
+    {
+        var fits = @"C:\" + new string('t', FoamScratchPath.MAX_WINDOWS_SCRATCH - 3);
+        var deep = fits + "t";
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(FoamScratchPath.CheckDepth(fits, true, @"C:\temp"), Is.Null, "the budget itself fits");
+            Assert.That(FoamScratchPath.CheckDepth(deep, true, @"C:\temp"),
+                Does.Contain(deep.Length.ToString()).And.Contain(FoamScratchPath.MAX_WINDOWS_SCRATCH.ToString()).And.Contain(@"C:\temp").And.Contain("Settings"));
+            Assert.That(FoamScratchPath.CheckDepth("/tmp/" + deep, false, "/tmp"), Is.Null, "no limit that matters off Windows");
+        });
+    }
+
+    [Test]
+    public void ATempFolderTooDeepForWindowsIsRefusedAndLeavesNothingTest()
+    {
+        // Segments of eight characters are their own 8.3 names: the short
+        // form of this folder is no shorter, so the depth decides.
+        var parent = OpenFOAMTestPaths.CreateScratch("foam-temp");
+        var root = Path.Combine(new[] { parent }.Concat(Enumerable.Repeat("deepdeep", 16)).ToArray());
+        try
+        {
+            var storage = new RecordingTempStorage(root);
+
+            if (!OperatingSystem.IsWindows())
+            {
+                var scratch = FoamScratchPath.CreateScratch(storage, "openfoam");
+                Assert.That(Directory.Exists(scratch.UsablePath), Is.True, "no limit that matters off Windows");
+                return;
+            }
+
+            var refusal = Assert.Throws<InvalidOperationException>(() => FoamScratchPath.CreateScratch(storage, "openfoam"));
+
+            Assert.That(refusal!.Message, Does.Contain("too deep").And.Contain(root));
+            Assert.That(storage.DeletedScopes, Is.EqualTo(storage.CreatedScopes), "the refused scope goes back");
+            Assert.That(storage.CreatedScopes.Where(Directory.Exists), Is.Empty, "the refused scope is not left behind");
+        }
+        finally
+        {
+            OpenFOAMTestPaths.TryDelete(parent);
+        }
+    }
+
+    #endregion
 }

@@ -58,7 +58,12 @@ substitutes the kit folder and the task's scratch and sets the result on the
 solver process, with `HOME` and `TMPDIR` inside the scratch. The scratch is
 a scope of the temp folder the host hands the controller (on a node, the
 client's controllers' temp folder, Settings > Storage), never a folder of the
-controller's own. Nothing is sourced on a node; a run writes into the case
+controller's own, and it goes back to that folder however the run ends. On
+Windows the scratch must leave room for the case's own paths below it: a
+temp folder so deep that a run's folder there passes 139 characters (259
+minus 120 kept for the deepest paths a decomposed case writes) is refused
+with the reason, and the benchmark fails the same way, so the node leaves the
+OpenFOAM pool. Nothing is sourced on a node; a run writes into the case
 directory and the scratch and nowhere else (the kit folder itself changes only once, when the kit is first
 resolved on a node: the Unix executable bits a zip does not keep are
 restored, and on Windows the Pstream swap below is made). The Windows kit is
