@@ -75,13 +75,17 @@ MS-MPI one over it on the first resolution of the kit (idempotent) and runs
 parallel steps under the node's `mpiexec`; a node without MS-MPI runs every
 step serially. Before a kit is used the controller spot-checks it against its
 own `BUILDINFO.txt` (a sample of the listed hashes) and refuses a kit that is
-short of a file or carries an altered one, naming the file. It also refuses,
-with the reason in words, a kit it cannot run from where it is installed:
+short of a file or carries an altered one, naming the file (a file another
+process, such as a scanner, holds for a moment is read again first). It also
+refuses, with the reason in words, a kit that is incomplete (no usable
+`KIT.env`, no solver) and a kit it cannot run from where it is installed:
 under a folder with a space on Linux or macOS (OpenFOAM rejects whitespace in
 a path and dies on its own executable path), or on Windows so deep that a kit
 file would pass 259 characters (the Windows binaries are not long-path
-aware). Such a node fails the `Foam.Run` benchmark with that reason and so
-leaves the OpenFOAM pool, instead of failing every variant. OpenFOAM is
+aware). A node with such a kit fails the `Foam.Run` benchmark with the reason
+and so leaves the OpenFOAM pool, instead of failing every variant; only a node
+with no kit folder at all (an unsupported platform) keeps the default score.
+OpenFOAM is
 GPL-3.0: the kit ships the licence text and the written source offer, and the
 corresponding source is publicly mirrored in that repository's releases.
 

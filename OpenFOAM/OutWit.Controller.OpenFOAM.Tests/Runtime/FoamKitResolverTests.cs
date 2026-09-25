@@ -66,7 +66,8 @@ public class FoamKitResolverTests
         Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, null);
         var probe = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "controller.dll");
 
-        Assert.That(FoamKitResolver.Resolve(probe), Is.Null);
+        Assert.That(FoamKitResolver.Resolve(probe, out var refusal), Is.Null);
+        Assert.That(refusal, Is.Null, "no kit folder at all is no refusal: the node keeps the default score");
     }
 
     [Test]
@@ -90,7 +91,12 @@ public class FoamKitResolverTests
         try
         {
             Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, empty);
-            Assert.That(FoamKitResolver.Resolve(PROBE), Is.Null);
+            Assert.That(FoamKitResolver.Resolve(PROBE, out var refusal), Is.Null);
+            Assert.That(refusal, Does.Contain(empty).And.Contain("carries no KIT.env"));
+
+            Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, Path.Combine(empty, "nowhere"));
+            Assert.That(FoamKitResolver.Resolve(PROBE, out refusal), Is.Null);
+            Assert.That(refusal, Does.Contain("nowhere").And.Contain(FoamKitResolver.ENV_KIT_PATH).And.Contain("does not exist"));
         }
         finally
         {
@@ -99,7 +105,7 @@ public class FoamKitResolverTests
     }
 
     [Test]
-    public void AKitWithAnUnusableEnvironmentFileIsAbsenceNotAnExceptionTest()
+    public void AKitWithAnUnusableEnvironmentFileIsRefusedByNameTest()
     {
         var root = OpenFOAMTestPaths.CreateScratch("foam-broken-kit");
         try
@@ -107,12 +113,24 @@ public class FoamKitResolverTests
             File.WriteAllText(Path.Combine(root, FoamKitEnvironment.FILE_NAME), "# no WM_PROJECT_DIR, no PATH\nKIT_PLATFORM=fake\n");
             Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, root);
 
-            Assert.That(FoamKitResolver.Resolve(PROBE), Is.Null);
+            Assert.That(FoamKitResolver.Resolve(PROBE, out var refusal), Is.Null, "absence, not an exception");
+            Assert.That(refusal, Does.Contain("unusable KIT.env").And.Contain("WM_PROJECT_DIR"));
         }
         finally
         {
             OpenFOAMTestPaths.TryDelete(root);
         }
+    }
+
+    [Test]
+    public void AKitWithoutItsSolverIsRefusedByNameTest()
+    {
+        var fake = RequireKit("blockMesh");
+        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, fake.Root);
+        File.Delete(Path.Combine(fake.AppBin, "simpleFoam" + (OperatingSystem.IsWindows() ? ".exe" : string.Empty)));
+
+        Assert.That(FoamKitResolver.Resolve(PROBE, out var refusal), Is.Null);
+        Assert.That(refusal, Does.Contain("no simpleFoam").And.Contain("incomplete"));
     }
 
     [Test]
@@ -184,6 +202,44 @@ public class FoamKitResolverTests
         }
     }
 
+    [Test]
+    public void AKitTooDeepForWindowsIsRefusedByNameTest()
+    {
+        var fake = RequireKit("blockMesh");
+        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, null);
+
+        var runtimeFolder = FoamKitResolver.ResolveCurrentRuntimeFolder();
+        if (runtimeFolder == null)
+            Assert.Ignore("unsupported platform");
+
+        // A controllers folder nested deep enough that the kit's deepest file
+        // (its pitzDaily tutorial) passes what Windows tools can open.
+        var parent = OpenFOAMTestPaths.CreateScratch("foam-module");
+        var module = Path.Combine(new[] { parent }.Concat(Enumerable.Repeat("deepdeep", 20)).Append("openfoam.module").ToArray());
+        try
+        {
+            var target = Path.Combine(module, "openfoam", runtimeFolder);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            Directory.Move(fake.Root, target);
+
+            var kit = FoamKitResolver.Resolve(Path.Combine(module, "OutWit.Controller.OpenFOAM.dll"), out var refusal);
+
+            if (!OperatingSystem.IsWindows())
+            {
+                Assert.That(kit, Is.Not.Null, "no length limit off Windows");
+                Assert.That(refusal, Is.Null);
+                return;
+            }
+
+            Assert.That(kit, Is.Null);
+            Assert.That(refusal, Does.Contain("deepest file").And.Contain(FoamKitPathRules.MAX_WINDOWS_PATH.ToString()).And.Contain("Settings"));
+        }
+        finally
+        {
+            OpenFOAMTestPaths.TryDelete(parent);
+        }
+    }
+
     #endregion
 
     #region Integrity Tests
@@ -199,7 +255,8 @@ public class FoamKitResolverTests
         var original = File.ReadAllText(envFile);
         File.AppendAllText(envFile, "TAMPERED=1\n");
 
-        Assert.That(FoamKitResolver.Resolve(PROBE), Is.Null, "an altered KIT.env refuses the kit");
+        Assert.That(FoamKitResolver.Resolve(PROBE, out var refusal), Is.Null, "an altered KIT.env refuses the kit");
+        Assert.That(refusal, Does.Contain("not intact").And.Contain("KIT.env"));
 
         // The refusal is not cached: a repaired kit is accepted at the next resolution.
         File.WriteAllText(envFile, original);
