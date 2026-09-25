@@ -4,7 +4,7 @@ namespace OutWit.Controller.Sweep.Utils;
 
 /// <summary>
 /// The human-readable identity of a sweep variant for document clients - the ParaView plugin's
-/// variant picker (audit item #13): the study's parameters paired with the variant's
+/// variant picker: the study's parameters paired with the variant's
 /// substitution values, "XMAX=300, T=250". Empty when the study carries no parameters or the
 /// variant no values (a deck-set study); readers then fall back to the variant number.
 /// </summary>

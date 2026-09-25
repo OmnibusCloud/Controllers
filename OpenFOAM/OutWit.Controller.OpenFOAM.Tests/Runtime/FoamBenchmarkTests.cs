@@ -81,6 +81,37 @@ public class FoamBenchmarkTests
         Assert.That(result.Iterations, Is.EqualTo(FoamBenchmark.MAX_RUNS));
     }
 
+    [Test]
+    public async Task ACallerWithoutATempFolderMeasuresInTheSystemTempTest()
+    {
+        var kit = RequireKit();
+        if (Path.GetTempPath().Contains(' ') && !OperatingSystem.IsWindows())
+            Assert.Ignore("the system temp path contains a space; OpenFOAM cannot run under it, by design");
+
+        // The signature from before the host's temp folder was a parameter.
+        var result = await FoamBenchmark.MeasureAsync(kit, (IWitBenchmarkOptions?)null);
+
+        Assert.That(result.Unit, Is.EqualTo(FoamBenchmark.UNIT));
+        Assert.That(result.Rate, Is.GreaterThan(0));
+    }
+
+    [Test]
+    public void ATempFolderTooDeepForWindowsFailsTheBenchmarkWithTheReasonTest()
+    {
+        if (!OperatingSystem.IsWindows())
+            Assert.Ignore("the depth limit is a Windows one");
+
+        var kit = RequireKit();
+        Temp();
+        var root = Path.Combine(new[] { m_temp ?? string.Empty }.Concat(Enumerable.Repeat("deepdeep", 16)).ToArray());
+
+        // A failed benchmark is how the node leaves the Foam.Run pool: with
+        // the reason, rather than taking variants it would fail one by one.
+        var refusal = Assert.ThrowsAsync<InvalidOperationException>(() => FoamBenchmark.MeasureAsync(kit, new WitTempStorageDefault(root)));
+
+        Assert.That(refusal!.Message, Does.Contain("too deep").And.Contain("Settings"));
+    }
+
     #endregion
 
     #region Scoring Tests

@@ -2,7 +2,7 @@ namespace OutWit.Controller.OpenFOAM.Model.Rules;
 
 /// <summary>
 /// The rules the base case tree obeys: every file at a relative path inside
-/// the case, with forward slashes, without a space (OpenFOAM strips
+/// the case, with forward slashes, without whitespace (OpenFOAM strips
 /// whitespace from paths), no two files at the same path - not even at two
 /// paths that differ by case alone, which one file on every Windows and
 /// macOS node - and nothing left over from an earlier run (a log, a
@@ -66,8 +66,8 @@ public static class FoamCasePathRules
             return "A case file has no path.";
         if (relativePath.Contains('\\'))
             return $"{relativePath}: a case file path must use forward slashes.";
-        if (relativePath.Contains(' '))
-            return $"{relativePath}: a case file path must not contain a space (OpenFOAM strips whitespace from paths).";
+        if (HasWhitespace(relativePath))
+            return $"{relativePath}: a case file path must not contain a space or other whitespace (OpenFOAM strips whitespace from paths).";
         if (IsPathEscape(relativePath))
             return $"{relativePath}: a case file path must stay inside the case directory.";
         if (relativePath.Split('/').Any(segment => segment.Length == 0 || segment == "."))
@@ -98,6 +98,19 @@ public static class FoamCasePathRules
             return true;
 
         return value.Split('/', '\\').Any(segment => segment == "..");
+    }
+
+    /// <summary>
+    /// Whether a path carries whitespace of any kind - a space, a tab, a
+    /// no-break space. OpenFOAM's <c>fileName</c> strips whitespace, so the
+    /// path it opens is another one. The one test the case's relative paths,
+    /// a run's scratch and the kit's location all go through.
+    /// </summary>
+    /// <param name="path">A path, relative or absolute.</param>
+    /// <returns>True when any character of the path is whitespace.</returns>
+    public static bool HasWhitespace(string path)
+    {
+        return path.Any(char.IsWhiteSpace);
     }
 
     private static bool IsProcessorDirectory(string segment)

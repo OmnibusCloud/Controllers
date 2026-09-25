@@ -102,6 +102,40 @@ public class FoamKitIntegrityTests
     }
 
     [Test]
+    public async Task AFileHeldLockedForAMomentIsNotAFindingTest()
+    {
+        if (!OperatingSystem.IsWindows())
+            Assert.Ignore("a scanner's lock that blocks a reader is a Windows thing");
+
+        // KIT.env is always sampled; a scanner holds it while the check runs.
+        var held = new FileStream(Path.Combine(m_kit, "KIT.env"), FileMode.Open, FileAccess.Read, FileShare.None);
+        var release = Task.Run(async () =>
+        {
+            await Task.Delay(FoamKitIntegrity.READ_RETRY_DELAY);
+            await held.DisposeAsync();
+        });
+
+        var findings = FoamKitIntegrity.Check(m_kit);
+        await release;
+
+        Assert.That(findings, Is.Empty, "the lock is waited out, not reported as an altered kit");
+    }
+
+    [Test]
+    public void AFileLockedThroughEveryAttemptIsAFindingTest()
+    {
+        if (!OperatingSystem.IsWindows())
+            Assert.Ignore("a scanner's lock that blocks a reader is a Windows thing");
+
+        using var held = new FileStream(Path.Combine(m_kit, "KIT.env"), FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var findings = FoamKitIntegrity.Check(m_kit);
+
+        Assert.That(findings, Has.Exactly(1).Items);
+        Assert.That(findings[0], Does.StartWith("KIT.env: could not be read"));
+    }
+
+    [Test]
     public void AKitWithoutABuildInfoIsOneFindingTest()
     {
         File.Delete(Path.Combine(m_kit, FoamKitIntegrity.BUILDINFO));

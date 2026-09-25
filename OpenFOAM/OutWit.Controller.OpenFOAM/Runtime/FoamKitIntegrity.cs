@@ -23,6 +23,16 @@ public static class FoamKitIntegrity
     /// <summary>How many files of the list are hashed, spread evenly over it.</summary>
     public const int SAMPLE_SIZE = 32;
 
+    /// <summary>Attempts at reading a sampled file another process holds locked, before the lock is a finding.</summary>
+    public const int READ_ATTEMPTS = 4;
+
+    /// <summary>Wait between two attempts at a locked file.</summary>
+    public static readonly TimeSpan READ_RETRY_DELAY = TimeSpan.FromMilliseconds(250);
+
+    private const int ERROR_SHARING_VIOLATION = 32;
+
+    private const int ERROR_LOCK_VIOLATION = 33;
+
     /// <summary>Files always hashed when present: the ones every run depends on.</summary>
     private static readonly IReadOnlyList<string> ALWAYS =
     [
@@ -75,13 +85,13 @@ public static class FoamKitIntegrity
             string actual;
             try
             {
-                using var stream = File.OpenRead(path);
-                actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+                actual = HashWithRetry(path);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                // A locked or unreadable file is a finding, not an infrastructure
-                // failure: the node says which file, and the next resolution retries.
+                // A file still locked after the retries, or unreadable, is a
+                // finding, not an infrastructure failure: the node says which
+                // file, and the next resolution tries again.
                 findings.Add($"{relativePath}: could not be read ({e.Message}).");
                 continue;
             }
@@ -142,6 +152,38 @@ public static class FoamKitIntegrity
         }
 
         return chosen;
+    }
+
+    /// <summary>
+    /// The SHA-256 of a file, read again after a short wait while another
+    /// process holds it locked: an antivirus scanning freshly unpacked
+    /// binaries holds each one for a moment, and a kit is not altered because
+    /// it is being scanned.
+    /// </summary>
+    /// <param name="path">The file.</param>
+    /// <returns>The lowercase hex hash.</returns>
+    /// <exception cref="IOException">The file stayed locked through every attempt, or could not be read.</exception>
+    private static string HashWithRetry(string path)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                using var stream = File.OpenRead(path);
+                return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            }
+            catch (IOException e) when (attempt < READ_ATTEMPTS && IsLockViolation(e))
+            {
+                Thread.Sleep(READ_RETRY_DELAY);
+            }
+        }
+    }
+
+    private static bool IsLockViolation(IOException e)
+    {
+        // The Win32 code sits in the HRESULT's low word (0x80070020, 0x80070021).
+        var code = e.HResult & 0xFFFF;
+        return code is ERROR_SHARING_VIOLATION or ERROR_LOCK_VIOLATION;
     }
 
     #endregion

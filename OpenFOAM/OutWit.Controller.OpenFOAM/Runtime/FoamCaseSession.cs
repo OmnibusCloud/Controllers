@@ -53,21 +53,25 @@ public sealed class FoamCaseSession
     /// <param name="task">The task.</param>
     /// <param name="cancellationToken">Reaches the running step's process tree.</param>
     /// <returns>The result, refused, failed or complete.</returns>
-    /// <exception cref="InvalidOperationException">The host's temp folder has a space in its path and no space-free form.</exception>
+    /// <exception cref="InvalidOperationException">The host's temp folder has whitespace in its path and no whitespace-free form.</exception>
     public async Task<FoamResultData> RunAsync(FoamTaskData task, CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
         var scratch = FoamScratchPath.CreateScratch(TempStorage, SCRATCH_LABEL);
-        var caseDirectory = Path.Combine(scratch, CASE_DIRECTORY);
-        Directory.CreateDirectory(caseDirectory);
-
         var result = new FoamResultData { VariantIndex = task.VariantIndex };
 
+        // Everything after the scratch exists runs inside the try: whatever
+        // throws, the scratch goes back to the host's temp folder.
         try
         {
-            // What the case's data decides is decided before a byte is
-            // downloaded; the files' contents (tokens, run-time code) after.
+            var caseDirectory = Path.Combine(scratch.UsablePath, CASE_DIRECTORY);
+            Directory.CreateDirectory(caseDirectory);
+
+            // What the case's data and the variant's values decide is decided
+            // before a byte is downloaded; the files' contents (tokens,
+            // run-time code) after.
             var rejections = new List<string>(FoamCaseRules.Validate(task.Case, Kit.HasExecutable));
+            rejections.AddRange(FoamTemplating.CheckSubstitutions(task.Substitutions));
             if (rejections.Count == 0)
             {
                 rejections.AddRange(await FoamCaseMaterializer.MaterializeAsync(task, caseDirectory, BlobService, cancellationToken));
@@ -88,7 +92,7 @@ public sealed class FoamCaseSession
             var data = task.Case ?? throw new InvalidOperationException("The task carries no case.");
             var recipe = data.Recipe ?? throw new InvalidOperationException("The task carries no recipe.");
             var ranks = FoamDecomposition.Ranks(data.Threads);
-            var environment = Kit.EnvironmentFor(scratch);
+            var environment = Kit.EnvironmentFor(scratch.UsablePath);
             var runner = new FoamCaseRunner(Kit, caseDirectory, environment, ranks, Logger);
 
             var report = await runner.RunAsync(recipe, cancellationToken);
@@ -107,13 +111,13 @@ public sealed class FoamCaseSession
             if (report.Succeeded)
             {
                 result.ResponseRow = ExtractResponses(caseDirectory, data.Extraction);
-                await UploadArtifactAsync(result, caseDirectory, scratch, data.ArtifactPolicy, cancellationToken);
+                await UploadArtifactAsync(result, caseDirectory, scratch.UsablePath, data.ArtifactPolicy, cancellationToken);
             }
             else if (data.ArtifactPolicy?.Logs == true)
             {
                 // A failed run still owes its logs when they were asked for: a
                 // diverged six-hour transient is not explained by sixty lines of tail.
-                await UploadArtifactAsync(result, caseDirectory, scratch, new FoamArtifactPolicyData { Logs = true }, cancellationToken);
+                await UploadArtifactAsync(result, caseDirectory, scratch.UsablePath, new FoamArtifactPolicyData { Logs = true }, cancellationToken);
             }
 
             result.TotalSeconds = stopwatch.Elapsed.TotalSeconds;
@@ -121,7 +125,7 @@ public sealed class FoamCaseSession
         }
         finally
         {
-            TryDeleteScratch(scratch);
+            DeleteScratch(scratch);
         }
     }
 
@@ -213,16 +217,10 @@ public sealed class FoamCaseSession
                || Directory.EnumerateFiles(libbin, $"{stem}.*", SearchOption.AllDirectories).Any();
     }
 
-    private void TryDeleteScratch(string directory)
+    private void DeleteScratch(FoamScratch scratch)
     {
-        try
-        {
-            Directory.Delete(directory, recursive: true);
-        }
-        catch (Exception e)
-        {
-            Logger?.LogWarning(e, "Foam.Run: failed to delete scratch directory {Directory}.", directory);
-        }
+        if (!FoamScratchPath.Delete(TempStorage, scratch))
+            Logger?.LogWarning("Foam.Run: failed to delete scratch directory {Directory}.", scratch.ScopePath);
     }
 
     #endregion

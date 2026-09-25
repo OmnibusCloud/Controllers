@@ -9,9 +9,14 @@ namespace OutWit.Controller.Sweep.Model;
 /// <summary>
 /// One harvested variant: the sweep's verdict and the node's own result,
 /// verbatim, in the member of its family. Nothing of the result is copied or
-/// reinterpreted at harvest, so a family's result grows (append-only, in its
-/// own model) and the manifest carries the growth without a mapping to keep
-/// in step.
+/// reinterpreted at harvest - and so the family's result is part of this
+/// row's wire layout. The manifest is default-mode MemoryPack, whose reader
+/// refuses a payload with a member it does not know: a member appended to
+/// <see cref="CcxResultData"/> or <see cref="FoamResultData"/>, or to a type
+/// either carries, breaks every manifest reader built against the older
+/// family model. Such an append ships like an append to this type - every
+/// manifest reader updated before a host writes it - and the Sweep.Model
+/// wire-layout tests freeze those family types beside the sweep's own.
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).

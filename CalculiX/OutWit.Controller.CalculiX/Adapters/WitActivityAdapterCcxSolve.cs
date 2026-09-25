@@ -68,8 +68,10 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
             // effect between activities.
             var cancellation = ProcessingManager.CancellationToken(status.JobId);
 
+            // A solve that may go through SPOOLES gets one equation-solver thread:
+            // multithreaded SPOOLES returns a wrong field now and then, with exit 0.
             var outcome = await CcxProcessRunner.RunAsync(
-                solverPath, JOB_NAME, scratchDirectory, task.Threads, cancellation);
+                solverPath, JOB_NAME, scratchDirectory, task.Threads, CcxEquationSolver.ThreadsFor(jobDeckPath), cancellation);
 
             // A killed solve is the user's verdict, not the deck's — it must
             // surface as cancellation, never be harvested as a red variant,
@@ -117,7 +119,7 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
         }
         finally
         {
-            TryDeleteScratch(scratchDirectory);
+            DeleteScratch(scratchDirectory);
         }
     }
 
@@ -162,16 +164,13 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
         return new FileInfo(path).Length > 0 ? path : null;
     }
 
-    private void TryDeleteScratch(string directory)
+    private void DeleteScratch(string directory)
     {
-        try
-        {
-            Directory.Delete(directory, recursive: true);
-        }
-        catch (Exception e)
-        {
-            Logger.LogWarning(e, "Ccx.Solve: failed to delete scratch directory {Directory}.", directory);
-        }
+        // The scope goes back to the host's temp folder; a file still held
+        // open keeps it, and the client takes it when it next starts.
+        TempStorage.DeleteScope(directory);
+        if (Directory.Exists(directory))
+            Logger.LogWarning("Ccx.Solve: failed to delete scratch directory {Directory}.", directory);
     }
 
     #endregion

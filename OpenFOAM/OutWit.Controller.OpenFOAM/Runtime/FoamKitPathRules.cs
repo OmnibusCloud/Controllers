@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using OutWit.Controller.OpenFOAM.Model.Rules;
 
 namespace OutWit.Controller.OpenFOAM.Runtime;
 
@@ -41,7 +42,7 @@ public static class FoamKitPathRules
     /// <returns>The reason, or null.</returns>
     public static string? Check(string root, bool isWindows, int deepestRelativePath)
     {
-        if (!isWindows && root.Any(char.IsWhiteSpace))
+        if (!isWindows && FoamCasePathRules.HasWhitespace(root))
         {
             return $"The OpenFOAM kit is installed at '{root}', a path with a space, and OpenFOAM cannot run from a path with a space. " +
                    "Choose a controllers folder without spaces in the client's Settings (Storage); clients from 2.2.4 on use one by default.";

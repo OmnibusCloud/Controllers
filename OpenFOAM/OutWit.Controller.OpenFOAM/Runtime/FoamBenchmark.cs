@@ -63,6 +63,22 @@ public static class FoamBenchmark
     #region Functions
 
     /// <summary>
+    /// Runs the reference case in the system temp directory: the signature
+    /// callers compiled against before the host's temp folder became a
+    /// parameter. A caller that has the host's temp folder passes it to
+    /// <see cref="MeasureAsync(FoamKit, IWitTempStorage, IWitBenchmarkOptions?, CancellationToken)"/>.
+    /// </summary>
+    /// <param name="kit">The kit.</param>
+    /// <param name="options">Engine benchmark options (target duration, warm-up count) or null for the defaults.</param>
+    /// <param name="cancellationToken">Kills the running process tree when signaled.</param>
+    /// <returns>The measured score.</returns>
+    /// <exception cref="InvalidOperationException">The kit has no pitzDaily, the system temp directory cannot hold a run, or a reference run did not finish cleanly.</exception>
+    public static Task<WitBenchmarkResult> MeasureAsync(FoamKit kit, IWitBenchmarkOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        return MeasureAsync(kit, new WitTempStorageDefault(Path.GetTempPath()), options, cancellationToken);
+    }
+
+    /// <summary>
     /// Runs the reference case: mesh once, warm-up, then timed runs, and scores the median.
     /// </summary>
     /// <param name="kit">The kit.</param>
@@ -70,7 +86,7 @@ public static class FoamBenchmark
     /// <param name="options">Engine benchmark options (target duration, warm-up count) or null for the defaults.</param>
     /// <param name="cancellationToken">Kills the running process tree when signaled.</param>
     /// <returns>The measured score.</returns>
-    /// <exception cref="InvalidOperationException">The kit has no pitzDaily, or a reference run did not finish cleanly.</exception>
+    /// <exception cref="InvalidOperationException">The kit has no pitzDaily, the temp folder cannot hold a run (see <see cref="FoamScratchPath.CreateScratch"/>), or a reference run did not finish cleanly.</exception>
     public static async Task<WitBenchmarkResult> MeasureAsync(FoamKit kit, IWitTempStorage tempStorage, IWitBenchmarkOptions? options = null, CancellationToken cancellationToken = default)
     {
         var target = options is { MinDuration.Ticks: > 0 } ? options.MinDuration : FALLBACK_TARGET;
@@ -86,13 +102,13 @@ public static class FoamBenchmark
         // The same scratch rule as a case run: in the host's temp folder, no
         // space in the path (the 8.3 form on Windows), home and tmp inside.
         var scratch = FoamScratchPath.CreateScratch(tempStorage, SCRATCH_LABEL);
-        var caseDirectory = Path.Combine(scratch, "pitzDaily");
 
         try
         {
+            var caseDirectory = Path.Combine(scratch.UsablePath, "pitzDaily");
             CopyTree(source, caseDirectory);
             FixIterations(caseDirectory);
-            var environment = kit.EnvironmentFor(scratch);
+            var environment = kit.EnvironmentFor(scratch.UsablePath);
 
             await StepAsync(kit, "blockMesh", caseDirectory, environment, cancellationToken);
 
@@ -131,14 +147,9 @@ public static class FoamBenchmark
         }
         finally
         {
-            try
-            {
-                Directory.Delete(scratch, recursive: true);
-            }
-            catch
-            {
-                // Scratch cleanup is best-effort; the client sweeps its temp folder at every start.
-            }
+            // Scratch cleanup is best-effort; the client clears its temp
+            // folder once, when it starts, which takes any straggler.
+            FoamScratchPath.Delete(tempStorage, scratch);
         }
     }
 

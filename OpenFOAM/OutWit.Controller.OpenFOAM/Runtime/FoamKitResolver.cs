@@ -51,19 +51,22 @@ public static class FoamKitResolver
     /// </summary>
     /// <param name="controllerAssemblyPath">Path of the controller assembly, the module root anchor.</param>
     /// <param name="logger">Diagnostics sink.</param>
-    /// <returns>The kit, or null when the module carries none for this platform.</returns>
+    /// <returns>The kit, or null when there is none or it is refused (<see cref="Resolve(string, out string?, ILogger?)"/> says why).</returns>
     public static FoamKit? Resolve(string controllerAssemblyPath, ILogger? logger = null)
     {
         return Resolve(controllerAssemblyPath, out _, logger);
     }
 
     /// <summary>
-    /// Resolves the kit and says why a kit that is in place cannot be used on
-    /// this node (<see cref="FoamKitPathRules"/>): such a node must leave the
-    /// OpenFOAM pool, which a missing kit for an unsupported platform need not.
+    /// Resolves the kit and says why a kit that is there cannot be used on
+    /// this node: installed where OpenFOAM cannot run from
+    /// (<see cref="FoamKitPathRules"/>), without a usable KIT.env, without its
+    /// solver, or not intact. Such a node must leave the OpenFOAM pool; only a
+    /// node with no kit folder at all (an unsupported platform, a module
+    /// without the kit) has no refusal and keeps the default score.
     /// </summary>
     /// <param name="controllerAssemblyPath">Path of the controller assembly, the module root anchor.</param>
-    /// <param name="refusal">Why the kit in place cannot be run from where it is, or null.</param>
+    /// <param name="refusal">Why the kit that is there cannot be used, or null.</param>
     /// <param name="logger">Diagnostics sink.</param>
     /// <returns>The kit, or null when there is none or it is refused.</returns>
     public static FoamKit? Resolve(string controllerAssemblyPath, out string? refusal, ILogger? logger = null)
@@ -74,41 +77,15 @@ public static class FoamKitResolver
         if (root == null)
             return null;
 
-        var envFile = Path.Combine(root, FoamKitEnvironment.FILE_NAME);
-        if (!File.Exists(envFile))
-        {
-            logger?.LogWarning("Foam.Run: the kit at {Root} carries no KIT.env.", root);
-            return null;
-        }
-
-        var fullRoot = Path.GetFullPath(root);
-        var isWindows = OperatingSystem.IsWindows();
-        refusal = FoamKitPathRules.Check(fullRoot, isWindows, isWindows ? FoamKitPathRules.DeepestRelativePath(fullRoot) : 0);
-        if (refusal != null)
+        var kit = Load(root, out refusal);
+        if (kit == null)
         {
             logger?.LogWarning("Foam.Run: {Refusal}", refusal);
             return null;
         }
 
-        FoamKit kit;
-        try
-        {
-            var environment = FoamKitEnvironment.Load(envFile);
-            kit = new FoamKit(root, environment);
-        }
-        catch (InvalidDataException e)
-        {
-            logger?.LogWarning("Foam.Run: the kit at {Root} has an unusable KIT.env: {Reason}", root, e.Message);
-            return null;
-        }
-
-        if (!kit.HasExecutable(PROBE_EXECUTABLE))
-        {
-            logger?.LogWarning("Foam.Run: the kit at {Root} has no {Probe} in {AppBin}.", root, PROBE_EXECUTABLE, kit.AppBin);
-            return null;
-        }
-
-        if (!IsIntact(kit, logger))
+        refusal = CheckIntegrity(kit, logger);
+        if (refusal != null)
             return null;
 
         EnsureExecutables(kit, logger);
@@ -138,8 +115,20 @@ public static class FoamKitResolver
     /// <returns>True when the kit may be used.</returns>
     public static bool IsIntact(FoamKit kit, ILogger? logger = null)
     {
+        return CheckIntegrity(kit, logger) == null;
+    }
+
+    /// <summary>
+    /// The integrity spot check of <see cref="IsIntact"/>, saying why a kit is
+    /// refused: every finding, in one sentence the node reports.
+    /// </summary>
+    /// <param name="kit">The kit.</param>
+    /// <param name="logger">Diagnostics sink.</param>
+    /// <returns>The refusal, or null when the kit may be used.</returns>
+    public static string? CheckIntegrity(FoamKit kit, ILogger? logger = null)
+    {
         if (INTACT.ContainsKey(kit.Root))
-            return true;
+            return null;
 
         // The Pstream the controller swaps on Windows is the one file of the
         // kit that is meant to change after unpacking.
@@ -155,11 +144,11 @@ public static class FoamKitResolver
             foreach (var finding in findings)
                 logger?.LogError("Foam.Run: the kit at {Root} is not intact - {Finding}", kit.Root, finding);
 
-            return false;
+            return $"The OpenFOAM kit at '{kit.Root}' is not intact: {string.Join(" ", findings)}";
         }
 
         INTACT.TryAdd(kit.Root, true);
-        return true;
+        return null;
     }
 
     /// <summary>
@@ -267,6 +256,56 @@ public static class FoamKitResolver
             logger?.LogWarning(e, "Foam.Run: failed to put the MS-MPI Pstream in place; parallel steps stay unavailable.");
             return false;
         }
+    }
+
+    /// <summary>
+    /// The kit at a folder that is there, or null with the reason it cannot
+    /// be used: no folder at the path the override names, no KIT.env, a
+    /// location OpenFOAM cannot run from, an unusable KIT.env, no solver.
+    /// </summary>
+    private static FoamKit? Load(string root, out string? refusal)
+    {
+        refusal = null;
+
+        // Only the override can name a folder that is not there: the bundled
+        // root is resolved only when it exists.
+        if (!Directory.Exists(root))
+        {
+            refusal = $"The OpenFOAM kit folder '{root}' that {ENV_KIT_PATH} names does not exist.";
+            return null;
+        }
+
+        var envFile = Path.Combine(root, FoamKitEnvironment.FILE_NAME);
+        if (!File.Exists(envFile))
+        {
+            refusal = $"The OpenFOAM kit at '{root}' carries no {FoamKitEnvironment.FILE_NAME}, so it is incomplete and cannot be used.";
+            return null;
+        }
+
+        var fullRoot = Path.GetFullPath(root);
+        var isWindows = OperatingSystem.IsWindows();
+        refusal = FoamKitPathRules.Check(fullRoot, isWindows, isWindows ? FoamKitPathRules.DeepestRelativePath(fullRoot) : 0);
+        if (refusal != null)
+            return null;
+
+        FoamKit kit;
+        try
+        {
+            kit = new FoamKit(root, FoamKitEnvironment.Load(envFile));
+        }
+        catch (InvalidDataException e)
+        {
+            refusal = $"The OpenFOAM kit at '{root}' has an unusable {FoamKitEnvironment.FILE_NAME}: {e.Message}";
+            return null;
+        }
+
+        if (!kit.HasExecutable(PROBE_EXECUTABLE))
+        {
+            refusal = $"The OpenFOAM kit at '{root}' has no {PROBE_EXECUTABLE} in {kit.AppBin}, so it is incomplete and cannot be used.";
+            return null;
+        }
+
+        return kit;
     }
 
     private static string? ResolveRoot(string controllerAssemblyPath, ILogger? logger)

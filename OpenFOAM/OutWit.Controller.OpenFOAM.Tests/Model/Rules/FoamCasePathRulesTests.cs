@@ -23,6 +23,8 @@ public class FoamCasePathRulesTests
     [TestCase("", "no path")]
     [TestCase("system\\controlDict", "forward slashes")]
     [TestCase("system/control Dict", "space")]
+    [TestCase("system/control\tDict", "whitespace")]
+    [TestCase("system/control\u00A0Dict", "whitespace")]
     [TestCase("../other/controlDict", "inside the case")]
     [TestCase("/etc/passwd", "inside the case")]
     [TestCase("C:/Windows/x", "inside the case")]
@@ -56,6 +58,16 @@ public class FoamCasePathRulesTests
     public void AnEscapeIsAbsoluteDriveRootedOrClimbingTest(string value, bool escapes)
     {
         Assert.That(FoamCasePathRules.IsPathEscape(value), Is.EqualTo(escapes));
+    }
+
+    [TestCase("system/controlDict", false)]
+    [TestCase("/home/node/Application Support", true)]
+    [TestCase("C:\\kit\tbin", true)]
+    [TestCase("kit\u00A0bin", true)]
+    [TestCase("kit\nbin", true)]
+    public void WhitespaceOfAnyKindIsFoundTest(string path, bool expected)
+    {
+        Assert.That(FoamCasePathRules.HasWhitespace(path), Is.EqualTo(expected));
     }
 
     #endregion

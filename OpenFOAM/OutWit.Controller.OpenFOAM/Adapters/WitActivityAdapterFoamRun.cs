@@ -50,16 +50,18 @@ internal sealed class WitActivityAdapterFoamRun : WitActivityAdapterFunction<Wit
     {
         var kit = FoamKitResolver.Resolve(GetType().Assembly.Location, out var refusal, Logger);
 
-        // A kit in place that cannot run from where it is (a path with a
-        // space, a path too long) fails the benchmark with the reason, so the
-        // node leaves the OpenFOAM pool rather than failing every variant.
+        // A kit that is there but cannot be used - installed where OpenFOAM
+        // cannot run from, incomplete, not intact - fails the benchmark with
+        // the reason, so the node leaves the OpenFOAM pool rather than
+        // failing every variant.
         if (kit == null && refusal != null)
             throw new InvalidOperationException(refusal);
 
         if (kit == null)
         {
-            // No kit for this platform: the node reports the default
-            // (unranked) score instead of failing registration.
+            // No kit folder at all (an unsupported platform, a module without
+            // the kit): the node reports the default (unranked) score instead
+            // of failing registration.
             Logger.LogWarning("Foam.Run benchmark: OpenFOAM kit not found - reporting the default score.");
             return WitBenchmarkResult.Default;
         }
