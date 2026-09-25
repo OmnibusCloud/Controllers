@@ -24,7 +24,7 @@ public class FoamCasePathRulesTests
     [TestCase("system\\controlDict", "forward slashes")]
     [TestCase("system/control Dict", "space")]
     [TestCase("system/control\tDict", "whitespace")]
-    [TestCase("system/control Dict", "whitespace")]
+    [TestCase("system/control\u00A0Dict", "whitespace")]
     [TestCase("../other/controlDict", "inside the case")]
     [TestCase("/etc/passwd", "inside the case")]
     [TestCase("C:/Windows/x", "inside the case")]
