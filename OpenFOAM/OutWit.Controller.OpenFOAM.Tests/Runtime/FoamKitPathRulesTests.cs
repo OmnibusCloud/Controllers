@@ -33,6 +33,8 @@ public class FoamKitPathRulesTests
             Assert.That(FoamKitPathRules.Check(root, false, 110), Does.Contain("a path with a space").And.Contain(root));
             Assert.That(FoamKitPathRules.Check(@"C:\Users\John Smith\Controllers\openfoam\windows-x64", true, 110), Is.Null,
                 "the Windows build accepts a space");
+            Assert.That(FoamKitPathRules.Check("/Users/node/kits v2606/openfoam/macos-arm64", false, 110), Does.Contain("a path with a space"),
+                "any whitespace, not only the ASCII space");
         });
     }
 

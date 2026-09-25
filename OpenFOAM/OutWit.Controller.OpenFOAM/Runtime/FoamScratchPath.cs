@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using OutWit.Controller.OpenFOAM.Model.Rules;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.OpenFOAM.Runtime;
@@ -46,21 +47,21 @@ public static class FoamScratchPath
     }
 
     /// <summary>
-    /// A form of the path without a space: the path itself when it has none,
-    /// its 8.3 short form on Windows when that exists, null otherwise.
+    /// A form of the path without whitespace: the path itself when it has
+    /// none, its 8.3 short form on Windows when that exists, null otherwise.
     /// </summary>
     /// <param name="path">An existing directory.</param>
-    /// <returns>A space-free path to the same directory, or null when none can be found.</returns>
+    /// <returns>A whitespace-free path to the same directory, or null when none can be found.</returns>
     public static string? WithoutSpaces(string path)
     {
-        if (!path.Contains(' '))
+        if (!FoamCasePathRules.HasWhitespace(path))
             return path;
 
         if (!OperatingSystem.IsWindows())
             return null;
 
         var shortPath = ShortPath(path);
-        return shortPath != null && !shortPath.Contains(' ') ? shortPath : null;
+        return shortPath != null && !FoamCasePathRules.HasWhitespace(shortPath) ? shortPath : null;
     }
 
     /// <summary>
