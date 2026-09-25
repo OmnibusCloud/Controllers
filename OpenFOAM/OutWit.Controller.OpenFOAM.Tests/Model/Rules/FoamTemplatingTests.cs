@@ -48,6 +48,56 @@ public class FoamTemplatingTests
         Assert.That(result, Is.EqualTo("abc"));
     }
 
+    [Test]
+    public void AValueThatContainsATokenIsNotSubstitutedAgainTest()
+    {
+        // One pass over the text: the value put in for {{oc1}} is never
+        // scanned again, whatever it contains and in whatever order the
+        // values come.
+        var text = "a {{oc1}} b {{oc2}}";
+        var forward = new List<FoamTokenValueData>
+        {
+            new() { Token = "{{oc1}}", Value = "{{oc2}}" },
+            new() { Token = "{{oc2}}", Value = "5" }
+        };
+        var backward = new List<FoamTokenValueData>(forward);
+        backward.Reverse();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(FoamTemplating.Substitute(text, forward), Is.EqualTo("a {{oc2}} b 5"));
+            Assert.That(FoamTemplating.Substitute(text, backward), Is.EqualTo("a {{oc2}} b 5"));
+        });
+    }
+
+    [Test]
+    public void ATokenWithoutAValueIsLeftAsItIsTest()
+    {
+        var result = FoamTemplating.Substitute("{{oc1}} {{oc2}} {{notatoken}}", [new FoamTokenValueData { Token = "{{oc1}}", Value = "1" }]);
+
+        Assert.That(result, Is.EqualTo("1 {{oc2}} {{notatoken}}"));
+        Assert.That(FoamTemplating.LeftoverTokens(result), Is.EqualTo(new[] { "{{oc2}}" }));
+    }
+
+    [Test]
+    public void AVariantsValuesNameTokensOfTheTokenShapeEachOnceTest()
+    {
+        var findings = FoamTemplating.CheckSubstitutions(
+        [
+            new FoamTokenValueData { Token = "{{oc1}}", Value = "1" },
+            new FoamTokenValueData { Token = "$INLET$", Value = "2" },
+            new FoamTokenValueData { Token = "{{oc1}}", Value = "3" },
+            new FoamTokenValueData { Token = "{{oc2}}", Value = "4" }
+        ]);
+
+        Assert.That(findings, Is.EqualTo(new[]
+        {
+            "'$INLET$' is not a token of the form {{ocN}}; its value would never be substituted.",
+            "Token {{oc1}} has more than one value in this variant."
+        }));
+        Assert.That(FoamTemplating.CheckSubstitutions([new FoamTokenValueData { Token = "{{oc7}}", Value = "7" }]), Is.Empty);
+    }
+
     #endregion
 
     #region Coverage Tests

@@ -67,9 +67,11 @@ public sealed class FoamCaseSession
             var caseDirectory = Path.Combine(scratch.UsablePath, CASE_DIRECTORY);
             Directory.CreateDirectory(caseDirectory);
 
-            // What the case's data decides is decided before a byte is
-            // downloaded; the files' contents (tokens, run-time code) after.
+            // What the case's data and the variant's values decide is decided
+            // before a byte is downloaded; the files' contents (tokens,
+            // run-time code) after.
             var rejections = new List<string>(FoamCaseRules.Validate(task.Case, Kit.HasExecutable));
+            rejections.AddRange(FoamTemplating.CheckSubstitutions(task.Substitutions));
             if (rejections.Count == 0)
             {
                 rejections.AddRange(await FoamCaseMaterializer.MaterializeAsync(task, caseDirectory, BlobService, cancellationToken));

@@ -213,6 +213,21 @@ public class FoamCaseSessionTests
     }
 
     [Test]
+    public async Task AVariantWithTwoValuesForATokenIsRefusedBeforeAnythingRunsTest()
+    {
+        var session = RequireSession();
+        var task = Task(PitzCase("ITERATIONS=1\n"),
+            new FoamTokenValueData { Token = "{{oc1}}", Value = "1e-05" },
+            new FoamTokenValueData { Token = "{{oc2}}", Value = "10" },
+            new FoamTokenValueData { Token = "{{oc2}}", Value = "20" });
+
+        var result = await session.RunAsync(task);
+
+        Assert.That(result.Rejections, Is.EqualTo(new[] { "Token {{oc2}} has more than one value in this variant." }));
+        Assert.That(result.Steps, Is.Empty);
+    }
+
+    [Test]
     public async Task ARecipeOutsideTheAllowListIsRefusedTogetherWithFileFindingsTest()
     {
         var session = RequireSession();
