@@ -28,7 +28,7 @@ internal sealed class WitActivityAdapterSweepHarvest : WitActivityAdapterFunctio
 
     protected override async Task Process(WitActivitySweepHarvest activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        if (!pool.TryGetValue(activity.Plan, out SweepPlanData? plan) || plan == null)
+        if (!pool.TryGetValue(activity.Plan, out SweepPlanData? plan) || plan?.Options == null)
             throw new InvalidOperationException("Failed to get parameter 'Plan'.");
 
         if (!pool.TryGetValue(activity.State, out SweepStateData? state) || state == null)
@@ -40,14 +40,21 @@ internal sealed class WitActivityAdapterSweepHarvest : WitActivityAdapterFunctio
         var family = SweepFamilies.Of(plan);
         var rows = family.ToRows(wave);
 
-        // Grid delivers the chunk as one group, so the wave's cardinality is
-        // an invariant - a short wave (a protocol drift, a foreign entry the
-        // family left out) must fail LOUDLY here, because the silent
-        // alternative is a manifest that under-reports forever.
+        // Grid delivers the chunk as one group, so the wave is exactly the
+        // chunk's variants, each once - a short wave (a protocol drift, a
+        // foreign entry the family left out), a variant twice or one from
+        // outside the chunk must fail LOUDLY here, because the silent
+        // alternative is a manifest that miscounts forever.
         var expected = plan.ChunkSizes[state.ChunkIndex];
-        if (rows.Count != expected)
+        var chunk = plan.Options.Variants
+            .Skip(state.NextVariantOrdinal)
+            .Take(expected)
+            .Select(variant => variant.VariantIndex)
+            .ToList();
+        var findings = SweepWaveCheck.Findings(chunk, rows.Select(row => row.VariantIndex).ToList());
+        if (findings.Count > 0)
             throw new InvalidOperationException(
-                $"Chunk {state.ChunkIndex} returned {rows.Count} {family.Family} result(s) for {expected} task(s).");
+                $"Chunk {state.ChunkIndex} returned {rows.Count} {family.Family} result(s) for {expected} task(s): {string.Join("; ", findings)}.");
 
         var manifest = await DownloadManifestAsync(state.ManifestBlobId);
         manifest.Rows.AddRange(rows);

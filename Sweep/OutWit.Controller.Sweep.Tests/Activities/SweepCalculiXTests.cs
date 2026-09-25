@@ -2,6 +2,7 @@ using System.Text;
 using MemoryPack;
 using Microsoft.Extensions.DependencyInjection;
 using OutWit.Controller.CalculiX.Runtime;
+using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.Sweep.Model;
 using OutWit.Controller.Sweep.Tests.Mock;
 using OutWit.Controller.Sweep.Tests.Utils;
@@ -303,6 +304,61 @@ public class SweepCalculiXTests
 
         Assert.That(status.Result, Is.Not.EqualTo(WitProcessingResult.Completed));
         Assert.That(status.Message, Does.Contain("The study carries no family block"));
+    }
+
+    [Test]
+    public async Task AStudyWithTwoFamilyBlocksIsRefusedUpFrontTest()
+    {
+        var blob = m_blobService.AddText("*HEADING\ntwo families {{oc1}}\n", "two.inp");
+        var options = TemplateStudy(["1"], blob);
+        options.OpenFOAM = new FoamCaseData();
+
+        var status = await m_engine.ScheduleAndWaitAsync(m_engine.Compile(m_script), options);
+
+        Assert.That(status.Result, Is.Not.EqualTo(WitProcessingResult.Completed));
+        Assert.That(status.Message, Does.Contain("more than one family block"));
+    }
+
+    [Test]
+    public async Task AVariantWithTheWrongNumberOfValuesIsRefusedUpFrontTest()
+    {
+        var blob = m_blobService.AddText("*HEADING\ncount probe {{oc1}}\n", "count.inp");
+        var options = TemplateStudy(["1", "2"], blob);
+        options.Variants[1].Values.Add("extra");
+
+        var status = await m_engine.ScheduleAndWaitAsync(m_engine.Compile(m_script), options);
+
+        Assert.That(status.Result, Is.Not.EqualTo(WitProcessingResult.Completed));
+        Assert.That(status.Message, Does.Contain("Variant #1 carries 2 value(s) for 1 parameter(s)"));
+    }
+
+    [Test]
+    public async Task AStudyWithoutVariantsIsRefusedUpFrontTest()
+    {
+        var blob = m_blobService.AddText("*HEADING\nempty probe {{oc1}}\n", "empty.inp");
+        var options = TemplateStudy([], blob);
+
+        var status = await m_engine.ScheduleAndWaitAsync(m_engine.Compile(m_script), options);
+
+        Assert.That(status.Result, Is.Not.EqualTo(WitProcessingResult.Completed));
+        Assert.That(status.Message, Does.Contain("The study carries no variants"));
+    }
+
+    [Test]
+    public async Task EveryFindingOfAStudyIsNamedAtOnceTest()
+    {
+        var blob = m_blobService.AddText("*HEADING\nno token here\n", "several.inp");
+        var options = TemplateStudy(["1", "2"], blob);
+        options.Variants[1].VariantIndex = 0;
+        options.Variants[0].Values.Clear();
+
+        var status = await m_engine.ScheduleAndWaitAsync(m_engine.Compile(m_script), options);
+
+        // The study's own findings and its family's, in one refusal.
+        Assert.That(status.Result, Is.Not.EqualTo(WitProcessingResult.Completed));
+        Assert.That(status.Message, Does.Contain("carries 0 value(s) for 1 parameter(s)")
+            .And.Contain("Variant index 0 appears 2 times")
+            .And.Contain("Placeholder '{{oc1}}'"));
     }
 
     #endregion
