@@ -1,6 +1,7 @@
 using OutWit.Controller.CalculiX.Runtime;
 using OutWit.Controller.CalculiX.Tests.Utils;
 using OutWit.Engine.Data.Benchmark;
+using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.CalculiX.Tests.Runtime;
 
@@ -15,6 +16,20 @@ public class CcxBenchmarkTests
 
     #endregion
 
+    #region Fields
+
+    private string? m_temp;
+
+    #endregion
+
+    [TearDown]
+    public void TearDown()
+    {
+        if (m_temp != null && Directory.Exists(m_temp))
+            Directory.Delete(m_temp, recursive: true);
+        m_temp = null;
+    }
+
     #region Benchmark Tests
 
     [Test]
@@ -22,7 +37,7 @@ public class CcxBenchmarkTests
     {
         var fakeCcx = FindFakeCcx();
 
-        var result = await CcxBenchmark.MeasureAsync(fakeCcx);
+        var result = await CcxBenchmark.MeasureAsync(fakeCcx, Temp());
 
         // The fake solver honors the bare-jobname contract, so the embedded
         // deck extraction, the spawn and the scoring all run for real; only
@@ -49,7 +64,7 @@ public class CcxBenchmarkTests
 
         try
         {
-            var result = await CcxBenchmark.MeasureAsync(fakeCcx);
+            var result = await CcxBenchmark.MeasureAsync(fakeCcx, Temp());
 
             // The first start sleeps 1.5 s, like a node opening a freshly
             // extracted kit; it lands in the warm-up, never in the timed runs.
@@ -78,7 +93,7 @@ public class CcxBenchmarkTests
             WarmupIterations = 2
         };
 
-        var result = await CcxBenchmark.MeasureAsync(fakeCcx, options);
+        var result = await CcxBenchmark.MeasureAsync(fakeCcx, Temp(), options);
 
         Assert.That(result.Iterations, Is.EqualTo(CcxBenchmark.MAX_RUNS));
         Assert.That(result.Custom!["runs_s"].Split(';'), Has.Length.EqualTo(CcxBenchmark.MAX_RUNS));
@@ -89,7 +104,22 @@ public class CcxBenchmarkTests
     {
         var missing = Path.Combine(Path.GetTempPath(), $"no-ccx-{Guid.NewGuid():N}.exe");
 
-        Assert.That(async () => await CcxBenchmark.MeasureAsync(missing), Throws.Exception);
+        Assert.That(async () => await CcxBenchmark.MeasureAsync(missing, Temp()), Throws.Exception);
+    }
+
+    [Test]
+    public async Task TheBenchmarkSolvesInTheHostsTempFolderTest()
+    {
+        var fakeCcx = FindFakeCcx();
+        var temp = Temp();
+
+        await CcxBenchmark.MeasureAsync(fakeCcx, temp);
+
+        // The scope lived under the host's folder, with the controller's
+        // label, and is gone once the benchmark is done.
+        var label = Path.Combine(temp.RootPath, "calculix-benchmark");
+        Assert.That(Directory.Exists(label), Is.True, "the host's temp folder, never a folder of the controller's own");
+        Assert.That(Directory.GetDirectories(label), Is.Empty);
     }
 
     #endregion
@@ -166,6 +196,16 @@ public class CcxBenchmarkTests
             Assert.Ignore("fake-ccx not built");
 
         return fakeCcx!;
+    }
+
+    #endregion
+
+    #region Temp Folder
+
+    private IWitTempStorage Temp()
+    {
+        m_temp ??= Path.Combine(Path.GetTempPath(), $"ccx-temp-{Guid.NewGuid():N}");
+        return new WitTempStorageDefault(m_temp);
     }
 
     #endregion

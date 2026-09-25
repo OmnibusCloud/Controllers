@@ -18,7 +18,7 @@ public sealed class FoamCaseSession
 {
     #region Constants
 
-    private const string SCRATCH_ROOT = "outwit-foam";
+    private const string SCRATCH_LABEL = "openfoam";
 
     private const string CASE_DIRECTORY = "case";
 
@@ -33,11 +33,13 @@ public sealed class FoamCaseSession
     /// </summary>
     /// <param name="kit">The resolved kit.</param>
     /// <param name="blobService">The node's blob service.</param>
+    /// <param name="tempStorage">The host's temp folder, where the run's scratch lives.</param>
     /// <param name="logger">Diagnostics sink.</param>
-    public FoamCaseSession(FoamKit kit, IWitBlobService blobService, ILogger? logger = null)
+    public FoamCaseSession(FoamKit kit, IWitBlobService blobService, IWitTempStorage tempStorage, ILogger? logger = null)
     {
         Kit = kit;
         BlobService = blobService;
+        TempStorage = tempStorage;
         Logger = logger;
     }
 
@@ -51,11 +53,11 @@ public sealed class FoamCaseSession
     /// <param name="task">The task.</param>
     /// <param name="cancellationToken">Reaches the running step's process tree.</param>
     /// <returns>The result, refused, failed or complete.</returns>
-    /// <exception cref="InvalidOperationException">The node's temp path contains a space and has no space-free form.</exception>
+    /// <exception cref="InvalidOperationException">The host's temp folder has a space in its path and no space-free form.</exception>
     public async Task<FoamResultData> RunAsync(FoamTaskData task, CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        var scratch = FoamScratchPath.CreateScratch(SCRATCH_ROOT);
+        var scratch = FoamScratchPath.CreateScratch(TempStorage, SCRATCH_LABEL);
         var caseDirectory = Path.Combine(scratch, CASE_DIRECTORY);
         Directory.CreateDirectory(caseDirectory);
 
@@ -230,6 +232,8 @@ public sealed class FoamCaseSession
     private FoamKit Kit { get; }
 
     private IWitBlobService BlobService { get; }
+
+    private IWitTempStorage TempStorage { get; }
 
     private ILogger? Logger { get; }
 

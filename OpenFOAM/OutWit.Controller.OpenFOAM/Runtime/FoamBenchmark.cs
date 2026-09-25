@@ -56,7 +56,7 @@ public static class FoamBenchmark
 
     private const string SOLVER = "simpleFoam";
 
-    private const string SCRATCH_ROOT = "outwit-foam-benchmark";
+    private const string SCRATCH_LABEL = "openfoam-benchmark";
 
     #endregion
 
@@ -66,11 +66,12 @@ public static class FoamBenchmark
     /// Runs the reference case: mesh once, warm-up, then timed runs, and scores the median.
     /// </summary>
     /// <param name="kit">The kit.</param>
+    /// <param name="tempStorage">The host's temp folder, where the reference case runs.</param>
     /// <param name="options">Engine benchmark options (target duration, warm-up count) or null for the defaults.</param>
     /// <param name="cancellationToken">Kills the running process tree when signaled.</param>
     /// <returns>The measured score.</returns>
     /// <exception cref="InvalidOperationException">The kit has no pitzDaily, or a reference run did not finish cleanly.</exception>
-    public static async Task<WitBenchmarkResult> MeasureAsync(FoamKit kit, IWitBenchmarkOptions? options = null, CancellationToken cancellationToken = default)
+    public static async Task<WitBenchmarkResult> MeasureAsync(FoamKit kit, IWitTempStorage tempStorage, IWitBenchmarkOptions? options = null, CancellationToken cancellationToken = default)
     {
         var target = options is { MinDuration.Ticks: > 0 } ? options.MinDuration : FALLBACK_TARGET;
         var warmupRuns = Math.Clamp(Math.Max(WARMUP_RUNS, options?.WarmupIterations ?? 0), WARMUP_RUNS, MAX_WARMUP_RUNS);
@@ -82,9 +83,9 @@ public static class FoamBenchmark
         if (!Directory.Exists(source))
             throw new InvalidOperationException($"The kit carries no {TUTORIAL} under {tutorials}.");
 
-        // The same scratch rule as a case run: under the node's temp, no space
-        // in the path (the 8.3 form on Windows), home and tmp inside.
-        var scratch = FoamScratchPath.CreateScratch(SCRATCH_ROOT);
+        // The same scratch rule as a case run: in the host's temp folder, no
+        // space in the path (the 8.3 form on Windows), home and tmp inside.
+        var scratch = FoamScratchPath.CreateScratch(tempStorage, SCRATCH_LABEL);
         var caseDirectory = Path.Combine(scratch, "pitzDaily");
 
         try
@@ -136,7 +137,7 @@ public static class FoamBenchmark
             }
             catch
             {
-                // Scratch cleanup is best-effort; the OS temp reaper covers stragglers.
+                // Scratch cleanup is best-effort; the client sweeps its temp folder at every start.
             }
         }
     }

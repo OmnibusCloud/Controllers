@@ -65,7 +65,7 @@ public static class CcxBenchmark
 
     private const string JOB_NAME = "benchmark";
 
-    private const string SCRATCH_ROOT = "outwit-ccx-benchmark";
+    private const string SCRATCH_LABEL = "calculix-benchmark";
 
     #endregion
 
@@ -75,17 +75,17 @@ public static class CcxBenchmark
     /// Runs the reference solve: warm-up first, then timed runs, and scores the median.
     /// </summary>
     /// <param name="solverPath">Full path of the ccx executable.</param>
+    /// <param name="tempStorage">The host's temp folder, where the reference deck is solved.</param>
     /// <param name="options">Engine benchmark options (target duration, warm-up count) or null for the defaults.</param>
     /// <param name="cancellationToken">Kills the solver process tree when signaled.</param>
     /// <returns>The measured score.</returns>
     /// <exception cref="InvalidOperationException">A reference solve did not finish cleanly.</exception>
-    public static async Task<WitBenchmarkResult> MeasureAsync(string solverPath, IWitBenchmarkOptions? options = null, CancellationToken cancellationToken = default)
+    public static async Task<WitBenchmarkResult> MeasureAsync(string solverPath, IWitTempStorage tempStorage, IWitBenchmarkOptions? options = null, CancellationToken cancellationToken = default)
     {
         var target = options is { MinDuration.Ticks: > 0 } ? options.MinDuration : FALLBACK_TARGET;
         var warmupRuns = System.Math.Clamp(System.Math.Max(WARMUP_RUNS, options?.WarmupIterations ?? 0), WARMUP_RUNS, MAX_WARMUP_RUNS);
 
-        var scratchDirectory = Path.Combine(Path.GetTempPath(), SCRATCH_ROOT, Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(scratchDirectory);
+        var scratchDirectory = tempStorage.CreateScope(SCRATCH_LABEL);
 
         try
         {

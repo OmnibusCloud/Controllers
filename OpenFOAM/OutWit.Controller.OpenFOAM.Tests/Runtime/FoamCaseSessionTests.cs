@@ -4,6 +4,7 @@ using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Mock;
 using OutWit.Controller.OpenFOAM.Tests.Utils;
+using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.OpenFOAM.Tests.Runtime;
 
@@ -50,7 +51,7 @@ public class FoamCaseSessionTests
             Assert.Ignore("the temp path contains a space; OpenFOAM strips whitespace from paths, so the controller refuses it by design");
 
         m_kit = FakeKit.Create(fakeFoam, "blockMesh", "simpleFoam", "checkMesh");
-        return new FoamCaseSession(m_kit.Resolve(), m_blobs);
+        return new FoamCaseSession(m_kit.Resolve(), m_blobs, new WitTempStorageDefault(m_storage));
     }
 
     private static FoamTaskData Task(FoamCaseData data, params FoamTokenValueData[] substitutions)

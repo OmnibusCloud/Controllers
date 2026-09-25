@@ -3,6 +3,7 @@ using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Mock;
 using OutWit.Controller.OpenFOAM.Tests.Utils;
+using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.OpenFOAM.Tests.Oracle;
 
@@ -146,7 +147,7 @@ public class FoamKitOracleTests
     [Test]
     public async Task PitzDailyRunsSeriallyThroughTheControllerTest()
     {
-        var session = new FoamCaseSession(m_kit, m_blobs);
+        var session = new FoamCaseSession(m_kit, m_blobs, new WitTempStorageDefault(m_storage));
 
         var result = await session.RunAsync(PitzDaily(threads: 1, parallel: false));
         PrintRow(result);
@@ -173,7 +174,7 @@ public class FoamKitOracleTests
         if (!m_kit.SupportsParallel)
             Assert.Ignore("the kit has no MPI launcher on this platform");
 
-        var session = new FoamCaseSession(m_kit, m_blobs);
+        var session = new FoamCaseSession(m_kit, m_blobs, new WitTempStorageDefault(m_storage));
 
         var serial = await session.RunAsync(PitzDaily(threads: 1, parallel: false));
         var parallel = await session.RunAsync(PitzDaily(threads: 2, parallel: true));
@@ -198,7 +199,7 @@ public class FoamKitOracleTests
     [Test]
     public async Task ADivergingVariantComesBackAsAFailedResultTest()
     {
-        var session = new FoamCaseSession(m_kit, m_blobs);
+        var session = new FoamCaseSession(m_kit, m_blobs, new WitTempStorageDefault(m_storage));
         var task = PitzDaily(threads: 1, parallel: false);
         task.Substitutions[0].Value = "1e6";
 
