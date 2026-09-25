@@ -66,6 +66,17 @@ counts, and the three platform builds add last-digit variation — results are
 stable to engineering tolerance, and the controller's tests assert tolerance,
 not bits.
 
+SPOOLES runs with one equation-solver thread (`CCX_NPROC_EQUATION_SOLVER=1`,
+`CcxEquationSolver`). The kits link SPOOLES multithreaded, and multithreaded
+SPOOLES returns a wrong field now and then with exit 0: a 14 k-node bracket
+solved 60 times in concurrent pairs came back different in 2 runs (by up to
+0.6 %), and a sweep variant on an arm64 Mac was 10 % off. PARDISO and
+single-threaded SPOOLES gave the same answer every time. A solve goes through
+SPOOLES when a step card says `SOLVER=SPOOLES`, and always on macOS, whose kit
+has no PARDISO (ccx's default where it is linked); assembly and stress recovery
+keep their OpenMP threads, and the single-threaded factorization cost about
+15 % on that bracket. The benchmark's reference solve follows the same rule.
+
 ## Dependencies
 
 `Variables` (module dependency). The shared data types live in

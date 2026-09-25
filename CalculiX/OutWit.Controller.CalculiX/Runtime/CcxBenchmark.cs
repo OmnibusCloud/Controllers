@@ -201,7 +201,10 @@ public static class CcxBenchmark
         ClearArtifacts(scratchDirectory);
 
         var stopwatch = Stopwatch.StartNew();
-        var outcome = await CcxProcessRunner.RunAsync(solverPath, JOB_NAME, scratchDirectory, threads: 0, cancellationToken);
+        // The reference solve runs the way a real one would: a SPOOLES solve (the macOS kit)
+        // with one equation-solver thread (CcxEquationSolver), so the rate predicts the solves.
+        var equationSolverThreads = CcxEquationSolver.ThreadsFor(Path.Combine(scratchDirectory, $"{JOB_NAME}.inp"));
+        var outcome = await CcxProcessRunner.RunAsync(solverPath, JOB_NAME, scratchDirectory, threads: 0, equationSolverThreads, cancellationToken);
         stopwatch.Stop();
 
         if (outcome.ExitCode != 0)

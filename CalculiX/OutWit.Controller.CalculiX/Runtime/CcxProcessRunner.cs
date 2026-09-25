@@ -4,8 +4,10 @@ namespace OutWit.Controller.CalculiX.Runtime;
 
 /// <summary>
 /// Spawns the real ccx with its host contract: bare jobname argument (no -i),
-/// cwd = the job directory, OMP_NUM_THREADS set explicitly, kill propagated
-/// to the whole process tree on cancellation, exit code forwarded verbatim.
+/// cwd = the job directory, OMP_NUM_THREADS set explicitly (and the equation
+/// solver's own thread count where it must differ, see
+/// <see cref="CcxEquationSolver"/>), kill propagated to the whole process tree
+/// on cancellation, exit code forwarded verbatim.
 /// </summary>
 public static class CcxProcessRunner
 {
@@ -22,6 +24,15 @@ public static class CcxProcessRunner
     /// </summary>
     public const int MAX_DEFAULT_THREADS = 16;
 
+    /// <summary>
+    /// The priority a solve runs at. A worker is often somebody's desktop: a solve or the
+    /// benchmark (35-70 s on the 40-cube) takes every core it is given, and at normal priority
+    /// the person at the keyboard waits behind it. Below normal, the interactive programs get
+    /// the CPU first and the solve takes what is left - all of it on an idle machine, so the
+    /// rate does not change there. Best-effort: a platform that refuses keeps normal.
+    /// </summary>
+    public const ProcessPriorityClass SOLVE_PRIORITY = ProcessPriorityClass.BelowNormal;
+
     #endregion
 
     #region Functions
@@ -35,14 +46,36 @@ public static class CcxProcessRunner
     /// <param name="threads">OMP thread count; 0 = all cores of this machine.</param>
     /// <param name="cancellationToken">Kills the whole solver process tree when signaled.</param>
     /// <returns>The run's outcome.</returns>
-    public static async Task<CcxRunOutcome> RunAsync(
+    public static Task<CcxRunOutcome> RunAsync(
         string solverPath,
         string jobName,
         string jobDirectory,
         int threads,
         CancellationToken cancellationToken = default)
     {
-        var startInfo = CreateStartInfo(solverPath, jobName, jobDirectory, threads);
+        return RunAsync(solverPath, jobName, jobDirectory, threads, equationSolverThreads: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs one solve to completion, with the equation solver's own thread count.
+    /// </summary>
+    /// <param name="solverPath">Full path of the ccx executable.</param>
+    /// <param name="jobName">Bare job name; ccx reads &lt;jobName&gt;.inp in the job directory.</param>
+    /// <param name="jobDirectory">Directory holding the deck; results land here.</param>
+    /// <param name="threads">OMP thread count; 0 = all cores of this machine.</param>
+    /// <param name="equationSolverThreads">The equation solver's thread count
+    /// (<see cref="CcxEquationSolver.THREADS_VARIABLE"/>), or null to leave it to OpenMP.</param>
+    /// <param name="cancellationToken">Kills the whole solver process tree when signaled.</param>
+    /// <returns>The run's outcome.</returns>
+    public static async Task<CcxRunOutcome> RunAsync(
+        string solverPath,
+        string jobName,
+        string jobDirectory,
+        int threads,
+        int? equationSolverThreads,
+        CancellationToken cancellationToken)
+    {
+        var startInfo = CreateStartInfo(solverPath, jobName, jobDirectory, threads, equationSolverThreads);
 
         var tail = new Queue<string>(LOG_TAIL_LINES);
 
@@ -83,30 +116,6 @@ public static class CcxProcessRunner
     }
 
     /// <summary>
-    /// The start parameters of one solve.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="ProcessStartInfo.CreateNoWindow"/> matters on Windows: the worker client is a
-    /// windowed application without a console, so without it every ccx.exe (a console program)
-    /// gets a console of its own, and creating it cost about 0.45 s per start on a Windows 11
-    /// workstation - the reference cube took 1.13-1.23 s from the client against 0.69-0.76 s with
-    /// the flag, and every variant of a sweep paid it. Output is redirected either way.
-    /// </remarks>
-    /// <param name="solverPath">Full path of the ccx executable.</param>
-    /// <param name="jobName">Bare job name; ccx reads &lt;jobName&gt;.inp in the job directory.</param>
-    /// <param name="jobDirectory">Directory holding the deck; results land here.</param>
-    /// <param name="threads">OMP thread count; 0 = all cores of this machine.</param>
-    /// <returns>The start info <see cref="RunAsync"/> launches.</returns>
-    /// <summary>
-    /// The priority a solve runs at. A worker is often somebody's desktop: a solve or the
-    /// benchmark (35-70 s on the 40-cube) takes every core it is given, and at normal priority
-    /// the person at the keyboard waits behind it. Below normal, the interactive programs get
-    /// the CPU first and the solve takes what is left - all of it on an idle machine, so the
-    /// rate does not change there. Best-effort: a platform that refuses keeps normal.
-    /// </summary>
-    public const ProcessPriorityClass SOLVE_PRIORITY = ProcessPriorityClass.BelowNormal;
-
-    /// <summary>
     /// Applies <see cref="SOLVE_PRIORITY"/> to a started solver process.
     /// </summary>
     /// <param name="process">The running ccx process.</param>
@@ -134,7 +143,37 @@ public static class CcxProcessRunner
         return Math.Clamp(Environment.ProcessorCount, 1, MAX_DEFAULT_THREADS);
     }
 
+    /// <summary>
+    /// The start parameters of one solve.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ProcessStartInfo.CreateNoWindow"/> matters on Windows: the worker client is a
+    /// windowed application without a console, so without it every ccx.exe (a console program)
+    /// gets a console of its own, and creating it cost about 0.45 s per start on a Windows 11
+    /// workstation - the reference cube took 1.13-1.23 s from the client against 0.69-0.76 s with
+    /// the flag, and every variant of a sweep paid it. Output is redirected either way.
+    /// </remarks>
+    /// <param name="solverPath">Full path of the ccx executable.</param>
+    /// <param name="jobName">Bare job name; ccx reads &lt;jobName&gt;.inp in the job directory.</param>
+    /// <param name="jobDirectory">Directory holding the deck; results land here.</param>
+    /// <param name="threads">OMP thread count; 0 = all cores of this machine.</param>
+    /// <returns>The start info <see cref="RunAsync(string, string, string, int, CancellationToken)"/> launches.</returns>
     public static ProcessStartInfo CreateStartInfo(string solverPath, string jobName, string jobDirectory, int threads)
+    {
+        return CreateStartInfo(solverPath, jobName, jobDirectory, threads, equationSolverThreads: null);
+    }
+
+    /// <summary>
+    /// The start parameters of one solve, with the equation solver's own thread count.
+    /// </summary>
+    /// <param name="solverPath">Full path of the ccx executable.</param>
+    /// <param name="jobName">Bare job name; ccx reads &lt;jobName&gt;.inp in the job directory.</param>
+    /// <param name="jobDirectory">Directory holding the deck; results land here.</param>
+    /// <param name="threads">OMP thread count; 0 = all cores of this machine.</param>
+    /// <param name="equationSolverThreads">The equation solver's thread count
+    /// (<see cref="CcxEquationSolver.THREADS_VARIABLE"/>), or null to leave it to OpenMP.</param>
+    /// <returns>The start info.</returns>
+    public static ProcessStartInfo CreateStartInfo(string solverPath, string jobName, string jobDirectory, int threads, int? equationSolverThreads)
     {
         var startInfo = new ProcessStartInfo(solverPath)
         {
@@ -148,6 +187,11 @@ public static class CcxProcessRunner
         startInfo.ArgumentList.Add(jobName);
         startInfo.EnvironmentVariables["OMP_NUM_THREADS"] =
             (threads > 0 ? threads : DefaultThreads()).ToString();
+
+        // Always set or cleared: a value inherited from the node's environment must not decide it.
+        startInfo.EnvironmentVariables.Remove(CcxEquationSolver.THREADS_VARIABLE);
+        if (equationSolverThreads is > 0)
+            startInfo.EnvironmentVariables[CcxEquationSolver.THREADS_VARIABLE] = equationSolverThreads.Value.ToString();
 
         return startInfo;
     }

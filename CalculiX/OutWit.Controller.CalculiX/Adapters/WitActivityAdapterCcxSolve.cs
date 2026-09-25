@@ -68,8 +68,10 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
             // effect between activities.
             var cancellation = ProcessingManager.CancellationToken(status.JobId);
 
+            // A solve that may go through SPOOLES gets one equation-solver thread:
+            // multithreaded SPOOLES returns a wrong field now and then, with exit 0.
             var outcome = await CcxProcessRunner.RunAsync(
-                solverPath, JOB_NAME, scratchDirectory, task.Threads, cancellation);
+                solverPath, JOB_NAME, scratchDirectory, task.Threads, CcxEquationSolver.ThreadsFor(jobDeckPath), cancellation);
 
             // A killed solve is the user's verdict, not the deck's — it must
             // surface as cancellation, never be harvested as a red variant,
