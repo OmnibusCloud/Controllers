@@ -137,7 +137,8 @@ public static class FoamBenchmark
             }
             catch
             {
-                // Scratch cleanup is best-effort; the client sweeps its temp folder at every start.
+                // Scratch cleanup is best-effort; the client clears its temp
+                // folder once, when it starts, which takes any straggler.
             }
         }
     }

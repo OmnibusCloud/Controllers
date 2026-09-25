@@ -132,7 +132,8 @@ public static class CcxBenchmark
             }
             catch
             {
-                // Scratch cleanup is best-effort; the OS temp reaper covers stragglers.
+                // Scratch cleanup is best-effort; the client clears its temp
+                // folder once, when it starts, which takes any straggler.
             }
         }
     }

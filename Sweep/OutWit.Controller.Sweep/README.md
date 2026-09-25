@@ -69,6 +69,13 @@ The families' node modules (`CalculiX`, `OpenFOAM`) are dependencies because
 their task and result types ride through the scripts; node-side work lives
 entirely in them.
 
+**Deploying Sweep 2.x:** the host needs both family modules next to it -
+`CalculiX` (>= 1.1.0) and `OpenFOAM` (>= 1.0.0). The host loader refuses a
+module whose declared dependencies are missing, so a host without the
+OpenFOAM module refuses the whole Sweep module, and CalculiX sweeps stop with
+it, even though they never touch OpenFOAM. Install (or upgrade) the OpenFOAM
+module on the host before, or together with, Sweep 2.x.
+
 ## Scripts
 
 `Scripts/SweepCalculiX.wit` and `Scripts/SweepOpenFOAM.wit` (shipped via
