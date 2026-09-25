@@ -16,7 +16,7 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
 
     private const string JOB_NAME = "job";
 
-    private const string SCRATCH_ROOT = "outwit-ccx";
+    private const string SCRATCH_LABEL = "calculix";
 
     /// <summary>
     /// Element count the work estimate is normalized to. Direct sparse solves
@@ -31,10 +31,11 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
 
     #region Constructors
 
-    public WitActivityAdapterCcxSolve(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
+    public WitActivityAdapterCcxSolve(IWitProcessingManager processingManager, IWitBlobService blobService, IWitTempStorage tempStorage, ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        TempStorage = tempStorage;
     }
 
     #endregion
@@ -50,8 +51,10 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
             ?? throw new InvalidOperationException(
                 "ccx not found in the CalculiX controller module. Ensure the module includes the bundled solver for this platform.");
 
-        var scratchDirectory = Path.Combine(Path.GetTempPath(), SCRATCH_ROOT, Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(scratchDirectory);
+        // The solve's scratch is a scope of the temp folder the host hands the
+        // controller (the client's controllers' temp folder), never a folder
+        // of the controller's own.
+        var scratchDirectory = TempStorage.CreateScope(SCRATCH_LABEL);
 
         try
         {
@@ -129,7 +132,7 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
             return OutWit.Engine.Data.Benchmark.WitBenchmarkResult.Default;
         }
 
-        var result = await CcxBenchmark.MeasureAsync(solverPath, options, cancellationToken);
+        var result = await CcxBenchmark.MeasureAsync(solverPath, TempStorage, options, cancellationToken);
 
         Logger.LogInformation(
             "Ccx.Solve benchmark: {Rate:F3} {Unit} (median of {Runs} reference solves: {RunTimes} s; warm-up {Warmup} s)",
@@ -202,6 +205,8 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IWitTempStorage TempStorage { get; }
 
     #endregion
 }

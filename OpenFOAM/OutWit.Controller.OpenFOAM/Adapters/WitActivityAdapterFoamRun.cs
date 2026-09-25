@@ -14,10 +14,11 @@ internal sealed class WitActivityAdapterFoamRun : WitActivityAdapterFunction<Wit
 {
     #region Constructors
 
-    public WitActivityAdapterFoamRun(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
+    public WitActivityAdapterFoamRun(IWitProcessingManager processingManager, IWitBlobService blobService, IWitTempStorage tempStorage, ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        TempStorage = tempStorage;
     }
 
     #endregion
@@ -29,16 +30,16 @@ internal sealed class WitActivityAdapterFoamRun : WitActivityAdapterFunction<Wit
         if (!pool.TryGetValue(activity.Task, out FoamTaskData? task) || task == null)
             throw new InvalidOperationException("Failed to get parameter 'Task'.");
 
-        var kit = FoamKitResolver.Resolve(GetType().Assembly.Location, Logger)
-            ?? throw new InvalidOperationException(
-                "The OpenFOAM kit was not found in the controller module. Ensure the module includes the kit for this platform.");
+        var kit = FoamKitResolver.Resolve(GetType().Assembly.Location, out var refusal, Logger)
+            ?? throw new InvalidOperationException(refusal
+                ?? "The OpenFOAM kit was not found in the controller module. Ensure the module includes the kit for this platform.");
 
         // The job's cancellation must reach the RUNNING solver: without the
         // token a cancelled overnight sweep keeps every node's in-flight case
         // running to completion, and cancel only takes effect between activities.
         var cancellation = ProcessingManager.CancellationToken(status.JobId);
 
-        var session = new FoamCaseSession(kit, BlobService, Logger);
+        var session = new FoamCaseSession(kit, BlobService, TempStorage, Logger);
         var result = await session.RunAsync(task, cancellation);
 
         if (!pool.TrySetValue(activity.ReturnReference, result))
@@ -47,7 +48,14 @@ internal sealed class WitActivityAdapterFoamRun : WitActivityAdapterFunction<Wit
 
     public override async Task<IWitBenchmarkResult> RunBenchmark(IWitBenchmarkOptions? options, CancellationToken cancellationToken)
     {
-        var kit = FoamKitResolver.Resolve(GetType().Assembly.Location, Logger);
+        var kit = FoamKitResolver.Resolve(GetType().Assembly.Location, out var refusal, Logger);
+
+        // A kit in place that cannot run from where it is (a path with a
+        // space, a path too long) fails the benchmark with the reason, so the
+        // node leaves the OpenFOAM pool rather than failing every variant.
+        if (kit == null && refusal != null)
+            throw new InvalidOperationException(refusal);
+
         if (kit == null)
         {
             // No kit for this platform: the node reports the default
@@ -56,7 +64,7 @@ internal sealed class WitActivityAdapterFoamRun : WitActivityAdapterFunction<Wit
             return WitBenchmarkResult.Default;
         }
 
-        var result = await FoamBenchmark.MeasureAsync(kit, options, cancellationToken);
+        var result = await FoamBenchmark.MeasureAsync(kit, TempStorage, options, cancellationToken);
 
         Logger.LogInformation(
             "Foam.Run benchmark: {Rate:F4} {Unit} (median of {Runs} reference runs: {RunTimes} s; warm-up {Warmup} s)",
@@ -104,6 +112,8 @@ internal sealed class WitActivityAdapterFoamRun : WitActivityAdapterFunction<Wit
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IWitTempStorage TempStorage { get; }
 
     #endregion
 }

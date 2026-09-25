@@ -146,6 +146,44 @@ public class FoamKitResolverTests
         }
     }
 
+    [Test]
+    public void AKitUnderAFolderWithASpaceIsRefusedByNameOffWindowsTest()
+    {
+        var fake = RequireKit("blockMesh");
+        Environment.SetEnvironmentVariable(FoamKitResolver.ENV_KIT_PATH, null);
+
+        var runtimeFolder = FoamKitResolver.ResolveCurrentRuntimeFolder();
+        if (runtimeFolder == null)
+            Assert.Ignore("unsupported platform");
+
+        // The client's controllers folder on macOS used to sit under
+        // ~/Library/Application Support: every utility died on its own path.
+        var parent = OpenFOAMTestPaths.CreateScratch("foam-module");
+        var module = Path.Combine(parent, "Application Support", "Controllers", "openfoam.module");
+        try
+        {
+            var target = Path.Combine(module, "openfoam", runtimeFolder);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            Directory.Move(fake.Root, target);
+
+            var kit = FoamKitResolver.Resolve(Path.Combine(module, "OutWit.Controller.OpenFOAM.dll"), out var refusal);
+
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.That(kit, Is.Not.Null, "the Windows build accepts a space");
+                Assert.That(refusal, Is.Null);
+                return;
+            }
+
+            Assert.That(kit, Is.Null);
+            Assert.That(refusal, Does.Contain("a path with a space").And.Contain("Settings"));
+        }
+        finally
+        {
+            OpenFOAMTestPaths.TryDelete(parent);
+        }
+    }
+
     #endregion
 
     #region Integrity Tests

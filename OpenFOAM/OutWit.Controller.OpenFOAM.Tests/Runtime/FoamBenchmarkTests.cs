@@ -2,6 +2,7 @@ using System.Globalization;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Utils;
 using OutWit.Engine.Data.Benchmark;
+using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.OpenFOAM.Tests.Runtime;
 
@@ -10,10 +11,14 @@ public class FoamBenchmarkTests
 {
     private FakeKit? m_kit;
 
+    private string? m_temp;
+
     [TearDown]
     public void TearDown()
     {
         m_kit?.Dispose();
+        if (m_temp != null)
+            OpenFOAMTestPaths.TryDelete(m_temp);
     }
 
     #region Tools
@@ -32,6 +37,12 @@ public class FoamBenchmarkTests
         return m_kit.Resolve();
     }
 
+    private IWitTempStorage Temp()
+    {
+        m_temp ??= OpenFOAMTestPaths.CreateScratch("foam-temp");
+        return new WitTempStorageDefault(m_temp);
+    }
+
     #endregion
 
     #region Benchmark Tests
@@ -41,7 +52,7 @@ public class FoamBenchmarkTests
     {
         var kit = RequireKit();
 
-        var result = await FoamBenchmark.MeasureAsync(kit);
+        var result = await FoamBenchmark.MeasureAsync(kit, Temp());
 
         // The fake solver honours the contract (cwd, log shape, a time
         // directory), so the copy, the controlDict rewrite, the spawns and
@@ -65,7 +76,7 @@ public class FoamBenchmarkTests
         var kit = RequireKit();
         var options = new WitBenchmarkOptions { MinDuration = TimeSpan.FromMinutes(10), WarmupIterations = 2 };
 
-        var result = await FoamBenchmark.MeasureAsync(kit, options);
+        var result = await FoamBenchmark.MeasureAsync(kit, Temp(), options);
 
         Assert.That(result.Iterations, Is.EqualTo(FoamBenchmark.MAX_RUNS));
     }

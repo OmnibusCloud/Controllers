@@ -10,7 +10,7 @@ companion `OutWit.Controller.Sweep` orchestrates into parameter studies.
 
 | Activity | Side | Purpose |
 |---|---|---|
-| `Ccx.Solve(CcxTask) → CcxResult` | node | Download the variant deck, run the bundled ccx (`<ccx> <jobname>` in a scratch directory, `OMP_NUM_THREADS` from the task), upload `.frd`/`.dat` as blobs, extract the requested responses on the node, return artifact ids + exit code + measured solve time + the response row. A nonzero solver exit is **data** in the result, not a task failure. |
+| `Ccx.Solve(CcxTask) → CcxResult` | node | Download the variant deck, run the bundled ccx (`<ccx> <jobname>` in a scratch directory - a scope of the temp folder the host hands the controller, on a node the client's controllers' temp folder - `OMP_NUM_THREADS` from the task), upload `.frd`/`.dat` as blobs, extract the requested responses on the node, return artifact ids + exit code + measured solve time + the response row. A nonzero solver exit is **data** in the result, not a task failure. |
 
 The task rides as one envelope (`CcxTaskData`): deck blob id, explicit
 node/element counts (work estimation never opens the blob), thread policy and

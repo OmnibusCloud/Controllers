@@ -54,6 +54,22 @@ public static class FoamKitResolver
     /// <returns>The kit, or null when the module carries none for this platform.</returns>
     public static FoamKit? Resolve(string controllerAssemblyPath, ILogger? logger = null)
     {
+        return Resolve(controllerAssemblyPath, out _, logger);
+    }
+
+    /// <summary>
+    /// Resolves the kit and says why a kit that is in place cannot be used on
+    /// this node (<see cref="FoamKitPathRules"/>): such a node must leave the
+    /// OpenFOAM pool, which a missing kit for an unsupported platform need not.
+    /// </summary>
+    /// <param name="controllerAssemblyPath">Path of the controller assembly, the module root anchor.</param>
+    /// <param name="refusal">Why the kit in place cannot be run from where it is, or null.</param>
+    /// <param name="logger">Diagnostics sink.</param>
+    /// <returns>The kit, or null when there is none or it is refused.</returns>
+    public static FoamKit? Resolve(string controllerAssemblyPath, out string? refusal, ILogger? logger = null)
+    {
+        refusal = null;
+
         var root = ResolveRoot(controllerAssemblyPath, logger);
         if (root == null)
             return null;
@@ -62,6 +78,15 @@ public static class FoamKitResolver
         if (!File.Exists(envFile))
         {
             logger?.LogWarning("Foam.Run: the kit at {Root} carries no KIT.env.", root);
+            return null;
+        }
+
+        var fullRoot = Path.GetFullPath(root);
+        var isWindows = OperatingSystem.IsWindows();
+        refusal = FoamKitPathRules.Check(fullRoot, isWindows, isWindows ? FoamKitPathRules.DeepestRelativePath(fullRoot) : 0);
+        if (refusal != null)
+        {
+            logger?.LogWarning("Foam.Run: {Refusal}", refusal);
             return null;
         }
 

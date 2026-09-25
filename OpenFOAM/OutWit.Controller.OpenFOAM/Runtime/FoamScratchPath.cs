@@ -1,39 +1,45 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.OpenFOAM.Runtime;
 
 /// <summary>
-/// Where a run may live. OpenFOAM's fileName class strips whitespace, so a
-/// path with a space in it is opened as a different path and nothing is
-/// found. The node's temp directory is under the user's profile on Windows -
-/// <c>C:\Users\John Smith\AppData\Local\Temp</c> is the common case - and
-/// there the 8.3 short form of the path, which Windows keeps for every
-/// directory on a volume with short names enabled, has no space. Every
-/// scratch the controller makes - a case run's, the benchmark's - comes from
-/// here, so the rule holds for both.
+/// Where a run may live: a scope of the temp folder the host hands the
+/// controller (the client's controllers' temp folder), never a folder of the
+/// controller's own. OpenFOAM's fileName class strips whitespace, so a path
+/// with a space in it is opened as a different path and nothing is found; on
+/// Windows the 8.3 short form of the path, which Windows keeps for every
+/// directory on a volume with short names enabled, has no space. Every scratch
+/// the controller makes - a case run's, the benchmark's - comes from here, so
+/// the rule holds for both.
 /// </summary>
 public static class FoamScratchPath
 {
     #region Functions
 
     /// <summary>
-    /// A fresh private scratch under the node's temp, at a path without a
+    /// A fresh private scratch in the host's temp folder, at a path without a
     /// space, with the <c>home</c> and <c>tmp</c> directories the kit's
     /// environment points into.
     /// </summary>
-    /// <param name="rootName">The controller's folder under the temp directory (<c>outwit-foam</c>, <c>outwit-foam-benchmark</c>).</param>
+    /// <param name="tempStorage">The host's temp folder.</param>
+    /// <param name="label">The scope's label under the temp folder (<c>openfoam</c>, <c>openfoam-benchmark</c>).</param>
     /// <returns>The scratch directory, created.</returns>
-    /// <exception cref="InvalidOperationException">The temp path contains a space and has no space-free form.</exception>
-    public static string CreateScratch(string rootName)
+    /// <exception cref="InvalidOperationException">The temp folder's path contains a space and has no space-free form.</exception>
+    public static string CreateScratch(IWitTempStorage tempStorage, string label)
     {
-        var root = Path.Combine(Path.GetTempPath(), rootName);
-        Directory.CreateDirectory(root);
+        var scope = tempStorage.CreateScope(label);
 
-        var usable = WithoutSpaces(root)
-            ?? throw new InvalidOperationException($"The node's temp path contains a space ('{Path.GetTempPath()}') and has no short form; OpenFOAM cannot run under it. Point TMPDIR/TEMP at a space-free directory.");
+        var scratch = WithoutSpaces(scope);
+        if (scratch == null)
+        {
+            tempStorage.DeleteScope(scope);
+            throw new InvalidOperationException(
+                $"The temp folder '{tempStorage.RootPath}' has a space in its path and no short form, and OpenFOAM cannot run under it. " +
+                "Choose a temp folder without spaces in the client's Settings (Storage).");
+        }
 
-        var scratch = Path.Combine(usable, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(scratch, "home"));
         Directory.CreateDirectory(Path.Combine(scratch, "tmp"));
         return scratch;

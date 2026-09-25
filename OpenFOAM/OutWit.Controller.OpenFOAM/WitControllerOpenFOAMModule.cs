@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using OutWit.Common.Plugins.Abstractions;
 using OutWit.Common.Plugins.Abstractions.Attributes;
 using OutWit.Controller.OpenFOAM.Activities;
@@ -29,6 +30,12 @@ public sealed class WitControllerOpenFOAMModule : WitPluginBase, IWitControllerN
     /// <param name="services">Engine service collection the plugin populates.</param>
     public override void Initialize(IServiceCollection services)
     {
+        // Temp storage: the host (the cloud client) registers the controllers'
+        // temp folder, where every run and the benchmark keep their scratch.
+        // A host without one (the host-side engine, tests) gets the system
+        // temp directory.
+        services.TryAddSingleton<IWitTempStorage>(_ => new WitTempStorageDefault(Path.GetTempPath()));
+
         services.AddVariable<WitVariableFoamTask>();
         services.AddVariable<WitVariableFoamResult>();
 
