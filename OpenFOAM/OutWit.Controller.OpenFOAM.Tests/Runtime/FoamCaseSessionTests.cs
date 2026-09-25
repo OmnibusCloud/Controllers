@@ -4,7 +4,6 @@ using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Mock;
 using OutWit.Controller.OpenFOAM.Tests.Utils;
-using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.OpenFOAM.Tests.Runtime;
 
@@ -19,6 +18,7 @@ public class FoamCaseSessionTests
     private string m_storage = null!;
     private FoamTestBlobService m_blobs = null!;
     private FakeKit? m_kit;
+    private RecordingTempStorage? m_temp;
 
     [SetUp]
     public void Setup()
@@ -51,7 +51,17 @@ public class FoamCaseSessionTests
             Assert.Ignore("the temp path contains a space; OpenFOAM strips whitespace from paths, so the controller refuses it by design");
 
         m_kit = FakeKit.Create(fakeFoam, "blockMesh", "simpleFoam", "checkMesh");
-        return new FoamCaseSession(m_kit.Resolve(), m_blobs, new WitTempStorageDefault(m_storage));
+        m_temp = new RecordingTempStorage(m_storage);
+        return new FoamCaseSession(m_kit.Resolve(), m_blobs, m_temp);
+    }
+
+    private void AssertScratchGivenBack()
+    {
+        var temp = m_temp ?? throw new InvalidOperationException("No session was made.");
+
+        Assert.That(temp.CreatedScopes, Has.Count.EqualTo(1), "one run, one scope");
+        Assert.That(temp.DeletedScopes, Is.EqualTo(temp.CreatedScopes), "the scope goes back through the host's temp folder");
+        Assert.That(Directory.Exists(temp.CreatedScopes[0]), Is.False, "nothing of the run is left behind");
     }
 
     private static FoamTaskData Task(FoamCaseData data, params FoamTokenValueData[] substitutions)
@@ -286,6 +296,68 @@ public class FoamCaseSessionTests
         Assert.That(result.ArtifactBytes, Is.EqualTo(0));
         Assert.That(result.ResponseRow, Is.Not.Null);
         Assert.That(result.ResponseRow!.Values, Is.Empty);
+    }
+
+    #endregion
+
+    #region Cleanup Tests
+
+    [Test]
+    public async Task ACompletedRunGivesItsScratchBackTest()
+    {
+        var session = RequireSession();
+
+        var result = await session.RunAsync(PitzTask("FAKE-COEFFS\nITERATIONS=2\n"));
+
+        Assert.That(result.ExitCode, Is.EqualTo(0));
+        AssertScratchGivenBack();
+    }
+
+    [Test]
+    public async Task ARefusedVariantGivesItsScratchBackTest()
+    {
+        var session = RequireSession();
+        var data = PitzCase("ITERATIONS=1\n");
+        data.BaseFiles.Add(BlobFile("0/p", "internalField #codeStream { code #{ os << 0; #}; };\n"));
+
+        var result = await session.RunAsync(Task(data));
+
+        Assert.That(result.Rejections, Is.Not.Empty);
+        AssertScratchGivenBack();
+    }
+
+    [Test]
+    public async Task AFailedRunGivesItsScratchBackTest()
+    {
+        var session = RequireSession();
+
+        var result = await session.RunAsync(PitzTask("FAKE-FAIL\n"));
+
+        Assert.That(result.FailedStep, Is.EqualTo("blockMesh"));
+        AssertScratchGivenBack();
+    }
+
+    [Test]
+    public void ACancelledRunGivesItsScratchBackTest()
+    {
+        var session = RequireSession();
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(700));
+
+        Assert.CatchAsync<OperationCanceledException>(() => session.RunAsync(PitzTask("FAKE-HANG\n"), cts.Token));
+
+        AssertScratchGivenBack();
+    }
+
+    [Test]
+    public void AnInfrastructureFailureGivesTheScratchBackTest()
+    {
+        var session = RequireSession();
+        var data = PitzCase("ITERATIONS=1\n");
+        data.BaseFiles.Add(new FoamFileRefData { RelativePath = "constant/g", BlobId = Guid.NewGuid(), Sha256 = "n/a", Size = 1 });
+
+        Assert.ThrowsAsync<FileNotFoundException>(() => session.RunAsync(Task(data)), "a blob the node cannot fetch is an infrastructure failure");
+
+        AssertScratchGivenBack();
     }
 
     #endregion

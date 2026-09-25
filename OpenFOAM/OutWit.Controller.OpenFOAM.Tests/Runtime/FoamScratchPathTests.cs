@@ -1,4 +1,5 @@
 using OutWit.Controller.OpenFOAM.Runtime;
+using OutWit.Controller.OpenFOAM.Tests.Mock;
 using OutWit.Controller.OpenFOAM.Tests.Utils;
 using OutWit.Engine.Interfaces;
 
@@ -68,14 +69,49 @@ public class FoamScratchPathTests
         {
             var scratch = FoamScratchPath.CreateScratch(new WitTempStorageDefault(root), "openfoam");
 
-            Assert.That(Path.GetFullPath(scratch), Does.StartWith(Path.Combine(Path.GetFullPath(root), "openfoam") + Path.DirectorySeparatorChar),
+            Assert.That(Path.GetFullPath(scratch.ScopePath), Does.StartWith(Path.Combine(Path.GetFullPath(root), "openfoam") + Path.DirectorySeparatorChar),
                 "the host's folder, under the controller's label - never a folder of the controller's own");
-            Assert.That(Directory.Exists(Path.Combine(scratch, "home")), Is.True);
-            Assert.That(Directory.Exists(Path.Combine(scratch, "tmp")), Is.True);
+            Assert.That(scratch.UsablePath, Is.EqualTo(scratch.ScopePath), "a path without whitespace is used as it is");
+            Assert.That(Directory.Exists(Path.Combine(scratch.UsablePath, "home")), Is.True);
+            Assert.That(Directory.Exists(Path.Combine(scratch.UsablePath, "tmp")), Is.True);
         }
         finally
         {
             OpenFOAMTestPaths.TryDelete(root);
+        }
+    }
+
+    [Test]
+    public void AScratchGoesBackToTheTempFolderThroughItsScopeTest()
+    {
+        // On Windows a folder with a space, so the scratch runs from its 8.3
+        // form while the scope keeps its own name; elsewhere a plain folder.
+        var parent = OpenFOAMTestPaths.CreateScratch("foam-temp");
+        var root = Path.Combine(parent, OperatingSystem.IsWindows() ? "with space" : "plain");
+        try
+        {
+            var storage = new RecordingTempStorage(root);
+            FoamScratch scratch;
+            try
+            {
+                scratch = FoamScratchPath.CreateScratch(storage, "openfoam");
+            }
+            catch (InvalidOperationException)
+            {
+                Assert.Ignore("this volume keeps no 8.3 names; the refusal is tested elsewhere");
+                return;
+            }
+
+            File.WriteAllText(Path.Combine(scratch.UsablePath, "tmp", "left.txt"), "x");
+
+            Assert.That(FoamScratchPath.Delete(storage, scratch), Is.True);
+            Assert.That(storage.DeletedScopes, Is.EqualTo(new[] { scratch.ScopePath }),
+                "the scope the temp folder handed out goes back - not the short form OpenFOAM was given");
+            Assert.That(Directory.Exists(scratch.ScopePath), Is.False);
+        }
+        finally
+        {
+            OpenFOAMTestPaths.TryDelete(parent);
         }
     }
 

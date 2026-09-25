@@ -86,13 +86,13 @@ public static class FoamBenchmark
         // The same scratch rule as a case run: in the host's temp folder, no
         // space in the path (the 8.3 form on Windows), home and tmp inside.
         var scratch = FoamScratchPath.CreateScratch(tempStorage, SCRATCH_LABEL);
-        var caseDirectory = Path.Combine(scratch, "pitzDaily");
 
         try
         {
+            var caseDirectory = Path.Combine(scratch.UsablePath, "pitzDaily");
             CopyTree(source, caseDirectory);
             FixIterations(caseDirectory);
-            var environment = kit.EnvironmentFor(scratch);
+            var environment = kit.EnvironmentFor(scratch.UsablePath);
 
             await StepAsync(kit, "blockMesh", caseDirectory, environment, cancellationToken);
 
@@ -131,15 +131,9 @@ public static class FoamBenchmark
         }
         finally
         {
-            try
-            {
-                Directory.Delete(scratch, recursive: true);
-            }
-            catch
-            {
-                // Scratch cleanup is best-effort; the client clears its temp
-                // folder once, when it starts, which takes any straggler.
-            }
+            // Scratch cleanup is best-effort; the client clears its temp
+            // folder once, when it starts, which takes any straggler.
+            FoamScratchPath.Delete(tempStorage, scratch);
         }
     }
 

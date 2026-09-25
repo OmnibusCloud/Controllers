@@ -117,7 +117,7 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
         }
         finally
         {
-            TryDeleteScratch(scratchDirectory);
+            DeleteScratch(scratchDirectory);
         }
     }
 
@@ -162,16 +162,13 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
         return new FileInfo(path).Length > 0 ? path : null;
     }
 
-    private void TryDeleteScratch(string directory)
+    private void DeleteScratch(string directory)
     {
-        try
-        {
-            Directory.Delete(directory, recursive: true);
-        }
-        catch (Exception e)
-        {
-            Logger.LogWarning(e, "Ccx.Solve: failed to delete scratch directory {Directory}.", directory);
-        }
+        // The scope goes back to the host's temp folder; a file still held
+        // open keeps it, and the client takes it when it next starts.
+        TempStorage.DeleteScope(directory);
+        if (Directory.Exists(directory))
+            Logger.LogWarning("Ccx.Solve: failed to delete scratch directory {Directory}.", directory);
     }
 
     #endregion

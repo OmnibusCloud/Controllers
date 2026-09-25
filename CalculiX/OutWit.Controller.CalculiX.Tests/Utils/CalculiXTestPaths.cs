@@ -6,6 +6,29 @@ internal static class CalculiXTestPaths
 {
     #region Functions
 
+    /// <summary>
+    /// Locates the staged controller modules (@Controllers/&lt;configuration&gt;),
+    /// preferring the configuration this test assembly was built in.
+    /// </summary>
+    /// <returns>The module folder, or null when nothing is staged.</returns>
+    public static string? FindControllersPath()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir != null)
+        {
+            foreach (var configuration in Configurations())
+            {
+                var candidate = Path.Combine(dir, "@Controllers", configuration);
+                if (Directory.Exists(candidate))
+                    return candidate;
+            }
+
+            dir = Path.GetDirectoryName(dir);
+        }
+
+        return null;
+    }
+
     public static string? FindSolutionRoot()
     {
         var dir = TestContext.CurrentContext.TestDirectory;
@@ -43,6 +66,15 @@ internal static class CalculiXTestPaths
         }
 
         return null;
+    }
+
+    private static IEnumerable<string> Configurations()
+    {
+        var own = AppContext.BaseDirectory.Contains($"{Path.DirectorySeparatorChar}Release{Path.DirectorySeparatorChar}")
+            ? "Release"
+            : "Debug";
+
+        return new[] { own, "Debug", "Release" }.Distinct();
     }
 
     #endregion

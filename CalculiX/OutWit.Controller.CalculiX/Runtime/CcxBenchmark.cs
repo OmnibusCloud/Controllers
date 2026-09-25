@@ -126,15 +126,9 @@ public static class CcxBenchmark
         }
         finally
         {
-            try
-            {
-                Directory.Delete(scratchDirectory, recursive: true);
-            }
-            catch
-            {
-                // Scratch cleanup is best-effort; the client clears its temp
-                // folder once, when it starts, which takes any straggler.
-            }
+            // Scratch cleanup is best-effort; the client clears its temp
+            // folder once, when it starts, which takes any straggler.
+            tempStorage.DeleteScope(scratchDirectory);
         }
     }
 
