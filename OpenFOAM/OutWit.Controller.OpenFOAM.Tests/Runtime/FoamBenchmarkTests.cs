@@ -82,6 +82,20 @@ public class FoamBenchmarkTests
     }
 
     [Test]
+    public async Task ACallerWithoutATempFolderMeasuresInTheSystemTempTest()
+    {
+        var kit = RequireKit();
+        if (Path.GetTempPath().Contains(' ') && !OperatingSystem.IsWindows())
+            Assert.Ignore("the system temp path contains a space; OpenFOAM cannot run under it, by design");
+
+        // The signature from before the host's temp folder was a parameter.
+        var result = await FoamBenchmark.MeasureAsync(kit, (IWitBenchmarkOptions?)null);
+
+        Assert.That(result.Unit, Is.EqualTo(FoamBenchmark.UNIT));
+        Assert.That(result.Rate, Is.GreaterThan(0));
+    }
+
+    [Test]
     public void ATempFolderTooDeepForWindowsFailsTheBenchmarkWithTheReasonTest()
     {
         if (!OperatingSystem.IsWindows())

@@ -72,6 +72,22 @@ public static class CcxBenchmark
     #region Functions
 
     /// <summary>
+    /// Runs the reference solve in the system temp directory: the signature
+    /// callers compiled against before the host's temp folder became a
+    /// parameter. A caller that has the host's temp folder passes it to
+    /// <see cref="MeasureAsync(string, IWitTempStorage, IWitBenchmarkOptions?, CancellationToken)"/>.
+    /// </summary>
+    /// <param name="solverPath">Full path of the ccx executable.</param>
+    /// <param name="options">Engine benchmark options (target duration, warm-up count) or null for the defaults.</param>
+    /// <param name="cancellationToken">Kills the solver process tree when signaled.</param>
+    /// <returns>The measured score.</returns>
+    /// <exception cref="InvalidOperationException">A reference solve did not finish cleanly.</exception>
+    public static Task<WitBenchmarkResult> MeasureAsync(string solverPath, IWitBenchmarkOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        return MeasureAsync(solverPath, new WitTempStorageDefault(Path.GetTempPath()), options, cancellationToken);
+    }
+
+    /// <summary>
     /// Runs the reference solve: warm-up first, then timed runs, and scores the median.
     /// </summary>
     /// <param name="solverPath">Full path of the ccx executable.</param>

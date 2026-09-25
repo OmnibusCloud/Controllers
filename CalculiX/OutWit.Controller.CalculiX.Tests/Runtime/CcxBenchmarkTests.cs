@@ -122,6 +122,18 @@ public class CcxBenchmarkTests
         Assert.That(Directory.GetDirectories(label), Is.Empty);
     }
 
+    [Test]
+    public async Task ACallerWithoutATempFolderMeasuresInTheSystemTempTest()
+    {
+        var fakeCcx = FindFakeCcx();
+
+        // The signature from before the host's temp folder was a parameter.
+        var result = await CcxBenchmark.MeasureAsync(fakeCcx, (IWitBenchmarkOptions?)null);
+
+        Assert.That(result.Unit, Is.EqualTo(CcxBenchmark.UNIT));
+        Assert.That(result.Rate, Is.GreaterThan(0));
+    }
+
     #endregion
 
     #region Scoring Tests
