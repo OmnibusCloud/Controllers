@@ -29,7 +29,11 @@ public static class FoamAllowList
     /// <summary>The steps the controller does itself: no kit executable, never under MPI.</summary>
     public static readonly IReadOnlyList<string> BUILT_IN_STEPS = [RESTORE_INITIAL_FIELDS];
 
-    /// <summary>The utilities of version 1, in the order they usually run.</summary>
+    /// <summary>
+    /// The utilities, in the order they usually run: those of version 1, then
+    /// the mesh, set and region utilities and the two initialisations of
+    /// version 1.1 (<c>setsToZones</c> ... <c>makeFaMesh</c>).
+    /// </summary>
     public static readonly IReadOnlyList<string> UTILITIES =
     [
         "blockMesh",
@@ -50,12 +54,26 @@ public static class FoamAllowList
         "reconstructParMesh",
         "postProcess",
         "foamDictionary",
-        "potentialFoam"
+        "potentialFoam",
+        "setsToZones",
+        "subsetMesh",
+        "splitMeshRegions",
+        "mergeMeshes",
+        "mergeOrSplitBaffles",
+        "extrudeToRegionMesh",
+        "refineHexMesh",
+        "collapseEdges",
+        "extrude2DMesh",
+        "setAlphaField",
+        "makeFaMesh"
     ];
 
     /// <summary>
-    /// The utilities that accept <c>-parallel</c>; a parallel step naming any
-    /// other utility is refused. Solvers are all parallel-capable.
+    /// The utilities a parallel step may name; a parallel step naming any
+    /// other utility is refused. Solvers are all parallel-capable. A utility
+    /// is here when the kit accepts <c>-parallel</c> for it and OpenFOAM's
+    /// tutorials run it in parallel; one that only accepts the flag runs
+    /// serially.
     /// </summary>
     public static readonly IReadOnlyList<string> PARALLEL_CAPABLE_UTILITIES =
     [
@@ -68,7 +86,9 @@ public static class FoamAllowList
         "checkMesh",
         "postProcess",
         "potentialFoam",
-        "refineMesh"
+        "refineMesh",
+        "splitMeshRegions",
+        "makeFaMesh"
     ];
 
     /// <summary>

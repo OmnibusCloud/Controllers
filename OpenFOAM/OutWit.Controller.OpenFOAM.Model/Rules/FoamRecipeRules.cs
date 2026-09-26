@@ -24,10 +24,11 @@ public static class FoamRecipeRules
 
     /// <summary>
     /// A value: OpenFOAM words, numbers, relative paths, lists in parentheses
-    /// (<c>(nonOrthoAngle)</c>) and comma lists - no shell metacharacters, no
-    /// quotes, no whitespace.
+    /// (<c>(nonOrthoAngle)</c>), comma lists, and <c>.</c> - the case itself,
+    /// as <c>mergeMeshes</c> names the case it merges into. No shell
+    /// metacharacters, no quotes, no whitespace, never <c>..</c>.
     /// </summary>
-    private static readonly Regex VALUE = new(@"^[A-Za-z0-9_(][A-Za-z0-9_.,:=+()/\-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex VALUE = new(@"^(\.|[A-Za-z0-9_(][A-Za-z0-9_.,:=+()/\-]*)$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex WORD = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 

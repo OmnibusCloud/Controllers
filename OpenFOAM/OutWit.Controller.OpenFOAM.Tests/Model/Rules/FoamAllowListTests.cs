@@ -13,8 +13,28 @@ public class FoamAllowListTests
         foreach (var utility in new[] { "blockMesh", "snappyHexMesh", "surfaceFeatureExtract", "decomposePar", "reconstructPar", "reconstructParMesh", "checkMesh", "postProcess", "potentialFoam", "foamDictionary" })
             Assert.That(FoamAllowList.IsUtility(utility), Is.True, utility);
 
-        foreach (var outside in new[] { "foamyHexMesh", "paraFoam", "foamToVTK", "bash", "sh", "python", "BlockMesh", "blockmesh", "" })
+        foreach (var outside in new[] { "foamyHexMesh", "paraFoam", "foamToVTK", "redistributePar", "changeDictionary", "cumulativeDisplacement", "bash", "sh", "python", "BlockMesh", "blockmesh", "" })
             Assert.That(FoamAllowList.IsUtility(outside), Is.False, outside);
+    }
+
+    [Test]
+    public void TheMeshSetAndInitialisationUtilitiesJoinedInOnePointOneTest()
+    {
+        // Mesh, set and region utilities the tutorials use around topoSet and
+        // snappyHexMesh, and the two initialisations beside setFields - each a
+        // deterministic operation on the case's own files.
+        foreach (var utility in new[]
+                 {
+                     "setsToZones", "subsetMesh", "splitMeshRegions", "mergeMeshes", "mergeOrSplitBaffles", "extrudeToRegionMesh",
+                     "refineHexMesh", "collapseEdges", "extrude2DMesh", "setAlphaField", "makeFaMesh"
+                 })
+            Assert.That(FoamAllowList.IsUtility(utility), Is.True, utility);
+
+        // Parallel only where the tutorials run them in parallel; the others accept -parallel but are allowed serially.
+        Assert.That(FoamAllowList.IsParallelCapable("splitMeshRegions"), Is.True);
+        Assert.That(FoamAllowList.IsParallelCapable("makeFaMesh"), Is.True);
+        foreach (var serial in new[] { "setsToZones", "subsetMesh", "mergeMeshes", "mergeOrSplitBaffles", "extrudeToRegionMesh", "refineHexMesh", "collapseEdges", "extrude2DMesh", "setAlphaField" })
+            Assert.That(FoamAllowList.IsParallelCapable(serial), Is.False, serial);
     }
 
     [Test]
@@ -22,7 +42,7 @@ public class FoamAllowListTests
     {
         // The list is a contract with the initiator's preflight and with the
         // supported-inputs document; a change here is a change there.
-        Assert.That(FoamAllowList.UTILITIES, Has.Count.EqualTo(19));
+        Assert.That(FoamAllowList.UTILITIES, Has.Count.EqualTo(30));
         Assert.That(FoamAllowList.UTILITIES, Is.Unique);
         Assert.That(FoamAllowList.PARALLEL_CAPABLE_UTILITIES, Is.SubsetOf(FoamAllowList.UTILITIES), "a parallel-capable name is first of all an allow-listed one");
     }

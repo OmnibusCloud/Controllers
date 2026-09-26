@@ -79,6 +79,19 @@ public class FoamRecipeRulesTests
     }
 
     [Test]
+    public void TheCaseItselfIsAValueItsParentIsNotTest()
+    {
+        // mergeMeshes names the case it merges into as '.', and the case to add by its folder.
+        var inside = FoamRecipeRules.ValidateStep(new FoamStepData { Utility = "mergeMeshes", Arguments = [".", "inlet", "-overwrite"] }, "Allrun:9");
+        var parent = FoamRecipeRules.ValidateStep(new FoamStepData { Utility = "mergeMeshes", Arguments = [".", "..", "-overwrite"] }, "Allrun:9");
+        var outside = FoamRecipeRules.ValidateStep(new FoamStepData { Utility = "mergeMeshes", Arguments = [".", "../cylinderMesh", "-overwrite"] }, "Allrun:9");
+
+        Assert.That(inside, Is.Empty);
+        Assert.That(parent, Has.Count.EqualTo(1).And.Some.Contains("'..'"));
+        Assert.That(outside, Is.EqualTo(new[] { "Allrun:9 (mergeMeshes): '../cylinderMesh' is not a value the allow-list accepts." }));
+    }
+
+    [Test]
     public void TheFlagsTheControllerDecidesAreRefusedTest()
     {
         var recipe = MotorBike();
