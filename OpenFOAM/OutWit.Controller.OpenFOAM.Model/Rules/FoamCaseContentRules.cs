@@ -6,7 +6,9 @@ namespace OutWit.Controller.OpenFOAM.Model.Rules;
 /// The rejects that need a case's contents: run-time code (<c>codeStream</c>,
 /// <c>#codeStream</c>, <c>coded*</c> conditions and function objects,
 /// <c>#calc</c>, a <c>dynamicCode/</c> directory), libraries outside the kit,
-/// includes outside the case, a decomposed-only case, a missing application.
+/// includes outside the case, a decomposed-only case, a missing application,
+/// a file that starts with a byte order mark (OpenFOAM reads it as part of
+/// the first word and fails).
 /// The kit ships no compiler, so run-time code would fail hard anyway; the
 /// reject is the honest message before that, with file and line. The node
 /// applies the rules to the materialised case before anything runs and the
@@ -31,6 +33,9 @@ public static class FoamCaseContentRules
     private const string PROCESSOR_PREFIX = "processor";
 
     private const string POLY_MESH_SEGMENT = "/polyMesh/";
+
+    /// <summary>A UTF-8 byte order mark in the one-byte view.</summary>
+    private const string BYTE_ORDER_MARK = "ï»¿";
 
     private static readonly Regex CODE_STREAM = new(@"(?<![A-Za-z0-9_])#?codeStream(?![A-Za-z0-9_])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -149,6 +154,9 @@ public static class FoamCaseContentRules
 
     private static void InspectText(string relativePath, string text, Func<string, bool>? kitHasLibrary, List<string> findings)
     {
+        if (text.StartsWith(BYTE_ORDER_MARK, StringComparison.Ordinal))
+            findings.Add($"{relativePath}:1: the file starts with a UTF-8 byte order mark, which OpenFOAM reads as part of the first word; save it without one.");
+
         Report(findings, relativePath, text, CODE_STREAM, "codeStream compiles C++ at run time");
         Report(findings, relativePath, text, CALC, "#calc compiles C++ at run time (#eval is the in-built evaluator and is allowed)");
         Report(findings, relativePath, text, CODED, "a coded condition or function object compiles C++ at run time");

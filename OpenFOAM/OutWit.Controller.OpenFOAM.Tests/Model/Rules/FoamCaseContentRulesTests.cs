@@ -201,6 +201,16 @@ public class FoamCaseContentRulesTests
     }
 
     [Test]
+    public void AByteOrderMarkIsRefusedByNameTest()
+    {
+        // OpenFOAM reads the three bytes as the start of the first word:
+        // "First token could not be read or is not 'FoamFile'".
+        var findings = FoamCaseContentRules.Inspect(PlainCaseWith(("constant/transportProperties", "ï»¿FoamFile { object transportProperties; }\nnu 1e-05;\n")));
+
+        Assert.That(findings, Is.EqualTo(new[] { "constant/transportProperties:1: the file starts with a UTF-8 byte order mark, which OpenFOAM reads as part of the first word; save it without one." }));
+    }
+
+    [Test]
     public void TheScannedSetIsDecidedByPathAndSizeTest()
     {
         Assert.Multiple(() =>
