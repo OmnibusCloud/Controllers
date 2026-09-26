@@ -116,6 +116,34 @@ public class FoamKitOracleTests
     }
 
     /// <summary>
+    /// The task with force coefficients on the lower wall measured after the
+    /// solve, the reference speed given as written (a number or a token).
+    /// </summary>
+    private static FoamTaskData WithCoefficients(FoamTaskData task, string magUInf)
+    {
+        task.Case!.Extraction!.Responses.Add(new FoamResponseSpecData
+        {
+            Name = "coeffs",
+            Kind = FoamResponseKind.ForceCoeffs,
+            Patches = ["lowerWall"],
+            Parameters =
+            [
+                new FoamNamedValueData { Name = "rho", Value = "rhoInf" },
+                new FoamNamedValueData { Name = "rhoInf", Value = "1" },
+                new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" },
+                new FoamNamedValueData { Name = "liftDir", Value = "(0 1 0)" },
+                new FoamNamedValueData { Name = "dragDir", Value = "(1 0 0)" },
+                new FoamNamedValueData { Name = "pitchAxis", Value = "(0 0 1)" },
+                new FoamNamedValueData { Name = "magUInf", Value = magUInf },
+                new FoamNamedValueData { Name = "lRef", Value = "1" },
+                new FoamNamedValueData { Name = "Aref", Value = "1" }
+            ]
+        });
+        task.Case.Recipe!.Steps.Add(new FoamStepData { Utility = "simpleFoam", Arguments = ["-postProcess", "-func", "coeffs", "-latestTime"] });
+        return task;
+    }
+
+    /// <summary>
     /// The first response value whose name starts with the prefix. The column
     /// names are the function objects' own (<c>areaAverage(p)</c>,
     /// <c>min(p)</c> ...), so a test asks by response and column fragment.
@@ -194,6 +222,26 @@ public class FoamKitOracleTests
         TestContext.Out.WriteLine($"inlet p: serial {serialP}, parallel {parallelP}, iterations {serial.Iterations} vs {parallel.Iterations}");
         Assert.That(parallelP, Is.EqualTo(serialP).Within(2).Percent);
         Assert.That(Value(parallel, "pRange.", "max"), Is.EqualTo(Value(serial, "pRange.", "max")).Within(2).Percent);
+    }
+
+    [Test]
+    public async Task AForceCoefficientFollowsTheSweptReferenceSpeedTest()
+    {
+        var session = new FoamCaseSession(m_kit, m_blobs, new WitTempStorageDefault(m_storage));
+
+        // The same flow twice; the coefficients' reference speed written as
+        // 10, then taken from the variant as 20. OpenFOAM divides the same
+        // forces by the square of the reference: a quarter of the first Cd.
+        var written = await session.RunAsync(WithCoefficients(PitzDaily(threads: 1, parallel: false), "10"));
+        var followed = WithCoefficients(PitzDaily(threads: 1, parallel: false), "{{oc2}}");
+        followed.Substitutions.Add(new FoamTokenValueData { Token = "{{oc2}}", Value = "20" });
+        var swept = await session.RunAsync(followed);
+        PrintRow(written);
+        PrintRow(swept);
+
+        Assert.That(swept.Rejections, Is.Empty);
+        Assert.That(swept.ExitCode, Is.EqualTo(0), swept.LogTail);
+        Assert.That(Value(swept, "coeffs.", "Cd"), Is.EqualTo(Value(written, "coeffs.", "Cd") / 4).Within(0.01).Percent);
     }
 
     [Test]

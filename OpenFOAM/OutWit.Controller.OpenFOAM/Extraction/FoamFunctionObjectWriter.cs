@@ -23,13 +23,24 @@ public static class FoamFunctionObjectWriter
     /// </summary>
     /// <param name="caseDirectory">The materialised case.</param>
     /// <param name="request">The request; null writes nothing.</param>
+    /// <param name="substitutions">The variant's values: a parameter that names a token (<c>magUInf {{oc1}}</c>) takes its value.</param>
     /// <returns>Findings, one sentence each; nothing is written when there is any.</returns>
-    public static IReadOnlyList<string> Write(string caseDirectory, FoamExtractionRequestData? request)
+    public static IReadOnlyList<string> Write(string caseDirectory, FoamExtractionRequestData? request, IReadOnlyList<FoamTokenValueData>? substitutions = null)
     {
         if (request == null || request.Responses.Count == 0)
             return [];
 
+        // A parameter that follows a swept value takes this variant's value;
+        // the rules then judge the value itself, not the placeholder.
+        request = Instantiate(request, substitutions ?? []);
+
         var findings = FoamResponseRules.Validate(request).ToList();
+        foreach (var response in request.Responses)
+        {
+            foreach (var token in response.Parameters.SelectMany(parameter => FoamTemplating.LeftoverTokens(parameter.Value)).Distinct(StringComparer.Ordinal))
+                findings.Add($"Response '{response.Name}': token {token} has no value in this variant.");
+        }
+
         var system = Path.Combine(caseDirectory, "system");
 
         // A response never overwrites a file the user shipped under the same name.
@@ -108,6 +119,15 @@ public static class FoamFunctionObjectWriter
             text.Append($"{parameter.Name,-16}{parameter.Value};\n");
 
         return text.ToString();
+    }
+
+    private static FoamExtractionRequestData Instantiate(FoamExtractionRequestData request, IReadOnlyList<FoamTokenValueData> substitutions)
+    {
+        var instantiated = request.Clone();
+        foreach (var parameter in instantiated.Responses.SelectMany(response => response.Parameters))
+            parameter.Value = FoamTemplating.Substitute(parameter.Value, substitutions);
+
+        return instantiated;
     }
 
     private static string List(string keyword, IReadOnlyList<string> items)

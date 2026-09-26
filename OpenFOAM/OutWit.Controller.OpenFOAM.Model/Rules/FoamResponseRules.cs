@@ -19,6 +19,13 @@ public static class FoamResponseRules
 
     private const string SYSTEM_PREFIX = "system/";
 
+    /// <summary>
+    /// What a placeholder counts as when a value is checked before the
+    /// variant supplies it: a number. The node checks the value again once it
+    /// is substituted.
+    /// </summary>
+    private const string TOKEN_STAND_IN = "0";
+
     private static readonly Regex WORD = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex OPERATION = new("^[A-Za-z][A-Za-z0-9]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -75,7 +82,7 @@ public static class FoamResponseRules
             {
                 if (!WORD.IsMatch(parameter.Name))
                     findings.Add($"{prefix}: parameter '{parameter.Name}' is not a keyword.");
-                else if (!VALUE.IsMatch(parameter.Value))
+                else if (!VALUE.IsMatch(FoamTemplating.TOKEN.Replace(parameter.Value, TOKEN_STAND_IN)))
                     findings.Add($"{prefix}: the value of '{parameter.Name}' is not a plain dictionary value.");
             }
         }

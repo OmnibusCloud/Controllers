@@ -179,5 +179,26 @@ public class FoamTemplatingTests
         Assert.That(FoamTemplating.CheckCoverage([], []), Is.Empty);
     }
 
+    [Test]
+    public void AResponseTokenTheStudyDoesNotDeclareIsAFindingTest()
+    {
+        var request = new FoamExtractionRequestData
+        {
+            Responses =
+            [
+                new FoamResponseSpecData
+                {
+                    Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["body"],
+                    Parameters = [new FoamNamedValueData { Name = "magUInf", Value = "{{oc1}}" }, new FoamNamedValueData { Name = "lRef", Value = "{{oc3}}" }]
+                }
+            ]
+        };
+
+        Assert.That(FoamTemplating.CheckResponseCoverage(["{{oc1}}", "{{oc3}}"], request), Is.Empty);
+        Assert.That(FoamTemplating.CheckResponseCoverage(["{{oc1}}"], request),
+            Is.EqualTo(new[] { "Response 'coeffs': token {{oc3}} is not declared by the study." }));
+        Assert.That(FoamTemplating.CheckResponseCoverage(["{{oc1}}"], null), Is.Empty);
+    }
+
     #endregion
 }

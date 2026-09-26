@@ -145,6 +145,29 @@ public static class FoamTemplating
         return findings;
     }
 
+    /// <summary>
+    /// Checks the placeholders of a study's responses: a response parameter
+    /// may follow a swept value (<c>magUInf {{oc1}}</c> beside the swept
+    /// speed), but only a token the study declares - otherwise every variant
+    /// would be refused on its node.
+    /// </summary>
+    /// <param name="tokens">The study's declared tokens.</param>
+    /// <param name="request">The responses; null asks for none.</param>
+    /// <returns>Findings, one sentence each; empty when every response token is declared.</returns>
+    public static IReadOnlyList<string> CheckResponseCoverage(IReadOnlyList<string> tokens, FoamExtractionRequestData? request)
+    {
+        var declared = new HashSet<string>(tokens, StringComparer.Ordinal);
+        var findings = new List<string>();
+
+        foreach (var response in request?.Responses ?? [])
+        {
+            foreach (var token in response.Parameters.SelectMany(parameter => LeftoverTokens(parameter.Value)).Distinct(StringComparer.Ordinal).Where(token => !declared.Contains(token)))
+                findings.Add($"Response '{response.Name}': token {token} is not declared by the study.");
+        }
+
+        return findings;
+    }
+
     private static Dictionary<string, string> ValuesOf(IReadOnlyList<FoamTokenValueData> substitutions, Func<string, string> view)
     {
         var values = new Dictionary<string, string>(StringComparer.Ordinal);

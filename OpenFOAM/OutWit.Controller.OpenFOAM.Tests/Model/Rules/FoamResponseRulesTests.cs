@@ -105,5 +105,26 @@ public class FoamResponseRulesTests
         Assert.That(FoamResponseRules.IsQuotedRegex("\"a;b\""), Is.False, "a semicolon ends a dictionary entry");
     }
 
+    [Test]
+    public void APlaceholderStandsForAValueTheSweepSuppliesTest()
+    {
+        static FoamExtractionRequestData Coefficients(string value) => new()
+        {
+            Responses =
+            [
+                new FoamResponseSpecData
+                {
+                    Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["body"],
+                    Parameters = [new FoamNamedValueData { Name = "magUInf", Value = value }]
+                }
+            ]
+        };
+
+        Assert.That(FoamResponseRules.Validate(Coefficients("{{oc1}}")), Is.Empty, "a speed swept with the case");
+        Assert.That(FoamResponseRules.Validate(Coefficients("({{oc1}} 0 0)")), Is.Empty, "a placeholder inside a vector");
+        Assert.That(FoamResponseRules.Validate(Coefficients("{{oc1}};#calc")), Has.Some.Contains("the value of 'magUInf' is not a plain dictionary value"));
+        Assert.That(FoamResponseRules.Validate(Coefficients("{{name}}")), Has.Some.Contains("not a plain dictionary value"), "only the sweep's own token shape");
+    }
+
     #endregion
 }
