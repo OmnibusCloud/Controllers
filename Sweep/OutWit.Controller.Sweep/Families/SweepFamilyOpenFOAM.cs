@@ -52,7 +52,9 @@ internal sealed class SweepFamilyOpenFOAM : ISweepFamily
             templated.Add((file.RelativePath, FoamCaseText.FromBytes(await File.ReadAllBytesAsync(path))));
         }
 
-        findings.AddRange(FoamTemplating.CheckCoverage(options.Parameters.Select(parameter => parameter.Token).ToList(), templated));
+        var tokens = options.Parameters.Select(parameter => parameter.Token).ToList();
+        findings.AddRange(FoamTemplating.CheckCoverage(tokens, templated));
+        findings.AddRange(FoamTemplating.CheckResponseCoverage(tokens, data.Extraction));
         return findings;
     }
 

@@ -134,6 +134,44 @@ public class FoamFunctionObjectWriterTests
     }
 
     [Test]
+    public void AResponseParameterTakesTheVariantsValueTest()
+    {
+        var request = MotorBikeRequest();
+        request.Responses[0].Parameters.Single(parameter => parameter.Name == "magUInf").Value = "{{oc1}}";
+
+        var findings = FoamFunctionObjectWriter.Write(m_case, request, [new FoamTokenValueData { Token = "{{oc1}}", Value = "25" }]);
+
+        Assert.That(findings, Is.Empty);
+        var coefficients = File.ReadAllText(Path.Combine(m_case, "system", "coeffs"));
+        Assert.That(coefficients, Does.Contain("magUInf         25;"));
+        Assert.That(coefficients, Does.Not.Contain("{{"));
+    }
+
+    [Test]
+    public void AValueThatIsNotPlainAfterSubstitutionIsRefusedTest()
+    {
+        var request = MotorBikeRequest();
+        request.Responses[0].Parameters.Single(parameter => parameter.Name == "magUInf").Value = "{{oc1}}";
+
+        var findings = FoamFunctionObjectWriter.Write(m_case, request, [new FoamTokenValueData { Token = "{{oc1}}", Value = "25; #calc \"1\"" }]);
+
+        Assert.That(findings, Is.EqualTo(new[] { "Response 'coeffs': the value of 'magUInf' is not a plain dictionary value." }));
+        Assert.That(File.Exists(Path.Combine(m_case, "system", "coeffs")), Is.False);
+    }
+
+    [Test]
+    public void ATokenWithoutAValueInTheVariantIsNamedTest()
+    {
+        var request = MotorBikeRequest();
+        request.Responses[0].Parameters.Single(parameter => parameter.Name == "magUInf").Value = "{{oc2}}";
+
+        var findings = FoamFunctionObjectWriter.Write(m_case, request, [new FoamTokenValueData { Token = "{{oc1}}", Value = "25" }]);
+
+        Assert.That(findings, Is.EqualTo(new[] { "Response 'coeffs': token {{oc2}} has no value in this variant." }));
+        Assert.That(File.Exists(Path.Combine(m_case, "system", "coeffs")), Is.False);
+    }
+
+    [Test]
     public void ANullOrEmptyRequestWritesNothingTest()
     {
         Assert.That(FoamFunctionObjectWriter.Write(m_case, null), Is.Empty);

@@ -94,6 +94,28 @@ public class SweepFamilyOpenFOAMTests
     }
 
     [Test]
+    public async Task AResponseMayFollowTheStudysTokensAndNoOtherTest()
+    {
+        var options = Study();
+        options.OpenFOAM!.Extraction = new FoamExtractionRequestData
+        {
+            Responses =
+            [
+                new FoamResponseSpecData
+                {
+                    Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["body"],
+                    Parameters = [new FoamNamedValueData { Name = "magUInf", Value = "{{oc1}}" }]
+                }
+            ]
+        };
+
+        Assert.That(await m_family.ValidateAsync(options, m_blobs), Is.Empty, "the speed's own token");
+
+        options.OpenFOAM.Extraction.Responses[0].Parameters[0].Value = "{{oc7}}";
+        Assert.That(await m_family.ValidateAsync(options, m_blobs), Is.EqualTo(new[] { "Response 'coeffs': token {{oc7}} is not declared by the study." }));
+    }
+
+    [Test]
     public async Task AStudyWithoutItsBlockIsRefusedTest()
     {
         Assert.That(await m_family.ValidateAsync(new SweepOptionsData(), m_blobs), Is.EqualTo(new[] { "The study carries no OpenFOAM block." }));

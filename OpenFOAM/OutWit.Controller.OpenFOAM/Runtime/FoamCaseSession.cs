@@ -75,7 +75,7 @@ public sealed class FoamCaseSession
             if (rejections.Count == 0)
             {
                 rejections.AddRange(await FoamCaseMaterializer.MaterializeAsync(task, caseDirectory, BlobService, cancellationToken));
-                rejections.AddRange(FoamFunctionObjectWriter.Write(caseDirectory, task.Case?.Extraction));
+                rejections.AddRange(FoamFunctionObjectWriter.Write(caseDirectory, task.Case?.Extraction, task.Substitutions));
             }
 
             if (rejections.Count == 0)
