@@ -22,9 +22,16 @@ rules both enforce:
 (the utilities and the solver shape), `FoamRecipeRules` (steps and argument
 grammar; the kit is asked through a predicate), `FoamCasePathRules` (the base
 tree: paths inside the case, no spaces, no case-only collisions, no leftovers
-of an earlier run), `FoamResponseRules`, `FoamTemplating` (substitution and
-token coverage) and `FoamCaseRules`, the one entry that checks a case from its
-data before anything is downloaded.
+of an earlier run), `FoamResponseRules`, `FoamTemplating` (substitution on a
+file's bytes and token coverage), `FoamCaseRules`, the one entry that checks a
+case from its data before anything is downloaded, and `FoamCaseContentRules`,
+the checks that need the files' contents (run-time code, libraries outside the
+kit, includes outside the case, a decomposed-only case, a missing
+application) - applied by the node to the materialised case and by a client to
+the case the user opened. `FoamCaseText` is how every party reads a case file
+as text without losing a byte (one character per byte), and
+`FoamSolverClasses` the vocabulary of `FoamCaseData.SolverClass` with the
+class of each solver of the pinned build.
 
 All types follow the OutWit model paradigm: `ModelBase` with value-based `Is`
 comparison and `Clone`, MemoryPack-serializable with append-only layouts.

@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Text;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Model.Rules;
 using OutWit.Controller.Sweep.Interfaces;
@@ -50,7 +49,7 @@ internal sealed class SweepFamilyOpenFOAM : ISweepFamily
         foreach (var file in data.BaseFiles.Where(file => file.Templated))
         {
             var path = await blobService.GetLocalPathAsync(file.BlobId);
-            templated.Add((file.RelativePath, await File.ReadAllTextAsync(path, Encoding.UTF8)));
+            templated.Add((file.RelativePath, FoamCaseText.FromBytes(await File.ReadAllBytesAsync(path))));
         }
 
         findings.AddRange(FoamTemplating.CheckCoverage(options.Parameters.Select(parameter => parameter.Token).ToList(), templated));

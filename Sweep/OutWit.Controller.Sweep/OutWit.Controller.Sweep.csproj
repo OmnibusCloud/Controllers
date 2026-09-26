@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Sweep</ControllerName>
-    <Version>2.0.1</Version>
+    <Version>2.0.2</Version>
     <Description>Host-side orchestration of parameter studies for every solver family the host knows - CalculiX decks and OpenFOAM cases - with one activity vocabulary: validates the study and its family block up front, fans each chunk out with Grid.ForEach to the family's node activity, and harvests the results into a manifest blob after every chunk, each row the sweep's verdict and the node's own result, so partial results are first-class and progress is observable while the sweep runs. Progressive chunk sizing: the first chunk as wide as the fleet, geometric growth to a cap.</Description>
     <PackageTags>sweep;parameter-study;doe;calculix;ccx;openfoam;cfd;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>sweep-solve</ControllerFeatures>

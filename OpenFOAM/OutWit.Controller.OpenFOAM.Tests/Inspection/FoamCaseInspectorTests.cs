@@ -1,8 +1,14 @@
+using System.Text;
 using OutWit.Controller.OpenFOAM.Inspection;
 using OutWit.Controller.OpenFOAM.Tests.Utils;
 
 namespace OutWit.Controller.OpenFOAM.Tests.Inspection;
 
+/// <summary>
+/// The node's side of the run-time code rules: reading the materialised case
+/// the way the rules expect it. The rules themselves are tested in
+/// <c>FoamCaseContentRulesTests</c>.
+/// </summary>
 [TestFixture]
 public class FoamCaseInspectorTests
 {
@@ -28,9 +34,14 @@ public class FoamCaseInspectorTests
 
     private void Write(string relative, string text)
     {
+        WriteBytes(relative, Encoding.ASCII.GetBytes(text));
+    }
+
+    private void WriteBytes(string relative, byte[] bytes)
+    {
         var path = Path.Combine(m_case, relative.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, text);
+        File.WriteAllBytes(path, bytes);
     }
 
     #endregion
@@ -41,117 +52,55 @@ public class FoamCaseInspectorTests
     public void APlainCaseHasNoFindingsTest()
     {
         Assert.That(FoamCaseInspector.Inspect(m_case), Is.Empty);
-        Assert.That(FoamCaseInspector.ReadApplication(m_case), Is.EqualTo("simpleFoam"));
     }
 
     [Test]
-    public void CodeStreamIsRefusedWithFileAndLineTest()
+    public void AFindingNamesTheRelativePathWithForwardSlashesAndTheLineTest()
     {
-        Write("0/p", "internalField #codeStream\n{\n    code #{ os << 0; #};\n};\n");
+        Write("0/include/p", "x 1;\ninternalField #codeStream { code #{ #}; };\n");
 
         var findings = FoamCaseInspector.Inspect(m_case);
 
         Assert.That(findings, Has.Exactly(1).Items);
-        Assert.That(findings[0], Does.StartWith("0/p:1:").And.Contain("codeStream"));
+        Assert.That(findings[0], Does.StartWith("0/include/p:2:"));
     }
 
     [Test]
-    public void CalcAndCodedEntriesAreRefusedButEvalIsNotTest()
+    public void ABytePastAsciiInACommentDoesNotHideAFindingTest()
     {
-        Write("system/blockMeshDict", "x 1;\ny #eval{ $x * 2 };\nz #calc \"$x * 3\";\n");
-        Write("0/T", "boundaryField { wall { type codedFixedValue; } }\n");
-        Write("system/functions", "f1 { type coded; name f1; }\n");
+        // A Latin-1 comment is not UTF-8; the file is still read and its line counted.
+        var head = new byte[] { (byte)'/', (byte)'/', (byte)' ', 0xE9, 0xC3, 0x28, (byte)'\n' };
+        WriteBytes("system/fvSolution", head.Concat(Encoding.ASCII.GetBytes("x #calc \"1+1\";\n")).ToArray());
 
         var findings = FoamCaseInspector.Inspect(m_case);
 
-        Assert.That(findings, Has.Count.EqualTo(3));
-        Assert.That(findings, Has.Some.StartsWith("system/blockMeshDict:3:").And.Some.Contains("#calc"));
-        Assert.That(findings, Has.Some.StartsWith("0/T:1:"));
-        Assert.That(findings, Has.Some.StartsWith("system/functions:1:"));
+        Assert.That(findings, Has.Exactly(1).Items);
+        Assert.That(findings[0], Does.StartWith("system/fvSolution:2:").And.Contain("#calc"));
     }
 
     [Test]
-    public void CommentedOutCodeIsNotAFindingTest()
+    public void TheKitLibraryQuestionIsPassedThroughTest()
     {
-        Write("system/fvSolution", "// codeStream was here once\n/* #calc \"x\" */\nsolvers { }\n");
+        Write("system/controlDict", "application simpleFoam;\nlibs (\"libmyBCs.so\");\n");
 
-        Assert.That(FoamCaseInspector.Inspect(m_case), Is.Empty);
+        Assert.That(FoamCaseInspector.Inspect(m_case, _ => true), Is.Empty);
+        Assert.That(FoamCaseInspector.Inspect(m_case, _ => false), Has.Some.Contains("libmyBCs.so"));
     }
 
     [Test]
-    public void LibrariesOutsideTheKitAndIncludesOutsideTheCaseAreRefusedTest()
-    {
-        Write("system/controlDict", "application simpleFoam;\nlibs (\"libmyBCs.so\" \"libfieldFunctionObjects.so\");\n#include \"/home/user/common\"\n#include \"$FOAM_CASE/system/local\"\n#includeEtc \"caseDicts/setConstraintTypes\"\n#include \"../shared/dict\"\n");
-
-        var findings = FoamCaseInspector.Inspect(m_case, library => library.Contains("fieldFunctionObjects", StringComparison.Ordinal));
-
-        Assert.That(findings, Has.Count.EqualTo(3));
-        Assert.That(findings, Has.Some.Contains("libmyBCs.so"));
-        Assert.That(findings, Has.Some.Contains("/home/user/common"));
-        Assert.That(findings, Has.Some.Contains("../shared/dict"));
-    }
-
-    [Test]
-    public void EveryIncludeDirectiveIsCheckedAndTheCasePrefixDoesNotHideAnEscapeTest()
-    {
-        Write("system/fvSolution",
-            "#include \"$FOAM_CASE/../shared/solution\"\n" +
-            "#include \"${FOAM_CASE}/system/local\"\n" +
-            "#sinclude \"../optional/dict\"\n" +
-            "#includeIfPresent \"<case>/system/present\"\n" +
-            "#includeIfPresent \"<case>/../absent\"\n" +
-            "#includeEtc \"../etc/escape\"\n" +
-            "#includeEtc \"caseDicts/setConstraintTypes\"\n" +
-            "#include \"$HOME/.OpenFOAM/dict\"\n" +
-            "#include \"~OpenFOAM/dict\"\n" +
-            "#include \"<etc>/caseDicts/x\"\n" +
-            "solvers { }\n");
-
-        var findings = FoamCaseInspector.Inspect(m_case);
-
-        Assert.That(findings, Has.Count.EqualTo(7));
-        Assert.That(findings, Has.Some.Contains("$FOAM_CASE/../shared/solution").And.Some.Contains("#include"));
-        Assert.That(findings, Has.Some.Contains("../optional/dict").And.Some.Contains("#sinclude"));
-        Assert.That(findings, Has.Some.Contains("<case>/../absent").And.Some.Contains("#includeIfPresent"));
-        Assert.That(findings, Has.Some.Contains("../etc/escape").And.Some.Contains("#includeEtc"));
-        Assert.That(findings, Has.Some.Contains("$HOME/.OpenFOAM/dict"));
-        Assert.That(findings, Has.Some.Contains("~OpenFOAM/dict"));
-        Assert.That(findings, Has.Some.Contains("<etc>/caseDicts/x"));
-        Assert.That(findings, Has.None.Contains("system/local").And.None.Contains("system/present").And.None.Contains("setConstraintTypes"));
-    }
-
-    [Test]
-    public void TheCaseRuleIsAnsweredForATargetAloneTest()
-    {
-        Assert.That(FoamCaseInspector.StaysInsideTheCase("system/local"), Is.True);
-        Assert.That(FoamCaseInspector.StaysInsideTheCase("$FOAM_CASE/system/local"), Is.True);
-        Assert.That(FoamCaseInspector.StaysInsideTheCase("<case>/0/U"), Is.True);
-        Assert.That(FoamCaseInspector.StaysInsideTheCase("$FOAM_CASE/../x"), Is.False);
-        Assert.That(FoamCaseInspector.StaysInsideTheCase("$FOAM_CASE"), Is.False, "the bare variable is not a file");
-        Assert.That(FoamCaseInspector.StaysInsideTheCase("$FOAM_CASE/$WM_PROJECT_DIR/x"), Is.False);
-        Assert.That(FoamCaseInspector.StaysInsideTheCase("/abs/x"), Is.False);
-        Assert.That(FoamCaseInspector.StaysInsideTheCase("C:/x"), Is.False);
-        Assert.That(FoamCaseInspector.StaysInsideTheCase(string.Empty), Is.False);
-    }
-
-    [Test]
-    public void ADecomposedOnlyCaseAndAMissingApplicationAreRefusedTest()
+    public void ADecomposedOnlyCaseIsRefusedTest()
     {
         Directory.Delete(Path.Combine(m_case, "0"), recursive: true);
-        Directory.CreateDirectory(Path.Combine(m_case, "processor0", "0"));
-        Directory.CreateDirectory(Path.Combine(m_case, "processor1", "0"));
-        Write("system/controlDict", "startTime 0;\n");
+        Write("processor0/0/U", "internalField uniform (0 0 0);\n");
+        Write("processor1/0/U", "internalField uniform (0 0 0);\n");
 
-        var findings = FoamCaseInspector.Inspect(m_case);
-
-        Assert.That(findings, Has.Some.Contains("decomposed only"));
-        Assert.That(findings, Has.Some.Contains("no 'application' entry"));
+        Assert.That(FoamCaseInspector.Inspect(m_case), Has.Some.Contains("decomposed only"));
     }
 
     [Test]
-    public void ADynamicCodeDirectoryIsRefusedTest()
+    public void AFileUnderDynamicCodeIsRefusedTest()
     {
-        Directory.CreateDirectory(Path.Combine(m_case, "dynamicCode", "x"));
+        Write("dynamicCode/x/code.C", "int main() {}\n");
 
         Assert.That(FoamCaseInspector.Inspect(m_case), Has.Some.StartsWith("dynamicCode/"));
     }

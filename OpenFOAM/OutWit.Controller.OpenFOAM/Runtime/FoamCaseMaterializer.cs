@@ -1,4 +1,3 @@
-using System.Text;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Model.Rules;
 using OutWit.Engine.Interfaces;
@@ -69,13 +68,15 @@ public static class FoamCaseMaterializer
                 continue;
             }
 
-            var text = await File.ReadAllTextAsync(source, Encoding.UTF8, cancellationToken);
-            var instantiated = FoamTemplating.Substitute(text, task.Substitutions);
-            var leftovers = FoamTemplating.LeftoverTokens(instantiated);
+            // Bytes in, bytes out: only the tokens change, whatever the file's
+            // encoding, byte order mark or line endings.
+            var content = await File.ReadAllBytesAsync(source, cancellationToken);
+            var instantiated = FoamTemplating.Substitute(content, task.Substitutions);
+            var leftovers = FoamTemplating.LeftoverTokens(FoamCaseText.FromBytes(instantiated));
             foreach (var token in leftovers)
                 findings.Add($"{file.RelativePath}: token {token} has no value in this variant.");
 
-            await File.WriteAllTextAsync(target, instantiated, new UTF8Encoding(false), cancellationToken);
+            await File.WriteAllBytesAsync(target, instantiated, cancellationToken);
         }
 
         return findings;
