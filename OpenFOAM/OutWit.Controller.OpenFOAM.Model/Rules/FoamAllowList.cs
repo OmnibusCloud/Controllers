@@ -4,14 +4,30 @@ namespace OutWit.Controller.OpenFOAM.Model.Rules;
 
 /// <summary>
 /// What a recipe may run. Utilities by name; solvers by shape (a kit
-/// executable whose name ends in <c>Foam</c>). Nothing else: no shell, no
-/// script, no utility outside this list, however useful - a case that needs
-/// one is refused by name, which is the honest answer before a node would
-/// fail on it anyway. Published in the supported-inputs document.
+/// executable whose name ends in <c>Foam</c>); and the controller's own
+/// steps, which no kit carries. Nothing else: no shell, no script, no utility
+/// outside this list, however useful - a case that needs one is refused by
+/// name, which is the honest answer before a node would fail on it anyway.
+/// Published in the supported-inputs document.
 /// </summary>
 public static class FoamAllowList
 {
     #region Constants
+
+    /// <summary>
+    /// The controller's step that puts the initial fields into every
+    /// processor directory (<c>restore0Dir -processor</c>, named as OpenFOAM's
+    /// <c>RunFunctions</c> name it): what a case needs after it is meshed on
+    /// the decomposed case, where <c>decomposePar</c> split the fields over
+    /// the background mesh.
+    /// </summary>
+    public const string RESTORE_INITIAL_FIELDS = "restore0Dir";
+
+    /// <summary>The one form of <see cref="RESTORE_INITIAL_FIELDS"/>: into the processor directories.</summary>
+    public const string PROCESSOR_FORM = "-processor";
+
+    /// <summary>The steps the controller does itself: no kit executable, never under MPI.</summary>
+    public static readonly IReadOnlyList<string> BUILT_IN_STEPS = [RESTORE_INITIAL_FIELDS];
 
     /// <summary>The utilities of version 1, in the order they usually run.</summary>
     public static readonly IReadOnlyList<string> UTILITIES =
@@ -90,6 +106,16 @@ public static class FoamAllowList
     public static bool IsUtility(string utility)
     {
         return UTILITY_SET.Contains(utility);
+    }
+
+    /// <summary>
+    /// Whether the name is one of the controller's own steps.
+    /// </summary>
+    /// <param name="name">The step's name.</param>
+    /// <returns>True for a built-in step.</returns>
+    public static bool IsBuiltIn(string name)
+    {
+        return BUILT_IN_STEPS.Contains(name, StringComparer.Ordinal);
     }
 
     /// <summary>

@@ -17,6 +17,8 @@ public static class FoamRecipeRules
     /// <summary>Upper bound on the steps of one recipe; a longer one is a script, not a recipe.</summary>
     public const int MAX_STEPS = 32;
 
+    private const string DECOMPOSE = "decomposePar";
+
     /// <summary>A flag: a dash, a letter, then letters, digits or dashes.</summary>
     private static readonly Regex FLAG = new("^-[A-Za-z][A-Za-z0-9-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -65,7 +67,14 @@ public static class FoamRecipeRules
             findings.Add($"The recipe has {recipe.Steps.Count} steps; at most {MAX_STEPS} are allowed.");
 
         for (var index = 0; index < recipe.Steps.Count; index++)
-            ValidateStep(recipe.Steps[index], $"Step {index + 1}", hasExecutable, findings);
+        {
+            var step = recipe.Steps[index];
+            ValidateStep(step, $"Step {index + 1}", hasExecutable, findings);
+
+            // The controller's restore puts the fields into processor directories: a decomposition must have made them.
+            if (step.Utility == FoamAllowList.RESTORE_INITIAL_FIELDS && recipe.Steps.Take(index).All(before => before.Utility != DECOMPOSE))
+                findings.Add($"Step {index + 1}: {FoamAllowList.RESTORE_INITIAL_FIELDS} {FoamAllowList.PROCESSOR_FORM} needs a {DECOMPOSE} step before it.");
+        }
 
         if (recipe.Steps.Count > 0
             && !string.IsNullOrEmpty(recipe.Application)
@@ -104,6 +113,12 @@ public static class FoamRecipeRules
         if (!WORD.IsMatch(name))
         {
             findings.Add($"{prefix}: '{name}' is not a utility name.");
+            return;
+        }
+
+        if (FoamAllowList.IsBuiltIn(name))
+        {
+            ValidateBuiltIn(step, prefix, findings);
             return;
         }
 
@@ -147,6 +162,18 @@ public static class FoamRecipeRules
             else if (FoamCasePathRules.IsPathEscape(argument))
                 findings.Add($"{prefix} ({name}): '{argument}' points outside the case directory.");
         }
+    }
+
+    /// <summary>The controller's own step: nothing asked of the kit, never under MPI, one form only.</summary>
+    private static void ValidateBuiltIn(FoamStepData step, string prefix, List<string> findings)
+    {
+        var name = step.Utility;
+
+        if (step.Parallel)
+            findings.Add($"{prefix}: '{name}' is done by the controller itself, never under MPI.");
+
+        if (step.Arguments is not [FoamAllowList.PROCESSOR_FORM])
+            findings.Add($"{prefix} ({name}): the only form is '{name} {FoamAllowList.PROCESSOR_FORM}'; a serial run's initial fields travel in 0/.");
     }
 
     #endregion

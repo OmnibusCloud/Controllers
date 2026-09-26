@@ -19,8 +19,11 @@ rules both enforce:
 - `FoamArtifactPolicyData` — what of the finished case travels back.
 
 `Rules/` holds what a case may be, as code every party runs: `FoamAllowList`
-(the utilities and the solver shape), `FoamRecipeRules` (steps and argument
-grammar; the kit is asked through a predicate), `FoamCasePathRules` (the base
+(the utilities, the solver shape, and the controller's own step
+`restore0Dir -processor`, which puts the initial fields into the processor
+directories of a case meshed on its decomposed form), `FoamRecipeRules`
+(steps and argument grammar, one step judged under a caller's name; the kit
+is asked through a predicate), `FoamCasePathRules` (the base
 tree: paths inside the case, no spaces, no case-only collisions, no leftovers
 of an earlier run), `FoamResponseRules`, `FoamTemplating` (substitution on a
 file's bytes and token coverage), `FoamCaseRules`, the one entry that checks a

@@ -182,4 +182,47 @@ public class FoamRecipeRulesTests
     }
 
     #endregion
+
+    #region Built-In Tests
+
+    [Test]
+    public void MeshingOnTheDecomposedCaseThenRestoringTheFieldsIsAcceptedWithoutAKitExecutableTest()
+    {
+        // The motorBike tutorial's own order: decompose the background mesh, snap in parallel, put the initial fields into the processors.
+        var recipe = new FoamRecipeData
+        {
+            Application = "simpleFoam",
+            Steps =
+            [
+                new FoamStepData { Utility = "blockMesh" },
+                new FoamStepData { Utility = "decomposePar" },
+                new FoamStepData { Utility = "snappyHexMesh", Arguments = ["-overwrite"], Parallel = true },
+                new FoamStepData { Utility = "restore0Dir", Arguments = ["-processor"] },
+                new FoamStepData { Utility = "simpleFoam", Parallel = true },
+                new FoamStepData { Utility = "reconstructParMesh", Arguments = ["-constant"] },
+                new FoamStepData { Utility = "reconstructPar", Arguments = ["-latestTime"] }
+            ]
+        };
+
+        Assert.That(FoamRecipeRules.Validate(recipe, name => name != "restore0Dir"), Is.Empty, "the controller's own step needs nothing from the kit");
+    }
+
+    [Test]
+    public void OnlyTheProcessorFormAfterADecompositionIsAcceptedTest()
+    {
+        FoamRecipeData Recipe(params FoamStepData[] steps) => new() { Application = "simpleFoam", Steps = [.. steps, new FoamStepData { Utility = "simpleFoam" }] };
+        var decompose = new FoamStepData { Utility = "decomposePar" };
+
+        var plain = FoamRecipeRules.Validate(Recipe(decompose, new FoamStepData { Utility = "restore0Dir" }));
+        var all = FoamRecipeRules.Validate(Recipe(decompose, new FoamStepData { Utility = "restore0Dir", Arguments = ["-all"] }));
+        var underMpi = FoamRecipeRules.Validate(Recipe(decompose, new FoamStepData { Utility = "restore0Dir", Arguments = ["-processor"], Parallel = true }));
+        var undecomposed = FoamRecipeRules.Validate(Recipe(new FoamStepData { Utility = "restore0Dir", Arguments = ["-processor"] }));
+
+        Assert.That(plain, Is.EqualTo(new[] { "Step 2 (restore0Dir): the only form is 'restore0Dir -processor'; a serial run's initial fields travel in 0/." }));
+        Assert.That(all, Is.EqualTo(plain));
+        Assert.That(underMpi, Is.EqualTo(new[] { "Step 2: 'restore0Dir' is done by the controller itself, never under MPI." }));
+        Assert.That(undecomposed, Is.EqualTo(new[] { "Step 1: restore0Dir -processor needs a decomposePar step before it." }));
+    }
+
+    #endregion
 }

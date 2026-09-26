@@ -46,6 +46,21 @@ leftovers of an earlier run in the base case (`log.*`, `postProcessing/`,
 collides with a file the case ships under `system/` is refused rather than
 overwritten.
 
+## The controller's own step
+
+One step of a recipe is the controller's rather than the kit's:
+`restore0Dir -processor`, named after OpenFOAM's `RunFunctions`. A case meshed
+on its decomposed form - `decomposePar` over the background mesh, then
+`snappyHexMesh` in parallel, as the motorBike tutorial does - needs its
+initial fields put into every processor directory afterwards: the fields
+`decomposePar` split were cut for a mesh that no longer exists. The step
+replaces each `processor*/0` with the initial fields: `0.orig/` when the case
+carries one, as in OpenFOAM, otherwise `0/` as it was before the first step
+(kept in `0.orig/` for the purpose). It needs a `decomposePar` before it and
+never runs under MPI; on a node without MPI the run is serial, there are no
+processor directories, and the step logs that it has nothing to do. Its log
+is `log.restore0Dir`, like any step's.
+
 ## Bundled kit
 
 The module carries pinned **OpenFOAM v2606** kits for `win-x64`, `linux-x64`
