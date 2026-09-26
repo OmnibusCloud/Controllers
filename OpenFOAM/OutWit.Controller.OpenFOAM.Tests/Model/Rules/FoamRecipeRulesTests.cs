@@ -164,4 +164,22 @@ public class FoamRecipeRulesTests
     }
 
     #endregion
+
+    #region Step Tests
+
+    [Test]
+    public void OneStepIsJudgedInTheSameWordsUnderTheCallersNameTest()
+    {
+        var allowed = FoamRecipeRules.ValidateStep(new FoamStepData { Utility = "checkMesh", Arguments = ["-writeFields", "(nonOrthoAngle)", "-constant"], Parallel = true }, "Allrun:31");
+        var outside = FoamRecipeRules.ValidateStep(new FoamStepData { Utility = "redistributePar", Arguments = ["-decompose"] }, "Allrun:12");
+        var flag = FoamRecipeRules.ValidateStep(new FoamStepData { Utility = "decomposePar", Arguments = ["-decomposeParDict", "system/decomposeParDict.6"] }, "Allrun:14");
+        var missing = FoamRecipeRules.ValidateStep(new FoamStepData { Utility = "blockMesh" }, "Allrun:9", _ => false);
+
+        Assert.That(allowed, Is.Empty);
+        Assert.That(outside, Is.EqualTo(new[] { "Allrun:12: 'redistributePar' is not on the allow-list." }));
+        Assert.That(flag, Is.EqualTo(new[] { "Allrun:14 (decomposePar): '-decomposeParDict' is decided by the controller and may not be given." }));
+        Assert.That(missing, Is.EqualTo(new[] { "Allrun:9: the kit has no 'blockMesh'." }));
+    }
+
+    #endregion
 }

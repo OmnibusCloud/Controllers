@@ -22,9 +22,10 @@ public static class FoamRecipeRules
 
     /// <summary>
     /// A value: OpenFOAM words, numbers, relative paths, lists in parentheses
-    /// and comma lists - no shell metacharacters, no quotes, no whitespace.
+    /// (<c>(nonOrthoAngle)</c>) and comma lists - no shell metacharacters, no
+    /// quotes, no whitespace.
     /// </summary>
-    private static readonly Regex VALUE = new(@"^[A-Za-z0-9_][A-Za-z0-9_.,:=+()/\-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex VALUE = new(@"^[A-Za-z0-9_(][A-Za-z0-9_.,:=+()/\-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex WORD = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -64,7 +65,7 @@ public static class FoamRecipeRules
             findings.Add($"The recipe has {recipe.Steps.Count} steps; at most {MAX_STEPS} are allowed.");
 
         for (var index = 0; index < recipe.Steps.Count; index++)
-            ValidateStep(recipe.Steps[index], index + 1, hasExecutable, findings);
+            ValidateStep(recipe.Steps[index], $"Step {index + 1}", hasExecutable, findings);
 
         if (recipe.Steps.Count > 0
             && !string.IsNullOrEmpty(recipe.Application)
@@ -74,10 +75,25 @@ public static class FoamRecipeRules
         return findings;
     }
 
-    private static void ValidateStep(FoamStepData step, int number, Func<string, bool>? hasExecutable, List<string> findings)
+    /// <summary>
+    /// Validates one step on its own, in the words <see cref="Validate"/>
+    /// uses, under the caller's name for it: a recipe says <c>Step 3</c>, a
+    /// script translated into steps names its file and line.
+    /// </summary>
+    /// <param name="step">The step.</param>
+    /// <param name="prefix">What each finding starts with (<c>Allrun:12</c>).</param>
+    /// <param name="hasExecutable">Answers whether the kit carries an executable; null skips the kit check.</param>
+    /// <returns>Findings, one sentence each; empty when the step may run.</returns>
+    public static IReadOnlyList<string> ValidateStep(FoamStepData step, string prefix, Func<string, bool>? hasExecutable = null)
+    {
+        var findings = new List<string>();
+        ValidateStep(step, prefix, hasExecutable, findings);
+        return findings;
+    }
+
+    private static void ValidateStep(FoamStepData step, string prefix, Func<string, bool>? hasExecutable, List<string> findings)
     {
         var name = step.Utility;
-        var prefix = $"Step {number}";
 
         if (string.IsNullOrEmpty(name))
         {
