@@ -48,8 +48,15 @@ public static class FoamCaseContentRules
     /// <summary>Every include directive OpenFOAM knows, quoted target captured: #include, #sinclude, #includeIfPresent, #includeFunc, #includeEtc.</summary>
     private static readonly Regex INCLUDE = new(@"#s?include(?:IfPresent|Func|Etc)?\s+""([^""]+)""", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    /// <summary>The case-root prefixes OpenFOAM expands: the rest of the path must still stay inside the case.</summary>
-    private static readonly string[] CASE_PREFIXES = ["$FOAM_CASE/", "${FOAM_CASE}/", "<case>/"];
+    /// <summary>The case-root prefixes OpenFOAM expands, with the folder each stands for: the rest of the path must still stay inside the case.</summary>
+    private static readonly (string Prefix, string Folder)[] CASE_PREFIXES =
+    [
+        ("$FOAM_CASE/", ""),
+        ("${FOAM_CASE}/", ""),
+        ("<case>/", ""),
+        ("<system>/", "system/"),
+        ("<constant>/", "constant/")
+    ];
 
     private static readonly Regex APPLICATION = new(@"(?m)^\s*application\s+([A-Za-z0-9_]+)\s*;", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -125,31 +132,50 @@ public static class FoamCaseContentRules
     }
 
     /// <summary>
-    /// Whether an include target resolves inside the case. A case-root prefix
-    /// ($FOAM_CASE/, ${FOAM_CASE}/, &lt;case&gt;/) is stripped and the rest judged
-    /// like any relative path, so "$FOAM_CASE/../x" is refused; an #includeEtc
-    /// target is a path under the kit's etc/ and is judged the same way; any
-    /// other variable or a home-relative path is refused - what it expands to
-    /// on a node is not the user's to decide.
+    /// Whether an include target resolves inside the case, the way OpenFOAM
+    /// resolves it: a case-root prefix ($FOAM_CASE/, ${FOAM_CASE}/,
+    /// &lt;case&gt;/, &lt;system&gt;/, &lt;constant&gt;/) from the case root,
+    /// any other relative path beside the including file - so
+    /// "../facesToBeRemoved" from system/ is the case root, while
+    /// "$FOAM_CASE/../x" climbs out and is refused. An #includeEtc target is a
+    /// path under the kit's etc/, judged from its root. Any other variable,
+    /// an absolute or home-relative path is refused - what it expands to on
+    /// a node is not the user's to decide.
     /// </summary>
     /// <param name="target">The quoted include target.</param>
+    /// <param name="includingFile">The including file's path in the case (forward slashes); empty for the root.</param>
     /// <returns>True when the include cannot leave the case (or the kit's etc/ for #includeEtc).</returns>
-    public static bool StaysInsideTheCase(string target)
+    public static bool StaysInsideTheCase(string target, string includingFile = "")
     {
         var path = target;
-        foreach (var prefix in CASE_PREFIXES)
+        var folder = FolderOf(includingFile);
+        foreach (var (prefix, prefixFolder) in CASE_PREFIXES)
         {
             if (path.StartsWith(prefix, StringComparison.Ordinal))
             {
                 path = path[prefix.Length..];
+                folder = prefixFolder;
                 break;
             }
         }
 
-        if (path.Length == 0 || path.StartsWith('$') || path.StartsWith('~') || path.StartsWith('<'))
+        if (path.Length == 0 || path.StartsWith('$') || path.StartsWith('~') || path.StartsWith('<') || path.StartsWith('/') || path.StartsWith('\\') || (path.Length > 1 && path[1] == ':'))
             return false;
 
-        return !FoamCasePathRules.IsPathEscape(path);
+        // Walk the folders: a '..' above the case root leaves the case.
+        var depth = 0;
+        foreach (var part in (folder + path).Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (part == "..")
+                depth--;
+            else if (part != ".")
+                depth++;
+
+            if (depth < 0)
+                return false;
+        }
+
+        return depth > 0;
     }
 
     private static void InspectText(string relativePath, string text, Func<string, bool>? kitHasLibrary, List<string> findings)
@@ -173,7 +199,8 @@ public static class FoamCaseContentRules
         foreach (Match match in INCLUDE.Matches(text))
         {
             var target = match.Groups[1].Value;
-            if (!StaysInsideTheCase(target))
+            var directive = match.Value.Split(' ', '\t')[0];
+            if (!StaysInsideTheCase(target, directive.Contains("Etc", StringComparison.Ordinal) ? string.Empty : relativePath))
                 findings.Add($"{relativePath}:{LineOf(text, match.Index)}: {match.Value.Split(' ', '\t')[0]} \"{target}\" reaches outside the case.");
         }
     }
@@ -196,6 +223,13 @@ public static class FoamCaseContentRules
         }
 
         return !relativePath.Contains(POLY_MESH_SEGMENT, StringComparison.Ordinal);
+    }
+
+    /// <summary>The folder of a file with its trailing slash; empty at the root.</summary>
+    private static string FolderOf(string relativePath)
+    {
+        var slash = relativePath.LastIndexOf('/');
+        return slash < 0 ? string.Empty : relativePath[..(slash + 1)];
     }
 
     private static string FirstSegment(string relativePath)

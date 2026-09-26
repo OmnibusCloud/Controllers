@@ -77,7 +77,7 @@ public class FoamCaseContentRulesTests
     [Test]
     public void LibrariesOutsideTheKitAndIncludesOutsideTheCaseAreRefusedTest()
     {
-        var controlDict = "application simpleFoam;\nlibs (\"libmyBCs.so\" \"libfieldFunctionObjects.so\");\n#include \"/home/user/common\"\n#include \"$FOAM_CASE/system/local\"\n#includeEtc \"caseDicts/setConstraintTypes\"\n#include \"../shared/dict\"\n";
+        var controlDict = "application simpleFoam;\nlibs (\"libmyBCs.so\" \"libfieldFunctionObjects.so\");\n#include \"/home/user/common\"\n#include \"$FOAM_CASE/system/local\"\n#includeEtc \"caseDicts/setConstraintTypes\"\n#include \"../../shared/dict\"\n";
 
         var findings = FoamCaseContentRules.Inspect(
             PlainCaseWith(("system/controlDict", controlDict)),
@@ -86,7 +86,7 @@ public class FoamCaseContentRulesTests
         Assert.That(findings, Has.Count.EqualTo(3));
         Assert.That(findings, Has.Some.Contains("libmyBCs.so"));
         Assert.That(findings, Has.Some.Contains("/home/user/common"));
-        Assert.That(findings, Has.Some.Contains("../shared/dict"));
+        Assert.That(findings, Has.Some.Contains("../../shared/dict"));
     }
 
     [Test]
@@ -95,7 +95,7 @@ public class FoamCaseContentRulesTests
         var fvSolution =
             "#include \"$FOAM_CASE/../shared/solution\"\n" +
             "#include \"${FOAM_CASE}/system/local\"\n" +
-            "#sinclude \"../optional/dict\"\n" +
+            "#sinclude \"../../optional/dict\"\n" +
             "#includeIfPresent \"<case>/system/present\"\n" +
             "#includeIfPresent \"<case>/../absent\"\n" +
             "#includeEtc \"../etc/escape\"\n" +
@@ -109,7 +109,7 @@ public class FoamCaseContentRulesTests
 
         Assert.That(findings, Has.Count.EqualTo(7));
         Assert.That(findings, Has.Some.Contains("$FOAM_CASE/../shared/solution").And.Some.Contains("#include"));
-        Assert.That(findings, Has.Some.Contains("../optional/dict").And.Some.Contains("#sinclude"));
+        Assert.That(findings, Has.Some.Contains("../../optional/dict").And.Some.Contains("#sinclude"));
         Assert.That(findings, Has.Some.Contains("<case>/../absent").And.Some.Contains("#includeIfPresent"));
         Assert.That(findings, Has.Some.Contains("../etc/escape").And.Some.Contains("#includeEtc"));
         Assert.That(findings, Has.Some.Contains("$HOME/.OpenFOAM/dict"));
@@ -130,6 +130,33 @@ public class FoamCaseContentRulesTests
         Assert.That(FoamCaseContentRules.StaysInsideTheCase("/abs/x"), Is.False);
         Assert.That(FoamCaseContentRules.StaysInsideTheCase("C:/x"), Is.False);
         Assert.That(FoamCaseContentRules.StaysInsideTheCase(string.Empty), Is.False);
+    }
+
+    [Test]
+    public void AnIncludeIsJudgedFromTheFileThatIncludesItTest()
+    {
+        // OpenFOAM reads a relative include beside the including file, and
+        // <system>/, <constant>/ from the case root (tutorials of v2606 do both).
+        Assert.Multiple(() =>
+        {
+            Assert.That(FoamCaseContentRules.StaysInsideTheCase("../facesToBeRemoved", "system/faceSetDict"), Is.True);
+            Assert.That(FoamCaseContentRules.StaysInsideTheCase("../../system/common", "0.orig/include/initialConditions"), Is.True);
+            Assert.That(FoamCaseContentRules.StaysInsideTheCase("../../x", "system/faceSetDict"), Is.False);
+            Assert.That(FoamCaseContentRules.StaysInsideTheCase("<constant>/caseSettings", "0.orig/U"), Is.True);
+            Assert.That(FoamCaseContentRules.StaysInsideTheCase("<system>/decomposeConstraints", "system/decomposeParDict"), Is.True);
+            Assert.That(FoamCaseContentRules.StaysInsideTheCase("<system>/../../x", "system/decomposeParDict"), Is.False);
+        });
+    }
+
+    [Test]
+    public void CaseRootTagsAndIncludesBesideTheFileAreNoFindingTest()
+    {
+        var findings = FoamCaseContentRules.Inspect(PlainCaseWith(
+            ("system/faceSetDict", "#include \"../facesToBeRemoved\"\n"),
+            ("0/include/fixedInlet", "#include \"<constant>/caseSettings\"\n#include \"../../system/common\"\n"),
+            ("system/decomposeParDict", "#include \"<system>/decomposeConstraints\"\n#includeEtc \"caseDicts/mesh/generation/meshQualityDict.cfg\"\n")));
+
+        Assert.That(findings, Is.Empty);
     }
 
     [Test]
