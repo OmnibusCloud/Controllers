@@ -1,4 +1,5 @@
 using OutWit.Controller.OpenFOAM.Model;
+using OutWit.Controller.OpenFOAM.Model.Rules;
 using OutWit.Controller.OpenFOAM.Runtime;
 
 namespace OutWit.Controller.OpenFOAM.Tests.Runtime;
@@ -46,6 +47,14 @@ public class FoamWorkEstimateTests
         Assert.That(FoamWorkEstimate.Estimate(new FoamCaseData { CellCount = 200_000, SolverClass = "" }), Is.EqualTo(2.0).Within(1e-12));
         Assert.That(FoamWorkEstimate.Estimate(new FoamCaseData { CellCount = 0, SolverClass = "incompressible-steady" }), Is.EqualTo(FoamWorkEstimate.UNKNOWN));
         Assert.That(FoamWorkEstimate.Estimate(null), Is.EqualTo(FoamWorkEstimate.UNKNOWN), "a task without a case");
+    }
+
+    [Test]
+    public void EveryClassOfTheSharedVocabularyHasAFactorTest()
+    {
+        // The initiator names the class from the Model's vocabulary; a class
+        // the estimate did not know would silently cost as steady.
+        Assert.That(FoamWorkEstimate.SOLVER_CLASS_FACTORS.Keys, Is.EquivalentTo(FoamSolverClasses.ALL));
     }
 
     #endregion

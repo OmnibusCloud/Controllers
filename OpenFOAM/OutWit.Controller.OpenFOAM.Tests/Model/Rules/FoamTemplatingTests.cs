@@ -1,3 +1,4 @@
+using System.Text;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Model.Rules;
 
@@ -96,6 +97,42 @@ public class FoamTemplatingTests
             "Token {{oc1}} has more than one value in this variant."
         }));
         Assert.That(FoamTemplating.CheckSubstitutions([new FoamTokenValueData { Token = "{{oc7}}", Value = "7" }]), Is.Empty);
+    }
+
+    #endregion
+
+    #region Byte Substitution Tests
+
+    [Test]
+    public void EveryByteOutsideTheTokensSurvivesTest()
+    {
+        // A BOM, a Latin-1 comment, a sequence that is not UTF-8 and CRLF
+        // endings: none of them is a token, so none of them may change.
+        var head = new byte[] { 0xEF, 0xBB, 0xBF, (byte)'/', (byte)'/', (byte)' ', (byte)'R', 0xE9, (byte)'f', 0xC3, 0x28, 0x0D, 0x0A };
+        var body = Encoding.ASCII.GetBytes("nu {{oc1}};\r\n");
+        var content = head.Concat(body).ToArray();
+
+        var result = FoamTemplating.Substitute(content, [new FoamTokenValueData { Token = "{{oc1}}", Value = "1.5e-05" }]);
+
+        Assert.That(result, Is.EqualTo(head.Concat(Encoding.ASCII.GetBytes("nu 1.5e-05;\r\n")).ToArray()));
+    }
+
+    [Test]
+    public void BytesWithoutTokensComeBackUnchangedTest()
+    {
+        var content = Enumerable.Range(0, 256).Select(value => (byte)value).ToArray();
+
+        Assert.That(FoamTemplating.Substitute(content, [new FoamTokenValueData { Token = "{{oc1}}", Value = "7" }]), Is.EqualTo(content));
+    }
+
+    [Test]
+    public void ANonAsciiValueIsWrittenAsUtf8Test()
+    {
+        var content = Encoding.ASCII.GetBytes("name {{oc1}};");
+
+        var result = FoamTemplating.Substitute(content, [new FoamTokenValueData { Token = "{{oc1}}", Value = "café" }]);
+
+        Assert.That(result, Is.EqualTo(Encoding.UTF8.GetBytes("name café;")));
     }
 
     #endregion

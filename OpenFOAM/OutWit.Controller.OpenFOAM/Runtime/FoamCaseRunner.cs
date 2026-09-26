@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.OpenFOAM.Model;
+using OutWit.Controller.OpenFOAM.Model.Rules;
 
 namespace OutWit.Controller.OpenFOAM.Runtime;
 
@@ -9,7 +10,9 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 /// ending the run. Parallel steps go through the kit's MPI launcher with
 /// <c>-parallel</c> appended; on a node without a launcher they run
 /// serially and the decomposition steps are skipped, so the case still
-/// produces a result there.
+/// produces a result there. The controller's own step
+/// (<c>restore0Dir -processor</c>) runs in-process through
+/// <see cref="FoamInitialFields"/>, with a log like any step's.
 /// </summary>
 public sealed class FoamCaseRunner
 {
@@ -59,6 +62,10 @@ public sealed class FoamCaseRunner
         else if (recipe.Steps.Any(step => step.Parallel))
             Logger?.LogInformation("Foam.Run: no MPI launcher on this node ({Platform}) - the parallel steps run serially.", Kit.Platform);
 
+        // A restore into the processor directories restores the fields as they were before any step ran.
+        if (parallel && recipe.Steps.Any(step => FoamAllowList.IsBuiltIn(step.Utility)))
+            FoamInitialFields.Keep(CaseDirectory);
+
         var report = new FoamRunReport();
         var logCounts = new Dictionary<string, int>(StringComparer.Ordinal);
 
@@ -73,15 +80,17 @@ public sealed class FoamCaseRunner
             }
 
             var runParallel = parallel && step.Parallel;
-            var (fileName, arguments) = CommandLine(step, runParallel);
+            var builtIn = FoamAllowList.IsBuiltIn(step.Utility);
             var logPath = Path.Combine(CaseDirectory, LogName(step.Utility, logCounts));
 
-            var outcome = await FoamProcessRunner.RunAsync(fileName, arguments, CaseDirectory, Environment, logPath, cancellationToken);
+            var outcome = builtIn
+                ? FoamInitialFields.RestoreIntoProcessors(CaseDirectory, logPath, decomposed: parallel)
+                : await RunProcessAsync(step, runParallel, logPath, cancellationToken);
 
             report.Add(step, new FoamStepOutcomeData
             {
                 Utility = step.Utility,
-                Ranks = runParallel ? Ranks : 1,
+                Ranks = builtIn ? 0 : runParallel ? Ranks : 1,
                 ExitCode = outcome.ExitCode,
                 Seconds = outcome.ElapsedSeconds
             }, logPath);
@@ -96,6 +105,12 @@ public sealed class FoamCaseRunner
         }
 
         return report;
+    }
+
+    private Task<FoamRunOutcome> RunProcessAsync(FoamStepData step, bool parallel, string logPath, CancellationToken cancellationToken)
+    {
+        var (fileName, arguments) = CommandLine(step, parallel);
+        return FoamProcessRunner.RunAsync(fileName, arguments, CaseDirectory, Environment, logPath, cancellationToken);
     }
 
     /// <summary>

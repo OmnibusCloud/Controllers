@@ -8,3 +8,5 @@ Visualization/**/Runner/*.py text eol=lf
 Visualization/**/Plugins/*.py text eol=lf
 # Shell scripts run by bash on every platform (git-bash on Windows): always LF
 *.sh text eol=lf
+# OpenFOAM test cases: dictionaries as OpenFOAM writes them, LF on every checkout
+OpenFOAM/**/Fixtures/** text eol=lf

@@ -279,4 +279,106 @@ public class FoamCaseRunnerTests
     }
 
     #endregion
+
+    #region Restore Tests
+
+    private const string INITIAL_U = "FoamFile { class volVectorField; object U; }\ninternalField uniform (5 0 0);\nboundaryField { \".*\" { type zeroGradient; } }\n";
+
+    private const string INITIAL_P = "FoamFile { class volScalarField; object p; }\ninternalField uniform 0;\nboundaryField { \".*\" { type zeroGradient; } }\n";
+
+    private static FoamRecipeData RestoringRecipe()
+    {
+        return new FoamRecipeData
+        {
+            Application = "simpleFoam",
+            Steps =
+            [
+                new FoamStepData { Utility = "decomposePar" },
+                new FoamStepData { Utility = "restore0Dir", Arguments = ["-processor"] },
+                new FoamStepData { Utility = "simpleFoam", Parallel = true }
+            ]
+        };
+    }
+
+    private void WriteCaseFile(string relativePath, string text)
+    {
+        var path = Path.Combine(m_case, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path) ?? m_case);
+        File.WriteAllText(path, text);
+    }
+
+    private string ReadCaseFile(string relativePath)
+    {
+        return File.ReadAllText(Path.Combine(m_case, relativePath));
+    }
+
+    [Test]
+    public async Task TheControllerPutsTheInitialFieldsIntoEveryProcessorTest()
+    {
+        var kit = RequireFakeKit().ResolveWithLauncher();
+        Assume.That(kit.SupportsParallel, Is.True);
+
+        // Every fake step writes <ITERATIONS>/U, so with none it overwrites 0/U - as a step that writes the fields would.
+        WriteCaseFile("system/fake", "ITERATIONS=0\n");
+        WriteCaseFile("0/U", INITIAL_U);
+        WriteCaseFile("0/p", INITIAL_P);
+        // What decomposePar left over the background mesh: fields the snapped mesh no longer fits.
+        WriteCaseFile("processor0/0/U", "stale U of the background mesh");
+        WriteCaseFile("processor0/0/cellLevel", "left by the meshing");
+        WriteCaseFile("processor1/constant/polyMesh/owner", "mesh");
+        var runner = new FoamCaseRunner(kit, m_case, kit.EnvironmentFor(m_scratch), ranks: 2);
+
+        var report = await runner.RunAsync(RestoringRecipe());
+
+        Assert.That(report.Succeeded, Is.True, report.LogTail);
+        Assert.That(report.Steps.Select(step => (step.Utility, step.Ranks)), Is.EqualTo(new[] { ("decomposePar", 1), ("restore0Dir", 0), ("simpleFoam", 2) }));
+        foreach (var processor in new[] { "processor0", "processor1" })
+        {
+            Assert.That(ReadCaseFile($"{processor}/0/U"), Is.EqualTo(INITIAL_U), $"{processor}: the fields as they were before the first step");
+            Assert.That(ReadCaseFile($"{processor}/0/p"), Is.EqualTo(INITIAL_P));
+        }
+
+        Assert.That(File.Exists(Path.Combine(m_case, "processor0", "0", "cellLevel")), Is.False, "the processor's 0/ is replaced, not merged");
+        Assert.That(ReadCaseFile("0.orig/U"), Is.EqualTo(INITIAL_U), "the initial fields are kept as OpenFOAM keeps them, in 0.orig/");
+        Assert.That(ReadCaseFile("log.restore0Dir"), Does.Contain("processor0").And.Contain("processor1"));
+        Assert.That(report.LogPaths, Has.Some.EndsWith("log.restore0Dir"));
+    }
+
+    [Test]
+    public async Task ACaseCarryingItsOwnOrigCopyIsRestoredFromItTest()
+    {
+        var kit = RequireFakeKit().ResolveWithLauncher();
+        Assume.That(kit.SupportsParallel, Is.True);
+        WriteCaseFile("system/fake", "ITERATIONS=3\n");
+        WriteCaseFile("0/U", "the working copy");
+        WriteCaseFile("0.orig/U", INITIAL_U);
+        WriteCaseFile("processor0/constant/polyMesh/owner", "mesh");
+        var runner = new FoamCaseRunner(kit, m_case, kit.EnvironmentFor(m_scratch), ranks: 2);
+
+        var report = await runner.RunAsync(RestoringRecipe());
+
+        Assert.That(report.Succeeded, Is.True, report.LogTail);
+        Assert.That(ReadCaseFile("processor0/0/U"), Is.EqualTo(INITIAL_U), "OpenFOAM's restore0Dir restores from 0.orig/ when the case has one");
+        Assert.That(ReadCaseFile("0/U"), Is.EqualTo("the working copy"));
+    }
+
+    [Test]
+    public async Task OnANodeWithoutMpiTheRestoreHasNothingToDoAndSaysSoTest()
+    {
+        var kit = RequireKit();
+        Assume.That(kit.SupportsParallel, Is.False, "the fake kit has no mpirun");
+        WriteCaseFile("system/fake", "ITERATIONS=2\n");
+        WriteCaseFile("0/U", INITIAL_U);
+        var runner = new FoamCaseRunner(kit, m_case, kit.EnvironmentFor(m_scratch), ranks: 4);
+
+        var report = await runner.RunAsync(RestoringRecipe());
+
+        Assert.That(report.Succeeded, Is.True, report.LogTail);
+        Assert.That(report.Steps.Select(step => (step.Utility, step.Ranks, step.ExitCode)), Is.EqualTo(new[] { ("decomposePar", 0, 0), ("restore0Dir", 0, 0), ("simpleFoam", 1, 0) }));
+        Assert.That(Directory.EnumerateDirectories(m_case, "processor*"), Is.Empty);
+        Assert.That(ReadCaseFile("0/U"), Is.EqualTo(INITIAL_U), "a serial run starts from 0/ as it travelled");
+        Assert.That(ReadCaseFile("log.restore0Dir"), Does.Contain("serial"));
+    }
+
+    #endregion
 }

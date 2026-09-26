@@ -79,4 +79,23 @@ public class FoamAllowListTests
     }
 
     #endregion
+
+    #region Built-In Tests
+
+    [Test]
+    public void TheControllersOwnStepIsNeitherAUtilityNorASolverTest()
+    {
+        Assert.That(FoamAllowList.BUILT_IN_STEPS, Is.EqualTo(new[] { FoamAllowList.RESTORE_INITIAL_FIELDS }));
+        Assert.That(FoamAllowList.RESTORE_INITIAL_FIELDS, Is.EqualTo("restore0Dir"), "the name OpenFOAM's RunFunctions give it, so a recipe reads like the Allrun it came from");
+        Assert.That(FoamAllowList.IsBuiltIn("restore0Dir"), Is.True);
+        Assert.That(FoamAllowList.IsBuiltIn("restore0dir"), Is.False);
+        Assert.That(FoamAllowList.IsBuiltIn("blockMesh"), Is.False);
+
+        Assert.That(FoamAllowList.IsUtility("restore0Dir"), Is.False, "no kit executable carries the name");
+        Assert.That(FoamAllowList.IsSolverName("restore0Dir"), Is.False);
+        Assert.That(FoamAllowList.IsParallelCapable("restore0Dir"), Is.False, "the controller does it once, not under MPI");
+        Assert.That(FoamAllowList.UTILITIES, Has.No.Member("restore0Dir"));
+    }
+
+    #endregion
 }

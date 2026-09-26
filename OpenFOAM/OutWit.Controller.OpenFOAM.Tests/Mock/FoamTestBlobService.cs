@@ -74,6 +74,21 @@ internal sealed class FoamTestBlobService : IWitBlobService
         return blobId;
     }
 
+    /// <summary>
+    /// Registers bytes as a blob, exactly as given.
+    /// </summary>
+    /// <param name="bytes">The file's bytes.</param>
+    /// <param name="extension">Extension for the stored copy.</param>
+    /// <returns>The blob id.</returns>
+    public Guid AddBytes(byte[] bytes, string extension = ".bin")
+    {
+        var blobId = Guid.NewGuid();
+        var path = Path.Combine(m_storagePath, $"{blobId:N}{extension}");
+        File.WriteAllBytes(path, bytes);
+        m_blobPaths[blobId] = path;
+        return blobId;
+    }
+
     public string GetStoredPath(Guid blobId)
     {
         return m_blobPaths[blobId];

@@ -1,3 +1,4 @@
+using System.Text;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Mock;
@@ -75,6 +76,39 @@ public class FoamCaseMaterializerTests
         Assert.That(File.ReadAllText(Path.Combine(m_case, "0", "U")), Is.EqualTo("internalField uniform (12.5 0 0);\n"));
         Assert.That(File.ReadAllText(Path.Combine(m_case, "constant", "polyMesh", "points")), Is.EqualTo(binary), "a file not marked templated is copied byte for byte");
         Assert.That(File.ReadAllText(Path.Combine(m_case, "constant", "transportProperties")), Is.EqualTo("nu {{oc1}};\n"), "tokens in a file not marked templated are left alone");
+    }
+
+    [Test]
+    public async Task ATemplatedFileKeepsEveryByteOutsideItsTokensTest()
+    {
+        // A dictionary saved by a Windows editor: a BOM, a Latin-1 comment, a
+        // byte pair that is not UTF-8, CRLF endings. Only the token changes.
+        var head = new byte[] { 0xEF, 0xBB, 0xBF, (byte)'/', (byte)'/', (byte)' ', 0xE9, 0xC3, 0x28, 0x0D, 0x0A };
+        var content = head.Concat(Encoding.ASCII.GetBytes("nu {{oc1}};\r\n")).ToArray();
+        var task = new FoamTaskData
+        {
+            Case = new FoamCaseData
+            {
+                BaseFiles =
+                [
+                    new FoamFileRefData
+                    {
+                        RelativePath = "constant/transportProperties",
+                        BlobId = m_blobs.AddBytes(content),
+                        Sha256 = "n/a",
+                        Size = content.Length,
+                        Templated = true
+                    }
+                ]
+            },
+            Substitutions = [new FoamTokenValueData { Token = "{{oc1}}", Value = "2e-05" }]
+        };
+
+        var findings = await FoamCaseMaterializer.MaterializeAsync(task, m_case, m_blobs);
+
+        Assert.That(findings, Is.Empty);
+        Assert.That(File.ReadAllBytes(Path.Combine(m_case, "constant", "transportProperties")),
+            Is.EqualTo(head.Concat(Encoding.ASCII.GetBytes("nu 2e-05;\r\n")).ToArray()));
     }
 
     [Test]

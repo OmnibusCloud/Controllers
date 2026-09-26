@@ -20,6 +20,11 @@
                       ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
+  <!-- OpenFOAM cases the kit oracle runs; .gitattributes keeps them LF on every checkout. -->
+  <ItemGroup>
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ExcludedControllerModule Include="render.module" />
     <ExcludedControllerModule Include="renderdcc.module" />

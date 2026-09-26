@@ -10,8 +10,9 @@ namespace OutWit.Controller.OpenFOAM.Model.Rules;
 /// token left after substitution refuses the variant, never a dictionary with
 /// braces in it; and before a study starts,
 /// every token it declares occurs in some templated file and every token of
-/// the templated files is declared. The node substitutes; the Sweep host and
-/// the initiator check coverage with the same grammar.
+/// the templated files is declared. The node substitutes on the files' bytes
+/// (<see cref="FoamCaseText"/>), so nothing outside a token changes; the Sweep
+/// host and the initiator check coverage with the same grammar.
 /// </summary>
 public static class FoamTemplating
 {
@@ -38,14 +39,27 @@ public static class FoamTemplating
     /// <returns>The instantiated text.</returns>
     public static string Substitute(string text, IReadOnlyList<FoamTokenValueData> substitutions)
     {
-        var values = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var substitution in substitutions)
-            values.TryAdd(substitution.Token, substitution.Value);
+        return Substitute(text, ValuesOf(substitutions, value => value));
+    }
 
+    /// <summary>
+    /// Replaces every token that has a value in a file's bytes, as
+    /// <see cref="Substitute(string, IReadOnlyList{FoamTokenValueData})"/>
+    /// does in a text: the file is read through <see cref="FoamCaseText"/>, so
+    /// every byte outside the tokens comes back unchanged (a byte order mark,
+    /// a legacy code page, line endings), and each value is written as its
+    /// UTF-8 bytes.
+    /// </summary>
+    /// <param name="content">The templated file's bytes.</param>
+    /// <param name="substitutions">The variant's values; the first value of a token counts.</param>
+    /// <returns>The instantiated file's bytes.</returns>
+    public static byte[] Substitute(byte[] content, IReadOnlyList<FoamTokenValueData> substitutions)
+    {
+        var values = ValuesOf(substitutions, FoamCaseText.FromValue);
         if (values.Count == 0)
-            return text;
+            return content;
 
-        return TOKEN.Replace(text, match => values.TryGetValue(match.Value, out var value) ? value : match.Value);
+        return FoamCaseText.ToBytes(Substitute(FoamCaseText.FromBytes(content), values));
     }
 
     /// <summary>
@@ -129,6 +143,23 @@ public static class FoamTemplating
         }
 
         return findings;
+    }
+
+    private static Dictionary<string, string> ValuesOf(IReadOnlyList<FoamTokenValueData> substitutions, Func<string, string> view)
+    {
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var substitution in substitutions)
+            values.TryAdd(substitution.Token, view(substitution.Value));
+
+        return values;
+    }
+
+    private static string Substitute(string text, Dictionary<string, string> values)
+    {
+        if (values.Count == 0)
+            return text;
+
+        return TOKEN.Replace(text, match => values.TryGetValue(match.Value, out var value) ? value : match.Value);
     }
 
     #endregion

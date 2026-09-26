@@ -17,14 +17,17 @@ public static class FoamRecipeRules
     /// <summary>Upper bound on the steps of one recipe; a longer one is a script, not a recipe.</summary>
     public const int MAX_STEPS = 32;
 
+    private const string DECOMPOSE = "decomposePar";
+
     /// <summary>A flag: a dash, a letter, then letters, digits or dashes.</summary>
     private static readonly Regex FLAG = new("^-[A-Za-z][A-Za-z0-9-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
     /// A value: OpenFOAM words, numbers, relative paths, lists in parentheses
-    /// and comma lists - no shell metacharacters, no quotes, no whitespace.
+    /// (<c>(nonOrthoAngle)</c>) and comma lists - no shell metacharacters, no
+    /// quotes, no whitespace.
     /// </summary>
-    private static readonly Regex VALUE = new(@"^[A-Za-z0-9_][A-Za-z0-9_.,:=+()/\-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex VALUE = new(@"^[A-Za-z0-9_(][A-Za-z0-9_.,:=+()/\-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex WORD = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -64,7 +67,14 @@ public static class FoamRecipeRules
             findings.Add($"The recipe has {recipe.Steps.Count} steps; at most {MAX_STEPS} are allowed.");
 
         for (var index = 0; index < recipe.Steps.Count; index++)
-            ValidateStep(recipe.Steps[index], index + 1, hasExecutable, findings);
+        {
+            var step = recipe.Steps[index];
+            ValidateStep(step, $"Step {index + 1}", hasExecutable, findings);
+
+            // The controller's restore puts the fields into processor directories: a decomposition must have made them.
+            if (step.Utility == FoamAllowList.RESTORE_INITIAL_FIELDS && recipe.Steps.Take(index).All(before => before.Utility != DECOMPOSE))
+                findings.Add($"Step {index + 1}: {FoamAllowList.RESTORE_INITIAL_FIELDS} {FoamAllowList.PROCESSOR_FORM} needs a {DECOMPOSE} step before it.");
+        }
 
         if (recipe.Steps.Count > 0
             && !string.IsNullOrEmpty(recipe.Application)
@@ -74,10 +84,25 @@ public static class FoamRecipeRules
         return findings;
     }
 
-    private static void ValidateStep(FoamStepData step, int number, Func<string, bool>? hasExecutable, List<string> findings)
+    /// <summary>
+    /// Validates one step on its own, in the words <see cref="Validate"/>
+    /// uses, under the caller's name for it: a recipe says <c>Step 3</c>, a
+    /// script translated into steps names its file and line.
+    /// </summary>
+    /// <param name="step">The step.</param>
+    /// <param name="prefix">What each finding starts with (<c>Allrun:12</c>).</param>
+    /// <param name="hasExecutable">Answers whether the kit carries an executable; null skips the kit check.</param>
+    /// <returns>Findings, one sentence each; empty when the step may run.</returns>
+    public static IReadOnlyList<string> ValidateStep(FoamStepData step, string prefix, Func<string, bool>? hasExecutable = null)
+    {
+        var findings = new List<string>();
+        ValidateStep(step, prefix, hasExecutable, findings);
+        return findings;
+    }
+
+    private static void ValidateStep(FoamStepData step, string prefix, Func<string, bool>? hasExecutable, List<string> findings)
     {
         var name = step.Utility;
-        var prefix = $"Step {number}";
 
         if (string.IsNullOrEmpty(name))
         {
@@ -88,6 +113,12 @@ public static class FoamRecipeRules
         if (!WORD.IsMatch(name))
         {
             findings.Add($"{prefix}: '{name}' is not a utility name.");
+            return;
+        }
+
+        if (FoamAllowList.IsBuiltIn(name))
+        {
+            ValidateBuiltIn(step, prefix, findings);
             return;
         }
 
@@ -131,6 +162,18 @@ public static class FoamRecipeRules
             else if (FoamCasePathRules.IsPathEscape(argument))
                 findings.Add($"{prefix} ({name}): '{argument}' points outside the case directory.");
         }
+    }
+
+    /// <summary>The controller's own step: nothing asked of the kit, never under MPI, one form only.</summary>
+    private static void ValidateBuiltIn(FoamStepData step, string prefix, List<string> findings)
+    {
+        var name = step.Utility;
+
+        if (step.Parallel)
+            findings.Add($"{prefix}: '{name}' is done by the controller itself, never under MPI.");
+
+        if (step.Arguments is not [FoamAllowList.PROCESSOR_FORM])
+            findings.Add($"{prefix} ({name}): the only form is '{name} {FoamAllowList.PROCESSOR_FORM}'; a serial run's initial fields travel in 0/.");
     }
 
     #endregion

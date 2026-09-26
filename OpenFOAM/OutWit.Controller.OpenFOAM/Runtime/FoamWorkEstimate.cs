@@ -1,4 +1,5 @@
 using OutWit.Controller.OpenFOAM.Model;
+using OutWit.Controller.OpenFOAM.Model.Rules;
 
 namespace OutWit.Controller.OpenFOAM.Runtime;
 
@@ -22,16 +23,16 @@ public static class FoamWorkEstimate
     /// <summary>The estimate for a task without a cell count: one unit, like any unknown.</summary>
     public const double UNKNOWN = 1.0;
 
-    /// <summary>Cost relative to a steady incompressible run of the same mesh, by solver class.</summary>
+    /// <summary>Cost relative to a steady incompressible run of the same mesh, by solver class (the Model's vocabulary).</summary>
     public static readonly IReadOnlyDictionary<string, double> SOLVER_CLASS_FACTORS = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
     {
-        ["incompressible-steady"] = 1.0,
-        ["incompressible-transient"] = 6.0,
-        ["compressible-steady"] = 2.0,
-        ["compressible-transient"] = 10.0,
-        ["multiphase-transient"] = 12.0,
-        ["thermal-steady"] = 1.5,
-        ["thermal-transient"] = 8.0
+        [FoamSolverClasses.INCOMPRESSIBLE_STEADY] = 1.0,
+        [FoamSolverClasses.INCOMPRESSIBLE_TRANSIENT] = 6.0,
+        [FoamSolverClasses.COMPRESSIBLE_STEADY] = 2.0,
+        [FoamSolverClasses.COMPRESSIBLE_TRANSIENT] = 10.0,
+        [FoamSolverClasses.MULTIPHASE_TRANSIENT] = 12.0,
+        [FoamSolverClasses.THERMAL_STEADY] = 1.5,
+        [FoamSolverClasses.THERMAL_TRANSIENT] = 8.0
     };
 
     #endregion
