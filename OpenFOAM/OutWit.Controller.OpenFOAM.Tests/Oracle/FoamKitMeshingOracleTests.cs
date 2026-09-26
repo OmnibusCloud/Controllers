@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Mock;
@@ -27,6 +28,12 @@ public class FoamKitMeshingOracleTests
     private const string KIT_VARIABLE = FoamKitResolver.ENV_KIT_PATH;
 
     private const string FIXTURE = "SphereInBox";
+
+    /// <summary>The inlet line of the fixture's 0/U, which the test's variant templates.</summary>
+    private const string INLET = "value           uniform (1 0 0);";
+
+    /// <summary>The variant's inlet velocity: it must reach the processors through the restore.</summary>
+    private const string VARIANT_INLET = "2";
 
     #endregion
 
@@ -78,7 +85,10 @@ public class FoamKitMeshingOracleTests
             ("reconstructParMesh", 1), ("reconstructPar", 1), ("postProcess", 1)
         }));
         Assert.That(result.ResponseRow?.Values.Select(value => value.Name), Has.Some.StartsWith("sphereP."), "the solver ran with a boundary condition on the snapped sphere");
-        Assert.That(MeshBoundary(result), Does.Contain("sphere"), "the reconstructed mesh carries the patch snappyHexMesh cut");
+        Assert.That(ArtifactText(result, "constant/polyMesh/boundary"), Does.Contain("sphere"), "the reconstructed mesh carries the patch snappyHexMesh cut");
+        Assert.That(ArtifactText(result, "20/U"), Does.Contain($"uniform ({VARIANT_INLET} 0 0)"), "the variant's inlet value reached the processors through the restore");
+        Assert.That(ArtifactEntries(result).Where(entry => entry.StartsWith("0.orig/", StringComparison.Ordinal) || entry.StartsWith("processor", StringComparison.Ordinal)), Is.Empty,
+            "the kept initial fields and the decomposed case never travel back");
     }
 
     [Test]
@@ -105,7 +115,8 @@ public class FoamKitMeshingOracleTests
         Assert.That(result.Steps.Where(step => step.Ranks > 0).Select(step => step.Utility), Is.EqualTo(new[] { "blockMesh", "snappyHexMesh", "simpleFoam", "postProcess" }),
             "serially, the decomposition steps are skipped and the restore has nothing to do");
         Assert.That(result.Steps.Single(step => step.Utility == "restore0Dir").ExitCode, Is.EqualTo(0));
-        Assert.That(MeshBoundary(result), Does.Contain("sphere"));
+        Assert.That(ArtifactText(result, "constant/polyMesh/boundary"), Does.Contain("sphere"));
+        Assert.That(ArtifactText(result, "20/U"), Does.Contain($"uniform ({VARIANT_INLET} 0 0)"));
     }
 
     #endregion
@@ -132,13 +143,20 @@ public class FoamKitMeshingOracleTests
         var files = Directory.EnumerateFiles(fixture, "*", SearchOption.AllDirectories)
             .Select(file =>
             {
-                var bytes = File.ReadAllBytes(file);
+                // The inlet velocity is the variant's parameter, as a study would have it.
+                var relativePath = Path.GetRelativePath(fixture, file).Replace('\\', '/');
+                var templated = relativePath == "0/U";
+                var bytes = templated
+                    ? Encoding.ASCII.GetBytes(File.ReadAllText(file).Replace(INLET, "value           uniform ({{oc1}} 0 0);"))
+                    : File.ReadAllBytes(file);
+
                 return new FoamFileRefData
                 {
-                    RelativePath = Path.GetRelativePath(fixture, file).Replace('\\', '/'),
+                    RelativePath = relativePath,
                     BlobId = m_blobs.AddBytes(bytes),
                     Sha256 = "n/a",
-                    Size = bytes.Length
+                    Size = bytes.Length,
+                    Templated = templated
                 };
             })
             .ToList();
@@ -159,6 +177,7 @@ public class FoamKitMeshingOracleTests
         return new FoamTaskData
         {
             VariantIndex = 1,
+            Substitutions = [new FoamTokenValueData { Token = "{{oc1}}", Value = VARIANT_INLET }],
             Case = new FoamCaseData
             {
                 BaseFiles = files,
@@ -175,16 +194,27 @@ public class FoamKitMeshingOracleTests
         };
     }
 
-    /// <summary>The mesh's patch list as the result's artifact carries it.</summary>
-    private string MeshBoundary(FoamResultData result)
+    /// <summary>A file of the result's artifact, as text.</summary>
+    private string ArtifactText(FoamResultData result, string entryName)
+    {
+        using var archive = OpenArtifact(result);
+        var entry = archive.GetEntry(entryName);
+        Assert.That(entry, Is.Not.Null, $"the artifact carries {entryName}");
+
+        using var reader = new StreamReader(entry!.Open());
+        return reader.ReadToEnd();
+    }
+
+    private List<string> ArtifactEntries(FoamResultData result)
+    {
+        using var archive = OpenArtifact(result);
+        return archive.Entries.Select(entry => entry.FullName).ToList();
+    }
+
+    private ZipArchive OpenArtifact(FoamResultData result)
     {
         Assert.That(result.ArtifactBlobId, Is.Not.Null);
-        using var archive = ZipFile.OpenRead(m_blobs.GetStoredPath(result.ArtifactBlobId!.Value));
-        var boundary = archive.GetEntry("constant/polyMesh/boundary");
-        Assert.That(boundary, Is.Not.Null, "the artifact carries the mesh");
-
-        using var reader = new StreamReader(boundary!.Open());
-        return reader.ReadToEnd();
+        return ZipFile.OpenRead(m_blobs.GetStoredPath(result.ArtifactBlobId!.Value));
     }
 
     #endregion

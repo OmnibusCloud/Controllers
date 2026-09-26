@@ -14,7 +14,10 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 /// OpenFOAM; otherwise from <c>0/</c> as it was before the first step, which
 /// the runner keeps in <c>0.orig/</c> for the purpose - not a time directory,
 /// so no artifact takes it. A serial run has no processor directories, and
-/// its <c>0/</c> already holds the initial fields: nothing to do.
+/// its <c>0/</c> already holds the initial fields: nothing to do. A decomposed
+/// run without <c>processor&lt;N&gt;</c> directories (a case that sets a
+/// collated file handler) or without initial fields fails by name, before
+/// the solver would fail on it less clearly.
 /// </summary>
 public static class FoamInitialFields
 {
@@ -24,8 +27,13 @@ public static class FoamInitialFields
 
     public const string INITIAL_ORIG = "0.orig";
 
-    /// <summary>A processor directory of the uncollated layout, the only one the controller writes.</summary>
+    private const string PROCESSOR = "processor";
+
+    /// <summary>A processor directory of the uncollated layout, the one OpenFOAM writes by default.</summary>
     private static readonly Regex PROCESSOR_NAME = new(@"^processor\d+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>The collated layout's directory (<c>processors4</c>, <c>processors4_0-1</c>), written when a case sets a collated file handler.</summary>
+    private static readonly Regex COLLATED_NAME = new(@"^processors\d+(_\d+-\d+)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     #endregion
 
@@ -51,8 +59,9 @@ public static class FoamInitialFields
     /// </summary>
     /// <param name="caseDirectory">The case.</param>
     /// <param name="logPath">The step's log, written whatever happens.</param>
-    /// <returns>The step's outcome: 0 when done or when there was nothing to do.</returns>
-    public static FoamRunOutcome RestoreIntoProcessors(string caseDirectory, string logPath)
+    /// <param name="decomposed">True when the run decomposes the case; false for a serial run, which has nothing to restore into.</param>
+    /// <returns>The step's outcome: 0 when done or, serially, when there is nothing to do; 1 with the reason in the log otherwise.</returns>
+    public static FoamRunOutcome RestoreIntoProcessors(string caseDirectory, string logPath, bool decomposed)
     {
         var stopwatch = Stopwatch.StartNew();
         var log = new StringBuilder();
@@ -60,29 +69,10 @@ public static class FoamInitialFields
 
         try
         {
-            var processors = Directory.EnumerateDirectories(caseDirectory)
-                .Where(directory => PROCESSOR_NAME.IsMatch(Path.GetFileName(directory)))
-                .OrderBy(directory => int.Parse(Path.GetFileName(directory)["processor".Length..]))
-                .ToList();
-            var source = SourceOf(caseDirectory);
-
-            if (processors.Count == 0)
+            if (!decomposed)
                 log.AppendLine("No processor directories: the run is serial, and its 0/ already holds the initial fields.");
-            else if (source == null)
-                log.AppendLine("No 0.orig/ to restore...");
             else
-            {
-                log.AppendLine($"Restore 0/ from {Path.GetFileName(source)}/  [processor dirs]");
-                foreach (var processor in processors)
-                {
-                    var target = Path.Combine(processor, INITIAL);
-                    if (Directory.Exists(target))
-                        Directory.Delete(target, recursive: true);
-
-                    CopyDirectory(source, target);
-                    log.AppendLine($"    {Path.GetFileName(processor)}/{INITIAL}");
-                }
-            }
+                exitCode = Restore(caseDirectory, log);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -93,6 +83,45 @@ public static class FoamInitialFields
         var text = log.ToString();
         File.WriteAllText(logPath, text);
         return new FoamRunOutcome(exitCode, stopwatch.Elapsed.TotalSeconds, text);
+    }
+
+    /// <summary>The restore of a decomposed case; the exit code, the log written into <paramref name="log"/>.</summary>
+    private static int Restore(string caseDirectory, StringBuilder log)
+    {
+        var directories = Directory.EnumerateDirectories(caseDirectory).Select(Path.GetFileName).OfType<string>().ToList();
+        var processors = directories
+            .Where(name => PROCESSOR_NAME.IsMatch(name))
+            .OrderBy(name => int.Parse(name[PROCESSOR.Length..]))
+            .ToList();
+
+        if (processors.Count == 0)
+        {
+            var collated = directories.FirstOrDefault(name => COLLATED_NAME.IsMatch(name));
+            log.AppendLine(collated == null
+                ? "--> decomposePar made no processor directories, so there is nowhere to restore the initial fields."
+                : $"--> decomposePar wrote the collated layout ({collated}/): the case's controlDict sets a collated file handler, and the initial fields are restored into processor<N>/ directories only.");
+            return 1;
+        }
+
+        var source = SourceOf(caseDirectory);
+        if (source == null)
+        {
+            log.AppendLine("--> the case has no initial fields to restore: neither 0.orig/ nor 0/.");
+            return 1;
+        }
+
+        log.AppendLine($"Restore 0/ from {Path.GetFileName(source)}/  [processor dirs]");
+        foreach (var processor in processors)
+        {
+            var target = Path.Combine(caseDirectory, processor, INITIAL);
+            if (Directory.Exists(target))
+                Directory.Delete(target, recursive: true);
+
+            CopyDirectory(source, target);
+            log.AppendLine($"    {processor}/{INITIAL}");
+        }
+
+        return 0;
     }
 
     /// <summary>Where the initial fields are: <c>0.orig/</c>, as OpenFOAM's restore reads them; null when the case has none.</summary>

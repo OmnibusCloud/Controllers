@@ -49,7 +49,11 @@ public sealed partial class FoamStepOutcomeData : ModelBase
     [MemoryPackOrder(0)]
     public string Utility { get; set; } = string.Empty;
 
-    /// <summary>MPI ranks the step ran on; 1 for a serial step.</summary>
+    /// <summary>
+    /// MPI ranks the step ran on; 1 for a serial step; 0 for a step no
+    /// process ran - a decomposition step skipped on a serial run, or the
+    /// controller's own <c>restore0Dir</c>.
+    /// </summary>
     [MemoryPackOrder(1)]
     public int Ranks { get; set; }
 

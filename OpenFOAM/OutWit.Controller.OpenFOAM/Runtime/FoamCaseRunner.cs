@@ -84,7 +84,7 @@ public sealed class FoamCaseRunner
             var logPath = Path.Combine(CaseDirectory, LogName(step.Utility, logCounts));
 
             var outcome = builtIn
-                ? FoamInitialFields.RestoreIntoProcessors(CaseDirectory, logPath)
+                ? FoamInitialFields.RestoreIntoProcessors(CaseDirectory, logPath, decomposed: parallel)
                 : await RunProcessAsync(step, runParallel, logPath, cancellationToken);
 
             report.Add(step, new FoamStepOutcomeData

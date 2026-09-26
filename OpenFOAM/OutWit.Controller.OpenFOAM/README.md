@@ -58,8 +58,11 @@ replaces each `processor*/0` with the initial fields: `0.orig/` when the case
 carries one, as in OpenFOAM, otherwise `0/` as it was before the first step
 (kept in `0.orig/` for the purpose). It needs a `decomposePar` before it and
 never runs under MPI; on a node without MPI the run is serial, there are no
-processor directories, and the step logs that it has nothing to do. Its log
-is `log.restore0Dir`, like any step's.
+processor directories, and the step logs that it has nothing to do. A
+decomposed run without `processor<N>` directories (a case whose `controlDict`
+sets a collated file handler) or without initial fields fails at this step,
+by name. Its log is `log.restore0Dir`, like any step's; its outcome reports
+0 ranks, as a step no process ran.
 
 ## Bundled kit
 
