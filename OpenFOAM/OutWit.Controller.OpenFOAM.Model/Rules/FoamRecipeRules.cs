@@ -57,6 +57,9 @@ public static class FoamRecipeRules
 
         if (string.IsNullOrEmpty(recipe.Application))
             findings.Add("The recipe names no application.");
+        else if (FoamAllowList.IsUtility(recipe.Application))
+            findings.Add($"'{recipe.Application}' is a utility on the allow-list, not a solver: the application is the solver the case runs " +
+                         $"(controlDict's 'application', such as simpleFoam); '{recipe.Application}' runs as a step of its own.");
         else if (!FoamAllowList.IsSolverName(recipe.Application))
             findings.Add($"'{recipe.Application}' is not a solver name (a solver's name ends in 'Foam').");
         else if (hasExecutable != null && !hasExecutable(recipe.Application))
