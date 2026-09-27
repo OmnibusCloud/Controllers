@@ -21,7 +21,9 @@ namespace OutWit.Controller.Sweep.Tests.Model;
 public sealed class SweepModelWireLayoutTests
 {
     // Field counts frozen 2026-09-24 (Sweep.Model 2.0.0, the family-neutral
-    // sweep). Bump a count ONLY when appending at the end of that type.
+    // sweep); the plan's case set and its two types appended 2026-09-27
+    // (Sweep.Model 2.1.0 - the plan is written and read by the host alone).
+    // Bump a count ONLY when appending at the end of that type.
     private static readonly IReadOnlyDictionary<Type, int> EXPECTED_FIELD_COUNTS = new Dictionary<Type, int>
     {
         [typeof(SweepArtifactData)] = 3,
@@ -29,9 +31,11 @@ public sealed class SweepModelWireLayoutTests
         [typeof(SweepCalculiXStudyData)] = 6,
         [typeof(SweepManifestData)] = 1,
         [typeof(SweepManifestRowData)] = 4,
+        [typeof(SweepOpenFOAMCaseData)] = 6,
+        [typeof(SweepOpenFOAMSetData)] = 1,
         [typeof(SweepOptionsData)] = 6,
         [typeof(SweepParameterData)] = 2,
-        [typeof(SweepPlanData)] = 2,
+        [typeof(SweepPlanData)] = 3,
         [typeof(SweepResultIndexEntryData)] = 4,
         [typeof(SweepStateData)] = 7,
         [typeof(SweepVariantData)] = 2

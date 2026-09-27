@@ -44,6 +44,24 @@ public class SweepDataRoundTripTests
         };
     }
 
+    private static SweepOpenFOAMCaseData SetCase(int variantIndex, string name, long cells)
+    {
+        return new SweepOpenFOAMCaseData
+        {
+            VariantIndex = variantIndex,
+            Name = name,
+            BaseFiles = [new FoamFileRefData { RelativePath = "system/blockMeshDict", BlobId = Guid.NewGuid(), Sha256 = "0a", Size = 812 }],
+            Recipe = new FoamRecipeData { Application = "icoFoam", Steps = [new FoamStepData { Utility = "blockMesh" }, new FoamStepData { Utility = "icoFoam" }] },
+            CellCount = cells,
+            SolverClass = "incompressible-transient"
+        };
+    }
+
+    private static SweepOpenFOAMSetData CaseSet()
+    {
+        return new SweepOpenFOAMSetData { Cases = [SetCase(0, "cavity-coarse", 400), SetCase(1, "cavity-fine", 1600)] };
+    }
+
     private static T RoundTrip<T>(T value)
     {
         var restored = MemoryPackSerializer.Deserialize<T>(MemoryPackSerializer.Serialize(value));
@@ -167,6 +185,56 @@ public class SweepDataRoundTripTests
         var plan = new SweepPlanData { Options = OpenFOAMStudy(), ChunkSizes = [3, 3, 1] };
 
         Assert.That(RoundTrip(plan).Is(plan), Is.True);
+    }
+
+    [Test]
+    public void APlanWithItsCaseSetSurvivesARoundTripTest()
+    {
+        var plan = new SweepPlanData { Options = OpenFOAMStudy(), ChunkSizes = [2], OpenFOAMSet = CaseSet() };
+
+        var restored = RoundTrip(plan);
+
+        Assert.That(restored.Is(plan), Is.True);
+        Assert.That(restored.OpenFOAMSet?.Cases.Select(item => (item.VariantIndex, item.Name, item.CellCount)),
+            Is.EqualTo(new[] { (0, "cavity-coarse", 400L), (1, "cavity-fine", 1600L) }));
+        Assert.That(plan.OpenFOAMSet?.ToString(), Is.EqualTo("OpenFOAM case set: 2 case(s)"));
+    }
+
+    [Test]
+    public void AClonedCaseSetIsEqualAndIndependentTest()
+    {
+        var set = CaseSet();
+        var clone = set.Clone();
+
+        Assert.That(clone.Is(set), Is.True);
+
+        clone.Cases[1].Name = "cavity-finer";
+        clone.Cases[0].BaseFiles[0].Size = 1;
+        Assert.That(clone.Is(set), Is.False);
+        Assert.That(set.Cases[1].Name, Is.EqualTo("cavity-fine"));
+        Assert.That(set.Cases[0].BaseFiles[0].Size, Is.EqualTo(812));
+
+        var plan = new SweepPlanData { Options = OpenFOAMStudy(), ChunkSizes = [2] };
+        var withSet = plan.Clone();
+        withSet.OpenFOAMSet = set;
+        Assert.That(withSet.Is(plan), Is.False, "the case set is part of the plan");
+        Assert.That(withSet.Clone().Is(withSet), Is.True);
+    }
+
+    [Test]
+    public void APlanAnEarlierHostWroteStillReadsTest()
+    {
+        // A job planned before the upgrade holds a two-member plan: the
+        // default MemoryPack reader takes fewer members than it knows.
+        var plan = new SweepPlanData { Options = OpenFOAMStudy(), ChunkSizes = [3, 1] };
+        var bytes = MemoryPackSerializer.Serialize(plan);
+        Assert.That((bytes[0], bytes[^1]), Is.EqualTo(((byte)3, (byte)255)), "three members, the last a null case set");
+
+        var earlier = bytes[..^1];
+        earlier[0] = 2;
+
+        var restored = MemoryPackSerializer.Deserialize<SweepPlanData>(earlier);
+        Assert.That(restored?.Is(plan), Is.True);
     }
 
     #endregion

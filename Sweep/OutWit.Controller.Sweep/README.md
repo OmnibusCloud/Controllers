@@ -9,6 +9,7 @@ harvested so far observable while the sweep runs.
 |---|---|---|---|
 | CalculiX | a base deck with baked tokens (a template study), or every variant's own deck (a deck set) | `Ccx.Solve` ([`OutWit.Controller.CalculiX`](../../CalculiX/OutWit.Controller.CalculiX/README.md)) | `SweepCalculiX.wit` |
 | OpenFOAM | one case whose templated files carry the tokens | `Foam.Run` ([`OutWit.Controller.OpenFOAM`](../../OpenFOAM/OutWit.Controller.OpenFOAM/README.md)) | `SweepOpenFOAM.wit` |
+| OpenFOAM | every variant's own ready case (a case set) | `Foam.Run` | `SweepOpenFOAMSet.wit` |
 
 The study travels as `SweepOptionsData` (`OutWit.Controller.Sweep.Model`): the
 parameters, the variant table, the chunk bounds and **exactly one family
@@ -18,15 +19,23 @@ the result index - is one implementation for every family; a family is an
 chunk becomes its node activity's tasks, how a result becomes a manifest row,
 which artifacts a row offers).
 
+An OpenFOAM **case set** is a second input beside the study,
+`SweepOpenFOAMSetData`: one ready case per variant (its name, its tree, its
+recipe, its size), no tokens and no parameters. The study's OpenFOAM block then
+carries only what the cases share - threads, responses, artifacts - and the
+variants carry no values. The set is a job input of its own script rather than
+a member of the study, so the study's layout stays what every released host
+reads: a host without case sets refuses the unknown script, not every study.
+
 ## Activities (all host-side)
 
 | Activity | Purpose |
 |---|---|
-| `Sweep.Plan(opts) → SweepPlan` | Validates the study (one family block, variants present with one value per parameter and unique indices) and its family block (CalculiX: every token in the base deck, or a deck set covering every variant exactly once; OpenFOAM: the case rules of `OutWit.Controller.OpenFOAM.Model` and every token placed in a templated file, every templated token declared), naming every finding at once; then computes the progressive chunk schedule. |
+| `Sweep.Plan(opts) → SweepPlan`, `Sweep.Plan(opts, cases) → SweepPlan` | Validates the study (one family block, variants present with one value per parameter and unique indices) and its family block (CalculiX: every token in the base deck, or a deck set covering every variant exactly once; OpenFOAM: the case rules of `OutWit.Controller.OpenFOAM.Model` and every token placed in a templated file, every templated token declared; an OpenFOAM case set: every variant exactly one case, each case under the same rules and named in every finding, nothing templated, no tree or recipe in the block), naming every finding at once; then computes the progressive chunk schedule. The plan carries the case set. |
 | `Sweep.InitState(plan) → SweepState` | The zero cursor. |
 | `Sweep.ChunkCount(plan) → Int` | Loop bound of the bundled scripts. |
-| `Sweep.MakeChunk(plan, state) → <family>TaskCollection` | The next chunk's tasks, of the family's node activity: CalculiX variant decks materialised by plain token substitution (this side never parses a deck), deck-set decks as uploaded; OpenFOAM tasks as metadata only (the case and each variant's values - substitution happens on the node, so the base files travel once per node). Checks that the script's task collection holds the family's tasks and fails loudly otherwise. |
-| `Sweep.Harvest(plan, state, wave) → SweepState` | Appends the chunk's rows - the sweep's verdict (succeeded, failed, refused) and the node's own result, verbatim - to the manifest blob, and returns the advanced cursor with the counts by outcome and the result index (variant, verdict, label from the parameter values - "XMAX=300, T=250" - and the artifacts by kind: `.frd`, `.dat`, a case zip). |
+| `Sweep.MakeChunk(plan, state) → <family>TaskCollection` | The next chunk's tasks, of the family's node activity: CalculiX variant decks materialised by plain token substitution (this side never parses a deck), deck-set decks as uploaded; OpenFOAM tasks as metadata only (the case and each variant's values - substitution happens on the node, so the base files travel once per node; in a case set each task is its own case with the block's shared part). Checks that the script's task collection holds the family's tasks and fails loudly otherwise. |
+| `Sweep.Harvest(plan, state, wave) → SweepState` | Appends the chunk's rows - the sweep's verdict (succeeded, failed, refused) and the node's own result, verbatim - to the manifest blob, and returns the advanced cursor with the counts by outcome and the result index (variant, verdict, label from the parameter values - "XMAX=300, T=250" - or the case's name in a case set, and the artifacts by kind: `.frd`, `.dat`, a case zip). |
 | `Sweep.Finish(plan, state) → Blob` | Returns the final manifest blob. |
 
 ## Why chunks
@@ -78,7 +87,8 @@ module on the host before, or together with, Sweep 2.x.
 
 ## Scripts
 
-`Scripts/SweepCalculiX.wit` and `Scripts/SweepOpenFOAM.wit` (shipped via
-`OutWit.Controller.Sweep.Scripts`): plan → loop chunks { make → `Grid.ForEach`
-→ harvest } → finish; the two differ only in the declared task and result
-collections and the node activity.
+`Scripts/SweepCalculiX.wit`, `Scripts/SweepOpenFOAM.wit` and
+`Scripts/SweepOpenFOAMSet.wit` (shipped via `OutWit.Controller.Sweep.Scripts`):
+plan → loop chunks { make → `Grid.ForEach` → harvest } → finish; they differ
+only in the declared task and result collections, the node activity, and the
+case set the last one takes beside the study.

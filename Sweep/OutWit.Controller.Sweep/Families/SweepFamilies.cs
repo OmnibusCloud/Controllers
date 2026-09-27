@@ -6,7 +6,8 @@ namespace OutWit.Controller.Sweep.Families;
 /// <summary>
 /// The solver families the host knows, by <see cref="SweepFamily"/>. A new
 /// family is one entry here and one <see cref="ISweepFamily"/> beside the
-/// others.
+/// others. An OpenFOAM case set is the OpenFOAM family's second input form:
+/// the same tasks, results and rows, its cases read from the set.
 /// </summary>
 internal static class SweepFamilies
 {
@@ -36,6 +37,20 @@ internal static class SweepFamilies
     }
 
     /// <summary>
+    /// The family implementation for a study and its optional case set.
+    /// </summary>
+    /// <param name="family">The study's family.</param>
+    /// <param name="caseSet">The cases of an OpenFOAM case set; null for every other study.</param>
+    /// <returns>The case-set form of the OpenFOAM family when a set is given to an OpenFOAM study; otherwise the family itself.</returns>
+    /// <exception cref="InvalidOperationException">The host does not know the family.</exception>
+    public static ISweepFamily For(SweepFamily family, SweepOpenFOAMSetData? caseSet)
+    {
+        return caseSet != null && family == SweepFamily.OpenFOAM
+            ? new SweepFamilyOpenFOAMSet(caseSet)
+            : For(family);
+    }
+
+    /// <summary>
     /// The family a validated plan runs on.
     /// </summary>
     /// <param name="plan">The plan.</param>
@@ -45,7 +60,7 @@ internal static class SweepFamilies
     {
         var family = plan.Options?.Family
                      ?? throw new InvalidOperationException("The plan's study carries no single family block.");
-        return For(family);
+        return For(family, plan.OpenFOAMSet);
     }
 
     #endregion

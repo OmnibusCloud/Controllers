@@ -5,8 +5,9 @@ namespace OutWit.Controller.Sweep.Utils;
 /// <summary>
 /// The human-readable identity of a sweep variant for document clients - the ParaView plugin's
 /// variant picker: the study's parameters paired with the variant's
-/// substitution values, "XMAX=300, T=250". Empty when the study carries no parameters or the
-/// variant no values (a deck-set study); readers then fall back to the variant number.
+/// substitution values, "XMAX=300, T=250", or the case's name in an OpenFOAM case set. Empty
+/// when nothing names the variant (a deck-set study, a case without a name); readers then fall
+/// back to the variant number.
 /// </summary>
 public static class SweepVariantLabel
 {
@@ -17,6 +18,21 @@ public static class SweepVariantLabel
     #endregion
 
     #region Functions
+
+    /// <summary>
+    /// Builds the label of one variant of a plan: its case's name in a case set, its values
+    /// otherwise.
+    /// </summary>
+    /// <param name="plan">The plan; null yields an empty label.</param>
+    /// <param name="variantIndex">Source-table index of the variant.</param>
+    /// <returns>The case's name, the "Name=Value" pairs of <see cref="Of(SweepOptionsData?, int)"/>, or empty.</returns>
+    public static string Of(SweepPlanData? plan, int variantIndex)
+    {
+        if (plan?.OpenFOAMSet is { } caseSet)
+            return caseSet.Cases.FirstOrDefault(candidate => candidate.VariantIndex == variantIndex)?.Name ?? string.Empty;
+
+        return Of(plan?.Options, variantIndex);
+    }
 
     /// <summary>
     /// Builds the label of one variant of a study.
