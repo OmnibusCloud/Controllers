@@ -46,6 +46,12 @@ leftovers of an earlier run in the base case (`log.*`, `postProcessing/`,
 collides with a file the case ships under `system/` is refused rather than
 overwritten.
 
+A response is read from the last row of each file in its function object's
+latest `postProcessing/<name>/<time>/` directory. A file whose last row is
+not at the run's final time - a function object that stopped writing before
+the run ended - is not reported: the node names it in `log.responses`,
+which travels with the step logs.
+
 ## The controller's own step
 
 One step of a recipe is the controller's rather than the kit's:
