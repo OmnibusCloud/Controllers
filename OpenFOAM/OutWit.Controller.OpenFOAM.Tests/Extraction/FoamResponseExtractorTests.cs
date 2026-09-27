@@ -73,6 +73,51 @@ public class FoamResponseExtractorTests
     }
 
     [Test]
+    public void ARowBeforeTheFinalTimeIsNotReportedTest()
+    {
+        // A function object that stopped writing before the run ended: its
+        // last row is not the final state, and a stale value is worse than none.
+        Write("postProcessing/coeffs/0/coefficient.dat", COEFFICIENT_DAT);
+        var request = new FoamExtractionRequestData { Responses = [new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs }] };
+        var notes = new List<string>();
+
+        var row = FoamResponseExtractor.Extract(m_case, request, 250, notes);
+
+        Assert.That(row.Values, Is.Empty);
+        Assert.That(notes, Is.EqualTo(new[] { "coeffs: the last row of coefficient.dat is at time 200, the run ended at 250 - not reported." }));
+    }
+
+    [Test]
+    public void ARowAtTheFinalTimeIsReportedTest()
+    {
+        Write("postProcessing/coeffs/0/coefficient.dat", COEFFICIENT_DAT);
+        Write("postProcessing/probes/0/p", PROBES_P);
+        var request = new FoamExtractionRequestData
+        {
+            Responses =
+            [
+                new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs },
+                new FoamResponseSpecData { Name = "probes", Kind = FoamResponseKind.Probe, Fields = ["p"] }
+            ]
+        };
+        var notes = new List<string>();
+
+        // Transient times carry the last digit's noise of the time loop.
+        Assert.That(FoamResponseExtractor.Extract(m_case, request, 200, notes).Values.Select(value => value.Name), Does.Contain("coeffs.Cd"));
+        Assert.That(FoamResponseExtractor.Extract(m_case, request, 0.20000000000000004, notes).Values.Select(value => value.Name), Does.Contain("probes.c1"));
+        Assert.That(notes, Has.Count.EqualTo(2), "each call judges its own final time: coeffs at 200 is stale against 0.2, probes at 0.2 against 200");
+    }
+
+    [Test]
+    public void TheNotesAreWrittenBesideTheStepLogsTest()
+    {
+        FoamResponseExtractor.WriteNotes(m_case, ["coeffs: the last row of coefficient.dat is at time 200, the run ended at 250 - not reported."]);
+        FoamResponseExtractor.WriteNotes(m_case, []);
+
+        Assert.That(File.ReadAllText(Path.Combine(m_case, "log.responses")), Does.Contain("coeffs: the last row"));
+    }
+
+    [Test]
     public void AMultiFieldMinMaxRowIsReadWholeTest()
     {
         // v2606 writes every field of a fieldMinMax in one row of one file.

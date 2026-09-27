@@ -120,11 +120,27 @@ public class FoamRecipeRulesTests
     public void TheApplicationMustBeASolverAndMustRunTest()
     {
         var recipe = MotorBike();
-        recipe.Application = "blockMesh";
-        Assert.That(FoamRecipeRules.Validate(recipe), Has.Some.Contains("not a solver name"));
+        recipe.Application = "myFlowSolver";
+        Assert.That(FoamRecipeRules.Validate(recipe), Has.Some.EqualTo("'myFlowSolver' is not a solver name (a solver's name ends in 'Foam')."));
 
         recipe.Application = "pisoFoam";
         Assert.That(FoamRecipeRules.Validate(recipe), Has.Some.Contains("No step runs the application 'pisoFoam'"));
+    }
+
+    [Test]
+    public void AUtilityAsTheApplicationIsNamedAsAUtilityTest()
+    {
+        // potentialFoam ends in 'Foam' like a solver: the reason must be
+        // what it is, not the shape of its name.
+        var recipe = MotorBike();
+        recipe.Application = "potentialFoam";
+
+        Assert.That(FoamRecipeRules.Validate(recipe), Has.Some.EqualTo(
+            "'potentialFoam' is a utility on the allow-list, not a solver: the application is the solver the case runs " +
+            "(controlDict's 'application', such as simpleFoam); 'potentialFoam' runs as a step of its own."));
+
+        recipe.Application = "blockMesh";
+        Assert.That(FoamRecipeRules.Validate(recipe), Has.Some.StartsWith("'blockMesh' is a utility on the allow-list, not a solver"));
     }
 
     [Test]
