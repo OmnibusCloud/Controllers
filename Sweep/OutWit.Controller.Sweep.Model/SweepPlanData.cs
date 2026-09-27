@@ -7,8 +7,9 @@ namespace OutWit.Controller.Sweep.Model;
 
 /// <summary>
 /// The validated, immutable execution plan of one sweep: the options as
-/// submitted and the chunk schedule computed up front. Mutable progress lives
-/// in <see cref="SweepStateData"/>, never here.
+/// submitted, the case set when the study is one, and the chunk schedule
+/// computed up front. Mutable progress lives in <see cref="SweepStateData"/>,
+/// never here.
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).
@@ -22,7 +23,8 @@ public sealed partial class SweepPlanData : ModelBase
             return false;
 
         return Options.Check(plan.Options)
-               && ChunkSizes.Is(plan.ChunkSizes);
+               && ChunkSizes.Is(plan.ChunkSizes)
+               && OpenFOAMSet.Check(plan.OpenFOAMSet);
     }
 
     public override SweepPlanData Clone()
@@ -30,7 +32,8 @@ public sealed partial class SweepPlanData : ModelBase
         return new SweepPlanData
         {
             Options = Options?.Clone(),
-            ChunkSizes = [.. ChunkSizes]
+            ChunkSizes = [.. ChunkSizes],
+            OpenFOAMSet = OpenFOAMSet?.Clone()
         };
     }
 
@@ -50,6 +53,10 @@ public sealed partial class SweepPlanData : ModelBase
     /// <summary>Progressive chunk sizes; sums to the variant count.</summary>
     [MemoryPackOrder(1)]
     public List<int> ChunkSizes { get; set; } = [];
+
+    /// <summary>The cases of an OpenFOAM case-set study, as submitted; null for every other study.</summary>
+    [MemoryPackOrder(2)]
+    public SweepOpenFOAMSetData? OpenFOAMSet { get; set; }
 
     #endregion
 }

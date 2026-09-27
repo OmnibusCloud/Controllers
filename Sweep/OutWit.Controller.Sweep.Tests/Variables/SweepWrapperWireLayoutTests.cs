@@ -17,7 +17,8 @@ namespace OutWit.Controller.Sweep.Tests.Variables;
 [TestFixture]
 public sealed class SweepWrapperWireLayoutTests
 {
-    // Declared layouts frozen 2026-09-24 (Sweep 2.0: Sweep.Plan takes the options alone). The variable wrappers deliberately
+    // Declared layouts frozen 2026-09-24 (Sweep 2.0: Sweep.Plan takes the options alone); Sweep 2.1 appends the
+    // optional case set to Sweep.Plan and adds its variable (host-only: scripts are parsed on the host). The variable wrappers deliberately
     // declare NOTHING — name and payload serialize through the engine base
     // class; a property declared here would silently extend the wire.
     private static readonly IReadOnlyDictionary<Type, string[]> EXPECTED_LAYOUTS = new Dictionary<Type, string[]>
@@ -25,7 +26,8 @@ public sealed class SweepWrapperWireLayoutTests
         [typeof(WitVariableSweepPlan)] = [],
         [typeof(WitVariableSweepState)] = [],
         [typeof(WitVariableSweepOptions)] = [],
-        [typeof(WitActivitySweepPlan)] = ["Options"],
+        [typeof(WitVariableSweepOpenFOAMSet)] = [],
+        [typeof(WitActivitySweepPlan)] = ["Options", "OpenFOAMSet"],
         [typeof(WitActivitySweepInitState)] = ["Plan"],
         [typeof(WitActivitySweepChunkCount)] = ["Plan"],
         [typeof(WitActivitySweepMakeChunk)] = ["Plan", "State"],

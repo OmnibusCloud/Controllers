@@ -82,7 +82,7 @@ internal sealed class WitActivityAdapterSweepHarvest : WitActivityAdapterFunctio
                 {
                     VariantIndex = row.VariantIndex,
                     Outcome = row.Outcome,
-                    Label = SweepVariantLabel.Of(plan.Options, row.VariantIndex),
+                    Label = SweepVariantLabel.Of(plan, row.VariantIndex),
                     Artifacts = family.ArtifactsOf(row).ToList()
                 })
                 .ToList()

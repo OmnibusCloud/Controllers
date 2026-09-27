@@ -13,8 +13,13 @@ family:
     `SweepCalculiXDeckData`), the mesh size, the thread policy, the extraction
     request;
   - `OpenFOAM` (`FoamCaseData` from `OutWit.Controller.OpenFOAM.Model`) - the
-    case every variant runs with its own token values.
-- `SweepPlanData` - the validated study and its chunk schedule, immutable.
+    case every variant runs with its own token values, or, in a case set,
+    what every case shares.
+- `SweepOpenFOAMSetData` - the cases of an OpenFOAM case set, a job input
+  beside the study: every variant's own ready case (`SweepOpenFOAMCaseData`:
+  its name, its tree, its recipe, its cell count and solver class).
+- `SweepPlanData` - the validated study, its case set when it has one, and
+  its chunk schedule, immutable.
 - `SweepStateData` - the cursor carried across chunks: the next chunk, the
   counts by outcome, the latest manifest blob and the result index
   (`SweepResultIndexEntryData`: variant, outcome, label, artifacts by kind -

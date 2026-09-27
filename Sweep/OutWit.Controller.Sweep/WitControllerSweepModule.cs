@@ -37,6 +37,7 @@ public sealed class WitControllerSweepModule : WitPluginBase, IWitControllerHost
     public override void Initialize(IServiceCollection services)
     {
         services.AddVariable<WitVariableSweepOptions>();
+        services.AddVariable<WitVariableSweepOpenFOAMSet>();
         services.AddVariable<WitVariableSweepPlan>();
         services.AddVariable<WitVariableSweepState>();
 

@@ -13,7 +13,7 @@
     ],
     "source": {
       "assembly": "OutWit.Controller.Sweep.Model",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
   },

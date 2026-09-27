@@ -31,11 +31,16 @@ internal sealed class WitActivityAdapterSweepPlan : WitActivityAdapterFunction<W
         if (!pool.TryGetValue(activity.Options, out SweepOptionsData? options) || options == null)
             throw new InvalidOperationException("Failed to get parameter 'Options'.");
 
-        // Plan is the one validation gate: every finding of the study and of
-        // its family block is named together, before any node sees a task.
-        var findings = ValidateStudy(options);
+        SweepOpenFOAMSetData? caseSet = null;
+        if (activity.OpenFOAMSet != null && (!pool.TryGetValue(activity.OpenFOAMSet, out caseSet) || caseSet == null))
+            throw new InvalidOperationException("Failed to get parameter 'OpenFOAMSet'.");
+
+        // Plan is the one validation gate: every finding of the study, of
+        // its family block and of a case set is named together, before any
+        // node sees a task.
+        var findings = ValidateStudy(options, caseSet);
         if (options.Family is { } family)
-            findings.AddRange(await SweepFamilies.For(family).ValidateAsync(options, BlobService));
+            findings.AddRange(await SweepFamilies.For(family, caseSet).ValidateAsync(options, BlobService));
 
         if (findings.Count > 0)
             throw new InvalidOperationException($"The sweep is refused: {string.Join(" ", findings)}");
@@ -48,12 +53,13 @@ internal sealed class WitActivityAdapterSweepPlan : WitActivityAdapterFunction<W
         var plan = new SweepPlanData
         {
             Options = options,
-            ChunkSizes = SweepChunkPlanner.Sizes(options.FirstChunkSize, options.MaxChunkSize, options.Variants.Count, availableNodes)
+            ChunkSizes = SweepChunkPlanner.Sizes(options.FirstChunkSize, options.MaxChunkSize, options.Variants.Count, availableNodes),
+            OpenFOAMSet = caseSet
         };
 
         Logger.LogInformation(
-            "Sweep plan: {Family}, {Variants} variant(s), {Nodes} eligible machine(s), chunks [{Chunks}] (client asked first {First}, max {Max})",
-            options.Family, options.Variants.Count, availableNodes, string.Join(", ", plan.ChunkSizes), options.FirstChunkSize, options.MaxChunkSize);
+            "Sweep plan: {Family}{Mode}, {Variants} variant(s), {Nodes} eligible machine(s), chunks [{Chunks}] (client asked first {First}, max {Max})",
+            options.Family, caseSet == null ? string.Empty : " case set", options.Variants.Count, availableNodes, string.Join(", ", plan.ChunkSizes), options.FirstChunkSize, options.MaxChunkSize);
 
         if (!pool.TrySetValue(activity.ReturnReference, plan))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
@@ -63,9 +69,10 @@ internal sealed class WitActivityAdapterSweepPlan : WitActivityAdapterFunction<W
     /// The family-independent rules of a study: one family block, at least one
     /// variant, one value per parameter in every variant, and unique variant
     /// indices - the manifest maps results by index, never positionally, so a
-    /// repeated index would burn node time and come back unmappable.
+    /// repeated index would burn node time and come back unmappable. A case
+    /// set belongs to an OpenFOAM study alone.
     /// </summary>
-    private static List<string> ValidateStudy(SweepOptionsData options)
+    private static List<string> ValidateStudy(SweepOptionsData options, SweepOpenFOAMSetData? caseSet)
     {
         var findings = new List<string>();
 
@@ -84,6 +91,9 @@ internal sealed class WitActivityAdapterSweepPlan : WitActivityAdapterFunction<W
 
         foreach (var group in options.Variants.GroupBy(variant => variant.VariantIndex).Where(group => group.Count() > 1))
             findings.Add($"Variant index {group.Key} appears {group.Count()} times; variant indices must be unique.");
+
+        if (caseSet != null && options.Family is { } family && family != SweepFamily.OpenFOAM)
+            findings.Add("A case set rides only with an OpenFOAM study.");
 
         return findings;
     }
@@ -116,15 +126,20 @@ internal sealed class WitActivityAdapterSweepPlan : WitActivityAdapterFunction<W
     {
         try
         {
-            if (parameters.Length != 1)
-                throw new ArgumentException($"Expected 1 parameter(s), got {parameters.Length}.");
+            if (parameters.Length is < 1 or > 2)
+                throw new ArgumentException($"Expected 1 or 2 parameter(s), got {parameters.Length}.");
 
             if (parameters[0] is not IWitReference options)
                 throw new ArgumentException("Parameter 'Options' must be a variable reference.");
 
+            IWitReference? caseSet = null;
+            if (parameters.Length == 2 && (caseSet = parameters[1] as IWitReference) == null)
+                throw new ArgumentException("Parameter 'OpenFOAMSet' must be a variable reference.");
+
             return new WitActivitySweepPlan
             {
-                Options = options
+                Options = options,
+                OpenFOAMSet = caseSet
             };
         }
         catch (Exception e)
