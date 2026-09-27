@@ -110,7 +110,7 @@ public sealed class FoamCaseSession
 
             if (report.Succeeded)
             {
-                result.ResponseRow = ExtractResponses(caseDirectory, data.Extraction);
+                result.ResponseRow = ExtractResponses(caseDirectory, data.Extraction, result.FinalTime);
                 await UploadArtifactAsync(result, caseDirectory, scratch.UsablePath, data.ArtifactPolicy, cancellationToken);
             }
             else if (data.ArtifactPolicy?.Logs == true)
@@ -164,13 +164,21 @@ public sealed class FoamCaseSession
         result.CellCount = cells;
     }
 
-    private FoamResponseRowData ExtractResponses(string caseDirectory, FoamExtractionRequestData? extraction)
+    private FoamResponseRowData ExtractResponses(string caseDirectory, FoamExtractionRequestData? extraction, double finalTime)
     {
         // A parsing surprise must not turn a finished run into a failure: the
         // row degrades to empty and the run's other facts stand.
         try
         {
-            return FoamResponseExtractor.Extract(caseDirectory, extraction);
+            // A response whose last row is not the run's final time is left
+            // out and named in log.responses, which travels with the logs;
+            // an unknown final time (no solver log) checks nothing.
+            var notes = new List<string>();
+            var row = FoamResponseExtractor.Extract(caseDirectory, extraction, finalTime > 0 ? finalTime : null, notes);
+            foreach (var note in notes)
+                Logger?.LogWarning("Foam.Run: {Note}", note);
+            FoamResponseExtractor.WriteNotes(caseDirectory, notes);
+            return row;
         }
         catch (Exception e)
         {
