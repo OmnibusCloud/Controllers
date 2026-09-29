@@ -9,10 +9,12 @@ namespace OutWit.Controller.OpenFOAM.Extraction;
 /// dictionaries, one file per response at <c>system/&lt;Name&gt;</c> - where
 /// OpenFOAM's <c>postProcess -func &lt;Name&gt;</c> (and a solver's
 /// <c>-postProcess</c> form, for the quantities that need the turbulence
-/// model) looks first, before its own <c>etc/caseDicts</c>. The user's files
-/// are never edited: a response is a file of its own beside them, and the
-/// recipe's post step names it. What a request may say is
-/// <see cref="FoamResponseRules"/>; this class only renders it.
+/// model) looks first, before its own <c>etc/caseDicts</c>, and so does a
+/// <c>#includeFunc</c>. A response is a file of its own beside the user's
+/// files: the recipe's post step names it, or the controller's
+/// <c>includeFunc</c> step adds it to the solve (<see cref="Runtime.FoamSolveFunctions"/>).
+/// What a request may say is <see cref="FoamResponseRules"/>; this class only
+/// renders it.
 /// </summary>
 public static class FoamFunctionObjectWriter
 {

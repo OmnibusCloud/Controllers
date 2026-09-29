@@ -51,8 +51,8 @@ public sealed partial class FoamStepOutcomeData : ModelBase
 
     /// <summary>
     /// MPI ranks the step ran on; 1 for a serial step; 0 for a step no
-    /// process ran - a decomposition step skipped on a serial run, or the
-    /// controller's own <c>restore0Dir</c>.
+    /// process ran - a decomposition step skipped on a serial run, or one of
+    /// the controller's own steps (<c>restore0Dir</c>, <c>includeFunc</c>).
     /// </summary>
     [MemoryPackOrder(1)]
     public int Ranks { get; set; }

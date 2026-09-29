@@ -10,9 +10,10 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 /// ending the run. Parallel steps go through the kit's MPI launcher with
 /// <c>-parallel</c> appended; on a node without a launcher they run
 /// serially and the decomposition steps are skipped, so the case still
-/// produces a result there. The controller's own step
-/// (<c>restore0Dir -processor</c>) runs in-process through
-/// <see cref="FoamInitialFields"/>, with a log like any step's.
+/// produces a result there. The controller's own steps run in-process, with a
+/// log like any step's: <c>restore0Dir -processor</c> through
+/// <see cref="FoamInitialFields"/>, <c>includeFunc &lt;response&gt;</c>
+/// through <see cref="FoamSolveFunctions"/>.
 /// </summary>
 public sealed class FoamCaseRunner
 {
@@ -63,7 +64,7 @@ public sealed class FoamCaseRunner
             Logger?.LogInformation("Foam.Run: no MPI launcher on this node ({Platform}) - the parallel steps run serially.", Kit.Platform);
 
         // A restore into the processor directories restores the fields as they were before any step ran.
-        if (parallel && recipe.Steps.Any(step => FoamAllowList.IsBuiltIn(step.Utility)))
+        if (parallel && recipe.Steps.Any(step => step.Utility == FoamAllowList.RESTORE_INITIAL_FIELDS))
             FoamInitialFields.Keep(CaseDirectory);
 
         var report = new FoamRunReport();
@@ -84,7 +85,7 @@ public sealed class FoamCaseRunner
             var logPath = Path.Combine(CaseDirectory, LogName(step.Utility, logCounts));
 
             var outcome = builtIn
-                ? FoamInitialFields.RestoreIntoProcessors(CaseDirectory, logPath, decomposed: parallel)
+                ? RunBuiltIn(step, parallel, logPath)
                 : await RunProcessAsync(step, runParallel, logPath, cancellationToken);
 
             report.Add(step, new FoamStepOutcomeData
@@ -105,6 +106,13 @@ public sealed class FoamCaseRunner
         }
 
         return report;
+    }
+
+    private FoamRunOutcome RunBuiltIn(FoamStepData step, bool decomposed, string logPath)
+    {
+        return step.Utility == FoamAllowList.INCLUDE_FUNCTION
+            ? FoamSolveFunctions.Include(CaseDirectory, step.Arguments[0], logPath)
+            : FoamInitialFields.RestoreIntoProcessors(CaseDirectory, logPath, decomposed);
     }
 
     private Task<FoamRunOutcome> RunProcessAsync(FoamStepData step, bool parallel, string logPath, CancellationToken cancellationToken)

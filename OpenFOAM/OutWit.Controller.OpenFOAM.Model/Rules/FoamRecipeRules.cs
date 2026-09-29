@@ -19,6 +19,8 @@ public static class FoamRecipeRules
 
     private const string DECOMPOSE = "decomposePar";
 
+    private const string POST_PROCESS_FLAG = "-postProcess";
+
     /// <summary>A flag: a dash, a letter, then letters, digits or dashes.</summary>
     private static readonly Regex FLAG = new("^-[A-Za-z][A-Za-z0-9-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -78,6 +80,12 @@ public static class FoamRecipeRules
             // The controller's restore puts the fields into processor directories: a decomposition must have made them.
             if (step.Utility == FoamAllowList.RESTORE_INITIAL_FIELDS && recipe.Steps.Take(index).All(before => before.Utility != DECOMPOSE))
                 findings.Add($"Step {index + 1}: {FoamAllowList.RESTORE_INITIAL_FIELDS} {FoamAllowList.PROCESSOR_FORM} needs a {DECOMPOSE} step before it.");
+
+            // The controller's include adds a response to the solve: a solve must come after it.
+            if (step.Utility == FoamAllowList.INCLUDE_FUNCTION
+                && step.Arguments is [var response] && WORD.IsMatch(response)
+                && !recipe.Steps.Skip(index + 1).Any(after => IsSolve(after, recipe.Application)))
+                findings.Add($"Step {index + 1}: {FoamAllowList.INCLUDE_FUNCTION} {response} adds a response to the solve, and no step after it runs '{recipe.Application}' to solve.");
         }
 
         if (recipe.Steps.Count > 0
@@ -176,8 +184,21 @@ public static class FoamRecipeRules
         if (step.Parallel)
             findings.Add($"{prefix}: '{name}' is done by the controller itself, never under MPI.");
 
+        if (name == FoamAllowList.INCLUDE_FUNCTION)
+        {
+            if (step.Arguments is not [var response] || !WORD.IsMatch(response))
+                findings.Add($"{prefix} ({name}): the only form is '{name} <response>', one response name.");
+            return;
+        }
+
         if (step.Arguments is not [FoamAllowList.PROCESSOR_FORM])
             findings.Add($"{prefix} ({name}): the only form is '{name} {FoamAllowList.PROCESSOR_FORM}'; a serial run's initial fields travel in 0/.");
+    }
+
+    /// <summary>A step that runs the application to solve, not its <c>-postProcess</c> form.</summary>
+    private static bool IsSolve(FoamStepData step, string application)
+    {
+        return step.Utility == application && !step.Arguments.Contains(POST_PROCESS_FLAG);
     }
 
     #endregion

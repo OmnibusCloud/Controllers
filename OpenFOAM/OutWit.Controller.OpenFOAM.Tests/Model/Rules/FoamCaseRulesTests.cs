@@ -79,5 +79,22 @@ public class FoamCaseRulesTests
         Assert.That(asked, Is.EquivalentTo(new[] { "simpleFoam", "blockMesh", "simpleFoam" }));
     }
 
+    [Test]
+    public void AResponseAddedToTheSolveIsOneTheTaskRequestsTest()
+    {
+        FoamCaseData Including(string response)
+        {
+            var data = PitzDaily();
+            data.Extraction!.Responses.Add(new FoamResponseSpecData { Name = "load", Kind = FoamResponseKind.Forces, Patches = ["lowerWall"] });
+            data.Recipe!.Steps.Insert(1, new FoamStepData { Utility = "includeFunc", Arguments = [response] });
+            return data;
+        }
+
+        Assert.That(FoamCaseRules.Validate(Including("load")), Is.Empty);
+        Assert.That(FoamCaseRules.Validate(Including("streamlines")),
+            Is.EqualTo(new[] { "Step 2: includeFunc streamlines names no response of this task; the step adds only the task's own responses to the solve." }),
+            "the node's copy of controlDict gains nothing the request did not ask for");
+    }
+
     #endregion
 }

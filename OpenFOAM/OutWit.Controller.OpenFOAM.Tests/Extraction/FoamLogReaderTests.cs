@@ -64,6 +64,23 @@ public class FoamLogReaderTests
     }
 
     [Test]
+    public void TheMeshSnappyHexMeshEndsWithIsItsCellCountTest()
+    {
+        const string log =
+            "Refined mesh : cells:325794  faces:1043271  points:390436  unbalance:0.00753237\n" +
+            "Snapped mesh : cells:325794  faces:1028155  points:380922  unbalance:0.00753237\n" +
+            "Before layer addition : cells:325794  faces:1025615  points:379219  unbalance:0.00753237\n" +
+            "Mesh with layers : cells:353854  faces:1108726  points:406385  unbalance:0.0464203\n" +
+            "Layer mesh : cells:353854  faces:1108726  points:406385  unbalance:0.00987413\n" +
+            "Ideal layer addition : cells:375243  unbalance:0.122942\n" +
+            "Finished meshing in = 34.2 s.\nEnd\n";
+
+        var facts = FoamLogReader.Read(new StringReader(log));
+
+        Assert.That(facts.CellCount, Is.EqualTo(353854), "the last mesh the log reports; the ideal count is a target, not a mesh");
+    }
+
+    [Test]
     public void AFatalErrorIsFlaggedTest()
     {
         var facts = FoamLogReader.Read(new StringReader("Time = 1\n--> FOAM FATAL IO ERROR: (openfoam-2606)\nkeyword nu is undefined\n"));

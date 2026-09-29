@@ -116,6 +116,25 @@ public class SweepFamilyOpenFOAMTests
     }
 
     [Test]
+    public async Task AForceTheNodeAddsToTheSolveIsAcceptedAtThePlanTest()
+    {
+        var options = Study();
+        options.OpenFOAM!.Extraction = new FoamExtractionRequestData
+        {
+            Responses = [new FoamResponseSpecData { Name = "torque", Kind = FoamResponseKind.Forces, Patches = ["rotor"] }]
+        };
+        options.OpenFOAM.Recipe!.Steps.Insert(1, new FoamStepData { Utility = "includeFunc", Arguments = ["torque"] });
+
+        Assert.That(await m_family.ValidateAsync(options, m_blobs), Is.Empty, "the host bundles the Model that knows the node's step");
+
+        options.OpenFOAM.Recipe.Steps[1].Arguments = ["streamlines"];
+        Assert.That(await m_family.ValidateAsync(options, m_blobs), Is.EqualTo(new[]
+        {
+            "Step 2: includeFunc streamlines names no response of this task; the step adds only the task's own responses to the solve."
+        }));
+    }
+
+    [Test]
     public async Task AStudyWithoutItsBlockIsRefusedTest()
     {
         Assert.That(await m_family.ValidateAsync(new SweepOptionsData(), m_blobs), Is.EqualTo(new[] { "The study carries no OpenFOAM block." }));

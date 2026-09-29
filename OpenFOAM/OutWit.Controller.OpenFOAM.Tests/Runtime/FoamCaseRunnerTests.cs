@@ -381,4 +381,70 @@ public class FoamCaseRunnerTests
     }
 
     #endregion
+
+    #region Include Tests
+
+    private static FoamRecipeData IncludingRecipe(bool parallel)
+    {
+        return new FoamRecipeData
+        {
+            Application = "simpleFoam",
+            Steps =
+            [
+                new FoamStepData { Utility = "blockMesh" },
+                new FoamStepData { Utility = "includeFunc", Arguments = ["torque"] },
+                new FoamStepData { Utility = "simpleFoam", Parallel = parallel }
+            ]
+        };
+    }
+
+    [Test]
+    public async Task TheControllerAddsTheResponseToTheSolveBeforeTheSolverRunsTest()
+    {
+        var kit = RequireKit();
+        WriteCaseFile("system/fake", "ITERATIONS=2\n");
+        WriteCaseFile("system/controlDict", "application simpleFoam;\nfunctions\n{\n}\n");
+        var runner = new FoamCaseRunner(kit, m_case, kit.EnvironmentFor(m_scratch), ranks: 1);
+
+        var report = await runner.RunAsync(IncludingRecipe(parallel: false));
+
+        Assert.That(report.Succeeded, Is.True, report.LogTail);
+        Assert.That(report.Steps.Select(step => (step.Utility, step.Ranks, step.ExitCode)), Is.EqualTo(new[] { ("blockMesh", 1, 0), ("includeFunc", 0, 0), ("simpleFoam", 1, 0) }));
+        Assert.That(ReadCaseFile("system/controlDict"), Does.Contain("    #includeFunc torque\n}"));
+        Assert.That(report.LogPaths, Has.Some.EndsWith("log.includeFunc"));
+    }
+
+    [Test]
+    public async Task AnIncludeThatCannotBeWrittenEndsTheRunBeforeTheSolveTest()
+    {
+        var kit = RequireKit();
+        WriteCaseFile("system/fake", "ITERATIONS=2\n");
+        WriteCaseFile("system/controlDict", "application simpleFoam;\nfunctions #includeEtc \"caseDicts/functions\";\n");
+        var runner = new FoamCaseRunner(kit, m_case, kit.EnvironmentFor(m_scratch), ranks: 1);
+
+        var report = await runner.RunAsync(IncludingRecipe(parallel: false));
+
+        Assert.That(report.Succeeded, Is.False);
+        Assert.That(report.FailedStep, Is.EqualTo("includeFunc"));
+        Assert.That(report.LogTail, Does.Contain("'functions' is not a block"));
+        Assert.That(report.Steps.Select(step => step.Utility), Is.EqualTo(new[] { "blockMesh", "includeFunc" }), "a solve that would not measure what was asked never starts");
+    }
+
+    [Test]
+    public async Task AnIncludeInAParallelRunLeavesTheInitialFieldsAloneTest()
+    {
+        var kit = RequireFakeKit().ResolveWithLauncher();
+        Assume.That(kit.SupportsParallel, Is.True);
+        WriteCaseFile("system/fake", "ITERATIONS=2\n");
+        WriteCaseFile("system/controlDict", "application simpleFoam;\n");
+        WriteCaseFile("0/U", INITIAL_U);
+        var runner = new FoamCaseRunner(kit, m_case, kit.EnvironmentFor(m_scratch), ranks: 2);
+
+        var report = await runner.RunAsync(IncludingRecipe(parallel: true));
+
+        Assert.That(report.Succeeded, Is.True, report.LogTail);
+        Assert.That(Directory.Exists(Path.Combine(m_case, "0.orig")), Is.False, "only the restore keeps the initial fields aside");
+    }
+
+    #endregion
 }

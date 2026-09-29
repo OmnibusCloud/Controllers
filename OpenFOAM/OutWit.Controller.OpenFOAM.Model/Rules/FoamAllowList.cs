@@ -26,8 +26,20 @@ public static class FoamAllowList
     /// <summary>The one form of <see cref="RESTORE_INITIAL_FIELDS"/>: into the processor directories.</summary>
     public const string PROCESSOR_FORM = "-processor";
 
+    /// <summary>
+    /// The controller's step that adds a response to the solve
+    /// (<c>includeFunc &lt;response&gt;</c>): one line, <c>#includeFunc
+    /// &lt;response&gt;</c>, in the <c>functions</c> of the node's copy of
+    /// <c>system/controlDict</c>, so the solver measures the response while it
+    /// solves. A force measured after the solve (<c>&lt;solver&gt;
+    /// -postProcess</c>) sees the walls a rotating zone (MRF) turns at rest,
+    /// because OpenFOAM moves them only inside the solve; measured by the
+    /// solver, the force is the solve's own.
+    /// </summary>
+    public const string INCLUDE_FUNCTION = "includeFunc";
+
     /// <summary>The steps the controller does itself: no kit executable, never under MPI.</summary>
-    public static readonly IReadOnlyList<string> BUILT_IN_STEPS = [RESTORE_INITIAL_FIELDS];
+    public static readonly IReadOnlyList<string> BUILT_IN_STEPS = [RESTORE_INITIAL_FIELDS, INCLUDE_FUNCTION];
 
     /// <summary>
     /// The utilities, in the order they usually run: those of version 1, then

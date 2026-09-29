@@ -170,6 +170,32 @@ public class FoamCaseSessionTests
     }
 
     [Test]
+    public async Task TheCellCountIsTheLastOneAStepReportsTest()
+    {
+        var session = RequireSession();
+
+        var result = await session.RunAsync(PitzTask("ITERATIONS=1\nCELLS.blockMesh=5000\nCELLS.checkMesh=185237\nCELLS.simpleFoam=0\n"));
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.LogTail);
+        Assert.That(result.CellCount, Is.EqualTo(185237), "the background mesh blockMesh reports is not the mesh a later step made");
+    }
+
+    [Test]
+    public async Task TheCellCountIsTheMeshTheRunEndedWithTest()
+    {
+        var session = RequireSession();
+        var data = PitzCase("ITERATIONS=1\nCELLS.blockMesh=5000\n");
+        data.BaseFiles.Add(BlobFile("constant/polyMesh/owner",
+            "FoamFile\n{\n    format      ascii;\n    class       labelList;\n" +
+            "    note        \"nPoints:218801  nCells:185237  nFaces:589238  nInternalFaces:520000\";\n    object      owner;\n}\n0\n(\n)\n"));
+
+        var result = await session.RunAsync(Task(data));
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.LogTail);
+        Assert.That(result.CellCount, Is.EqualTo(185237), "the mesh on disk outranks what a log said on the way");
+    }
+
+    [Test]
     public async Task TheSubstitutedFilesReachTheSolverTest()
     {
         var session = RequireSession();

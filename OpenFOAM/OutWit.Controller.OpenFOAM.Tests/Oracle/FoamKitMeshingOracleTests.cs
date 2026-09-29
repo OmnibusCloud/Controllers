@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using OutWit.Controller.OpenFOAM.Extraction;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Mock;
@@ -89,6 +90,7 @@ public class FoamKitMeshingOracleTests
         Assert.That(ArtifactText(result, "20/U"), Does.Contain($"uniform ({VARIANT_INLET} 0 0)"), "the variant's inlet value reached the processors through the restore");
         Assert.That(ArtifactEntries(result).Where(entry => entry.StartsWith("0.orig/", StringComparison.Ordinal) || entry.StartsWith("processor", StringComparison.Ordinal)), Is.Empty,
             "the kept initial fields and the decomposed case never travel back");
+        AssertTheCellCountIsTheSnappedMesh(result);
     }
 
     [Test]
@@ -117,6 +119,7 @@ public class FoamKitMeshingOracleTests
         Assert.That(result.Steps.Single(step => step.Utility == "restore0Dir").ExitCode, Is.EqualTo(0));
         Assert.That(ArtifactText(result, "constant/polyMesh/boundary"), Does.Contain("sphere"));
         Assert.That(ArtifactText(result, "20/U"), Does.Contain($"uniform ({VARIANT_INLET} 0 0)"));
+        AssertTheCellCountIsTheSnappedMesh(result);
     }
 
     #endregion
@@ -192,6 +195,16 @@ public class FoamKitMeshingOracleTests
                 SolverClass = "incompressible-steady"
             }
         };
+    }
+
+    /// <summary>The run reports the mesh the solver ran on: the one snappyHexMesh wrote, not the box blockMesh made for it.</summary>
+    private void AssertTheCellCountIsTheSnappedMesh(FoamResultData result)
+    {
+        var background = FoamLogReader.Read(new StringReader(ArtifactText(result, "log.blockMesh"))).CellCount;
+        var snapped = FoamLogReader.Read(new StringReader(ArtifactText(result, "log.snappyHexMesh"))).CellCount;
+
+        Assert.That(snapped, Is.GreaterThan(0).And.Not.EqualTo(background), "the fixture's sphere takes cells out of the box");
+        Assert.That(result.CellCount, Is.EqualTo(snapped));
     }
 
     /// <summary>A file of the result's artifact, as text.</summary>
