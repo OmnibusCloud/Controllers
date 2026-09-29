@@ -31,7 +31,11 @@ A case is a **reconstructed** case directory: `system/controlDict` with an
 `0.orig/` as `0/` when it has no `0/`), and either a mesh in `constant/polyMesh`
 or a step that makes one. Every file travels as it is: the node substitutes a
 study's tokens byte for byte, adds the function objects the responses need and,
-for a parallel run, writes its own `decomposeParDict`; nothing else changes.
+for a parallel run, writes its own `decomposeParDict`. One more change, only
+when a recipe asks for it (the `includeFunc` step below): one line,
+`#includeFunc <response>`, in the `functions` of the node's copy of
+`system/controlDict`, so that the solver measures a force while it solves. The
+user's own files are never changed; nothing else changes in the copy.
 
 A case file path is refused when it
 
@@ -115,6 +119,18 @@ A parallel step naming a utility not marked here is refused.
 - `restore0Dir -processor` - puts the initial fields into every processor
   directory after `decomposePar` (what a case meshed in parallel needs). Its only
   form; it needs a `decomposePar` step before it and never runs under MPI.
+- `includeFunc <response>` - adds one of the task's responses to the solve: the
+  line `#includeFunc <response>` at the end of the `functions` of the node's copy
+  of `system/controlDict` (a `functions` block of its own when the file has
+  none), and a `log.includeFunc` that says what was added, where and why. Why:
+  a force measured after the solve (`<solver> -postProcess`) sees the walls a
+  rotating zone (MRF) turns at rest, because OpenFOAM moves them only inside the
+  solve - the torque comes out wrong by an order of magnitude or more, even in
+  sign; measured by the solver, a force is the solve's own. It names one
+  response of the task, it needs a step after it that runs the application to
+  solve, and it never runs under MPI. When the `functions` entry is not a block
+  (`functions #includeEtc "..."`), the step fails with that line and leaves the
+  copy as it was, rather than rewrite it.
 
 ### Arguments
 
@@ -140,9 +156,13 @@ object the case already runs or one the controller adds for the run:
 | `Probe` | `probes` | at least one field, a `probeLocations` parameter |
 
 A response's name is a word, unique in the request, and not the name of a file
-the case carries in `system/`. A value is reported only from the run's final
-time: a function object that stopped writing earlier is left out and named in
-`log.responses`. In a parameter study a response parameter may carry the
+the case carries in `system/`. A patch is a word or a quoted regular
+expression; a field is a word that may carry dots, as phases are named
+(`alpha.water`) - never a colon, since a probe writes one file per field. A
+response the case does not write itself is measured either during the solve
+(`includeFunc`, which a force on a turning wall needs) or after it by a post
+step. A value is reported only from the run's final time: a function object
+that stopped writing earlier is left out and named in `log.responses`. In a parameter study a response parameter may carry the
 study's token (a reference speed that follows the swept speed).
 
 ## Solver classes

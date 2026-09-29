@@ -126,5 +126,40 @@ public class FoamResponseRulesTests
         Assert.That(FoamResponseRules.Validate(Coefficients("{{name}}")), Has.Some.Contains("not a plain dictionary value"), "only the sweep's own token shape");
     }
 
+    [Test]
+    public void APhaseFieldNamedWithADotIsAFieldTest()
+    {
+        static FoamExtractionRequestData Depth(string field) => new()
+        {
+            Responses =
+            [
+                new FoamResponseSpecData
+                {
+                    Name = "depth", Kind = FoamResponseKind.PatchValue, Patches = ["inlet"], Fields = [field], Operation = "areaIntegrate"
+                }
+            ]
+        };
+
+        Assert.That(FoamResponseRules.Validate(Depth("alpha.water")), Is.Empty, "every multiphase solver names its phases so");
+        Assert.That(FoamResponseRules.Validate(Depth("T.solid")), Is.Empty, "and a region's fields");
+        Assert.That(FoamResponseRules.Validate(Depth(".water")), Has.Some.Contains("'.water' is not a field name"), "a word starts with a letter");
+        Assert.That(FoamResponseRules.Validate(Depth("U:Transformed")), Has.Some.Contains("'U:Transformed' is not a field name"),
+            "a colon is no file name on a Windows node, and a probe writes one file per field");
+    }
+
+    [Test]
+    public void APatchOrAResponseNameStaysAWordWithoutADotTest()
+    {
+        static FoamExtractionRequestData Load(string name, string patch) => new()
+        {
+            Responses = [new FoamResponseSpecData { Name = name, Kind = FoamResponseKind.Forces, Patches = [patch] }]
+        };
+
+        Assert.That(FoamResponseRules.Validate(Load("load.x", "wall")), Is.EqualTo(new[] { "Response name 'load.x' is not a word (letters, digits, underscore)." }),
+            "a response name is a column prefix and a file of system/");
+        Assert.That(FoamResponseRules.Validate(Load("load", "wall.a")), Is.EqualTo(new[] { "Response 'load': 'wall.a' is not a patch name." }),
+            "the dot is a field's, not a patch's");
+    }
+
     #endregion
 }

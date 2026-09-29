@@ -88,6 +88,8 @@ public class FoamSupportedInputsDocumentTests
         var builtIn = Section("### Built-in steps").Where(line => line.StartsWith("- ")).Select(line => CodeIn(line)[0].Split(' ')[0]);
         Assert.That(builtIn, Is.EqualTo(FoamAllowList.BUILT_IN_STEPS));
         Assert.That(m_document, Does.Contain($"`{FoamAllowList.RESTORE_INITIAL_FIELDS} {FoamAllowList.PROCESSOR_FORM}`"));
+        Assert.That(m_document, Does.Contain($"`{FoamAllowList.INCLUDE_FUNCTION} <response>`"));
+        Assert.That(m_document, Does.Contain($"`#{FoamAllowList.INCLUDE_FUNCTION} <response>`"), "the one line the step writes, said where the case's files are said to travel as they are");
 
         var arguments = Section("### Arguments");
         var flags = arguments[arguments.FindIndex(line => line.EndsWith("refused in a recipe:")) + 2];

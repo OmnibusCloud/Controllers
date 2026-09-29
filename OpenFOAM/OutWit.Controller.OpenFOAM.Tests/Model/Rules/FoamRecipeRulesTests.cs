@@ -253,5 +253,44 @@ public class FoamRecipeRulesTests
         Assert.That(undecomposed, Is.EqualTo(new[] { "Step 1: restore0Dir -processor needs a decomposePar step before it." }));
     }
 
+    [Test]
+    public void AResponseAddedToTheSolveIsAcceptedWithoutAKitExecutableTest()
+    {
+        var recipe = new FoamRecipeData
+        {
+            Application = "simpleFoam",
+            Steps =
+            [
+                new FoamStepData { Utility = "blockMesh" },
+                new FoamStepData { Utility = "includeFunc", Arguments = ["torque"] },
+                new FoamStepData { Utility = "simpleFoam" }
+            ]
+        };
+
+        Assert.That(FoamRecipeRules.Validate(recipe, name => name != "includeFunc"), Is.Empty, "the controller's own step needs nothing from the kit");
+    }
+
+    [Test]
+    public void AResponseAddedToTheSolveNamesOneResponseBeforeTheSolveTest()
+    {
+        FoamRecipeData Recipe(params FoamStepData[] steps) => new() { Application = "simpleFoam", Steps = [.. steps] };
+        var solve = new FoamStepData { Utility = "simpleFoam" };
+        var postSolve = new FoamStepData { Utility = "simpleFoam", Arguments = ["-postProcess", "-func", "torque", "-latestTime"] };
+
+        var bare = FoamRecipeRules.Validate(Recipe(new FoamStepData { Utility = "includeFunc" }, solve));
+        var two = FoamRecipeRules.Validate(Recipe(new FoamStepData { Utility = "includeFunc", Arguments = ["torque", "load"] }, solve));
+        var notAWord = FoamRecipeRules.Validate(Recipe(new FoamStepData { Utility = "includeFunc", Arguments = ["../controlDict"] }, solve));
+        var underMpi = FoamRecipeRules.Validate(Recipe(new FoamStepData { Utility = "includeFunc", Arguments = ["torque"], Parallel = true }, solve));
+        var afterTheSolve = FoamRecipeRules.Validate(Recipe(solve, new FoamStepData { Utility = "includeFunc", Arguments = ["torque"] }, postSolve));
+
+        var form = "Step 1 (includeFunc): the only form is 'includeFunc <response>', one response name.";
+        Assert.That(bare, Is.EqualTo(new[] { form }));
+        Assert.That(two, Is.EqualTo(new[] { form }));
+        Assert.That(notAWord, Is.EqualTo(new[] { form }));
+        Assert.That(underMpi, Is.EqualTo(new[] { "Step 1: 'includeFunc' is done by the controller itself, never under MPI." }));
+        Assert.That(afterTheSolve, Is.EqualTo(new[] { "Step 2: includeFunc torque adds a response to the solve, and no step after it runs 'simpleFoam' to solve." }),
+            "the solver's -postProcess form measures after the solve, which is what the step exists to avoid");
+    }
+
     #endregion
 }

@@ -20,9 +20,11 @@ rules both enforce:
 
 `Rules/` holds what a case may be, as code every party runs (published as
 [SUPPORTED-INPUTS.md](https://github.com/OmnibusCloud/Controllers/blob/main/OpenFOAM/SUPPORTED-INPUTS.md)): `FoamAllowList`
-(the utilities, the solver shape, and the controller's own step
+(the utilities, the solver shape, and the controller's own steps:
 `restore0Dir -processor`, which puts the initial fields into the processor
-directories of a case meshed on its decomposed form), `FoamRecipeRules`
+directories of a case meshed on its decomposed form, and
+`includeFunc <response>`, which adds a response to the solve through one line
+in the node's copy of `system/controlDict`), `FoamRecipeRules`
 (steps and argument grammar, one step judged under a caller's name; the kit
 is asked through a predicate), `FoamCasePathRules` (the base
 tree: paths inside the case, no spaces, no case-only collisions, no leftovers

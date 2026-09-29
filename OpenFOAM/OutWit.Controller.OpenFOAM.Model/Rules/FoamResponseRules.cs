@@ -28,6 +28,14 @@ public static class FoamResponseRules
 
     private static readonly Regex WORD = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>
+    /// A field: a word that may carry dots, as every multiphase solver names
+    /// its phases (<c>alpha.water</c>) and a region its fields. No colon: a
+    /// probe writes one file per field, and a Windows node has no file named
+    /// <c>U:Transformed</c>.
+    /// </summary>
+    private static readonly Regex FIELD = new("^[A-Za-z][A-Za-z0-9_.]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex OPERATION = new("^[A-Za-z][A-Za-z0-9]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>A dictionary entry value: words, numbers, vectors and lists in parentheses - no braces, no semicolons, no code.</summary>
@@ -76,7 +84,7 @@ public static class FoamResponseRules
 
             foreach (var patch in response.Patches.Where(patch => !WORD.IsMatch(patch) && !IsQuotedRegex(patch)))
                 findings.Add($"{prefix}: '{patch}' is not a patch name.");
-            foreach (var field in response.Fields.Where(field => !WORD.IsMatch(field)))
+            foreach (var field in response.Fields.Where(field => !FIELD.IsMatch(field)))
                 findings.Add($"{prefix}: '{field}' is not a field name.");
             foreach (var parameter in response.Parameters)
             {
