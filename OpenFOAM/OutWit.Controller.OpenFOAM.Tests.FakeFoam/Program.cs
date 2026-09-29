@@ -14,17 +14,29 @@
 //     the forceCoeffs function object writes;
 //   - otherwise it "solves" ITERATIONS steps (system/fake may say
 //     "ITERATIONS=n"), converging on the last one, and writes <n>/U.
+// Every copy prints "nCells: 12225" unless system/fake says
+// "CELLS.<utility>=n" for the copy's name: n cells, or no count for 0.
 
 var caseDirectory = Directory.GetCurrentDirectory();
 var control = Path.Combine(caseDirectory, "system", "fake");
 var text = File.Exists(control) ? File.ReadAllText(control) : string.Empty;
+var name = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "fake-foam");
 
 Console.WriteLine("/*---------------------------------------------------------------------------*\\");
 Console.WriteLine("| fake-foam: a stand-in for an OpenFOAM solver                                |");
 Console.WriteLine("\\*---------------------------------------------------------------------------*/");
 Console.WriteLine($"Case   : {caseDirectory}");
 Console.WriteLine($"Args   : {string.Join(' ', args)}");
-Console.WriteLine("nCells: 12225");
+
+var cells = 12225L;
+foreach (var line in text.Split('\n'))
+{
+    if (line.StartsWith($"CELLS.{name}=", StringComparison.Ordinal) && long.TryParse(line[$"CELLS.{name}=".Length..].Trim(), out var value))
+        cells = value;
+}
+
+if (cells > 0)
+    Console.WriteLine($"nCells: {cells}");
 
 if (text.Contains("FAKE-ECHO", StringComparison.Ordinal))
 {

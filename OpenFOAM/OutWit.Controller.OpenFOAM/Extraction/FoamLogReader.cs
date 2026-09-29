@@ -21,6 +21,13 @@ public static class FoamLogReader
 
     private static readonly Regex CELLS = new(@"^\s*(?:nCells|cells):\s+(\d+)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>
+    /// A mesh snappyHexMesh reports as it goes (<c>Snapped mesh : cells:185237
+    /// faces:...</c>); the last one is the mesh it wrote. The ideal layer
+    /// count is a target, not a mesh.
+    /// </summary>
+    private static readonly Regex MESH_CELLS = new(@"^(?!Ideal )[A-Z][A-Za-z ]* : cells:(\d+)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private const string END = "End";
 
     private const string WARNING = "--> FOAM Warning";
@@ -107,6 +114,8 @@ public static class FoamLogReader
             else
             {
                 var cells = CELLS.Match(line);
+                if (!cells.Success)
+                    cells = MESH_CELLS.Match(line);
                 if (cells.Success && long.TryParse(cells.Groups[1].Value, out var count))
                     facts.CellCount = count;
             }

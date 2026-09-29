@@ -145,23 +145,30 @@ public sealed class FoamCaseSession
             .ToList();
 
         var checkMeshLog = report.LogPathOf(step => step.Utility == "checkMesh") ?? Path.Combine(caseDirectory, "log.checkMesh");
-        var (verdict, checkedCells) = FoamCheckMeshReader.Read(checkMeshLog);
+        var (verdict, _) = FoamCheckMeshReader.Read(checkMeshLog);
         result.CheckMeshVerdict = verdict;
 
         // Only the logs this run wrote: the base tree may not carry logs at all
-        // (the materializer refuses them), so these are the steps' own.
+        // (the materializer refuses them), so these are the steps' own. They
+        // run in step order, so the last count is the latest mesh a step
+        // reported - snappyHexMesh's, not the background mesh blockMesh made.
         var warnings = 0;
-        long cells = checkedCells;
+        long logged = 0;
         foreach (var log in report.LogPaths)
         {
             var facts = FoamLogReader.Read(log);
             warnings += facts.WarningCount;
-            if (cells == 0 && facts.CellCount > 0)
-                cells = facts.CellCount;
+            if (facts.CellCount > 0)
+                logged = facts.CellCount;
         }
 
         result.WarningCount = warnings;
-        result.CellCount = cells;
+
+        // The mesh on disk outranks the logs: it is the mesh the run ended with
+        // whatever step wrote it, one that prints no count included.
+        var decomposed = report.Steps.Any(step => step.Utility == recipe.Application && step.Ranks > 1);
+        var meshed = FoamMeshReader.CellCount(caseDirectory, decomposed);
+        result.CellCount = meshed > 0 ? meshed : logged;
     }
 
     private FoamResponseRowData ExtractResponses(string caseDirectory, FoamExtractionRequestData? extraction, double finalTime)
