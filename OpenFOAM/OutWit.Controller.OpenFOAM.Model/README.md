@@ -18,7 +18,8 @@ rules both enforce:
   the response set evaluated on the node right after the run.
 - `FoamArtifactPolicyData` — what of the finished case travels back.
 
-`Rules/` holds what a case may be, as code every party runs: `FoamAllowList`
+`Rules/` holds what a case may be, as code every party runs (published as
+[SUPPORTED-INPUTS.md](https://github.com/OmnibusCloud/Controllers/blob/main/OpenFOAM/SUPPORTED-INPUTS.md)): `FoamAllowList`
 (the utilities, the solver shape, and the controller's own step
 `restore0Dir -processor`, which puts the initial fields into the processor
 directories of a case meshed on its decomposed form), `FoamRecipeRules`
