@@ -1,0 +1,47 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Couette flow between two cylinders: the inner one turns with the zone the
+  MRF rotates, the outer one stands still. The controller's oracle case for a
+  force measured during the solve: the torque on the inner wall has a closed
+  form, 4 pi mu omega r1^2 r2^2 / (r2^2 - r1^2) per unit depth.
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+
+application     simpleFoam;
+
+startFrom       startTime;
+
+startTime       0;
+
+stopAt          endTime;
+
+endTime         400;
+
+deltaT          1;
+
+writeControl    timeStep;
+
+writeInterval   400;
+
+purgeWrite      0;
+
+writeFormat     ascii;
+
+writePrecision  8;
+
+writeCompression off;
+
+timeFormat      general;
+
+timePrecision   6;
+
+runTimeModifiable false;
+
+functions
+{
+}

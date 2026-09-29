@@ -55,9 +55,12 @@ not at the run's final time - a function object that stopped writing before
 the run ended - is not reported: the node names it in `log.responses`,
 which travels with the step logs.
 
-## The controller's own step
+## The controller's own steps
 
-One step of a recipe is the controller's rather than the kit's:
+Two steps of a recipe are the controller's rather than the kit's. Neither
+runs under MPI; each writes its log like any step's (`log.restore0Dir`,
+`log.includeFunc`) and reports 0 ranks, as a step no process ran.
+
 `restore0Dir -processor`, named after OpenFOAM's `RunFunctions`. A case meshed
 on its decomposed form - `decomposePar` over the background mesh, then
 `snappyHexMesh` in parallel, as the motorBike tutorial does - needs its
@@ -70,8 +73,28 @@ never runs under MPI; on a node without MPI the run is serial, there are no
 processor directories, and the step logs that it has nothing to do. A
 decomposed run without `processor<N>` directories (a case whose `controlDict`
 sets a collated file handler) or without initial fields fails at this step,
-by name. Its log is `log.restore0Dir`, like any step's; its outcome reports
-0 ranks, as a step no process ran.
+by name.
+
+`includeFunc <response>` measures a response during the solve instead of
+after it. It is the one change the controller makes to a case's own files,
+made only when a recipe asks for it and only in the node's copy: one line,
+`#includeFunc <response>`, at the end of the top-level `functions` block of
+`system/controlDict` (a block of its own when the case has none), so the
+solver runs the response's function object, `system/<response>`, while it
+solves. The reason is a force on a wall a rotating zone (MRF) turns:
+OpenFOAM moves such a wall only inside the solve, so the same force measured
+afterwards (`<solver> -postProcess`) sees it at rest - the torque on the
+inner cylinder of a Couette flow comes out about fourteen times too large and
+of the wrong sign (the kit oracle test holds both numbers). The step needs a
+solve after it, names only a response of the task, and fails by line - the
+copy left as it was - when `functions` is not a block the controller can add
+a line to (`#includeEtc`, a `$` reference). Its log says what was added,
+where, and why.
+
+The mesh a run reports (`CellCount`) is the one it ended with: read from the
+header OpenFOAM writes on every mesh (the processor meshes summed for a
+decomposed solve), else the last count a step's log reports - the mesh
+`snappyHexMesh` wrote, not the background mesh `blockMesh` made for it.
 
 ## Bundled kit
 
