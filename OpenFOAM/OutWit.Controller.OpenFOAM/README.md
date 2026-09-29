@@ -28,7 +28,10 @@ the response request, the token coverage - live in
 `OutWit.Controller.OpenFOAM.Model` (`Rules/`), so the node, the Sweep host
 and an initiator's preflight refuse the same things with the same sentences.
 What needs the kit or the materialised files (executables, libraries,
-run-time code) is checked here, on the node.
+run-time code) is checked here, on the node. The whole of it - the build and
+its platforms, the allow-list, what a case may not carry, the responses, the
+solver classes - is published, held to the rules by the tests, in
+[SUPPORTED-INPUTS.md](https://github.com/OmnibusCloud/Controllers/blob/main/OpenFOAM/SUPPORTED-INPUTS.md).
 
 ## What a case may contain
 
