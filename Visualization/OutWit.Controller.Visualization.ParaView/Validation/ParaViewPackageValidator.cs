@@ -295,6 +295,10 @@ public sealed class ParaViewPackageValidator
             warnings.Add($"state was saved by ParaView {document.Version} while the package declares {scene.Runtime.ParaViewMajor}.{scene.Runtime.ParaViewMinor}");
 
         var requiredPlugins = scene.Runtime.Plugins.Select(me => me.Name).ToList();
+        var allowlist = m_allowlist.ForProducer(scene.Runtime.ParaViewMajor, scene.Runtime.ParaViewMinor);
+        var allowlistName = ReferenceEquals(allowlist, m_allowlist)
+            ? $"ParaView {m_allowlist.RuntimeVersion}"
+            : $"ParaView {m_allowlist.RuntimeVersion} or {scene.Runtime.ParaViewMajor}.{scene.Runtime.ParaViewMinor}";
         var notAllowed = new SortedSet<string>(StringComparer.Ordinal);
         var referenced = new HashSet<string>(StringComparer.Ordinal);
 
@@ -311,7 +315,7 @@ public sealed class ParaViewPackageValidator
             foreach (var property in proxy.Properties.Where(ParaViewProxyPolicy.IsBlockedProperty))
                 errors.Add($"proxy '{proxy.Key}' (id {proxy.Id}) carries executable property '{property.Name}' and is rejected");
 
-            if (!m_allowlist.Allows(proxy.Key, requiredPlugins))
+            if (!allowlist.Allows(proxy.Key, requiredPlugins))
                 notAllowed.Add(proxy.Key);
 
             foreach (var property in proxy.Properties.Where(property => ParaViewProxyPolicy.IsFileProperty(proxy, property)))
@@ -337,7 +341,7 @@ public sealed class ParaViewPackageValidator
         }
 
         foreach (var key in notAllowed)
-            errors.Add($"state instantiates '{key}', which is not in the proxy allowlist of ParaView {m_allowlist.RuntimeVersion}");
+            errors.Add($"state instantiates '{key}', which is not in the proxy allowlist of {allowlistName}");
 
         foreach (var attachment in scene.Attachments)
         {

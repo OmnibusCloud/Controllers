@@ -43,7 +43,7 @@ internal static class FakeCompose
 
     public const string MARKER_TIMESTEPS = "FAKE-TIMESTEPS=";
 
-    public const string PARAVIEW_VERSION = "6.1.1-fake";
+    public const string PARAVIEW_VERSION = "6.2.0-fake";
 
     public const int DEFAULT_TIMESTEPS = 3;
 
@@ -248,7 +248,7 @@ internal static class FakeCompose
         static string Number(double value) => value.ToString("R", CultureInfo.InvariantCulture);
 
         var builder = new StringBuilder();
-        builder.Append("<ParaView>\n<ServerManagerState version=\"6.1.1\">\n");
+        builder.Append("<ParaView>\n<ServerManagerState version=\"6.2.0\">\n");
 
         builder.Append("  <Proxy group=\"sources\" type=\"OmnibusCloudFrdReader\" id=\"1\" servers=\"1\">\n");
         builder.Append("    <Property name=\"FileName\" id=\"1.FileName\" number_of_elements=\"1\">\n");

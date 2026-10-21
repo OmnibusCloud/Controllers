@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Xml;
+using OutWit.Controller.Visualization.ParaView.Runtime;
 
 namespace OutWit.Controller.Visualization.ParaView.Tests.Utils;
 
@@ -21,7 +22,7 @@ internal sealed class ParaViewStateBuilder
 
     private int m_nextId = 1000;
 
-    private string m_version = "6.1.1";
+    private string m_version = ParaViewRuntimeInfo.RUNTIME_VERSION;
 
     private bool m_timeKeeper = true;
 

@@ -108,8 +108,8 @@ public sealed class ParaViewComposeExecutorTests
             Assert.That(attachment.Role, Is.EqualTo(ParaViewAttachmentRole.ReaderInput));
 
             Assert.That(scene.Runtime.ParaViewMajor, Is.EqualTo(6));
-            Assert.That(scene.Runtime.ParaViewMinor, Is.EqualTo(1));
-            Assert.That(scene.Runtime.ParaViewPatch, Is.EqualTo(1));
+            Assert.That(scene.Runtime.ParaViewMinor, Is.EqualTo(ParaViewRuntimeInfo.RUNTIME_MINOR));
+            Assert.That(scene.Runtime.ParaViewPatch, Is.EqualTo(ParaViewRuntimeInfo.RUNTIME_PATCH));
             Assert.That(scene.Runtime.ProducerPluginVersion, Does.StartWith(ParaViewComposeExecutor.PRODUCER_TAG));
             Assert.That(scene.Runtime.Plugins.Single().Name, Is.EqualTo(ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME));
             Assert.That(scene.Runtime.Plugins.Single().Version, Is.EqualTo(ParaViewRuntimeInfo.BundledReaderVersion()));

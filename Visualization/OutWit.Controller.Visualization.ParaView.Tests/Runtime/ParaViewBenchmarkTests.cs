@@ -80,7 +80,7 @@ public sealed class ParaViewBenchmarkTests
             Assert.That(result.Custom[ParaViewBenchmark.CUSTOM_RENDER_DEVICE], Is.EqualTo("GPU"), "only vtkOSOpenGLRenderWindow is software");
             Assert.That(result.Custom[ParaViewBenchmark.CUSTOM_RENDER_RESOLUTION], Is.EqualTo($"{ParaViewBenchmark.CYCLE_WIDTH}x{ParaViewBenchmark.CYCLE_HEIGHT}"));
             Assert.That(result.Custom[ParaViewBenchmark.CUSTOM_CYCLES], Is.EqualTo(ParaViewBenchmark.MIN_CYCLES.ToString()));
-            Assert.That(result.Custom[ParaViewBenchmark.CUSTOM_PARAVIEW_VERSION], Is.EqualTo("6.1.1-fake"));
+            Assert.That(result.Custom[ParaViewBenchmark.CUSTOM_PARAVIEW_VERSION], Is.EqualTo("6.2.0-fake"));
             Assert.That(result.Custom[ParaViewBenchmark.CUSTOM_SCENE_POINTS], Is.EqualTo("226981"));
             // Each fake cycle reports 20 ms of in-process render time; the sum shows the startup share.
             Assert.That(double.Parse(result.Custom[ParaViewBenchmark.CUSTOM_RENDER_SECONDS], CultureInfo.InvariantCulture),

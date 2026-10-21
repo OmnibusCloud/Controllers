@@ -84,7 +84,7 @@ public sealed class ParaViewTaskExecutorTests
             Assert.That(result.Height, Is.EqualTo(48));
             Assert.That(result.Format, Is.EqualTo(ParaViewImageFormat.Png));
             Assert.That(result.ByteSize, Is.GreaterThan(0));
-            Assert.That(result.RuntimeVersion, Is.EqualTo("6.1.1-fake"));
+            Assert.That(result.RuntimeVersion, Is.EqualTo("6.2.0-fake"));
             Assert.That(result.Diagnostics, Does.Contain("stage=done"));
             Assert.That(File.Exists(m_blobs.GetStoredPath(result.ImageBlobId)), Is.True);
         });

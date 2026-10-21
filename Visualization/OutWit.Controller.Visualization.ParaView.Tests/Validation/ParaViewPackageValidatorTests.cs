@@ -304,6 +304,9 @@ public sealed class ParaViewPackageValidatorTests
         var scene = package.BuildScene(ParaViewStateBuilder.Typical("data/field.vtu").Build(), major: 5, minor: 13);
         var mismatch = m_validator.Validate(scene, new ParaViewOutputOptionsData(), m_blobs.GetStoredPath(scene.StateBlobId));
 
+        var newerScene = package.BuildScene(ParaViewStateBuilder.Typical("data/field.vtu").Build(), minor: ParaViewRuntimeInfo.RUNTIME_MINOR + 1);
+        var newer = m_validator.Validate(newerScene, new ParaViewOutputOptionsData(), m_blobs.GetStoredPath(newerScene.StateBlobId));
+
         var patchScene = package.BuildScene(ParaViewStateBuilder.Typical("data/field.vtu").Build());
         patchScene.Runtime.ParaViewPatch = ParaViewRuntimeInfo.RUNTIME_PATCH + 1;
         var patch = m_validator.Validate(patchScene, new ParaViewOutputOptionsData(), m_blobs.GetStoredPath(patchScene.StateBlobId));
@@ -311,9 +314,35 @@ public sealed class ParaViewPackageValidatorTests
         Assert.Multiple(() =>
         {
             Assert.That(mismatch.IsValid, Is.False);
-            Assert.That(mismatch.Errors, Has.Some.Contains("exact major.minor match"));
+            Assert.That(mismatch.Errors, Has.Some.Contains($"accepts packages produced with ParaView {ParaViewRuntimeInfo.RUNTIME_SERIES} or {ParaViewRuntimeInfo.PREVIOUS_SERIES}"));
+            Assert.That(newer.IsValid, Is.False, "a state from a newer ParaView may name proxies the runtime does not have");
             Assert.That(patch.IsValid, Is.True, string.Join("; ", patch.Errors));
             Assert.That(patch.Warnings, Has.Some.Contains("patch mismatch tolerated"));
+        });
+    }
+
+    [Test]
+    public void PreviousReleaseIsAcceptedWithAWarningAndItsOwnAllowlistTest()
+    {
+        // A runtime list without the reader the state uses: a package of the runtime's own series is refused,
+        // a package of the previous release passes through that release's embedded list.
+        const string READER = "sources/XMLUnstructuredGridReader";
+        var narrowed = new ParaViewProxyAllowlist(ParaViewRuntimeInfo.RUNTIME_SERIES, "test", ParaViewProxyAllowlist.Bundled.Proxies.Where(me => me != READER));
+        var validator = new ParaViewPackageValidator(narrowed, ParaViewRuntimeInfo.BundledReaderVersion());
+
+        var package = new ParaViewPackageBuilder(m_root, m_blobs).AddFile("data/field.vtu", "x");
+        var current = package.BuildScene(ParaViewStateBuilder.Typical("data/field.vtu").Build());
+        var previous = package.BuildScene(ParaViewStateBuilder.Typical("data/field.vtu").Build(), major: ParaViewRuntimeInfo.PREVIOUS_MAJOR, minor: ParaViewRuntimeInfo.PREVIOUS_MINOR);
+        var currentReport = validator.Validate(current, new ParaViewOutputOptionsData(), m_blobs.GetStoredPath(current.StateBlobId));
+        var previousReport = validator.Validate(previous, new ParaViewOutputOptionsData(), m_blobs.GetStoredPath(previous.StateBlobId));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(currentReport.IsValid, Is.False);
+            Assert.That(currentReport.Errors, Has.Some.Contains($"'{READER}', which is not in the proxy allowlist of ParaView {ParaViewRuntimeInfo.RUNTIME_SERIES}"));
+            Assert.That(previousReport.IsValid, Is.True, string.Join("; ", previousReport.Errors));
+            Assert.That(previousReport.Warnings, Has.Some.Contains("the previous release is accepted"));
+            Assert.That(previousReport.RuntimeVersion, Is.EqualTo(ParaViewRuntimeInfo.RUNTIME_VERSION));
         });
     }
 

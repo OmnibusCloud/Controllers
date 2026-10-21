@@ -114,11 +114,11 @@ check "pvpython windows-x64"   "$MODULE/paraview/windows-x64/bin/pvpython.exe"
 check "pvpython linux-x64"     "$MODULE/paraview/linux-x64/bin/pvpython"
 check "pvpython-real linux"    "$MODULE/paraview/linux-x64/bin/pvpython-real"
 check "mesa linux"             "$MODULE/paraview/linux-x64/lib/mesa/libOSMesa.so.8"
-check "pvpython macos-arm64"   "$MODULE/paraview/macos-arm64/ParaView-6.1.1.app/Contents/bin/pvpython"
+check "pvpython macos-arm64"   "$MODULE/paraview/macos-arm64/ParaView-6.2.0.app/Contents/bin/pvpython"
 check "licenses windows"       "$MODULE/paraview/windows-x64/share/licenses"
 check "licenses linux"         "$MODULE/paraview/linux-x64/share/licenses"
-check "licenses macos"         "$MODULE/paraview/macos-arm64/ParaView-6.1.1.app/Contents/Resources/licenses"
-for resource in runner/render_task.py allowlists/paraview-6.1.json plugins/omnibuscloud_frd_reader.py; do
+check "licenses macos"         "$MODULE/paraview/macos-arm64/ParaView-6.2.0.app/Contents/Resources/licenses"
+for resource in runner/render_task.py allowlists/paraview-6.2.json allowlists/paraview-6.1.json plugins/omnibuscloud_frd_reader.py; do
   if grep -q "$resource" "$MODULE/OutWit.Controller.Visualization.ParaView.dll"; then echo "  OK   embedded $resource"; else echo "  FAIL embedded $resource"; fail=1; fi
 done
 SCRIPTS="$(find "$OUT" -name "RenderParaViewFrames.wit" | head -1)"

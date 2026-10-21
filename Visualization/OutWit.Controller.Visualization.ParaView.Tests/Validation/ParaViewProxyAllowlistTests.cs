@@ -21,8 +21,43 @@ public sealed class ParaViewProxyAllowlistTests
             Assert.That(allowlist.Proxies, Does.Contain("filters/Contour"));
             Assert.That(allowlist.Proxies, Does.Contain("views/RenderView"));
             Assert.That(allowlist.Proxies, Does.Contain("misc/TimeKeeper"));
+            Assert.That(allowlist.Proxies, Does.Contain("sources/LegacyVTKFileReader"), "a .vtk opened beside an OpenFOAM case reads through the legacy reader");
             Assert.That(allowlist.Proxies, Does.Not.Contain("filters/ProgrammableFilter"));
             Assert.That(allowlist.Proxies, Does.Not.Contain("sources/ProgrammableSource"));
+        });
+    }
+
+    [Test]
+    public void EmbeddedAllowlistForThePreviousReleaseLoadsTest()
+    {
+        var previous = ParaViewProxyAllowlist.LoadEmbedded(ParaViewRuntimeInfo.PREVIOUS_SERIES);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(previous.RuntimeVersion, Is.EqualTo(ParaViewRuntimeInfo.PREVIOUS_SERIES));
+            Assert.That(previous.Origin, Is.EqualTo("generated"));
+            Assert.That(previous.Proxies, Does.Contain("views/RenderView"));
+        });
+    }
+
+    [Test]
+    public void ForProducerUnionsThePreviousReleaseAndKeepsTheRuntimeSeriesTest()
+    {
+        var runtime = new ParaViewProxyAllowlist(ParaViewRuntimeInfo.RUNTIME_SERIES, "test", ["views/RenderView", "cell_locators/StaticCellLocator"],
+            new Dictionary<string, IReadOnlyList<string>> { ["Other"] = ["sources/Other"] });
+        var previous = ParaViewProxyAllowlist.LoadEmbedded(ParaViewRuntimeInfo.PREVIOUS_SERIES);
+
+        var forPrevious = runtime.ForProducer(ParaViewRuntimeInfo.PREVIOUS_MAJOR, ParaViewRuntimeInfo.PREVIOUS_MINOR);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(runtime.ForProducer(ParaViewRuntimeInfo.RUNTIME_MAJOR, ParaViewRuntimeInfo.RUNTIME_MINOR), Is.SameAs(runtime));
+            Assert.That(runtime.ForProducer(5, 13), Is.SameAs(runtime), "an unaccepted series is refused by the compatibility check, not here");
+            Assert.That(forPrevious.RuntimeVersion, Is.EqualTo(ParaViewRuntimeInfo.RUNTIME_SERIES));
+            Assert.That(forPrevious.Proxies, Is.SupersetOf(previous.Proxies));
+            Assert.That(forPrevious.Proxies, Does.Contain("cell_locators/StaticCellLocator"));
+            Assert.That(forPrevious.PluginProxies[ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME], Does.Contain($"sources/{ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME}"));
+            Assert.That(forPrevious.PluginProxies["Other"], Does.Contain("sources/Other"));
         });
     }
 

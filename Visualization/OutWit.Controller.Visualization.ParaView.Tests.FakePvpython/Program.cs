@@ -31,7 +31,7 @@ using OutWit.Controller.Visualization.ParaView.Tests.FakePvpython;
 
 if (args.Length == 1 && args[0] == "--version")
 {
-    Console.WriteLine("paraview version 6.1.1");
+    Console.WriteLine("paraview version 6.2.0");
     return 0;
 }
 
@@ -85,7 +85,7 @@ var status = new Dictionary<string, object?>
     ["ok"] = false,
     ["stage"] = "load-task",
     ["error"] = "",
-    ["paraview_version"] = "6.1.1-fake",
+    ["paraview_version"] = "6.2.0-fake",
     ["reader_version"] = "",
     ["proxy_count"] = 0,
     ["render_seconds"] = 0.0,

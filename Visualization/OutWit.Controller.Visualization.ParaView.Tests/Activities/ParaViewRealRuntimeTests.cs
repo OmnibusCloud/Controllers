@@ -106,6 +106,7 @@ public sealed class ParaViewRealRuntimeTests
     [TestCase(ParaViewCorpus.VTR_SURFACE)]
     [TestCase(ParaViewCorpus.SPHERE_STATIC)]
     [TestCase(ParaViewCorpus.OPENFOAM_BOX)]
+    [TestCase(ParaViewCorpus.LEGACY_VTK)]
     public async Task StillRendersThroughTheRealRuntimeTest(string stateName)
     {
         var (scene, _) = ParaViewCorpus.BuildScene(stateName, Path.Combine(m_root, Path.GetFileNameWithoutExtension(stateName)), m_blobs);
@@ -123,6 +124,35 @@ public sealed class ParaViewRealRuntimeTests
         var rendered = (job.Variables["rendered"].Value as IReadOnlyList<ParaViewRenderResultData?>)!.Single()!;
         Assert.That(rendered.RuntimeVersion, Does.StartWith(ParaViewRuntimeInfo.RUNTIME_SERIES));
         Assert.That(rendered.Diagnostics, Does.Contain("stage=done"));
+    }
+
+    [Test]
+    public async Task PreviousReleaseStatesRenderThroughTheRealRuntimeTest()
+    {
+        // The state every plugin build for the previous ParaView release sends - core, GUI-saved and reader
+        // states as that release saved them - loads forward and renders on this runtime.
+        var failures = new List<string>();
+        foreach (var stateName in ParaViewCorpus.PreviousStates)
+        {
+            var (scene, _) = ParaViewCorpus.BuildPreviousScene(stateName, Path.Combine(m_root, "previous_" + stateName.Replace('/', '_')), m_blobs);
+            var options = new ParaViewOutputOptionsData { Width = 160, Height = 120 };
+
+            var job = m_engine.Compile(Script("RenderParaViewStill.wit"));
+            var status = await m_engine.ScheduleAndWaitAsync(job, scene, options);
+            if (status.Result != WitProcessingResult.Completed)
+            {
+                failures.Add($"{stateName}: {status.Result}: {status.Message}");
+                continue;
+            }
+
+            var image = ParaViewImageInfo.TryRead(m_blobs.GetStoredPath((Guid)job.Variables["result"].Value!));
+            var rendered = (job.Variables["rendered"].Value as IReadOnlyList<ParaViewRenderResultData?>)!.Single()!;
+            if (image != new ParaViewImageInfo(ParaViewImageFormat.Png, 160, 120, false) || !rendered.RuntimeVersion.StartsWith(ParaViewRuntimeInfo.RUNTIME_SERIES, StringComparison.Ordinal))
+                failures.Add($"{stateName}: image {image}, runtime {rendered.RuntimeVersion}");
+        }
+
+        Assert.That(ParaViewCorpus.PreviousStates, Has.Count.GreaterThanOrEqualTo(20));
+        Assert.That(failures, Is.Empty);
     }
 
     [Test]

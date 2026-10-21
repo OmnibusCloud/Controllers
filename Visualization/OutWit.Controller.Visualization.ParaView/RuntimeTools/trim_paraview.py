@@ -48,6 +48,11 @@ RULES = {
             # without it; with it, a state that enables ray tracing renders through the CPU path tracer.
             # Only the MPI device module goes.
             "bin/ospray_module_mpi.dll",
+            # 6.2: the uv package manager ships in bin/ (76 MB, nothing in the runtime calls it) and ANARI's
+            # VisRTX device (CUDA/OptiX, like the visrtx.dll above); ANARI's CPU reference device stays.
+            "bin/uv.exe", "bin/uvx.exe", "bin/anari_library_visrtx.dll",
+            # 6.2: the CAVE interaction incubator links the Qt client (pq*, Qt6*) removed above - unloadable here.
+            "bin/vtkPVIncubatorCAVEInteractionStyles-pv*.dll", "bin/Lib/site-packages/paraview/incubator/vtkPVIncubatorCAVEInteractionStyles*",
         ],
         "site_packages": "bin/Lib/site-packages",
         "dll_dir": "bin",
@@ -86,6 +91,12 @@ RULES = {
             "lib/libospray_module_mpi*", "lib/mesa/libswrAVX*",
             # scipy leftovers (the package is removed below) and unreferenced vendor bits.
             "lib/libqhull_r*", "lib/libsf_error_state*", "lib/libusb-1.0*",
+            # 6.2: the uv package manager and ANARI's VisRTX device (see the Windows rule).
+            "bin/uv", "bin/uvx", "lib/libanari_library_visrtx*",
+            # 6.2: CUDA's random-number library (only the VisRTX device needs it), the Qt testing library (renamed
+            # to lower case in 6.2) and the CAVE interaction incubator (links the Qt client - see the Windows rule).
+            "lib/libcurand*", "lib/libvtkqttesting-pv*", "lib/libvtkPVIncubatorCAVEInteractionStyles-pv*",
+            "lib/python*/site-packages/paraview/incubator/vtkPVIncubatorCAVEInteractionStyles*",
         ],
         "site_packages": "lib/python*/site-packages",
         "dll_dir": None,
@@ -100,7 +111,7 @@ RULES = {
         ],
     },
     "macos-arm64": {
-        # Layout of the official dmg's ParaView-6.1.1.app: Contents/bin (pvpython is a real Mach-O, rpath
+        # Layout of the official dmg's ParaView-<version>.app: Contents/bin (pvpython is a real Mach-O, rpath
         # @executable_path/../Libraries), Contents/Libraries (flat dylibs, the Python stdlib under lib/python3.12,
         # and — unlike Linux — the plugin libraries next to the core ones), Contents/Python (site-packages),
         # Contents/Frameworks (Qt only), Contents/Plugins (the .so plugin stubs), Contents/Resources.
@@ -119,6 +130,12 @@ RULES = {
             "Contents/Libraries/libpq*", "Contents/Libraries/libvtkGUISupportQt-pv*", "Contents/Libraries/libvtkQtTesting-pv*", "Contents/Libraries/libvtkExtensionsShaderBall-pv*",
             "Contents/Libraries/libnvindex*", "Contents/Libraries/libcatalyst-paraview*", "Contents/Libraries/libcatalyst-stub*",
             "Contents/Libraries/libospray_module_mpi*", "Contents/Libraries/libqhull_r*", "Contents/Libraries/libsf_error_state*",
+            # 6.2: the uv package manager and ANARI's VisRTX device (see the Windows rule).
+            "Contents/bin/uv", "Contents/bin/uvx", "Contents/Libraries/libanari_library_visrtx*",
+            # 6.2: CUDA's random-number library, the Qt testing library and the CAVE interaction incubator
+            # (see the Linux rule; the incubator's Python module would keep it reachable for the closure prune).
+            "Contents/Libraries/libcurand*", "Contents/Libraries/libvtkqttesting-pv*", "Contents/Libraries/libvtkPVIncubatorCAVEInteractionStyles-pv*",
+            "Contents/Python/paraview/incubator/vtkPVIncubatorCAVEInteractionStyles*",
         ],
         # Plugin libraries live next to the core ones here, so the rule set is completed by a closure prune:
         # every dylib not reachable from pvpython / the Python extension modules goes, except the dlopen'd

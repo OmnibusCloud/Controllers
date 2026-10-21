@@ -8,7 +8,7 @@ namespace OutWit.Controller.Visualization.ParaView.Tasks;
 /// O(attachments + outputs) lookups. Attachments keep their package order inside every subset.
 /// The <b>series anchor</b> is the first member of every series group (lowest ordinal, then package
 /// order): ParaView's PVD and file-series readers open the first file of a series when the state
-/// loads, whatever timestep is rendered — verified against ParaView 6.1.1 — so it ships with every
+/// loads, whatever timestep is rendered — verified against ParaView 6.1.1 and 6.2.0 — so it ships with every
 /// task at the cost of one extra piece per task, keeping per-task data O(1) in the series length.
 /// </summary>
 public sealed class ParaViewAttachmentSubsetIndex

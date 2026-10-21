@@ -7,16 +7,17 @@ tasks across worker nodes. The companion
 carries the shared data types and the `paraview.*@1` job document vocabulary for non-.NET initiators
 (the ParaView GUI plugin).
 
-**Status: 1.0.0.** The controller shape, validation, splitting (per output and batched), the node runner
-contract, the test harness, the per-platform ParaView runtime assets (`paraview-v0.1.0`), the bundled
-OmnibusCloud `.frd` reader, composed scenes, camera moves and the native OpenFOAM reader are complete
-and in production behind the ParaView GUI plugin and WitSweep.
+**Status: 1.1.0.** The controller shape, validation, splitting (per output and batched), the node runner
+contract, the test harness, the per-platform ParaView runtime assets (`paraview-v1.0.0`: ParaView 6.2.0),
+the bundled OmnibusCloud `.frd` reader, composed scenes, camera moves and the native OpenFOAM reader are
+complete and in production behind the ParaView GUI plugin and WitSweep. Packages produced with the
+previous release (ParaView 6.1) keep rendering.
 
 ## Activities
 
 | Activity | Side | Purpose |
 |---|---|---|
-| `ParaView.Validate(ParaViewSceneRef scene, ParaViewOutputOptions options)` → `ParaViewValidationReport` | host | Treats the package as untrusted input: package reference, attachments and logical paths, runtime requirement (exact ParaView major.minor, allowlisted plugins only), output options and limits, then the state — hardened XML parse (no DTD/entities, depth/count/size bounds), proxy allowlist, programmable-pipeline rejection, file references against the package, views, timeline, frame selection. Downloads only the state. An invalid package is a *completed* activity with an invalid report. |
+| `ParaView.Validate(ParaViewSceneRef scene, ParaViewOutputOptions options)` → `ParaViewValidationReport` | host | Treats the package as untrusted input: package reference, attachments and logical paths, runtime requirement (the runtime's ParaView major.minor or the previous release's, allowlisted plugins only), output options and limits, then the state — hardened XML parse (no DTD/entities, depth/count/size bounds), proxy allowlist, programmable-pipeline rejection, file references against the package, views, timeline, frame selection. Downloads only the state. An invalid package is a *completed* activity with an invalid report. |
 | `ParaView.Split(scene, report, options)` → `ParaViewRenderTaskCollection` | host | Deterministic tasks — one per resolved timestep of the resolved view; identity = package digest + dataset identity (reserved, empty) + view + timestep + options digest; **each task carries only the attachments its timestep needs** (series pieces by `TimestepIndices`, plus statics and series indexes). Refuses an invalid report. |
 | `ParaView.RenderFrame(ParaViewRenderTask task)` → `ParaViewRenderResult` | node | Materializes the state and the task's subset into an isolated, task-unique package root (digests verified while copying, nothing outside the subset requested), writes the controller-owned runner, runs `pvpython` under an allowlisted environment, interprets exit code + status document, validates the output (signature, dimensions, alpha, no stray files), publishes it. Cancellation and the wall-clock limit kill the whole process tree; the workspace is deleted on every path. |
 | `ParaView.SplitBatched(scene, report, options)` → `ParaViewRenderTaskBatchCollection` | host | **0.5.0 (FrameBatch).** The tasks of `Split` grouped into consecutive chunks (`Tasks/ParaViewChunkPolicy`: `clamp(ceil(outputs / 24), 1, 32)` outputs per chunk — a small job still splits per output, a long animation batches up to 32 per process; a chunk also closes early when the next output would push its attachment union over the per-task byte limit). A chunk hoists the state, options and runtime, carries the **union** of its members' subsets in package order (statics, indexes and series anchors once per chunk instead of once per output), and lists its members with their global task indices. |
@@ -197,8 +198,37 @@ the reader scans whenever the state loads) at empty timestep indices and every l
 directory at its timeline index, so a task materializes the case minus the other times
 (`ParaViewCorpusValidationTests.OpenFoamCaseSplitsIntoStaticsAndTheOwnTimeDirectoryTest`; the
 real-runtime proof renders both times with subset-only downloads and distinct frames). The
-runtime asset is unchanged (`paraview-v0.1.0`): the reader lives in the core VTK IO libraries the
+runtime asset was unchanged (`paraview-v0.1.0`): the reader lives in the core VTK IO libraries the
 trim keeps on every platform.
+
+### ParaView 6.2 (controller 1.1.0)
+
+The bundled runtime moves to **ParaView 6.2.0** (runtime assets `paraview-v1.0.0`) and the controller
+**still renders packages produced with ParaView 6.1**, so a client on the previous release keeps working
+while it upgrades:
+
+- **Compatibility.** `ParaViewCompatibility` admits the runtime's major.minor (patch mismatch tolerated)
+  and the previous release (`ParaViewRuntimeInfo.PREVIOUS_SERIES`) with a warning - ParaView loads an
+  older state forward, converting it as it loads. Any other series is refused before a byte of data moves.
+- **Allowlists per producer.** A state names the proxies of the release that saved it and the runtime
+  registers its own after loading it, so a previous-release package is checked against the union of
+  both allowlists (`ParaViewProxyAllowlist.ForProducer`, used by the host validator and by the node's
+  runner task alike); `Allowlists/paraview-6.1.json` stays embedded next to `paraview-6.2.json`.
+- **Proof.** The 6.1 corpus states (`Fixtures/CorpusPrevious/paraview-6.1-states.zip` - core, GUI-saved
+  and reader states as 6.1 saved them over the same data) validate with the compatibility warning and
+  render through the real 6.2 runtime (`PreviousReleaseStatesAreValidWithAWarningTest`,
+  `PreviousReleaseStatesRenderThroughTheRealRuntimeTest`); measured on the author machine, 48 of the 49
+  frames of that corpus are pixel-identical to the 6.1 runtime's and the last differs on 0.8 % of edge
+  pixels (a filter-level change in 6.2).
+- **The 6.2 allowlist** was regenerated over a corpus re-saved by 6.2 (pvpython and GUI): no proxy left,
+  six `cell_locators/*` helpers arrived (the GUI now saves the locator choice of the filters that probe
+  cells) and `sources/LegacyVTKFileReader` came with a new fixture (`legacy_vtk.pvsm`, a legacy-format
+  `.vtk` surface - what OpenFOAM's `foamToVTK` and the postProcessing surface writers produce next to a
+  case, which a client opens beside it).
+- **Trim.** 6.2 ships the `uv` package manager, ANARI's VisRTX device, CUDA's `libcurand` and a CAVE
+  interaction incubator module that links the Qt client; all four go. OSPRay 3 renamed its CPU device
+  module to `ospray_module_cpu` and still dlopens it by the unversioned name - `collapse_symlinks.py`
+  now follows a real file an earlier alias already renamed instead of dropping the dlopen'd alias.
 
 ## The runner contract
 
@@ -263,8 +293,8 @@ positive, arrays have their shapes and every step has data — the real-runtime 
 
 ## Runtime
 
-The pinned runtime is **ParaView 6.1.1** (`Runtime/ParaViewRuntimeInfo.cs`). Version 1 requires an exact
-major.minor match with the producing ParaView; patch mismatch is tolerated. Since ParaView 6.0 a single
+The pinned runtime is **ParaView 6.2.0** (`Runtime/ParaViewRuntimeInfo.cs`). A package must come from the
+runtime's major.minor (patch mismatch tolerated) or from the previous release, 6.1 (see above). Since ParaView 6.0 a single
 binary serves every rendering backend — OSMesa software rendering is the certified baseline (Linux), EGL/GPU
 stays opportunistic. The per-platform runtimes are the official Kitware binaries trimmed to the headless
 pvpython (`RuntimeTools/trim_paraview.py`; Linux/macOS symlink chains collapsed to one loader-named file
@@ -278,8 +308,8 @@ packages, OSPRay's CPU device (ParaView initialises OSPRay with every render vie
 (Linux), and the ParaView license / SPDX materials. What goes: the Qt client and its libraries, NVIDIA
 IndeX / MDL / OptiX / VisRTX, MKL, Catalyst stubs, ParaView's own plugins, docs, examples, translations,
 web/, and the Python packages pvpython does not need for rendering (scipy, pandas, matplotlib, sympy,
-h5py, netCDF4, mpi4py, PIL, …). The official 1.4 GB Windows zip becomes ~700 MB, the 2.8 GB Linux tarball
-~1.35 GB (the flat `lib/` is one DT_NEEDED chain from `libvtkRemotingApplication` and cannot shrink
+h5py, netCDF4, mpi4py, PIL, …). With 6.2.0 the official 1.4 GB Windows zip (4.2 GB unpacked) becomes ~720 MB
+and the 2.9 GB Linux tree ~1.5 GB (the flat `lib/` is one DT_NEEDED chain from `libvtkRemotingApplication` and cannot shrink
 without rebuilding ParaView). Every trim is verified by the real-runtime tests and by regenerating the
 allowlist from the trimmed runtime — never by the scripts alone.
 
@@ -287,7 +317,7 @@ allowlist from the trimmed runtime — never by the scripts alone.
 | --- | --- | --- |
 | windows-x64 | `paraview-windows-x64.zip` | `bin/pvpython.exe`; Win32 offscreen OpenGL (no osmesa.dll in the official build — a software GL is a node concern) |
 | linux-x64 | `paraview-linux-x64.zip` | `bin/pvpython` is Kitware's ELF launcher (sets `LD_LIBRARY_PATH`, falls back to the bundled `lib/mesa` OSMesa) exec'ing `pvpython-real`; the resolver restores both execute bits. Renders through llvmpipe OSMesa — `VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow`, set by `ParaViewRunnerEnvironment`; no GPU, display or system Mesa needed. **Nodes must provide** `libgomp1 libpciaccess0 libx11-6 libxext6` (Debian/Ubuntu names; X11 is dlopen'd even for offscreen rendering). Certified in a bare `ubuntu:22.04` container. |
-| macos-arm64 | `paraview-macos-arm64.zip` | `ParaView-6.1.1.app/Contents/bin/pvpython`; best effort — packed from the official dmg but not run on macOS hardware yet |
+| macos-arm64 | `paraview-macos-arm64.zip` | `ParaView-6.2.0.app/Contents/bin/pvpython`; best effort — packed from the official dmg but not run on macOS hardware yet |
 
 `RuntimeTools/` is author-side: `generate_fixtures.py` (the golden corpus; `--plugin/--frd` add the
 reader states), `generate_gui_states.py` (run INSIDE the ParaView GUI with `--script`: re-saves every
@@ -322,10 +352,10 @@ python trim_paraview.py --platform windows-x64 --source <extracted> --out @Prere
 # Linux (inside ubuntu:22.04 — the tarball's symlinks need a POSIX filesystem)
 python3 trim_paraview.py --platform linux-x64 --source <extracted> --out linux-x64
 python3 collapse_symlinks.py linux-x64 --keep-alias "libospray_module_*" --keep-alias "libopenvkl_module_cpu_device.so"
-# macOS (extract ParaView-6.1.1.app from the dmg with 7-Zip ≥ 22; HFS+ symlinks come out as real links)
-python trim_paraview.py --platform macos-arm64 --source <ParaView-6.1.1.app> --out @Prerequisites/paraview/macos-arm64/ParaView-6.1.1.app
-python collapse_symlinks.py @Prerequisites/paraview/macos-arm64/ParaView-6.1.1.app --keep-alias "libospray_module_*" --keep-alias "libopenvkl_module_cpu_device.dylib"
-# then: outwit-assets-pack <csproj> --prerequisites @Prerequisites --apply --push-release
+# macOS (extract ParaView-6.2.0.app from the dmg with 7-Zip ≥ 22 and -snl; HFS+ symlinks come out as real links)
+python trim_paraview.py --platform macos-arm64 --source <ParaView-6.2.0.app> --out @Prerequisites/paraview/macos-arm64/ParaView-6.2.0.app
+python collapse_symlinks.py @Prerequisites/paraview/macos-arm64/ParaView-6.2.0.app --keep-alias "libospray_module_*" --keep-alias "libopenvkl_module_cpu_device.dylib"
+# then: outwit-assets-pack <csproj> --prerequisites @Prerequisites --release-tag paraview-v<assets> --apply --push-release
 ```
 
 OSPRay and Open VKL dlopen their device modules by the *unversioned* name, which is why those aliases
@@ -359,7 +389,8 @@ Utils/         NullBlobService
 Runner/        render_task.py, compose_scene.py (embedded)
 Fixtures/      benchmark.frd (embedded; the compose benchmark's data — the corpus static.frd)
 Plugins/       omnibuscloud_frd_reader.py (embedded; byte-identical with the GUI plugin's copy)
-Allowlists/    paraview-6.1.json (embedded; generated from the fixture corpus by RuntimeTools/generate_allowlist.py)
+Allowlists/    paraview-6.2.json (embedded; generated from the fixture corpus by RuntimeTools/generate_allowlist.py)
+               + paraview-6.1.json (the previous release's, for the packages it still produces)
 RuntimeTools/  author-side: corpus + allowlist generators, frd fixtures + reader proof, runtime trimming, closure reports
 Scripts/       the bundled .wit scripts
 ```

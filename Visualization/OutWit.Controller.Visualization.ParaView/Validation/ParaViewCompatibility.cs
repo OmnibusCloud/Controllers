@@ -4,9 +4,11 @@ using OutWit.Controller.Visualization.ParaView.Runtime;
 namespace OutWit.Controller.Visualization.ParaView.Validation;
 
 /// <summary>
-/// The version-1 compatibility policy (docs 03, section 7): exact major and minor match between
-/// the producing ParaView and the bundled runtime, patch mismatch tolerated; every required plugin
-/// must be the bundled OmnibusCloud reader at a version the bundled reader satisfies (same major,
+/// The compatibility policy (docs 03, section 7): the producing ParaView is the bundled runtime's
+/// major.minor (patch mismatch tolerated) or the previous release the controller still renders
+/// (<see cref="ParaViewRuntimeInfo.PREVIOUS_SERIES"/>: ParaView loads an older state forward, and the
+/// state is checked against that release's own allowlist as well); every required plugin must be the
+/// bundled OmnibusCloud reader at a version the bundled reader satisfies (same major,
 /// greater-or-equal minor); anything else is a permanent compatibility failure reported before any
 /// large attachment is downloaded.
 /// </summary>
@@ -29,8 +31,10 @@ public static class ParaViewCompatibility
     {
         if (requirement.ParaViewMajor <= 0)
             errors.Add("runtime requirement does not name the producing ParaView version");
-        else if (requirement.ParaViewMajor != ParaViewRuntimeInfo.RUNTIME_MAJOR || requirement.ParaViewMinor != ParaViewRuntimeInfo.RUNTIME_MINOR)
-            errors.Add($"package was produced with ParaView {requirement.ParaViewMajor}.{requirement.ParaViewMinor}; this controller renders with {ParaViewRuntimeInfo.RUNTIME_SERIES} and version 1 requires an exact major.minor match");
+        else if (ParaViewRuntimeInfo.IsPreviousSeries(requirement.ParaViewMajor, requirement.ParaViewMinor))
+            warnings.Add($"package was produced with ParaView {requirement.ParaViewMajor}.{requirement.ParaViewMinor}.{requirement.ParaViewPatch}; rendering with {ParaViewRuntimeInfo.RUNTIME_VERSION} (the previous release is accepted: ParaView loads the state forward)");
+        else if (!ParaViewRuntimeInfo.IsRuntimeSeries(requirement.ParaViewMajor, requirement.ParaViewMinor))
+            errors.Add($"package was produced with ParaView {requirement.ParaViewMajor}.{requirement.ParaViewMinor}; this controller renders with {ParaViewRuntimeInfo.RUNTIME_SERIES} and accepts packages produced with ParaView {ParaViewRuntimeInfo.RUNTIME_SERIES} or {ParaViewRuntimeInfo.PREVIOUS_SERIES}");
         else if (requirement.ParaViewPatch != ParaViewRuntimeInfo.RUNTIME_PATCH)
             warnings.Add($"package was produced with ParaView {requirement.ParaViewMajor}.{requirement.ParaViewMinor}.{requirement.ParaViewPatch}; rendering with {ParaViewRuntimeInfo.RUNTIME_VERSION} (patch mismatch tolerated)");
 

@@ -35,7 +35,7 @@ internal static class FakeBenchmark
 
     public const string RENDER_WINDOW = "FakeOffscreenWindow";
 
-    public const string PARAVIEW_VERSION = "6.1.1-fake";
+    public const string PARAVIEW_VERSION = "6.2.0-fake";
 
     #endregion
 
