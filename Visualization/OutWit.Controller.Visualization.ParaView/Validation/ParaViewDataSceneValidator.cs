@@ -24,7 +24,7 @@ public static class ParaViewDataSceneValidator
 
     /// <summary>
     /// ParaView colour-map presets a data scene may name — every name verified against the bundled
-    /// 6.1.1 runtime's preset vocabulary (vtkSMTransferFunctionPresets; the RealRuntime suite guards
+    /// 6.2.0 runtime's preset vocabulary (vtkSMTransferFunctionPresets; the RealRuntime suite guards
     /// the list). An empty preset keeps ParaView's default.
     /// </summary>
     public static readonly IReadOnlySet<string> COLORMAP_PRESETS = new HashSet<string>(StringComparer.Ordinal)

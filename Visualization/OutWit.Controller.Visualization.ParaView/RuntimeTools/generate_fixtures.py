@@ -22,6 +22,8 @@ controller's golden validation tests:
       states/pvd_series.pvsm              # PVDReader time series (index file + per-step pieces)
       states/file_series.pvsm             # XMLImageDataReader over FileNames (file-series reader)
       states/sphere_static.pvsm           # no files at all (static, no attachments)
+      data/legacy/surface.vtk             # legacy-format polydata (what foamToVTK and postProcessing surfaces write)
+      states/legacy_vtk.pvsm              # LegacyVTKReader surface coloured by elevation
       data/frd/*.frd                      # (with --frd) CalculiX results: the CalculiX.Tests fixtures +
                                           #   generate_frd_fixtures.py output (every cgx element type)
       states/OmnibusCloudFrdReader/       # (with --plugin) states that need the bundled reader:
@@ -115,6 +117,32 @@ def main(argv):
     writer.SetInputData(grid)
     writer.Write()
 
+    # Legacy VTK: the format OpenFOAM's foamToVTK and the postProcessing surface writers produce, which
+    # users open beside a case (ParaView reads it through LegacyVTKReader).
+    from vtkmodules.vtkFiltersCore import vtkElevationFilter
+    from vtkmodules.vtkFiltersSources import vtkSphereSource
+    from vtkmodules.vtkIOLegacy import vtkPolyDataWriter
+    legacy_dir = os.path.join(data, "legacy")
+    os.makedirs(legacy_dir, exist_ok=True)
+    sphere_source = vtkSphereSource()
+    sphere_source.SetRadius(2.0)
+    sphere_source.SetThetaResolution(24)
+    sphere_source.SetPhiResolution(16)
+    elevation = vtkElevationFilter()
+    elevation.SetInputConnection(sphere_source.GetOutputPort())
+    elevation.SetLowPoint(0.0, 0.0, -2.0)
+    elevation.SetHighPoint(0.0, 0.0, 2.0)
+    legacy = fwd(os.path.join(legacy_dir, "surface.vtk"))
+    legacy_writer = vtkPolyDataWriter()
+    legacy_writer.SetInputConnection(elevation.GetOutputPort())
+    legacy_writer.SetFileTypeToASCII()
+    # Through a string: the writer's own file stream is text-mode and would write CRLF on Windows, while
+    # data files are committed byte-exact - LF on every platform.
+    legacy_writer.WriteToOutputStringOn()
+    legacy_writer.Write()
+    with open(legacy, "w", encoding="ascii", newline="\n") as handle:
+        handle.write(legacy_writer.GetOutputString())
+
     # Time series: 5 wavelets of growing amplitude + a PVD index.
     pieces = []
     for step in range(5):
@@ -137,6 +165,7 @@ def main(argv):
         vtu: "data/tets.vtu",
         vtr: "data/grid.vtr",
         pvd: "data/series/series.pvd",
+        legacy: "data/legacy/surface.vtk",
     }
     for piece in pieces:
         mapping[piece] = "data/series/" + os.path.basename(piece)
@@ -236,6 +265,11 @@ def main(argv):
         sphere = pv.Sphere(registrationName="Sphere1", Radius=2.0)
         pv.Show(sphere, view)
 
+    def legacy_vtk(view):
+        reader = pv.LegacyVTKReader(registrationName="surface.vtk", FileNames=[legacy])
+        rep = pv.Show(reader, view)
+        pv.ColorBy(rep, ("POINTS", "Elevation"))
+
     save("vti_contour", vti_contour)
     save("vti_volume", vti_volume)
     save("vtu_slice_clip_glyph", vtu_slice_clip_glyph)
@@ -243,6 +277,7 @@ def main(argv):
     save("pvd_series", pvd_series)
     save("file_series", file_series)
     save("sphere_static", sphere_static)
+    save("legacy_vtk", legacy_vtk)
 
     # ------------------------------------------------------------------ reader states
     plugin_version = None

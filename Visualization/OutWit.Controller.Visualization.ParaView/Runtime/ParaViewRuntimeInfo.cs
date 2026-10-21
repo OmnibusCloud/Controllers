@@ -13,16 +13,29 @@ public static class ParaViewRuntimeInfo
     public const int RUNTIME_MAJOR = 6;
 
     /// <summary>Minor version of the bundled ParaView runtime.</summary>
-    public const int RUNTIME_MINOR = 1;
+    public const int RUNTIME_MINOR = 2;
 
     /// <summary>Patch version of the bundled ParaView runtime.</summary>
-    public const int RUNTIME_PATCH = 1;
+    public const int RUNTIME_PATCH = 0;
+
+    /// <summary>
+    /// Major version of the previous ParaView release whose packages this controller still renders:
+    /// ParaView loads an older state forward (it converts the state as it loads it), so a client on the
+    /// previous release keeps rendering while it upgrades. The series must carry an embedded allowlist.
+    /// </summary>
+    public const int PREVIOUS_MAJOR = 6;
+
+    /// <summary>Minor version of the previous ParaView release whose packages this controller still renders.</summary>
+    public const int PREVIOUS_MINOR = 1;
 
     /// <summary>The bundled runtime as major.minor (the allowlist key), derived from the numbers above.</summary>
     public static readonly string RUNTIME_SERIES = $"{RUNTIME_MAJOR}.{RUNTIME_MINOR}";
 
     /// <summary>The bundled runtime as major.minor.patch, derived from the numbers above.</summary>
     public static readonly string RUNTIME_VERSION = $"{RUNTIME_MAJOR}.{RUNTIME_MINOR}.{RUNTIME_PATCH}";
+
+    /// <summary>The previous release as major.minor (its allowlist key), derived from the numbers above.</summary>
+    public static readonly string PREVIOUS_SERIES = $"{PREVIOUS_MAJOR}.{PREVIOUS_MINOR}";
 
     /// <summary>Registered name of the bundled OmnibusCloud .frd reader plugin.</summary>
     public const string FRD_READER_PLUGIN_NAME = "OmnibusCloudFrdReader";
@@ -66,6 +79,28 @@ public static class ParaViewRuntimeInfo
     public static string? BundledReaderVersion()
     {
         return BUNDLED_READER_VERSION.Value;
+    }
+
+    /// <summary>
+    /// Whether a producing ParaView major.minor is the bundled runtime's series.
+    /// </summary>
+    /// <param name="major">Producing major.</param>
+    /// <param name="minor">Producing minor.</param>
+    /// <returns>True for the runtime series.</returns>
+    public static bool IsRuntimeSeries(int major, int minor)
+    {
+        return major == RUNTIME_MAJOR && minor == RUNTIME_MINOR;
+    }
+
+    /// <summary>
+    /// Whether a producing ParaView major.minor is the previous release this controller still renders.
+    /// </summary>
+    /// <param name="major">Producing major.</param>
+    /// <param name="minor">Producing minor.</param>
+    /// <returns>True for the previous series.</returns>
+    public static bool IsPreviousSeries(int major, int minor)
+    {
+        return major == PREVIOUS_MAJOR && minor == PREVIOUS_MINOR;
     }
 
     /// <summary>

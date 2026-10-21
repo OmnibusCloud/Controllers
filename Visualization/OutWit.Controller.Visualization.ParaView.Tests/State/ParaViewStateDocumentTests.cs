@@ -1,4 +1,5 @@
 using System.Text;
+using OutWit.Controller.Visualization.ParaView.Runtime;
 using OutWit.Controller.Visualization.ParaView.State;
 using OutWit.Controller.Visualization.ParaView.Tests.Utils;
 using OutWit.Controller.Visualization.ParaView.Validation;
@@ -22,7 +23,7 @@ public sealed class ParaViewStateDocumentTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(document.Version, Is.EqualTo("6.1.1"));
+            Assert.That(document.Version, Is.EqualTo(ParaViewRuntimeInfo.RUNTIME_VERSION));
             Assert.That(document.Proxies.Select(me => me.Key), Does.Contain("sources/XMLUnstructuredGridReader"));
             Assert.That(document.Proxies.Select(me => me.Key), Does.Contain("filters/Contour"));
             Assert.That(document.Proxies.Select(me => me.Key), Does.Contain("views/RenderView"));

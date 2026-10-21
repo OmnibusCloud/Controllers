@@ -230,8 +230,7 @@ def write_case(root, cells=(4, 3, 2), times=(0.0, 0.5, 1.0), moving=True, stub="
     if stub:
         # Not empty: the cloud refuses an empty blob, and a real client's plugin replaces an
         # empty stub with a one-line stand-in - the corpus carries what actually travels.
-        write(os.path.join(root, stub), "OpenFOAM case stub (fixture); the reader opens the case beside it.
-")
+        write(os.path.join(root, stub), "OpenFOAM case stub (fixture); the reader opens the case beside it.\n")
 
     for directory, _, names in os.walk(root):
         for name in names:

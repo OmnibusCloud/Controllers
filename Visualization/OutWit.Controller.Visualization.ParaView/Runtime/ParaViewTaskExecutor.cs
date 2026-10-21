@@ -155,7 +155,7 @@ public sealed class ParaViewTaskExecutor
             Format = ParaViewImageFormats.WireToken(options.Format),
             TransparentBackground = options.TransparentBackground && ParaViewImageFormats.SupportsTransparency(options.Format),
             PluginPath = pluginPath,
-            AllowedProxies = [.. m_allowlist.EffectiveKeys(requiredPlugins)],
+            AllowedProxies = [.. m_allowlist.ForProducer(batch.Runtime.ParaViewMajor, batch.Runtime.ParaViewMinor).EffectiveKeys(requiredPlugins)],
             BlockedProxyTypes = [.. ParaViewProxyPolicy.BLOCKED_PROXY_TYPES.Order(StringComparer.Ordinal)],
             BlockedPropertyNames = [.. ParaViewProxyPolicy.BLOCKED_PROPERTY_NAMES.Order(StringComparer.Ordinal)],
             FilePropertyNames = [.. ParaViewProxyPolicy.FILE_PROPERTY_NAMES.Order(StringComparer.Ordinal)],

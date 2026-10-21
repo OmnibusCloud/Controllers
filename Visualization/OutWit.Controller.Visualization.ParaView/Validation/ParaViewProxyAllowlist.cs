@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using OutWit.Controller.Visualization.ParaView.Runtime;
 
@@ -25,6 +26,8 @@ public sealed class ParaViewProxyAllowlist
     };
 
     private static readonly Lazy<ParaViewProxyAllowlist> BUNDLED = new(() => LoadEmbedded(ParaViewRuntimeInfo.RUNTIME_SERIES));
+
+    private static readonly ConcurrentDictionary<string, ParaViewProxyAllowlist> EMBEDDED = new(StringComparer.Ordinal);
 
     #endregion
 
@@ -93,6 +96,38 @@ public sealed class ParaViewProxyAllowlist
             .ToDictionary(me => me.Key, me => (IReadOnlyList<string>)me.Value.ToList(), StringComparer.Ordinal);
 
         return new ParaViewProxyAllowlist(document.ParaView, document.Origin ?? "unknown", document.Proxies ?? [], plugins);
+    }
+
+    /// <summary>
+    /// The allowlist a package produced with a given ParaView major.minor is checked against: this list
+    /// for the runtime's own series, and for the previous release (<see cref="ParaViewRuntimeInfo.PREVIOUS_SERIES"/>)
+    /// the union of this list and that release's embedded list — the state names the previous release's
+    /// proxies before it loads, the runtime registers its own after. Any other series gets this list
+    /// (the compatibility check has refused it already).
+    /// </summary>
+    /// <param name="major">Producing major.</param>
+    /// <param name="minor">Producing minor.</param>
+    /// <returns>The effective allowlist; its <see cref="RuntimeVersion"/> stays this list's.</returns>
+    /// <exception cref="InvalidOperationException">The previous release's allowlist is not embedded.</exception>
+    public ParaViewProxyAllowlist ForProducer(int major, int minor)
+    {
+        if (!ParaViewRuntimeInfo.IsPreviousSeries(major, minor) || string.Equals(RuntimeVersion, ParaViewRuntimeInfo.PREVIOUS_SERIES, StringComparison.Ordinal))
+            return this;
+
+        var previous = EMBEDDED.GetOrAdd(ParaViewRuntimeInfo.PREVIOUS_SERIES, LoadEmbedded);
+
+        var plugins = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        foreach (var plugin in PluginProxies.Keys.Union(previous.PluginProxies.Keys, StringComparer.Ordinal))
+        {
+            var keys = new SortedSet<string>(StringComparer.Ordinal);
+            if (PluginProxies.TryGetValue(plugin, out var own))
+                keys.UnionWith(own);
+            if (previous.PluginProxies.TryGetValue(plugin, out var inherited))
+                keys.UnionWith(inherited);
+            plugins[plugin] = keys.ToList();
+        }
+
+        return new ParaViewProxyAllowlist(RuntimeVersion, $"{Origin}+{previous.RuntimeVersion}", Proxies.Union(previous.Proxies, StringComparer.Ordinal), plugins);
     }
 
     /// <summary>

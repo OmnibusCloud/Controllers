@@ -130,6 +130,29 @@ public sealed class ParaViewCorpusValidationTests
     }
 
     [Test]
+    public void PreviousReleaseStatesAreValidWithAWarningTest()
+    {
+        // A client still on the previous ParaView release keeps rendering: every state that release saved
+        // (core, GUI-saved, reader) validates against this runtime, with the compatibility warning.
+        Assert.That(ParaViewCorpus.PreviousStates, Has.Count.GreaterThanOrEqualTo(20));
+
+        foreach (var stateName in ParaViewCorpus.PreviousStates)
+        {
+            var (scene, _) = ParaViewCorpus.BuildPreviousScene(stateName, Path.Combine(m_root, "previous_" + stateName.Replace('/', '_')), m_blobs);
+            var options = new ParaViewOutputOptionsData { Width = 64, Height = 48, Frames = new ParaViewFrameSelectionData { Mode = ParaViewFrameSelectionMode.All } };
+
+            var report = m_validator.Validate(scene, options, m_blobs.GetStoredPath(scene.StateBlobId));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(report.IsValid, Is.True, $"{stateName}: {string.Join("; ", report.Errors)}");
+                Assert.That(report.Warnings, Has.Some.Contains("the previous release is accepted"), stateName);
+                Assert.That(report.TimestepValues, Is.EqualTo(ParaViewCorpus.TimelineOf(stateName)).Within(1e-9), stateName);
+            });
+        }
+    }
+
+    [Test]
     public void TimeSeriesStatesResolveTheirTimelineFromTheStateTest()
     {
         var (pvd, _) = ParaViewCorpus.BuildScene(ParaViewCorpus.PVD_SERIES, Path.Combine(m_root, "pvd"), m_blobs);

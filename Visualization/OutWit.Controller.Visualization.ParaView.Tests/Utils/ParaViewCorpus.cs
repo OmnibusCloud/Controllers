@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using OutWit.Controller.Visualization.ParaView.Model;
@@ -30,6 +31,9 @@ internal static class ParaViewCorpus
 
     public const string SPHERE_STATIC = "sphere_static.pvsm";
 
+    /// <summary>A legacy-format .vtk surface through LegacyVTKReader (what foamToVTK and postProcessing surfaces write).</summary>
+    public const string LEGACY_VTK = "legacy_vtk.pvsm";
+
     /// <summary>The OpenFOAM case behind ParaView's native reader (generate_openfoam_fixtures.py): a 4x3x2 hex block, times 0.5 and 1, the mesh moving at 1.</summary>
     public const string OPENFOAM_BOX = "openfoam_box.pvsm";
 
@@ -61,10 +65,36 @@ internal static class ParaViewCorpus
 
     #endregion
 
+    #region Fields
+
+    private static readonly Lazy<string> PREVIOUS_ROOT = new(ExtractPreviousStates);
+
+    #endregion
+
     #region Functions
 
     /// <summary>Root of the committed corpus in the test output.</summary>
     public static string Root => Path.Combine(AppContext.BaseDirectory, "Fixtures", "Corpus");
+
+    /// <summary>
+    /// Root of the previous release's corpus states, extracted once per run from
+    /// Fixtures/CorpusPrevious/paraview-&lt;previous series&gt;-states.zip: every state (core, GUI-saved, reader)
+    /// as that release saved it over the same data files, kept to prove the runtime still renders its packages.
+    /// </summary>
+    public static string PreviousRoot => PREVIOUS_ROOT.Value;
+
+    /// <summary>Every state of the previous release's corpus ("name.pvsm", "gui/name.pvsm", "OmnibusCloudFrdReader/name.pvsm").</summary>
+    public static IReadOnlyList<string> PreviousStates
+    {
+        get
+        {
+            var states = Path.Combine(PreviousRoot, "states");
+            return Directory.GetFiles(states, "*.pvsm", SearchOption.AllDirectories)
+                .Select(me => Path.GetRelativePath(states, me).Replace(Path.DirectorySeparatorChar, '/'))
+                .Order(StringComparer.Ordinal)
+                .ToList();
+        }
+    }
 
     /// <summary>The logical paths of the OpenFOAM case's static files (every task) and of its second time (timestep 1 only).</summary>
     public static IReadOnlyList<string> OpenFoamStatics => FilesOf(OPENFOAM_BOX).Where(me => me.TimestepIndices.Length == 0).Select(me => me.LogicalPath).ToList();
@@ -148,6 +178,7 @@ internal static class ParaViewCorpus
             ],
             FILE_SERIES => [.. Enumerable.Range(0, 5).Select(i => ($"data/series/series_{i:D3}.vti", ParaViewAttachmentRole.ReaderInput, SERIES_GROUP, new[] { i }, i))],
             SPHERE_STATIC => [],
+            LEGACY_VTK => [("data/legacy/surface.vtk", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
             // What the plugin's OpenFOAM resolver stages: the stub, system/, the constant/ dictionaries and
             // mesh, the first listed time directory (static: the reader scans it at load, SkipZeroTime leaves
             // 0/ home), then time 1 with its own timeline index and its moved polyMesh/points - one series
@@ -206,6 +237,22 @@ internal static class ParaViewCorpus
     /// </summary>
     public static (ParaViewSceneRefData Scene, ParaViewPackageBuilder Package) BuildScene(string stateName, string directory, ParaViewTestBlobService blobs)
     {
+        return BuildScene(stateName, StatePath(stateName), ParaViewRuntimeInfo.RUNTIME_MAJOR, ParaViewRuntimeInfo.RUNTIME_MINOR, directory, blobs);
+    }
+
+    /// <summary>
+    /// Builds the package of a previous-release corpus state the way that release's plugin did: the same
+    /// data files and series metadata, the state as that release saved it, the producing version declared
+    /// as the previous series.
+    /// </summary>
+    public static (ParaViewSceneRefData Scene, ParaViewPackageBuilder Package) BuildPreviousScene(string stateName, string directory, ParaViewTestBlobService blobs)
+    {
+        var statePath = Path.Combine(PreviousRoot, "states", stateName.Replace('/', Path.DirectorySeparatorChar));
+        return BuildScene(stateName, statePath, ParaViewRuntimeInfo.PREVIOUS_MAJOR, ParaViewRuntimeInfo.PREVIOUS_MINOR, directory, blobs);
+    }
+
+    private static (ParaViewSceneRefData Scene, ParaViewPackageBuilder Package) BuildScene(string stateName, string statePath, int major, int minor, string directory, ParaViewTestBlobService blobs)
+    {
         var package = new ParaViewPackageBuilder(directory, blobs);
         foreach (var (logicalPath, role, group, timesteps, ordinal) in FilesOf(stateName))
             package.AddFile(logicalPath, File.ReadAllBytes(Path.Combine(Root, logicalPath.Replace('/', Path.DirectorySeparatorChar))), role, group, timesteps.Length == 0 ? null : timesteps, ordinal);
@@ -213,8 +260,19 @@ internal static class ParaViewCorpus
         var plugins = NeedsReader(stateName)
             ? new[] { new ParaViewPluginRequirementData { Name = ParaViewRuntimeInfo.FRD_READER_PLUGIN_NAME, Version = ReaderVersion() ?? "1.0.0" } }
             : null;
-        var scene = package.BuildScene(File.ReadAllText(StatePath(stateName)), timestepValues: TimelineOf(stateName), plugins: plugins);
+        var scene = package.BuildScene(File.ReadAllText(statePath), major, minor, timestepValues: TimelineOf(stateName), plugins: plugins);
         return (scene, package);
+    }
+
+    private static string ExtractPreviousStates()
+    {
+        var archive = Path.Combine(AppContext.BaseDirectory, "Fixtures", "CorpusPrevious", $"paraview-{ParaViewRuntimeInfo.PREVIOUS_SERIES}-states.zip");
+        var root = Path.Combine(AppContext.BaseDirectory, "Fixtures", "CorpusPrevious", ParaViewRuntimeInfo.PREVIOUS_SERIES);
+        if (Directory.Exists(root))
+            Directory.Delete(root, recursive: true);
+
+        ZipFile.ExtractToDirectory(archive, root);
+        return root;
     }
 
     /// <summary>

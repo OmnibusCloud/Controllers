@@ -1,5 +1,5 @@
 {
-  "paraview": "paraview version 6.1.1",
+  "paraview": "paraview version 6.2.0",
   "data": [
     "data/frd/beam_b32_2d.frd",
     "data/frd/beam_b32_3d.frd",
@@ -17,6 +17,7 @@
     "data/frd/tet4_c3d4.frd",
     "data/frd/transient_heat.frd",
     "data/grid.vtr",
+    "data/legacy/surface.vtk",
     "data/openfoam/box/0.5/U",
     "data/openfoam/box/0.5/p",
     "data/openfoam/box/0/U",
@@ -51,6 +52,7 @@
     "pvd_series.pvsm",
     "file_series.pvsm",
     "sphere_static.pvsm",
+    "legacy_vtk.pvsm",
     "OmnibusCloudFrdReader/frd_static.pvsm",
     "OmnibusCloudFrdReader/frd_transient.pvsm",
     "OmnibusCloudFrdReader/frd_modes.pvsm",
@@ -91,6 +93,6 @@
     ]
   },
   "plugins": {
-    "OmnibusCloudFrdReader": "1.0.0"
+    "OmnibusCloudFrdReader": "1.0.1"
   }
 }
