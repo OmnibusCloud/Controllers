@@ -281,6 +281,18 @@ def main(argv):
     root = os.path.abspath(positional[0])
     replaced = removed = copied = kept = 0
     referenced = referenced_names(root) if keep_alias else set()
+    # Real files renamed during the first pass (old path -> new path). A directory's links are listed with
+    # their targets up front, so a later link can still name a file an earlier link already renamed (two
+    # aliases of one library: libfoo.so.2 renames libfoo.so.2.12.0, then libfoo.so must follow it rather
+    # than be dropped as dangling - which order decides, and which lost OSPRay's dlopen'd device module).
+    moved = {}
+
+    def current(target):
+        seen = set()
+        while target in moved and target not in seen:
+            seen.add(target)
+            target = moved[target]
+        return target
 
     def is_kept_alias(name):
         # Only the UNVERSIONED alias (libfoo.so / libfoo.dylib, not libfoo.so.2 / libfoo.2.dylib) is
@@ -306,6 +318,7 @@ def main(argv):
     for dirpath, dirnames, filenames in os.walk(root):
         for path, target in list(links_in(dirpath, list(filenames) + list(dirnames))):
             name = os.path.basename(path)
+            target = current(target)
             if not os.path.exists(target):
                 os.remove(path)
                 removed += 1
@@ -331,6 +344,7 @@ def main(argv):
                     print("  dlopen'd alias %s kept as a copy (%s is linked by name)" % (os.path.relpath(path, root), library_name))
                 else:
                     os.rename(target, path)
+                    moved[target] = path
                     print("  dlopen'd alias %s is the single kept file (%s is not linked by name)" % (os.path.relpath(path, root), library_name))
                 kept += 1
                 continue
@@ -339,6 +353,7 @@ def main(argv):
             removed += 1
             if not os.path.exists(wanted):
                 os.rename(target, wanted)
+                moved[target] = wanted
                 replaced += 1
 
     # Second pass: libraries whose real file name is not their loader name. Without an alias they are
