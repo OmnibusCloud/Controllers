@@ -342,6 +342,101 @@ public sealed class ParaViewRunnerScriptTests
         Assert.That(status.Error, Does.Contain("drive letter"));
     }
 
+    [TestCase("../../outside.vti")]
+    [TestCase("/etc/secret.vti")]
+    [TestCase("C:/Users/me/secret.vti")]
+    [TestCase("~/secret.vti")]
+    [TestCase("file:///etc/secret.vti")]
+    public void RunnerRefusesACollectionPieceOutsideThePackageTest(string piece)
+    {
+        // A .pvd's reader opens what the collection names - '..' and absolute names included - and
+        // the state check never sees those names: the runner checks them before ParaView loads.
+        var collection = $"<?xml version=\"1.0\"?>\n<VTKFile type=\"Collection\" version=\"0.1\">\n  <Collection>\n    <DataSet timestep=\"0\" file=\"{piece}\"/>\n  </Collection>\n</VTKFile>\n";
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/series.pvd").Build(), 0, null, ["data/series.pvd"],
+            contents: new Dictionary<string, string> { ["data/series.pvd"] = collection });
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Stage, Is.EqualTo("resolve-state"));
+        Assert.That(status.Error, Does.Contain("data/series.pvd").And.Contain("outside the package root"));
+    }
+
+    [Test]
+    public void RunnerRefusesAnEscapeNestedBehindAnIndexInsideThePackageTest()
+    {
+        // A multiblock index names a parallel index inside the package, which names a piece outside it.
+        var multiblock = "<VTKFile type=\"vtkMultiBlockDataSet\" version=\"1.0\"><vtkMultiBlockDataSet><DataSet index=\"0\" file=\"blocks/solid.pvtu\"/></vtkMultiBlockDataSet></VTKFile>";
+        var parallel = "<VTKFile type=\"PUnstructuredGrid\" version=\"1.0\"><PUnstructuredGrid GhostLevel=\"0\"><Piece Source=\"../../../piece_0.vtu\"/></PUnstructuredGrid></VTKFile>";
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/blocks.vtm").Build(), 0, null, ["data/blocks.vtm", "data/blocks/solid.pvtu"],
+            contents: new Dictionary<string, string> { ["data/blocks.vtm"] = multiblock, ["data/blocks/solid.pvtu"] = parallel });
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Error, Does.Contain("data/blocks/solid.pvtu").And.Contain("'../../../piece_0.vtu', outside the package root"));
+    }
+
+    [Test]
+    public void RunnerRefusesAFileSeriesListNamingAnAbsolutePathTest()
+    {
+        // Every file-series reader reads a <name>.series list (ParaView 6.2 follows an absolute name in it).
+        var list = "{ \"file-series-version\" : \"1.0\", \"files\" : [ { \"name\" : \"field_0.vtu\", \"time\" : 0 }, { \"name\" : \"/home/someone/secret.vtu\", \"time\" : 1 } ] }";
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/field.vtu.series").Build(), 0, null, ["data/field.vtu.series", "data/field_0.vtu"],
+            contents: new Dictionary<string, string> { ["data/field.vtu.series"] = list });
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Error, Does.Contain("data/field.vtu.series").And.Contain("outside the package root"));
+    }
+
+    [Test]
+    public void RunnerRefusesAFileSeriesListItCannotParseTest()
+    {
+        // The reader's JSON parser takes comments; the node's does not - what it cannot check it refuses.
+        var list = "{ /* comment */ \"files\" : [ { \"name\" : \"/etc/secret.vtu\" } ] }";
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/field.vtu.series").Build(), 0, null, ["data/field.vtu.series"],
+            contents: new Dictionary<string, string> { ["data/field.vtu.series"] = list });
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Error, Does.Contain("not a file-series list the node can check"));
+    }
+
+    [Test]
+    public void RunnerRefusesXmlWhoseVtkFileElementOpensPastTheCheckWindowTest()
+    {
+        var padded = "<?xml version=\"1.0\"?>\n<!--" + new string(' ', 70_000) + "-->\n<VTKFile type=\"Collection\"><Collection><DataSet file=\"/etc/secret.vti\"/></Collection></VTKFile>";
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/series.pvd").Build(), 0, null, ["data/series.pvd"],
+            contents: new Dictionary<string, string> { ["data/series.pvd"] = padded });
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Error, Does.Contain("without a VTKFile element"));
+    }
+
+    [Test]
+    public void RunnerAcceptsIndexesWhosePiecesStayInsideThePackageTest()
+    {
+        // The corpus shape: a multiblock index over pieces in its own subfolder, a nested parallel
+        // index beside them, a piece the task did not materialize (left to the reader).
+        var multiblock = "<?xml version=\"1.0\"?>\n<VTKFile type=\"vtkMultiBlockDataSet\" version=\"1.0\" byte_order=\"LittleEndian\"><vtkMultiBlockDataSet>"
+                         + "<DataSet index=\"0\" name=\"solid\" file=\"blocks/blocks_0.vtu\"/><DataSet index=\"1\" file=\"blocks/shell.pvtp\"/><DataSet index=\"2\" file=\"blocks/absent.vtu\"/>"
+                         + "</vtkMultiBlockDataSet></VTKFile>";
+        var parallel = "<VTKFile type=\"PPolyData\" version=\"1.0\"><PPolyData GhostLevel=\"0\"><Piece Source=\"shell_0.vtp\"/><Piece Source=\"./shell_1.vtp\"/></PPolyData></VTKFile>";
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/blocks.vtm").Build(), 0, null,
+            ["data/blocks.vtm", "data/blocks/blocks_0.vtu", "data/blocks/shell.pvtp", "data/blocks/shell_0.vtp", "data/blocks/shell_1.vtp"],
+            contents: new Dictionary<string, string> { ["data/blocks.vtm"] = multiblock, ["data/blocks/shell.pvtp"] = parallel, ["data/blocks/blocks_0.vtu"] = "<VTKFile type=\"UnstructuredGrid\"/>" });
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status!.Ok, Is.True, status.Error);
+    }
+
     [Test]
     public void RunnerRefusesAProxyOutsideTheAllowlistAfterLoadTest()
     {
@@ -407,7 +502,8 @@ public sealed class ParaViewRunnerScriptTests
 
     #region Tools
 
-    private (ParaViewRunnerTask Task, string WorkDir) Prepare(string stateXml, int timestepIndex, double? timeValue, string[] materialize, string viewId = "RenderView1")
+    private (ParaViewRunnerTask Task, string WorkDir) Prepare(string stateXml, int timestepIndex, double? timeValue, string[] materialize, string viewId = "RenderView1",
+        IReadOnlyDictionary<string, string>? contents = null)
     {
         var workDir = Path.Combine(m_root, "work_" + Guid.NewGuid().ToString("N")[..8]);
         var packageRoot = Path.Combine(workDir, "package");
@@ -418,7 +514,7 @@ public sealed class ParaViewRunnerScriptTests
         {
             var path = Path.Combine(packageRoot, logical.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, "data");
+            File.WriteAllText(path, contents != null && contents.TryGetValue(logical, out var content) ? content : "data");
         }
 
         var statePath = Path.Combine(workDir, "state.pvsm");

@@ -7,11 +7,12 @@ tasks across worker nodes. The companion
 carries the shared data types and the `paraview.*@1` job document vocabulary for non-.NET initiators
 (the ParaView GUI plugin).
 
-**Status: 1.1.0.** The controller shape, validation, splitting (per output and batched), the node runner
+**Status: 1.2.0.** The controller shape, validation, splitting (per output and batched), the node runner
 contract, the test harness, the per-platform ParaView runtime assets (`paraview-v1.0.0`: ParaView 6.2.0),
 the bundled OmnibusCloud `.frd` reader, composed scenes, camera moves and the native OpenFOAM reader are
 complete and in production behind the ParaView GUI plugin and WitSweep. Packages produced with the
-previous release (ParaView 6.1) keep rendering.
+previous release (ParaView 6.1) keep rendering. 1.2.0 widens the readers and filters a package may use
+and checks the file names inside indexes and file-series lists on the node.
 
 ## Activities
 
@@ -230,6 +231,35 @@ while it upgrades:
   module to `ospray_module_cpu` and still dlopens it by the unversioned name - `collapse_symlinks.py`
   now follows a real file an earlier alias already renamed instead of dropping the dlopen'd alias.
 
+### Wider readers and filters, names inside indexes (controller 1.2.0)
+
+- **Six corpus scenes** (`generate_fixtures.py`, each also saved by the GUI) bring the formats users
+  open beside the original ones and the common filters: a polydata surface (`.vtp`), a curvilinear grid
+  (`.vts`), a multiblock index over its pieces (`.vtm`), the parallel unstructured and polydata indexes
+  (`.pvtu`, `.pvtp`), plain geometry (STL, PLY, OBJ), and a filter set over `tets.vtu`. The regenerated
+  6.2 allowlist keeps every earlier key and adds 45 (76 to 121): those readers, the `Plane` and `Ruler`
+  sources, the structured-grid and ruler representations, and Transform, Axis Aligned Reflect, Extract
+  Block, Merge Blocks, Group / Append Datasets, Shrink, Elevation, Decimate, Smooth, Generate Surface
+  Normals, Outline, Feature Edges, Extract Edges, Clean, Triangulate, Point Data to Cell Data, Warp By
+  Scalar, Extract Cells By Region, Extract Subset, Mask Points, Cell Centers, Resample With Dataset,
+  Stream Tracer With Custom Source, Tessellate, Slice With Plane, Annotate Attribute Data, Curvature,
+  Cell Size and Mesh Quality, with the transform choices the Transform filter saves. Every new scene
+  renders through the real runtime, pvpython- and GUI-saved alike. The runtime asset is unchanged: the
+  readers live in the IO libraries the trim keeps.
+- **Names inside indexes.** A collection (`.pvd`), a composite (`.vtm`, `.vtpc`, `.vthb`) or a parallel
+  piece list (`.pvt*`) names further files, and so does a file-series list (`<name>.series`, JSON). A
+  reader follows those names - an absolute path or a `..` climb as readily as the package's own pieces
+  (ParaView 6.2 opened an absolute path from a `.series` list and `../` from a `.pvd`, which the state
+  check never sees). The runner now reads every file a state references before ParaView does. For an
+  index (decided by its VTKFile type, as the reader decides) or a `.series` list it refuses any name that
+  is absolute, a drive, URI or home path, or climbs out of the package root. It follows nested indexes
+  (8 levels), caps an index at 32 MB, refuses XML whose VTKFile element does not open within the first
+  64 KB, and refuses a `.series` list it cannot parse (the reader's parser also takes comments).
+- **Map projections.** The Transform filter's state carries `transforms/GeoTransform` among its
+  transform choices. A PROJ definition can name grid files anywhere on the node, so a non-empty
+  `SourceProjection` / `DestinationProjection` is refused like an executable property. The empty
+  default stays inert.
+
 ## The runner contract
 
 The node never builds a shell string. It invokes the bundled `pvpython` directly:
@@ -254,6 +284,8 @@ A single-valued file reference of the state must be a materialized package file;
 with several elements) legitimately lists every file while the task carries only its own piece, so at least
 one must exist — and any VTK error during load or render (a reader touching a file this task did not
 materialize, a GL failure) fails the task through an error observer rather than producing a blank frame.
+Every name an index or a file-series list of the package carries must stay inside the package root
+(controller 1.2.0, above); the runner checks them before ParaView loads the state.
 File-series readers (PVD, `FileNames` lists) open the FIRST file of a series when the state loads, so every
 task carries that *series anchor* next to the index and its own piece (`ValidationReport.SeriesAnchors`).
 The runner (`Runner/render_task.py`), the proxy allowlist (`Allowlists/paraview-<major.minor>.json`) and

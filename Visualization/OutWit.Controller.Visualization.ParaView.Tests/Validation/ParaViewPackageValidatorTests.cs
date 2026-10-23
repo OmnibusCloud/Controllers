@@ -261,6 +261,24 @@ public sealed class ParaViewPackageValidatorTests
     }
 
     [Test]
+    public void GeoTransformWithAProjectionIsRejectedTest()
+    {
+        // transforms/GeoTransform is allowlisted because every Transform filter's state carries it; a
+        // PROJ definition can name grid files by absolute path, so a non-empty projection is refused
+        // like an executable property while the empty default stays inert.
+        var armed = ParaViewStateBuilder.Typical("data/field.vtu");
+        armed.AddProxy("transforms", "GeoTransform", ("SourceProjection", ["+proj=longlat +nadgrids=/etc/passwd"]), ("DestinationProjection", [""]));
+        var report = ValidateState(armed);
+
+        Assert.That(report.IsValid, Is.False);
+        Assert.That(report.Errors, Has.Some.Contains("transforms/GeoTransform").And.Some.Contains("executable property 'SourceProjection'"));
+
+        var inert = ParaViewStateBuilder.Typical("data/field.vtu");
+        inert.AddProxy("transforms", "GeoTransform", ("SourceProjection", [""]), ("DestinationProjection", [""]));
+        Assert.That(ValidateState(inert).IsValid, Is.True, "the empty projections are what every Transform filter's state carries");
+    }
+
+    [Test]
     public void UnknownProxyTypeIsRejectedByTheAllowlistTest()
     {
         var state = ParaViewStateBuilder.Typical("data/field.vtu");
