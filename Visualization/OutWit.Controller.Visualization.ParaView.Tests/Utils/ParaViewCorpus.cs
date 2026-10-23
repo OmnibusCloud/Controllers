@@ -37,6 +37,24 @@ internal static class ParaViewCorpus
     /// <summary>The OpenFOAM case behind ParaView's native reader (generate_openfoam_fixtures.py): a 4x3x2 hex block, times 0.5 and 1, the mesh moving at 1.</summary>
     public const string OPENFOAM_BOX = "openfoam_box.pvsm";
 
+    /// <summary>A polydata surface (.vtp) through Clean, Triangulate, Decimate, Smooth, surface normals, Elevation, feature edges and Curvature.</summary>
+    public const string VTP_SURFACE = "vtp_surface.pvsm";
+
+    /// <summary>A curvilinear structured grid (.vts) through Extract Subset, Warp By Scalar, Outline, Shrink and point-to-cell data.</summary>
+    public const string VTS_STRUCTURED = "vts_structured.pvsm";
+
+    /// <summary>A multiblock index (.vtm) over a solid and a shell block, through Extract Block, Merge Blocks, Group and Append Datasets.</summary>
+    public const string VTM_BLOCKS = "vtm_blocks.pvsm";
+
+    /// <summary>The parallel unstructured (.pvtu) and polydata (.pvtp) indexes over two pieces each.</summary>
+    public const string PARALLEL_PIECES = "parallel_pieces.pvsm";
+
+    /// <summary>Plain geometry: an STL moved by Transform, a PLY through Reflect, an OBJ.</summary>
+    public const string GEOMETRY_FORMATS = "geometry_formats.pvsm";
+
+    /// <summary>tets.vtu through cells by region, cell centers, mask points, Tessellate, Resample With Dataset, custom-seed streamlines, attribute annotation, a ruler, Slice With Plane, cell size, mesh quality and edges.</summary>
+    public const string VTU_MORE_FILTERS = "vtu_more_filters.pvsm";
+
     /// <summary>Folder of the states that need the bundled reader (named after the plugin).</summary>
     public const string FRD_READER_FOLDER = "OmnibusCloudFrdReader";
 
@@ -212,6 +230,32 @@ internal static class ParaViewCorpus
             FRD_QUADRATIC => [("data/frd/he20_c3d20.frd", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
             GUI_NATIVE => [],
             GUI_FILTERS or GUI_CHART => [("data/wavelet.vti", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
+            VTP_SURFACE => [("data/polydata/surface.vtp", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
+            VTS_STRUCTURED => [("data/structured/grid.vts", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
+            // What the plugin stages for an index the state names: the index as the reader input, the
+            // pieces it names at their relative places as static auxiliaries (every task, no warning).
+            VTM_BLOCKS =>
+            [
+                ("data/multiblock/blocks.vtm", ParaViewAttachmentRole.ReaderInput, "", [], 0),
+                ("data/multiblock/blocks/blocks_0.vtu", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ("data/multiblock/blocks/blocks_1.vtp", ParaViewAttachmentRole.Auxiliary, "", [], 0)
+            ],
+            PARALLEL_PIECES =>
+            [
+                ("data/parallel/tets.pvtu", ParaViewAttachmentRole.ReaderInput, "", [], 0),
+                ("data/parallel/tets_0.vtu", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ("data/parallel/tets_1.vtu", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ("data/parallel/shell.pvtp", ParaViewAttachmentRole.ReaderInput, "", [], 0),
+                ("data/parallel/shell_0.vtp", ParaViewAttachmentRole.Auxiliary, "", [], 0),
+                ("data/parallel/shell_1.vtp", ParaViewAttachmentRole.Auxiliary, "", [], 0)
+            ],
+            GEOMETRY_FORMATS =>
+            [
+                ("data/geometry/part.stl", ParaViewAttachmentRole.ReaderInput, "", [], 0),
+                ("data/geometry/part.ply", ParaViewAttachmentRole.ReaderInput, "", [], 0),
+                ("data/geometry/part.obj", ParaViewAttachmentRole.ReaderInput, "", [], 0)
+            ],
+            VTU_MORE_FILTERS => [("data/tets.vtu", ParaViewAttachmentRole.ReaderInput, "", [], 0)],
             _ => throw new ArgumentOutOfRangeException(nameof(stateName), stateName, "unknown corpus state")
         };
     }

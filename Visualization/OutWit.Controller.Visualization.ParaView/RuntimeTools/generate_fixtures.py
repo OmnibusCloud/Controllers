@@ -24,7 +24,19 @@ controller's golden validation tests:
       states/sphere_static.pvsm           # no files at all (static, no attachments)
       data/legacy/surface.vtk             # legacy-format polydata (what foamToVTK and postProcessing surfaces write)
       states/legacy_vtk.pvsm              # LegacyVTKReader surface coloured by elevation
-      data/frd/*.frd                      # (with --frd) CalculiX results: the CalculiX.Tests fixtures +
+      data/polydata/surface.vtp           # polydata surface (a superquadric torus with an elevation field)
+      data/structured/grid.vts            # curvilinear structured grid (a quarter annulus)
+      data/multiblock/blocks.vtm + blocks/  # multiblock index over a solid (.vtu) and a shell (.vtp) block
+      data/parallel/tets.pvtu + tets_N.vtu  # parallel unstructured index over two pieces
+      data/parallel/shell.pvtp + shell_N.vtp  # parallel polydata index over two pieces
+      data/geometry/part.stl|ply|obj      # plain geometry: binary STL, binary PLY, Wavefront OBJ
+      states/vtp_surface.pvsm             # XMLPolyDataReader + Clean, Triangulate, Decimate, Smooth, normals, Elevation, edges, Curvature
+      states/vts_structured.pvsm          # XMLStructuredGridReader + Extract Subset, Warp By Scalar, Outline, Shrink, point-to-cell
+      states/vtm_blocks.pvsm              # XMLMultiBlockDataReader + Extract Block, Merge Blocks, Group / Append Datasets
+      states/parallel_pieces.pvsm         # the parallel unstructured and polydata readers over their pieces
+      states/geometry_formats.pvsm        # STL + Transform, PLY + Reflect, OBJ
+      states/vtu_more_filters.pvsm        # tets.vtu + cells by region, centers, mask, tessellate, resample, custom-seed streamlines, annotations, ruler
+      data/frd/*.frd                     # (with --frd) CalculiX results: the CalculiX.Tests fixtures +
                                           #   generate_frd_fixtures.py output (every cgx element type)
       states/OmnibusCloudFrdReader/       # (with --plugin) states that need the bundled reader:
         frd_static.pvsm                   #   static.frd warped by DISP, coloured by STRESS
@@ -53,6 +65,205 @@ def rewrite_state(state_path, mapping):
         text = text.replace(absolute.replace("/", "\\"), logical_path)
     with open(state_path, "w", encoding="utf-8") as handle:
         handle.write(text)
+
+
+#: VTK data type names -> VTK XML type attributes (the parallel indexes declare their arrays).
+XML_TYPES = {"float": "Float32", "double": "Float64"}
+
+
+def write_wider_formats(data, fwd):
+    """The data behind the wider reader coverage (controller 1.2.0), written straight through VTK so
+    every file stays small and byte-reproducible. Returns the reader input of every format and
+    "files" - every file written, the pieces an index names included."""
+    import math
+    from vtkmodules.vtkCommonCore import vtkFloatArray, vtkIdList, vtkPoints
+    from vtkmodules.vtkCommonDataModel import vtkCompositeDataSet, vtkMultiBlockDataSet, vtkStructuredGrid, vtkUnstructuredGrid
+    from vtkmodules.vtkFiltersCore import vtkElevationFilter, vtkTriangleFilter
+    from vtkmodules.vtkFiltersGeneral import vtkDataSetTriangleFilter
+    from vtkmodules.vtkFiltersSources import vtkConeSource, vtkCylinderSource, vtkSphereSource, vtkSuperquadricSource
+    from vtkmodules.vtkImagingCore import vtkRTAnalyticSource
+    from vtkmodules.vtkIOGeometry import vtkSTLWriter
+    from vtkmodules.vtkIOPLY import vtkPLYWriter
+    from vtkmodules.vtkIOXML import vtkXMLMultiBlockDataWriter, vtkXMLPolyDataWriter, vtkXMLStructuredGridWriter, vtkXMLUnstructuredGridWriter
+    try:
+        from vtkmodules.vtkFiltersCore import vtkExtractCells
+    except ImportError:
+        from vtkmodules.vtkFiltersExtraction import vtkExtractCells
+
+    written = []
+
+    def folder(name):
+        path = os.path.join(data, name)
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def keep_arrays(dataset, names):
+        for attributes in (dataset.GetPointData(), dataset.GetCellData()):
+            for index in reversed(range(attributes.GetNumberOfArrays())):
+                if attributes.GetArrayName(index) not in names:
+                    attributes.RemoveArray(index)
+        return dataset
+
+    def elevated(algorithm, low, high):
+        elevation = vtkElevationFilter()
+        elevation.SetInputConnection(algorithm.GetOutputPort())
+        elevation.SetLowPoint(*low)
+        elevation.SetHighPoint(*high)
+        elevation.Update()
+        result = elevation.GetOutput().NewInstance()
+        result.DeepCopy(elevation.GetOutput())
+        return keep_arrays(result, ("Elevation",))
+
+    def write_xml(writer, dataset, path):
+        writer.SetFileName(path)
+        writer.SetInputData(dataset)
+        writer.Write()
+        written.append(path)
+        return path
+
+    def write_parallel_index(path, kind, pieces, array):
+        dataset = pieces[0][1]
+        values = dataset.GetPointData().GetArray(array)
+        lines = [
+            '<?xml version="1.0"?>',
+            '<VTKFile type="%s" version="1.0" byte_order="LittleEndian" header_type="UInt64">' % kind,
+            '  <%s GhostLevel="0">' % kind,
+            '    <PPointData Scalars="%s">' % array,
+            '      <PDataArray type="%s" Name="%s"/>' % (XML_TYPES[values.GetDataTypeAsString()], array),
+            '    </PPointData>',
+            '    <PPoints>',
+            '      <PDataArray type="%s" Name="Points" NumberOfComponents="3"/>' % XML_TYPES[dataset.GetPoints().GetData().GetDataTypeAsString()],
+            '    </PPoints>',
+        ]
+        lines += ['    <Piece Source="%s"/>' % os.path.basename(piece_path) for piece_path, _ in pieces]
+        lines += ['  </%s>' % kind, '</VTKFile>', '']
+        with open(path, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write("\n".join(lines))
+        written.append(path)
+        return path
+
+    # A polydata surface: a superquadric torus with an elevation field.
+    torus = vtkSuperquadricSource()
+    torus.SetToroidal(1)
+    torus.SetThickness(0.4)
+    torus.SetSize(2.0)
+    torus.SetThetaResolution(48)
+    torus.SetPhiResolution(24)
+    vtp = write_xml(vtkXMLPolyDataWriter(), elevated(torus, (0.0, 0.0, -1.0), (0.0, 0.0, 1.0)),
+                    fwd(os.path.join(folder("polydata"), "surface.vtp")))
+
+    # A curvilinear structured grid: a quarter annulus, a pressure-like field over it.
+    grid = vtkStructuredGrid()
+    grid.SetDimensions(9, 7, 5)
+    points = vtkPoints()
+    points.SetDataTypeToFloat()
+    points.GetData().SetName("Points")
+    pressure = vtkFloatArray()
+    pressure.SetName("pressure")
+    for k in range(5):
+        for j in range(7):
+            theta = 0.5 * math.pi * j / 6.0
+            for i in range(9):
+                radius = 1.0 + i / 8.0
+                points.InsertNextPoint(radius * math.cos(theta), radius * math.sin(theta), 0.25 * k)
+                pressure.InsertNextValue(radius * math.cos(theta) + 0.25 * k)
+    grid.SetPoints(points)
+    grid.GetPointData().SetScalars(pressure)
+    vts = write_xml(vtkXMLStructuredGridWriter(), grid, fwd(os.path.join(folder("structured"), "grid.vts")))
+
+    # A multiblock index over a solid block (a tetrahedralized wavelet) and a shell block (a sphere).
+    wavelet = vtkRTAnalyticSource()
+    wavelet.SetWholeExtent(-3, 3, -3, 3, -3, 3)
+    tetrahedra = vtkDataSetTriangleFilter()
+    tetrahedra.SetInputConnection(wavelet.GetOutputPort())
+    tetrahedra.Update()
+    solid = vtkUnstructuredGrid()
+    solid.DeepCopy(tetrahedra.GetOutput())
+    keep_arrays(solid, ("RTData",))
+    sphere = vtkSphereSource()
+    sphere.SetRadius(4.0)
+    sphere.SetThetaResolution(24)
+    sphere.SetPhiResolution(16)
+    shell = elevated(sphere, (0.0, 0.0, -4.0), (0.0, 0.0, 4.0))
+    blocks = vtkMultiBlockDataSet()
+    blocks.SetNumberOfBlocks(2)
+    blocks.SetBlock(0, solid)
+    blocks.GetMetaData(0).Set(vtkCompositeDataSet.NAME(), "solid")
+    blocks.SetBlock(1, shell)
+    blocks.GetMetaData(1).Set(vtkCompositeDataSet.NAME(), "shell")
+    multiblock_dir = folder("multiblock")
+    vtm = fwd(os.path.join(multiblock_dir, "blocks.vtm"))
+    multiblock_writer = vtkXMLMultiBlockDataWriter()
+    multiblock_writer.SetFileName(vtm)
+    multiblock_writer.SetInputData(blocks)
+    multiblock_writer.Write()
+    for directory, _, names in os.walk(multiblock_dir):
+        written.extend(fwd(os.path.join(directory, name)) for name in sorted(names))
+
+    # Parallel indexes over two pieces each: the solid split in halves, two spheres side by side.
+    parallel_dir = folder("parallel")
+    halves = []
+    cell_count = solid.GetNumberOfCells()
+    for half, (first, last) in enumerate(((0, cell_count // 2), (cell_count // 2, cell_count))):
+        ids = vtkIdList()
+        for cell in range(first, last):
+            ids.InsertNextId(cell)
+        extract = vtkExtractCells()
+        extract.SetInputData(solid)
+        extract.SetCellList(ids)
+        extract.Update()
+        piece = keep_arrays(extract.GetOutput(), ("RTData",))
+        halves.append((write_xml(vtkXMLUnstructuredGridWriter(), piece, fwd(os.path.join(parallel_dir, "tets_%d.vtu" % half))), piece))
+    pvtu = write_parallel_index(fwd(os.path.join(parallel_dir, "tets.pvtu")), "PUnstructuredGrid", halves, "RTData")
+    spheres = []
+    for index, center in enumerate((-1.5, 1.5)):
+        ball = vtkSphereSource()
+        ball.SetCenter(center, 0.0, 0.0)
+        ball.SetThetaResolution(16)
+        ball.SetPhiResolution(12)
+        piece = elevated(ball, (-3.0, 0.0, 0.0), (3.0, 0.0, 0.0))
+        spheres.append((write_xml(vtkXMLPolyDataWriter(), piece, fwd(os.path.join(parallel_dir, "shell_%d.vtp" % index))), piece))
+    pvtp = write_parallel_index(fwd(os.path.join(parallel_dir, "shell.pvtp")), "PPolyData", spheres, "Elevation")
+
+    # Plain geometry: a binary STL cylinder, a binary PLY cone, a Wavefront OBJ cube (written by
+    # hand: the OBJ writer's text stream would write CRLF on Windows).
+    geometry_dir = folder("geometry")
+    cylinder = vtkCylinderSource()
+    cylinder.SetResolution(24)
+    triangles = vtkTriangleFilter()
+    triangles.SetInputConnection(cylinder.GetOutputPort())
+    stl = fwd(os.path.join(geometry_dir, "part.stl"))
+    stl_writer = vtkSTLWriter()
+    stl_writer.SetInputConnection(triangles.GetOutputPort())
+    stl_writer.SetFileTypeToBinary()
+    stl_writer.SetHeader("OmnibusCloud ParaView corpus: a cylinder")
+    stl_writer.SetFileName(stl)
+    stl_writer.Write()
+    written.append(stl)
+    cone = vtkConeSource()
+    cone.SetResolution(24)
+    cone_triangles = vtkTriangleFilter()
+    cone_triangles.SetInputConnection(cone.GetOutputPort())
+    ply = fwd(os.path.join(geometry_dir, "part.ply"))
+    ply_writer = vtkPLYWriter()
+    ply_writer.SetInputConnection(cone_triangles.GetOutputPort())
+    ply_writer.SetFileTypeToBinary()
+    ply_writer.SetDataByteOrderToLittleEndian()
+    ply_writer.SetFileName(ply)
+    ply_writer.Write()
+    written.append(ply)
+    obj = fwd(os.path.join(geometry_dir, "part.obj"))
+    corners = [(x, y, z) for x in (-1.0, 1.0) for y in (-1.0, 1.0) for z in (-1.0, 1.0)]
+    faces = [(1, 3, 4), (1, 4, 2), (5, 6, 8), (5, 8, 7), (1, 2, 6), (1, 6, 5),
+             (3, 7, 8), (3, 8, 4), (1, 5, 7), (1, 7, 3), (2, 4, 8), (2, 8, 6)]
+    with open(obj, "w", encoding="ascii", newline="\n") as handle:
+        handle.write("# OmnibusCloud ParaView corpus: a cube\n")
+        handle.writelines("v %g %g %g\n" % corner for corner in corners)
+        handle.writelines("f %d %d %d\n" % face for face in faces)
+    written.append(obj)
+
+    return {"vtp": vtp, "vts": vts, "vtm": vtm, "pvtu": pvtu, "pvtp": pvtp, "stl": stl, "ply": ply, "obj": obj,
+            "files": sorted(set(written))}
 
 
 def main(argv):
@@ -143,6 +354,8 @@ def main(argv):
     with open(legacy, "w", encoding="ascii", newline="\n") as handle:
         handle.write(legacy_writer.GetOutputString())
 
+    wider = write_wider_formats(data, fwd)
+
     # Time series: 5 wavelets of growing amplitude + a PVD index.
     pieces = []
     for step in range(5):
@@ -169,6 +382,8 @@ def main(argv):
     }
     for piece in pieces:
         mapping[piece] = "data/series/" + os.path.basename(piece)
+    for path in wider["files"]:
+        mapping[path] = logical(path, out)
 
     # CalculiX results for the bundled reader: copied verbatim, one logical path each.
     import shutil
@@ -278,6 +493,96 @@ def main(argv):
     save("file_series", file_series)
     save("sphere_static", sphere_static)
     save("legacy_vtk", legacy_vtk)
+
+    # Wider reader and filter coverage (controller 1.2.0): one scene per format family, every common
+    # filter used at least once (hidden ones too - a state saves every proxy of the pipeline).
+    def vtp_surface(view):
+        reader = pv.XMLPolyDataReader(registrationName="surface.vtp", FileName=[wider["vtp"]])
+        clean = pv.Clean(registrationName="Clean1", Input=reader)
+        triangulate = pv.Triangulate(registrationName="Triangulate1", Input=clean)
+        decimate = pv.Decimate(registrationName="Decimate1", Input=triangulate, TargetReduction=0.5)
+        smooth = pv.Smooth(registrationName="Smooth1", Input=decimate, NumberofIterations=20)
+        normals = pv.SurfaceNormals(registrationName="GenerateSurfaceNormals1", Input=smooth)
+        elevation = pv.Elevation(registrationName="Elevation1", Input=normals, LowPoint=[0.0, 0.0, -1.0], HighPoint=[0.0, 0.0, 1.0])
+        rep = pv.Show(elevation, view)
+        pv.ColorBy(rep, ("POINTS", "Elevation"))
+        pv.Show(pv.FeatureEdges(registrationName="FeatureEdges1", Input=reader), view)
+        pv.Curvature(registrationName="Curvature1", Input=triangulate)
+
+    def vts_structured(view):
+        reader = pv.XMLStructuredGridReader(registrationName="grid.vts", FileName=[wider["vts"]])
+        subset = pv.ExtractSubset(registrationName="ExtractSubset1", Input=reader, VOI=[0, 8, 0, 6, 0, 2])
+        warp = pv.WarpByScalar(registrationName="WarpByScalar1", Input=subset, Scalars=["POINTS", "pressure"], ScaleFactor=0.2)
+        rep = pv.Show(warp, view)
+        pv.ColorBy(rep, ("POINTS", "pressure"))
+        pv.Show(pv.Outline(registrationName="Outline1", Input=reader), view)
+        shrink = pv.Shrink(registrationName="Shrink1", Input=reader, ShrinkFactor=0.8)
+        cells = pv.PointDatatoCellData(registrationName="PointDatatoCellData1", Input=shrink)
+        cells_rep = pv.Show(cells, view)
+        pv.ColorBy(cells_rep, ("CELLS", "pressure"))
+
+    def vtm_blocks(view):
+        reader = pv.XMLMultiBlockDataReader(registrationName="blocks.vtm", FileName=[wider["vtm"]])
+        shell = pv.ExtractBlock(registrationName="ExtractBlock1", Input=reader, Selectors=["/Root/shell"])
+        shell_rep = pv.Show(shell, view)
+        pv.ColorBy(shell_rep, ("POINTS", "Elevation"))
+        solid = pv.ExtractBlock(registrationName="ExtractBlock2", Input=reader, Selectors=["/Root/solid"])
+        merged = pv.MergeBlocks(registrationName="MergeBlocks1", Input=solid)
+        merged_rep = pv.Show(merged, view)
+        pv.ColorBy(merged_rep, ("POINTS", "RTData"))
+        pv.GroupDatasets(registrationName="GroupDatasets1", Input=[shell, merged])
+        shell_merged = pv.MergeBlocks(registrationName="MergeBlocks2", Input=shell)
+        pv.AppendDatasets(registrationName="AppendDatasets1", Input=[merged, shell_merged])
+
+    def parallel_pieces(view):
+        tets = pv.XMLPartitionedUnstructuredGridReader(registrationName="tets.pvtu", FileName=[wider["pvtu"]])
+        tets_rep = pv.Show(tets, view)
+        pv.ColorBy(tets_rep, ("POINTS", "RTData"))
+        shell = pv.XMLPartitionedPolydataReader(registrationName="shell.pvtp", FileName=[wider["pvtp"]])
+        shell_rep = pv.Show(shell, view)
+        pv.ColorBy(shell_rep, ("POINTS", "Elevation"))
+
+    def geometry_formats(view):
+        stl = pv.STLReader(registrationName="part.stl", FileNames=[wider["stl"]])
+        moved = pv.Transform(registrationName="Transform1", Input=stl)
+        moved.Transform.Translate = [3.0, 0.0, 0.0]
+        pv.Show(moved, view)
+        ply = pv.PLYReader(registrationName="part.ply", FileNames=[wider["ply"]])
+        pv.Show(pv.AxisAlignedReflect(registrationName="Reflect1", Input=ply), view)
+        pv.Show(pv.WavefrontOBJReader(registrationName="part.obj", FileName=wider["obj"]), view)
+
+    def vtu_more_filters(view):
+        reader = pv.XMLUnstructuredGridReader(registrationName="tets.vtu", FileName=[vtu])
+        region = pv.ExtractCellsByRegion(registrationName="ExtractCellsByRegion1", Input=reader, IntersectWith="Sphere")
+        region.IntersectWith.Radius = 3.0
+        pv.Show(region, view).SetRepresentationType("Wireframe")
+        centers = pv.CellCenters(registrationName="CellCenters1", Input=region)
+        pv.Show(pv.MaskPoints(registrationName="MaskPoints1", Input=centers, OnRatio=3, GenerateVertices=1), view)
+        pv.Tessellate(registrationName="Tessellate1", Input=reader)
+        plane = pv.Plane(registrationName="Plane1", Origin=[-5.0, -5.0, 0.0], Point1=[5.0, -5.0, 0.0], Point2=[-5.0, 5.0, 0.0], XResolution=20, YResolution=20)
+        resampled = pv.ResampleWithDataset(registrationName="ResampleWithDataset1", SourceDataArrays=reader, DestinationMesh=plane)
+        resampled_rep = pv.Show(resampled, view)
+        pv.ColorBy(resampled_rep, ("POINTS", "RTData"))
+        gradient = pv.Gradient(registrationName="Gradient1", Input=reader)
+        gradient.ScalarArray = ["POINTS", "RTData"]
+        seeds = pv.Line(registrationName="Line1", Point1=[-4.0, -4.0, -4.0], Point2=[4.0, 4.0, 4.0], Resolution=10)
+        tracer = pv.StreamTracerWithCustomSource(registrationName="StreamTracerWithCustomSource1", Input=gradient, SeedSource=seeds)
+        tracer.Vectors = ["POINTS", "Gradient"]
+        tracer.MaximumStreamlineLength = 10.0
+        pv.Show(tracer, view)
+        pv.Show(pv.AnnotateAttributeData(registrationName="AnnotateAttributeData1", Input=reader, SelectInputArray=["POINTS", "RTData"], Prefix="RTData: "), view)
+        pv.Show(pv.Ruler(registrationName="Ruler1", Point1=[-5.0, -5.0, -5.0], Point2=[5.0, -5.0, -5.0]), view)
+        pv.Show(pv.SliceWithPlane(registrationName="SliceWithPlane1", Input=reader), view)
+        pv.CellSize(registrationName="CellSize1", Input=reader)
+        pv.MeshQuality(registrationName="MeshQuality1", Input=reader)
+        pv.ExtractEdges(registrationName="ExtractEdges1", Input=region)
+
+    save("vtp_surface", vtp_surface)
+    save("vts_structured", vts_structured)
+    save("vtm_blocks", vtm_blocks)
+    save("parallel_pieces", parallel_pieces)
+    save("geometry_formats", geometry_formats)
+    save("vtu_more_filters", vtu_more_filters)
 
     # ------------------------------------------------------------------ reader states
     plugin_version = None

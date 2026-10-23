@@ -45,7 +45,12 @@ public static class ParaViewProxyPolicy
         // through LoadMaterials and lives outside the file-reference groups, so neither path gate
         // sees it; a non-empty value hands an arbitrary path to ParaView at load (audit C-H1). Empty
         // (every corpus state) stays inert.
-        "LoadMaterials"
+        "LoadMaterials",
+        // transforms/GeoTransform rides along in every Transform filter's state (one of its transform
+        // choices). A PROJ definition can name grid files by absolute path (+nadgrids, +geoidgrids),
+        // which PROJ opens on the node, outside both path gates. Empty (every corpus state) stays inert.
+        "SourceProjection",
+        "DestinationProjection"
     };
 
     /// <summary>

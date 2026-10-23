@@ -107,6 +107,12 @@ public sealed class ParaViewRealRuntimeTests
     [TestCase(ParaViewCorpus.SPHERE_STATIC)]
     [TestCase(ParaViewCorpus.OPENFOAM_BOX)]
     [TestCase(ParaViewCorpus.LEGACY_VTK)]
+    [TestCase(ParaViewCorpus.VTP_SURFACE)]
+    [TestCase(ParaViewCorpus.VTS_STRUCTURED)]
+    [TestCase(ParaViewCorpus.VTM_BLOCKS)]
+    [TestCase(ParaViewCorpus.PARALLEL_PIECES)]
+    [TestCase(ParaViewCorpus.GEOMETRY_FORMATS)]
+    [TestCase(ParaViewCorpus.VTU_MORE_FILTERS)]
     public async Task StillRendersThroughTheRealRuntimeTest(string stateName)
     {
         var (scene, _) = ParaViewCorpus.BuildScene(stateName, Path.Combine(m_root, Path.GetFileNameWithoutExtension(stateName)), m_blobs);
@@ -260,6 +266,12 @@ public sealed class ParaViewRealRuntimeTests
     [TestCase(ParaViewCorpus.GUI_CHART)]
     [TestCase(ParaViewCorpus.GUI_FOLDER + "/" + ParaViewCorpus.VTU_SLICE_CLIP_GLYPH)]
     [TestCase(ParaViewCorpus.GUI_FOLDER + "/" + ParaViewCorpus.OPENFOAM_BOX)]
+    [TestCase(ParaViewCorpus.GUI_FOLDER + "/" + ParaViewCorpus.VTP_SURFACE)]
+    [TestCase(ParaViewCorpus.GUI_FOLDER + "/" + ParaViewCorpus.VTS_STRUCTURED)]
+    [TestCase(ParaViewCorpus.GUI_FOLDER + "/" + ParaViewCorpus.VTM_BLOCKS)]
+    [TestCase(ParaViewCorpus.GUI_FOLDER + "/" + ParaViewCorpus.PARALLEL_PIECES)]
+    [TestCase(ParaViewCorpus.GUI_FOLDER + "/" + ParaViewCorpus.GEOMETRY_FORMATS)]
+    [TestCase(ParaViewCorpus.GUI_FOLDER + "/" + ParaViewCorpus.VTU_MORE_FILTERS)]
     public async Task GuiSavedStateRendersThroughTheRealRuntimeTest(string stateName)
     {
         // A state the ParaView GUI saved (root <ParaView>, legends, annotations, a chart view next to

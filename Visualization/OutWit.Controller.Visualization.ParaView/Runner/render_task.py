@@ -19,7 +19,8 @@ Responsibilities (docs 03, section 9):
   2. load only the bundled reader, from the task's plugin path;
   3. resolve the state's logical file references under the package root (the state never carries
      a client path): a single-valued reference must be a materialized package file, a file series
-     must have at least one, and any VTK error during load/render fails the task;
+     must have at least one, every file an index or a file-series list names in turn must stay
+     inside the package root, and any VTK error during load/render fails the task;
   4. select the declared view, then per output its timestep;
   4a. move the state's camera by the output's camera move (docs 03, section 27, item 1; docs 06,
       part B): revolve it by the azimuth about the orbit axis through the focal point, raise it by
@@ -84,6 +85,23 @@ VALIDATED_PROXY_GROUPS = (
     "transfer_2d_functions", "animation", "misc", "implicit_functions", "textures",
     "extended_sources", "annotations", "additional_lights", "layouts", "scalar_bars",
 )
+
+# VTK XML index types: their readers open further files the index names - a collection's (.pvd)
+# and a composite's (.vtm, .vtpc, .vthb) DataSet file, a parallel piece list's (.pvt*) Piece
+# Source. A reader opens the files of its own type only, so the VTKFile type decides.
+INDEX_TYPES = frozenset((
+    "Collection", "vtkMultiBlockDataSet", "vtkMultiGroupDataSet", "vtkHierarchicalBoxDataSet",
+    "vtkOverlappingAMR", "vtkNonOverlappingAMR", "vtkPartitionedDataSet", "vtkPartitionedDataSetCollection",
+    "PUnstructuredGrid", "PPolyData", "PImageData", "PStructuredGrid", "PRectilinearGrid", "PTable",
+    "PHyperTreeGrid",
+))
+INDEX_REFERENCE_ATTRIBUTES = ("file", "Source")
+# A file-series list (<name>.series, JSON: files[].name) is read by every file-series reader.
+SERIES_LIST_SUFFIX = ".series"
+MAX_INDEX_BYTES = 32 * 1024 * 1024
+MAX_INDEX_DEPTH = 8
+INDEX_SNIFF_BYTES = 64 * 1024
+_VTKFILE_TYPE = re.compile(rb"<VTKFile\b[^>]*?\btype\s*=\s*[\"']([^\"']*)[\"']")
 
 
 class RunnerError(Exception):
@@ -395,6 +413,7 @@ def resolve_state(task):
                         raise RunnerError("reference '%s' escapes the package root" % value, EXIT_POLICY)
                     if os.path.isfile(target):
                         present += 1
+                        check_indirect_references(target, task.package_root)
                     else:
                         missing.append(value)
                     element.set("value", target)
@@ -411,6 +430,94 @@ def resolve_state(task):
     resolved_path = os.path.join(task.work_dir, "state.resolved.pvsm")
     ET.ElementTree(root).write(resolved_path, encoding="utf-8", xml_declaration=True)
     return resolved_path, rewritten, missing
+
+
+def check_indirect_references(path, package_root, depth=0):
+    """Refuses a package file that makes a reader open a file outside the package root.
+
+    A VTK XML index (.pvd, .vtm, .pvt*: DataSet file / Piece Source) or a file-series list
+    (.series: files[].name) names further files, and a reader follows an absolute name or a '..'
+    climb as readily as the package's own pieces (ParaView 6.2 opens an absolute path from a
+    .series list and '../' from a .pvd). The state check never sees those names, so every file a
+    state references is checked here, before ParaView touches it, and nested indexes are followed
+    the way their readers follow them. A name the package did not materialize is left to the
+    reader (a task carries only its own subset)."""
+    if depth > MAX_INDEX_DEPTH:
+        raise RunnerError("'%s': indexes nest deeper than %d levels" % (_package_relative(path, package_root), MAX_INDEX_DEPTH), EXIT_POLICY)
+
+    if path.lower().endswith(SERIES_LIST_SUFFIX):
+        names = _series_list_names(path, package_root)
+    else:
+        names = _index_names(path, package_root)
+
+    base = os.path.dirname(path)
+    for name in names:
+        if not name:
+            continue
+        normalized = name.replace("\\", "/")
+        # A package names its pieces relatively (the plugin keeps them so); an absolute, drive,
+        # URI or home ('~' is a full path to VTK on POSIX) name points off the package, and a
+        # relative one must not climb out of it.
+        absolute = os.path.isabs(normalized) or normalized.startswith(("/", "~")) or _DRIVE.match(normalized) or _URI.match(normalized)
+        target = None if absolute else os.path.join(base, *normalized.split("/"))
+        if target is None or not is_inside(target, package_root):
+            raise RunnerError("'%s' names '%s', outside the package root" % (_package_relative(path, package_root), name), EXIT_POLICY)
+        if os.path.isfile(target):
+            check_indirect_references(target, package_root, depth + 1)
+
+
+def _index_names(path, package_root):
+    """The file names a VTK XML index carries; nothing for any other file. A file that opens as
+    XML must show its VTKFile element within the first INDEX_SNIFF_BYTES - a reader would find it
+    further down, the check could not."""
+    with open(path, "rb") as handle:
+        head = handle.read(INDEX_SNIFF_BYTES)
+    if not head.lstrip(b"\xef\xbb\xbf \t\r\n").startswith(b"<"):
+        return []
+
+    match = _VTKFILE_TYPE.search(head)
+    if match is None:
+        raise RunnerError("'%s' is XML without a VTKFile element in its first %d bytes; what it names cannot be checked" % (_package_relative(path, package_root), INDEX_SNIFF_BYTES), EXIT_POLICY)
+    if match.group(1).decode("ascii", "replace") not in INDEX_TYPES:
+        return []
+
+    raw = _read_bounded(path, package_root)
+    if b"<!doctype" in raw[:4096].lower() or b"<!entity" in raw.lower():
+        raise RunnerError("'%s' declares a DTD or entities" % _package_relative(path, package_root), EXIT_POLICY)
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError as e:
+        raise RunnerError("'%s' is not well-formed XML: %s" % (_package_relative(path, package_root), e), EXIT_POLICY)
+    return [element.get(attribute) for element in root.iter() for attribute in INDEX_REFERENCE_ATTRIBUTES if element.get(attribute)]
+
+
+def _series_list_names(path, package_root):
+    """The file names of a file-series list. A list the check cannot parse is refused: the
+    reader's parser is more lenient (comments) and would still follow it."""
+    raw = _read_bounded(path, package_root)
+    try:
+        document = json.loads(raw.decode("utf-8-sig"))
+        names = [entry["name"] for entry in document["files"]]
+    except (ValueError, KeyError, TypeError) as e:
+        raise RunnerError("'%s' is not a file-series list the node can check: %s" % (_package_relative(path, package_root), e), EXIT_POLICY)
+    if not all(isinstance(name, str) for name in names):
+        raise RunnerError("'%s' is not a file-series list the node can check: a name is not a string" % _package_relative(path, package_root), EXIT_POLICY)
+    return names
+
+
+def _read_bounded(path, package_root):
+    size = os.path.getsize(path)
+    if size > MAX_INDEX_BYTES:
+        raise RunnerError("'%s' is %d bytes, over the %d byte index limit" % (_package_relative(path, package_root), size, MAX_INDEX_BYTES), EXIT_POLICY)
+    with open(path, "rb") as handle:
+        return handle.read()
+
+
+def _package_relative(path, package_root):
+    try:
+        return os.path.relpath(path, package_root).replace(os.sep, "/")
+    except ValueError:
+        return path
 
 
 # ---------------------------------------------------------------------------------------------
