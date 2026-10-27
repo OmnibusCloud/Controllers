@@ -42,6 +42,53 @@ public class DatResultReaderTests
         return path;
     }
 
+    private static string Fixture(string name)
+    {
+        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
+    }
+
+    #endregion
+
+    #region Block End Tests
+
+    [Test]
+    public void TheEigenvalueTableEndsBeforeTheParticipationFactorsTest()
+    {
+        // ccx 2.22 prints PARTICIPATION FACTORS, EFFECTIVE MODAL MASS and
+        // TOTAL EFFECTIVE MASS after the eigenvalues — rows of the same shape
+        // (a leading integer, four or more numbers) that were read as modes
+        // 5 to 13 of a 4-mode deck.
+        var result = DatResultReader.Read(Fixture("freq.dat"));
+
+        Assert.That(result.Eigenfrequencies, Is.EqualTo(new[] { 2.229443e5, 2.229443e5, 4.113257e5, 6.997396e5 })
+            .Within(1e0));
+    }
+
+    [Test]
+    public void BucklingFactorsAreReadOnePerModeTest()
+    {
+        // buckle.inp, solved by ccx 2.22: *BUCKLE asking for 3 factors.
+        var result = DatResultReader.Read(Fixture("buckle.dat"));
+
+        Assert.That(result.BucklingFactors, Is.EqualTo(new[] { 151.9163, 151.9163, 699.4240 }).Within(1e-3));
+    }
+
+    [Test]
+    public void AForcesBlockEndsAtTheNextPrintTest()
+    {
+        // static-prints.inp, solved by ccx 2.22: *NODE PRINT with RF, U and
+        // an *EL PRINT of S. The displacement and stress rows follow the
+        // forces rows and have their shape; they were summed into the
+        // reaction forces.
+        var result = DatResultReader.Read(Fixture("static-prints.dat"));
+
+        Assert.That(result.ForceSums, Has.Count.EqualTo(1));
+        Assert.That(result.ForceSums[0].SetName, Is.EqualTo("FIX"));
+        Assert.That(result.ForceSums[0].Fx, Is.EqualTo(0.0).Within(1e-6));
+        Assert.That(result.ForceSums[0].Fy, Is.EqualTo(0.0).Within(1e-6));
+        Assert.That(result.ForceSums[0].Fz, Is.EqualTo(100.0).Within(1e-6));
+    }
+
     #endregion
 
     #region Force Sum Tests
