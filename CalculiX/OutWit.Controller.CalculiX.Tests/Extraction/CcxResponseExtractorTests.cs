@@ -120,6 +120,27 @@ public class CcxResponseExtractorTests
         Assert.That(Value(row, "eigenfrequency_2"), Is.EqualTo(2.229443e5).Within(1e0));
         Assert.That(Value(row, "eigenfrequency_3"), Is.EqualTo(4.113257e5).Within(1e0));
         Assert.That(Value(row, "eigenfrequency_4"), Is.EqualTo(6.997396e5).Within(1e0));
+        Assert.That(row.Values.Select(value => value.Name), Has.None.StartsWith("eigenfrequency_5"),
+            "a 4-mode deck reports 4 eigenfrequencies — nothing from the participation-factor tables");
+    }
+
+    [Test]
+    public void BucklingDeckYieldsOneFactorPerModeTest()
+    {
+        var row = CcxResponseExtractor.Extract(null, null, Fixture("buckle.dat"), null);
+
+        Assert.That(row.Values.Select(value => value.Name), Is.EqualTo(new[] { "buckling_factor_1", "buckling_factor_2", "buckling_factor_3" }));
+        Assert.That(Value(row, "buckling_factor_3"), Is.EqualTo(699.4240).Within(1e-3));
+    }
+
+    [Test]
+    public void ReactionSumsIgnoreTheDisplacementAndStressPrintsAfterThemTest()
+    {
+        var row = CcxResponseExtractor.Extract(Fixture("static-prints.inp"), null, Fixture("static-prints.dat"), null);
+
+        Assert.That(Value(row, "rf_sum_z@fix"), Is.EqualTo(100.0).Within(1e-4));
+        Assert.That(Value(row, "rf_sum_x@fix"), Is.EqualTo(0.0).Within(1e-4));
+        Assert.That(Value(row, "rf_sum_y@fix"), Is.EqualTo(0.0).Within(1e-4));
     }
 
     #endregion
