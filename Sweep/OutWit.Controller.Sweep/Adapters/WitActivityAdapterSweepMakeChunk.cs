@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using OutWit.Controller.Sweep.Activities;
 using OutWit.Controller.Sweep.Families;
 using OutWit.Controller.Sweep.Model;
+using OutWit.Controller.Sweep.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -32,14 +33,17 @@ internal sealed class WitActivityAdapterSweepMakeChunk : WitActivityAdapterFunct
         if (!pool.TryGetValue(activity.State, out SweepStateData? state) || state == null)
             throw new InvalidOperationException("Failed to get parameter 'State'.");
 
-        if (state.ChunkIndex >= plan.ChunkSizes.Count)
+        // The schedule of record is the state's (Sweep.Model 2.2.0), the plan's for a cursor
+        // an older host wrote: a resumed run keeps the boundaries it was harvested by.
+        var sizes = SweepResume.Sizes(plan, state);
+        if (state.ChunkIndex >= sizes.Count)
             throw new InvalidOperationException(
-                $"Chunk {state.ChunkIndex} requested, but the plan holds {plan.ChunkSizes.Count} chunk(s).");
+                $"Chunk {state.ChunkIndex} requested, but the schedule holds {sizes.Count} chunk(s).");
 
         var family = SweepFamilies.Of(plan);
         var variants = plan.Options.Variants
             .Skip(state.NextVariantOrdinal)
-            .Take(plan.ChunkSizes[state.ChunkIndex])
+            .Take(sizes[state.ChunkIndex])
             .ToList();
 
         var tasks = await family.MakeTasksAsync(plan.Options, variants, BlobService);

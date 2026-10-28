@@ -1,6 +1,7 @@
 using System.Text;
 using MemoryPack;
 using Microsoft.Extensions.DependencyInjection;
+using OutWit.Controller.CalculiX.Model;
 using OutWit.Controller.CalculiX.Runtime;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.Sweep.Model;
@@ -256,6 +257,64 @@ public class SweepCalculiXTests
 
         // Deck-set chunks are pure metadata: nothing instantiated, nothing re-uploaded.
         Assert.That(Directory.GetFiles(m_blobStoragePath, "*.inp").Length, Is.EqualTo(inpCountBefore));
+    }
+
+    [Test]
+    public async Task AResumedStudyContinuesFromItsStateAndNeverRecomputesAChunkTest()
+    {
+        var deckBlobId = m_blobService.AddText(DECK_TEMPLATE, "base.inp");
+        var values = new[] { "v0", "v1", "v2", "v3", "v4", "FAKE-FAIL", "v6" };
+
+        // The first run harvested its first chunk - variants 0..2 - before it stopped (the
+        // fleet went away, the server restarted): the manifest of that chunk and the cursor
+        // after it are what the engine hands back as the job's last state.
+        var harvested = new SweepManifestData
+        {
+            Rows = Enumerable.Range(0, 3)
+                .Select(index => new SweepManifestRowData
+                {
+                    VariantIndex = index,
+                    Outcome = SweepOutcome.Succeeded,
+                    CalculiX = new CcxResultData { VariantIndex = index, ExitCode = 0, SolveSeconds = 1 }
+                })
+                .ToList()
+        };
+        var manifestBlobId = await m_blobService.UploadBytesAsync(MemoryPackSerializer.Serialize(harvested), "manifest_0.bin");
+        var resumed = new SweepStateData
+        {
+            ChunkIndex = 1,
+            NextVariantOrdinal = 3,
+            SucceededCount = 3,
+            ManifestBlobId = manifestBlobId,
+            ChunkSizes = [3, 3, 1]
+        };
+
+        // What an engine resuming the job does: the script's state variable is set from the
+        // last state before the run; Sweep.Plan replans, Sweep.InitState keeps the cursor.
+        var job = m_engine.Compile(m_script);
+        job.Variables["state"].SetValue(resumed);
+        var frdCountBefore = Directory.GetFiles(m_blobStoragePath, "*.frd").Length;
+
+        var status = await m_engine.ScheduleAndWaitAsync(job, TemplateStudy(values, deckBlobId));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
+
+        var state = job.Variables["state"].Value as SweepStateData ?? new SweepStateData();
+        Assert.That(state.ChunkIndex, Is.EqualTo(3));
+        Assert.That(state.NextVariantOrdinal, Is.EqualTo(7));
+        Assert.That(state.SucceededCount, Is.EqualTo(6));
+        Assert.That(state.FailedCount, Is.EqualTo(1));
+        Assert.That(state.ChunkSizes, Is.EqualTo(new[] { 3, 3, 1 }));
+        Assert.That(job.Variables["chunks"].Value, Is.EqualTo(2), "only the chunks after the cursor ran");
+
+        // The manifest grew monotonically: the first chunk's rows are the ones handed in,
+        // verbatim (no .frd of theirs was ever written here), the rest were solved now.
+        var manifest = await ManifestAsync(state);
+        Assert.That(manifest.Rows.Select(row => row.VariantIndex), Is.EqualTo(Enumerable.Range(0, values.Length)));
+        Assert.That(manifest.Rows.Take(3).All(row => row.CalculiX?.FrdBlobId == null && row.CalculiX?.SolveSeconds == 1), Is.True, "the harvested chunk is not recomputed");
+        Assert.That(manifest.Rows.Skip(3).Where(row => row.VariantIndex != 5).All(row => row.CalculiX?.FrdBlobId != null), Is.True);
+        Assert.That(manifest.Rows.Single(row => row.VariantIndex == 5).Outcome, Is.EqualTo(SweepOutcome.Failed));
+        Assert.That(Directory.GetFiles(m_blobStoragePath, "*.frd").Length - frdCountBefore, Is.EqualTo(3), "three solves wrote a result; the failed one and the handed chunk none");
     }
 
     #endregion

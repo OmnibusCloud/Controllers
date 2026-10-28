@@ -45,7 +45,8 @@ internal sealed class WitActivityAdapterSweepHarvest : WitActivityAdapterFunctio
         // foreign entry the family left out), a variant twice or one from
         // outside the chunk must fail LOUDLY here, because the silent
         // alternative is a manifest that miscounts forever.
-        var expected = plan.ChunkSizes[state.ChunkIndex];
+        var sizes = SweepResume.Sizes(plan, state);
+        var expected = sizes[state.ChunkIndex];
         var chunk = plan.Options.Variants
             .Skip(state.NextVariantOrdinal)
             .Take(expected)
@@ -74,6 +75,9 @@ internal sealed class WitActivityAdapterSweepHarvest : WitActivityAdapterFunctio
             FailedCount = state.FailedCount + rows.Count(row => row.Outcome == SweepOutcome.Failed),
             RefusedCount = state.RefusedCount + rows.Count(row => row.Outcome == SweepOutcome.Refused),
             ManifestBlobId = manifestBlobId,
+            // The schedule rides every cursor of the run, so a client mirrors it from the
+            // state alone and a resume keeps the boundaries the manifest was harvested by.
+            ChunkSizes = [.. sizes],
             // The document-client view of the manifest: the cumulative index
             // rides the state variable, which the door renders as
             // sweep.state@2 - the manifest blob itself stays MemoryPack.

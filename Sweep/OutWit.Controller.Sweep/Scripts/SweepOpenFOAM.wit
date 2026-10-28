@@ -2,7 +2,7 @@ Job:SweepOpenFOAM(SweepOptions:opts)
 {
     SweepPlan:plan = Sweep.Plan(opts);
     SweepState:state = Sweep.InitState(plan);
-    Int:chunks = Sweep.ChunkCount(plan);
+    Int:chunks = Sweep.ChunkCount(plan, state);
     FoamTaskCollection:tasks;
     FoamResultCollection:wave;
 
