@@ -18,7 +18,7 @@ public sealed partial class WitActivitySweepHarvest : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Plan}, {State}, {Wave}";
+        return Schedule == null ? $"{Plan}, {State}, {Wave}" : $"{Plan}, {State}, {Wave}, {Schedule}";
     }
 
     #endregion
@@ -33,7 +33,8 @@ public sealed partial class WitActivitySweepHarvest : WitActivityFunction
         return base.Is(activity, tolerance)
                && Plan.Check(activity.Plan)
                && State.Check(activity.State)
-               && Wave.Check(activity.Wave);
+               && Wave.Check(activity.Wave)
+               && Schedule.Check(activity.Schedule);
     }
 
     protected override WitActivitySweepHarvest InnerClone()
@@ -42,7 +43,8 @@ public sealed partial class WitActivitySweepHarvest : WitActivityFunction
         {
             Plan = Plan?.Clone() as IWitReference,
             State = State?.Clone() as IWitReference,
-            Wave = Wave?.Clone() as IWitReference
+            Wave = Wave?.Clone() as IWitReference,
+            Schedule = Schedule?.Clone() as IWitReference
         };
     }
 
@@ -61,6 +63,10 @@ public sealed partial class WitActivitySweepHarvest : WitActivityFunction
     /// <summary>Reference to the Wave argument.</summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Wave { get; init; }
+
+    /// <summary>Reference to the Schedule argument; null in a script without the schedule variable.</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Schedule { get; init; }
 
     #endregion
 }

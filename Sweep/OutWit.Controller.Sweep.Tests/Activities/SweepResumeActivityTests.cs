@@ -9,10 +9,13 @@ namespace OutWit.Controller.Sweep.Tests.Activities;
 
 /// <summary>
 /// Sweep.InitState and Sweep.ChunkCount through the engine, the way a resumed
-/// run reaches them: the state variable of the compiled script is set before
-/// the run (what an engine resuming a job from its last state does), and the
-/// script must continue from it - keep the cursor, loop over the chunks left -
-/// or refuse a cursor that does not fit the plan, in words.
+/// run reaches them: the state (and schedule) variables of the compiled
+/// script are set before the run (what an engine resuming a job from its
+/// last state does), and the script must continue from them - keep the
+/// cursor, go by the handed schedule, loop over the chunks left - or refuse
+/// a cursor that does not fit the plan, in words. A fresh run writes the
+/// plan's schedule into the schedule variable and leaves the state's layout
+/// alone.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -23,9 +26,10 @@ public class SweepResumeActivityTests
     private const string SCRIPT = """
                                   Job:SweepResumeTest(SweepPlan:plan)
                                   {
+                                      SweepSchedule:schedule;
                                       SweepState:state;
-                                      state = Sweep.InitState(plan);
-                                      Int:chunks = Sweep.ChunkCount(plan, state);
+                                      state = Sweep.InitState(plan, schedule);
+                                      Int:chunks = Sweep.ChunkCount(plan, state, schedule);
                                   }
                                   """;
 
@@ -101,27 +105,44 @@ public class SweepResumeActivityTests
         };
     }
 
+    private static SweepScheduleData Schedule(params int[] sizes)
+    {
+        return new SweepScheduleData { ChunkSizes = [.. sizes] };
+    }
+
+    private static SweepStateData StateOf(IWitJob job)
+    {
+        var state = job.Variables["state"].Value as SweepStateData;
+        Assert.That(state, Is.Not.Null);
+        return state!;
+    }
+
+    private static SweepScheduleData ScheduleOf(IWitJob job)
+    {
+        var schedule = job.Variables["schedule"].Value as SweepScheduleData;
+        Assert.That(schedule, Is.Not.Null);
+        return schedule!;
+    }
+
     #endregion
 
     #region Resume Tests
 
     [Test]
-    public async Task AFreshRunStartsAtTheZeroCursorWithThePlansScheduleTest()
+    public async Task AFreshRunStartsAtTheZeroCursorAndWritesThePlansScheduleTest()
     {
         var job = m_engine.Compile(SCRIPT);
 
         var status = await m_engine.ScheduleAndWaitAsync(job, Plan());
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
-        var state = job.Variables["state"].Value as SweepStateData;
-        Assert.That(state, Is.Not.Null);
-        Assert.That(state!.ChunkIndex, Is.Zero);
-        Assert.That(state.ChunkSizes, Is.EqualTo(new[] { 3, 3, 1 }), "the zero cursor carries the schedule");
+        Assert.That(StateOf(job).ChunkIndex, Is.Zero);
+        Assert.That(ScheduleOf(job).ChunkSizes, Is.EqualTo(new[] { 3, 3, 1 }), "the schedule variable carries the plan's chunk sizes");
         Assert.That(job.Variables["chunks"].Value, Is.EqualTo(3));
     }
 
     [Test]
-    public async Task AHandedStateIsKeptAndOnlyTheChunksLeftAreCountedTest()
+    public async Task AHandedStateAndScheduleAreKeptAndOnlyTheChunksLeftAreCountedTest()
     {
         var job = m_engine.Compile(SCRIPT);
         var manifest = Guid.NewGuid();
@@ -129,22 +150,22 @@ public class SweepResumeActivityTests
         // one the run goes by.
         job.Variables["state"].SetValue(new SweepStateData
         {
-            ChunkIndex = 1, NextVariantOrdinal = 6, SucceededCount = 5, FailedCount = 1, ManifestBlobId = manifest, ChunkSizes = [6, 1]
+            ChunkIndex = 1, NextVariantOrdinal = 6, SucceededCount = 5, FailedCount = 1, ManifestBlobId = manifest
         });
+        job.Variables["schedule"].SetValue(Schedule(6, 1));
 
         var status = await m_engine.ScheduleAndWaitAsync(job, Plan());
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
-        var state = job.Variables["state"].Value as SweepStateData;
-        Assert.That(state, Is.Not.Null);
-        Assert.That(state!.ChunkIndex, Is.EqualTo(1), "the cursor is kept");
+        var state = StateOf(job);
+        Assert.That(state.ChunkIndex, Is.EqualTo(1), "the cursor is kept");
         Assert.That(state.ManifestBlobId, Is.EqualTo(manifest));
-        Assert.That(state.ChunkSizes, Is.EqualTo(new[] { 6, 1 }));
+        Assert.That(ScheduleOf(job).ChunkSizes, Is.EqualTo(new[] { 6, 1 }), "the handed schedule is kept");
         Assert.That(job.Variables["chunks"].Value, Is.EqualTo(1), "one chunk left");
     }
 
     [Test]
-    public async Task AStateWithoutAScheduleResumesByThePlansTest()
+    public async Task AStateHandedWithoutAScheduleResumesByThePlansTest()
     {
         var job = m_engine.Compile(SCRIPT);
         job.Variables["state"].SetValue(new SweepStateData
@@ -155,9 +176,21 @@ public class SweepResumeActivityTests
         var status = await m_engine.ScheduleAndWaitAsync(job, Plan());
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
-        var state = job.Variables["state"].Value as SweepStateData;
-        Assert.That(state!.ChunkSizes, Is.EqualTo(new[] { 3, 3, 1 }), "a 2.1 cursor adopts the plan's schedule");
+        Assert.That(ScheduleOf(job).ChunkSizes, Is.EqualTo(new[] { 3, 3, 1 }), "the plan's schedule becomes the run's");
         Assert.That(job.Variables["chunks"].Value, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task AScheduleHandedWithoutAStartedStateIsReplacedByThePlansTest()
+    {
+        var job = m_engine.Compile(SCRIPT);
+        job.Variables["schedule"].SetValue(Schedule(7));
+
+        var status = await m_engine.ScheduleAndWaitAsync(job, Plan());
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
+        Assert.That(ScheduleOf(job).ChunkSizes, Is.EqualTo(new[] { 3, 3, 1 }), "a schedule without a cursor means nothing");
+        Assert.That(job.Variables["chunks"].Value, Is.EqualTo(3));
     }
 
     [Test]
@@ -166,8 +199,9 @@ public class SweepResumeActivityTests
         var job = m_engine.Compile(SCRIPT);
         job.Variables["state"].SetValue(new SweepStateData
         {
-            ChunkIndex = 3, NextVariantOrdinal = 7, SucceededCount = 7, ManifestBlobId = Guid.NewGuid(), ChunkSizes = [3, 3, 1]
+            ChunkIndex = 3, NextVariantOrdinal = 7, SucceededCount = 7, ManifestBlobId = Guid.NewGuid()
         });
+        job.Variables["schedule"].SetValue(Schedule(3, 3, 1));
 
         var status = await m_engine.ScheduleAndWaitAsync(job, Plan());
 
@@ -181,8 +215,9 @@ public class SweepResumeActivityTests
         var job = m_engine.Compile(SCRIPT);
         job.Variables["state"].SetValue(new SweepStateData
         {
-            ChunkIndex = 1, NextVariantOrdinal = 4, SucceededCount = 4, ManifestBlobId = Guid.NewGuid(), ChunkSizes = [4, 4]
+            ChunkIndex = 1, NextVariantOrdinal = 4, SucceededCount = 4, ManifestBlobId = Guid.NewGuid()
         });
+        job.Variables["schedule"].SetValue(Schedule(4, 4));
 
         var status = await m_engine.ScheduleAndWaitAsync(job, Plan());
 
@@ -191,13 +226,14 @@ public class SweepResumeActivityTests
     }
 
     [Test]
-    public async Task AScriptPassingThePlanAloneStillCountsEveryChunkTest()
+    public async Task AScriptWithoutTheScheduleVariableStillRunsTest()
     {
         var job = m_engine.Compile(LEGACY_SCRIPT);
 
         var status = await m_engine.ScheduleAndWaitAsync(job, Plan());
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
+        Assert.That(StateOf(job).ChunkIndex, Is.Zero);
         Assert.That(job.Variables["chunks"].Value, Is.EqualTo(3));
     }
 

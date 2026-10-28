@@ -27,40 +27,44 @@ internal sealed class WitActivityAdapterSweepInitState : WitActivityAdapterFunct
         if (!pool.TryGetValue(activity.Plan, out SweepPlanData? plan) || plan == null)
             throw new InvalidOperationException("Failed to get parameter 'Plan'.");
 
+        SweepScheduleData? schedule = null;
+        if (activity.Schedule != null)
+            pool.TryGetValue(activity.Schedule, out schedule);
+
         // A cursor already in the pool before this first assignment is a resume: the host (or
         // a client, through the engine) handed the script the state of an earlier run of the
-        // same study. The run continues from it - the chunks it harvested are never computed
-        // again - once the state is shown to fit the plan; a state that does not fit is named
-        // and refused here, before any node sees a task.
+        // same study, and the schedule that run went by when it has it. The run continues
+        // from the cursor under that schedule - the plan's when none was handed - once the
+        // state is shown to fit; the chunks it harvested are never computed again, and a
+        // state that does not fit is named and refused here, before any node sees a task.
         if (pool.TryGetValue(activity.ReturnReference, out SweepStateData? resumed) && resumed != null && SweepResume.IsStarted(resumed))
         {
-            var findings = SweepResume.Findings(plan, resumed);
+            var findings = SweepResume.Findings(plan, resumed, schedule);
             if (findings.Count > 0)
                 throw new InvalidOperationException($"The sweep cannot resume from the state it was handed: {string.Join("; ", findings)}.");
 
-            // A cursor an older host wrote carries no schedule of its own: it ran by the
-            // plan's, which the fit check above held it to.
-            if (resumed.ChunkSizes.Count == 0)
-                resumed.ChunkSizes = [.. plan.ChunkSizes];
+            if (schedule == null || schedule.ChunkSizes.Count == 0)
+                schedule = SweepResume.ScheduleOf(plan);
 
             Logger.LogInformation(
                 "Sweep resumes at chunk {Chunk} of {Chunks}: {Harvested} variant(s) harvested before, manifest {Manifest}",
-                resumed.ChunkIndex, resumed.ChunkSizes.Count, resumed.NextVariantOrdinal, resumed.ManifestBlobId);
-
-            if (!pool.TrySetValue(activity.ReturnReference, resumed))
-                throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
-
-            return Task.CompletedTask;
+                resumed.ChunkIndex, schedule.ChunkSizes.Count, resumed.NextVariantOrdinal, resumed.ManifestBlobId);
+        }
+        else
+        {
+            // A fresh run: the zero cursor, and the plan's schedule as the run's own. A
+            // schedule handed without a started cursor means nothing and is replaced.
+            resumed = new SweepStateData();
+            schedule = SweepResume.ScheduleOf(plan);
         }
 
-        // The zero cursor carries the schedule this run goes by, so a client mirrors the
-        // server's plan from the state alone and a later resume keeps these boundaries.
-        var state = new SweepStateData
-        {
-            ChunkSizes = [.. plan.ChunkSizes]
-        };
+        // The schedule rides its own variable, written here once and never reassigned, so the
+        // state keeps the wire layout every released reader speaks; a script that declares no
+        // schedule variable (Sweep 2.0 - 2.1) runs by the plan's.
+        if (activity.Schedule != null && !pool.TrySetValue(activity.Schedule.Reference, schedule))
+            throw new InvalidOperationException($"Failed to set schedule '{activity.Schedule}'.");
 
-        if (!pool.TrySetValue(activity.ReturnReference, state))
+        if (!pool.TrySetValue(activity.ReturnReference, resumed))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
 
         return Task.CompletedTask;
@@ -74,15 +78,20 @@ internal sealed class WitActivityAdapterSweepInitState : WitActivityAdapterFunct
     {
         try
         {
-            if (parameters.Length != 1)
-                throw new ArgumentException($"Expected 1 parameter(s), got {parameters.Length}.");
+            if (parameters.Length is < 1 or > 2)
+                throw new ArgumentException($"Expected 1 or 2 parameter(s), got {parameters.Length}.");
 
             if (parameters[0] is not IWitReference plan)
                 throw new ArgumentException("Parameter 'Plan' must be a variable reference.");
 
+            IWitReference? schedule = null;
+            if (parameters.Length == 2 && (schedule = parameters[1] as IWitReference) == null)
+                throw new ArgumentException("Parameter 'Schedule' must be a variable reference.");
+
             return new WitActivitySweepInitState
             {
-                Plan = plan
+                Plan = plan,
+                Schedule = schedule
             };
         }
         catch (Exception e)

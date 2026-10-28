@@ -9,6 +9,7 @@
     "types": [
       "sweep.artifact@1",
       "sweep.resultIndexEntry@2",
+      "sweep.schedule@1",
       "sweep.state@2"
     ],
     "source": {
@@ -74,6 +75,25 @@
         }
       }
     },
+    "sweep.schedule@1": {
+      "type": "object",
+      "title": "SweepSchedule",
+      "x-oc-type-id": "sweep.schedule@1",
+      "x-oc-binding-name": "SweepSchedule",
+      "x-oc-clr": "OutWit.Controller.Sweep.Model.SweepScheduleData, OutWit.Controller.Sweep.Model",
+      "properties": {
+        "chunkSizes": {
+          "x-oc-clr-name": "ChunkSizes",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          }
+        }
+      }
+    },
     "sweep.state@2": {
       "type": "object",
       "title": "SweepStateV2",
@@ -129,16 +149,6 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/sweep.resultIndexEntry@2"
-          }
-        },
-        "chunkSizes": {
-          "x-oc-clr-name": "ChunkSizes",
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": -2147483648,
-            "maximum": 2147483647
           }
         }
       }

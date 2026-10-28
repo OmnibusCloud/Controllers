@@ -5,24 +5,39 @@ namespace OutWit.Controller.Sweep.Utils;
 /// <summary>
 /// What lets a sweep continue from a cursor it was handed instead of starting
 /// over: the chunk schedule a run goes by, and whether a state fits a plan.
-/// The schedule is the state's own when it carries one (Sweep.Model 2.2.0),
-/// the plan's otherwise (a cursor an older host wrote), so a resumed run keeps
-/// the boundaries its manifest was harvested by even when a fresh plan would
-/// open wider or narrower - the fleet is rarely the same width twice.
+/// The schedule of record is the <c>schedule</c> variable when the run has
+/// one (Sweep 2.2), the plan's otherwise (a Sweep 2.0 - 2.1 script, or a
+/// resume handed a state alone), so a resumed run keeps the boundaries its
+/// manifest was harvested by even when a fresh plan would open wider or
+/// narrower - the fleet is rarely the same width twice.
 /// </summary>
 public static class SweepResume
 {
     #region Functions
 
     /// <summary>
-    /// The chunk schedule a run goes by: the state's when it has one, the plan's otherwise.
+    /// The chunk schedule a run goes by: the schedule variable's when it carries one, the
+    /// plan's otherwise.
     /// </summary>
     /// <param name="plan">The plan of the run.</param>
-    /// <param name="state">The cursor of the run.</param>
+    /// <param name="schedule">The run's schedule variable; null or empty when the run has none.</param>
     /// <returns>Chunk sizes, summing to the variant count.</returns>
-    public static IReadOnlyList<int> Sizes(SweepPlanData plan, SweepStateData state)
+    public static IReadOnlyList<int> Sizes(SweepPlanData plan, SweepScheduleData? schedule)
     {
-        return state.ChunkSizes.Count > 0 ? state.ChunkSizes : plan.ChunkSizes;
+        return schedule != null && schedule.ChunkSizes.Count > 0 ? schedule.ChunkSizes : plan.ChunkSizes;
+    }
+
+    /// <summary>
+    /// The schedule variable of a fresh run: the plan's chunk sizes, copied.
+    /// </summary>
+    /// <param name="plan">The plan of the run.</param>
+    /// <returns>A schedule of its own.</returns>
+    public static SweepScheduleData ScheduleOf(SweepPlanData plan)
+    {
+        return new SweepScheduleData
+        {
+            ChunkSizes = [.. plan.ChunkSizes]
+        };
     }
 
     /// <summary>
@@ -37,19 +52,20 @@ public static class SweepResume
     }
 
     /// <summary>
-    /// Everything that keeps a cursor from continuing a plan, each named: a schedule that
-    /// does not cover the study's variants, a chunk index outside the schedule, a next ordinal
-    /// that is not the sum of the chunks before it, counts that do not add up to what was
-    /// harvested, a manifest missing although chunks were harvested. Empty when the state
-    /// fits.
+    /// Everything that keeps a cursor from continuing a plan under a schedule, each named: a
+    /// schedule that does not cover the study's variants, a chunk index outside the schedule,
+    /// a next ordinal that is not the sum of the chunks before it, counts that do not add up
+    /// to what was harvested, a manifest missing although chunks were harvested. Empty when
+    /// the state fits.
     /// </summary>
     /// <param name="plan">The plan the state must fit.</param>
     /// <param name="state">The cursor handed to the run.</param>
+    /// <param name="schedule">The schedule handed with it; null falls back to the plan's.</param>
     /// <returns>The findings, in words; empty when the state can continue the plan.</returns>
-    public static List<string> Findings(SweepPlanData plan, SweepStateData state)
+    public static List<string> Findings(SweepPlanData plan, SweepStateData state, SweepScheduleData? schedule)
     {
         var findings = new List<string>();
-        var sizes = Sizes(plan, state);
+        var sizes = Sizes(plan, schedule);
         var variants = plan.Options?.Variants.Count ?? 0;
         var covered = sizes.Sum();
 

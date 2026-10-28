@@ -21,13 +21,13 @@ family:
 - `SweepPlanData` - the validated study, its case set when it has one, and
   its chunk schedule, immutable.
 - `SweepStateData` - the cursor carried across chunks: the next chunk, the
-  counts by outcome, the latest manifest blob, the result index
+  counts by outcome, the latest manifest blob and the result index
   (`SweepResultIndexEntryData`: variant, outcome, label, artifacts by kind -
-  `SweepArtifactData`, `SweepArtifactKind`) and, since 2.2.0, the chunk
-  schedule the run goes by (`ChunkSizes`, appended at order 7; a 2.0 - 2.1
-  payload reads with an empty schedule, never a null). A reader built against
-  2.0 - 2.1 cannot decode a 2.2 state: update every state reader before a host
-  writes it.
+  `SweepArtifactData`, `SweepArtifactKind`).
+- `SweepScheduleData` (2.2.0) - the chunk schedule a run goes by, the planned
+  size of every chunk as the host computed it for the fleet; its own job
+  variable beside the state, so the state keeps the layout every released
+  reader speaks and a reader that never asks for the schedule never sees it.
 - `SweepManifestData` - everything harvested so far; each row
   (`SweepManifestRowData`) is the sweep's verdict (`SweepOutcome`: succeeded,
   failed, refused) and the node's own result, verbatim, in its family's
@@ -37,7 +37,8 @@ A new solver family is an addition: a `SweepFamily` member, an options block
 and a manifest-row member, each appended.
 
 The state and its index publish the `sweep.*` document vocabulary
-(`sweep.state@2`, `sweep.resultIndexEntry@2`, `sweep.artifact@1`) for
+(`sweep.state@2`, `sweep.resultIndexEntry@2`, `sweep.artifact@1`,
+`sweep.schedule@1`) for
 initiators that are not .NET: `Documents/` carries the JSON schema and the
 generated C++ and Python bindings, regenerated from this assembly (CI checks
 them for drift).

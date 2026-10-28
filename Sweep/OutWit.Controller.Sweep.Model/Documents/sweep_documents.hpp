@@ -243,6 +243,37 @@ struct sweep_result_index_entry_v2 {
     }
 };
 
+/// Document type sweep.schedule@1.
+struct sweep_schedule {
+    static constexpr std::string_view type_id = "sweep.schedule@1";
+
+    std::vector<int32_t> chunk_sizes;
+
+    /// Writes the wire object of this value into a writer.
+    void write_json(detail::json_writer& w) const {
+        w.begin_object();
+        w.key("chunkSizes");
+        w.begin_array();
+        for (const auto& item0 : chunk_sizes) {
+            w.value(item0);
+        }
+        w.end_array();
+        w.end_object();
+    }
+
+    /// The wire object of this value (camelCase, enum names, empty optionals omitted).
+    std::string to_json() const {
+        detail::json_writer w;
+        write_json(w);
+        return w.str();
+    }
+
+    /// This value as a job request parameter of kind "document".
+    std::string to_parameter_json() const {
+        return std::string("{\"kind\":\"document\",\"type\":\"sweep.schedule@1\",\"value\":") + to_json() + "}";
+    }
+};
+
 /// Document type sweep.state@2.
 struct sweep_state_v2 {
     static constexpr std::string_view type_id = "sweep.state@2";
@@ -254,7 +285,6 @@ struct sweep_state_v2 {
     std::optional<int32_t> refused_count;
     std::optional<std::string> manifest_blob_id;
     std::vector<sweep_result_index_entry_v2> results;
-    std::vector<int32_t> chunk_sizes;
 
     /// Writes the wire object of this value into a writer.
     void write_json(detail::json_writer& w) const {
@@ -289,12 +319,6 @@ struct sweep_state_v2 {
             item0.write_json(w);
         }
         w.end_array();
-        w.key("chunkSizes");
-        w.begin_array();
-        for (const auto& item0 : chunk_sizes) {
-            w.value(item0);
-        }
-        w.end_array();
         w.end_object();
     }
 
@@ -315,6 +339,7 @@ struct sweep_state_v2 {
 inline constexpr std::string_view type_ids[] = {
     "sweep.artifact@1",
     "sweep.resultIndexEntry@2",
+    "sweep.schedule@1",
     "sweep.state@2",
 };
 

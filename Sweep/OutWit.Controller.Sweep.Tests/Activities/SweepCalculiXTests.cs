@@ -135,7 +135,7 @@ public class SweepCalculiXTests
 
         // A silently-wrong compile (missing statements) must not pass as "compiles".
         var variables = job.Variables.Select(variable => variable.Name).ToList();
-        Assert.That(variables, Is.SupersetOf(new[] { "opts", "plan", "state", "chunks", "tasks", "wave", "manifest" }));
+        Assert.That(variables, Is.SupersetOf(new[] { "opts", "plan", "schedule", "state", "chunks", "tasks", "wave", "manifest" }));
     }
 
     #endregion
@@ -266,8 +266,9 @@ public class SweepCalculiXTests
         var values = new[] { "v0", "v1", "v2", "v3", "v4", "FAKE-FAIL", "v6" };
 
         // The first run harvested its first chunk - variants 0..2 - before it stopped (the
-        // fleet went away, the server restarted): the manifest of that chunk and the cursor
-        // after it are what the engine hands back as the job's last state.
+        // fleet went away, the server restarted): the manifest of that chunk, the cursor
+        // after it and the schedule it went by are what the engine hands back as the job's
+        // last state.
         var harvested = new SweepManifestData
         {
             Rows = Enumerable.Range(0, 3)
@@ -285,14 +286,15 @@ public class SweepCalculiXTests
             ChunkIndex = 1,
             NextVariantOrdinal = 3,
             SucceededCount = 3,
-            ManifestBlobId = manifestBlobId,
-            ChunkSizes = [3, 3, 1]
+            ManifestBlobId = manifestBlobId
         };
 
-        // What an engine resuming the job does: the script's state variable is set from the
-        // last state before the run; Sweep.Plan replans, Sweep.InitState keeps the cursor.
+        // What an engine resuming the job does: the script's state and schedule variables are
+        // set from the last state before the run; Sweep.Plan replans, Sweep.InitState keeps
+        // the cursor and the handed schedule.
         var job = m_engine.Compile(m_script);
         job.Variables["state"].SetValue(resumed);
+        job.Variables["schedule"].SetValue(new SweepScheduleData { ChunkSizes = [3, 3, 1] });
         var frdCountBefore = Directory.GetFiles(m_blobStoragePath, "*.frd").Length;
 
         var status = await m_engine.ScheduleAndWaitAsync(job, TemplateStudy(values, deckBlobId));
@@ -304,7 +306,7 @@ public class SweepCalculiXTests
         Assert.That(state.NextVariantOrdinal, Is.EqualTo(7));
         Assert.That(state.SucceededCount, Is.EqualTo(6));
         Assert.That(state.FailedCount, Is.EqualTo(1));
-        Assert.That(state.ChunkSizes, Is.EqualTo(new[] { 3, 3, 1 }));
+        Assert.That((job.Variables["schedule"].Value as SweepScheduleData)?.ChunkSizes, Is.EqualTo(new[] { 3, 3, 1 }), "the handed schedule stays the run's");
         Assert.That(job.Variables["chunks"].Value, Is.EqualTo(2), "only the chunks after the cursor ran");
 
         // The manifest grew monotonically: the first chunk's rows are the ones handed in,

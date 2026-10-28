@@ -31,6 +31,7 @@ COMPONENT = "sweep"
 TYPE_IDS = (
     "sweep.artifact@1",
     "sweep.resultIndexEntry@2",
+    "sweep.schedule@1",
     "sweep.state@2",
 )
 """Every published type id of the component."""
@@ -178,6 +179,33 @@ class SweepResultIndexEntryV2:
 
 
 @_dataclass(kw_only=True)
+class SweepSchedule:
+    """Document type sweep.schedule@1."""
+
+    TYPE_ID: _ClassVar[str] = "sweep.schedule@1"
+    """The published type id this class binds."""
+
+    chunk_sizes: list[int] = _field(default_factory=list)
+
+    def to_json(self) -> dict[str, _Any]:
+        """The wire object of this value (camelCase, enum names, None omitted)."""
+        return _omit_none({
+            "chunkSizes": (None if self.chunk_sizes is None else list(self.chunk_sizes)),
+        })
+
+    @classmethod
+    def from_json(cls, data: dict[str, _Any]) -> "SweepSchedule":
+        """Reads the wire object of a value document."""
+        return cls(
+            chunk_sizes=([] if data.get("chunkSizes") is None else list(data.get("chunkSizes"))),
+        )
+
+    def to_parameter(self) -> dict[str, _Any]:
+        """This value as a job request parameter of kind "document"."""
+        return {"kind": "document", "type": self.TYPE_ID, "value": self.to_json()}
+
+
+@_dataclass(kw_only=True)
 class SweepStateV2:
     """Document type sweep.state@2."""
 
@@ -191,7 +219,6 @@ class SweepStateV2:
     refused_count: _Optional[int] = None
     manifest_blob_id: _Optional[_uuid.UUID] = None
     results: list[SweepResultIndexEntryV2] = _field(default_factory=list)
-    chunk_sizes: list[int] = _field(default_factory=list)
 
     def to_json(self) -> dict[str, _Any]:
         """The wire object of this value (camelCase, enum names, None omitted)."""
@@ -203,7 +230,6 @@ class SweepStateV2:
             "refusedCount": self.refused_count,
             "manifestBlobId": (None if self.manifest_blob_id is None else _uuid_to_json(self.manifest_blob_id)),
             "results": (None if self.results is None else [item0.to_json() for item0 in self.results]),
-            "chunkSizes": (None if self.chunk_sizes is None else list(self.chunk_sizes)),
         })
 
     @classmethod
@@ -217,7 +243,6 @@ class SweepStateV2:
             refused_count=data.get("refusedCount"),
             manifest_blob_id=(None if data.get("manifestBlobId") is None else _uuid_from_json(data.get("manifestBlobId"))),
             results=([] if data.get("results") is None else [(None if item0 is None else SweepResultIndexEntryV2.from_json(item0)) for item0 in data.get("results")]),
-            chunk_sizes=([] if data.get("chunkSizes") is None else list(data.get("chunkSizes"))),
         )
 
     def to_parameter(self) -> dict[str, _Any]:
@@ -228,6 +253,7 @@ class SweepStateV2:
 DOCUMENT_TYPES = {
     "sweep.artifact@1": SweepArtifact,
     "sweep.resultIndexEntry@2": SweepResultIndexEntryV2,
+    "sweep.schedule@1": SweepSchedule,
     "sweep.state@2": SweepStateV2,
 }
 """Type id -> dataclass, for reading value documents by their declared type."""
@@ -256,5 +282,6 @@ __all__ = [
     "SweepOutcome",
     "SweepArtifact",
     "SweepResultIndexEntryV2",
+    "SweepSchedule",
     "SweepStateV2",
 ]

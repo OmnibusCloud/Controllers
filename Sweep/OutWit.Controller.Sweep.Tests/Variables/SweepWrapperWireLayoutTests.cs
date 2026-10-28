@@ -18,21 +18,23 @@ namespace OutWit.Controller.Sweep.Tests.Variables;
 public sealed class SweepWrapperWireLayoutTests
 {
     // Declared layouts frozen 2026-09-24 (Sweep 2.0: Sweep.Plan takes the options alone); Sweep 2.1 appends the
-    // optional case set to Sweep.Plan and adds its variable (host-only: scripts are parsed on the host); Sweep 2.2 appends the
-    // optional state to Sweep.ChunkCount (the remaining chunks of a resumed run). The variable wrappers deliberately
+    // optional case set to Sweep.Plan and adds its variable (host-only: scripts are parsed on the host); Sweep 2.2 adds the
+    // schedule variable and appends its optional reference to Sweep.InitState (written there), Sweep.ChunkCount (with the
+    // state), Sweep.MakeChunk and Sweep.Harvest. The variable wrappers deliberately
     // declare NOTHING — name and payload serialize through the engine base
     // class; a property declared here would silently extend the wire.
     private static readonly IReadOnlyDictionary<Type, string[]> EXPECTED_LAYOUTS = new Dictionary<Type, string[]>
     {
         [typeof(WitVariableSweepPlan)] = [],
         [typeof(WitVariableSweepState)] = [],
+        [typeof(WitVariableSweepSchedule)] = [],
         [typeof(WitVariableSweepOptions)] = [],
         [typeof(WitVariableSweepOpenFOAMSet)] = [],
         [typeof(WitActivitySweepPlan)] = ["Options", "OpenFOAMSet"],
-        [typeof(WitActivitySweepInitState)] = ["Plan"],
-        [typeof(WitActivitySweepChunkCount)] = ["Plan", "State"],
-        [typeof(WitActivitySweepMakeChunk)] = ["Plan", "State"],
-        [typeof(WitActivitySweepHarvest)] = ["Plan", "State", "Wave"],
+        [typeof(WitActivitySweepInitState)] = ["Plan", "Schedule"],
+        [typeof(WitActivitySweepChunkCount)] = ["Plan", "State", "Schedule"],
+        [typeof(WitActivitySweepMakeChunk)] = ["Plan", "State", "Schedule"],
+        [typeof(WitActivitySweepHarvest)] = ["Plan", "State", "Wave", "Schedule"],
         [typeof(WitActivitySweepFinish)] = ["Plan", "State"]
     };
 

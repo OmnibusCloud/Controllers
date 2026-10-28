@@ -33,9 +33,13 @@ internal sealed class WitActivityAdapterSweepMakeChunk : WitActivityAdapterFunct
         if (!pool.TryGetValue(activity.State, out SweepStateData? state) || state == null)
             throw new InvalidOperationException("Failed to get parameter 'State'.");
 
-        // The schedule of record is the state's (Sweep.Model 2.2.0), the plan's for a cursor
-        // an older host wrote: a resumed run keeps the boundaries it was harvested by.
-        var sizes = SweepResume.Sizes(plan, state);
+        // The schedule of record is the run's schedule variable (Sweep 2.2), the plan's for a
+        // script without one: a resumed run keeps the boundaries it was harvested by.
+        SweepScheduleData? schedule = null;
+        if (activity.Schedule != null)
+            pool.TryGetValue(activity.Schedule, out schedule);
+
+        var sizes = SweepResume.Sizes(plan, schedule);
         if (state.ChunkIndex >= sizes.Count)
             throw new InvalidOperationException(
                 $"Chunk {state.ChunkIndex} requested, but the schedule holds {sizes.Count} chunk(s).");
@@ -71,8 +75,8 @@ internal sealed class WitActivityAdapterSweepMakeChunk : WitActivityAdapterFunct
     {
         try
         {
-            if (parameters.Length != 2)
-                throw new ArgumentException($"Expected 2 parameter(s), got {parameters.Length}.");
+            if (parameters.Length is < 2 or > 3)
+                throw new ArgumentException($"Expected 2 or 3 parameter(s), got {parameters.Length}.");
 
             if (parameters[0] is not IWitReference plan)
                 throw new ArgumentException("Parameter 'Plan' must be a variable reference.");
@@ -80,10 +84,15 @@ internal sealed class WitActivityAdapterSweepMakeChunk : WitActivityAdapterFunct
             if (parameters[1] is not IWitReference state)
                 throw new ArgumentException("Parameter 'State' must be a variable reference.");
 
+            IWitReference? schedule = null;
+            if (parameters.Length == 3 && (schedule = parameters[2] as IWitReference) == null)
+                throw new ArgumentException("Parameter 'Schedule' must be a variable reference.");
+
             return new WitActivitySweepMakeChunk
             {
                 Plan = plan,
-                State = state
+                State = state,
+                Schedule = schedule
             };
         }
         catch (Exception e)
