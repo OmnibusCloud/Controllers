@@ -62,7 +62,8 @@ name:
 | `libs (...)` naming a library the kit does not have | the library is not there |
 | `#include`, `#includeIfPresent`, `#includeFunc`, `#includeEtc` reaching outside the case | the run must be reproducible from the case alone |
 | a UTF-8 byte order mark at the start of a file | OpenFOAM reads it as part of the first word |
-| a function object of a type outside the list below, or one naming a path outside the case | a pool node is another person's machine; a case may carry only measurements and writers that stay inside it |
+| a function object of a type outside the list below, or one naming a path outside the case - wherever it is written: a block of `functions`, a block of a file it `#include`s, a dictionary of the case's `system/` that an `#includeFunc` pulls in | a pool node is another person's machine; a case may carry only measurements and writers that stay inside it |
+| a `functions` entry that is not a block (`functions #includeEtc "...";`, `functions $macro;`) | what it pulls in cannot be read, and the controller cannot add a response to it |
 
 Files larger than 8 MB (meshes, large fields) are not read for these
 constructs.
@@ -76,7 +77,15 @@ objects that reach the node (`systemCall` runs a command, `timeActivatedFileUpda
 copies a file of the node into the case, `writeDictionary`, `externalCoupled`,
 `abort`); a case carrying one is refused by name and line, and every solver
 process runs with `allowSystemOperations` off, so nothing of a case's runs a
-command whatever the rules miss.
+command whatever the rules miss. The rule reads every function object the
+case runs, the way v2606 finds them: the blocks of the last top-level
+`functions`, the blocks of a case file it `#include`s, and an `#includeFunc
+<name>` as the case's own `system/<name>` when the case ships one (OpenFOAM
+looks there first) - a dictionary of the kit's own
+`etc/caseDicts/postProcessing` is the kit's and passes. The same reading
+(`FoamCaseFunctionObjects`) tells the node which responses the case already
+measures itself and an initiator what a case offers, a function object with
+a `coordinateSystem` or an `origin` in place of `CofR` included.
 
 `forces` `forceCoeffs` `bladeForces` `propellerInfo` `phaseForces` `fieldMinMax` `fieldStatistics` `fieldAverage` `fieldExtents` `valueAverage` `volFieldValue` `surfaceFieldValue` `multiFieldValue` `histogram` `momentum` `momentumError` `continuityError` `flux` `fluxSummary` `interfaceHeight` `regionSizeDistribution` `sizeDistribution` `probes` `patchProbes` `thermoCoupleProbes` `radiometerProbes` `sets` `surfaces` `streamLine` `wallBoundedStreamLine` `nearWallFields` `add` `subtract` `multiply` `divide` `pow` `mag` `magSqr` `components` `norm` `randomise` `grad` `div` `ddt` `ddt2` `curl` `vorticity` `enstrophy` `Lambda2` `Q` `LambVector` `flowType` `pressure` `hydrostaticPressure` `CourantNo` `surfaceCourantNumber` `MachNo` `PecletNo` `wallShearStress` `wallHeatFlux` `yPlus` `heatTransferCoeff` `turbulenceFields` `DESModelRegions` `blendingFactor` `stabilityBlendingFactor` `derivedFields` `exprField` `age` `comfort` `columnAverage` `fieldCoordinateSystemTransform` `limitFields` `zeroGradient` `reference` `resolutionIndex` `streamFunction` `surfaceInterpolate` `surfaceDistance` `writeCellCentres` `writeCellVolumes` `binField` `energySpectrum` `proudmanAcousticPower` `Curle` `XiReactionRate` `BilgerMixtureFraction` `electricPotential` `energyTransport` `scalarTransport` `AMIWeights` `processorField` `DMD` `psiReactionThermoMoleFractions` `rhoReactionThermoMoleFractions` `psiSpecieReactionRates` `rhoSpecieReactionRates` `psiReactionsSensitivityAnalysis` `rhoReactionsSensitivityAnalysis` `multiphaseInterHtcModel` `reactingEulerHtcModel` `viewFactorHeatFlux` `cloudInfo` `dataCloud` `particleDistribution` `extractEulerianParticles` `icoUncoupledKinematicCloud` `dsmcFields` `writeObjects` `readFields` `removeRegisteredObject` `ensightWrite` `ensightCloud` `vtkWrite` `vtkCloud` `areaWrite` `runTimeControl` `timeInfo` `solverInfo` `caseInfo` `foamReport` `log` `setTimeStep` `setTimeStepFaRegion` `setFlow` `syncObjects` `agglomerationInfo` `parProfiling` `cellDecomposer` `mapFields` `multiRegion` `relativeVelocity` `graphFunctionObject`
 

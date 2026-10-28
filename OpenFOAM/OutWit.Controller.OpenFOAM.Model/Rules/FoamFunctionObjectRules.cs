@@ -11,9 +11,16 @@ namespace OutWit.Controller.OpenFOAM.Model.Rules;
 /// rules never see them. A pool node is another person's machine: a case
 /// may carry only the function objects named here, which measure and write
 /// inside the case, and no entry of theirs may name a path outside the
-/// case. The node applies the rule to the materialised case before anything
-/// runs and the initiator to the case the user opened - the same code, the
-/// same sentences.
+/// case. Every function object the case runs is judged, wherever it is
+/// written (<see cref="FoamCaseFunctionObjects"/>): a block of
+/// <c>functions</c>, a block of a file it <c>#include</c>s, a dictionary of
+/// the case's <c>system/</c> an <c>#includeFunc</c> pulls in; a dictionary
+/// of the kit's own <c>etc/caseDicts/postProcessing</c> is the kit's and
+/// passes. A <c>functions</c> entry that is not a block (<c>functions
+/// #includeEtc "..."</c>) pulls in what cannot be read here and is refused
+/// by line. The node applies the rule to the materialised case before
+/// anything runs and the initiator to the case the user opened - the same
+/// code, the same sentences.
 /// </summary>
 public static class FoamFunctionObjectRules
 {
@@ -76,10 +83,6 @@ public static class FoamFunctionObjectRules
 
     private const string CONTROL_DICT = "system/controlDict";
 
-    private const string FUNCTIONS = "functions";
-
-    private static readonly Regex TYPE = new(@"(?<![A-Za-z0-9_])type\s+([A-Za-z0-9_]+)\s*;", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
     /// <summary>A quoted string, or a bare word that is a path: it has a slash, starts a drive, or expands a variable.</summary>
     private static readonly Regex PATH_LIKE = new(@"""([^""\n]*)""|(?<![A-Za-z0-9_""./$-])((?:\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|~|[A-Za-z]:|\.\.?)?[\\/][^\s;()""]*)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -90,39 +93,64 @@ public static class FoamFunctionObjectRules
     /// <summary>
     /// Inspects the function objects a controlDict carries: every block of
     /// its <c>functions</c> dictionary must be of an allowed type, and no
-    /// entry of a block may name a path outside the case.
+    /// entry of a block may name a path outside the case. Without a file
+    /// lookup, an <c>#include</c>d file is not read and every
+    /// <c>#includeFunc</c> counts as the kit's.
     /// </summary>
     /// <param name="controlDictText">The controlDict's text, comments already blanked.</param>
     /// <param name="relativePath">The file's path in the case, for the sentences.</param>
     /// <param name="findings">Receives one sentence per refusal, with file and line.</param>
     public static void Inspect(string controlDictText, string relativePath, List<string> findings)
     {
-        var functions = FindFunctions(controlDictText);
+        Inspect(controlDictText, relativePath, findings, null);
+    }
+
+    /// <summary>
+    /// Inspects the function objects a controlDict carries, the ones it
+    /// <c>#include</c>s and <c>#includeFunc</c>s from the case included.
+    /// </summary>
+    /// <param name="controlDictText">The controlDict's text.</param>
+    /// <param name="relativePath">The file's path in the case, for the sentences.</param>
+    /// <param name="findings">Receives one sentence per refusal, with file and line.</param>
+    /// <param name="readCaseFile">Reads a case file by its relative path, null when there is none; null reads no file.</param>
+    public static void Inspect(string controlDictText, string relativePath, List<string> findings, Func<string, string?>? readCaseFile)
+    {
+        var functions = FoamCaseFunctionObjects.Functions(controlDictText);
         if (functions == null)
             return;
 
-        foreach (var (name, body, bodyStart) in Blocks(controlDictText, functions.Value.Start, functions.Value.End))
+        if (!functions.Value.IsBlock)
         {
-            var line = LineOf(controlDictText, bodyStart);
-            var type = TYPE.Match(body);
-            if (!type.Success)
+            findings.Add($"{relativePath}:{functions.Value.Line}: 'functions' is not a block: what it pulls in cannot be read here, and the controller cannot add a response to it; write it as functions {{ ... }}.");
+            return;
+        }
+
+        foreach (var function in FoamCaseFunctionObjects.Enumerate(controlDictText, readCaseFile))
+        {
+            var where = $"{(function.Source == FoamCaseFunctionObjectSource.IncludedCaseDictionary ? relativePath : function.RelativePath)}:{function.Line}";
+            var name = function.Source == FoamCaseFunctionObjectSource.IncludedCaseDictionary ? $"{function.Name} (system/{function.Name})" : function.Name;
+
+            // The kit's own dictionaries measure and write inside the case.
+            if (function.Source == FoamCaseFunctionObjectSource.IncludedKitDictionary)
+                continue;
+
+            if (function.Type == null)
             {
-                findings.Add($"{relativePath}:{line}: the function object '{name}' names no type.");
+                findings.Add($"{where}: the function object '{name}' names no type.");
                 continue;
             }
 
-            var typeName = type.Groups[1].Value;
-            if (!ALLOWED.Contains(typeName, StringComparer.Ordinal))
+            if (!IsAllowed(function.Type))
             {
-                var why = REFUSED_BECAUSE.TryGetValue(typeName, out var reason) ? reason : "is not among the function objects a pool node runs";
-                findings.Add($"{relativePath}:{line}: the function object '{name}' is of type '{typeName}', which {why}; a case may carry only measurements and writers that stay inside it.");
+                var why = REFUSED_BECAUSE.TryGetValue(function.Type, out var reason) ? reason : "is not among the function objects a pool node runs";
+                findings.Add($"{where}: the function object '{name}' is of type '{function.Type}', which {why}; a case may carry only measurements and writers that stay inside it.");
                 continue;
             }
 
-            foreach (var path in PathsIn(body))
+            foreach (var path in PathsIn(function.Body))
             {
-                if (!FoamCaseContentRules.StaysInsideTheCase(path, relativePath))
-                    findings.Add($"{relativePath}:{line}: the function object '{name}' names \"{path}\", which reaches outside the case.");
+                if (!FoamCaseContentRules.StaysInsideTheCase(path, function.RelativePath))
+                    findings.Add($"{where}: the function object '{name}' names \"{path}\", which reaches outside the case.");
             }
         }
     }
@@ -147,53 +175,6 @@ public static class FoamFunctionObjectRules
         return relativePath == CONTROL_DICT;
     }
 
-    // The span of the functions dictionary's body (between its braces), or
-    // null when the controlDict has none or it is not a block (a macro, an
-    // #include alone - the solver refuses those itself).
-    private static (int Start, int End)? FindFunctions(string text)
-    {
-        var index = -1;
-        while ((index = text.IndexOf(FUNCTIONS, index + 1, StringComparison.Ordinal)) >= 0)
-        {
-            if (index > 0 && IsWord(text[index - 1]))
-                continue;
-
-            var after = index + FUNCTIONS.Length;
-            if (after < text.Length && IsWord(text[after]))
-                continue;
-
-            var brace = SkipBlanks(text, after);
-            if (brace >= text.Length || text[brace] != '{')
-                continue;
-
-            var close = MatchingBrace(text, brace);
-            return close < 0 ? null : (brace + 1, close);
-        }
-
-        return null;
-    }
-
-    // The top-level blocks of a dictionary body: "name { ... }" each, the
-    // name a word before the brace; entries that are not blocks are skipped.
-    private static IEnumerable<(string Name, string Body, int BodyStart)> Blocks(string text, int start, int end)
-    {
-        var position = start;
-        while (position < end)
-        {
-            var brace = text.IndexOf('{', position, end - position);
-            if (brace < 0)
-                yield break;
-
-            var close = MatchingBrace(text, brace);
-            if (close < 0 || close > end)
-                yield break;
-
-            var name = WordBefore(text, brace, start);
-            yield return (name, text[(brace + 1)..close], brace);
-            position = close + 1;
-        }
-    }
-
     private static IEnumerable<string> PathsIn(string body)
     {
         foreach (Match match in PATH_LIKE.Matches(body))
@@ -202,58 +183,6 @@ public static class FoamFunctionObjectRules
             if (value.Length > 0 && (value.Contains('/') || value.Contains('\\') || value.StartsWith('$') || value.StartsWith('~')))
                 yield return value;
         }
-    }
-
-    private static int MatchingBrace(string text, int open)
-    {
-        var depth = 0;
-        for (var i = open; i < text.Length; i++)
-        {
-            if (text[i] == '{')
-                depth++;
-            else if (text[i] == '}' && --depth == 0)
-                return i;
-        }
-
-        return -1;
-    }
-
-    private static string WordBefore(string text, int brace, int floor)
-    {
-        var end = brace;
-        while (end > floor && char.IsWhiteSpace(text[end - 1]))
-            end--;
-
-        var begin = end;
-        while (begin > floor && IsWord(text[begin - 1]))
-            begin--;
-
-        return text[begin..end];
-    }
-
-    private static int SkipBlanks(string text, int index)
-    {
-        while (index < text.Length && char.IsWhiteSpace(text[index]))
-            index++;
-
-        return index;
-    }
-
-    private static bool IsWord(char c)
-    {
-        return char.IsLetterOrDigit(c) || c == '_';
-    }
-
-    private static int LineOf(string text, int index)
-    {
-        var line = 1;
-        for (var i = 0; i < index && i < text.Length; i++)
-        {
-            if (text[i] == '\n')
-                line++;
-        }
-
-        return line;
     }
 
     #endregion

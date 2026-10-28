@@ -93,6 +93,13 @@ public static class FoamCaseContentRules
         if (IsDecomposedOnly(files))
             findings.Add("processor*/: the case is decomposed only; a reconstructed case is required.");
 
+        // The function-object rule reads the files the controlDict includes
+        // through this lookup: a file the case ships, by its relative path.
+        var texts = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var (relativePath, text) in files)
+            texts.TryAdd(relativePath, text);
+        string? ReadCaseFile(string relativePath) => texts.TryGetValue(relativePath, out var text) ? text : null;
+
         // A binary field is scanned like any other file: its entries around the
         // binary list are dictionary text (a coded boundary condition among
         // them), and the one-byte view reads any byte without harm.
@@ -101,7 +108,7 @@ public static class FoamCaseContentRules
             if (text == null || !IsScannedPath(relativePath))
                 continue;
 
-            InspectText(relativePath, StripComments(text), kitHasLibrary, findings);
+            InspectText(relativePath, StripComments(text), kitHasLibrary, findings, ReadCaseFile);
         }
 
         return findings;
@@ -179,7 +186,7 @@ public static class FoamCaseContentRules
         return depth > 0;
     }
 
-    private static void InspectText(string relativePath, string text, Func<string, bool>? kitHasLibrary, List<string> findings)
+    private static void InspectText(string relativePath, string text, Func<string, bool>? kitHasLibrary, List<string> findings, Func<string, string?> readCaseFile)
     {
         if (text.StartsWith(BYTE_ORDER_MARK, StringComparison.Ordinal))
             findings.Add($"{relativePath}:1: the file starts with a UTF-8 byte order mark, which OpenFOAM reads as part of the first word; save it without one.");
@@ -206,7 +213,7 @@ public static class FoamCaseContentRules
         }
 
         if (FoamFunctionObjectRules.Carries(relativePath))
-            FoamFunctionObjectRules.Inspect(text, relativePath, findings);
+            FoamFunctionObjectRules.Inspect(text, relativePath, findings, readCaseFile);
     }
 
     private static bool IsDecomposedOnly(IReadOnlyList<(string RelativePath, string? Text)> files)
