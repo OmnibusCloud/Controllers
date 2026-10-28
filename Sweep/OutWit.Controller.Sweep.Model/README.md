@@ -21,9 +21,13 @@ family:
 - `SweepPlanData` - the validated study, its case set when it has one, and
   its chunk schedule, immutable.
 - `SweepStateData` - the cursor carried across chunks: the next chunk, the
-  counts by outcome, the latest manifest blob and the result index
+  counts by outcome, the latest manifest blob, the result index
   (`SweepResultIndexEntryData`: variant, outcome, label, artifacts by kind -
-  `SweepArtifactData`, `SweepArtifactKind`).
+  `SweepArtifactData`, `SweepArtifactKind`) and, since 2.2.0, the chunk
+  schedule the run goes by (`ChunkSizes`, appended at order 7; a 2.0 - 2.1
+  payload reads with an empty schedule, never a null). A reader built against
+  2.0 - 2.1 cannot decode a 2.2 state: update every state reader before a host
+  writes it.
 - `SweepManifestData` - everything harvested so far; each row
   (`SweepManifestRowData`) is the sweep's verdict (`SweepOutcome`: succeeded,
   failed, refused) and the node's own result, verbatim, in its family's

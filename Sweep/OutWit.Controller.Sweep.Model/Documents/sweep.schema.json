@@ -13,7 +13,7 @@
     ],
     "source": {
       "assembly": "OutWit.Controller.Sweep.Model",
-      "version": "2.1.0"
+      "version": "2.2.0"
     },
     "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
   },
@@ -129,6 +129,16 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/sweep.resultIndexEntry@2"
+          }
+        },
+        "chunkSizes": {
+          "x-oc-clr-name": "ChunkSizes",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": -2147483648,
+            "maximum": 2147483647
           }
         }
       }

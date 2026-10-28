@@ -22,7 +22,9 @@ public sealed class SweepModelWireLayoutTests
 {
     // Field counts frozen 2026-09-24 (Sweep.Model 2.0.0, the family-neutral
     // sweep); the plan's case set and its two types appended 2026-09-27
-    // (Sweep.Model 2.1.0 - the plan is written and read by the host alone).
+    // (Sweep.Model 2.1.0 - the plan is written and read by the host alone);
+    // the state's chunk schedule appended 2026-10-28 (Sweep.Model 2.2.0 -
+    // every state reader, WitSweep first, updated before a host writes it).
     // Bump a count ONLY when appending at the end of that type.
     private static readonly IReadOnlyDictionary<Type, int> EXPECTED_FIELD_COUNTS = new Dictionary<Type, int>
     {
@@ -37,7 +39,7 @@ public sealed class SweepModelWireLayoutTests
         [typeof(SweepParameterData)] = 2,
         [typeof(SweepPlanData)] = 3,
         [typeof(SweepResultIndexEntryData)] = 4,
-        [typeof(SweepStateData)] = 7,
+        [typeof(SweepStateData)] = 8,
         [typeof(SweepVariantData)] = 2
     };
 
