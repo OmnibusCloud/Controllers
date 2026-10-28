@@ -22,7 +22,8 @@ public sealed class FoamCaseFunctionObject
     /// <param name="line">The 1-based line of the block or the <c>#includeFunc</c> in <paramref name="relativePath"/>.</param>
     /// <param name="source">Where the function object comes from.</param>
     /// <param name="arguments">The arguments of an <c>#includeFunc</c> (<c>p, U</c> of <c>probes(p, U)</c>); empty otherwise.</param>
-    public FoamCaseFunctionObject(string name, string? type, string body, string relativePath, int line, FoamCaseFunctionObjectSource source, string arguments = "")
+    /// <param name="typedByKit">True when the type comes from a dictionary of the kit (<see cref="TypedByKit"/>).</param>
+    public FoamCaseFunctionObject(string name, string? type, string body, string relativePath, int line, FoamCaseFunctionObjectSource source, string arguments = "", bool typedByKit = false)
     {
         Name = name;
         Type = type;
@@ -31,6 +32,7 @@ public sealed class FoamCaseFunctionObject
         Line = line;
         Source = source;
         Arguments = arguments;
+        TypedByKit = typedByKit;
     }
 
     #endregion
@@ -78,6 +80,15 @@ public sealed class FoamCaseFunctionObject
 
     /// <summary>The arguments of an <c>#includeFunc</c>, as written; empty otherwise.</summary>
     public string Arguments { get; }
+
+    /// <summary>
+    /// Whether the type is the kit's: a dictionary of the kit's
+    /// <c>etc/caseDicts/postProcessing</c> pulled in by <c>#includeFunc</c>, or
+    /// a body without a <c>type</c> of its own that <c>#includeEtc</c>s a kit
+    /// cfg (pitzDaily's <c>system/streamlines</c>); the type is the kit's cfg's,
+    /// <see cref="Type"/> when the Model knows it, null otherwise.
+    /// </summary>
+    public bool TypedByKit { get; }
 
     #endregion
 }

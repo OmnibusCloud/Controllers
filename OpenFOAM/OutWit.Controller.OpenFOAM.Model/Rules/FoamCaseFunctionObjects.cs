@@ -36,6 +36,9 @@ public static class FoamCaseFunctionObjects
     /// <summary>An include of a file by quoted path: #include, #sinclude, #includeIfPresent.</summary>
     private static readonly Regex INCLUDE_FILE = new(@"#(?:s?include|includeIfPresent)\s+""([^""\n]+)""", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>An include of a kit cfg under caseDicts/postProcessing, which carries the function object's type (pitzDaily's streamlines).</summary>
+    private static readonly Regex INCLUDE_ETC = new(@"#includeEtc\s+""caseDicts/postProcessing/(?:[A-Za-z0-9_]+/)*([A-Za-z0-9_]+)(?:\.cfg)?""", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex LINE_COMMENT = new(@"//[^\n]*", RegexOptions.Compiled);
 
     private static readonly Regex BLOCK_COMMENT = new(@"/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Singleline);
@@ -124,7 +127,8 @@ public static class FoamCaseFunctionObjects
         var blanked = text.ToCharArray();
         foreach (var (name, body, bodyStart) in Blocks(text, start, end))
         {
-            found.Add((bodyStart, new FoamCaseFunctionObject(name, TypeOf(body), body, CONTROL_DICT, LineOf(text, bodyStart), FoamCaseFunctionObjectSource.Block)));
+            var type = TypeOf(body, out var typedByKit);
+            found.Add((bodyStart, new FoamCaseFunctionObject(name, type, body, CONTROL_DICT, LineOf(text, bodyStart), FoamCaseFunctionObjectSource.Block, typedByKit: typedByKit)));
             for (var index = bodyStart; index < bodyStart + body.Length + 2 && index < blanked.Length; index++)
                 blanked[index] = blanked[index] == '\n' ? '\n' : ' ';
         }
@@ -137,10 +141,19 @@ public static class FoamCaseFunctionObjects
             var arguments = match.Groups[2].Success ? match.Groups[2].Value.Trim() : string.Empty;
             var line = LineOf(text, start + match.Index);
             var own = readCaseFile?.Invoke(SYSTEM_PREFIX + name);
-            var ownText = own == null ? null : StripComments(own);
-            found.Add((start + match.Index, ownText != null
-                ? new FoamCaseFunctionObject(name, TypeOf(ownText), ownText, SYSTEM_PREFIX + name, line, FoamCaseFunctionObjectSource.IncludedCaseDictionary, arguments)
-                : new FoamCaseFunctionObject(name, KitType(name), string.Empty, KIT_DICTIONARIES + "/" + name, line, FoamCaseFunctionObjectSource.IncludedKitDictionary, arguments)));
+            if (own == null)
+            {
+                found.Add((start + match.Index, new FoamCaseFunctionObject(name, KitType(name), string.Empty, KIT_DICTIONARIES + "/" + name, line, FoamCaseFunctionObjectSource.IncludedKitDictionary, arguments, typedByKit: true)));
+                continue;
+            }
+
+            // The case's dictionary: its entries at the top level, or wrapped
+            // in a block named after the function (v2606 reads either).
+            var ownText = StripComments(own);
+            var wrapped = Blocks(ownText, 0, ownText.Length).FirstOrDefault(block => block.Name == name);
+            var ownBody = wrapped.Body ?? ownText;
+            var ownType = TypeOf(ownBody, out var ownTypedByKit);
+            found.Add((start + match.Index, new FoamCaseFunctionObject(name, ownType, ownBody, SYSTEM_PREFIX + name, line, FoamCaseFunctionObjectSource.IncludedCaseDictionary, arguments, ownTypedByKit)));
         }
 
         foreach (Match match in INCLUDE_FILE.Matches(between))
@@ -152,7 +165,10 @@ public static class FoamCaseFunctionObjects
 
             var includedText = StripComments(included);
             foreach (var (name, body, bodyStart) in Blocks(includedText, 0, includedText.Length))
-                found.Add((start + match.Index, new FoamCaseFunctionObject(name, TypeOf(body), body, path!, LineOf(includedText, bodyStart), FoamCaseFunctionObjectSource.IncludedFile)));
+            {
+                var includedType = TypeOf(body, out var includedTypedByKit);
+                found.Add((start + match.Index, new FoamCaseFunctionObject(name, includedType, body, path!, LineOf(includedText, bodyStart), FoamCaseFunctionObjectSource.IncludedFile, typedByKit: includedTypedByKit)));
+            }
         }
 
         // In file order, blocks and includes alike (a stable sort keeps an
@@ -335,10 +351,21 @@ public static class FoamCaseFunctionObjects
         }
     }
 
-    private static string? TypeOf(string body)
+    // The type a body declares; without one, the type of the last kit cfg
+    // it includes (the kit's, known to the Model or not).
+    private static string? TypeOf(string body, out bool typedByKit)
     {
+        typedByKit = false;
         var type = Entry(body, TYPE);
-        return type != null && Regex.IsMatch(type, "^[A-Za-z0-9_]+$") ? type : null;
+        if (type != null && Regex.IsMatch(type, "^[A-Za-z0-9_]+$"))
+            return type;
+
+        var cfg = INCLUDE_ETC.Matches(body).LastOrDefault();
+        if (cfg == null)
+            return null;
+
+        typedByKit = true;
+        return KitType(cfg.Groups[1].Value);
     }
 
     private static string? KitType(string name)

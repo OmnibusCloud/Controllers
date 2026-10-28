@@ -70,6 +70,33 @@ public class FoamCaseFunctionObjectsTests
     }
 
     [Test]
+    public void ACaseDictionaryTypedByAKitCfgOrWrappedInItsOwnBlockIsReadAsOpenFoamReadsItTest()
+    {
+        // pitzDaily's system/streamlines carries no type of its own: the kit
+        // cfg it #includeEtc's last does. And a case dictionary may wrap its
+        // entries in a block named after the function (funcsDict.findDict).
+        var files = new Dictionary<string, string>
+        {
+            ["system/streamlines"] = "nLines 10;\nfields (p k U);\nU U;\n// Must be last entry\n#includeEtc \"caseDicts/postProcessing/visualization/streamlines.cfg\"\n",
+            ["system/wake"] = "wake\n{\n    type probes;\n    fields (p);\n    probeLocations ((0.1 0 0));\n}\n",
+            ["system/pull"] = "#includeEtc \"caseDicts/postProcessing/fields/CourantNo\"\ntype timeActivatedFileUpdate;\n"
+        };
+        var text = HEAD + "functions\n{\n    #includeFunc streamlines\n    #includeFunc wake\n    #includeFunc pull\n    own { #includeEtc \"caseDicts/postProcessing/minMax/cellMax.cfg\" fields (p); }\n}\n";
+
+        var functions = FoamCaseFunctionObjects.Enumerate(text, path => files.GetValueOrDefault(path));
+
+        Assert.That(functions.Select(function => (function.Name, function.Type, function.TypedByKit, function.Source)), Is.EqualTo(new[]
+        {
+            ("streamlines", "streamLine", true, FoamCaseFunctionObjectSource.IncludedCaseDictionary),
+            ("wake", "probes", false, FoamCaseFunctionObjectSource.IncludedCaseDictionary),
+            ("pull", "timeActivatedFileUpdate", false, FoamCaseFunctionObjectSource.IncludedCaseDictionary),
+            ("own", "volFieldValue", true, FoamCaseFunctionObjectSource.Block)
+        }), "a type of the body's own outranks the cfg's; the wrapped block's entries are the function object's");
+        Assert.That(functions[1].Entry("probeLocations"), Is.EqualTo("((0.1 0 0))"));
+        Assert.That(functions[1].Body, Does.Not.Contain("wake"));
+    }
+
+    [Test]
     public void TheBlocksOfAnIncludedFileAreEnumeratedWhereTheIncludeStandsTest()
     {
         var files = new Dictionary<string, string>

@@ -130,8 +130,14 @@ public static class FoamFunctionObjectRules
             var where = $"{(function.Source == FoamCaseFunctionObjectSource.IncludedCaseDictionary ? relativePath : function.RelativePath)}:{function.Line}";
             var name = function.Source == FoamCaseFunctionObjectSource.IncludedCaseDictionary ? $"{function.Name} (system/{function.Name})" : function.Name;
 
-            // The kit's own dictionaries measure and write inside the case.
+            // The kit's own dictionaries measure and write inside the case,
+            // and so does a body whose type a kit cfg gives (pitzDaily's
+            // streamlines); a type the kit gives that the list names is
+            // judged by the list all the same.
             if (function.Source == FoamCaseFunctionObjectSource.IncludedKitDictionary)
+                continue;
+
+            if (function.Type == null && function.TypedByKit)
                 continue;
 
             if (function.Type == null)
