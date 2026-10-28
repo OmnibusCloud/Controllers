@@ -85,7 +85,7 @@ public class FoamCaseRulesTests
         FoamCaseData Including(string response)
         {
             var data = PitzDaily();
-            data.Extraction!.Responses.Add(new FoamResponseSpecData { Name = "load", Kind = FoamResponseKind.Forces, Patches = ["lowerWall"] });
+            data.Extraction!.Responses.Add(new FoamResponseSpecData { Name = "load", Kind = FoamResponseKind.Forces, Patches = ["lowerWall"], Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }] });
             data.Recipe!.Steps.Insert(1, new FoamStepData { Utility = "includeFunc", Arguments = [response] });
             return data;
         }
