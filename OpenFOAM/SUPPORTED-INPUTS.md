@@ -240,7 +240,16 @@ Every run returns its facts - converged or not, iterations, final residuals,
 cells, `checkMesh`'s verdict, the time of each step, exit code, warnings - and
 its responses. What else comes back is the task's artifact policy: nothing, the
 final time and the mesh, or every written time; the step logs; `postProcessing/`.
-A node keeps nothing: what is not returned is gone when the run ends.
+With the logs comes `log.responses`, what the run says beyond the numbers: a
+response left out and why (a stale row, a probe outside the mesh), a reference
+value a re-measured force took from the case, and the advice a task gives -
+said, not refused - when it would run without doing what was meant: ranks
+asked for while no step of the recipe runs in parallel (every step then runs
+serially on one rank), or a `setFields` step that overwrites an `internalField`
+the study sweeps (everywhere through `defaultFieldValues`, or inside the
+regions only). An initiator shows the same sentences at preflight
+(`FoamCaseAdvice`). A node keeps nothing: what is not returned is gone when
+the run ends.
 
 ## Studies
 

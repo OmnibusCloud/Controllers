@@ -97,6 +97,10 @@ public sealed class FoamCaseSession
             // The case rules refused a task without a case or a recipe above; these are the invariants, not branches.
             var data = task.Case ?? throw new InvalidOperationException("The task carries no case.");
             var recipe = data.Recipe ?? throw new InvalidOperationException("The task carries no recipe.");
+
+            // What the task would do without doing what was meant (ranks that
+            // do nothing, a setFields over a swept field): said, not refused.
+            notes.AddRange(await FoamCaseAdvisor.AdviseAsync(task, BlobService, cancellationToken));
             var ranks = FoamDecomposition.Ranks(data.Threads);
             var environment = Kit.EnvironmentFor(scratch.UsablePath);
             var runner = new FoamCaseRunner(Kit, caseDirectory, environment, ranks, Logger);
