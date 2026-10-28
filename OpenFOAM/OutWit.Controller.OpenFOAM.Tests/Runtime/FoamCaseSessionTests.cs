@@ -109,7 +109,7 @@ public class FoamCaseSessionTests
                 ]
             },
             Threads = 2,
-            Extraction = new FoamExtractionRequestData { Responses = [new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["wall"], Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "magUInf", Value = "20" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }] }] },
+            Extraction = new FoamExtractionRequestData { Responses = [new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["wall"], Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "liftDir", Value = "(0 0 1)" }, new FoamNamedValueData { Name = "dragDir", Value = "(1 0 0)" }, new FoamNamedValueData { Name = "magUInf", Value = "20" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }, new FoamNamedValueData { Name = "rhoInf", Value = "1" }] }] },
             ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.Latest, Logs = true, PostProcessing = true },
             CellCount = 12225,
             SolverClass = "incompressible-steady"
@@ -208,6 +208,32 @@ public class FoamCaseSessionTests
         using var archive = ZipFile.OpenRead(m_blobs.GetStoredPath(result.ArtifactBlobId!.Value));
         using var reader = new StreamReader(archive.GetEntry("constant/transportProperties")!.Open());
         Assert.That(await reader.ReadToEndAsync(), Is.EqualTo("nu 1e-05;\n"));
+    }
+
+    [Test]
+    public async Task ASweptReferenceValueOfTheCasesOwnForceReachesTheReMeasuredResponseTest()
+    {
+        // The case's forceCoeffs1 sweeps its lRef; the initiator offered it as
+        // forceCoeffs1_sweep with lRef as written. Before: the node wrote the
+        // response with lRef 1 in every variant (K4).
+        var session = RequireSession();
+        var data = PitzCase("ITERATIONS=1\n");
+        data.BaseFiles.RemoveAll(file => file.RelativePath == "system/controlDict");
+        data.BaseFiles.Add(BlobFile("system/controlDict",
+            "FoamFile { object controlDict; }\napplication simpleFoam;\nendTime 5;\nfunctions\n{\n" +
+            "    forceCoeffs1 { type forceCoeffs; libs (forces); patches (wall); rho rhoInf; rhoInf 1; CofR (0 0 0); liftDir (0 0 1); dragDir (1 0 0); magUInf 20; lRef {{oc2}}; Aref 1; }\n}\n", templated: true));
+        data.Extraction!.Responses[0].Name = "forceCoeffs1_sweep";
+        data.Recipe!.Steps.Insert(2, new FoamStepData { Utility = "includeFunc", Arguments = ["forceCoeffs1_sweep"] });
+
+        var result = await session.RunAsync(Task(data));
+
+        Assert.That(result.Rejections, Is.Empty);
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.LogTail);
+        using var archive = ZipFile.OpenRead(m_blobs.GetStoredPath(result.ArtifactBlobId!.Value));
+        using var written = new StreamReader(archive.GetEntry("system/forceCoeffs1_sweep")!.Open());
+        Assert.That(await written.ReadToEndAsync(), Does.Contain("lRef            10;"), "the variant's value, not the offered one");
+        using var notes = new StreamReader(archive.GetEntry("log.responses")!.Open());
+        Assert.That(await notes.ReadToEndAsync(), Does.Contain("Response 'forceCoeffs1_sweep': lRef follows the case's forceCoeffs1 (system/controlDict:6), which the study sweeps - 10 in this variant."));
     }
 
     [Test]

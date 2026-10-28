@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using OutWit.Controller.Sweep.Activities;
 using OutWit.Controller.Sweep.Families;
 using OutWit.Controller.Sweep.Model;
+using OutWit.Controller.Sweep.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -32,14 +33,21 @@ internal sealed class WitActivityAdapterSweepMakeChunk : WitActivityAdapterFunct
         if (!pool.TryGetValue(activity.State, out SweepStateData? state) || state == null)
             throw new InvalidOperationException("Failed to get parameter 'State'.");
 
-        if (state.ChunkIndex >= plan.ChunkSizes.Count)
+        // The schedule of record is the run's schedule variable (Sweep 2.2), the plan's for a
+        // script without one: a resumed run keeps the boundaries it was harvested by.
+        SweepScheduleData? schedule = null;
+        if (activity.Schedule != null)
+            pool.TryGetValue(activity.Schedule, out schedule);
+
+        var sizes = SweepResume.Sizes(plan, schedule);
+        if (state.ChunkIndex >= sizes.Count)
             throw new InvalidOperationException(
-                $"Chunk {state.ChunkIndex} requested, but the plan holds {plan.ChunkSizes.Count} chunk(s).");
+                $"Chunk {state.ChunkIndex} requested, but the schedule holds {sizes.Count} chunk(s).");
 
         var family = SweepFamilies.Of(plan);
         var variants = plan.Options.Variants
             .Skip(state.NextVariantOrdinal)
-            .Take(plan.ChunkSizes[state.ChunkIndex])
+            .Take(sizes[state.ChunkIndex])
             .ToList();
 
         var tasks = await family.MakeTasksAsync(plan.Options, variants, BlobService);
@@ -67,8 +75,8 @@ internal sealed class WitActivityAdapterSweepMakeChunk : WitActivityAdapterFunct
     {
         try
         {
-            if (parameters.Length != 2)
-                throw new ArgumentException($"Expected 2 parameter(s), got {parameters.Length}.");
+            if (parameters.Length is < 2 or > 3)
+                throw new ArgumentException($"Expected 2 or 3 parameter(s), got {parameters.Length}.");
 
             if (parameters[0] is not IWitReference plan)
                 throw new ArgumentException("Parameter 'Plan' must be a variable reference.");
@@ -76,10 +84,15 @@ internal sealed class WitActivityAdapterSweepMakeChunk : WitActivityAdapterFunct
             if (parameters[1] is not IWitReference state)
                 throw new ArgumentException("Parameter 'State' must be a variable reference.");
 
+            IWitReference? schedule = null;
+            if (parameters.Length == 3 && (schedule = parameters[2] as IWitReference) == null)
+                throw new ArgumentException("Parameter 'Schedule' must be a variable reference.");
+
             return new WitActivitySweepMakeChunk
             {
                 Plan = plan,
-                State = state
+                State = state,
+                Schedule = schedule
             };
         }
         catch (Exception e)

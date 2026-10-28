@@ -62,7 +62,8 @@ name:
 | `libs (...)` naming a library the kit does not have | the library is not there |
 | `#include`, `#includeIfPresent`, `#includeFunc`, `#includeEtc` reaching outside the case | the run must be reproducible from the case alone |
 | a UTF-8 byte order mark at the start of a file | OpenFOAM reads it as part of the first word |
-| a function object of a type outside the list below, or one naming a path outside the case | a pool node is another person's machine; a case may carry only measurements and writers that stay inside it |
+| a function object of a type outside the list below, or one naming a path outside the case - wherever it is written: a block of `functions`, a block of a file it `#include`s, a dictionary of the case's `system/` that an `#includeFunc` pulls in | a pool node is another person's machine; a case may carry only measurements and writers that stay inside it |
+| a `functions` entry that is not a block (`functions #includeEtc "...";`, `functions $macro;`) | what it pulls in cannot be read, and the controller cannot add a response to it |
 
 Files larger than 8 MB (meshes, large fields) are not read for these
 constructs.
@@ -76,7 +77,15 @@ objects that reach the node (`systemCall` runs a command, `timeActivatedFileUpda
 copies a file of the node into the case, `writeDictionary`, `externalCoupled`,
 `abort`); a case carrying one is refused by name and line, and every solver
 process runs with `allowSystemOperations` off, so nothing of a case's runs a
-command whatever the rules miss.
+command whatever the rules miss. The rule reads every function object the
+case runs, the way v2606 finds them: the blocks of the last top-level
+`functions`, the blocks of a case file it `#include`s, and an `#includeFunc
+<name>` as the case's own `system/<name>` when the case ships one (OpenFOAM
+looks there first) - a dictionary of the kit's own
+`etc/caseDicts/postProcessing` is the kit's and passes. The same reading
+(`FoamCaseFunctionObjects`) tells the node which responses the case already
+measures itself and an initiator what a case offers, a function object with
+a `coordinateSystem` or an `origin` in place of `CofR` included.
 
 `forces` `forceCoeffs` `bladeForces` `propellerInfo` `phaseForces` `fieldMinMax` `fieldStatistics` `fieldAverage` `fieldExtents` `valueAverage` `volFieldValue` `surfaceFieldValue` `multiFieldValue` `histogram` `momentum` `momentumError` `continuityError` `flux` `fluxSummary` `interfaceHeight` `regionSizeDistribution` `sizeDistribution` `probes` `patchProbes` `thermoCoupleProbes` `radiometerProbes` `sets` `surfaces` `streamLine` `wallBoundedStreamLine` `nearWallFields` `add` `subtract` `multiply` `divide` `pow` `mag` `magSqr` `components` `norm` `randomise` `grad` `div` `ddt` `ddt2` `curl` `vorticity` `enstrophy` `Lambda2` `Q` `LambVector` `flowType` `pressure` `hydrostaticPressure` `CourantNo` `surfaceCourantNumber` `MachNo` `PecletNo` `wallShearStress` `wallHeatFlux` `yPlus` `heatTransferCoeff` `turbulenceFields` `DESModelRegions` `blendingFactor` `stabilityBlendingFactor` `derivedFields` `exprField` `age` `comfort` `columnAverage` `fieldCoordinateSystemTransform` `limitFields` `zeroGradient` `reference` `resolutionIndex` `streamFunction` `surfaceInterpolate` `surfaceDistance` `writeCellCentres` `writeCellVolumes` `binField` `energySpectrum` `proudmanAcousticPower` `Curle` `XiReactionRate` `BilgerMixtureFraction` `electricPotential` `energyTransport` `scalarTransport` `AMIWeights` `processorField` `DMD` `psiReactionThermoMoleFractions` `rhoReactionThermoMoleFractions` `psiSpecieReactionRates` `rhoSpecieReactionRates` `psiReactionsSensitivityAnalysis` `rhoReactionsSensitivityAnalysis` `multiphaseInterHtcModel` `reactingEulerHtcModel` `viewFactorHeatFlux` `cloudInfo` `dataCloud` `particleDistribution` `extractEulerianParticles` `icoUncoupledKinematicCloud` `dsmcFields` `writeObjects` `readFields` `removeRegisteredObject` `ensightWrite` `ensightCloud` `vtkWrite` `vtkCloud` `areaWrite` `runTimeControl` `timeInfo` `solverInfo` `caseInfo` `foamReport` `log` `setTimeStep` `setTimeStepFaRegion` `setFlow` `syncObjects` `agglomerationInfo` `parProfiling` `cellDecomposer` `mapFields` `multiRegion` `relativeVelocity` `graphFunctionObject`
 
@@ -144,7 +153,11 @@ A parallel step naming a utility not marked here is refused.
   response of the task, it needs a step after it that runs the application to
   solve, and it never runs under MPI. When the `functions` entry is not a block
   (`functions #includeEtc "..."`), the step fails with that line and leaves the
-  copy as it was, rather than rewrite it.
+  copy as it was, rather than rewrite it. The controller adds steps of this
+  kind on its own, right before the first solve, for every patch value, volume
+  value, min/max and probe of the task that neither the recipe includes nor
+  the case runs itself (see Responses); they appear in the result's steps
+  like any other.
 
 ### Arguments
 
@@ -162,8 +175,8 @@ object the case already runs or one the controller adds for the run:
 
 | Kind | Function object | Needs |
 |---|---|---|
-| `ForceCoeffs` | `forceCoeffs` | at least one patch; the reference values (`magUInf`, `lRef`, `Aref`, ...) as parameters |
-| `Forces` | `forces` | at least one patch |
+| `ForceCoeffs` | `forceCoeffs` | at least one patch; the centre (`CofR`, `origin` or a `coordinateSystem`); `magUInf`, `lRef`, `Aref` and `rhoInf` whatever `rho` says; with `CofR`, `liftDir` and `dragDir` too |
+| `Forces` | `forces` | at least one patch; the centre (`CofR`, `origin` or a `coordinateSystem`); `rhoInf` when `rho rhoInf` |
 | `PatchValue` | `surfaceFieldValue` | exactly one patch, at least one field, an operation (`areaAverage`, `areaIntegrate`, `min`, `max`, ...) |
 | `VolumeValue` | `volFieldValue` | at least one field, an operation (`volAverage`, `volIntegrate`, `min`, `max`, ...) |
 | `FieldMinMax` | `fieldMinMax` | at least one field |
@@ -173,11 +186,37 @@ A response's name is a word, unique in the request, and not the name of a file
 the case carries in `system/`. A patch is a word or a quoted regular
 expression; a field is a word that may carry dots, as phases are named
 (`alpha.water`) - never a colon, since a probe writes one file per field. A
-response the case does not write itself is measured either during the solve
-(`includeFunc`, which a force on a turning wall needs) or after it by a post
-step. A value is reported only from the run's final time: a function object
-that stopped writing earlier is left out and named in `log.responses`. In a parameter study a response parameter may carry the
-study's token (a reference speed that follows the swept speed).
+force the case does not write itself is measured as the recipe says: during
+the solve (`includeFunc`, which a force on a turning wall needs) or after it
+by a post step. A patch value, a volume value, a min/max and a probe are
+measured by the solver at every step whatever step the recipe names for them
+- the controller adds them to the solve itself, right before it, with a
+`log.includeFunc` of its own - and a post step the recipe names for one of
+them is recorded but not run. Why: a post step (`postProcess -func`,
+`-latestTime`) reads the latest written time, which is not the final time
+when `endTime` is not a multiple of `writeInterval` (sweeping either does
+that), so the response came back blank; and for a probe the post step
+overwrites the solve's rows with that one time (both measured on v2606,
+2026-10-28). A value is reported from the run's final time, whichever step
+wrote it: a function object that stopped writing earlier - the case's own,
+writing at write times only, included - is left out and named in
+`log.responses`. A probe column is named `<field>@probe<N>(x y z)` from the
+probe's header line, with `_x`, `_y`, `_z` for a vector (`_xx` ... `_zz` for a
+tensor); a probe outside the mesh is an empty cell, named in `log.responses`
+with its position, never the -1e+300 OpenFOAM writes for it. In a parameter study a response parameter may carry the
+study's token (a reference speed that follows the swept speed). A force
+response that re-measures one of the case's own force function objects -
+named as it, or as it with `_sweep` - follows the case where the study
+sweeps it: every reference value whose entry carries a token (a `$`
+reference to such an entry included) takes the variant's value before the
+node writes the response, and `log.responses` says which followed and to
+what; a value the study does not sweep stays as requested. A parameter's
+value is plain dictionary text - a word, a number, a vector, a list - or a flat
+sub-dictionary of such entries (`coordinateSystem { origin (0 0 0); e1 (1 0 0);
+e3 (0 0 1); }`, a `binData`); never braces inside braces, never code. A force
+function object without the entries it reads stops the solve ("Entry 'rhoInf'
+not found" - measured on v2606, 2026-10-28), so a request missing one is
+refused by name before it runs.
 
 ## Solver classes
 
@@ -201,7 +240,16 @@ Every run returns its facts - converged or not, iterations, final residuals,
 cells, `checkMesh`'s verdict, the time of each step, exit code, warnings - and
 its responses. What else comes back is the task's artifact policy: nothing, the
 final time and the mesh, or every written time; the step logs; `postProcessing/`.
-A node keeps nothing: what is not returned is gone when the run ends.
+With the logs comes `log.responses`, what the run says beyond the numbers: a
+response left out and why (a stale row, a probe outside the mesh), a reference
+value a re-measured force took from the case, and the advice a task gives -
+said, not refused - when it would run without doing what was meant: ranks
+asked for while no step of the recipe runs in parallel (every step then runs
+serially on one rank), or a `setFields` step that overwrites an `internalField`
+the study sweeps (everywhere through `defaultFieldValues`, or inside the
+regions only). An initiator shows the same sentences at preflight
+(`FoamCaseAdvice`). A node keeps nothing: what is not returned is gone when
+the run ends.
 
 ## Studies
 

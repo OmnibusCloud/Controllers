@@ -38,6 +38,22 @@ public static class FoamSolveFunctions
     /// <summary>What ends a word besides white space: OpenFOAM's punctuation and the start of a string.</summary>
     private const string DELIMITERS = "{}();\"";
 
+    /// <summary>The recipe's reason for an <c>includeFunc</c> step: a force on a wall a rotating zone turns.</summary>
+    public const string WHY_TURNING_WALL =
+        "a force measured after the solve (<solver> -postProcess) sees the walls a rotating zone (MRF) turns at rest, " +
+        "because OpenFOAM moves them only inside the solve; measured by the solver, the force is the solve's own.";
+
+    /// <summary>
+    /// The controller's own reason for adding a response to the solve: a post
+    /// step reads the latest written time, which is not the run's final time
+    /// when <c>endTime</c> is not a multiple of <c>writeInterval</c>
+    /// (measured on v2606, 2026-10-28: the response came back blank).
+    /// </summary>
+    public const string WHY_FINAL_TIME =
+        "a post step (postProcess -func, -latestTime) reads the latest written time, which is not the run's final time " +
+        "when endTime is not a multiple of writeInterval - the response would then be left out as stale; " +
+        "measured by the solver at every step, its last row is the final time's.";
+
     /// <summary>
     /// Latin-1 maps every byte to one character and back, so a file in any
     /// ASCII-compatible encoding is written back byte for byte, save the line
@@ -60,13 +76,28 @@ public static class FoamSolveFunctions
     /// <returns>The step's outcome: 0 when the line is in; 1 with the reason in the log, the file left as it was, otherwise.</returns>
     public static FoamRunOutcome Include(string caseDirectory, string response, string logPath)
     {
+        return Include(caseDirectory, response, logPath, WHY_TURNING_WALL);
+    }
+
+    /// <summary>
+    /// Adds the response to the solve (<see cref="Include(string, string, string)"/>)
+    /// and says why in the log: the recipe's reason (<see cref="WHY_TURNING_WALL"/>)
+    /// or the controller's own (<see cref="WHY_FINAL_TIME"/>).
+    /// </summary>
+    /// <param name="caseDirectory">The materialised case.</param>
+    /// <param name="response">The response: a word, the name of its dictionary in <c>system/</c>.</param>
+    /// <param name="logPath">The step's log, written whatever happens.</param>
+    /// <param name="why">The sentence the log gives as the reason.</param>
+    /// <returns>The step's outcome: 0 when the line is in; 1 with the reason in the log, the file left as it was, otherwise.</returns>
+    public static FoamRunOutcome Include(string caseDirectory, string response, string logPath, string why)
+    {
         var stopwatch = Stopwatch.StartNew();
         var log = new StringBuilder();
         var exitCode = 0;
 
         try
         {
-            exitCode = Include(caseDirectory, response, log);
+            exitCode = Include(caseDirectory, response, log, why);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -120,7 +151,7 @@ public static class FoamSolveFunctions
 
     #region Tools
 
-    private static int Include(string caseDirectory, string response, StringBuilder log)
+    private static int Include(string caseDirectory, string response, StringBuilder log, string why)
     {
         var path = Path.Combine(caseDirectory, "system", "controlDict");
         var line = $"#{FoamAllowList.INCLUDE_FUNCTION} {response}";
@@ -140,8 +171,7 @@ public static class FoamSolveFunctions
         File.WriteAllText(path, edited, BYTES);
         log.AppendLine($"Added '{line}' at {CONTROL_DICT}:{at}, in the functions of the node's copy of the case; the case's own files are not changed.");
         log.AppendLine($"The solver measures '{response}' while it solves, from system/{response}, which the controller wrote.");
-        log.AppendLine("Why: a force measured after the solve (<solver> -postProcess) sees the walls a rotating zone (MRF) turns at rest, " +
-                       "because OpenFOAM moves them only inside the solve; measured by the solver, the force is the solve's own.");
+        log.AppendLine($"Why: {why}");
         return 0;
     }
 

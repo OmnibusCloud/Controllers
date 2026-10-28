@@ -415,6 +415,47 @@ public class FoamCaseRunnerTests
     }
 
     [Test]
+    public async Task TheControllersOwnIncludesGoRightBeforeTheFirstSolveTest()
+    {
+        // The responses a post step would read at the latest written time
+        // are measured by the solver too; the recipe's own include keeps its
+        // place and its reason, the controller's say theirs.
+        var kit = RequireKit();
+        WriteCaseFile("system/fake", "ITERATIONS=2\n");
+        WriteCaseFile("system/controlDict", "application simpleFoam;\nfunctions\n{\n}\n");
+        var recipe = IncludingRecipe(parallel: false);
+        recipe.Steps.Add(new FoamStepData { Utility = "simpleFoam", Arguments = ["-postProcess", "-func", "inletP", "-latestTime"] });
+        var runner = new FoamCaseRunner(kit, m_case, kit.EnvironmentFor(m_scratch), ranks: 1);
+
+        var report = await runner.RunAsync(recipe, ["inletP", "wake"]);
+
+        Assert.That(report.Succeeded, Is.True, report.LogTail);
+        Assert.That(report.Steps.Select(step => (step.Utility, step.Ranks)), Is.EqualTo(new[]
+        {
+            ("blockMesh", 1), ("includeFunc", 0), ("includeFunc", 0), ("includeFunc", 0), ("simpleFoam", 1), ("simpleFoam", 0)
+        }), "the post step for what the solver measured is recorded, not run");
+        Assert.That(ReadCaseFile("system/controlDict"), Does.Contain("    #includeFunc torque\n    #includeFunc inletP\n    #includeFunc wake\n}"));
+        Assert.That(ReadCaseFile("log.includeFunc"), Does.Contain("rotating zone (MRF)"));
+        Assert.That(ReadCaseFile("log.includeFunc.2"), Does.Contain("'#includeFunc inletP'").And.Contain("latest written time"));
+        Assert.That(ReadCaseFile("log.includeFunc.3"), Does.Contain("'#includeFunc wake'"));
+        Assert.That(ReadCaseFile("log.simpleFoam.2"), Does.StartWith("Not run: 'simpleFoam -postProcess -func inletP -latestTime'").And.Contain("overwrites the solve's rows"));
+    }
+
+    [Test]
+    public void APostStepIsSkippedOnlyForAResponseTheControllerMeasuredTest()
+    {
+        static FoamStepData Step(string utility, params string[] arguments) => new() { Utility = utility, Arguments = [.. arguments] };
+        string[] measured = ["inletP", "wake"];
+
+        Assert.That(FoamCaseRunner.PostStepResponse(Step("postProcess", "-func", "inletP", "-latestTime"), "simpleFoam", measured), Is.EqualTo("inletP"));
+        Assert.That(FoamCaseRunner.PostStepResponse(Step("simpleFoam", "-postProcess", "-func", "wake", "-latestTime"), "simpleFoam", measured), Is.EqualTo("wake"));
+        Assert.That(FoamCaseRunner.PostStepResponse(Step("postProcess", "-func", "coeffs", "-latestTime"), "simpleFoam", measured), Is.Null, "a force the recipe measures after the solve stays its");
+        Assert.That(FoamCaseRunner.PostStepResponse(Step("simpleFoam"), "simpleFoam", measured), Is.Null, "the solve itself");
+        Assert.That(FoamCaseRunner.PostStepResponse(Step("postProcess", "-latestTime"), "simpleFoam", measured), Is.Null, "no function named");
+        Assert.That(FoamCaseRunner.PostStepResponse(Step("postProcess", "-func", "inletP"), "simpleFoam", []), Is.Null, "nothing measured by the controller");
+    }
+
+    [Test]
     public async Task AnIncludeThatCannotBeWrittenEndsTheRunBeforeTheSolveTest()
     {
         var kit = RequireKit();

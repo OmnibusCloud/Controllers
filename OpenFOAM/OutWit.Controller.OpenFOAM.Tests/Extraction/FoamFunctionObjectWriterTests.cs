@@ -101,7 +101,7 @@ public class FoamFunctionObjectWriterTests
             Responses =
             [
                 new FoamResponseSpecData { Name = "bad name", Kind = FoamResponseKind.Forces, Patches = ["wall"] },
-                new FoamResponseSpecData { Name = "noPatch", Kind = FoamResponseKind.ForceCoeffs, Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "magUInf", Value = "20" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }] },
+                new FoamResponseSpecData { Name = "noPatch", Kind = FoamResponseKind.ForceCoeffs, Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "liftDir", Value = "(0 0 1)" }, new FoamNamedValueData { Name = "dragDir", Value = "(1 0 0)" }, new FoamNamedValueData { Name = "magUInf", Value = "20" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }, new FoamNamedValueData { Name = "rhoInf", Value = "1" }] },
                 new FoamResponseSpecData { Name = "twoPatches", Kind = FoamResponseKind.PatchValue, Patches = ["a", "b"], Fields = ["p"], Operation = "areaAverage" },
                 new FoamResponseSpecData { Name = "noLocations", Kind = FoamResponseKind.Probe, Fields = ["U"] },
                 new FoamResponseSpecData { Name = "code", Kind = FoamResponseKind.FieldMinMax, Fields = ["p"], Parameters = [new FoamNamedValueData { Name = "x", Value = "#calc \"1\"" }] },

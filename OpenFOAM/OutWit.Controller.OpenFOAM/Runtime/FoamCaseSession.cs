@@ -72,10 +72,16 @@ public sealed class FoamCaseSession
             // run-time code) after.
             var rejections = new List<string>(FoamCaseRules.Validate(task.Case, Kit.HasExecutable));
             rejections.AddRange(FoamTemplating.CheckSubstitutions(task.Substitutions));
+
+            // What the run says of its responses besides their values: a
+            // swept reference value a re-measured force follows, a value left
+            // out and why. Written beside the logs as log.responses.
+            var notes = new List<string>();
             if (rejections.Count == 0)
             {
                 rejections.AddRange(await FoamCaseMaterializer.MaterializeAsync(task, caseDirectory, BlobService, cancellationToken));
-                rejections.AddRange(FoamFunctionObjectWriter.Write(caseDirectory, task.Case?.Extraction, task.Substitutions));
+                var request = await FoamResponseFollowing.FollowAsync(task, caseDirectory, BlobService, notes, cancellationToken);
+                rejections.AddRange(FoamFunctionObjectWriter.Write(caseDirectory, request, task.Substitutions));
             }
 
             if (rejections.Count == 0)
@@ -91,11 +97,19 @@ public sealed class FoamCaseSession
             // The case rules refused a task without a case or a recipe above; these are the invariants, not branches.
             var data = task.Case ?? throw new InvalidOperationException("The task carries no case.");
             var recipe = data.Recipe ?? throw new InvalidOperationException("The task carries no recipe.");
+
+            // What the task would do without doing what was meant (ranks that
+            // do nothing, a setFields over a swept field): said, not refused.
+            notes.AddRange(await FoamCaseAdvisor.AdviseAsync(task, BlobService, cancellationToken));
             var ranks = FoamDecomposition.Ranks(data.Threads);
             var environment = Kit.EnvironmentFor(scratch.UsablePath);
             var runner = new FoamCaseRunner(Kit, caseDirectory, environment, ranks, Logger);
 
-            var report = await runner.RunAsync(recipe, cancellationToken);
+            // The statistics, min/max and probes the recipe measures after
+            // the solve are measured during it as well: a post step reads
+            // the latest written time, not the final one.
+            var measuredInSolve = FoamSolveResponses.MeasuredInSolve(caseDirectory, recipe, data.Extraction);
+            var report = await runner.RunAsync(recipe, measuredInSolve, cancellationToken);
 
             // A killed run is the user's verdict, not the case's - it must
             // surface as cancellation, never be harvested as a red variant.
@@ -110,7 +124,7 @@ public sealed class FoamCaseSession
 
             if (report.Succeeded)
             {
-                result.ResponseRow = ExtractResponses(caseDirectory, data.Extraction, result.FinalTime);
+                result.ResponseRow = ExtractResponses(caseDirectory, data.Extraction, result.FinalTime, notes);
                 await UploadArtifactAsync(result, caseDirectory, scratch.UsablePath, data.ArtifactPolicy, cancellationToken);
             }
             else if (data.ArtifactPolicy?.Logs == true)
@@ -171,7 +185,7 @@ public sealed class FoamCaseSession
         result.CellCount = meshed > 0 ? meshed : logged;
     }
 
-    private FoamResponseRowData ExtractResponses(string caseDirectory, FoamExtractionRequestData? extraction, double finalTime)
+    private FoamResponseRowData ExtractResponses(string caseDirectory, FoamExtractionRequestData? extraction, double finalTime, List<string> notes)
     {
         // A parsing surprise must not turn a finished run into a failure: the
         // row degrades to empty and the run's other facts stand.
@@ -180,10 +194,9 @@ public sealed class FoamCaseSession
             // A response whose last row is not the run's final time is left
             // out and named in log.responses, which travels with the logs;
             // an unknown final time (no solver log) checks nothing.
-            var notes = new List<string>();
             var row = FoamResponseExtractor.Extract(caseDirectory, extraction, finalTime > 0 ? finalTime : null, notes);
             foreach (var note in notes)
-                Logger?.LogWarning("Foam.Run: {Note}", note);
+                Logger?.LogInformation("Foam.Run: {Note}", note);
             FoamResponseExtractor.WriteNotes(caseDirectory, notes);
             return row;
         }
