@@ -24,6 +24,12 @@ public sealed class FoamCaseRunner
         "decomposePar", "reconstructPar", "reconstructParMesh"
     };
 
+    private const string POST_PROCESS = "postProcess";
+
+    private const string POST_PROCESS_FLAG = "-postProcess";
+
+    private const string FUNCTION_FLAG = "-func";
+
     #endregion
 
     #region Constructors
@@ -55,7 +61,27 @@ public sealed class FoamCaseRunner
     /// <param name="recipe">A validated recipe.</param>
     /// <param name="cancellationToken">Kills the running step's process tree when signaled.</param>
     /// <returns>Every step's outcome, and the failure if there was one.</returns>
-    public async Task<FoamRunReport> RunAsync(FoamRecipeData recipe, CancellationToken cancellationToken = default)
+    public Task<FoamRunReport> RunAsync(FoamRecipeData recipe, CancellationToken cancellationToken = default)
+    {
+        return RunAsync(recipe, [], cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs the recipe, with the named responses added to the solve by the
+    /// controller before the first step that runs the application to solve:
+    /// one <c>includeFunc &lt;response&gt;</c> step of the controller's own per
+    /// name, in the report and with a log like any step's. Why: a post step
+    /// (<c>postProcess -func</c>, <c>-latestTime</c>) reads the latest written
+    /// time, which is not the run's final time when <c>endTime</c> is not a
+    /// multiple of <c>writeInterval</c> - the response then came back blank
+    /// (measured on v2606, 2026-10-28); measured by the solver at every step,
+    /// its last row is the final time's.
+    /// </summary>
+    /// <param name="recipe">A validated recipe.</param>
+    /// <param name="measuredInSolve">The responses to add to the solve, by name (<see cref="FoamSolveResponses"/>); each is a dictionary in <c>system/</c> the controller wrote.</param>
+    /// <param name="cancellationToken">Kills the running step's process tree when signaled.</param>
+    /// <returns>Every step's outcome, the controller's own included, and the failure if there was one.</returns>
+    public async Task<FoamRunReport> RunAsync(FoamRecipeData recipe, IReadOnlyList<string> measuredInSolve, CancellationToken cancellationToken = default)
     {
         var parallel = Kit.SupportsParallel && Ranks > 1 && recipe.Steps.Any(step => step.Parallel);
         if (parallel)
@@ -69,6 +95,7 @@ public sealed class FoamCaseRunner
 
         var report = new FoamRunReport();
         var logCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var pending = measuredInSolve.ToList();
 
         foreach (var step in recipe.Steps)
         {
@@ -80,32 +107,105 @@ public sealed class FoamCaseRunner
                 continue;
             }
 
+            // The controller's own includes go right before the first solve,
+            // where the recipe's own includeFunc steps stand.
+            if (pending.Count > 0 && IsSolve(step, recipe.Application))
+            {
+                var added = true;
+                foreach (var response in pending)
+                {
+                    var include = new FoamStepData { Utility = FoamAllowList.INCLUDE_FUNCTION, Arguments = [response] };
+                    var includeLog = Path.Combine(CaseDirectory, LogName(include.Utility, logCounts));
+                    added &= Record(report, include, FoamSolveFunctions.Include(CaseDirectory, response, includeLog, FoamSolveFunctions.WHY_FINAL_TIME), 0, includeLog);
+                    if (!added)
+                        break;
+                }
+
+                pending.Clear();
+                if (!added)
+                    break;
+            }
+
             var runParallel = parallel && step.Parallel;
             var builtIn = FoamAllowList.IsBuiltIn(step.Utility);
             var logPath = Path.Combine(CaseDirectory, LogName(step.Utility, logCounts));
 
-            var outcome = builtIn
-                ? RunBuiltIn(step, parallel, logPath)
-                : await RunProcessAsync(step, runParallel, logPath, cancellationToken);
+            // A post step for a response the solver measured is not run: it
+            // would read the latest written time only, and for a probe it
+            // overwrites the solve's rows with that one (measured on v2606,
+            // 2026-10-28: postProcessing/<probe>/0/p kept one row, at 0.04).
+            var measured = PostStepResponse(step, recipe.Application, measuredInSolve);
+            var outcome = measured != null
+                ? SkipPostStep(step, measured, logPath)
+                : builtIn
+                    ? RunBuiltIn(step, parallel, logPath)
+                    : await RunProcessAsync(step, runParallel, logPath, cancellationToken);
 
-            report.Add(step, new FoamStepOutcomeData
-            {
-                Utility = step.Utility,
-                Ranks = builtIn ? 0 : runParallel ? Ranks : 1,
-                ExitCode = outcome.ExitCode,
-                Seconds = outcome.ElapsedSeconds
-            }, logPath);
-
-            if (outcome.ExitCode != 0)
-            {
-                report.FailedStep = step.Utility;
-                report.ExitCode = outcome.ExitCode;
-                report.LogTail = outcome.LogTail;
+            if (!Record(report, step, outcome, builtIn || measured != null ? 0 : runParallel ? Ranks : 1, logPath))
                 break;
-            }
         }
 
         return report;
+    }
+
+    /// <summary>
+    /// The response a post step measures (<c>postProcess -func &lt;response&gt;</c>
+    /// or <c>&lt;application&gt; -postProcess -func &lt;response&gt;</c>) when it is one
+    /// the controller measured in the solve; null for any other step.
+    /// </summary>
+    /// <param name="step">A recipe step.</param>
+    /// <param name="application">The recipe's application.</param>
+    /// <param name="measuredInSolve">The responses the controller added to the solve.</param>
+    /// <returns>The response's name, or null.</returns>
+    public static string? PostStepResponse(FoamStepData step, string application, IReadOnlyList<string> measuredInSolve)
+    {
+        if (measuredInSolve.Count == 0)
+            return null;
+
+        var isPostStep = step.Utility == POST_PROCESS || (step.Utility == application && step.Arguments.Contains(POST_PROCESS_FLAG));
+        if (!isPostStep)
+            return null;
+
+        var function = step.Arguments.IndexOf(FUNCTION_FLAG);
+        if (function < 0 || function + 1 >= step.Arguments.Count)
+            return null;
+
+        var response = step.Arguments[function + 1];
+        return measuredInSolve.Contains(response, StringComparer.Ordinal) ? response : null;
+    }
+
+    private static FoamRunOutcome SkipPostStep(FoamStepData step, string response, string logPath)
+    {
+        var text = $"Not run: '{step.Utility} {string.Join(' ', step.Arguments)}'. The solver measured '{response}' at every step (the controller's includeFunc), " +
+                   "so its last row is the final time's; a post step reads the latest written time only, and for a probe it overwrites the solve's rows with that one.\n";
+        File.WriteAllText(logPath, text);
+        return new FoamRunOutcome(0, 0, text);
+    }
+
+    /// <summary>Adds a step's outcome to the report; false, with the failure recorded, when the step failed.</summary>
+    private static bool Record(FoamRunReport report, FoamStepData step, FoamRunOutcome outcome, int ranks, string logPath)
+    {
+        report.Add(step, new FoamStepOutcomeData
+        {
+            Utility = step.Utility,
+            Ranks = ranks,
+            ExitCode = outcome.ExitCode,
+            Seconds = outcome.ElapsedSeconds
+        }, logPath);
+
+        if (outcome.ExitCode == 0)
+            return true;
+
+        report.FailedStep = step.Utility;
+        report.ExitCode = outcome.ExitCode;
+        report.LogTail = outcome.LogTail;
+        return false;
+    }
+
+    /// <summary>A step that runs the application to solve, not its <c>-postProcess</c> form.</summary>
+    private static bool IsSolve(FoamStepData step, string application)
+    {
+        return step.Utility == application && !step.Arguments.Contains("-postProcess");
     }
 
     private FoamRunOutcome RunBuiltIn(FoamStepData step, bool decomposed, string logPath)

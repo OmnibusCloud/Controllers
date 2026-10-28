@@ -186,7 +186,10 @@ public class FoamKitOracleTests
         Assert.That(result.Iterations, Is.InRange(270, 300), "pitzDaily converges at 281 iterations serially on the kit's acceptance");
         Assert.That(result.CellCount, Is.EqualTo(12225));
         Assert.That(result.CheckMeshVerdict, Is.EqualTo("ok"));
-        Assert.That(result.Steps.Select(step => step.Utility), Is.EqualTo(new[] { "blockMesh", "checkMesh", "simpleFoam", "postProcess", "postProcess" }));
+        Assert.That(result.Steps.Select(step => (step.Utility, step.Ranks)), Is.EqualTo(new[]
+        {
+            ("blockMesh", 1), ("checkMesh", 1), ("includeFunc", 0), ("includeFunc", 0), ("simpleFoam", 1), ("postProcess", 0), ("postProcess", 0)
+        }), "the inlet value and the range are measured by the solver; the post steps for them are recorded, not run");
         Assert.That(result.FinalResiduals.Select(residual => residual.Name), Does.Contain("residual.p").And.Contain("residual.Ux"));
 
         Value(result, "inletP.");

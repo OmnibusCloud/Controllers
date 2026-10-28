@@ -23,6 +23,15 @@ public static class FoamResponseRules
     /// <summary>The coordinate-system spelling of <see cref="CENTRE_OF_ROTATION"/>.</summary>
     public const string ORIGIN = "origin";
 
+    /// <summary>
+    /// A coordinate system of the force function object's own, a flat
+    /// sub-dictionary (<c>{ origin (0 0 0); e1 (1 0 0); e3 (0 0 1); }</c>):
+    /// it carries the centre and the directions, so neither <see cref="CENTRE_OF_ROTATION"/>
+    /// nor <see cref="LIFT_DIRECTION"/> and <see cref="DRAG_DIRECTION"/> are read beside it
+    /// (v2606 <c>forces::setCoordinateSystem</c>).
+    /// </summary>
+    public const string COORDINATE_SYSTEM = "coordinateSystem";
+
     /// <summary>The reference speed of force coefficients.</summary>
     public const string REFERENCE_SPEED = "magUInf";
 
@@ -31,6 +40,25 @@ public static class FoamResponseRules
 
     /// <summary>The reference area of force coefficients.</summary>
     public const string REFERENCE_AREA = "Aref";
+
+    /// <summary>
+    /// The freestream density. Force coefficients read it whatever <see cref="DENSITY"/>
+    /// says (v2606: <c>forces::read</c> under <c>rho rhoInf</c>, <c>forceCoeffs::read</c>
+    /// otherwise, both with <c>readEntry</c>); a force reads it under <c>rho rhoInf</c>.
+    /// </summary>
+    public const string FREESTREAM_DENSITY = "rhoInf";
+
+    /// <summary>The density entry: the name of a density field, or <c>rhoInf</c> for a kinematic case.</summary>
+    public const string DENSITY = "rho";
+
+    /// <summary>
+    /// The lift direction of force coefficients: given <see cref="CENTRE_OF_ROTATION"/>,
+    /// v2606 reads it and <see cref="DRAG_DIRECTION"/> with <c>get</c>, no default.
+    /// </summary>
+    public const string LIFT_DIRECTION = "liftDir";
+
+    /// <summary>The drag direction of force coefficients, read with <see cref="LIFT_DIRECTION"/>.</summary>
+    public const string DRAG_DIRECTION = "dragDir";
 
     private const string SYSTEM_PREFIX = "system/";
 
@@ -55,6 +83,13 @@ public static class FoamResponseRules
 
     /// <summary>A dictionary entry value: words, numbers, vectors and lists in parentheses - no braces, no semicolons, no code.</summary>
     private static readonly Regex VALUE = new(@"^[A-Za-z0-9_.,:+\-eE() \t]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// A flat sub-dictionary as a value: braces around plain entries, each a
+    /// keyword, a <see cref="VALUE"/> and a semicolon - what a
+    /// <c>coordinateSystem</c> or a <c>binData</c> is, and no nesting, no code.
+    /// </summary>
+    private static readonly Regex SUB_DICTIONARY = new(@"^\{(\s*[A-Za-z][A-Za-z0-9_]*\s+[A-Za-z0-9_.,:+\-eE() \t]+;)*\s*\}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>A quoted patch selector's body: letters, digits and the regular-expression characters, no whitespace, no code.</summary>
     private static readonly Regex PATCH_REGEX = new(@"^[A-Za-z0-9_.|*+?()\[\]^$\-]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -105,7 +140,7 @@ public static class FoamResponseRules
             {
                 if (!WORD.IsMatch(parameter.Name))
                     findings.Add($"{prefix}: parameter '{parameter.Name}' is not a keyword.");
-                else if (!VALUE.IsMatch(FoamTemplating.TOKEN.Replace(parameter.Value, TOKEN_STAND_IN)))
+                else if (!IsPlainValue(FoamTemplating.TOKEN.Replace(parameter.Value, TOKEN_STAND_IN)))
                     findings.Add($"{prefix}: the value of '{parameter.Name}' is not a plain dictionary value.");
             }
         }
@@ -174,21 +209,61 @@ public static class FoamResponseRules
         }
     }
 
-    private static List<string> MissingReferences(FoamResponseSpecData response)
+    /// <summary>
+    /// The entries a force function object reads without a default, by what
+    /// the request already says - measured on v2606 (2026-10-28), each a
+    /// "FOAM FATAL IO ERROR ... not found" that stops the solve:
+    /// the centre (<see cref="CENTRE_OF_ROTATION"/>, <see cref="ORIGIN"/> or a
+    /// <see cref="COORDINATE_SYSTEM"/>); for coefficients <see cref="REFERENCE_SPEED"/>,
+    /// <see cref="REFERENCE_LENGTH"/>, <see cref="REFERENCE_AREA"/> and
+    /// <see cref="FREESTREAM_DENSITY"/> whatever <see cref="DENSITY"/> says, and
+    /// <see cref="LIFT_DIRECTION"/> with <see cref="DRAG_DIRECTION"/> when the
+    /// centre is a <see cref="CENTRE_OF_ROTATION"/>; for a force
+    /// <see cref="FREESTREAM_DENSITY"/> when <see cref="DENSITY"/> is <c>rhoInf</c>.
+    /// </summary>
+    /// <param name="response">A force or force-coefficient response.</param>
+    /// <returns>The missing entry names, in the order OpenFOAM reads them; empty when the function object starts.</returns>
+    public static IReadOnlyList<string> MissingReferences(FoamResponseSpecData response)
     {
-        var present = response.Parameters
+        var values = response.Parameters
             .Where(parameter => parameter.Value.Trim().Length > 0)
-            .Select(parameter => parameter.Name)
-            .ToHashSet(StringComparer.Ordinal);
+            .GroupBy(parameter => parameter.Name, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().Value.Trim(), StringComparer.Ordinal);
 
         var missing = new List<string>();
-        if (!present.Contains(CENTRE_OF_ROTATION) && !present.Contains(ORIGIN))
+        var hasCoordinateSystem = values.ContainsKey(COORDINATE_SYSTEM);
+        var hasCentre = values.ContainsKey(CENTRE_OF_ROTATION);
+        if (!hasCoordinateSystem && !hasCentre && !values.ContainsKey(ORIGIN))
             missing.Add(CENTRE_OF_ROTATION);
 
+        var kinematic = values.TryGetValue(DENSITY, out var density) && density == FREESTREAM_DENSITY;
+
         if (response.Kind == FoamResponseKind.ForceCoeffs)
-            missing.AddRange(new[] { REFERENCE_SPEED, REFERENCE_LENGTH, REFERENCE_AREA }.Where(name => !present.Contains(name)));
+        {
+            missing.AddRange(new[] { REFERENCE_SPEED, REFERENCE_LENGTH, REFERENCE_AREA, FREESTREAM_DENSITY }.Where(name => !values.ContainsKey(name)));
+            if (hasCentre && !hasCoordinateSystem)
+                missing.AddRange(new[] { LIFT_DIRECTION, DRAG_DIRECTION }.Where(name => !values.ContainsKey(name)));
+        }
+        else if (kinematic && !values.ContainsKey(FREESTREAM_DENSITY))
+        {
+            missing.Add(FREESTREAM_DENSITY);
+        }
 
         return missing;
+    }
+
+    /// <summary>
+    /// Whether a parameter value is plain dictionary text: a word, a number,
+    /// a vector or a list in parentheses, or a flat sub-dictionary of such
+    /// entries - never braces inside braces, a semicolon outside one, or code.
+    /// </summary>
+    /// <param name="value">The value text, tokens already stood in for.</param>
+    /// <returns>True for a value the node writes verbatim.</returns>
+    public static bool IsPlainValue(string value)
+    {
+        // A blank value is plain text too: the reference check names it as
+        // missing, which is the more useful sentence.
+        return VALUE.IsMatch(value) || SUB_DICTIONARY.IsMatch(value.Trim());
     }
 
     #endregion

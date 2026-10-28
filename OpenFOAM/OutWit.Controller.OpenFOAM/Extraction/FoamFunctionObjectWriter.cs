@@ -117,8 +117,13 @@ public static class FoamFunctionObjectWriter
                 break;
         }
 
+        // A flat sub-dictionary (coordinateSystem { ... }) ends in its brace:
+        // OpenFOAM reads no semicolon after one.
         foreach (var parameter in response.Parameters)
-            text.Append($"{parameter.Name,-16}{parameter.Value};\n");
+        {
+            var value = parameter.Value.Trim();
+            text.Append(value.EndsWith('}') ? $"{parameter.Name,-16}{value}\n" : $"{parameter.Name,-16}{value};\n");
+        }
 
         return text.ToString();
     }

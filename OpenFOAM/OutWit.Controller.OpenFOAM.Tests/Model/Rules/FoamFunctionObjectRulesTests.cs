@@ -165,10 +165,55 @@ public class FoamFunctionObjectRulesTests
     }
 
     [Test]
-    public void AControlDictWithoutFunctionsOrWithAMacroForThemHasNoFindingTest()
+    public void AControlDictWithoutFunctionsHasNoFindingTest()
     {
         Assert.That(Inspect(""), Is.Empty);
-        Assert.That(Inspect("functions #includeFunc residuals;\n"), Is.Empty, "the solver refuses that shape itself");
+    }
+
+    [Test]
+    public void AFunctionsEntryThatIsNotABlockIsRefusedByLineTest()
+    {
+        // What such an entry pulls in cannot be read here, and the
+        // controller's includeFunc cannot add a response to it (K5).
+        const string sentence = "system/controlDict:4: 'functions' is not a block: what it pulls in cannot be read here, and the controller cannot add a response to it; write it as functions { ... }.";
+
+        Assert.That(Inspect("functions #includeEtc \"caseDicts/postProcessing/fields/CourantNo\";\n"), Is.EqualTo(new[] { sentence }));
+        Assert.That(Inspect("functions $myFunctions;\n"), Is.EqualTo(new[] { sentence }));
+        Assert.That(Inspect("functions\n{\n    #includeEtc \"caseDicts/postProcessing/fields/CourantNo\"\n}\n"), Is.Empty, "an include inside the block is a block");
+    }
+
+    [Test]
+    public void AFunctionObjectTheCaseIncludesFromItsOwnSystemIsJudgedLikeABlockTest()
+    {
+        // v2606 resolves #includeFunc <name> to system/<name> before the kit's
+        // etc/caseDicts (functionObjectList::findDict): a case dictionary of a
+        // refused type reached the node past the block rule.
+        var files = new Dictionary<string, string>
+        {
+            ["system/marker"] = "type systemCall;\nlibs (utilityFunctionObjects);\nendCalls (\"cmd /c echo ran > marker.txt\");\n",
+            ["system/wakeProbes"] = "type probes;\nlibs (sampling);\nfields (p);\nprobeLocations ((0.1 0 0));\n",
+            ["system/extra"] = "pull { type timeActivatedFileUpdate; fileToUpdate \"x\"; timeVsFile ((0 \"y\")); }\nminMax { type fieldMinMax; fields (p); }\n"
+        };
+        var functions = "functions\n{\n    #includeFunc marker\n    #includeFunc wakeProbes\n    #include \"extra\"\n    #includeFunc CourantNo\n    #includeFunc ObukhovLength\n}\n";
+        var findings = new List<string>();
+
+        FoamFunctionObjectRules.Inspect(HEAD + functions, "system/controlDict", findings, path => files.GetValueOrDefault(path));
+
+        Assert.That(findings, Is.EqualTo(new[]
+        {
+            "system/controlDict:6: the function object 'marker (system/marker)' is of type 'systemCall', which runs commands on the node; a case may carry only measurements and writers that stay inside it.",
+            "system/extra:1: the function object 'pull' is of type 'timeActivatedFileUpdate', which copies a file of the node into the case; a case may carry only measurements and writers that stay inside it."
+        }), "the kit's own dictionaries (CourantNo, ObukhovLength) pass; the case's probes and min/max pass");
+    }
+
+    [Test]
+    public void TheContentRulesReadTheIncludedFilesOfTheCaseTest()
+    {
+        var controlDict = HEAD + "functions\n{\n    #includeFunc marker\n}\n";
+        var findings = FoamCaseContentRules.Inspect([("system/controlDict", controlDict), ("system/marker", "type systemCall;\nendCalls (\"ls\");\n")]);
+
+        Assert.That(findings, Has.Exactly(1).Items);
+        Assert.That(findings[0], Does.StartWith("system/controlDict:6:").And.Contain("'marker (system/marker)' is of type 'systemCall'"));
     }
 
     [Test]
