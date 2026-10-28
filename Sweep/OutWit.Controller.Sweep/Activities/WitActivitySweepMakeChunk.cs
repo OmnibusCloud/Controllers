@@ -18,7 +18,7 @@ public sealed partial class WitActivitySweepMakeChunk : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Plan}, {State}";
+        return Schedule == null ? $"{Plan}, {State}" : $"{Plan}, {State}, {Schedule}";
     }
 
     #endregion
@@ -32,7 +32,8 @@ public sealed partial class WitActivitySweepMakeChunk : WitActivityFunction
 
         return base.Is(activity, tolerance)
                && Plan.Check(activity.Plan)
-               && State.Check(activity.State);
+               && State.Check(activity.State)
+               && Schedule.Check(activity.Schedule);
     }
 
     protected override WitActivitySweepMakeChunk InnerClone()
@@ -40,7 +41,8 @@ public sealed partial class WitActivitySweepMakeChunk : WitActivityFunction
         return new WitActivitySweepMakeChunk
         {
             Plan = Plan?.Clone() as IWitReference,
-            State = State?.Clone() as IWitReference
+            State = State?.Clone() as IWitReference,
+            Schedule = Schedule?.Clone() as IWitReference
         };
     }
 
@@ -55,6 +57,10 @@ public sealed partial class WitActivitySweepMakeChunk : WitActivityFunction
     /// <summary>Reference to the State argument.</summary>
     [MemoryPackAllowSerialize]
     public IWitReference? State { get; init; }
+
+    /// <summary>Reference to the Schedule argument; null in a script without the schedule variable.</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Schedule { get; init; }
 
     #endregion
 }

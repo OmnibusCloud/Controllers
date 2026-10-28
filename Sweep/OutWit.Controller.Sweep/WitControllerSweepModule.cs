@@ -40,6 +40,7 @@ public sealed class WitControllerSweepModule : WitPluginBase, IWitControllerHost
         services.AddVariable<WitVariableSweepOpenFOAMSet>();
         services.AddVariable<WitVariableSweepPlan>();
         services.AddVariable<WitVariableSweepState>();
+        services.AddVariable<WitVariableSweepSchedule>();
 
         services.AddActivityAdapter<WitActivitySweepPlan, WitActivityAdapterSweepPlan>();
         services.AddActivityAdapter<WitActivitySweepInitState, WitActivityAdapterSweepInitState>();

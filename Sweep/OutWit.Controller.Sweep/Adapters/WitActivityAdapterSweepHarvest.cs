@@ -45,7 +45,13 @@ internal sealed class WitActivityAdapterSweepHarvest : WitActivityAdapterFunctio
         // foreign entry the family left out), a variant twice or one from
         // outside the chunk must fail LOUDLY here, because the silent
         // alternative is a manifest that miscounts forever.
-        var expected = plan.ChunkSizes[state.ChunkIndex];
+        // The schedule of record is the run's schedule variable (Sweep 2.2), the plan's for a
+        // script without one.
+        SweepScheduleData? schedule = null;
+        if (activity.Schedule != null)
+            pool.TryGetValue(activity.Schedule, out schedule);
+
+        var expected = SweepResume.Sizes(plan, schedule)[state.ChunkIndex];
         var chunk = plan.Options.Variants
             .Skip(state.NextVariantOrdinal)
             .Take(expected)
@@ -110,8 +116,8 @@ internal sealed class WitActivityAdapterSweepHarvest : WitActivityAdapterFunctio
     {
         try
         {
-            if (parameters.Length != 3)
-                throw new ArgumentException($"Expected 3 parameter(s), got {parameters.Length}.");
+            if (parameters.Length is < 3 or > 4)
+                throw new ArgumentException($"Expected 3 or 4 parameter(s), got {parameters.Length}.");
 
             if (parameters[0] is not IWitReference plan)
                 throw new ArgumentException("Parameter 'Plan' must be a variable reference.");
@@ -122,11 +128,16 @@ internal sealed class WitActivityAdapterSweepHarvest : WitActivityAdapterFunctio
             if (parameters[2] is not IWitReference wave)
                 throw new ArgumentException("Parameter 'Wave' must be a variable reference.");
 
+            IWitReference? schedule = null;
+            if (parameters.Length == 4 && (schedule = parameters[3] as IWitReference) == null)
+                throw new ArgumentException("Parameter 'Schedule' must be a variable reference.");
+
             return new WitActivitySweepHarvest
             {
                 Plan = plan,
                 State = state,
-                Wave = wave
+                Wave = wave,
+                Schedule = schedule
             };
         }
         catch (Exception e)

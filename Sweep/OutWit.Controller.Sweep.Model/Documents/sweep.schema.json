@@ -9,11 +9,12 @@
     "types": [
       "sweep.artifact@1",
       "sweep.resultIndexEntry@2",
+      "sweep.schedule@1",
       "sweep.state@2"
     ],
     "source": {
       "assembly": "OutWit.Controller.Sweep.Model",
-      "version": "2.1.0"
+      "version": "2.2.0"
     },
     "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
   },
@@ -70,6 +71,25 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/sweep.artifact@1"
+          }
+        }
+      }
+    },
+    "sweep.schedule@1": {
+      "type": "object",
+      "title": "SweepSchedule",
+      "x-oc-type-id": "sweep.schedule@1",
+      "x-oc-binding-name": "SweepSchedule",
+      "x-oc-clr": "OutWit.Controller.Sweep.Model.SweepScheduleData, OutWit.Controller.Sweep.Model",
+      "properties": {
+        "chunkSizes": {
+          "x-oc-clr-name": "ChunkSizes",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": -2147483648,
+            "maximum": 2147483647
           }
         }
       }
