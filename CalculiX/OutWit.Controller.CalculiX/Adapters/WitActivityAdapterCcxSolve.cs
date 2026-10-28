@@ -62,6 +62,11 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
             var jobDeckPath = Path.Combine(scratchDirectory, $"{JOB_NAME}.inp");
             File.Copy(deckPath, jobDeckPath);
 
+            // A step card naming a solver this node's kit does not link
+            // (PASTIX anywhere, PARDISO on macOS) ends the solve with exit
+            // 201 at once: the parameter is removed and the variant says so.
+            var notes = CcxSolverFallback.Apply(jobDeckPath, CcxEquationSolver.PardisoLinked(OperatingSystem.IsMacOS()));
+
             // The job's cancellation must reach the RUNNING solver: without
             // the token a cancelled overnight sweep keeps every node's
             // in-flight ccx solving to completion, and cancel only takes
@@ -85,8 +90,7 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
             {
                 VariantIndex = task.VariantIndex,
                 ExitCode = outcome.ExitCode,
-                SolveSeconds = outcome.ElapsedSeconds,
-                LogTail = outcome.ExitCode == 0 ? null : outcome.LogTail
+                SolveSeconds = outcome.ElapsedSeconds
             };
 
             if (frdPath != null)
@@ -98,21 +102,34 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
             // A nonzero exit is data, not a task failure: the orchestration
             // records the failed variant and moves on; only infrastructure
             // errors (blob transfer, missing solver) throw out of here.
-            // Extraction itself follows the same rule — a parsing surprise
-            // must not turn a finished solve into a failure, so it degrades
-            // to an empty row with the artifacts still uploaded.
+            // Extraction follows the same rule - a parsing surprise must not
+            // turn a finished solve into a failure - but it must not pass for
+            // a result either: a failed extraction leaves the row NULL and an
+            // error note saying why, with the artifacts still uploaded. An
+            // empty row here once passed for a solve with nothing to report.
             if (outcome.ExitCode == 0)
             {
                 try
                 {
-                    result.ResponseRow = CcxResponseExtractor.Extract(jobDeckPath, frdPath, datPath, task.Extraction);
+                    var extraction = CcxResponseExtractor.Extract(jobDeckPath, frdPath, datPath, task.Extraction);
+                    result.ResponseRow = extraction.Row;
+                    notes.AddRange(extraction.Notes);
                 }
                 catch (Exception e)
                 {
-                    Logger.LogWarning(e, "Ccx.Solve: response extraction failed — the row stays empty, artifacts remain.");
-                    result.ResponseRow = new CcxResponseRowData();
+                    result.ResponseRow = null;
+                    notes.Add(new CcxNote { Kind = CcxNoteKind.Error, Text = $"response extraction failed: {e.GetType().Name}: {e.Message}" });
                 }
+
+                if (result.ResponseRow == null)
+                    Logger.LogWarning("Ccx.Solve: response extraction failed — {Reason}; the row is missing, artifacts remain.",
+                        notes.LastOrDefault(note => note.Kind == CcxNoteKind.Error)?.Text);
             }
+
+            // The notes ride inside the log tail, after the solver's own tail
+            // (kept for a failed solve only): the result keeps the shipped
+            // wire layout, which every installed client reads.
+            result.LogTail = CcxNoteLog.Compose(outcome.ExitCode == 0 ? null : outcome.LogTail, notes);
 
             if (!pool.TrySetValue(activity.ReturnReference, result))
                 throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");

@@ -3,11 +3,13 @@ using OutWit.Controller.CalculiX.Extraction;
 namespace OutWit.Controller.CalculiX.Tests.Extraction;
 
 /// <summary>
-/// The .dat reader's force-sum semantics on decks the golden fixtures do not
-/// cover: ccx prints one "forces (fx,fy,fz) for set …" block PER
-/// INCREMENT/STEP, and the response must be the final state — the audit
+/// The .dat reader on decks the golden fixtures of the first release did
+/// not cover: ccx prints one "forces (fx,fy,fz) for set …" block PER
+/// INCREMENT/STEP and the response must be the final state (the audit
 /// caught the blocks accumulating into duplicate response names carrying
-/// partial-load values.
+/// partial-load values); every step is read on its own; the eigenvalue table
+/// comes in four layouts and only one of them had the frequency in the
+/// fourth column; a row printed in a local *TRANSFORM frame says so.
 /// </summary>
 [TestFixture]
 public class DatResultReaderTests
@@ -47,6 +49,16 @@ public class DatResultReaderTests
         return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
     }
 
+    private static DatForceBlock SingleForces(DatResultFile result)
+    {
+        return result.Steps.Single().ForceBlocks.Single();
+    }
+
+    private static double[] RowSum(DatForceBlock block)
+    {
+        return [block.Rows.Sum(row => row.Fx), block.Rows.Sum(row => row.Fy), block.Rows.Sum(row => row.Fz)];
+    }
+
     #endregion
 
     #region Block End Tests
@@ -60,8 +72,10 @@ public class DatResultReaderTests
         // 5 to 13 of a 4-mode deck.
         var result = DatResultReader.Read(Fixture("freq.dat"));
 
-        Assert.That(result.Eigenfrequencies, Is.EqualTo(new[] { 2.229443e5, 2.229443e5, 4.113257e5, 6.997396e5 })
-            .Within(1e0));
+        Assert.That(result.Steps.Single().Eigenfrequencies.Select(mode => mode.Cycles),
+            Is.EqualTo(new[] { 2.229443e5, 2.229443e5, 4.113257e5, 6.997396e5 }).Within(1e0));
+        Assert.That(result.Steps.Single().Eigenfrequencies.Select(mode => mode.Mode), Is.EqualTo(new[] { 1, 2, 3, 4 }));
+        Assert.That(result.Steps.Single().Eigenfrequencies.Select(mode => mode.NodalDiameter), Is.All.Null);
     }
 
     [Test]
@@ -70,7 +84,23 @@ public class DatResultReaderTests
         // buckle.inp, solved by ccx 2.22: *BUCKLE asking for 3 factors.
         var result = DatResultReader.Read(Fixture("buckle.dat"));
 
-        Assert.That(result.BucklingFactors, Is.EqualTo(new[] { 151.9163, 151.9163, 699.4240 }).Within(1e-3));
+        Assert.That(result.Steps.Single().BucklingFactors, Is.EqualTo(new[] { 151.9163, 151.9163, 699.4240 }).Within(1e-3));
+        Assert.That(result.Steps.Single().ForceBlocks, Is.Empty);
+    }
+
+    [Test]
+    public void ABucklingStepKeepsTheBaseStateReactionAndDropsTheModePrintsTest()
+    {
+        // buckle-prints.inp, solved by ccx 2.22: *BUCKLE with *NODE PRINT RF.
+        // The reactions printed before the factors are the base state's (the
+        // applied load) and stay; the three blocks printed per mode after
+        // them are mode shapes, and the last of them was the sum before.
+        var step = DatResultReader.Read(Fixture("buckle-prints.dat")).Steps.Single();
+
+        Assert.That(step.BucklingFactors, Has.Count.EqualTo(3));
+        Assert.That(step.ForceBlocks.Single().Time, Is.EqualTo(0.0));
+        Assert.That(RowSum(step.ForceBlocks.Single())[0], Is.EqualTo(900.0).Within(1e-3));
+        Assert.That(step.ModeShapeForceBlocks, Is.EqualTo(3));
     }
 
     [Test]
@@ -82,11 +112,11 @@ public class DatResultReaderTests
         // reaction forces.
         var result = DatResultReader.Read(Fixture("static-prints.dat"));
 
-        Assert.That(result.ForceSums, Has.Count.EqualTo(1));
-        Assert.That(result.ForceSums[0].SetName, Is.EqualTo("FIX"));
-        Assert.That(result.ForceSums[0].Fx, Is.EqualTo(0.0).Within(1e-6));
-        Assert.That(result.ForceSums[0].Fy, Is.EqualTo(0.0).Within(1e-6));
-        Assert.That(result.ForceSums[0].Fz, Is.EqualTo(100.0).Within(1e-6));
+        var block = SingleForces(result);
+        Assert.That(block.SetName, Is.EqualTo("FIX"));
+        Assert.That(RowSum(block), Is.EqualTo(new[] { 0.0, 0.0, 100.0 }).Within(1e-6));
+        Assert.That(block.Rows.Select(row => row.Local), Is.All.False);
+        Assert.That(block.Total, Is.Null);
     }
 
     #endregion
@@ -112,12 +142,11 @@ public class DatResultReaderTests
 
         var result = DatResultReader.Read(path);
 
-        Assert.That(result.ForceSums, Has.Count.EqualTo(1),
-            "one sum per SET, never one per increment");
-        Assert.That(result.ForceSums[0].SetName, Is.EqualTo("FIX"));
-        Assert.That(result.ForceSums[0].Fx, Is.EqualTo(200.0).Within(1e-9),
+        var block = SingleForces(result);
+        Assert.That(block.SetName, Is.EqualTo("FIX"));
+        Assert.That(block.Time, Is.EqualTo(1.0));
+        Assert.That(RowSum(block), Is.EqualTo(new[] { 200.0, 0.0, 50.0 }).Within(1e-9),
             "the FINAL block's values, not an accumulation across increments");
-        Assert.That(result.ForceSums[0].Fz, Is.EqualTo(50.0).Within(1e-9));
     }
 
     [Test]
@@ -134,8 +163,131 @@ public class DatResultReaderTests
 
         var result = DatResultReader.Read(path);
 
-        Assert.That(result.ForceSums.Select(sum => sum.SetName),
-            Is.EquivalentTo(new[] { "FIX", "LOAD" }));
+        Assert.That(result.Steps.Single().ForceBlocks.Select(block => block.SetName), Is.EquivalentTo(new[] { "FIX", "LOAD" }));
+    }
+
+    [Test]
+    public void ARowInALocalFrameKeepsItsMarkTest()
+    {
+        // transform-cyl.dat: *NODE PRINT prints in the node's *TRANSFORM
+        // frame by default and marks every such row with a trailing L.
+        var result = DatResultReader.Read(Fixture("transform-cyl.dat"));
+
+        var block = SingleForces(result);
+        Assert.That(block.Rows, Has.Count.EqualTo(9));
+        Assert.That(block.Rows.Select(row => row.Local), Is.All.True);
+        Assert.That(block.Rows.Select(row => row.Node), Is.EqualTo(new[] { 1, 12, 23, 34, 45, 56, 67, 78, 89 }));
+        Assert.That(RowSum(block), Is.EqualTo(new[] { 1262.115, -2524.23, 0.0 }).Within(1e-2), "summed as printed, the audit's wrong number");
+    }
+
+    [Test]
+    public void TheGlobalTotalOfTotalsYesIsReadTest()
+    {
+        // static-totals.dat: the same deck as static.dat with TOTALS=YES.
+        // ccx sums the global components itself and prints them after the rows.
+        var result = DatResultReader.Read(Fixture("static-totals.dat"));
+
+        var block = SingleForces(result);
+        Assert.That(block.Rows, Has.Count.EqualTo(4));
+        Assert.That(block.Total, Is.EqualTo(new[] { 0.0, 0.0, 100.0 }).Within(1e-9));
+    }
+
+    [Test]
+    public void TotalsOnlyPrintsTheTotalAloneTest()
+    {
+        var path = WriteDat(
+            " total force (fx,fy,fz) for set FIX and time  0.1000000E+01\n" +
+            "\n" +
+            "       -7.105427E-14 -3.907985E-14  1.000000E+02\n");
+
+        var block = SingleForces(DatResultReader.Read(path));
+
+        Assert.That(block.Rows, Is.Empty);
+        Assert.That(block.Total, Is.EqualTo(new[] { -7.105427e-14, -3.907985e-14, 100.0 }).Within(1e-9));
+    }
+
+    #endregion
+
+    #region Step Tests
+
+    [Test]
+    public void EveryStepIsReadOnItsOwnTest()
+    {
+        // static-freq.dat: a static step with a printed reaction, then a
+        // frequency step whose forces are printed per mode. The per-mode
+        // blocks replaced the static sum before (rf_sum 0 for a static 900).
+        var result = DatResultReader.Read(Fixture("static-freq.dat"));
+
+        Assert.That(result.Steps.Select(step => step.Number), Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(RowSum(result.Steps[0].ForceBlocks.Single()), Is.EqualTo(new[] { 0.0, 0.0, 900.0 }).Within(1e-6));
+        Assert.That(result.Steps[0].Eigenfrequencies, Is.Empty);
+        Assert.That(result.Steps[1].ForceBlocks, Is.Empty, "the forces printed per mode are mode shapes");
+        Assert.That(result.Steps[1].ModeShapeForceBlocks, Is.EqualTo(5));
+        Assert.That(result.Steps[1].Eigenfrequencies.Select(mode => mode.Cycles), Is.EqualTo(new[] { 1000.459, 1000.459, 6085.65, 6085.65, 8027.393 }).Within(1e-3));
+    }
+
+    [Test]
+    public void FrequencyStepsNumberTheirModesFromOneTest()
+    {
+        // freq-freq.dat: 5 modes, a static perturbation, then 3 modes — the
+        // second table's modes were numbered 6, 7, 8 before.
+        var result = DatResultReader.Read(Fixture("freq-freq.dat"));
+
+        Assert.That(result.Steps.Select(step => step.Number), Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(result.Steps[0].Eigenfrequencies.Select(mode => mode.Mode), Is.EqualTo(new[] { 1, 2, 3, 4, 5 }));
+        Assert.That(result.Steps[2].Eigenfrequencies.Select(mode => mode.Mode), Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(result.Steps[2].Eigenfrequencies[0].Cycles, Is.EqualTo(1281.772).Within(1e-3));
+    }
+
+    #endregion
+
+    #region Eigenvalue Layout Tests
+
+    [Test]
+    public void ACyclicSymmetryTableCarriesTheNodalDiameterTest()
+    {
+        // cyclic-freq.dat: a 30-degree sector of a ring, nodal diameters 0 to
+        // 2, three modes each. The frequency is the fifth number of a row;
+        // read as the fourth, the column held the real part in rad/time.
+        var result = DatResultReader.Read(Fixture("cyclic-freq.dat"));
+
+        var modes = result.Steps.Single().Eigenfrequencies;
+        Assert.That(modes, Has.Count.EqualTo(9));
+        Assert.That(modes.Select(mode => mode.NodalDiameter), Is.EqualTo(new int?[] { 0, 0, 0, 1, 1, 1, 2, 2, 2 }));
+        Assert.That(modes.Select(mode => mode.Mode), Is.EqualTo(new[] { 1, 2, 3, 1, 2, 3, 1, 2, 3 }));
+        Assert.That(modes[6].Cycles, Is.EqualTo(1563.217).Within(1e-3));
+        Assert.That(modes[8].Cycles, Is.EqualTo(5265.133).Within(1e-3));
+        Assert.That(result.Steps.Single().UnknownEigenvalueTables, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void AComplexFrequencyTableHasNoEigenvalueColumnTest()
+    {
+        // complex-freq.dat: *COMPLEX FREQUENCY, CORIOLIS after a *FREQUENCY
+        // step. The row is mode, real part, cycles, imaginary part; read as
+        // the fourth number, the column held the imaginary part.
+        var result = DatResultReader.Read(Fixture("complex-freq.dat"));
+
+        Assert.That(result.Steps.Select(step => step.Number), Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(result.Steps[1].Eigenfrequencies.Select(mode => mode.Cycles),
+            Is.EqualTo(new[] { 841.8615, 1158.962, 5930.293, 6240.909, 8025.816 }).Within(1e-3));
+        Assert.That(result.Steps[1].Eigenfrequencies.Select(mode => mode.NodalDiameter), Is.All.Null);
+    }
+
+    [Test]
+    public void AnUnknownTableLayoutYieldsNoFrequencyTest()
+    {
+        var path = WriteDat(
+            "     E I G E N V A L U E   O U T P U T\n" +
+            "\n" +
+            " SOMETHING ELSE ENTIRELY\n" +
+            "\n" +
+            "      1   0.3951470E+08   0.6286072E+04   0.1000459E+04   0.0000000E+00\n");
+
+        var step = DatResultReader.Read(path).Steps.Single();
+
+        Assert.That(step.Eigenfrequencies, Is.Empty, "never a number from a column that may be the wrong one");
+        Assert.That(step.UnknownEigenvalueTables, Is.EqualTo(1));
     }
 
     #endregion
