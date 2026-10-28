@@ -74,6 +74,12 @@ public class FoamScratchPathTests
             Assert.That(scratch.UsablePath, Is.EqualTo(scratch.ScopePath), "a path without whitespace is used as it is");
             Assert.That(Directory.Exists(Path.Combine(scratch.UsablePath, "home")), Is.True);
             Assert.That(Directory.Exists(Path.Combine(scratch.UsablePath, "tmp")), Is.True);
+
+            // HOME is the scratch's home, and OpenFOAM reads its user-level
+            // controlDict there after the kit's: system operations stay off
+            // whatever the kit's etc/controlDict allows.
+            var userControlDict = File.ReadAllText(Path.Combine(scratch.UsablePath, "home", ".OpenFOAM", "controlDict"));
+            Assert.That(userControlDict, Does.Contain("InfoSwitches").And.Contain($"{FoamKitEnvironment.ALLOW_SYSTEM_OPERATIONS}   0;"));
         }
         finally
         {

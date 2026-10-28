@@ -29,6 +29,16 @@ public sealed class FoamKitEnvironment
 
     private const string PATH = "PATH";
 
+    /// <summary>
+    /// The InfoSwitch OpenFOAM reads before it lets a function object or a
+    /// <c>coded</c> entry run a command of the case's: the kit's own
+    /// etc/controlDict allows it, and a pool node never does.
+    /// </summary>
+    public const string ALLOW_SYSTEM_OPERATIONS = "allowSystemOperations";
+
+    /// <summary>The variable OpenFOAM reads site-level and user-level settings from, before the user's home.</summary>
+    public const string FOAM_CONFIG_ETC = "FOAM_CONFIG_ETC";
+
     #endregion
 
     #region Constructors

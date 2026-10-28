@@ -227,6 +227,24 @@ public class FoamCaseSessionTests
     }
 
     [Test]
+    public async Task ACaseWithAFunctionObjectThatReachesTheNodeIsRefusedBeforeAnythingRunsTest()
+    {
+        var session = RequireSession();
+        var data = PitzCase("ITERATIONS=1\n");
+        data.BaseFiles.RemoveAll(file => file.RelativePath == "system/controlDict");
+        data.BaseFiles.Add(BlobFile("system/controlDict",
+            "FoamFile { object controlDict; }\napplication simpleFoam;\nendTime 5;\n" +
+            "functions\n{\n    marker { type systemCall; libs (utilityFunctionObjects); endCalls (\"echo ran\"); }\n}\n"));
+
+        var result = await session.RunAsync(Task(data));
+
+        // The fake kit carries no utilityFunctionObjects either: two refusals,
+        // the type's among them, and nothing runs.
+        Assert.That(result.Rejections, Has.Some.StartsWith("system/controlDict:6:").And.Some.Contains("'marker' is of type 'systemCall'"));
+        Assert.That(result.Steps, Is.Empty);
+    }
+
+    [Test]
     public async Task AVariantMissingATokenValueIsRefusedTest()
     {
         var session = RequireSession();

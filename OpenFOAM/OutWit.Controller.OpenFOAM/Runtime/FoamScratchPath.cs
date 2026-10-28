@@ -39,6 +39,24 @@ public static class FoamScratchPath
     /// </summary>
     public const int MAX_WINDOWS_SCRATCH = FoamKitPathRules.MAX_WINDOWS_PATH - WINDOWS_CASE_RESERVE;
 
+    /// <summary>
+    /// The user-level controlDict OpenFOAM reads from <c>$HOME/.OpenFOAM/</c>
+    /// after the kit's <c>etc/controlDict</c>, HOME being the scratch's
+    /// <c>home</c>: it turns the kit's <c>allowSystemOperations</c> off, so no
+    /// function object or coded entry of a case runs a command on the node,
+    /// whatever the kit's own setting says.
+    /// </summary>
+    public const string USER_CONTROL_DICT =
+        "FoamFile\n{\n    version     2.0;\n    format      ascii;\n    class       dictionary;\n    object      controlDict;\n}\n\n" +
+        "// Written by the OpenFOAM controller for this run: a pool node never\n// lets a case run commands.\n" +
+        "InfoSwitches\n{\n    " + FoamKitEnvironment.ALLOW_SYSTEM_OPERATIONS + "   0;\n}\n";
+
+    private const string HOME = "home";
+
+    private const string USER_SETTINGS = ".OpenFOAM";
+
+    private const string CONTROL_DICT = "controlDict";
+
     #endregion
 
     #region Functions
@@ -47,8 +65,9 @@ public static class FoamScratchPath
     /// A fresh private scratch in the host's temp folder, at a path without
     /// whitespace (and on Windows short enough for the case below it), with
     /// the <c>home</c> and <c>tmp</c> directories the kit's environment points
-    /// into. A scratch that cannot be completed is given back before the
-    /// exception leaves.
+    /// into and the user-level controlDict that keeps system operations off
+    /// (<see cref="USER_CONTROL_DICT"/>). A scratch that cannot be completed
+    /// is given back before the exception leaves.
     /// </summary>
     /// <param name="tempStorage">The host's temp folder.</param>
     /// <param name="label">The scope's label under the temp folder (<c>openfoam</c>, <c>openfoam-benchmark</c>).</param>
@@ -76,7 +95,8 @@ public static class FoamScratchPath
             if (refusal != null)
                 throw new InvalidOperationException(refusal);
 
-            Directory.CreateDirectory(Path.Combine(usable, "home"));
+            var settings = Directory.CreateDirectory(Path.Combine(usable, HOME, USER_SETTINGS));
+            File.WriteAllText(Path.Combine(settings.FullName, CONTROL_DICT), USER_CONTROL_DICT);
             Directory.CreateDirectory(Path.Combine(usable, "tmp"));
             return new FoamScratch(scope, usable);
         }
