@@ -8,7 +8,10 @@ namespace OutWit.Controller.OpenFOAM.Extraction;
 /// row: for every requested response, the last row of every data file in
 /// its latest time directory, each column a value named
 /// <c>&lt;response&gt;.&lt;column&gt;</c> (with the file's name in between when
-/// a function object writes more than one file). The time column is left out;
+/// a function object writes more than one file; a probe column is named
+/// <c>&lt;field&gt;@probe&lt;N&gt;(x y z)</c> with its component suffix by
+/// <see cref="FoamPostProcessingReader"/> and carries the field itself). A
+/// probe outside the mesh contributes nothing and a note names it. The time column is left out;
 /// it is the same for every column and the result carries it once. Given the
 /// run's final time, a file whose last row is earlier - a function object
 /// that stopped writing before the run ended - is not reported: a stale value
@@ -72,23 +75,27 @@ public static class FoamResponseExtractor
                 if (table == null)
                     continue;
 
-                if (finalTime is { } final && IsStale(table.Value.Columns, table.Value.Values, final, out var time))
+                if (finalTime is { } final && IsStale(table.Columns, table.Values, final, out var time))
                 {
                     notes?.Add(string.Create(CultureInfo.InvariantCulture,
                         $"{response.Name}: the last row of {Path.GetFileName(file)} is at time {time}, the run ended at {final} - not reported."));
                     continue;
                 }
 
-                var stem = Path.GetFileNameWithoutExtension(file);
-                var prefix = files.Count > 1 ? $"{response.Name}.{stem}" : response.Name;
+                foreach (var note in table.Notes)
+                    notes?.Add($"{response.Name}: {note}");
 
-                for (var index = 0; index < table.Value.Columns.Count; index++)
+                // A probe column carries its field already (p@probe0(0.1 0 0)).
+                var stem = Path.GetFileNameWithoutExtension(file);
+                var prefix = files.Count > 1 && !table.IsProbes ? $"{response.Name}.{stem}" : response.Name;
+
+                for (var index = 0; index < table.Columns.Count; index++)
                 {
-                    var column = table.Value.Columns[index];
+                    var column = table.Columns[index];
                     if (index == 0 && string.Equals(column, TIME_COLUMN, StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    var value = table.Value.Values[index];
+                    var value = table.Values[index];
                     if (double.IsNaN(value))
                         continue;
 

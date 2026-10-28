@@ -13,8 +13,9 @@ public class FoamResponseExtractorTests
         "100\t0.44\t0.30\t0.14\t0.10\t0.06\t0.04\t0.01\n" +
         "200\t0.418\t0.281\t0.137\t0.092\t0.055\t0.037\t0.009\n";
 
+    /// <summary>A probes file as v2606 writes it: the probes, then "# Time" with their indices.</summary>
     private const string PROBES_P =
-        "# Probe 0 (0.1 0.2 0)\n# Probe 1 (0.3 0.2 0)\n#       Probe             0             1\n#        Time\n" +
+        "# Probe 0 (0.1 0.2 0)\n# Probe 1 (0.3 0.2 0)\n# Time        0             1            \n" +
         "        0.1     -1.23e+00     -0.5e+00\n        0.2     -1.20e+00     -0.48e+00\n";
 
     private string m_case = null!;
@@ -50,7 +51,7 @@ public class FoamResponseExtractorTests
         Write("postProcessing/coeffs/0/coefficient.dat", "# Time Cd\n0 9\n");
         Write("postProcessing/coeffs/200/coefficient.dat", COEFFICIENT_DAT);
         Write("postProcessing/probes/0/p", PROBES_P);
-        Write("postProcessing/probes/0/U", "# Probe 0 (0.1 0.2 0)\n#  Time  0\n0.2  (1 2 3)\n");
+        Write("postProcessing/probes/0/U", "# Probe 0 (0.1 0.2 0)\n# Time  0\n0.2  (1 2 3)\n");
 
         var request = new FoamExtractionRequestData
         {
@@ -68,7 +69,9 @@ public class FoamResponseExtractorTests
         Assert.That(names, Does.Contain("coeffs.Cd").And.Contain("coeffs.CmPitch"));
         Assert.That(names, Does.Not.Contain("coeffs.Time"));
         Assert.That(row.Values.First(value => value.Name == "coeffs.Cd").Value, Is.EqualTo(0.418), "the LATEST time directory is read");
-        Assert.That(names, Does.Contain("probes.p.c1").And.Contain("probes.U.c3"), "two files under one response carry the file name");
+        Assert.That(names, Does.Contain("probes.p@probe1(0.3 0.2 0)").And.Contain("probes.U@probe0(0.1 0.2 0)_z"),
+            "a probe column carries its field, number, position and component - the file's name is not repeated");
+        Assert.That(row.Values.First(value => value.Name == "probes.U@probe0(0.1 0.2 0)_z").Value, Is.EqualTo(3));
         Assert.That(names.Count(name => name.StartsWith("absent", StringComparison.Ordinal)), Is.EqualTo(0), "a response whose function object wrote nothing contributes nothing");
     }
 
@@ -104,7 +107,7 @@ public class FoamResponseExtractorTests
 
         // Transient times carry the last digit's noise of the time loop.
         Assert.That(FoamResponseExtractor.Extract(m_case, request, 200, notes).Values.Select(value => value.Name), Does.Contain("coeffs.Cd"));
-        Assert.That(FoamResponseExtractor.Extract(m_case, request, 0.20000000000000004, notes).Values.Select(value => value.Name), Does.Contain("probes.c1"));
+        Assert.That(FoamResponseExtractor.Extract(m_case, request, 0.20000000000000004, notes).Values.Select(value => value.Name), Does.Contain("probes.p@probe0(0.1 0.2 0)"));
         Assert.That(notes, Has.Count.EqualTo(2), "each call judges its own final time: coeffs at 200 is stale against 0.2, probes at 0.2 against 200");
     }
 
@@ -130,6 +133,30 @@ public class FoamResponseExtractorTests
 
         Assert.That(row.Values.Select(value => value.Name), Is.EqualTo(new[] { "pRange.min(p)", "pRange.max(p)", "pRange.min(U)", "pRange.max(U)" }));
         Assert.That(row.Values[1].Value, Is.EqualTo(12.1));
+    }
+
+    [Test]
+    public void AProbeOutsideTheMeshIsAnEmptyCellWithANoteTest()
+    {
+        // v2606 writes -1e+300 (its -VGREAT) for a probe it did not find and
+        // marks the probe in the header: before, that number went into the
+        // response table as a measurement.
+        Write("postProcessing/wake/0/p", "# Probe 0 (0.1 0 0)\n# Probe 1 (9 9 9)  # Not Found\n# Time 0 1\n282 -3.68615 -1e+300\n");
+        Write("postProcessing/wake/0/U", "# Probe 0 (0.1 0 0)\n# Probe 1 (9 9 9)  # Not Found\n# Time 0 1\n282 (6.4 -0.5 0) (-1e+300 -1e+300 -1e+300)\n");
+        var request = new FoamExtractionRequestData { Responses = [new FoamResponseSpecData { Name = "wake", Kind = FoamResponseKind.Probe, Fields = ["p", "U"] }] };
+        var notes = new List<string>();
+
+        var row = FoamResponseExtractor.Extract(m_case, request, 282, notes);
+
+        Assert.That(row.Values.Select(value => value.Name), Is.EqualTo(new[]
+        {
+            "wake.U@probe0(0.1 0 0)_x", "wake.U@probe0(0.1 0 0)_y", "wake.U@probe0(0.1 0 0)_z", "wake.p@probe0(0.1 0 0)"
+        }), "the probe outside the mesh is an empty cell: no value under its name");
+        Assert.That(notes, Is.EqualTo(new[]
+        {
+            "wake: probe 1 (9 9 9) of U is outside the mesh - not reported.",
+            "wake: probe 1 (9 9 9) of p is outside the mesh - not reported."
+        }));
     }
 
     [Test]
