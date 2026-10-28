@@ -104,7 +104,7 @@ public class SweepFamilyOpenFOAMTests
                 new FoamResponseSpecData
                 {
                     Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["body"],
-                    Parameters = [new FoamNamedValueData { Name = "magUInf", Value = "{{oc1}}" }]
+                    Parameters = [new FoamNamedValueData { Name = "magUInf", Value = "{{oc1}}" }, new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }]
                 }
             ]
         };
@@ -121,7 +121,7 @@ public class SweepFamilyOpenFOAMTests
         var options = Study();
         options.OpenFOAM!.Extraction = new FoamExtractionRequestData
         {
-            Responses = [new FoamResponseSpecData { Name = "torque", Kind = FoamResponseKind.Forces, Patches = ["rotor"] }]
+            Responses = [new FoamResponseSpecData { Name = "torque", Kind = FoamResponseKind.Forces, Patches = ["rotor"], Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }] }]
         };
         options.OpenFOAM.Recipe!.Steps.Insert(1, new FoamStepData { Utility = "includeFunc", Arguments = ["torque"] });
 

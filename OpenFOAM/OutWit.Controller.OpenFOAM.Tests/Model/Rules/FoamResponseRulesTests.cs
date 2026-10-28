@@ -15,7 +15,7 @@ public class FoamResponseRulesTests
         {
             Responses =
             [
-                new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["\"(motorBike|wheel).*\""] },
+                new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["\"(motorBike|wheel).*\""], Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "magUInf", Value = "20" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }] },
                 new FoamResponseSpecData { Name = "inletP", Kind = FoamResponseKind.PatchValue, Patches = ["inlet"], Fields = ["p"], Operation = "areaAverage" },
                 new FoamResponseSpecData { Name = "cellT", Kind = FoamResponseKind.VolumeValue, Fields = ["T"], Operation = "volAverage" },
                 new FoamResponseSpecData { Name = "wake", Kind = FoamResponseKind.Probe, Fields = ["U"], Parameters = [new FoamNamedValueData { Name = FoamResponseRules.PROBE_LOCATIONS, Value = "((2 0 0.5))" }] }
@@ -46,6 +46,7 @@ public class FoamResponseRulesTests
         Assert.That(findings, Is.EqualTo(new[]
         {
             "Response 'forces': Forces needs at least one patch.",
+            "Response 'forces': Forces needs CofR - OpenFOAM does not start the function object without them.",
             "Response 'patch': a patch value needs at least one field.",
             "Response 'patch': 'area Average' is not an operation (areaAverage, areaIntegrate, min, max, ...).",
             "Response 'volume': a volume value needs at least one field.",
@@ -83,11 +84,37 @@ public class FoamResponseRulesTests
     }
 
     [Test]
+    public void AForceWithoutItsReferencesIsRefusedTest()
+    {
+        // OpenFOAM stops the solve on a force function object without them
+        // (v2606: "Entry 'magUInf' not found", "Entry 'origin' not found").
+        static FoamExtractionRequestData Request(FoamResponseKind kind, params (string Name, string Value)[] parameters) => new()
+        {
+            Responses =
+            [
+                new FoamResponseSpecData
+                {
+                    Name = "load", Kind = kind, Patches = ["wall"],
+                    Parameters = parameters.Select(parameter => new FoamNamedValueData { Name = parameter.Name, Value = parameter.Value }).ToList()
+                }
+            ]
+        };
+
+        Assert.That(FoamResponseRules.Validate(Request(FoamResponseKind.Forces)),
+            Is.EqualTo(new[] { "Response 'load': Forces needs CofR - OpenFOAM does not start the function object without them." }));
+        Assert.That(FoamResponseRules.Validate(Request(FoamResponseKind.Forces, ("origin", "(0 0 0)"))), Is.Empty,
+            "the coordinate-system spelling of the centre");
+        Assert.That(FoamResponseRules.Validate(Request(FoamResponseKind.ForceCoeffs, ("CofR", "(0 0 0)"), ("magUInf", " "))),
+            Is.EqualTo(new[] { "Response 'load': ForceCoeffs needs magUInf, lRef, Aref - OpenFOAM does not start the function object without them." }),
+            "a blank value is no value");
+    }
+
+    [Test]
     public void AResponseNamedLikeAFileOfTheCasesSystemIsRefusedTest()
     {
         var request = new FoamExtractionRequestData
         {
-            Responses = [new FoamResponseSpecData { Name = "forceCoeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["wall"] }]
+            Responses = [new FoamResponseSpecData { Name = "forceCoeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["wall"], Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "magUInf", Value = "20" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }] }]
         };
 
         Assert.That(FoamResponseRules.Validate(request, ["system/controlDict", "system/forceCoeffs"]),
@@ -115,7 +142,13 @@ public class FoamResponseRulesTests
                 new FoamResponseSpecData
                 {
                     Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["body"],
-                    Parameters = [new FoamNamedValueData { Name = "magUInf", Value = value }]
+                    Parameters =
+                    [
+                        new FoamNamedValueData { Name = "magUInf", Value = value },
+                        new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" },
+                        new FoamNamedValueData { Name = "lRef", Value = "1" },
+                        new FoamNamedValueData { Name = "Aref", Value = "1" }
+                    ]
                 }
             ]
         };
@@ -152,7 +185,7 @@ public class FoamResponseRulesTests
     {
         static FoamExtractionRequestData Load(string name, string patch) => new()
         {
-            Responses = [new FoamResponseSpecData { Name = name, Kind = FoamResponseKind.Forces, Patches = [patch] }]
+            Responses = [new FoamResponseSpecData { Name = name, Kind = FoamResponseKind.Forces, Patches = [patch], Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }] }]
         };
 
         Assert.That(FoamResponseRules.Validate(Load("load.x", "wall")), Is.EqualTo(new[] { "Response name 'load.x' is not a word (letters, digits, underscore)." }),

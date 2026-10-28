@@ -17,6 +17,21 @@ public static class FoamResponseRules
     /// <summary>The parameter a probe response must carry.</summary>
     public const string PROBE_LOCATIONS = "probeLocations";
 
+    /// <summary>The centre moments are taken about: a force function object does not start without it (or <see cref="ORIGIN"/>).</summary>
+    public const string CENTRE_OF_ROTATION = "CofR";
+
+    /// <summary>The coordinate-system spelling of <see cref="CENTRE_OF_ROTATION"/>.</summary>
+    public const string ORIGIN = "origin";
+
+    /// <summary>The reference speed of force coefficients.</summary>
+    public const string REFERENCE_SPEED = "magUInf";
+
+    /// <summary>The reference length of force coefficients.</summary>
+    public const string REFERENCE_LENGTH = "lRef";
+
+    /// <summary>The reference area of force coefficients.</summary>
+    public const string REFERENCE_AREA = "Aref";
+
     private const string SYSTEM_PREFIX = "system/";
 
     /// <summary>
@@ -116,6 +131,13 @@ public static class FoamResponseRules
             case FoamResponseKind.Forces:
                 if (response.Patches.Count == 0)
                     findings.Add($"{prefix}: {response.Kind} needs at least one patch.");
+
+                // OpenFOAM stops the solve on a force function object without
+                // them ("Entry 'magUInf' not found", "Entry 'origin' not
+                // found" - measured on v2606, 2026-10-28).
+                var missing = MissingReferences(response);
+                if (missing.Count > 0)
+                    findings.Add($"{prefix}: {response.Kind} needs {string.Join(", ", missing)} - OpenFOAM does not start the function object without them.");
                 break;
 
             case FoamResponseKind.PatchValue:
@@ -150,6 +172,23 @@ public static class FoamResponseRules
                 findings.Add($"{prefix}: unknown kind {response.Kind}.");
                 break;
         }
+    }
+
+    private static List<string> MissingReferences(FoamResponseSpecData response)
+    {
+        var present = response.Parameters
+            .Where(parameter => parameter.Value.Trim().Length > 0)
+            .Select(parameter => parameter.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var missing = new List<string>();
+        if (!present.Contains(CENTRE_OF_ROTATION) && !present.Contains(ORIGIN))
+            missing.Add(CENTRE_OF_ROTATION);
+
+        if (response.Kind == FoamResponseKind.ForceCoeffs)
+            missing.AddRange(new[] { REFERENCE_SPEED, REFERENCE_LENGTH, REFERENCE_AREA }.Where(name => !present.Contains(name)));
+
+        return missing;
     }
 
     #endregion
