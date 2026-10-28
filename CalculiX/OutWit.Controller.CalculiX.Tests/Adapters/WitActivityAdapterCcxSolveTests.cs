@@ -146,6 +146,28 @@ public class WitActivityAdapterCcxSolveTests
     }
 
     [Test]
+    public async Task ASolverTheKitLacksIsRemovedBeforeTheSolveWithANoteTest()
+    {
+        // The fake solver echoes the deck it was given into the .frd: the
+        // card reached ccx without its SOLVER=PASTIX, and the variant says so.
+        var deck = m_blobService.AddText("*HEADING\nsolved\n*STEP\n*STATIC, SOLVER=PASTIX\n1., 1.\n*END STEP\n", "deck.inp");
+
+        var job = m_engine.Compile(SCRIPT);
+        var status = await m_engine.ScheduleAndWaitAsync(job, Tasks(deck));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
+        var result = (job.Variables["wave"].Value as IReadOnlyList<CcxResultData?>)?.Single();
+        Assert.That(result?.ExitCode, Is.EqualTo(0));
+        Assert.That(result?.Notes.Select(note => note.Kind), Is.EqualTo(new[] { CcxNoteKind.Warning }));
+        Assert.That(result?.Notes.Single().Text, Does.StartWith("SOLVER=PASTIX is not linked in the bundled ccx"));
+        Assert.That(result?.ResponseRow, Is.Not.Null, "deck text in the .frd reads as an empty row, not as a failure");
+
+        var solved = await File.ReadAllTextAsync(await m_blobService.GetLocalPathAsync(result!.FrdBlobId!.Value));
+        Assert.That(solved, Does.Contain("*STATIC").And.Not.Contain("SOLVER"));
+        AssertScratchGivenBack();
+    }
+
+    [Test]
     public async Task AFailedSolveGivesItsScratchBackTest()
     {
         var deck = m_blobService.AddText("*HEADING\nFAKE-FAIL\n", "deck.inp");
