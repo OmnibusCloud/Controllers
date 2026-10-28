@@ -105,6 +105,15 @@ public class FoamSupportedInputsDocumentTests
     }
 
     [Test]
+    public void TheFunctionObjectListIsTheAllowListTest()
+    {
+        // The list is the one line of the section made of code spans alone.
+        var listed = Section("### Function objects").Single(line => line.StartsWith('`') && line.EndsWith('`'));
+
+        Assert.That(CodeIn(listed), Is.EqualTo(FoamFunctionObjectRules.ALLOWED));
+    }
+
+    [Test]
     public void TheResponseKindsAreTheVocabularyTest()
     {
         Assert.That(Rows("## Responses").Select(row => CodeIn(row[0]).Single()), Is.EqualTo(Enum.GetNames<FoamResponseKind>()));

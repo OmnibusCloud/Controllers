@@ -62,9 +62,23 @@ name:
 | `libs (...)` naming a library the kit does not have | the library is not there |
 | `#include`, `#includeIfPresent`, `#includeFunc`, `#includeEtc` reaching outside the case | the run must be reproducible from the case alone |
 | a UTF-8 byte order mark at the start of a file | OpenFOAM reads it as part of the first word |
+| a function object of a type outside the list below, or one naming a path outside the case | a pool node is another person's machine; a case may carry only measurements and writers that stay inside it |
 
 Files larger than 8 MB (meshes, large fields) are not read for these
 constructs.
+
+### Function objects
+
+The `functions` dictionary of `controlDict` may carry only these types - the
+kit's own measurements, derived fields and writers, each writing under the
+case's `postProcessing/` or into a time folder. The kit also carries function
+objects that reach the node (`systemCall` runs a command, `timeActivatedFileUpdate`
+copies a file of the node into the case, `writeDictionary`, `externalCoupled`,
+`abort`); a case carrying one is refused by name and line, and every solver
+process runs with `allowSystemOperations` off, so nothing of a case's runs a
+command whatever the rules miss.
+
+`forces` `forceCoeffs` `bladeForces` `propellerInfo` `phaseForces` `fieldMinMax` `fieldStatistics` `fieldAverage` `fieldExtents` `valueAverage` `volFieldValue` `surfaceFieldValue` `multiFieldValue` `histogram` `momentum` `momentumError` `continuityError` `flux` `fluxSummary` `interfaceHeight` `regionSizeDistribution` `sizeDistribution` `probes` `patchProbes` `thermoCoupleProbes` `radiometerProbes` `sets` `surfaces` `streamLine` `wallBoundedStreamLine` `nearWallFields` `add` `subtract` `multiply` `divide` `pow` `mag` `magSqr` `components` `norm` `randomise` `grad` `div` `ddt` `ddt2` `curl` `vorticity` `enstrophy` `Lambda2` `Q` `LambVector` `flowType` `pressure` `hydrostaticPressure` `CourantNo` `surfaceCourantNumber` `MachNo` `PecletNo` `wallShearStress` `wallHeatFlux` `yPlus` `heatTransferCoeff` `turbulenceFields` `DESModelRegions` `blendingFactor` `stabilityBlendingFactor` `derivedFields` `exprField` `age` `comfort` `columnAverage` `fieldCoordinateSystemTransform` `limitFields` `zeroGradient` `reference` `resolutionIndex` `streamFunction` `surfaceInterpolate` `surfaceDistance` `writeCellCentres` `writeCellVolumes` `binField` `energySpectrum` `proudmanAcousticPower` `Curle` `XiReactionRate` `BilgerMixtureFraction` `electricPotential` `energyTransport` `scalarTransport` `AMIWeights` `processorField` `DMD` `psiReactionThermoMoleFractions` `rhoReactionThermoMoleFractions` `psiSpecieReactionRates` `rhoSpecieReactionRates` `psiReactionsSensitivityAnalysis` `rhoReactionsSensitivityAnalysis` `multiphaseInterHtcModel` `reactingEulerHtcModel` `viewFactorHeatFlux` `cloudInfo` `dataCloud` `particleDistribution` `extractEulerianParticles` `icoUncoupledKinematicCloud` `dsmcFields` `writeObjects` `readFields` `removeRegisteredObject` `ensightWrite` `ensightCloud` `vtkWrite` `vtkCloud` `areaWrite` `runTimeControl` `timeInfo` `solverInfo` `caseInfo` `foamReport` `log` `setTimeStep` `setTimeStepFaRegion` `setFlow` `syncObjects` `agglomerationInfo` `parProfiling` `cellDecomposer` `mapFields` `multiRegion` `relativeVelocity` `graphFunctionObject`
 
 ## The recipe
 

@@ -105,5 +105,24 @@ public class FoamCaseInspectorTests
         Assert.That(FoamCaseInspector.Inspect(m_case), Has.Some.StartsWith("dynamicCode/"));
     }
 
+    [Test]
+    public void AFunctionObjectThatReachesTheNodeIsRefusedBeforeAnythingRunsTest()
+    {
+        // The two the audit ran on v2606 past every rule: a command of the
+        // case's, and a file of the node copied into the case.
+        Write("system/controlDict",
+            "application icoFoam;\nfunctions\n{\n" +
+            "    marker { type systemCall; libs (utilityFunctionObjects); endCalls (\"cmd /c echo ran > marker.txt\"); }\n" +
+            "    pull { type timeActivatedFileUpdate; libs (utilityFunctionObjects); fileToUpdate \"$FOAM_CASE/constant/pulledIn\"; timeVsFile ((-1 \"C:/Windows/win.ini\")); }\n" +
+            "    forces1 { type forces; libs (forces); patches (wall); CofR (0 0 0); }\n" +
+            "}\n");
+
+        var findings = FoamCaseInspector.Inspect(m_case);
+
+        Assert.That(findings, Has.Count.EqualTo(2));
+        Assert.That(findings, Has.Some.Contains("'marker' is of type 'systemCall'"));
+        Assert.That(findings, Has.Some.Contains("'pull' is of type 'timeActivatedFileUpdate'"));
+    }
+
     #endregion
 }

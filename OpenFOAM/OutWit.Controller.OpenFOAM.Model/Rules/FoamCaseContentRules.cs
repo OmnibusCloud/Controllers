@@ -6,9 +6,10 @@ namespace OutWit.Controller.OpenFOAM.Model.Rules;
 /// The rejects that need a case's contents: run-time code (<c>codeStream</c>,
 /// <c>#codeStream</c>, <c>coded*</c> conditions and function objects,
 /// <c>#calc</c>, a <c>dynamicCode/</c> directory), libraries outside the kit,
-/// includes outside the case, a decomposed-only case, a missing application,
-/// a file that starts with a byte order mark (OpenFOAM reads it as part of
-/// the first word and fails).
+/// includes outside the case, function objects that reach the node
+/// (<see cref="FoamFunctionObjectRules"/>), a decomposed-only case, a
+/// missing application, a file that starts with a byte order mark (OpenFOAM
+/// reads it as part of the first word and fails).
 /// The kit ships no compiler, so run-time code would fail hard anyway; the
 /// reject is the honest message before that, with file and line. The node
 /// applies the rules to the materialised case before anything runs and the
@@ -203,6 +204,9 @@ public static class FoamCaseContentRules
             if (!StaysInsideTheCase(target, directive.Contains("Etc", StringComparison.Ordinal) ? string.Empty : relativePath))
                 findings.Add($"{relativePath}:{LineOf(text, match.Index)}: {match.Value.Split(' ', '\t')[0]} \"{target}\" reaches outside the case.");
         }
+
+        if (FoamFunctionObjectRules.Carries(relativePath))
+            FoamFunctionObjectRules.Inspect(text, relativePath, findings);
     }
 
     private static bool IsDecomposedOnly(IReadOnlyList<(string RelativePath, string? Text)> files)
