@@ -159,7 +159,7 @@ public class SweepFamilyOpenFOAMSetTests
         options.OpenFOAM!.Extraction!.Responses.Add(new FoamResponseSpecData
         {
             Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["lid"],
-            Parameters = [new FoamNamedValueData { Name = "magUInf", Value = "{{oc1}}" }, new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }]
+            Parameters = [new FoamNamedValueData { Name = "magUInf", Value = "{{oc1}}" }, new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "liftDir", Value = "(0 0 1)" }, new FoamNamedValueData { Name = "dragDir", Value = "(1 0 0)" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }, new FoamNamedValueData { Name = "rhoInf", Value = "1" }]
         });
 
         var findings = await Family(Case(0, "coarse")).ValidateAsync(options, m_blobs);
