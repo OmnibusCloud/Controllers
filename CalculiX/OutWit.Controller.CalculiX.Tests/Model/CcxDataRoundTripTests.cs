@@ -39,7 +39,12 @@ public class CcxDataRoundTripTests
             ResponseRow = new CcxResponseRowData
             {
                 Values = [new CcxResponseValueData { Name = "max_von_mises", Value = 318.4 }]
-            }
+            },
+            Notes =
+            [
+                new CcxNoteData { Kind = CcxNoteKind.Warning, Column = "rf_sum_x@fix", Text = "not reported" },
+                new CcxNoteData { Kind = CcxNoteKind.Info, Text = "SOLVER=PASTIX is not in the bundled ccx; solved with PARDISO" }
+            ]
         };
     }
 

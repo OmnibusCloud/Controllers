@@ -20,15 +20,18 @@ public sealed class CalculiXModelWireLayoutTests
 {
     // Field counts frozen 2026-09-24 (CalculiX.Model 2.0.0 - the sweep types
     // moved to OutWit.Controller.Sweep.Model, which freezes them itself).
+    // 2026-10-28: CcxResultData grew its Notes list (member 7) and CcxNoteData
+    // arrived with it - the Sweep.Model freeze of CcxResultData moves with it.
     // Bump a count ONLY when appending at the end of that type, and only
     // alongside a server-first rollout.
     private static readonly IReadOnlyDictionary<Type, int> EXPECTED_FIELD_COUNTS = new Dictionary<Type, int>
     {
         [typeof(CcxExtractionRequestData)] = 1,
+        [typeof(CcxNoteData)] = 3,
         [typeof(CcxProbeData)] = 3,
         [typeof(CcxResponseRowData)] = 1,
         [typeof(CcxResponseValueData)] = 2,
-        [typeof(CcxResultData)] = 7,
+        [typeof(CcxResultData)] = 8,
         [typeof(CcxTaskData)] = 6
     };
 
