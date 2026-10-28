@@ -211,6 +211,32 @@ public class FoamCaseSessionTests
     }
 
     [Test]
+    public async Task ASweptReferenceValueOfTheCasesOwnForceReachesTheReMeasuredResponseTest()
+    {
+        // The case's forceCoeffs1 sweeps its lRef; the initiator offered it as
+        // forceCoeffs1_sweep with lRef as written. Before: the node wrote the
+        // response with lRef 1 in every variant (K4).
+        var session = RequireSession();
+        var data = PitzCase("ITERATIONS=1\n");
+        data.BaseFiles.RemoveAll(file => file.RelativePath == "system/controlDict");
+        data.BaseFiles.Add(BlobFile("system/controlDict",
+            "FoamFile { object controlDict; }\napplication simpleFoam;\nendTime 5;\nfunctions\n{\n" +
+            "    forceCoeffs1 { type forceCoeffs; libs (forces); patches (wall); rho rhoInf; rhoInf 1; CofR (0 0 0); liftDir (0 0 1); dragDir (1 0 0); magUInf 20; lRef {{oc2}}; Aref 1; }\n}\n", templated: true));
+        data.Extraction!.Responses[0].Name = "forceCoeffs1_sweep";
+        data.Recipe!.Steps.Insert(2, new FoamStepData { Utility = "includeFunc", Arguments = ["forceCoeffs1_sweep"] });
+
+        var result = await session.RunAsync(Task(data));
+
+        Assert.That(result.Rejections, Is.Empty);
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.LogTail);
+        using var archive = ZipFile.OpenRead(m_blobs.GetStoredPath(result.ArtifactBlobId!.Value));
+        using var written = new StreamReader(archive.GetEntry("system/forceCoeffs1_sweep")!.Open());
+        Assert.That(await written.ReadToEndAsync(), Does.Contain("lRef            10;"), "the variant's value, not the offered one");
+        using var notes = new StreamReader(archive.GetEntry("log.responses")!.Open());
+        Assert.That(await notes.ReadToEndAsync(), Does.Contain("Response 'forceCoeffs1_sweep': lRef follows the case's forceCoeffs1 (system/controlDict:6), which the study sweeps - 10 in this variant."));
+    }
+
+    [Test]
     public async Task ACaseWithRunTimeCodeIsRefusedBeforeAnythingRunsTest()
     {
         var session = RequireSession();

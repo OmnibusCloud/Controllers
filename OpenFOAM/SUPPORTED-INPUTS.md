@@ -204,7 +204,13 @@ writing at write times only, included - is left out and named in
 probe's header line, with `_x`, `_y`, `_z` for a vector (`_xx` ... `_zz` for a
 tensor); a probe outside the mesh is an empty cell, named in `log.responses`
 with its position, never the -1e+300 OpenFOAM writes for it. In a parameter study a response parameter may carry the
-study's token (a reference speed that follows the swept speed). A parameter's
+study's token (a reference speed that follows the swept speed). A force
+response that re-measures one of the case's own force function objects -
+named as it, or as it with `_sweep` - follows the case where the study
+sweeps it: every reference value whose entry carries a token (a `$`
+reference to such an entry included) takes the variant's value before the
+node writes the response, and `log.responses` says which followed and to
+what; a value the study does not sweep stays as requested. A parameter's
 value is plain dictionary text - a word, a number, a vector, a list - or a flat
 sub-dictionary of such entries (`coordinateSystem { origin (0 0 0); e1 (1 0 0);
 e3 (0 0 1); }`, a `binData`); never braces inside braces, never code. A force
