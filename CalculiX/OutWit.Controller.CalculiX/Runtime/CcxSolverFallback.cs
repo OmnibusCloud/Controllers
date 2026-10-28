@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using OutWit.Controller.CalculiX.Model;
+using OutWit.Controller.CalculiX.Extraction;
 
 namespace OutWit.Controller.CalculiX.Runtime;
 
@@ -76,7 +76,7 @@ public static partial class CcxSolverFallback
     /// <param name="deckPath">The deck ccx will read.</param>
     /// <param name="pardisoLinked">Whether this platform's kit links PARDISO.</param>
     /// <returns>One note per parameter removed; empty when the deck was left as it was.</returns>
-    public static List<CcxNoteData> Apply(string deckPath, bool pardisoLinked)
+    public static List<CcxNote> Apply(string deckPath, bool pardisoLinked)
     {
         var lines = File.ReadAllLines(deckPath);
         var rewritten = Rewrite(lines, pardisoLinked, out var notes);
@@ -93,7 +93,7 @@ public static partial class CcxSolverFallback
     /// <param name="pardisoLinked">Whether this platform's kit links PARDISO.</param>
     /// <param name="notes">Receives one note per parameter removed.</param>
     /// <returns>The deck with the offending parameters removed; the same lines when nothing was.</returns>
-    public static List<string> Rewrite(IReadOnlyList<string> lines, bool pardisoLinked, out List<CcxNoteData> notes)
+    public static List<string> Rewrite(IReadOnlyList<string> lines, bool pardisoLinked, out List<CcxNote> notes)
     {
         notes = [];
         var linked = Linked(pardisoLinked);
@@ -130,7 +130,7 @@ public static partial class CcxSolverFallback
                     continue;
 
                 kept = Remove(kept);
-                notes.Add(new CcxNoteData
+                notes.Add(new CcxNote
                 {
                     Kind = CcxNoteKind.Warning,
                     Text = $"SOLVER={solver} is not linked in the bundled ccx of this node: the parameter was removed from *{keyword} and the solve used {Default(pardisoLinked)}"

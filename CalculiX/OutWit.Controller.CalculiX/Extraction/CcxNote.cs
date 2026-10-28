@@ -1,8 +1,7 @@
-using MemoryPack;
 using OutWit.Common.Abstract;
 using OutWit.Common.Values;
 
-namespace OutWit.Controller.CalculiX.Model;
+namespace OutWit.Controller.CalculiX.Extraction;
 
 /// <summary>
 /// How much a note changes the reading of the variant.
@@ -25,17 +24,16 @@ public enum CcxNoteKind
 /// why (a column refused, a value that was not a number), or how a value was
 /// obtained (reaction forces rotated out of a local frame). A note that
 /// concerns one response column names it; a note about the variant as a whole
-/// names none.
+/// names none. Notes travel inside <c>CcxResultData.LogTail</c> as note lines
+/// (<see cref="CcxNoteLog"/>): the shipped wire layout of the result does not change.
 /// </summary>
-[MemoryPackable]
-// Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).
-public sealed partial class CcxNoteData : ModelBase
+public sealed class CcxNote : ModelBase
 {
     #region Model Base
 
     public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
     {
-        if (modelBase is not CcxNoteData note)
+        if (modelBase is not CcxNote note)
             return false;
 
         return Kind.Is(note.Kind)
@@ -43,9 +41,9 @@ public sealed partial class CcxNoteData : ModelBase
                && Text.Is(note.Text);
     }
 
-    public override CcxNoteData Clone()
+    public override CcxNote Clone()
     {
-        return new CcxNoteData
+        return new CcxNote
         {
             Kind = Kind,
             Column = Column,
@@ -63,15 +61,12 @@ public sealed partial class CcxNoteData : ModelBase
     #region Properties
 
     /// <summary>What the note means for the reading of the variant.</summary>
-    [MemoryPackOrder(0)]
     public CcxNoteKind Kind { get; set; }
 
     /// <summary>The response column the note is about; null for a note about the variant as a whole.</summary>
-    [MemoryPackOrder(1)]
     public string? Column { get; set; }
 
     /// <summary>The note, for the person reading the results.</summary>
-    [MemoryPackOrder(2)]
     public string Text { get; set; } = string.Empty;
 
     #endregion

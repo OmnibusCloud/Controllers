@@ -1,4 +1,4 @@
-using OutWit.Controller.CalculiX.Model;
+using OutWit.Controller.CalculiX.Extraction;
 using OutWit.Controller.CalculiX.Runtime;
 
 namespace OutWit.Controller.CalculiX.Tests.Runtime;

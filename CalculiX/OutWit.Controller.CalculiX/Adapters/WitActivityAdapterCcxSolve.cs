@@ -90,9 +90,7 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
             {
                 VariantIndex = task.VariantIndex,
                 ExitCode = outcome.ExitCode,
-                SolveSeconds = outcome.ElapsedSeconds,
-                LogTail = outcome.ExitCode == 0 ? null : outcome.LogTail,
-                Notes = notes
+                SolveSeconds = outcome.ElapsedSeconds
             };
 
             if (frdPath != null)
@@ -115,18 +113,23 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
                 {
                     var extraction = CcxResponseExtractor.Extract(jobDeckPath, frdPath, datPath, task.Extraction);
                     result.ResponseRow = extraction.Row;
-                    result.Notes.AddRange(extraction.Notes);
+                    notes.AddRange(extraction.Notes);
                 }
                 catch (Exception e)
                 {
                     result.ResponseRow = null;
-                    result.Notes.Add(new CcxNoteData { Kind = CcxNoteKind.Error, Text = $"response extraction failed: {e.GetType().Name}: {e.Message}" });
+                    notes.Add(new CcxNote { Kind = CcxNoteKind.Error, Text = $"response extraction failed: {e.GetType().Name}: {e.Message}" });
                 }
 
                 if (result.ResponseRow == null)
                     Logger.LogWarning("Ccx.Solve: response extraction failed — {Reason}; the row is missing, artifacts remain.",
-                        result.Notes.LastOrDefault(note => note.Kind == CcxNoteKind.Error)?.Text);
+                        notes.LastOrDefault(note => note.Kind == CcxNoteKind.Error)?.Text);
             }
+
+            // The notes ride inside the log tail, after the solver's own tail
+            // (kept for a failed solve only): the result keeps the shipped
+            // wire layout, which every installed client reads.
+            result.LogTail = CcxNoteLog.Compose(outcome.ExitCode == 0 ? null : outcome.LogTail, notes);
 
             if (!pool.TrySetValue(activity.ReturnReference, result))
                 throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");

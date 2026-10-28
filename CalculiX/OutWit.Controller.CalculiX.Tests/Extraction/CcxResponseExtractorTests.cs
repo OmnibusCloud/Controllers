@@ -37,7 +37,7 @@ public class CcxResponseExtractorTests
         return row.Values.Select(value => value.Name);
     }
 
-    private static IEnumerable<CcxNoteData> NotesOn(CcxExtraction extraction, string column)
+    private static IEnumerable<CcxNote> NotesOn(CcxExtraction extraction, string column)
     {
         return extraction.Notes.Where(note => note.Column == column);
     }

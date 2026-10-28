@@ -40,7 +40,7 @@ public static class CcxResponseExtractor
     /// <returns>The extracted row and notes, or the failure.</returns>
     public static CcxExtraction Extract(string? deckPath, string? frdPath, string? datPath, CcxExtractionRequestData? request)
     {
-        var notes = new List<CcxNoteData>();
+        var notes = new List<CcxNote>();
         var sink = new CcxResponseSink();
         DeckFacts? facts = null;
 

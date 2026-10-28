@@ -1,4 +1,3 @@
-using OutWit.Controller.CalculiX.Model;
 
 namespace OutWit.Controller.CalculiX.Extraction;
 

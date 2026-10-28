@@ -1,6 +1,5 @@
 using MemoryPack;
 using OutWit.Common.Abstract;
-using OutWit.Common.Collections;
 using OutWit.Common.Values;
 
 namespace OutWit.Controller.CalculiX.Model;
@@ -8,10 +7,7 @@ namespace OutWit.Controller.CalculiX.Model;
 /// <summary>
 /// One variant's outcome. A nonzero solver exit is DATA here, not a task
 /// failure — a variant that failed to converge must not poison its node batch;
-/// the orchestration records it and moves on. The notes carry what the node
-/// changed before the solve, refused or could not read; a note of kind
-/// <see cref="CcxNoteKind.Error"/> means the response row is not a result,
-/// whatever the exit code says.
+/// the orchestration records it and moves on.
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order - append new members at the END only (default MemoryPack mode rejects payloads with unknown members).
@@ -30,8 +26,7 @@ public sealed partial class CcxResultData : ModelBase
                && ExitCode.Is(result.ExitCode)
                && SolveSeconds.Is(result.SolveSeconds, tolerance)
                && ResponseRow.Check(result.ResponseRow)
-               && LogTail.Is(result.LogTail)
-               && Notes.IsSequence(result.Notes, tolerance);
+               && LogTail.Is(result.LogTail);
     }
 
     public override CcxResultData Clone()
@@ -44,8 +39,7 @@ public sealed partial class CcxResultData : ModelBase
             ExitCode = ExitCode,
             SolveSeconds = SolveSeconds,
             ResponseRow = ResponseRow?.Clone(),
-            LogTail = LogTail,
-            Notes = Notes.Select(note => note.Clone()).ToList()
+            LogTail = LogTail
         };
     }
 
@@ -85,15 +79,6 @@ public sealed partial class CcxResultData : ModelBase
     /// <summary>Last lines of solver output — the error tail of a failed variant.</summary>
     [MemoryPackOrder(6)]
     public string? LogTail { get; set; }
-
-    /// <summary>
-    /// What the node changed before the solve, refused or could not read, and how a
-    /// value was obtained. Empty for a variant with nothing to say. Appended after
-    /// CalculiX.Model 2.0.0: a reader built against the 7-member layout refuses a result
-    /// that carries it (default-mode MemoryPack), so every reader ships before a node writes it.
-    /// </summary>
-    [MemoryPackOrder(7)]
-    public List<CcxNoteData> Notes { get; set; } = [];
 
     #endregion
 }

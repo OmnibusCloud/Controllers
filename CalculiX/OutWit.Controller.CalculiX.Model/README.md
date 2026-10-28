@@ -8,10 +8,6 @@ Shared data types of the CalculiX solve controller (`OutWit.Controller.CalculiX`
   measured solve time and the extracted response row.
 - `CcxExtractionRequestData`, `CcxProbeData`, `CcxResponseRowData` — the
   response set extracted on the node right after the solve.
-- `CcxNoteData` — a remark the node attaches to a variant (`CcxResultData.Notes`):
-  what it changed before the solve, what it refused or could not read and why,
-  how a value was obtained. A note of kind `Error` means the response row is not
-  a result. The controller's README lists the notes and the columns they concern.
 
 The Sweep orchestration controller carries these types inside its own
 (`OutWit.Controller.Sweep.Model`): a CalculiX study's extraction request and

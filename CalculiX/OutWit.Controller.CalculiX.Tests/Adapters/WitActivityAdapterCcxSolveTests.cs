@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using OutWit.Controller.CalculiX.Extraction;
 using OutWit.Controller.CalculiX.Model;
 using OutWit.Controller.CalculiX.Runtime;
 using OutWit.Controller.CalculiX.Tests.Mock;
@@ -158,9 +159,14 @@ public class WitActivityAdapterCcxSolveTests
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
         var result = (job.Variables["wave"].Value as IReadOnlyList<CcxResultData?>)?.Single();
         Assert.That(result?.ExitCode, Is.EqualTo(0));
-        Assert.That(result?.Notes.Select(note => note.Kind), Is.EqualTo(new[] { CcxNoteKind.Warning }));
-        Assert.That(result?.Notes.Single().Text, Does.StartWith("SOLVER=PASTIX is not linked in the bundled ccx"));
         Assert.That(result?.ResponseRow, Is.Not.Null, "deck text in the .frd reads as an empty row, not as a failure");
+
+        // The note rides in the log tail as a note line, after the separator
+        // (no solver tail on a successful solve): the shipped wire layout holds.
+        Assert.That(result?.LogTail, Does.StartWith("--- notes ---\n[note]\tWARNING\t\tSOLVER=PASTIX is not linked in the bundled ccx"));
+        var (solverTail, notes) = CcxNoteLog.Parse(result?.LogTail);
+        Assert.That(solverTail, Is.Null);
+        Assert.That(notes.Select(note => (note.Kind, note.Column)), Is.EqualTo(new[] { (CcxNoteKind.Warning, (string?)null) }));
 
         var solved = await File.ReadAllTextAsync(await m_blobService.GetLocalPathAsync(result!.FrdBlobId!.Value));
         Assert.That(solved, Does.Contain("*STATIC").And.Not.Contain("SOLVER"));

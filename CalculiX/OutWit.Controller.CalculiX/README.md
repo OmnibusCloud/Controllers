@@ -21,9 +21,10 @@ the extraction request. Results return in completion order — consumers map by
 
 The node reads the variant's `.frd` and `.dat` right after ccx exits and
 returns numbers, not files: the response row (`CcxResultData.ResponseRow`, a
-list of named values) and the notes (`CcxResultData.Notes`). A column appears
-only when the deck asked ccx for the output it is computed from; the
-controller adds no output requests to a deck.
+list of named values) and the notes, carried as note lines inside
+`CcxResultData.LogTail` (see *Notes* below). A column appears only when the
+deck asked ccx for the output it is computed from; the controller adds no
+output requests to a deck.
 
 ### Columns
 
@@ -92,7 +93,7 @@ left out, with an info note, and a set with none gets no column and a warning.
 ### Columns that are not reported
 
 A column that would carry a wrong number is left out, with a warning note on
-the column (`CcxNoteData.Column` names it) saying why:
+the column (the note line's column field names it) saying why:
 
 - `max_von_mises`, `min_von_mises` and every `von_mises` probe when the deck
   has shell or beam elements and its file cards say `OUTPUT=2D`: ccx then maps
@@ -107,21 +108,45 @@ the column (`CcxNoteData.Column` names it) saying why:
 
 ### Notes
 
-`CcxResultData.Notes` is a list of `CcxNoteData { Kind, Column, Text }`:
+The notes travel inside `CcxResultData.LogTail`, whose wire layout is the
+shipped one (every installed client reads the Sweep manifest in default-mode
+MemoryPack, which checks the member count both ways, so no member is added).
+`LogTail` is therefore now populated on **successful** variants too, whenever
+the node has something to say; it stays `null` for a successful variant
+without notes. The grammar (`CcxNoteLog` composes and parses it):
+
+```
+<solver tail, as before: the last lines of ccx output, failed solves only>
+--- notes ---
+[note]<TAB><KIND><TAB><column or empty><TAB><text>
+[note]<TAB><KIND><TAB><column or empty><TAB><text>
+```
+
+- Lines are separated by `\n`. The solver tail comes first and is absent on a
+  successful solve, so such a tail starts with the separator line
+  `--- notes ---`. A tail without the separator carries no notes (a failed
+  solve with nothing to remark on).
+- Every line after the separator that starts with `[note]` is one note:
+  `Split('\t', 4)` gives `[note]`, the kind, the column and the text. The
+  column and the text never contain a tab or a line break (replaced by
+  spaces); the column is empty for a note about the variant as a whole.
+- `KIND` is `INFO`, `WARNING` or `ERROR`:
 
 | Kind | Meaning |
 |---|---|
-| `Info` | The value stands; the note says how it was obtained (reaction forces rotated from a local frame, probe nodes taken by nearest position, a mode-shape column of an eigenvalue step: `max_disp_*` and `*_von_mises` of a `*FREQUENCY` or `*BUCKLE` step describe the last mode shape, normalised). |
-| `Warning` | A column is not reported (`Column` names it; `Text` says why), or the deck was changed before the solve: a step card naming a solver the bundled ccx does not link (`SOLVER=PASTIX` anywhere, `SOLVER=PARDISO` on a macOS node, `TAUCS`, `SGI`) has the parameter removed and ccx takes its default - PARDISO on Windows and Linux, SPOOLES on macOS; such a card ended the solve with exit 201 before. |
-| `Error` | The extraction failed as a whole (a reader threw: a file that could not be read, memory that ran out). `ResponseRow` is then **null** and the variant is not a result, whatever the exit code; before, an empty row passed for a solve with nothing to report. |
+| `INFO` | The value stands; the note says how it was obtained (reaction forces rotated from a local frame, probe nodes taken by nearest position, a mode-shape column of an eigenvalue step: `max_disp_*` and `*_von_mises` of a `*FREQUENCY` or `*BUCKLE` step describe the last mode shape, normalised). |
+| `WARNING` | A column is not reported (the column field names it; the text says why), or the deck was changed before the solve: a step card naming a solver the bundled ccx does not link (`SOLVER=PASTIX` anywhere, `SOLVER=PARDISO` on a macOS node, `TAUCS`, `SGI`) has the parameter removed and ccx takes its default - PARDISO on Windows and Linux, SPOOLES on macOS; such a card ended the solve with exit 201 before. |
+| `ERROR` | The extraction failed as a whole (a reader threw: a file that could not be read, memory that ran out). `ResponseRow` is then **null** with `ExitCode` 0 - that pair is the "extraction failed" signal - and the variant is not a result; before, an empty row passed for a solve with nothing to report. |
 
-A note about the variant as a whole has `Column` null; in a multi-step deck a
-step-scoped note without a column starts with `step N:`.
+The column field carries the final column name (with the `[step N]` suffix in
+a multi-step deck); in a multi-step deck a step-scoped note without a column
+starts its text with `step N:`. Example of a successful variant's tail:
 
-`Notes` is member 7 of `CcxResultData`, appended after CalculiX.Model 2.0.0;
-the Sweep manifest rows carry the result verbatim in default-mode MemoryPack,
-so every manifest reader (the Sweep controller, the client applications) must
-be built against the new layout before a node writes it.
+```
+--- notes ---
+[note]	WARNING		SOLVER=PASTIX is not linked in the bundled ccx of this node: the parameter was removed from *STATIC and the solve used PARDISO
+[note]	INFO	rf_sum_z@fix	9 of 9 rows were printed in the local frame of *TRANSFORM, NSET=FIX and rotated to the global frame
+```
 
 ### Memory
 

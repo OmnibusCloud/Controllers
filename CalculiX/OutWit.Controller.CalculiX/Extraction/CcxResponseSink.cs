@@ -77,7 +77,7 @@ internal sealed class CcxResponseSink
     /// </summary>
     /// <param name="row">Receives the responses, in extraction order.</param>
     /// <param name="notes">Receives the notes, in extraction order.</param>
-    public void Emit(CcxResponseRowData row, List<CcxNoteData> notes)
+    public void Emit(CcxResponseRowData row, List<CcxNote> notes)
     {
         var multiStep = MaxStep > 1;
 
@@ -86,7 +86,7 @@ internal sealed class CcxResponseSink
 
         foreach (var (step, kind, column, text) in m_notes)
         {
-            notes.Add(new CcxNoteData
+            notes.Add(new CcxNote
             {
                 Kind = kind,
                 Column = column == null ? null : ColumnName(column, step, multiStep),
