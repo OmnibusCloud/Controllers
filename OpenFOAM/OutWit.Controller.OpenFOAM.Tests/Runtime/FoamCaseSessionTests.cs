@@ -109,7 +109,7 @@ public class FoamCaseSessionTests
                 ]
             },
             Threads = 2,
-            Extraction = new FoamExtractionRequestData { Responses = [new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["wall"], Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "magUInf", Value = "20" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }] }] },
+            Extraction = new FoamExtractionRequestData { Responses = [new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["wall"], Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "liftDir", Value = "(0 0 1)" }, new FoamNamedValueData { Name = "dragDir", Value = "(1 0 0)" }, new FoamNamedValueData { Name = "magUInf", Value = "20" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }, new FoamNamedValueData { Name = "rhoInf", Value = "1" }] }] },
             ArtifactPolicy = new FoamArtifactPolicyData { Times = FoamArtifactTimes.Latest, Logs = true, PostProcessing = true },
             CellCount = 12225,
             SolverClass = "incompressible-steady"

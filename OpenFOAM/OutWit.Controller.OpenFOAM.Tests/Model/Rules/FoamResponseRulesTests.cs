@@ -15,7 +15,7 @@ public class FoamResponseRulesTests
         {
             Responses =
             [
-                new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["\"(motorBike|wheel).*\""], Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "magUInf", Value = "20" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }] },
+                new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["\"(motorBike|wheel).*\""], Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "liftDir", Value = "(0 0 1)" }, new FoamNamedValueData { Name = "dragDir", Value = "(1 0 0)" }, new FoamNamedValueData { Name = "magUInf", Value = "20" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }, new FoamNamedValueData { Name = "rhoInf", Value = "1" }] },
                 new FoamResponseSpecData { Name = "inletP", Kind = FoamResponseKind.PatchValue, Patches = ["inlet"], Fields = ["p"], Operation = "areaAverage" },
                 new FoamResponseSpecData { Name = "cellT", Kind = FoamResponseKind.VolumeValue, Fields = ["T"], Operation = "volAverage" },
                 new FoamResponseSpecData { Name = "wake", Kind = FoamResponseKind.Probe, Fields = ["U"], Parameters = [new FoamNamedValueData { Name = FoamResponseRules.PROBE_LOCATIONS, Value = "((2 0 0.5))" }] }
@@ -105,8 +105,47 @@ public class FoamResponseRulesTests
         Assert.That(FoamResponseRules.Validate(Request(FoamResponseKind.Forces, ("origin", "(0 0 0)"))), Is.Empty,
             "the coordinate-system spelling of the centre");
         Assert.That(FoamResponseRules.Validate(Request(FoamResponseKind.ForceCoeffs, ("CofR", "(0 0 0)"), ("magUInf", " "))),
-            Is.EqualTo(new[] { "Response 'load': ForceCoeffs needs magUInf, lRef, Aref - OpenFOAM does not start the function object without them." }),
-            "a blank value is no value");
+            Is.EqualTo(new[] { "Response 'load': ForceCoeffs needs magUInf, lRef, Aref, rhoInf, liftDir, dragDir - OpenFOAM does not start the function object without them." }),
+            "a blank value is no value; coefficients read rhoInf whatever rho says, and the directions go with CofR");
+    }
+
+    [Test]
+    public void TheDensityAndTheDirectionsAForceReadsAreRequiredTest()
+    {
+        // v2606: forceCoeffs::read reads rhoInf with readEntry when rho names
+        // a field, forces::read when rho is rhoInf - so coefficients need it
+        // always, a force only under rho rhoInf; and with CofR, liftDir and
+        // dragDir are read with get, no default. A coordinateSystem carries the
+        // centre and the directions itself.
+        static FoamResponseSpecData Spec(FoamResponseKind kind, params (string Name, string Value)[] parameters) => new()
+        {
+            Name = "load", Kind = kind, Patches = ["wall"],
+            Parameters = parameters.Select(parameter => new FoamNamedValueData { Name = parameter.Name, Value = parameter.Value }).ToList()
+        };
+
+        Assert.That(FoamResponseRules.MissingReferences(Spec(FoamResponseKind.Forces, ("CofR", "(0 0 0)"), ("rho", "rhoInf"))),
+            Is.EqualTo(new[] { "rhoInf" }), "a kinematic force needs the freestream density");
+        Assert.That(FoamResponseRules.MissingReferences(Spec(FoamResponseKind.Forces, ("CofR", "(0 0 0)"), ("rho", "rhoInf"), ("rhoInf", "1.2"))), Is.Empty);
+        Assert.That(FoamResponseRules.MissingReferences(Spec(FoamResponseKind.Forces, ("CofR", "(0 0 0)"), ("rho", "rho"))), Is.Empty, "a density field needs no rhoInf");
+
+        Assert.That(FoamResponseRules.MissingReferences(Spec(FoamResponseKind.ForceCoeffs,
+                ("CofR", "(0 0 0)"), ("rho", "rho"), ("magUInf", "20"), ("lRef", "1"), ("Aref", "1"))),
+            Is.EqualTo(new[] { "rhoInf", "liftDir", "dragDir" }), "coefficients over a density field still read rhoInf; CofR brings the directions");
+        Assert.That(FoamResponseRules.MissingReferences(Spec(FoamResponseKind.ForceCoeffs,
+                ("CofR", "(0 0 0)"), ("liftDir", "(0 0 1)"), ("dragDir", "(1 0 0)"), ("rho", "rhoInf"), ("rhoInf", "1"), ("magUInf", "20"), ("lRef", "1"), ("Aref", "1"))),
+            Is.Empty);
+        Assert.That(FoamResponseRules.MissingReferences(Spec(FoamResponseKind.ForceCoeffs,
+                ("coordinateSystem", "{ origin (0 0 0); e1 (1 0 0); e3 (0 0 1); }"), ("rhoInf", "1"), ("magUInf", "20"), ("lRef", "1"), ("Aref", "1"))),
+            Is.Empty, "a coordinate system of the function object's own carries the centre and the directions");
+
+        var findings = FoamResponseRules.Validate(new FoamExtractionRequestData
+        {
+            Responses = [Spec(FoamResponseKind.ForceCoeffs, ("coordinateSystem", "{ origin (0 0 0); e1 (1 0 0); e3 (0 0 1); }"), ("rhoInf", "1"), ("magUInf", "20"), ("lRef", "1"), ("Aref", "1"))]
+        });
+        Assert.That(findings, Is.Empty, "a flat sub-dictionary is a plain value");
+        Assert.That(FoamResponseRules.IsPlainValue("{ nBin 20; direction (1 0 0); cumulative yes; }"), Is.True);
+        Assert.That(FoamResponseRules.IsPlainValue("{ inner { x 1; } }"), Is.False, "no nesting");
+        Assert.That(FoamResponseRules.IsPlainValue("{ x #calc \"1\"; }"), Is.False, "no code");
     }
 
     [Test]
@@ -114,7 +153,7 @@ public class FoamResponseRulesTests
     {
         var request = new FoamExtractionRequestData
         {
-            Responses = [new FoamResponseSpecData { Name = "forceCoeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["wall"], Parameters = [new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "magUInf", Value = "20" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }] }]
+            Responses = [new FoamResponseSpecData { Name = "forceCoeffs", Kind = FoamResponseKind.ForceCoeffs, Patches = ["wall"], Parameters = [new FoamNamedValueData { Name = "origin", Value = "(0 0 0)" }, new FoamNamedValueData { Name = "magUInf", Value = "20" }, new FoamNamedValueData { Name = "lRef", Value = "1" }, new FoamNamedValueData { Name = "Aref", Value = "1" }, new FoamNamedValueData { Name = "rhoInf", Value = "1" }] }]
         };
 
         Assert.That(FoamResponseRules.Validate(request, ["system/controlDict", "system/forceCoeffs"]),
@@ -146,8 +185,11 @@ public class FoamResponseRulesTests
                     [
                         new FoamNamedValueData { Name = "magUInf", Value = value },
                         new FoamNamedValueData { Name = "CofR", Value = "(0 0 0)" },
+                        new FoamNamedValueData { Name = "liftDir", Value = "(0 0 1)" },
+                        new FoamNamedValueData { Name = "dragDir", Value = "(1 0 0)" },
                         new FoamNamedValueData { Name = "lRef", Value = "1" },
-                        new FoamNamedValueData { Name = "Aref", Value = "1" }
+                        new FoamNamedValueData { Name = "Aref", Value = "1" },
+                        new FoamNamedValueData { Name = "rhoInf", Value = "1" }
                     ]
                 }
             ]

@@ -162,8 +162,8 @@ object the case already runs or one the controller adds for the run:
 
 | Kind | Function object | Needs |
 |---|---|---|
-| `ForceCoeffs` | `forceCoeffs` | at least one patch; the reference values (`magUInf`, `lRef`, `Aref`, ...) as parameters |
-| `Forces` | `forces` | at least one patch |
+| `ForceCoeffs` | `forceCoeffs` | at least one patch; the centre (`CofR`, `origin` or a `coordinateSystem`); `magUInf`, `lRef`, `Aref` and `rhoInf` whatever `rho` says; with `CofR`, `liftDir` and `dragDir` too |
+| `Forces` | `forces` | at least one patch; the centre (`CofR`, `origin` or a `coordinateSystem`); `rhoInf` when `rho rhoInf` |
 | `PatchValue` | `surfaceFieldValue` | exactly one patch, at least one field, an operation (`areaAverage`, `areaIntegrate`, `min`, `max`, ...) |
 | `VolumeValue` | `volFieldValue` | at least one field, an operation (`volAverage`, `volIntegrate`, `min`, `max`, ...) |
 | `FieldMinMax` | `fieldMinMax` | at least one field |
@@ -177,7 +177,13 @@ response the case does not write itself is measured either during the solve
 (`includeFunc`, which a force on a turning wall needs) or after it by a post
 step. A value is reported only from the run's final time: a function object
 that stopped writing earlier is left out and named in `log.responses`. In a parameter study a response parameter may carry the
-study's token (a reference speed that follows the swept speed).
+study's token (a reference speed that follows the swept speed). A parameter's
+value is plain dictionary text - a word, a number, a vector, a list - or a flat
+sub-dictionary of such entries (`coordinateSystem { origin (0 0 0); e1 (1 0 0);
+e3 (0 0 1); }`, a `binData`); never braces inside braces, never code. A force
+function object without the entries it reads stops the solve ("Entry 'rhoInf'
+not found" - measured on v2606, 2026-10-28), so a request missing one is
+refused by name before it runs.
 
 ## Solver classes
 
