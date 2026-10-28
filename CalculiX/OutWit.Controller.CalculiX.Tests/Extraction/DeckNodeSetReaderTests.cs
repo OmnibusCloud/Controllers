@@ -150,5 +150,26 @@ public class DeckNodeSetReaderTests
         Assert.That(sets.ContainsKey("LOOPB"), Is.False);
     }
 
+    [Test]
+    public void BlanksAroundTheEqualsSignAndInsideTheKeywordAreIgnoredTest()
+    {
+        // ccx strips every blank from a keyword line before it reads it:
+        // "*NSET, NSET = TIP" is the set TIP. The audit found the probe over
+        // such a set blank - the reader looked for "NSET=" and found "NSET ".
+        var path = WriteDeck(
+            "*NSET, NSET = TIP\n" +
+            "11, 22\n" +
+            "* NSET , nset= Base , generate\n" +
+            "1, 3\n" +
+            "*Node Print, NSET = FIX\n" +
+            "RF\n");
+
+        var sets = DeckNodeSetReader.Read(path);
+
+        Assert.That(sets["TIP"], Is.EquivalentTo(new[] { 11, 22 }));
+        Assert.That(sets["BASE"], Is.EquivalentTo(new[] { 1, 2, 3 }), "the blanks inside the keyword and the GENERATE flag go too");
+        Assert.That(sets.ContainsKey("FIX"), Is.False, "a *NODE PRINT names a set, it does not define one");
+    }
+
     #endregion
 }
