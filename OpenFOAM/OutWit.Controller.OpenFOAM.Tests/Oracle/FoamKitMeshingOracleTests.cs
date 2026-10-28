@@ -82,9 +82,9 @@ public class FoamKitMeshingOracleTests
         Assert.That(result.ExitCode, Is.EqualTo(0), result.LogTail);
         Assert.That(result.Steps.Select(step => (step.Utility, step.Ranks)), Is.EqualTo(new[]
         {
-            ("blockMesh", 1), ("decomposePar", 1), ("snappyHexMesh", 2), ("restore0Dir", 0), ("simpleFoam", 2),
-            ("reconstructParMesh", 1), ("reconstructPar", 1), ("postProcess", 1)
-        }));
+            ("blockMesh", 1), ("decomposePar", 1), ("snappyHexMesh", 2), ("restore0Dir", 0), ("includeFunc", 0), ("simpleFoam", 2),
+            ("reconstructParMesh", 1), ("reconstructPar", 1), ("postProcess", 0)
+        }), "the controller measures the patch value in the solve; the post step for it is recorded, not run");
         Assert.That(result.ResponseRow?.Values.Select(value => value.Name), Has.Some.StartsWith("sphereP."), "the solver ran with a boundary condition on the snapped sphere");
         Assert.That(ArtifactText(result, "constant/polyMesh/boundary"), Does.Contain("sphere"), "the reconstructed mesh carries the patch snappyHexMesh cut");
         Assert.That(ArtifactText(result, "20/U"), Does.Contain($"uniform ({VARIANT_INLET} 0 0)"), "the variant's inlet value reached the processors through the restore");
@@ -114,8 +114,8 @@ public class FoamKitMeshingOracleTests
 
         Assert.That(result.Rejections, Is.Empty);
         Assert.That(result.ExitCode, Is.EqualTo(0), result.LogTail);
-        Assert.That(result.Steps.Where(step => step.Ranks > 0).Select(step => step.Utility), Is.EqualTo(new[] { "blockMesh", "snappyHexMesh", "simpleFoam", "postProcess" }),
-            "serially, the decomposition steps are skipped and the restore has nothing to do");
+        Assert.That(result.Steps.Where(step => step.Ranks > 0).Select(step => step.Utility), Is.EqualTo(new[] { "blockMesh", "snappyHexMesh", "simpleFoam" }),
+            "serially, the decomposition steps are skipped, the restore has nothing to do, and the post step for what the solver measured is not run");
         Assert.That(result.Steps.Single(step => step.Utility == "restore0Dir").ExitCode, Is.EqualTo(0));
         Assert.That(ArtifactText(result, "constant/polyMesh/boundary"), Does.Contain("sphere"));
         Assert.That(ArtifactText(result, "20/U"), Does.Contain($"uniform ({VARIANT_INLET} 0 0)"));

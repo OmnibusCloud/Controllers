@@ -153,7 +153,11 @@ A parallel step naming a utility not marked here is refused.
   response of the task, it needs a step after it that runs the application to
   solve, and it never runs under MPI. When the `functions` entry is not a block
   (`functions #includeEtc "..."`), the step fails with that line and leaves the
-  copy as it was, rather than rewrite it.
+  copy as it was, rather than rewrite it. The controller adds steps of this
+  kind on its own, right before the first solve, for every patch value, volume
+  value, min/max and probe of the task that neither the recipe includes nor
+  the case runs itself (see Responses); they appear in the result's steps
+  like any other.
 
 ### Arguments
 
@@ -182,10 +186,24 @@ A response's name is a word, unique in the request, and not the name of a file
 the case carries in `system/`. A patch is a word or a quoted regular
 expression; a field is a word that may carry dots, as phases are named
 (`alpha.water`) - never a colon, since a probe writes one file per field. A
-response the case does not write itself is measured either during the solve
-(`includeFunc`, which a force on a turning wall needs) or after it by a post
-step. A value is reported only from the run's final time: a function object
-that stopped writing earlier is left out and named in `log.responses`. In a parameter study a response parameter may carry the
+force the case does not write itself is measured as the recipe says: during
+the solve (`includeFunc`, which a force on a turning wall needs) or after it
+by a post step. A patch value, a volume value, a min/max and a probe are
+measured by the solver at every step whatever step the recipe names for them
+- the controller adds them to the solve itself, right before it, with a
+`log.includeFunc` of its own - and a post step the recipe names for one of
+them is recorded but not run. Why: a post step (`postProcess -func`,
+`-latestTime`) reads the latest written time, which is not the final time
+when `endTime` is not a multiple of `writeInterval` (sweeping either does
+that), so the response came back blank; and for a probe the post step
+overwrites the solve's rows with that one time (both measured on v2606,
+2026-10-28). A value is reported from the run's final time, whichever step
+wrote it: a function object that stopped writing earlier - the case's own,
+writing at write times only, included - is left out and named in
+`log.responses`. A probe column is named `<field>@probe<N>(x y z)` from the
+probe's header line, with `_x`, `_y`, `_z` for a vector (`_xx` ... `_zz` for a
+tensor); a probe outside the mesh is an empty cell, named in `log.responses`
+with its position, never the -1e+300 OpenFOAM writes for it. In a parameter study a response parameter may carry the
 study's token (a reference speed that follows the swept speed). A parameter's
 value is plain dictionary text - a word, a number, a vector, a list - or a flat
 sub-dictionary of such entries (`coordinateSystem { origin (0 0 0); e1 (1 0 0);

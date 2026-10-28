@@ -95,7 +95,11 @@ public sealed class FoamCaseSession
             var environment = Kit.EnvironmentFor(scratch.UsablePath);
             var runner = new FoamCaseRunner(Kit, caseDirectory, environment, ranks, Logger);
 
-            var report = await runner.RunAsync(recipe, cancellationToken);
+            // The statistics, min/max and probes the recipe measures after
+            // the solve are measured during it as well: a post step reads
+            // the latest written time, not the final one.
+            var measuredInSolve = FoamSolveResponses.MeasuredInSolve(caseDirectory, recipe, data.Extraction);
+            var report = await runner.RunAsync(recipe, measuredInSolve, cancellationToken);
 
             // A killed run is the user's verdict, not the case's - it must
             // surface as cancellation, never be harvested as a red variant.

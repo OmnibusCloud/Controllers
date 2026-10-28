@@ -182,6 +182,63 @@ public class FoamResponseExtractorTests
     #region Time Directory Tests
 
     [Test]
+    public void TheLatestRowOfAFileWinsOverTheLatestDirectoryTest()
+    {
+        // A response measured during the solve writes under the start time,
+        // the recipe's post step under the latest written time (0.04 when
+        // the run ended at 0.045): the row at the final time is the solve's,
+        // in the earlier directory. On a tie the solve's row wins too.
+        Write("postProcessing/inletP/0/surfaceFieldValue.dat", "# Time areaAverage(p)\n0.04 -5.4\n0.045 -5.5\n");
+        Write("postProcessing/inletP/0.04/surfaceFieldValue.dat", "# Time areaAverage(p)\n0.04 -5.4\n");
+        Write("postProcessing/tie/0/volFieldValue.dat", "# Time volAverage(k)\n0.04 1\n");
+        Write("postProcessing/tie/0.04/volFieldValue.dat", "# Time volAverage(k)\n0.04 2\n");
+        var request = new FoamExtractionRequestData
+        {
+            Responses =
+            [
+                new FoamResponseSpecData { Name = "inletP", Kind = FoamResponseKind.PatchValue },
+                new FoamResponseSpecData { Name = "tie", Kind = FoamResponseKind.VolumeValue }
+            ]
+        };
+        var notes = new List<string>();
+
+        var row = FoamResponseExtractor.Extract(m_case, request, 0.045, notes);
+
+        Assert.That(row.Values.First(value => value.Name == "inletP.areaAverage(p)").Value, Is.EqualTo(-5.5), "the solve's row at the final time, not the post step's stale one");
+        Assert.That(notes, Is.EqualTo(new[] { "tie: the last row of volFieldValue.dat is at time 0.04, the run ended at 0.045 - not reported." }), "inletP is not stale; tie is, whichever row wins");
+        Assert.That(FoamResponseExtractor.Extract(m_case, request).Values.First(value => value.Name == "tie.volAverage(k)").Value, Is.EqualTo(1), "on a tie, the earlier directory");
+        Assert.That(FoamResponseExtractor.LatestRows(Path.Combine(m_case, "postProcessing", "inletP")).Keys, Is.EqualTo(new[] { "surfaceFieldValue.dat" }));
+        Assert.That(FoamResponseExtractor.LatestRows(Path.Combine(m_case, "postProcessing", "none")), Is.Empty);
+    }
+
+    [Test]
+    public void AWritersRestartSiblingIsTheSameMeasurementTest()
+    {
+        // v2606 writes surfaceFieldValue_0.dat beside surfaceFieldValue.dat
+        // when a post step runs after the solve in the same start-time
+        // directory: one measurement, one column name, the later row.
+        Write("postProcessing/inletP/0/surfaceFieldValue.dat", "# Time areaAverage(p)\n0.045 -5.5\n");
+        Write("postProcessing/inletP/0/surfaceFieldValue_0.dat", "# Time areaAverage(p)\n0.04 -5.4\n");
+        Write("postProcessing/wake/0/T", "# Probe 0 (1 1 1)\n# Time 0\n0.045 300\n");
+        Write("postProcessing/wake/0/T_1", "# Probe 0 (1 1 1)\n# Time 0\n0.045 301\n");
+        var request = new FoamExtractionRequestData
+        {
+            Responses =
+            [
+                new FoamResponseSpecData { Name = "inletP", Kind = FoamResponseKind.PatchValue },
+                new FoamResponseSpecData { Name = "wake", Kind = FoamResponseKind.Probe, Fields = ["T", "T_1"] }
+            ]
+        };
+
+        var row = FoamResponseExtractor.Extract(m_case, request);
+
+        Assert.That(row.Values.Select(value => (value.Name, value.Value)), Is.EqualTo(new[]
+        {
+            ("inletP.areaAverage(p)", -5.5), ("wake.T@probe0(1 1 1)", 300.0), ("wake.T_1@probe0(1 1 1)", 301.0)
+        }), "the .dat sibling folds into its stem; probe files, which are fields, never do");
+    }
+
+    [Test]
     public void TheLatestTimeDirectoryIsChosenNumericallyTest()
     {
         foreach (var time in new[] { "0", "100", "1e-05", "250.5", "notATime" })

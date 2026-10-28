@@ -5,8 +5,10 @@ namespace OutWit.Controller.OpenFOAM.Extraction;
 
 /// <summary>
 /// Turns a finished case's <c>postProcessing/</c> tree into the response
-/// row: for every requested response, the last row of every data file in
-/// its latest time directory, each column a value named
+/// row: for every requested response, the latest last row of every data
+/// file over all its time directories (a response measured during the solve
+/// writes under the start time, a post step under the latest written time;
+/// the later row counts, and on a tie the solve's), each column a value named
 /// <c>&lt;response&gt;.&lt;column&gt;</c> (with the file's name in between when
 /// a function object writes more than one file; a probe column is named
 /// <c>&lt;field&gt;@probe&lt;N&gt;(x y z)</c> with its component suffix by
@@ -26,6 +28,8 @@ public static class FoamResponseExtractor
     private const string TIME_COLUMN = "Time";
 
     private const string NOTES_FILE = "log.responses";
+
+    private const string DATA_EXTENSION = ".dat";
 
     /// <summary>Relative tolerance of "the same time": a transient time loop carries its last digit's noise.</summary>
     private const double TIME_TOLERANCE = 1e-9;
@@ -61,19 +65,17 @@ public static class FoamResponseExtractor
 
         foreach (var response in request.Responses)
         {
-            var directory = LatestTimeDirectory(Path.Combine(caseDirectory, POST_PROCESSING, response.Name));
-            if (directory == null)
-                continue;
-
-            var files = Directory.EnumerateFiles(directory)
-                .OrderBy(file => file, StringComparer.Ordinal)
-                .ToList();
+            // Every time directory is read: a response measured during the
+            // solve writes under the start time, a post step under the
+            // latest written time, and the row that counts is the latest
+            // row of each file name wherever it lies - on a tie, the solve's
+            // own (the earlier directory).
+            var latest = LatestRows(Path.Combine(caseDirectory, POST_PROCESSING, response.Name));
+            var files = latest.Keys.OrderBy(file => file, StringComparer.Ordinal).ToList();
 
             foreach (var file in files)
             {
-                var table = FoamPostProcessingReader.ReadLastRow(file);
-                if (table == null)
-                    continue;
+                var table = latest[file];
 
                 if (finalTime is { } final && IsStale(table.Columns, table.Values, final, out var time))
                 {
@@ -151,9 +153,71 @@ public static class FoamResponseExtractor
         return latest;
     }
 
+    /// <summary>
+    /// The latest last row of every file name under a function object's
+    /// output directory, over all its time directories: the row with the
+    /// greatest time, and on a tie the one from the earliest directory (the
+    /// solve's own measurement rather than a post step's).
+    /// </summary>
+    /// <param name="functionDirectory">The <c>postProcessing/&lt;name&gt;</c> directory.</param>
+    /// <returns>By file name (<c>surfaceFieldValue.dat</c>, <c>p</c>), the table to report; empty when there is none.</returns>
+    public static IReadOnlyDictionary<string, FoamPostProcessingTable> LatestRows(string functionDirectory)
+    {
+        var latest = new Dictionary<string, (double Time, FoamPostProcessingTable Table)>(StringComparer.Ordinal);
+        if (!Directory.Exists(functionDirectory))
+            return latest.ToDictionary(entry => entry.Key, entry => entry.Value.Table, StringComparer.Ordinal);
+
+        var directories = Directory.EnumerateDirectories(functionDirectory)
+            .Select(directory => (Directory: directory, Time: double.TryParse(Path.GetFileName(directory), NumberStyles.Float, CultureInfo.InvariantCulture, out var time) ? time : double.NaN))
+            .Where(entry => !double.IsNaN(entry.Time))
+            .OrderBy(entry => entry.Time);
+
+        foreach (var (directory, _) in directories)
+        {
+            foreach (var file in Directory.EnumerateFiles(directory))
+            {
+                var table = FoamPostProcessingReader.ReadLastRow(file);
+                if (table == null)
+                    continue;
+
+                var time = TimeOf(table);
+                var name = MeasurementName(file);
+                if (!latest.TryGetValue(name, out var known) || time > known.Time)
+                    latest[name] = (time, table);
+            }
+        }
+
+        return latest.ToDictionary(entry => entry.Key, entry => entry.Value.Table, StringComparer.Ordinal);
+    }
+
     #endregion
 
     #region Tools
+
+    // The measurement a file belongs to: its name, with the "_<n>" a
+    // writer appends when its file already exists in the start-time
+    // directory folded away (measured on v2606, 2026-10-28: a post step after
+    // the solve wrote surfaceFieldValue_0.dat beside surfaceFieldValue.dat).
+    // A probe file (no extension) is never folded: a field may carry such a
+    // name of its own.
+    private static string MeasurementName(string file)
+    {
+        var name = Path.GetFileName(file);
+        if (!name.EndsWith(DATA_EXTENSION, StringComparison.Ordinal))
+            return name;
+
+        var stem = name[..^DATA_EXTENSION.Length];
+        var underscore = stem.LastIndexOf('_');
+        return underscore > 0 && stem[(underscore + 1)..].All(char.IsAsciiDigit) ? stem[..underscore] + DATA_EXTENSION : name;
+    }
+
+    // The time of a table's row: its time column, or negative infinity when it has none.
+    private static double TimeOf(FoamPostProcessingTable table)
+    {
+        return table.Columns.Count > 0 && table.Values.Count > 0 && string.Equals(table.Columns[0], TIME_COLUMN, StringComparison.OrdinalIgnoreCase)
+            ? table.Values[0]
+            : double.NegativeInfinity;
+    }
 
     // A last row whose time column is not the final time.
     private static bool IsStale(IReadOnlyList<string> columns, IReadOnlyList<double> values, double finalTime, out double time)
