@@ -101,7 +101,8 @@ public class FoamResponseExtractorTests
         // A case's own fieldMinMax writes the field's name in a column of
         // its own (v2606, location on): a word, never a value. A probe
         // outside the mesh in a stale file is a value column like any.
-        Write("postProcessing/ownMinMax/0/fieldMinMax.dat", "# Time field min max\n0.04 p -2.0 2.3\n");
+        Write("postProcessing/ownMinMax/0/fieldMinMax.dat",
+            "# Time field min location(min) max location(max)\n0.04 p -2.0 (0.005 0.095 0.005) 2.3 (0.095 0.095 0.005)\n");
         Write("postProcessing/wake/0/p", "# Probe 0 (0.1 0 0)\n# Probe 1 (9 9 9)  # Not Found\n# Time 0 1\n0.04 -3.68615 -1e+300\n");
         var request = new FoamExtractionRequestData
         {
@@ -116,7 +117,12 @@ public class FoamResponseExtractorTests
         var row = FoamResponseExtractor.Extract(m_case, request, 0.045, notes);
 
         Assert.That(row.Values, Is.Empty);
-        Assert.That(notes.Select(note => note.Column), Is.EqualTo(new[] { "ownMinMax.min", "ownMinMax.max", "wake.p@probe0(0.1 0 0)", "wake.p@probe1(9 9 9)" }));
+        Assert.That(notes.Select(note => note.Column), Is.EqualTo(new[]
+        {
+            "ownMinMax.min", "ownMinMax.location(min)_x", "ownMinMax.location(min)_y", "ownMinMax.location(min)_z",
+            "ownMinMax.max", "ownMinMax.location(max)_x", "ownMinMax.location(max)_y", "ownMinMax.location(max)_z",
+            "wake.p@probe0(0.1 0 0)", "wake.p@probe1(9 9 9)"
+        }));
         Assert.That(FoamResponseExtractor.Sentences(notes), Is.EqualTo(new[]
         {
             "ownMinMax: the last row of fieldMinMax.dat is at time 0.04, the run ended at 0.045 - not reported.",
@@ -163,6 +169,33 @@ public class FoamResponseExtractorTests
         File.Delete(Path.Combine(m_case, "log.responses"));
         FoamResponseExtractor.WriteNotes(m_case, []);
         Assert.That(File.Exists(Path.Combine(m_case, "log.responses")), Is.False, "no notes, no file");
+    }
+
+    [Test]
+    public void AVectorStatisticIsAColumnPerComponentTest()
+    {
+        // patchValue1 on movingWall over U came back as patchValue1.c1, .c2,
+        // .c3 (a live run on the 2.4.1 pool, 2026-10-29): the components
+        // are named as a probe's.
+        Write("postProcessing/patchValue1/0/surfaceFieldValue.dat", "# Region type : patch movingWall\n# Time areaAverage(p) areaAverage(U)\n0.045 0.053 (1 0 0)\n");
+        Write("postProcessing/volumeValue1/0/volFieldValue.dat", "# Time volAverage(U)\n0.045 (0.1 -0.05 0)\n");
+        var request = new FoamExtractionRequestData
+        {
+            Responses =
+            [
+                new FoamResponseSpecData { Name = "patchValue1", Kind = FoamResponseKind.PatchValue, Patches = ["movingWall"], Fields = ["p", "U"], Operation = "areaAverage" },
+                new FoamResponseSpecData { Name = "volumeValue1", Kind = FoamResponseKind.VolumeValue, Fields = ["U"], Operation = "volAverage" }
+            ]
+        };
+
+        var row = FoamResponseExtractor.Extract(m_case, request, 0.045, null);
+
+        Assert.That(row.Values.Select(value => (value.Name, value.Value)), Is.EqualTo(new[]
+        {
+            ("patchValue1.areaAverage(p)", 0.053),
+            ("patchValue1.areaAverage(U)_x", 1.0), ("patchValue1.areaAverage(U)_y", 0.0), ("patchValue1.areaAverage(U)_z", 0.0),
+            ("volumeValue1.volAverage(U)_x", 0.1), ("volumeValue1.volAverage(U)_y", -0.05), ("volumeValue1.volAverage(U)_z", 0.0)
+        }), "a scalar keeps its name; a vector's components carry _x, _y, _z");
     }
 
     [Test]

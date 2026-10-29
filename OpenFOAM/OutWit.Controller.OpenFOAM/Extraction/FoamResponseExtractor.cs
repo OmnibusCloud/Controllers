@@ -10,9 +10,11 @@ namespace OutWit.Controller.OpenFOAM.Extraction;
 /// writes under the start time, a post step under the latest written time;
 /// the later row counts, and on a tie the solve's), each column a value named
 /// <c>&lt;response&gt;.&lt;column&gt;</c> (with the file's name in between when
-/// a function object writes more than one file; a probe column is named
-/// <c>&lt;field&gt;@probe&lt;N&gt;(x y z)</c> with its component suffix by
-/// <see cref="FoamPostProcessingReader"/> and carries the field itself). A
+/// a function object writes more than one file; a vector or tensor value is
+/// a column per component, <c>areaAverage(U)_x</c> ..., and a probe column
+/// is named <c>&lt;field&gt;@probe&lt;N&gt;(x y z)</c> with its component
+/// suffix, both by <see cref="FoamPostProcessingReader"/>; a probe column
+/// carries the field itself). A
 /// probe outside the mesh contributes nothing and a note names it. The time column is left out;
 /// it is the same for every column and the result carries it once. Given the
 /// run's final time, a file whose last row is earlier - a function object

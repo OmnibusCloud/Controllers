@@ -231,6 +231,37 @@ function object without the entries it reads stops the solve ("Entry 'rhoInf'
 not found" - measured on v2606, 2026-10-28), so a request missing one is
 refused by name before it runs.
 
+### Column names
+
+A value is named `<response>.<column>`: the column as the function object's
+header names it, with the file's name in between when a function object
+writes more than one file (`forces1.force.total_x`); the time column is not a
+value. A vector or tensor value, which OpenFOAM writes in parentheses under
+one name, is a column per component, named as a probe's are: the name with
+`_x`, `_y`, `_z` for a vector, `_xx`, `_xy`, `_xz`, `_yy`, `_yz`, `_zz` for a
+symmetric tensor, `_xx` ... `_zz` (nine, `_yx`, `_zx`, `_zy` among them) for a
+tensor. A scalar keeps its name; a word (the field name a case's own
+`fieldMinMax` writes) is no value. Only a row that matches its header neither
+value for value nor group for group (a nested group) is named by position,
+`c1`, `c2`, ...
+
+Before controller 1.1.5 every column of a file that carried a vector or a
+tensor was named by position, the scalars in it included:
+
+| What the file carries | Before 1.1.5 | From 1.1.5 |
+|---|---|---|
+| A patch statistic of a vector, `areaAverage(U)` | `patchValue1.c1`, `patchValue1.c2`, `patchValue1.c3` | `patchValue1.areaAverage(U)_x`, `patchValue1.areaAverage(U)_y`, `patchValue1.areaAverage(U)_z` |
+| A scalar and a vector in one file, `areaAverage(p)` then `areaAverage(U)` | `patchValue1.c1`; `patchValue1.c2`, `patchValue1.c3`, `patchValue1.c4` | `patchValue1.areaAverage(p)`; `patchValue1.areaAverage(U)_x`, `_y`, `_z` |
+| A volume statistic of a vector, `volAverage(U)` | `volumeValue1.c1`, `volumeValue1.c2`, `volumeValue1.c3` | `volumeValue1.volAverage(U)_x`, `volumeValue1.volAverage(U)_y`, `volumeValue1.volAverage(U)_z` |
+| A statistic of a symmetric tensor, `areaAverage(R)` | `<response>.c1` ... `<response>.c6` | `<response>.areaAverage(R)_xx`, `_xy`, `_xz`, `_yy`, `_yz`, `_zz` |
+| A statistic of a tensor, `areaAverage(gradU)` | `<response>.c1` ... `<response>.c9` | `<response>.areaAverage(gradU)_xx`, `_xy`, `_xz`, `_yx`, `_yy`, `_yz`, `_zx`, `_zy`, `_zz` |
+| A min/max of a vector by component (a case's own `fieldMinMax`, `mode component`) | `<response>.c1` ... `<response>.c6` | `<response>.min(U)_x`, `_y`, `_z`, `<response>.max(U)_x`, `_y`, `_z` |
+| A min/max with its locations (a case's own `fieldMinMax`, `location` on) | `<response>.c2` (min), `c3` ... `c5`, `c6` (max), `c7` ... `c9` | `<response>.min`, `<response>.location(min)_x`, `_y`, `_z`, `<response>.max`, `<response>.location(max)_x`, `_y`, `_z` |
+
+Unchanged: a file of scalars alone, the forces' and coefficients' columns
+(`forces1.force.total_x`, `coeffs.Cd`), the probes, and the controller's own
+min/max, which measures magnitudes (`fieldMinMax1.max(U)`).
+
 ## Solver classes
 
 The class of a solver prices a run for the scheduler and, in WitSweep, estimates
@@ -292,9 +323,10 @@ The grammar is the CalculiX controller's, so one reader serves both families
   line breaks inside the column or the text are replaced by spaces.
 - The column is the value's exact name in the response row:
   `<response>.<column>`, with the file's name in between for a function object
-  that writes more than one file (`forces1.force.total_x`), a probe's
+  that writes more than one file (`forces1.force.total_x`), a vector
+  statistic's `<response>.areaAverage(U)_x`, a probe's
   `<response>.<field>@probe<N>(x y z)` with `_x`, `_y`, `_z` for a vector
-  (`_xx` ... `_zz` for a tensor). A note about several columns is written once
+  (`_xx` ... `_zz` for a tensor) - see [Column names](#column-names). A note about several columns is written once
   per column, with the same text. A note about a whole response or about the
   variant as a whole has an empty column, and its text names what it is about.
 - The notes come in the order they arose: before the run (a reference value

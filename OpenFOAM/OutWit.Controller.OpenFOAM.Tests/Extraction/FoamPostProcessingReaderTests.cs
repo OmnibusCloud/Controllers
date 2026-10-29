@@ -41,7 +41,7 @@ public class FoamPostProcessingReaderTests
     }
 
     [Test]
-    public void VectorColumnsAreFlattenedAndGetPositionalNamesTest()
+    public void NestedVectorGroupsAreFlattenedAndGetPositionalNamesTest()
     {
         var table = FoamPostProcessingReader.ReadLastRow(new StringReader(FORCE_DAT_WITH_VECTORS));
 
@@ -50,6 +50,71 @@ public class FoamPostProcessingReaderTests
         Assert.That(table.Columns[0], Is.EqualTo("Time"));
         Assert.That(table.Columns[1], Is.EqualTo("c1"));
         Assert.That(table.Values[4], Is.EqualTo(0.1));
+    }
+
+    [Test]
+    public void AVectorStatisticIsNamedByComponentAsAProbeIsTest()
+    {
+        // A surfaceFieldValue of U writes the vector in parentheses under
+        // one name; before, the header gave way and the columns came back
+        // c1, c2, c3 (a live run on the 2.4.1 pool, 2026-10-29).
+        var patch = FoamPostProcessingReader.ReadLastRow(new StringReader(
+            "# Region type : patch movingWall\n# Faces       : 10\n# Time        \tareaAverage(U)\n0.04\t(0.9 0 0)\n0.045\t(1 0.01 0)\n"));
+        var volume = FoamPostProcessingReader.ReadLastRow(new StringReader("# Time volAverage(p) volAverage(U)\n0.045 0.5 (0.1 -0.2 0.3)\n"));
+
+        Assert.That(patch!.Columns, Is.EqualTo(new[] { "Time", "areaAverage(U)_x", "areaAverage(U)_y", "areaAverage(U)_z" }));
+        Assert.That(patch.Values, Is.EqualTo(new[] { 0.045, 1, 0.01, 0 }));
+        Assert.That(volume!.Columns, Is.EqualTo(new[] { "Time", "volAverage(p)", "volAverage(U)_x", "volAverage(U)_y", "volAverage(U)_z" }), "a scalar keeps its name");
+        Assert.That(volume.Values[3], Is.EqualTo(-0.2));
+        Assert.That(patch.Notes, Is.Empty);
+    }
+
+    [Test]
+    public void ATensorStatisticIsNamedByComponentTest()
+    {
+        var table = FoamPostProcessingReader.ReadLastRow(new StringReader(
+            "# Time areaAverage(R) areaAverage(gradU) areaAverage(k)\n1 (1 2 3 4 5 6) (11 12 13 21 22 23 31 32 33) 0.5\n"));
+
+        Assert.That(table!.Columns, Is.EqualTo(new[]
+        {
+            "Time",
+            "areaAverage(R)_xx", "areaAverage(R)_xy", "areaAverage(R)_xz", "areaAverage(R)_yy", "areaAverage(R)_yz", "areaAverage(R)_zz",
+            "areaAverage(gradU)_xx", "areaAverage(gradU)_xy", "areaAverage(gradU)_xz", "areaAverage(gradU)_yx", "areaAverage(gradU)_yy",
+            "areaAverage(gradU)_yz", "areaAverage(gradU)_zx", "areaAverage(gradU)_zy", "areaAverage(gradU)_zz",
+            "areaAverage(k)"
+        }), "a symmetric tensor's six, a tensor's nine, as OpenFOAM orders them");
+        Assert.That(table.Values[^2], Is.EqualTo(33));
+    }
+
+    [Test]
+    public void AMinMaxWithLocationsNamesTheirComponentsTest()
+    {
+        // v2606's fieldMinMax with its location on - a case's own, as the
+        // cavity's ownMinMax writes it: the field's name a word, each
+        // location a point. Before, the columns were c1 ... c9.
+        var located = FoamPostProcessingReader.ReadLastRow(new StringReader(
+            "# Field minima and maxima\n# Time        \tfield         \tmin           \tlocation(min) \tmax           \tlocation(max) \n" +
+            "0.04          \tp             \t-2.003816e+00\t(5.000000e-03 9.500000e-02 5.000000e-03)\t2.312034e+00\t(9.500000e-02 9.500000e-02 5.000000e-03)\n"));
+        var components = FoamPostProcessingReader.ReadLastRow(new StringReader("# Time min(U) max(U)\n1 (0 -0.2 0) (1 0.1 0)\n"));
+
+        Assert.That(located!.Columns, Is.EqualTo(new[]
+        {
+            "Time", "field", "min", "location(min)_x", "location(min)_y", "location(min)_z", "max", "location(max)_x", "location(max)_y", "location(max)_z"
+        }));
+        Assert.That(double.IsNaN(located.Values[1]), Is.True, "the field's name is a word, not a value");
+        Assert.That(located.Values[4], Is.EqualTo(0.095));
+        Assert.That(components!.Columns, Is.EqualTo(new[] { "Time", "min(U)_x", "min(U)_y", "min(U)_z", "max(U)_x", "max(U)_y", "max(U)_z" }), "mode component: each extreme a vector");
+    }
+
+    [Test]
+    public void AnUnsetComponentIsNamedByItsComponentTest()
+    {
+        var table = FoamPostProcessingReader.ReadLastRow(new StringReader("# Time areaAverage(U)\n1 (1 -1e+300 0)\n"));
+
+        Assert.That(table!.Notes.Select(note => (note.Column, note.Text)), Is.EqualTo(new[]
+        {
+            ((string?)"areaAverage(U)_y", "areaAverage(U)_y is -1e+300, a probe outside the mesh - not reported.")
+        }));
     }
 
     [Test]

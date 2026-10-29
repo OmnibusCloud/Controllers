@@ -7,8 +7,11 @@ namespace OutWit.Controller.OpenFOAM.Extraction;
 /// Reads the last row of an OpenFOAM function-object data file
 /// (<c>postProcessing/&lt;name&gt;/&lt;time&gt;/*.dat</c>): comment lines start
 /// with '#', the last of them names the columns, then rows of numbers; a
-/// vector column is written in parentheses, which are stripped so that its
-/// components become columns of their own.
+/// vector or tensor value is written in parentheses under one name, which
+/// are stripped so that its components become columns of their own, named
+/// as a probe's are: <c>areaAverage(U)_x</c>, <c>_y</c>, <c>_z</c>
+/// (<c>_xx</c> ... <c>_zz</c> for a tensor, six for a symmetric one); a
+/// scalar keeps its name.
 /// A probes file (<c>postProcessing/&lt;name&gt;/&lt;time&gt;/&lt;field&gt;</c>) is
 /// named from its own header instead: v2606 writes one <c># Probe N (x y z)</c>
 /// line per probe, <c>  # Not Found</c> after one outside the mesh, then
@@ -116,11 +119,18 @@ public static class FoamPostProcessingReader
                 return table;
         }
 
-        // A header that does not match the row column for column (vector
-        // columns written as "(x y z)" under one name) gives way to
-        // positional names.
-        if (names.Count != values.Count)
-            names = Enumerable.Range(0, values.Count).Select(index => index == 0 ? TIME : $"c{index}").ToList();
+        // A vector or tensor value stands in parentheses under one name
+        // (areaAverage(U) over "(1 2 3)", fieldMinMax's location(min) over a
+        // point): its components are named as a probe's are, the name with
+        // _x, _y, _z (_xx ... _zz for a tensor, six for a symmetric one). A
+        // header that matches the row neither so nor value for value (a
+        // nested group, as the forces of older versions wrote them; a
+        // probes file read without its field, whose header names probes by
+        // number) gives way to positional names.
+        names = (probes.Count == 0 ? ComponentNames(names, last) : null)
+                ?? (names.Count == values.Count
+                    ? names
+                    : Enumerable.Range(0, values.Count).Select(index => index == 0 ? TIME : $"c{index}").ToList());
 
         var notes = new List<FoamNote>();
         for (var index = 1; index < values.Count; index++)
@@ -162,11 +172,7 @@ public static class FoamPostProcessingReader
             return null;
 
         var components = count / listed.Count;
-        var suffixes = components == 1
-            ? [string.Empty]
-            : COMPONENTS.TryGetValue(components, out var known)
-                ? known.Select(suffix => "_" + suffix).ToArray()
-                : Enumerable.Range(1, components).Select(component => $"_c{component}").ToArray();
+        var suffixes = Suffixes(components);
 
         var columns = new List<string>(values.Count) { TIME };
         var notes = new List<FoamNote>();
@@ -193,6 +199,61 @@ public static class FoamPostProcessingReader
         }
 
         return new FoamPostProcessingTable(columns, values, notes, isProbes: true);
+    }
+
+    // The columns of a row whose vector and tensor values stand in
+    // parentheses, one header name each: the name of a plain value as it
+    // is, a parenthesised value's name once per component with its suffix;
+    // null when the row does not divide into the header's names (a nested
+    // or unclosed group, another count of values).
+    private static List<string>? ComponentNames(IReadOnlyList<string> names, string row)
+    {
+        var sizes = new List<int>();
+        var group = -1;
+        foreach (var token in row.Replace("(", " ( ").Replace(")", " ) ").Split(SEPARATORS, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (token == "(")
+            {
+                if (group >= 0)
+                    return null;
+
+                group = 0;
+            }
+            else if (token == ")")
+            {
+                if (group < 0)
+                    return null;
+
+                sizes.Add(group);
+                group = -1;
+            }
+            else if (group >= 0)
+                group++;
+            else
+                sizes.Add(1);
+        }
+
+        if (group >= 0 || sizes.Count != names.Count)
+            return null;
+
+        var columns = new List<string>();
+        for (var index = 0; index < names.Count; index++)
+            columns.AddRange(Suffixes(sizes[index]).Select(suffix => names[index] + suffix));
+
+        return columns;
+    }
+
+    // The suffixes of a value's components: none for one, OpenFOAM's
+    // component names for a vector, a symmetric tensor and a tensor, a
+    // number for any other count.
+    private static string[] Suffixes(int components)
+    {
+        if (components == 1)
+            return [string.Empty];
+
+        return COMPONENTS.TryGetValue(components, out var known)
+            ? known.Select(suffix => "_" + suffix).ToArray()
+            : Enumerable.Range(1, components).Select(component => $"_c{component}").ToArray();
     }
 
     private static FoamNote NotReported(string column, string sentence)

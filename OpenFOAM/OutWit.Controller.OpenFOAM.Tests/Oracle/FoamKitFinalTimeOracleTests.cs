@@ -119,9 +119,12 @@ public class FoamKitFinalTimeOracleTests
             (FoamNoteKind.Warning, (string?)"probe1.U@probe1(9 9 9)_z"), (FoamNoteKind.Warning, (string?)"probe1.p@probe1(9 9 9)")
         }));
         var stale = tailNotes.Where(note => note.Text.StartsWith("ownMinMax:", StringComparison.Ordinal)).ToList();
-        Assert.That(stale, Is.Not.Empty);
-        Assert.That(stale.Select(note => (note.Kind, note.Column?.StartsWith("ownMinMax.", StringComparison.Ordinal))), Is.All.EqualTo((FoamNoteKind.Warning, (bool?)true)),
-            "the stale file's sentence on each of its columns");
+        Assert.That(stale.Select(note => note.Kind), Is.All.EqualTo(FoamNoteKind.Warning));
+        Assert.That(stale.Select(note => note.Column), Is.EqualTo(new[]
+        {
+            "ownMinMax.min", "ownMinMax.location(min)_x", "ownMinMax.location(min)_y", "ownMinMax.location(min)_z",
+            "ownMinMax.max", "ownMinMax.location(max)_x", "ownMinMax.location(max)_y", "ownMinMax.location(max)_z"
+        }), "the stale file's sentence on each of its value columns, a location's components named as a probe's; the field's name is a word");
         Assert.That(tailNotes.Where(note => note.Text.StartsWith("Not run: 'postProcess -func ", StringComparison.Ordinal)).Select(note => (note.Kind, note.Column)),
             Is.EqualTo(Enumerable.Repeat((FoamNoteKind.Info, (string?)null), 4)), "one INFO per post step recorded but not run");
 
@@ -135,6 +138,36 @@ public class FoamKitFinalTimeOracleTests
         Assert.That(ArtifactText(result, "log.includeFunc.2"), Does.Contain("'#includeFunc patchValue1'").And.Contain("latest written time"));
         Assert.That(ArtifactText(result, "log.postProcess"), Does.StartWith("Not run: 'postProcess -func patchValue1 -latestTime'"));
         Assert.That(ArtifactText(result, "system/controlDict"), Does.Contain("#includeFunc forces1").And.Contain("#includeFunc probe1"));
+    }
+
+    [Test]
+    public async Task AVectorStatisticIsAColumnPerComponentTest()
+    {
+        // A patch and a volume statistic of U, measured by the solver: v2606
+        // writes the vector in parentheses under one name, and the columns
+        // came back c1, c2, c3 (a live run on the 2.4.1 pool, 2026-10-29).
+        var session = new FoamCaseSession(m_kit, m_blobs, new WitTempStorageDefault(m_storage));
+        var task = Task();
+        var data = task.Case!;
+        data.Recipe!.Steps = [new FoamStepData { Utility = "blockMesh" }, new FoamStepData { Utility = "icoFoam" }];
+        data.Extraction!.Responses =
+        [
+            new FoamResponseSpecData { Name = "patchU", Kind = FoamResponseKind.PatchValue, Patches = ["movingWall"], Fields = ["p", "U"], Operation = "areaAverage" },
+            new FoamResponseSpecData { Name = "volumeU", Kind = FoamResponseKind.VolumeValue, Fields = ["U"], Operation = "volAverage" }
+        ];
+
+        var result = await session.RunAsync(task);
+
+        TestContext.Out.WriteLine("responses: " + string.Join(", ", result.ResponseRow?.Values.Select(entry => $"{entry.Name}={entry.Value}") ?? []));
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.LogTail);
+        var values = result.ResponseRow!.Values.ToDictionary(value => value.Name, value => value.Value);
+        Assert.That(values.Keys, Is.EquivalentTo(new[]
+        {
+            "patchU.areaAverage(p)", "patchU.areaAverage(U)_x", "patchU.areaAverage(U)_y", "patchU.areaAverage(U)_z",
+            "volumeU.volAverage(U)_x", "volumeU.volAverage(U)_y", "volumeU.volAverage(U)_z"
+        }), "a scalar keeps its name; a vector's components carry _x, _y, _z");
+        Assert.That(values["patchU.areaAverage(U)_x"], Is.EqualTo(1).Within(1e-9), "the lid moves at (1 0 0)");
+        Assert.That(values["patchU.areaAverage(U)_y"], Is.EqualTo(0).Within(1e-9));
     }
 
     #endregion
