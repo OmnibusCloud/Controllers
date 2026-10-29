@@ -153,14 +153,7 @@ public class FoamKitMeshingOracleTests
                     ? Encoding.ASCII.GetBytes(File.ReadAllText(file).Replace(INLET, "value           uniform ({{oc1}} 0 0);"))
                     : File.ReadAllBytes(file);
 
-                return new FoamFileRefData
-                {
-                    RelativePath = relativePath,
-                    BlobId = m_blobs.AddBytes(bytes),
-                    Sha256 = "n/a",
-                    Size = bytes.Length,
-                    Templated = templated
-                };
+                return m_blobs.AddFile(relativePath, bytes, templated);
             })
             .ToList();
 

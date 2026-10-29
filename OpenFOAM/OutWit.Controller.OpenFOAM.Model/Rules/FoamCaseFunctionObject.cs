@@ -24,12 +24,33 @@ public sealed class FoamCaseFunctionObject
     /// <param name="arguments">The arguments of an <c>#includeFunc</c> (<c>p, U</c> of <c>probes(p, U)</c>); empty otherwise.</param>
     /// <param name="typedByKit">True when the type comes from a dictionary of the kit (<see cref="TypedByKit"/>).</param>
     public FoamCaseFunctionObject(string name, string? type, string body, string relativePath, int line, FoamCaseFunctionObjectSource source, string arguments = "", bool typedByKit = false)
+        : this(name, type, body, relativePath, line, line, source, arguments, typedByKit)
+    {
+    }
+
+    /// <summary>
+    /// A function object whose body begins on another line than the one
+    /// that names it: a dictionary of the case's <c>system/</c> an
+    /// <c>#includeFunc</c> pulls in is named by the include's line while
+    /// its entries are in the dictionary's own file.
+    /// </summary>
+    /// <param name="name">Its name: the block's keyword, or the <c>#includeFunc</c> name before its arguments.</param>
+    /// <param name="type">Its <c>type</c>; null when the text read names none.</param>
+    /// <param name="body">The text between its braces, or the whole dictionary file.</param>
+    /// <param name="relativePath">The case file the text was read from.</param>
+    /// <param name="line">The 1-based line of the block or the <c>#includeFunc</c>.</param>
+    /// <param name="bodyLine">The 1-based line in <paramref name="relativePath"/> on which <paramref name="body"/> begins: the line of its opening brace, or 1 for a whole file.</param>
+    /// <param name="source">Where the function object comes from.</param>
+    /// <param name="arguments">The arguments of an <c>#includeFunc</c>; empty otherwise.</param>
+    /// <param name="typedByKit">True when the type comes from a dictionary of the kit.</param>
+    public FoamCaseFunctionObject(string name, string? type, string body, string relativePath, int line, int bodyLine, FoamCaseFunctionObjectSource source, string arguments = "", bool typedByKit = false)
     {
         Name = name;
         Type = type;
         Body = body;
         RelativePath = relativePath;
         Line = line;
+        BodyLine = bodyLine;
         Source = source;
         Arguments = arguments;
         TypedByKit = typedByKit;
@@ -38,6 +59,30 @@ public sealed class FoamCaseFunctionObject
     #endregion
 
     #region Functions
+
+    /// <summary>
+    /// The line in <see cref="RelativePath"/> on which an entry of the body
+    /// is written - what a note about the entry points at, rather than the
+    /// block that holds it; <see cref="Line"/> when the body has no such
+    /// top-level entry.
+    /// </summary>
+    /// <param name="keyword">The entry's keyword.</param>
+    /// <returns>The 1-based line.</returns>
+    public int EntryLine(string keyword)
+    {
+        var index = FoamCaseFunctionObjects.IndexOfEntry(Body, keyword);
+        if (index < 0)
+            return Line;
+
+        var line = BodyLine;
+        for (var i = 0; i < index; i++)
+        {
+            if (Body[i] == '\n')
+                line++;
+        }
+
+        return line;
+    }
 
     /// <summary>
     /// The value text of an entry of the body, as written (<c>(0 0 0)</c>,
@@ -74,6 +119,9 @@ public sealed class FoamCaseFunctionObject
 
     /// <summary>The 1-based line in <see cref="RelativePath"/>.</summary>
     public int Line { get; }
+
+    /// <summary>The 1-based line in <see cref="RelativePath"/> on which <see cref="Body"/> begins; <see cref="Line"/> for a block.</summary>
+    public int BodyLine { get; }
 
     /// <summary>Where the function object comes from.</summary>
     public FoamCaseFunctionObjectSource Source { get; }

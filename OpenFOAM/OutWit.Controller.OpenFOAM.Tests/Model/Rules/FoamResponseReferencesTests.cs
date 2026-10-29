@@ -78,8 +78,38 @@ public class FoamResponseReferencesTests
         Assert.That(parameters["CofR"], Is.EqualTo("(0.72 0 0)"));
         Assert.That(notes, Is.EqualTo(new[]
         {
-            "Response 'forceCoeffs1_sweep': magUInf follows the case's forceCoeffs1 (system/controlDict:8), which the study sweeps - 25 in this variant.",
-            "Response 'forceCoeffs1_sweep': lRef follows the case's forceCoeffs1 (system/controlDict:8), which the study sweeps - 1.5 in this variant."
+            "Response 'forceCoeffs1_sweep': magUInf follows the case's forceCoeffs1 (system/controlDict:11), which the study sweeps - 25 in this variant.",
+            "Response 'forceCoeffs1_sweep': lRef follows the case's forceCoeffs1 (system/controlDict:11), which the study sweeps - 1.5 in this variant."
+        }), "the note points at the entry's line, not the block's");
+    }
+
+    [Test]
+    public void TheNoteNamesTheEntryInTheFileThatHoldsItTest()
+    {
+        // motorBike's shape: the function object in its own file the
+        // controlDict #includes, and another the case ships under system/
+        // for an #includeFunc. Before, the note named the block's line of the
+        // included file and the #includeFunc's line of the controlDict.
+        var files = new Dictionary<string, string>
+        {
+            ["system/forceCoeffs"] = "forceCoeffs1\n{\n    type forceCoeffs;\n    libs (forces);\n    patches (body);\n    rho rhoInf;\n    rhoInf 1;\n    magUInf 20;\n    lRef {{oc2}};\n    Aref 0.75;\n    CofR (0 0 0);\n}\n",
+            ["system/coeffs"] = "type forceCoeffs;\nlibs (forces);\npatches (body);\nrho rhoInf;\nrhoInf 1;\nmagUInf {{oc1}};\nlRef 1;\nAref 1;\nCofR (0 0 0);\n"
+        };
+        var templated = HEAD + "functions\n{\n    #include \"forceCoeffs\"\n    #includeFunc coeffs\n}\n";
+        var instantiated = Instantiate(templated, "25", "1.5");
+        var variantFiles = files.ToDictionary(file => file.Key, file => Instantiate(file.Value, "25", "1.5"));
+        var request = Request("forceCoeffs1_sweep");
+        request.Responses.Add(Request("coeffs").Responses[0]);
+        var notes = new List<string>();
+
+        FoamResponseReferences.Follow(request,
+            FoamCaseFunctionObjects.Enumerate(templated, path => files.GetValueOrDefault(path)), templated,
+            FoamCaseFunctionObjects.Enumerate(instantiated, path => variantFiles.GetValueOrDefault(path)), instantiated, notes);
+
+        Assert.That(notes, Is.EqualTo(new[]
+        {
+            "Response 'forceCoeffs1_sweep': lRef follows the case's forceCoeffs1 (system/forceCoeffs:9), which the study sweeps - 1.5 in this variant.",
+            "Response 'coeffs': magUInf follows the case's coeffs (system/coeffs:6), which the study sweeps - 25 in this variant."
         }));
     }
 

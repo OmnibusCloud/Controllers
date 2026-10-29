@@ -111,7 +111,7 @@ public static class FoamResponseReferences
     /// <param name="templatedControlDict">The templated controlDict's text.</param>
     /// <param name="instantiated">The same function objects read from the variant's files.</param>
     /// <param name="instantiatedControlDict">The variant's controlDict text.</param>
-    /// <param name="notes">Receives one sentence per parameter that follows; null discards them.</param>
+    /// <param name="notes">Receives one sentence per parameter that follows, naming the case's entry by file and line; null discards them.</param>
     /// <returns>The request to write; the given one is left as it is.</returns>
     public static FoamExtractionRequestData? Follow(
         FoamExtractionRequestData? request,
@@ -151,7 +151,7 @@ public static class FoamResponseReferences
                 else
                     parameter.Value = value;
 
-                notes?.Add($"Response '{response.Name}': {key} follows the case's {original.Name} ({original.RelativePath}:{original.Line}), which the study sweeps - {value} in this variant.");
+                notes?.Add($"Response '{response.Name}': {key} follows the case's {original.Name} ({original.RelativePath}:{original.EntryLine(key)}), which the study sweeps - {value} in this variant.");
             }
         }
 

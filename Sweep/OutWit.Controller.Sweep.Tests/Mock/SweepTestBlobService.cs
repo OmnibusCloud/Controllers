@@ -1,4 +1,7 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
+using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Sweep.Tests.Mock;
@@ -64,7 +67,29 @@ internal sealed class SweepTestBlobService : IWitBlobService
     /// <returns>The blob id.</returns>
     public Guid AddText(string text, string fileName = "file.txt")
     {
-        return UploadBytesAsync(System.Text.Encoding.UTF8.GetBytes(text), fileName).GetAwaiter().GetResult();
+        return UploadBytesAsync(Encoding.UTF8.GetBytes(text), fileName).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Stores an OpenFOAM case file's text as a blob and describes it as an
+    /// initiator would - its UTF-8 bytes' size and SHA-256 - since the node
+    /// refuses a blob that is not what its reference says.
+    /// </summary>
+    /// <param name="relativePath">The file's path inside the case.</param>
+    /// <param name="text">The file's text.</param>
+    /// <param name="templated">Whether the file carries tokens.</param>
+    /// <returns>The file reference.</returns>
+    public FoamFileRefData AddFile(string relativePath, string text, bool templated = false)
+    {
+        var bytes = Encoding.UTF8.GetBytes(text);
+        return new FoamFileRefData
+        {
+            RelativePath = relativePath,
+            BlobId = UploadBytesAsync(bytes, "file.txt").GetAwaiter().GetResult(),
+            Sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            Size = bytes.Length,
+            Templated = templated
+        };
     }
 
     public string GetStoredPath(Guid blobId)

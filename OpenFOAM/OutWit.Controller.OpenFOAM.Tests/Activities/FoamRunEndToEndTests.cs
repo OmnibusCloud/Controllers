@@ -135,14 +135,7 @@ public class FoamRunEndToEndTests
 
     private FoamFileRefData BlobFile(string relativePath, string text, bool templated = false)
     {
-        return new FoamFileRefData
-        {
-            RelativePath = relativePath,
-            BlobId = m_blobService.AddText(text),
-            Sha256 = "n/a",
-            Size = text.Length,
-            Templated = templated
-        };
+        return m_blobService.AddFile(relativePath, text, templated);
     }
 
     #endregion

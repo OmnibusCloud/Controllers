@@ -119,6 +119,27 @@ public class FoamCaseFunctionObjectsTests
     }
 
     [Test]
+    public void TheLineOfAnEntryIsWhereItsKeywordIsWrittenTest()
+    {
+        var files = new Dictionary<string, string>
+        {
+            ["system/myFunctions"] = "// the case's own functions\nminMax\n{\n    type fieldMinMax;\n    fields (p);\n}\n",
+            ["system/wake"] = "type probes;\nfields (p);\n\nprobeLocations ((0.1 0 0));\n",
+            ["system/wrapped"] = "// a wrapped dictionary\nwrapped\n{\n    type probes;\n    fields (U);\n}\n"
+        };
+        var text = HEAD + "functions\n{\n    first\n    {\n        type forces;\n        patches (a);\n        CofR (0 0 0);\n    }\n    #include \"myFunctions\"\n    #includeFunc wake\n    #includeFunc wrapped\n    #includeFunc forceCoeffsIncompressible\n}\n";
+
+        var functions = FoamCaseFunctionObjects.Enumerate(text, path => files.GetValueOrDefault(path)).ToDictionary(function => function.Name);
+
+        Assert.That((functions["first"].Line, functions["first"].BodyLine, functions["first"].EntryLine("CofR")), Is.EqualTo((7, 7, 10)), "a block of the controlDict");
+        Assert.That((functions["minMax"].Line, functions["minMax"].BodyLine, functions["minMax"].EntryLine("fields")), Is.EqualTo((3, 3, 5)), "a block of an included file, by that file's lines");
+        Assert.That((functions["wake"].Line, functions["wake"].BodyLine, functions["wake"].EntryLine("probeLocations")), Is.EqualTo((13, 1, 4)), "a case dictionary: named by the #includeFunc's line, its entries by the dictionary's own lines");
+        Assert.That((functions["wrapped"].Line, functions["wrapped"].BodyLine, functions["wrapped"].EntryLine("fields")), Is.EqualTo((14, 3, 5)), "a wrapped case dictionary");
+        Assert.That(functions["first"].EntryLine("lRef"), Is.EqualTo(7), "an entry the body has not: the block's line");
+        Assert.That(functions["forceCoeffsIncompressible"].EntryLine("lRef"), Is.EqualTo(15), "a kit dictionary has no body to point into");
+    }
+
+    [Test]
     public void OnlyTheLastTopLevelFunctionsCountsAndNothingNestedOrQuotedTest()
     {
         var text = HEAD +

@@ -118,14 +118,7 @@ public class FoamCaseSessionTests
 
     private FoamFileRefData BlobFile(string relativePath, string text, bool templated = false)
     {
-        return new FoamFileRefData
-        {
-            RelativePath = relativePath,
-            BlobId = m_blobs.AddText(text),
-            Sha256 = "n/a",
-            Size = text.Length,
-            Templated = templated
-        };
+        return m_blobs.AddFile(relativePath, text, templated);
     }
 
     #endregion
@@ -250,6 +243,25 @@ public class FoamCaseSessionTests
         Assert.That(result.Steps, Is.Empty);
         Assert.That(result.ArtifactBlobId, Is.Null);
         Assert.That(result.ResponseRow, Is.Null);
+    }
+
+    [Test]
+    public async Task ABlobThatIsNotWhatTheTaskDescribesRefusesTheVariantBeforeAnythingRunsTest()
+    {
+        // The case changed between the reading that made the study and the
+        // upload: the task describes the old controlDict, the blob holds the new.
+        var session = RequireSession();
+        var data = PitzCase("ITERATIONS=1\n");
+        var controlDict = data.BaseFiles.Single(file => file.RelativePath == "system/controlDict");
+        File.WriteAllText(m_blobs.GetStoredPath(controlDict.BlobId), "FoamFile { object controlDict; }\napplication simpleFoam;\nendTime 500;\n");
+
+        var result = await session.RunAsync(Task(data));
+
+        Assert.That(result.Rejections, Has.Exactly(1).Items);
+        Assert.That(result.Rejections[0], Does.StartWith("system/controlDict: the blob's bytes are not the ones the task describes (size ")
+            .And.EndWith("- the case changed after it was read; open it again and submit it again."));
+        Assert.That(result.Steps, Is.Empty, "a refused variant, not a failed task");
+        AssertScratchGivenBack();
     }
 
     [Test]
