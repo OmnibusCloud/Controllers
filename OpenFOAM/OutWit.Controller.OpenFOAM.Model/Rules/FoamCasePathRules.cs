@@ -7,7 +7,8 @@ namespace OutWit.Controller.OpenFOAM.Model.Rules;
 /// paths that differ by case alone, which one file on every Windows and
 /// macOS node - and nothing left over from an earlier run (a log, a
 /// <c>postProcessing/</c> or <c>processor*</c> tree, which would pass for this
-/// run's).
+/// run's). The paths are judged as strings; the folder they come from, and
+/// the links inside it, are <see cref="FoamCaseFolderRules"/>' to judge.
 /// </summary>
 public static class FoamCasePathRules
 {

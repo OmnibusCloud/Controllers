@@ -49,6 +49,11 @@ A case file path is refused when it
 - repeats another path, or differs from one by letter case alone (one file on a
   Windows or macOS node).
 
+A link inside the case folder - a directory junction, a symbolic link to a
+folder or to a file - is refused by its path and never entered: a case travels
+as the files it holds, never what a link points to (`FoamCaseFolderRules`);
+copy the files into the case.
+
 A case is refused, by file and line, when it carries code that would be compiled
 while it runs - the kit ships no compiler, and a pool never runs code it cannot
 name:
