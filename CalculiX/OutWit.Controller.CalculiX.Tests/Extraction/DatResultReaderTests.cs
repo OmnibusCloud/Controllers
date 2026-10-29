@@ -241,6 +241,31 @@ public class DatResultReaderTests
 
     #endregion
 
+    #region Section Print Tests
+
+    [Test]
+    public void SectionPrintsAreReadPerSurfaceTest()
+    {
+        // The S8R plate with one print per element edge (52); WITEDGE4 is the
+        // root edge of element 1 (face S6): half the tip load of 10 and half
+        // the root moment of 1000, through a cut of 10 x 2.
+        var result = DatResultReader.Read(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "shell-s8r-2d-edges.dat"));
+
+        var step = result.Steps.Single();
+        Assert.That(step.Sections, Has.Count.EqualTo(52));
+        Assert.That(step.ForceBlocks.Single().SetName, Is.EqualTo("FIX"), "the reactions beside them are read as before");
+
+        var root = step.Sections["witedge4"];
+        Assert.That(root.Time, Is.EqualTo(1.0));
+        Assert.That(root.Force.Z, Is.EqualTo(-4.9998).Within(1e-4));
+        Assert.That((root.Centre.X, root.Centre.Y), Is.EqualTo((0.0, 5.0)));
+        Assert.That((root.Normal.X, root.Normal.Y, root.Normal.Z), Is.EqualTo((-1.0, 0.0, 0.0)), "the outward normal of the element's face");
+        Assert.That(root.Moment.Y, Is.EqualTo(499.9967).Within(1e-4));
+        Assert.That(root.Area, Is.EqualTo(20.0));
+    }
+
+    #endregion
+
     #region Eigenvalue Layout Tests
 
     [Test]

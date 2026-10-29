@@ -44,7 +44,17 @@ public sealed class FrdFieldStatistics
     /// <param name="values">The row's components (at least 1, 3 or 6 by kind).</param>
     public void Add(double[] values)
     {
-        var scalar = Scalar(Kind, values);
+        Add(values, Scalar(Kind, values));
+    }
+
+    /// <summary>
+    /// Takes one row whose scalar was found elsewhere: the von Mises of a
+    /// shell or beam node recovered from section forces.
+    /// </summary>
+    /// <param name="values">The row's components (at least 1, 3 or 6 by kind).</param>
+    /// <param name="scalar">The row's scalar.</param>
+    public void Add(double[] values, double scalar)
+    {
         if (Count == 0 || scalar > Max)
             Max = scalar;
 

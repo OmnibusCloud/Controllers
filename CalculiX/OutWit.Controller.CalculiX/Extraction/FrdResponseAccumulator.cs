@@ -9,6 +9,8 @@ namespace OutWit.Controller.CalculiX.Extraction;
 /// the transient's history - and samples the nodes the probes ask for.
 /// A block with a value that is not a number empties its family for the
 /// step, with a note naming the node, rather than reporting NaN or zero.
+/// The stress of the shell and beam nodes of an OUTPUT=2D deck comes from
+/// <see cref="CcxSectionStress"/>, or the block's von Mises is refused.
 /// </summary>
 internal sealed class FrdResponseAccumulator : IFrdResultVisitor
 {
@@ -28,6 +30,7 @@ internal sealed class FrdResponseAccumulator : IFrdResultVisitor
     private readonly string? m_deckPath;
     private readonly CcxResponseSink m_sink;
     private readonly bool m_refuseVonMises;
+    private readonly CcxSectionStress? m_sectionStress;
     private readonly List<FrdProbeTarget> m_targets = [];
     private readonly HashSet<int> m_probeNodes = [];
     private readonly HashSet<int> m_present = [];
@@ -48,12 +51,14 @@ internal sealed class FrdResponseAccumulator : IFrdResultVisitor
     /// <param name="deckPath">The deck, for node coordinates on demand; null when not available.</param>
     /// <param name="probes">The probes requested.</param>
     /// <param name="sink">Receives the responses and notes.</param>
-    public FrdResponseAccumulator(DeckFacts? facts, string? deckPath, IReadOnlyList<CcxProbeData> probes, CcxResponseSink sink)
+    /// <param name="sectionStress">The shell and beam stress of an OUTPUT=2D deck; null when the deck has none or writes the expanded mesh.</param>
+    public FrdResponseAccumulator(DeckFacts? facts, string? deckPath, IReadOnlyList<CcxProbeData> probes, CcxResponseSink sink, CcxSectionStress? sectionStress = null)
     {
         m_facts = facts;
         m_deckPath = deckPath;
         m_sink = sink;
-        m_refuseVonMises = facts is { OutputIs2D: true, HasShellOrBeamElements: true };
+        m_sectionStress = sectionStress;
+        m_refuseVonMises = sectionStress == null && facts is { OutputIs2D: true, HasShellOrBeamElements: true };
 
         foreach (var probe in probes)
         {
@@ -95,11 +100,12 @@ internal sealed class FrdResponseAccumulator : IFrdResultVisitor
                 continue;
             }
 
-            if (kind == FrdFieldKind.Stress && m_refuseVonMises)
+            if (kind == FrdFieldKind.Stress && (m_refuseVonMises || family.Problem != null))
             {
+                var reason = family.Problem == null ? string.Empty : $", and the section-force recovery cannot run: {family.Problem}";
                 foreach (var column in columns.Concat(ProbeColumns(kind)))
                     m_sink.Note(CcxNoteKind.Warning, step, column,
-                        "not reported: with OUTPUT=2D ccx maps shell and beam stresses onto the mid-surface or the beam axis, where the bending stress is gone (an S8R cantilever read 0.81 against 75 analytic); remove OUTPUT=2D from the file cards to get the expanded-mesh stress");
+                        $"not reported: with OUTPUT=2D ccx maps shell and beam stresses onto the mid-surface or the beam axis, where the bending stress is gone (an S8R cantilever read 0.81 against 75 analytic){reason}; remove OUTPUT=2D from the file cards to get the expanded-mesh stress");
 
                 continue;
             }
@@ -107,6 +113,12 @@ internal sealed class FrdResponseAccumulator : IFrdResultVisitor
             AddValues(step, kind, family);
             foreach (var target in m_targets.Where(target => target.Kind == kind))
                 AddProbe(step, family, target);
+
+            if (kind == FrdFieldKind.Stress && m_sectionStress?.Method() is { } method)
+            {
+                foreach (var column in columns.Concat(ProbeColumns(kind)))
+                    m_sink.Note(CcxNoteKind.Info, step, column, method);
+            }
 
             if (family.LastIsModeShape)
             {
@@ -325,6 +337,8 @@ internal sealed class FrdResponseAccumulator : IFrdResultVisitor
         // A later block of the same field in the same step replaces the
         // earlier one: the response is the step's final state.
         m_current.Begin(header);
+        if (kind == FrdFieldKind.Stress && m_sectionStress != null)
+            m_current.Problem = m_sectionStress.BeginBlock(header);
     }
 
     public void Row(int node, double[] values)
@@ -332,8 +346,10 @@ internal sealed class FrdResponseAccumulator : IFrdResultVisitor
         if (m_current == null)
             return;
 
-        m_current.Last.Add(values);
-        var scalar = FrdFieldStatistics.Scalar(m_current.Kind, values);
+        var scalar = m_current.Kind == FrdFieldKind.Stress && m_sectionStress != null
+            ? m_sectionStress.VonMises(node, values)
+            : FrdFieldStatistics.Scalar(m_current.Kind, values);
+        m_current.Last.Add(values, scalar);
         m_current.AnyBlockMax = m_current.Blocks == 1 && m_current.Last.Count == 1 ? scalar : System.Math.Max(m_current.AnyBlockMax, scalar);
 
         if (m_interest.Contains(node))
