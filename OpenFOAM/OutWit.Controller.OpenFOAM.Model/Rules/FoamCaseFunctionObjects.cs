@@ -152,8 +152,9 @@ public static class FoamCaseFunctionObjects
             var ownText = StripComments(own);
             var wrapped = Blocks(ownText, 0, ownText.Length).FirstOrDefault(block => block.Name == name);
             var ownBody = wrapped.Body ?? ownText;
+            var ownBodyLine = wrapped.Body == null ? 1 : LineOf(ownText, wrapped.BodyStart);
             var ownType = TypeOf(ownBody, out var ownTypedByKit);
-            found.Add((start + match.Index, new FoamCaseFunctionObject(name, ownType, ownBody, SYSTEM_PREFIX + name, line, FoamCaseFunctionObjectSource.IncludedCaseDictionary, arguments, ownTypedByKit)));
+            found.Add((start + match.Index, new FoamCaseFunctionObject(name, ownType, ownBody, SYSTEM_PREFIX + name, line, ownBodyLine, FoamCaseFunctionObjectSource.IncludedCaseDictionary, arguments, ownTypedByKit)));
         }
 
         foreach (Match match in INCLUDE_FILE.Matches(between))
@@ -186,6 +187,24 @@ public static class FoamCaseFunctionObjects
     /// <returns>The value, or null when the body has no such entry at its top level.</returns>
     public static string? Entry(string body, string keyword)
     {
+        var index = IndexOfEntry(body, keyword);
+        if (index < 0)
+            return null;
+
+        var valueStart = SkipBlanks(body, index + keyword.Length);
+        var valueEnd = EndOfValue(body, valueStart);
+        return body[valueStart..valueEnd].Trim();
+    }
+
+    /// <summary>
+    /// Where a top-level entry of a dictionary body is written: the index
+    /// of its keyword.
+    /// </summary>
+    /// <param name="body">The dictionary text between its braces.</param>
+    /// <param name="keyword">The entry's keyword.</param>
+    /// <returns>The keyword's index, or -1 when the body has no such entry at its top level.</returns>
+    internal static int IndexOfEntry(string body, string keyword)
+    {
         var depth = 0;
         var index = 0;
         while (index < body.Length)
@@ -213,16 +232,12 @@ public static class FoamCaseFunctionObjects
 
             if (depth == 0 && IsWordStart(body, index) && string.CompareOrdinal(body, index, keyword, 0, keyword.Length) == 0
                 && index + keyword.Length < body.Length && char.IsWhiteSpace(body[index + keyword.Length]))
-            {
-                var valueStart = SkipBlanks(body, index + keyword.Length);
-                var valueEnd = EndOfValue(body, valueStart);
-                return body[valueStart..valueEnd].Trim();
-            }
+                return index;
 
             index++;
         }
 
-        return null;
+        return -1;
     }
 
     /// <summary>
