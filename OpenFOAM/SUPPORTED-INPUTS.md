@@ -50,9 +50,16 @@ A case file path is refused when it
   Windows or macOS node).
 
 A link inside the case folder - a directory junction, a symbolic link to a
-folder or to a file - is refused by its path and never entered: a case travels
-as the files it holds, never what a link points to (`FoamCaseFolderRules`);
-copy the files into the case.
+folder or to a file - is the file or folder it points to when its target lies
+inside the case (OpenFOAM's tutorials keep `system/<region>/fvSolution ->
+../fvSolution`), and is refused by its path, never entered, when it points
+outside: a case travels as the files it holds, never what a link points to
+(`FoamCaseFolderRules`); copy the files into the case.
+
+Every file travels with its size and SHA-256 as the initiator read it, and the
+node verifies the bytes it has against them before the file lands in the case:
+a case that changed after it was read refuses the variant, by file
+(`FoamCaseBlobRules`).
 
 A case is refused, by file and line, when it carries code that would be compiled
 while it runs - the kit ships no compiler, and a pool never runs code it cannot
