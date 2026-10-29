@@ -1,3 +1,4 @@
+using OutWit.Controller.OpenFOAM.Extraction;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Model.Rules;
 using OutWit.Engine.Interfaces;
@@ -30,10 +31,14 @@ public static class FoamResponseFollowing
     /// <param name="task">The task.</param>
     /// <param name="caseDirectory">The materialised case.</param>
     /// <param name="blobService">The node's blob service, for the base files.</param>
-    /// <param name="notes">Receives one sentence per parameter that follows.</param>
+    /// <param name="notes">
+    /// Receives one <see cref="FoamNoteKind.Info"/> per parameter that
+    /// follows: the values stand, measured with the variant's reference
+    /// value; the note is about the whole response, so it names no column.
+    /// </param>
     /// <param name="cancellationToken">Cancels the reads.</param>
     /// <returns>The request to write; the task's own when nothing follows.</returns>
-    public static async Task<FoamExtractionRequestData?> FollowAsync(FoamTaskData task, string caseDirectory, IWitBlobService blobService, ICollection<string> notes, CancellationToken cancellationToken = default)
+    public static async Task<FoamExtractionRequestData?> FollowAsync(FoamTaskData task, string caseDirectory, IWitBlobService blobService, ICollection<FoamNote> notes, CancellationToken cancellationToken = default)
     {
         var request = task.Case?.Extraction;
         if (request == null || task.Case == null || !request.Responses.Any(response => response.Kind is FoamResponseKind.Forces or FoamResponseKind.ForceCoeffs))
@@ -56,13 +61,19 @@ public static class FoamResponseFollowing
         if (instantiatedControlDict == null)
             return request;
 
-        return FoamResponseReferences.Follow(
+        var sentences = new List<string>();
+        var followed = FoamResponseReferences.Follow(
             request,
             FoamCaseFunctionObjects.Enumerate(templatedControlDict, path => templated.GetValueOrDefault(path)),
             templatedControlDict,
             FoamCaseFunctionObjects.Enumerate(instantiatedControlDict, path => ReadCaseFile(root, path)),
             instantiatedControlDict,
-            notes);
+            sentences);
+
+        foreach (var sentence in sentences)
+            notes.Add(new FoamNote { Kind = FoamNoteKind.Info, Text = sentence });
+
+        return followed;
     }
 
     #endregion

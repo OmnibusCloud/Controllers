@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using OutWit.Controller.OpenFOAM.Extraction;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Utils;
@@ -439,6 +440,11 @@ public class FoamCaseRunnerTests
         Assert.That(ReadCaseFile("log.includeFunc.2"), Does.Contain("'#includeFunc inletP'").And.Contain("latest written time"));
         Assert.That(ReadCaseFile("log.includeFunc.3"), Does.Contain("'#includeFunc wake'"));
         Assert.That(ReadCaseFile("log.simpleFoam.2"), Does.StartWith("Not run: 'simpleFoam -postProcess -func inletP -latestTime'").And.Contain("overwrites the solve's rows"));
+        Assert.That(report.Notes.Select(note => (note.Kind, note.Column, note.Text + "\n")), Is.EqualTo(new[]
+        {
+            (FoamNoteKind.Info, (string?)null, ReadCaseFile("log.simpleFoam.2"))
+        }), "the step that did nothing says so in the result too: the log's sentence, an INFO about the whole response");
+        Assert.That(report.Notes, Has.Count.EqualTo(1), "a step that ran has no note");
     }
 
     [Test]

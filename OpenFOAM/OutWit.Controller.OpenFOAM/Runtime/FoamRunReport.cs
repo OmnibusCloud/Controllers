@@ -1,11 +1,13 @@
+using OutWit.Controller.OpenFOAM.Extraction;
 using OutWit.Controller.OpenFOAM.Model;
 
 namespace OutWit.Controller.OpenFOAM.Runtime;
 
 /// <summary>
 /// What <see cref="FoamCaseRunner"/> hands back: every step's outcome in
-/// order with the log it wrote, and, when a step failed, which one, with what
-/// code and what it said last.
+/// order with the log it wrote, what the run says of its steps besides
+/// (a post step recorded but not run), and, when a step failed, which one,
+/// with what code and what it said last.
 /// </summary>
 public sealed class FoamRunReport
 {
@@ -54,6 +56,9 @@ public sealed class FoamRunReport
 
     /// <summary>The logs the steps that ran wrote, in order.</summary>
     public IReadOnlyList<string> LogPaths => m_logs.Select(entry => entry.LogPath).ToList();
+
+    /// <summary>What the run says of its steps besides their outcomes, in step order: one note per post step recorded but not run.</summary>
+    public List<FoamNote> Notes { get; } = [];
 
     /// <summary>The utility of the failed step; null when every step succeeded.</summary>
     public string? FailedStep { get; set; }

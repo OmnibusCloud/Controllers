@@ -53,7 +53,11 @@ A response is read from the last row of each file in its function object's
 latest `postProcessing/<name>/<time>/` directory. A file whose last row is
 not at the run's final time - a function object that stopped writing before
 the run ended - is not reported: the node names it in `log.responses`,
-which travels with the step logs.
+which travels with the step logs, and in a note on each of its columns. The
+notes - what the run says beyond the numbers - ride inside the result's
+`LogTail` after the failed step's tail, in the CalculiX controller's grammar
+(`--- notes ---`, then `[note]<TAB>KIND<TAB>column<TAB>text` per note); the
+"What comes back" section of the supported-inputs document lists them.
 
 ## The controller's own steps
 

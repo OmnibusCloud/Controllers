@@ -1,3 +1,4 @@
+using OutWit.Controller.OpenFOAM.Extraction;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Model.Rules;
 using OutWit.Engine.Interfaces;
@@ -11,7 +12,11 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 /// <c>internalField</c> through a reference to an included entry as often
 /// as it is written in the field), as the study templated them, tokens in
 /// place, from the node's blob cache - given to the Model, the sentences
-/// kept for <c>log.responses</c>. A file that cannot be read says nothing.
+/// kept as the variant's notes: ranks that do nothing are an
+/// <see cref="FoamNoteKind.Info"/> (the values stand, obtained on one rank),
+/// a <c>setFields</c> over a swept field a <see cref="FoamNoteKind.Warning"/>
+/// (the swept value does not reach the solve, or reaches it outside the
+/// regions only); neither names a column. A file that cannot be read says nothing.
 /// </summary>
 public static class FoamCaseAdvisor
 {
@@ -31,10 +36,12 @@ public static class FoamCaseAdvisor
     /// <param name="task">The task.</param>
     /// <param name="blobService">The node's blob service, for the base files.</param>
     /// <param name="cancellationToken">Cancels the reads.</param>
-    /// <returns>Sentences, one each; empty when there is nothing to say.</returns>
-    public static async Task<IReadOnlyList<string>> AdviseAsync(FoamTaskData task, IWitBlobService blobService, CancellationToken cancellationToken = default)
+    /// <returns>One note per sentence of the advice; empty when there is nothing to say.</returns>
+    public static async Task<IReadOnlyList<FoamNote>> AdviseAsync(FoamTaskData task, IWitBlobService blobService, CancellationToken cancellationToken = default)
     {
-        var advice = new List<string>(FoamCaseAdvice.Of(task.Case));
+        var advice = FoamCaseAdvice.Of(task.Case)
+            .Select(sentence => new FoamNote { Kind = FoamNoteKind.Info, Text = sentence })
+            .ToList();
         if (task.Case?.Recipe == null || task.Case.Recipe.Steps.All(step => step.Utility != "setFields"))
             return advice;
 
@@ -63,7 +70,8 @@ public static class FoamCaseAdvisor
             }
         }
 
-        advice.AddRange(FoamCaseAdvice.OfSetFields(task.Case.Recipe, files));
+        advice.AddRange(FoamCaseAdvice.OfSetFields(task.Case.Recipe, files)
+            .Select(sentence => new FoamNote { Kind = FoamNoteKind.Warning, Text = sentence }));
         return advice;
     }
 
