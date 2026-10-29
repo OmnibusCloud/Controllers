@@ -12,6 +12,12 @@
 //   - a file containing "FAKE-COEFFS" also writes a force-coefficient
 //     history under postProcessing/coeffs/<n>/coefficient.dat, in the shape
 //     the forceCoeffs function object writes;
+//   - a file containing "FAKE-STALE-COEFFS" writes the same history under
+//     postProcessing/coeffs/0/ one time short of the run (rows at n-2 and
+//     n-1): a function object that stopped writing before the run ended;
+//   - a line "FAKE-PROBES=<name>" also writes the probes files p and U under
+//     postProcessing/<name>/0/ in v2606's shape, a row per time, probe 1 at
+//     (9 9 9) outside the mesh ("# Not Found", -1e+300);
 //   - otherwise it "solves" ITERATIONS steps (system/fake may say
 //     "ITERATIONS=n"), converging on the last one, and writes <n>/U.
 // Every copy prints "nCells: 12225" unless system/fake says
@@ -92,6 +98,35 @@ if (text.Contains("FAKE-COEFFS", StringComparison.Ordinal))
     File.WriteAllText(Path.Combine(coeffs, "coefficient.dat"),
         "# Force coefficients\n# Time        \tCd            \tCl            \tCmPitch\n" +
         $"{iterations - 1}\t0.44\t0.10\t0.01\n{iterations}\t0.418\t0.092\t0.009\n");
+}
+
+if (text.Contains("FAKE-STALE-COEFFS", StringComparison.Ordinal))
+{
+    var coeffs = Path.Combine(caseDirectory, "postProcessing", "coeffs", "0");
+    Directory.CreateDirectory(coeffs);
+    File.WriteAllText(Path.Combine(coeffs, "coefficient.dat"),
+        "# Force coefficients\n# Time        \tCd            \tCl            \tCmPitch\n" +
+        $"{iterations - 2}\t0.44\t0.10\t0.01\n{iterations - 1}\t0.418\t0.092\t0.009\n");
+}
+
+foreach (var line in text.Split('\n'))
+{
+    if (!line.StartsWith("FAKE-PROBES=", StringComparison.Ordinal))
+        continue;
+
+    var probes = Path.Combine(caseDirectory, "postProcessing", line["FAKE-PROBES=".Length..].Trim(), "0");
+    Directory.CreateDirectory(probes);
+    const string PROBES_HEADER = "# Probe 0 (0.1 0 0)\n# Probe 1 (9 9 9)  # Not Found\n# Time 0 1\n";
+    var scalar = new System.Text.StringBuilder(PROBES_HEADER);
+    var vector = new System.Text.StringBuilder(PROBES_HEADER);
+    for (var step = 1; step <= iterations; step++)
+    {
+        scalar.Append($"{step} -3.68615 -1e+300\n");
+        vector.Append($"{step} (6.4 -0.5 0) (-1e+300 -1e+300 -1e+300)\n");
+    }
+
+    File.WriteAllText(Path.Combine(probes, "p"), scalar.ToString());
+    File.WriteAllText(Path.Combine(probes, "U"), vector.ToString());
 }
 
 Console.WriteLine("End");

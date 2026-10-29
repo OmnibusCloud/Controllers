@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using OutWit.Controller.OpenFOAM.Extraction;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Mock;
@@ -106,6 +107,23 @@ public class FoamKitFinalTimeOracleTests
         Assert.That(notes, Does.Contain("probe1: probe 1 (9 9 9) of U is outside the mesh - not reported."));
         Assert.That(notes, Does.Contain($"ownMinMax: the last row of fieldMinMax.dat is at time {LAST_WRITTEN_TIME}, the run ended at {FINAL_TIME} - not reported."));
         Assert.That(notes, Does.Not.Contain("patchValue1:").And.Not.Contain("volumeValue1:").And.Not.Contain("fieldMinMax1:"));
+
+        // The same notes reach the app inside the log tail, each on the
+        // column it leaves empty, and the post steps recorded but not run
+        // say so there as well.
+        var (solverTail, tailNotes) = FoamNoteLog.Parse(result.LogTail);
+        Assert.That(solverTail, Is.Null, "a successful run has no solver tail");
+        Assert.That(tailNotes.Where(note => note.Text.StartsWith("probe1:", StringComparison.Ordinal)).Select(note => (note.Kind, note.Column)), Is.EqualTo(new[]
+        {
+            (FoamNoteKind.Warning, (string?)"probe1.U@probe1(9 9 9)_x"), (FoamNoteKind.Warning, (string?)"probe1.U@probe1(9 9 9)_y"),
+            (FoamNoteKind.Warning, (string?)"probe1.U@probe1(9 9 9)_z"), (FoamNoteKind.Warning, (string?)"probe1.p@probe1(9 9 9)")
+        }));
+        var stale = tailNotes.Where(note => note.Text.StartsWith("ownMinMax:", StringComparison.Ordinal)).ToList();
+        Assert.That(stale, Is.Not.Empty);
+        Assert.That(stale.Select(note => (note.Kind, note.Column?.StartsWith("ownMinMax.", StringComparison.Ordinal))), Is.All.EqualTo((FoamNoteKind.Warning, (bool?)true)),
+            "the stale file's sentence on each of its columns");
+        Assert.That(tailNotes.Where(note => note.Text.StartsWith("Not run: 'postProcess -func ", StringComparison.Ordinal)).Select(note => (note.Kind, note.Column)),
+            Is.EqualTo(Enumerable.Repeat((FoamNoteKind.Info, (string?)null), 4)), "one INFO per post step recorded but not run");
 
         // The solve's own files carry the final time, and the post steps
         // that would have read 0.04 - and, for the probes, overwritten the

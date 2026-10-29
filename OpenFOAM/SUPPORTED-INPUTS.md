@@ -212,17 +212,18 @@ overwrites the solve's rows with that one time (both measured on v2606,
 2026-10-28). A value is reported from the run's final time, whichever step
 wrote it: a function object that stopped writing earlier - the case's own,
 writing at write times only, included - is left out and named in
-`log.responses`. A probe column is named `<field>@probe<N>(x y z)` from the
-probe's header line, with `_x`, `_y`, `_z` for a vector (`_xx` ... `_zz` for a
-tensor); a probe outside the mesh is an empty cell, named in `log.responses`
+`log.responses` and in a note on each of its columns ([Notes](#notes)). A
+probe column is named `<field>@probe<N>(x y z)` from the probe's header line,
+with `_x`, `_y`, `_z` for a vector (`_xx` ... `_zz` for a tensor); a probe
+outside the mesh is an empty cell, named in `log.responses` and in a note
 with its position, never the -1e+300 OpenFOAM writes for it. In a parameter study a response parameter may carry the
 study's token (a reference speed that follows the swept speed). A force
 response that re-measures one of the case's own force function objects -
 named as it, or as it with `_sweep` - follows the case where the study
 sweeps it: every reference value whose entry carries a token (a `$`
 reference to such an entry included) takes the variant's value before the
-node writes the response, and `log.responses` says which followed and to
-what; a value the study does not sweep stays as requested. A parameter's
+node writes the response, and `log.responses` and a note say which followed
+and to what; a value the study does not sweep stays as requested. A parameter's
 value is plain dictionary text - a word, a number, a vector, a list - or a flat
 sub-dictionary of such entries (`coordinateSystem { origin (0 0 0); e1 (1 0 0);
 e3 (0 0 1); }`, a `binData`); never braces inside braces, never code. A force
@@ -260,8 +261,78 @@ asked for while no step of the recipe runs in parallel (every step then runs
 serially on one rank), or a `setFields` step that overwrites an `internalField`
 the study sweeps (everywhere through `defaultFieldValues`, or inside the
 regions only). An initiator shows the same sentences at preflight
-(`FoamCaseAdvice`). A node keeps nothing: what is not returned is gone when
-the run ends.
+(`FoamCaseAdvice`). The same sentences, and the one a post step recorded but
+not run writes into its own log, come back in the result itself as notes,
+whatever the artifact policy. A node keeps nothing: what is not returned is
+gone when the run ends.
+
+### Notes
+
+The notes travel inside `FoamResultData.LogTail`, whose wire layout is the
+shipped one (every installed client reads the Sweep manifest in default-mode
+MemoryPack, which checks the member count both ways, so no member is added).
+The grammar is the CalculiX controller's, so one reader serves both families
+(`FoamNoteLog` composes and parses it):
+
+```
+<the failed step's tail, as before: a failed run only>
+--- notes ---
+[note]<TAB><KIND><TAB><column or empty><TAB><text>
+[note]<TAB><KIND><TAB><column or empty><TAB><text>
+```
+
+- Lines are separated by `\n`. The failed step's tail comes first and is
+  absent on a successful run, whose tail then starts with the separator line
+  `--- notes ---`. A tail without the separator carries no notes.
+- A variant without notes keeps the tail it always had: none on success, the
+  failed step's tail on failure. A refused variant carries no notes: its tail
+  stays empty and its rejections say why.
+- Every line after the separator that starts with `[note]` is one note:
+  `Split('\t', 4)` gives `[note]`, the kind, the column and the text. Tabs and
+  line breaks inside the column or the text are replaced by spaces.
+- The column is the value's exact name in the response row:
+  `<response>.<column>`, with the file's name in between for a function object
+  that writes more than one file (`forces1.force.total_x`), a probe's
+  `<response>.<field>@probe<N>(x y z)` with `_x`, `_y`, `_z` for a vector
+  (`_xx` ... `_zz` for a tensor). A note about several columns is written once
+  per column, with the same text. A note about a whole response or about the
+  variant as a whole has an empty column, and its text names what it is about.
+- The notes come in the order they arose: before the run (a reference value
+  that follows, the advice), of its steps (a post step not run), of its
+  responses (in the request's order). `log.responses` carries the same
+  sentences, one line each, as before - the post step's is in its own log.
+
+| Kind | Meaning |
+|---|---|
+| `INFO` | The values stand; the note says how they were obtained or what the run did besides. |
+| `WARNING` | A column is not reported (the column field names it; the text says why), or a swept value does not do what the study meant. |
+| `ERROR` | The extraction failed as a whole. This controller writes none yet: an extraction that throws leaves the row empty, with no note. |
+
+### What the notes say
+
+| Note | Kind | Column | Text |
+|---|---|---|---|
+| A reference value of a re-measured force follows the sweep | `INFO` | empty | `Response '<response>': <key> follows the case's <function object> (<file>:<line>), which the study sweeps - <value> in this variant.` |
+| Ranks asked for, no step runs in parallel | `INFO` | empty | `The task asks for <N> ranks, and no step of the recipe runs in parallel: every step runs serially on one rank, and the other <N-1> do nothing. Mark the solve (and the steps that may) parallel, or ask for one thread.` |
+| A `setFields` step overwrites a swept `internalField` everywhere | `WARNING` | empty | `<field file>: internalField carries <token>, which the study sweeps, and the recipe's setFields step overwrites it everywhere (system/setFieldsDict defaultFieldValues names <field>): the swept value has no effect.` |
+| A `setFields` step overwrites a swept `internalField` inside its regions | `WARNING` | empty | `<field file>: internalField carries <token>, which the study sweeps, and the recipe's setFields step overwrites it inside the regions of system/setFieldsDict: the swept value holds outside them only.` |
+| A post step recorded but not run | `INFO` | empty | `Not run: '<utility> <arguments>'. The solver measured '<response>' at every step (the controller's includeFunc), so its last row is the final time's; a post step reads the latest written time only, and for a probe it overwrites the solve's rows with that one.` |
+| A function object stopped writing before the run ended | `WARNING` | every value column of the file | `<response>: the last row of <file> is at time <time>, the run ended at <final time> - not reported.` |
+| A probe outside the mesh | `WARNING` | every component column of the probe | `<response>: probe <N> (x y z) of <field> is outside the mesh - not reported.` |
+| -1e+300 in a file that is not a probes file | `WARNING` | that column | `<response>: <column> is -1e+300, a probe outside the mesh - not reported.` |
+
+A token the `setFields` note names may be reached through a reference: the
+text then reads `carries <token> through $<entry>` (`of <file>` when the entry
+is in a file the field includes). Example of a successful variant's tail:
+
+```
+--- notes ---
+[note]	INFO		Not run: 'postProcess -func probe1 -latestTime'. The solver measured 'probe1' at every step (the controller's includeFunc), so its last row is the final time's; a post step reads the latest written time only, and for a probe it overwrites the solve's rows with that one.
+[note]	WARNING	probe1.U@probe1(9 9 9)_x	probe1: probe 1 (9 9 9) of U is outside the mesh - not reported.
+[note]	WARNING	probe1.U@probe1(9 9 9)_y	probe1: probe 1 (9 9 9) of U is outside the mesh - not reported.
+[note]	WARNING	probe1.U@probe1(9 9 9)_z	probe1: probe 1 (9 9 9) of U is outside the mesh - not reported.
+[note]	WARNING	probe1.p@probe1(9 9 9)	probe1: probe 1 (9 9 9) of p is outside the mesh - not reported.
+```
 
 ## Studies
 

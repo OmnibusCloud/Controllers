@@ -126,11 +126,16 @@ public class FoamPostProcessingReaderTests
         Assert.That(table!.Columns, Is.EqualTo(new[] { "Time", "p@probe0(0.1 0 0)", "p@probe1(5 5 5)" }));
         Assert.That(table.Values[1], Is.EqualTo(-3.68615));
         Assert.That(double.IsNaN(table.Values[2]), Is.True, "not a value");
-        Assert.That(table.Notes, Is.EqualTo(new[] { "probe 1 (5 5 5) of p is outside the mesh - not reported." }));
+        Assert.That(table.Notes.Select(note => (note.Kind, note.Column, note.Text)), Is.EqualTo(new[]
+        {
+            (FoamNoteKind.Warning, (string?)"p@probe1(5 5 5)", "probe 1 (5 5 5) of p is outside the mesh - not reported.")
+        }));
 
         var vector = FoamPostProcessingReader.ReadLastRow(new StringReader("# Probe 0 (5 5 5)  # Not Found\n# Time 0\n1 (-1e+300 -1e+300 -1e+300)\n"), "U");
         Assert.That(vector!.Values.Skip(1).All(double.IsNaN), Is.True, "every component of the probe");
-        Assert.That(vector.Notes, Has.Count.EqualTo(1));
+        Assert.That(vector.Notes.Select(note => note.Column), Is.EqualTo(new[] { "U@probe0(5 5 5)_x", "U@probe0(5 5 5)_y", "U@probe0(5 5 5)_z" }),
+            "a note on every component the probe leaves empty");
+        Assert.That(vector.Notes.Select(note => note.Text).Distinct(), Is.EqualTo(new[] { "probe 0 (5 5 5) of U is outside the mesh - not reported." }), "one sentence for the probe");
     }
 
     [Test]
@@ -162,7 +167,10 @@ public class FoamPostProcessingReaderTests
 
         Assert.That(double.IsNaN(table!.Values[1]), Is.True);
         Assert.That(table.Values[2], Is.EqualTo(2));
-        Assert.That(table.Notes, Is.EqualTo(new[] { "a is -1e+300, a probe outside the mesh - not reported." }));
+        Assert.That(table.Notes.Select(note => (note.Kind, note.Column, note.Text)), Is.EqualTo(new[]
+        {
+            (FoamNoteKind.Warning, (string?)"a", "a is -1e+300, a probe outside the mesh - not reported.")
+        }));
     }
 
     #endregion

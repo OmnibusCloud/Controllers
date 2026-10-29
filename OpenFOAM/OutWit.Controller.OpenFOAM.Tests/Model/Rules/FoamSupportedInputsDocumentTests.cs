@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using OutWit.Controller.OpenFOAM.Extraction;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Model.Rules;
 using OutWit.Controller.OpenFOAM.Runtime;
@@ -128,6 +129,21 @@ public class FoamSupportedInputsDocumentTests
 
         Assert.That(Rows("## Solver classes").Select(row => CodeIn(row[0]).Single()), Is.EqualTo(FoamSolverClasses.ALL));
         Assert.That(published, Is.EquivalentTo(FoamSolverClasses.APPLICATIONS));
+    }
+
+    [Test]
+    public void TheNotesAreTheGrammarTheControllerWritesTest()
+    {
+        var notes = Section("### Notes");
+
+        Assert.That(Rows("### Notes").Select(row => CodeIn(row[0]).Single()), Is.EqualTo(Enum.GetNames<FoamNoteKind>().Select(name => name.ToUpperInvariant())));
+        Assert.That(notes, Does.Contain(FoamNoteLog.SEPARATOR));
+        Assert.That(notes, Has.Some.StartsWith($"{FoamNoteLog.NOTE_PREFIX}<TAB><KIND><TAB>"));
+        Assert.That(Rows("### What the notes say").Select(row => CodeIn(row[1]).Single()).Distinct(), Is.SubsetOf(Enum.GetNames<FoamNoteKind>().Select(name => name.ToUpperInvariant())));
+
+        // The example is what the composer writes: every line after the separator reads back as a note.
+        var example = Section("### What the notes say").SkipWhile(line => line != FoamNoteLog.SEPARATOR).TakeWhile(line => line != "```").ToList();
+        Assert.That(FoamNoteLog.Parse(string.Join('\n', example)).Notes, Has.Count.EqualTo(example.Count - 1));
     }
 
     #endregion

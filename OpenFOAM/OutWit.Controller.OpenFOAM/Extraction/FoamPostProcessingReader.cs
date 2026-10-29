@@ -122,12 +122,12 @@ public static class FoamPostProcessingReader
         if (names.Count != values.Count)
             names = Enumerable.Range(0, values.Count).Select(index => index == 0 ? TIME : $"c{index}").ToList();
 
-        var notes = new List<string>();
+        var notes = new List<FoamNote>();
         for (var index = 1; index < values.Count; index++)
         {
             if (IsUnset(values[index]))
             {
-                notes.Add($"{names[index]} is -1e+300, a probe outside the mesh - not reported.");
+                notes.Add(NotReported(names[index], $"{names[index]} is -1e+300, a probe outside the mesh - not reported."));
                 values[index] = double.NaN;
             }
         }
@@ -169,7 +169,7 @@ public static class FoamPostProcessingReader
                 : Enumerable.Range(1, components).Select(component => $"_c{component}").ToArray();
 
         var columns = new List<string>(values.Count) { TIME };
-        var notes = new List<string>();
+        var notes = new List<FoamNote>();
         var position = 1;
         foreach (var probe in listed)
         {
@@ -183,12 +183,21 @@ public static class FoamPostProcessingReader
             if (!outside)
                 continue;
 
-            notes.Add($"probe {probe.Index} {probe.Position} of {fieldName} is outside the mesh - not reported.");
-            for (var component = 1; component <= components; component++)
+            // One sentence for the probe, on every column it leaves empty.
+            var sentence = $"probe {probe.Index} {probe.Position} of {fieldName} is outside the mesh - not reported.";
+            for (var component = components; component >= 1; component--)
+            {
                 values[position - component] = double.NaN;
+                notes.Add(NotReported(columns[position - component], sentence));
+            }
         }
 
         return new FoamPostProcessingTable(columns, values, notes, isProbes: true);
+    }
+
+    private static FoamNote NotReported(string column, string sentence)
+    {
+        return new FoamNote { Kind = FoamNoteKind.Warning, Column = column, Text = sentence };
     }
 
     private static bool IsUnset(double value)

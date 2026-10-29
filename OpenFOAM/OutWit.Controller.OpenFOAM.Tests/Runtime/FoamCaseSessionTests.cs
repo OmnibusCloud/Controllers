@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using OutWit.Controller.OpenFOAM.Extraction;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Mock;
@@ -36,7 +37,7 @@ public class FoamCaseSessionTests
 
     #region Tools
 
-    private FoamCaseSession RequireSession()
+    private FoamCaseSession RequireSession(params string[] utilities)
     {
         var solutionRoot = OpenFOAMTestPaths.FindSolutionRoot();
         if (solutionRoot == null)
@@ -50,7 +51,7 @@ public class FoamCaseSessionTests
         if (Path.GetTempPath().Contains(' ') && !OperatingSystem.IsWindows())
             Assert.Ignore("the temp path contains a space; OpenFOAM strips whitespace from paths, so the controller refuses it by design");
 
-        m_kit = FakeKit.Create(fakeFoam, "blockMesh", "simpleFoam", "checkMesh");
+        m_kit = FakeKit.Create(fakeFoam, ["blockMesh", "simpleFoam", "checkMesh", .. utilities]);
         m_temp = new RecordingTempStorage(m_storage);
         return new FoamCaseSession(m_kit.Resolve(), m_blobs, m_temp);
     }
@@ -119,6 +120,20 @@ public class FoamCaseSessionTests
     private FoamFileRefData BlobFile(string relativePath, string text, bool templated = false)
     {
         return m_blobs.AddFile(relativePath, text, templated);
+    }
+
+    /// <summary>The notes a result carries in its log tail, as kind, column and text.</summary>
+    private static IEnumerable<(FoamNoteKind Kind, string? Column, string Text)> NotesOf(FoamResultData result)
+    {
+        return FoamNoteLog.Parse(result.LogTail).Notes.Select(note => (note.Kind, note.Column, note.Text));
+    }
+
+    /// <summary>A file of the result's artifact, as text.</summary>
+    private string ArtifactText(FoamResultData result, string entryName)
+    {
+        using var archive = ZipFile.OpenRead(m_blobs.GetStoredPath(result.ArtifactBlobId!.Value));
+        using var reader = new StreamReader(archive.GetEntry(entryName)!.Open());
+        return reader.ReadToEnd();
     }
 
     #endregion
@@ -227,6 +242,12 @@ public class FoamCaseSessionTests
         Assert.That(await written.ReadToEndAsync(), Does.Contain("lRef            10;"), "the variant's value, not the offered one");
         using var notes = new StreamReader(archive.GetEntry("log.responses")!.Open());
         Assert.That(await notes.ReadToEndAsync(), Does.Contain("Response 'forceCoeffs1_sweep': lRef follows the case's forceCoeffs1 (system/controlDict:6), which the study sweeps - 10 in this variant."));
+
+        // The same sentence reaches the app: an INFO about the whole response.
+        Assert.That(NotesOf(result), Is.EqualTo(new[]
+        {
+            (FoamNoteKind.Info, (string?)null, "Response 'forceCoeffs1_sweep': lRef follows the case's forceCoeffs1 (system/controlDict:6), which the study sweeps - 10 in this variant.")
+        }));
     }
 
     [Test]
@@ -243,6 +264,7 @@ public class FoamCaseSessionTests
         Assert.That(result.Steps, Is.Empty);
         Assert.That(result.ArtifactBlobId, Is.Null);
         Assert.That(result.ResponseRow, Is.Null);
+        Assert.That(result.LogTail, Is.Null, "a refused variant's tail stays empty: its rejections say why");
     }
 
     [Test]
@@ -393,6 +415,174 @@ public class FoamCaseSessionTests
         Assert.That(result.ArtifactBytes, Is.EqualTo(0));
         Assert.That(result.ResponseRow, Is.Not.Null);
         Assert.That(result.ResponseRow!.Values, Is.Empty);
+    }
+
+    #endregion
+
+    #region Note Tests
+
+    [Test]
+    public async Task AProbeOutsideTheMeshIsAWarningOnEveryColumnItLeavesEmptyTest()
+    {
+        var session = RequireSession();
+        var data = PitzCase("ITERATIONS=3\nFAKE-PROBES=wake\n");
+        data.Extraction = new FoamExtractionRequestData
+        {
+            Responses =
+            [
+                new FoamResponseSpecData
+                {
+                    Name = "wake", Kind = FoamResponseKind.Probe, Fields = ["p", "U"],
+                    Parameters = [new FoamNamedValueData { Name = "probeLocations", Value = "((0.1 0 0) (9 9 9))" }]
+                }
+            ]
+        };
+
+        var result = await session.RunAsync(Task(data));
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.LogTail);
+        Assert.That(result.ResponseRow!.Values.Select(value => value.Name), Is.EqualTo(new[]
+        {
+            "wake.U@probe0(0.1 0 0)_x", "wake.U@probe0(0.1 0 0)_y", "wake.U@probe0(0.1 0 0)_z", "wake.p@probe0(0.1 0 0)"
+        }));
+        Assert.That(result.LogTail, Does.StartWith(FoamNoteLog.SEPARATOR + "\n"), "a successful run has no solver tail: the notes come first");
+        Assert.That(NotesOf(result), Is.EqualTo(new[]
+        {
+            (FoamNoteKind.Warning, (string?)"wake.U@probe1(9 9 9)_x", "wake: probe 1 (9 9 9) of U is outside the mesh - not reported."),
+            (FoamNoteKind.Warning, (string?)"wake.U@probe1(9 9 9)_y", "wake: probe 1 (9 9 9) of U is outside the mesh - not reported."),
+            (FoamNoteKind.Warning, (string?)"wake.U@probe1(9 9 9)_z", "wake: probe 1 (9 9 9) of U is outside the mesh - not reported."),
+            (FoamNoteKind.Warning, (string?)"wake.p@probe1(9 9 9)", "wake: probe 1 (9 9 9) of p is outside the mesh - not reported.")
+        }), "every empty cell is named as the row names the probe it found");
+        Assert.That(ArtifactText(result, "log.responses").Replace("\r\n", "\n"), Is.EqualTo(
+            "wake: probe 1 (9 9 9) of U is outside the mesh - not reported.\nwake: probe 1 (9 9 9) of p is outside the mesh - not reported.\n"),
+            "log.responses is written as before: one line per sentence");
+    }
+
+    [Test]
+    public async Task AFunctionObjectThatStoppedWritingIsAWarningOnEveryColumnTest()
+    {
+        var session = RequireSession();
+
+        var result = await session.RunAsync(PitzTask("ITERATIONS=4\nFAKE-STALE-COEFFS\n"));
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.LogTail);
+        Assert.That(result.ResponseRow!.Values, Is.Empty, "a stale value is worse than none");
+        Assert.That(NotesOf(result), Is.EqualTo(new[]
+        {
+            (FoamNoteKind.Warning, (string?)"coeffs.Cd", "coeffs: the last row of coefficient.dat is at time 3, the run ended at 4 - not reported."),
+            (FoamNoteKind.Warning, (string?)"coeffs.Cl", "coeffs: the last row of coefficient.dat is at time 3, the run ended at 4 - not reported."),
+            (FoamNoteKind.Warning, (string?)"coeffs.CmPitch", "coeffs: the last row of coefficient.dat is at time 3, the run ended at 4 - not reported.")
+        }));
+    }
+
+    [Test]
+    public async Task RanksWithoutAParallelStepAreAnInfoOfTheVariantTest()
+    {
+        var session = RequireSession();
+        var data = PitzCase("FAKE-COEFFS\nITERATIONS=2\n");
+        data.Recipe!.Steps[2].Parallel = false;
+
+        var result = await session.RunAsync(Task(data));
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.LogTail);
+        Assert.That(result.ResponseRow!.Values, Is.Not.Empty, "the values stand");
+        Assert.That(NotesOf(result), Is.EqualTo(new[]
+        {
+            (FoamNoteKind.Info, (string?)null, "The task asks for 2 ranks, and no step of the recipe runs in parallel: every step runs serially on one rank, and the other 1 do nothing. Mark the solve (and the steps that may) parallel, or ask for one thread.")
+        }));
+    }
+
+    [Test]
+    public async Task ASetFieldsOverASweptFieldIsAWarningOfTheVariantTest()
+    {
+        var session = RequireSession("setFields");
+        var data = PitzCase("FAKE-COEFFS\nITERATIONS=2\n");
+        data.BaseFiles.Add(BlobFile("system/setFieldsDict", "defaultFieldValues ( volVectorFieldValue U (0 0 0) );\nregions ();\n"));
+        data.Recipe!.Steps.Insert(2, new FoamStepData { Utility = "setFields" });
+
+        var result = await session.RunAsync(Task(data));
+
+        Assert.That(result.Rejections, Is.Empty);
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.LogTail);
+        Assert.That(NotesOf(result), Is.EqualTo(new[]
+        {
+            (FoamNoteKind.Warning, (string?)null, "0/U: internalField carries {{oc2}}, which the study sweeps, and the recipe's setFields step overwrites it everywhere (system/setFieldsDict defaultFieldValues names U): the swept value has no effect.")
+        }));
+    }
+
+    [Test]
+    public async Task APostStepRecordedButNotRunIsAnInfoTest()
+    {
+        var session = RequireSession("postProcess");
+        var data = PitzCase("FAKE-COEFFS\nITERATIONS=2\n");
+        data.Extraction!.Responses.Add(new FoamResponseSpecData { Name = "inletP", Kind = FoamResponseKind.PatchValue, Patches = ["inlet"], Fields = ["p"], Operation = "areaAverage" });
+        data.Recipe!.Steps.Add(new FoamStepData { Utility = "postProcess", Arguments = ["-func", "inletP", "-latestTime"] });
+
+        var result = await session.RunAsync(Task(data));
+
+        Assert.That(result.Rejections, Is.Empty);
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.LogTail);
+        Assert.That(result.Steps.Select(step => (step.Utility, step.Ranks)).Last(), Is.EqualTo(("postProcess", 0)), "recorded like any step");
+        Assert.That(NotesOf(result), Is.EqualTo(new[]
+        {
+            (FoamNoteKind.Info, (string?)null, "Not run: 'postProcess -func inletP -latestTime'. The solver measured 'inletP' at every step (the controller's includeFunc), so its last row is the final time's; a post step reads the latest written time only, and for a probe it overwrites the solve's rows with that one.")
+        }), "nothing else in the result says the step did nothing");
+        Assert.That(ArtifactText(result, "log.postProcess").TrimEnd(), Is.EqualTo(NotesOf(result).Single().Text), "the step's log says the same");
+    }
+
+    [Test]
+    public async Task AVariantWithoutNotesKeepsTheTailItHadTest()
+    {
+        var session = RequireSession();
+
+        var succeeded = await session.RunAsync(PitzTask("FAKE-COEFFS\nITERATIONS=2\n"));
+        var failed = await session.RunAsync(PitzTask("FAKE-FAIL\n"));
+
+        Assert.That(succeeded.ExitCode, Is.EqualTo(0));
+        Assert.That(succeeded.LogTail, Is.Null, "a successful run without notes: no tail, as before");
+        Assert.That(failed.FailedStep, Is.EqualTo("blockMesh"));
+        Assert.That(failed.LogTail, Does.Contain("FOAM FATAL ERROR").And.Not.Contain(FoamNoteLog.SEPARATOR), "the failed step's tail, nothing after it");
+
+        var (tail, notes) = FoamNoteLog.Parse(failed.LogTail);
+        Assert.That(tail, Is.EqualTo(failed.LogTail), "a tail without the separator is the solver's tail whole");
+        Assert.That(notes, Is.Empty, "and carries no notes");
+    }
+
+    [Test]
+    public async Task AFailedRunCarriesItsTailFirstAndItsNotesAfterTest()
+    {
+        var session = RequireSession();
+        var data = PitzCase("FAKE-FAIL\n");
+        data.Recipe!.Steps[2].Parallel = false;
+
+        var result = await session.RunAsync(Task(data));
+
+        Assert.That(result.FailedStep, Is.EqualTo("blockMesh"));
+        var (tail, notes) = FoamNoteLog.Parse(result.LogTail);
+        Assert.That(tail, Does.Contain("FOAM FATAL ERROR"), "the solver's own words first");
+        Assert.That(result.LogTail, Does.StartWith(tail!));
+        Assert.That(notes.Select(note => (note.Kind, note.Column)), Is.EqualTo(new[] { (FoamNoteKind.Info, (string?)null) }));
+        Assert.That(notes[0].Text, Does.StartWith("The task asks for 2 ranks"));
+    }
+
+    [Test]
+    public async Task ARefusedVariantCarriesNoNotesTest()
+    {
+        // The reference value follows before the refusal is known: a run
+        // that never was says nothing beyond its rejections.
+        var session = RequireSession();
+        var data = PitzCase("ITERATIONS=1\n");
+        data.BaseFiles.RemoveAll(file => file.RelativePath == "system/controlDict");
+        data.BaseFiles.Add(BlobFile("system/controlDict",
+            "FoamFile { object controlDict; }\napplication simpleFoam;\nendTime 5;\nfunctions\n{\n" +
+            "    forceCoeffs1 { type forceCoeffs; libs (forces); patches (wall); rho rhoInf; rhoInf 1; CofR (0 0 0); liftDir (0 0 1); dragDir (1 0 0); magUInf 20; lRef {{oc2}}; Aref 1; }\n}\n", templated: true));
+        data.Extraction!.Responses[0].Name = "forceCoeffs1_sweep";
+        data.BaseFiles.Add(BlobFile("0/p", "internalField #codeStream { code #{ os << 0; #}; };\n"));
+
+        var result = await session.RunAsync(Task(data));
+
+        Assert.That(result.Rejections, Is.Not.Empty);
+        Assert.That(result.LogTail, Is.Null);
     }
 
     #endregion

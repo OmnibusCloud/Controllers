@@ -1,3 +1,4 @@
+using OutWit.Controller.OpenFOAM.Extraction;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Mock;
@@ -72,8 +73,11 @@ public class FoamCaseAdvisorTests
         var advice = await FoamCaseAdvisor.AdviseAsync(Task(threads: 4, parallel: false, setFields: true), m_blobs);
 
         Assert.That(advice, Has.Count.EqualTo(2));
-        Assert.That(advice[0], Does.StartWith("The task asks for 4 ranks, and no step of the recipe runs in parallel"));
-        Assert.That(advice[1], Is.EqualTo("0/alpha.water: internalField carries {{oc1}}, which the study sweeps, and the recipe's setFields step overwrites it everywhere (system/setFieldsDict defaultFieldValues names alpha.water): the swept value has no effect."));
+        Assert.That(advice[0].Text, Does.StartWith("The task asks for 4 ranks, and no step of the recipe runs in parallel"));
+        Assert.That(advice[0].Kind, Is.EqualTo(FoamNoteKind.Info), "the values stand, obtained on one rank");
+        Assert.That(advice[1].Text, Is.EqualTo("0/alpha.water: internalField carries {{oc1}}, which the study sweeps, and the recipe's setFields step overwrites it everywhere (system/setFieldsDict defaultFieldValues names alpha.water): the swept value has no effect."));
+        Assert.That(advice[1].Kind, Is.EqualTo(FoamNoteKind.Warning), "the swept value does not reach the solve");
+        Assert.That(advice.Select(note => note.Column), Is.All.Null, "advice is about the variant, not a response column");
     }
 
     [Test]
@@ -89,7 +93,7 @@ public class FoamCaseAdvisorTests
 
         var advice = await FoamCaseAdvisor.AdviseAsync(task, m_blobs);
 
-        Assert.That(advice, Is.EqualTo(new[]
+        Assert.That(advice.Select(note => note.Text), Is.EqualTo(new[]
         {
             "0/U: internalField carries {{oc2}} through $flowVelocity of 0/include/initialConditions, which the study sweeps, and the recipe's setFields step overwrites it everywhere (system/setFieldsDict defaultFieldValues names U): the swept value has no effect."
         }));

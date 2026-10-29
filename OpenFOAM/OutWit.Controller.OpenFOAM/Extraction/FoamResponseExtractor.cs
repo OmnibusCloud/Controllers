@@ -17,7 +17,9 @@ namespace OutWit.Controller.OpenFOAM.Extraction;
 /// it is the same for every column and the result carries it once. Given the
 /// run's final time, a file whose last row is earlier - a function object
 /// that stopped writing before the run ended - is not reported: a stale value
-/// is worse than none, and a note names it.
+/// is worse than none, and a note names it. Every such note is a
+/// <see cref="FoamNoteKind.Warning"/> on each column left out, named as the
+/// row would have named the value.
 /// </summary>
 public static class FoamResponseExtractor
 {
@@ -55,9 +57,14 @@ public static class FoamResponseExtractor
     /// <param name="caseDirectory">The case root.</param>
     /// <param name="request">The request; null yields an empty row.</param>
     /// <param name="finalTime">The time the run ended at; null skips the check.</param>
-    /// <param name="notes">Receives one sentence per file left out; null discards them.</param>
+    /// <param name="notes">
+    /// Receives a <see cref="FoamNoteKind.Warning"/> on every column left
+    /// out, named as the row would have named its value: one sentence per
+    /// stale file on each of its columns, one per probe outside the mesh on
+    /// each of its components; null discards them.
+    /// </param>
     /// <returns>The row; a response whose files are missing or stale contributes nothing.</returns>
-    public static FoamResponseRowData Extract(string caseDirectory, FoamExtractionRequestData? request, double? finalTime, ICollection<string>? notes)
+    public static FoamResponseRowData Extract(string caseDirectory, FoamExtractionRequestData? request, double? finalTime, ICollection<FoamNote>? notes)
     {
         var row = new FoamResponseRowData();
         if (request == null)
@@ -77,19 +84,27 @@ public static class FoamResponseExtractor
             {
                 var table = latest[file];
 
+                // A probe column carries its field already (p@probe0(0.1 0 0)).
+                var stem = Path.GetFileNameWithoutExtension(file);
+                var prefix = files.Count > 1 && !table.IsProbes ? $"{response.Name}.{stem}" : response.Name;
+
                 if (finalTime is { } final && IsStale(table.Columns, table.Values, final, out var time))
                 {
-                    notes?.Add(string.Create(CultureInfo.InvariantCulture,
-                        $"{response.Name}: the last row of {Path.GetFileName(file)} is at time {time}, the run ended at {final} - not reported."));
+                    var sentence = string.Create(CultureInfo.InvariantCulture,
+                        $"{response.Name}: the last row of {Path.GetFileName(file)} is at time {time}, the run ended at {final} - not reported.");
+                    NoteStale(notes, table, prefix, sentence);
                     continue;
                 }
 
                 foreach (var note in table.Notes)
-                    notes?.Add($"{response.Name}: {note}");
-
-                // A probe column carries its field already (p@probe0(0.1 0 0)).
-                var stem = Path.GetFileNameWithoutExtension(file);
-                var prefix = files.Count > 1 && !table.IsProbes ? $"{response.Name}.{stem}" : response.Name;
+                {
+                    notes?.Add(new FoamNote
+                    {
+                        Kind = note.Kind,
+                        Column = note.Column == null ? null : $"{prefix}.{note.Column}",
+                        Text = $"{response.Name}: {note.Text}"
+                    });
+                }
 
                 for (var index = 0; index < table.Columns.Count; index++)
                 {
@@ -110,17 +125,30 @@ public static class FoamResponseExtractor
     }
 
     /// <summary>
-    /// Writes the notes of an extraction beside the step logs (<c>log.responses</c>),
-    /// where they travel with the logs; no notes, no file.
+    /// Writes the notes of a run beside the step logs (<c>log.responses</c>),
+    /// where they travel with the logs: one line per sentence
+    /// (<see cref="Sentences"/>); no notes, no file.
     /// </summary>
     /// <param name="caseDirectory">The case root.</param>
-    /// <param name="notes">The notes of <see cref="Extract(string, FoamExtractionRequestData?, double?, ICollection{string}?)"/>.</param>
-    public static void WriteNotes(string caseDirectory, IReadOnlyCollection<string> notes)
+    /// <param name="notes">The notes, those of <see cref="Extract(string, FoamExtractionRequestData?, double?, ICollection{FoamNote}?)"/> among them.</param>
+    public static void WriteNotes(string caseDirectory, IReadOnlyCollection<FoamNote> notes)
     {
         if (notes.Count == 0)
             return;
 
-        File.WriteAllLines(Path.Combine(caseDirectory, NOTES_FILE), notes);
+        File.WriteAllLines(Path.Combine(caseDirectory, NOTES_FILE), Sentences(notes));
+    }
+
+    /// <summary>
+    /// The sentences of notes as <c>log.responses</c> carries them: each
+    /// once, in order of first appearance - a sentence about several columns
+    /// is one note per column, and one line.
+    /// </summary>
+    /// <param name="notes">The notes.</param>
+    /// <returns>The sentences.</returns>
+    public static IReadOnlyList<string> Sentences(IEnumerable<FoamNote> notes)
+    {
+        return notes.Select(note => note.Text).Distinct(StringComparer.Ordinal).ToList();
     }
 
     /// <summary>
@@ -217,6 +245,28 @@ public static class FoamResponseExtractor
         return table.Columns.Count > 0 && table.Values.Count > 0 && string.Equals(table.Columns[0], TIME_COLUMN, StringComparison.OrdinalIgnoreCase)
             ? table.Values[0]
             : double.NegativeInfinity;
+    }
+
+    // A stale file's sentence on every column of a value - not the time
+    // column, not a word such as fieldMinMax's field name, a probe outside
+    // the mesh included - or, for a file with no such column, on the
+    // response as a whole.
+    private static void NoteStale(ICollection<FoamNote>? notes, FoamPostProcessingTable table, string prefix, string sentence)
+    {
+        if (notes == null)
+            return;
+
+        var leftOut = table.Notes.Select(note => note.Column).ToHashSet(StringComparer.Ordinal);
+        var columns = table.Columns
+            .Where((column, index) => (index > 0 || !string.Equals(column, TIME_COLUMN, StringComparison.OrdinalIgnoreCase))
+                                      && (!double.IsNaN(table.Values[index]) || leftOut.Contains(column)))
+            .ToList();
+
+        if (columns.Count == 0)
+            notes.Add(new FoamNote { Kind = FoamNoteKind.Warning, Text = sentence });
+
+        foreach (var column in columns)
+            notes.Add(new FoamNote { Kind = FoamNoteKind.Warning, Column = $"{prefix}.{column}", Text = sentence });
     }
 
     // A last row whose time column is not the final time.

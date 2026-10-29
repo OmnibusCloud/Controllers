@@ -82,12 +82,46 @@ public class FoamResponseExtractorTests
         // last row is not the final state, and a stale value is worse than none.
         Write("postProcessing/coeffs/0/coefficient.dat", COEFFICIENT_DAT);
         var request = new FoamExtractionRequestData { Responses = [new FoamResponseSpecData { Name = "coeffs", Kind = FoamResponseKind.ForceCoeffs }] };
-        var notes = new List<string>();
+        var notes = new List<FoamNote>();
 
         var row = FoamResponseExtractor.Extract(m_case, request, 250, notes);
 
         Assert.That(row.Values, Is.Empty);
-        Assert.That(notes, Is.EqualTo(new[] { "coeffs: the last row of coefficient.dat is at time 200, the run ended at 250 - not reported." }));
+        Assert.That(FoamResponseExtractor.Sentences(notes), Is.EqualTo(new[] { "coeffs: the last row of coefficient.dat is at time 200, the run ended at 250 - not reported." }));
+        Assert.That(notes.Select(note => note.Column), Is.EqualTo(new[]
+        {
+            "coeffs.Cd", "coeffs.Cd(f)", "coeffs.Cd(r)", "coeffs.Cl", "coeffs.Cl(f)", "coeffs.Cl(r)", "coeffs.CmPitch"
+        }), "the sentence on every column the file would have reported, named as the row names it; the time column is none");
+        Assert.That(notes.Select(note => note.Kind), Is.All.EqualTo(FoamNoteKind.Warning));
+    }
+
+    [Test]
+    public void AStaleFilesNoteIsOnEveryValueColumnButAWordTest()
+    {
+        // A case's own fieldMinMax writes the field's name in a column of
+        // its own (v2606, location on): a word, never a value. A probe
+        // outside the mesh in a stale file is a value column like any.
+        Write("postProcessing/ownMinMax/0/fieldMinMax.dat", "# Time field min max\n0.04 p -2.0 2.3\n");
+        Write("postProcessing/wake/0/p", "# Probe 0 (0.1 0 0)\n# Probe 1 (9 9 9)  # Not Found\n# Time 0 1\n0.04 -3.68615 -1e+300\n");
+        var request = new FoamExtractionRequestData
+        {
+            Responses =
+            [
+                new FoamResponseSpecData { Name = "ownMinMax", Kind = FoamResponseKind.FieldMinMax, Fields = ["p"] },
+                new FoamResponseSpecData { Name = "wake", Kind = FoamResponseKind.Probe, Fields = ["p"] }
+            ]
+        };
+        var notes = new List<FoamNote>();
+
+        var row = FoamResponseExtractor.Extract(m_case, request, 0.045, notes);
+
+        Assert.That(row.Values, Is.Empty);
+        Assert.That(notes.Select(note => note.Column), Is.EqualTo(new[] { "ownMinMax.min", "ownMinMax.max", "wake.p@probe0(0.1 0 0)", "wake.p@probe1(9 9 9)" }));
+        Assert.That(FoamResponseExtractor.Sentences(notes), Is.EqualTo(new[]
+        {
+            "ownMinMax: the last row of fieldMinMax.dat is at time 0.04, the run ended at 0.045 - not reported.",
+            "wake: the last row of p is at time 0.04, the run ended at 0.045 - not reported."
+        }), "stale says it all: the probe outside the mesh is not named a second time");
     }
 
     [Test]
@@ -103,21 +137,32 @@ public class FoamResponseExtractorTests
                 new FoamResponseSpecData { Name = "probes", Kind = FoamResponseKind.Probe, Fields = ["p"] }
             ]
         };
-        var notes = new List<string>();
+        var notes = new List<FoamNote>();
 
         // Transient times carry the last digit's noise of the time loop.
         Assert.That(FoamResponseExtractor.Extract(m_case, request, 200, notes).Values.Select(value => value.Name), Does.Contain("coeffs.Cd"));
         Assert.That(FoamResponseExtractor.Extract(m_case, request, 0.20000000000000004, notes).Values.Select(value => value.Name), Does.Contain("probes.p@probe0(0.1 0.2 0)"));
-        Assert.That(notes, Has.Count.EqualTo(2), "each call judges its own final time: coeffs at 200 is stale against 0.2, probes at 0.2 against 200");
+        Assert.That(FoamResponseExtractor.Sentences(notes), Has.Count.EqualTo(2), "each call judges its own final time: coeffs at 200 is stale against 0.2, probes at 0.2 against 200");
     }
 
     [Test]
     public void TheNotesAreWrittenBesideTheStepLogsTest()
     {
-        FoamResponseExtractor.WriteNotes(m_case, ["coeffs: the last row of coefficient.dat is at time 200, the run ended at 250 - not reported."]);
-        FoamResponseExtractor.WriteNotes(m_case, []);
+        const string SENTENCE = "coeffs: the last row of coefficient.dat is at time 200, the run ended at 250 - not reported.";
+        const string FOLLOWS = "Response 'coeffs': lRef follows the case's coeffs (system/controlDict:6), which the study sweeps - 2 in this variant.";
+        FoamResponseExtractor.WriteNotes(m_case,
+        [
+            new FoamNote { Kind = FoamNoteKind.Warning, Column = "coeffs.Cd", Text = SENTENCE },
+            new FoamNote { Kind = FoamNoteKind.Warning, Column = "coeffs.Cl", Text = SENTENCE },
+            new FoamNote { Kind = FoamNoteKind.Info, Text = FOLLOWS }
+        ]);
 
-        Assert.That(File.ReadAllText(Path.Combine(m_case, "log.responses")), Does.Contain("coeffs: the last row"));
+        Assert.That(File.ReadAllLines(Path.Combine(m_case, "log.responses")), Is.EqualTo(new[] { SENTENCE, FOLLOWS }),
+            "one line per sentence, as before: a sentence on several columns is written once");
+
+        File.Delete(Path.Combine(m_case, "log.responses"));
+        FoamResponseExtractor.WriteNotes(m_case, []);
+        Assert.That(File.Exists(Path.Combine(m_case, "log.responses")), Is.False, "no notes, no file");
     }
 
     [Test]
@@ -144,7 +189,7 @@ public class FoamResponseExtractorTests
         Write("postProcessing/wake/0/p", "# Probe 0 (0.1 0 0)\n# Probe 1 (9 9 9)  # Not Found\n# Time 0 1\n282 -3.68615 -1e+300\n");
         Write("postProcessing/wake/0/U", "# Probe 0 (0.1 0 0)\n# Probe 1 (9 9 9)  # Not Found\n# Time 0 1\n282 (6.4 -0.5 0) (-1e+300 -1e+300 -1e+300)\n");
         var request = new FoamExtractionRequestData { Responses = [new FoamResponseSpecData { Name = "wake", Kind = FoamResponseKind.Probe, Fields = ["p", "U"] }] };
-        var notes = new List<string>();
+        var notes = new List<FoamNote>();
 
         var row = FoamResponseExtractor.Extract(m_case, request, 282, notes);
 
@@ -152,11 +197,18 @@ public class FoamResponseExtractorTests
         {
             "wake.U@probe0(0.1 0 0)_x", "wake.U@probe0(0.1 0 0)_y", "wake.U@probe0(0.1 0 0)_z", "wake.p@probe0(0.1 0 0)"
         }), "the probe outside the mesh is an empty cell: no value under its name");
-        Assert.That(notes, Is.EqualTo(new[]
+        Assert.That(notes.Select(note => (note.Kind, note.Column, note.Text)), Is.EqualTo(new[]
+        {
+            (FoamNoteKind.Warning, (string?)"wake.U@probe1(9 9 9)_x", "wake: probe 1 (9 9 9) of U is outside the mesh - not reported."),
+            (FoamNoteKind.Warning, (string?)"wake.U@probe1(9 9 9)_y", "wake: probe 1 (9 9 9) of U is outside the mesh - not reported."),
+            (FoamNoteKind.Warning, (string?)"wake.U@probe1(9 9 9)_z", "wake: probe 1 (9 9 9) of U is outside the mesh - not reported."),
+            (FoamNoteKind.Warning, (string?)"wake.p@probe1(9 9 9)", "wake: probe 1 (9 9 9) of p is outside the mesh - not reported.")
+        }), "the empty cells, each named as the row would have named its value");
+        Assert.That(FoamResponseExtractor.Sentences(notes), Is.EqualTo(new[]
         {
             "wake: probe 1 (9 9 9) of U is outside the mesh - not reported.",
             "wake: probe 1 (9 9 9) of p is outside the mesh - not reported."
-        }));
+        }), "log.responses: one sentence per probe and field, as before");
     }
 
     [Test]
@@ -200,12 +252,15 @@ public class FoamResponseExtractorTests
                 new FoamResponseSpecData { Name = "tie", Kind = FoamResponseKind.VolumeValue }
             ]
         };
-        var notes = new List<string>();
+        var notes = new List<FoamNote>();
 
         var row = FoamResponseExtractor.Extract(m_case, request, 0.045, notes);
 
         Assert.That(row.Values.First(value => value.Name == "inletP.areaAverage(p)").Value, Is.EqualTo(-5.5), "the solve's row at the final time, not the post step's stale one");
-        Assert.That(notes, Is.EqualTo(new[] { "tie: the last row of volFieldValue.dat is at time 0.04, the run ended at 0.045 - not reported." }), "inletP is not stale; tie is, whichever row wins");
+        Assert.That(notes.Select(note => (note.Column, note.Text)), Is.EqualTo(new[]
+        {
+            ((string?)"tie.volAverage(k)", "tie: the last row of volFieldValue.dat is at time 0.04, the run ended at 0.045 - not reported.")
+        }), "inletP is not stale; tie is, whichever row wins");
         Assert.That(FoamResponseExtractor.Extract(m_case, request).Values.First(value => value.Name == "tie.volAverage(k)").Value, Is.EqualTo(1), "on a tie, the earlier directory");
         Assert.That(FoamResponseExtractor.LatestRows(Path.Combine(m_case, "postProcessing", "inletP")).Keys, Is.EqualTo(new[] { "surfaceFieldValue.dat" }));
         Assert.That(FoamResponseExtractor.LatestRows(Path.Combine(m_case, "postProcessing", "none")), Is.Empty);

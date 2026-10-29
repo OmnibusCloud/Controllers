@@ -11,8 +11,9 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 /// <summary>
 /// One variant's run from task to result: the scratch, the materialised
 /// case, the refusals (recipe, files, run-time code), the steps, the facts
-/// read from the logs, the responses, the artifact. A refused or failed
-/// variant is a result with the reasons; only infrastructure errors throw.
+/// read from the logs, the responses, the notes (in the log tail, by
+/// <see cref="FoamNoteLog"/>), the artifact. A refused or failed variant is
+/// a result with the reasons; only infrastructure errors throw.
 /// </summary>
 public sealed class FoamCaseSession
 {
@@ -75,8 +76,9 @@ public sealed class FoamCaseSession
 
             // What the run says of its responses besides their values: a
             // swept reference value a re-measured force follows, a value left
-            // out and why. Written beside the logs as log.responses.
-            var notes = new List<string>();
+            // out and why. Written beside the logs as log.responses, and into
+            // the result's log tail as note lines (FoamNoteLog).
+            var notes = new List<FoamNote>();
             if (rejections.Count == 0)
             {
                 rejections.AddRange(await FoamCaseMaterializer.MaterializeAsync(task, caseDirectory, BlobService, cancellationToken));
@@ -87,6 +89,9 @@ public sealed class FoamCaseSession
             if (rejections.Count == 0)
                 rejections.AddRange(FoamCaseInspector.Inspect(caseDirectory, KitHasLibrary));
 
+            // A refused variant runs nothing: its rejections say why, and the
+            // notes of a run it never had stay out of its tail, which stays
+            // empty as before - a client shows the rejections of such a row.
             if (rejections.Count > 0)
             {
                 result.Rejections = rejections;
@@ -118,13 +123,13 @@ public sealed class FoamCaseSession
             result.Steps = report.Steps;
             result.ExitCode = report.ExitCode;
             result.FailedStep = report.FailedStep;
-            result.LogTail = report.LogTail;
 
             ReadFacts(result, caseDirectory, recipe, report);
 
+            var extracted = new List<FoamNote>();
             if (report.Succeeded)
             {
-                result.ResponseRow = ExtractResponses(caseDirectory, data.Extraction, result.FinalTime, notes);
+                result.ResponseRow = ExtractResponses(caseDirectory, data.Extraction, result.FinalTime, notes, extracted);
                 await UploadArtifactAsync(result, caseDirectory, scratch.UsablePath, data.ArtifactPolicy, cancellationToken);
             }
             else if (data.ArtifactPolicy?.Logs == true)
@@ -134,6 +139,12 @@ public sealed class FoamCaseSession
                 await UploadArtifactAsync(result, caseDirectory, scratch.UsablePath, new FoamArtifactPolicyData { Logs = true }, cancellationToken);
             }
 
+            // The notes ride inside the log tail, after the failed step's own
+            // tail (a failed run's only), in the order they arose - before the
+            // run, of its steps, of its responses: the result keeps the
+            // shipped wire layout, which every installed client reads. A
+            // variant without notes keeps the tail it always had.
+            result.LogTail = FoamNoteLog.Compose(report.LogTail, [.. notes, .. report.Notes, .. extracted]);
             result.TotalSeconds = stopwatch.Elapsed.TotalSeconds;
             return result;
         }
@@ -185,7 +196,7 @@ public sealed class FoamCaseSession
         result.CellCount = meshed > 0 ? meshed : logged;
     }
 
-    private FoamResponseRowData ExtractResponses(string caseDirectory, FoamExtractionRequestData? extraction, double finalTime, List<string> notes)
+    private FoamResponseRowData ExtractResponses(string caseDirectory, FoamExtractionRequestData? extraction, double finalTime, IReadOnlyList<FoamNote> before, List<FoamNote> extracted)
     {
         // A parsing surprise must not turn a finished run into a failure: the
         // row degrades to empty and the run's other facts stand.
@@ -194,14 +205,17 @@ public sealed class FoamCaseSession
             // A response whose last row is not the run's final time is left
             // out and named in log.responses, which travels with the logs;
             // an unknown final time (no solver log) checks nothing.
-            var row = FoamResponseExtractor.Extract(caseDirectory, extraction, finalTime > 0 ? finalTime : null, notes);
-            foreach (var note in notes)
-                Logger?.LogInformation("Foam.Run: {Note}", note);
+            var row = FoamResponseExtractor.Extract(caseDirectory, extraction, finalTime > 0 ? finalTime : null, extracted);
+            List<FoamNote> notes = [.. before, .. extracted];
+            foreach (var sentence in FoamResponseExtractor.Sentences(notes))
+                Logger?.LogInformation("Foam.Run: {Note}", sentence);
             FoamResponseExtractor.WriteNotes(caseDirectory, notes);
             return row;
         }
         catch (Exception e)
         {
+            // The row is empty: what the extraction said of its columns says nothing more.
+            extracted.Clear();
             Logger?.LogWarning(e, "Foam.Run: response extraction failed - the row stays empty.");
             return new FoamResponseRowData();
         }

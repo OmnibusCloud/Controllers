@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using OutWit.Controller.OpenFOAM.Extraction;
 using OutWit.Controller.OpenFOAM.Model;
 using OutWit.Controller.OpenFOAM.Model.Rules;
 
@@ -136,7 +137,7 @@ public sealed class FoamCaseRunner
             // 2026-10-28: postProcessing/<probe>/0/p kept one row, at 0.04).
             var measured = PostStepResponse(step, recipe.Application, measuredInSolve);
             var outcome = measured != null
-                ? SkipPostStep(step, measured, logPath)
+                ? SkipPostStep(report, step, measured, logPath)
                 : builtIn
                     ? RunBuiltIn(step, parallel, logPath)
                     : await RunProcessAsync(step, runParallel, logPath, cancellationToken);
@@ -174,11 +175,17 @@ public sealed class FoamCaseRunner
         return measuredInSolve.Contains(response, StringComparer.Ordinal) ? response : null;
     }
 
-    private static FoamRunOutcome SkipPostStep(FoamStepData step, string response, string logPath)
+    // A post step for a response the solver measured: recorded, its log
+    // saying why it did not run, and the same sentence noted for the result -
+    // the step is in the result like any step, and nothing else there says
+    // it did nothing.
+    private static FoamRunOutcome SkipPostStep(FoamRunReport report, FoamStepData step, string response, string logPath)
     {
-        var text = $"Not run: '{step.Utility} {string.Join(' ', step.Arguments)}'. The solver measured '{response}' at every step (the controller's includeFunc), " +
-                   "so its last row is the final time's; a post step reads the latest written time only, and for a probe it overwrites the solve's rows with that one.\n";
+        var sentence = $"Not run: '{step.Utility} {string.Join(' ', step.Arguments)}'. The solver measured '{response}' at every step (the controller's includeFunc), " +
+                       "so its last row is the final time's; a post step reads the latest written time only, and for a probe it overwrites the solve's rows with that one.";
+        var text = sentence + "\n";
         File.WriteAllText(logPath, text);
+        report.Notes.Add(new FoamNote { Kind = FoamNoteKind.Info, Text = sentence });
         return new FoamRunOutcome(0, 0, text);
     }
 
