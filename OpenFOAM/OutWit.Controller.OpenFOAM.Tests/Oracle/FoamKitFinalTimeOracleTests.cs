@@ -129,14 +129,7 @@ public class FoamKitFinalTimeOracleTests
         var files = Directory.EnumerateFiles(fixture, "*", SearchOption.AllDirectories)
             .Select(file =>
             {
-                var bytes = File.ReadAllBytes(file);
-                return new FoamFileRefData
-                {
-                    RelativePath = Path.GetRelativePath(fixture, file).Replace('\\', '/'),
-                    BlobId = m_blobs.AddBytes(bytes),
-                    Sha256 = "n/a",
-                    Size = bytes.Length
-                };
+                return m_blobs.AddFile(Path.GetRelativePath(fixture, file).Replace('\\', '/'), File.ReadAllBytes(file));
             })
             .ToList();
 

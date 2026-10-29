@@ -69,14 +69,7 @@ public class FoamKitOracleTests
             if (templated)
                 text = text.Replace("uniform (10 0 0)", "uniform ({{oc1}} 0 0)");
 
-            files.Add(new FoamFileRefData
-            {
-                RelativePath = relative,
-                BlobId = m_blobs.AddText(text),
-                Sha256 = "n/a",
-                Size = text.Length,
-                Templated = templated
-            });
+            files.Add(m_blobs.AddFile(relative, text, templated));
         }
 
         Assert.That(files.Any(file => file.RelativePath == "0/U" && file.Templated), Is.True, "0/U carries the inlet velocity");

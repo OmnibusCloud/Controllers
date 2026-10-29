@@ -114,7 +114,7 @@ public class WitActivityAdapterFoamRunTests
             VariantIndex = 0,
             Case = new FoamCaseData
             {
-                BaseFiles = [new FoamFileRefData { RelativePath = "system/controlDict", BlobId = m_blobService.AddText(text), Sha256 = "n/a", Size = text.Length }],
+                BaseFiles = [m_blobService.AddFile("system/controlDict", text)],
                 Recipe = new FoamRecipeData { Application = "simpleFoam", Steps = [new FoamStepData { Utility = "simpleFoam" }] },
                 Threads = 1
             }

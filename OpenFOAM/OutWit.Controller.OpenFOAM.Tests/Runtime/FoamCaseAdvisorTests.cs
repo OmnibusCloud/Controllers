@@ -34,7 +34,7 @@ public class FoamCaseAdvisorTests
 
     private FoamFileRefData BlobFile(string relativePath, string text, bool templated = false)
     {
-        return new FoamFileRefData { RelativePath = relativePath, BlobId = m_blobs.AddText(text), Sha256 = "n/a", Size = text.Length, Templated = templated };
+        return m_blobs.AddFile(relativePath, text, templated);
     }
 
     private FoamTaskData Task(int threads, bool parallel, bool setFields)

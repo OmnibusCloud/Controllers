@@ -100,13 +100,7 @@ public class SweepOpenFOAMSetTests
 
     private FoamFileRefData BlobFile(string relativePath, string text)
     {
-        return new FoamFileRefData
-        {
-            RelativePath = relativePath,
-            BlobId = m_blobService.AddText(text),
-            Sha256 = "n/a",
-            Size = text.Length
-        };
+        return m_blobService.AddFile(relativePath, text);
     }
 
     /// <summary>

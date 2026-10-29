@@ -1,5 +1,6 @@
 using System.Text;
 using OutWit.Controller.OpenFOAM.Model;
+using OutWit.Controller.OpenFOAM.Model.Rules;
 using OutWit.Controller.OpenFOAM.Runtime;
 using OutWit.Controller.OpenFOAM.Tests.Mock;
 using OutWit.Controller.OpenFOAM.Tests.Utils;
@@ -32,14 +33,7 @@ public class FoamCaseMaterializerTests
 
     private FoamFileRefData BlobFile(string relativePath, string text, bool templated = false)
     {
-        return new FoamFileRefData
-        {
-            RelativePath = relativePath,
-            BlobId = m_blobs.AddText(text),
-            Sha256 = "n/a",
-            Size = text.Length,
-            Templated = templated
-        };
+        return m_blobs.AddFile(relativePath, text, templated);
     }
 
     #endregion
@@ -89,17 +83,7 @@ public class FoamCaseMaterializerTests
         {
             Case = new FoamCaseData
             {
-                BaseFiles =
-                [
-                    new FoamFileRefData
-                    {
-                        RelativePath = "constant/transportProperties",
-                        BlobId = m_blobs.AddBytes(content),
-                        Sha256 = "n/a",
-                        Size = content.Length,
-                        Templated = true
-                    }
-                ]
+                BaseFiles = [m_blobs.AddFile("constant/transportProperties", content, templated: true)]
             },
             Substitutions = [new FoamTokenValueData { Token = "{{oc1}}", Value = "2e-05" }]
         };
@@ -159,6 +143,26 @@ public class FoamCaseMaterializerTests
         {
             File.SetAttributes(m_blobs.GetStoredPath(file.BlobId), FileAttributes.Normal);
         }
+    }
+
+    [Test]
+    public async Task ABlobWhoseBytesAreNotTheDescribedOnesRefusesTheVariantAndTheRestStillLandsTest()
+    {
+        // The case changed between the reading that made the study and the
+        // upload: the reference describes the old bytes, the blob holds the new.
+        var changed = BlobFile("system/controlDict", "application simpleFoam;\nendTime 200;\n");
+        File.WriteAllText(m_blobs.GetStoredPath(changed.BlobId), "application simpleFoam;\nendTime 300;\n");
+        var (size, sha256) = await FoamCaseBlobRules.DescribeAsync(m_blobs.GetStoredPath(changed.BlobId));
+        var task = new FoamTaskData { Case = new FoamCaseData { BaseFiles = [changed, BlobFile("0/U", "internalField uniform (1 0 0);\n")] } };
+
+        var findings = await FoamCaseMaterializer.MaterializeAsync(task, m_case, m_blobs);
+
+        Assert.That(findings, Is.EqualTo(new[]
+        {
+            $"system/controlDict: the blob's bytes are not the ones the task describes (size {size}, sha256 {sha256}; expected size {changed.Size}, sha256 {changed.Sha256}) - the case changed after it was read; open it again and submit it again."
+        }));
+        Assert.That(File.Exists(Path.Combine(m_case, "system", "controlDict")), Is.False, "the other bytes never land in the case");
+        Assert.That(File.Exists(Path.Combine(m_case, "0", "U")), Is.True, "the rest of the case still lands");
     }
 
     [Test]

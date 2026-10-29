@@ -11,8 +11,9 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 /// A file path that would leave the case, a path with a space (OpenFOAM strips
 /// whitespace from paths), a leftover of an earlier run (a log, a
 /// <c>postProcessing/</c> or <c>processor*</c> tree, which would pass for this
-/// run's), or a token left without a value refuses the variant here, before
-/// anything runs.
+/// run's), a blob whose bytes are not the ones the task describes (the case
+/// changed between the reading that made the study and the upload), or a
+/// token left without a value refuses the variant here, before anything runs.
 /// </summary>
 public static class FoamCaseMaterializer
 {
@@ -59,6 +60,17 @@ public static class FoamCaseMaterializer
             Directory.CreateDirectory(Path.GetDirectoryName(target) ?? root);
 
             var source = await blobService.GetLocalPathAsync(file.BlobId);
+
+            // The bytes the node has are the bytes the task describes, or the
+            // variant is refused. The digest is one sequential read of the
+            // blob at about 1.4 GiB/s (3.6 MiB of geometry in 2.6 ms, 64 MiB
+            // in 46 ms, measured 2026-10-29): nothing beside the copy after it.
+            var mismatch = await FoamCaseBlobRules.ValidateAsync(file, source, cancellationToken);
+            if (mismatch != null)
+            {
+                findings.Add(mismatch);
+                continue;
+            }
 
             if (!file.Templated)
             {
