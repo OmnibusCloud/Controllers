@@ -3,7 +3,7 @@ namespace OutWit.Controller.OpenFOAM.Extraction;
 /// <summary>
 /// The last row of a function-object data file as <see cref="FoamPostProcessingReader"/>
 /// reads it: the column names, the values (a column left out is
-/// <see cref="double.NaN"/>), one sentence per value left out and why, and
+/// <see cref="double.NaN"/>), a note per column left out and why, and
 /// whether the file is a probes file - whose column names carry the field
 /// already, so a response names its values without the file's name in between.
 /// </summary>
@@ -16,9 +16,9 @@ public sealed class FoamPostProcessingTable
     /// </summary>
     /// <param name="columns">The column names, the time column first when the file has one.</param>
     /// <param name="values">The values of the last row, one per column.</param>
-    /// <param name="notes">One sentence per value left out.</param>
+    /// <param name="notes">One note per column left out, named by the table's column; the columns of one probe share its sentence.</param>
     /// <param name="isProbes">True for a probes file.</param>
-    public FoamPostProcessingTable(IReadOnlyList<string> columns, IReadOnlyList<double> values, IReadOnlyList<string> notes, bool isProbes)
+    public FoamPostProcessingTable(IReadOnlyList<string> columns, IReadOnlyList<double> values, IReadOnlyList<FoamNote> notes, bool isProbes)
     {
         Columns = columns;
         Values = values;
@@ -36,8 +36,12 @@ public sealed class FoamPostProcessingTable
     /// <summary>The values of the last row; <see cref="double.NaN"/> for a value that is not a number or was left out.</summary>
     public IReadOnlyList<double> Values { get; }
 
-    /// <summary>Why a value was left out, one sentence each; empty when every value stands.</summary>
-    public IReadOnlyList<string> Notes { get; }
+    /// <summary>
+    /// Why a value was left out: one note per column, named by the table's
+    /// own column (<c>U@probe1(9 9 9)_x</c>, without the response), the
+    /// columns of one probe sharing its sentence; empty when every value stands.
+    /// </summary>
+    public IReadOnlyList<FoamNote> Notes { get; }
 
     /// <summary>
     /// Whether the file is a probes file: its columns are named

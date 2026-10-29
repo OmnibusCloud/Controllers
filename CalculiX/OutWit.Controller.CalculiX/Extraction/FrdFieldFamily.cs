@@ -34,6 +34,7 @@ internal sealed class FrdFieldFamily
         Last = new FrdFieldStatistics(Kind);
         Samples.Clear();
         Broken = null;
+        Problem = null;
         Blocks++;
         LastIsModeShape = header.IsModeShape;
         LastMode = header.Mode;
@@ -51,6 +52,13 @@ internal sealed class FrdFieldFamily
 
     /// <summary>Result node → scalar, for the nodes the probes ask for, latest block.</summary>
     public Dictionary<int, double> Samples { get; } = [];
+
+    /// <summary>
+    /// Why the latest block's values cannot stand although every row was
+    /// read (the shell or beam stress of an OUTPUT=2D deck that could not be
+    /// recovered); null when they can.
+    /// </summary>
+    public string? Problem { get; set; }
 
     /// <summary>The first row of the latest block the reader could not take; null when none.</summary>
     public (int Node, string Text)? Broken { get; set; }

@@ -17,6 +17,8 @@ namespace OutWit.Controller.CalculiX.Extraction;
 /// be read as more frequencies or more reaction forces. The forces ccx
 /// prints per mode after an eigenvalue solve ("E I G E N V A L U E
 /// N U M B E R n") are mode shapes, not reactions, and are counted, not read.
+/// The "statistics for surface set …" blocks of <c>*SECTION PRINT</c> are
+/// kept per set and step, the last one winning (<see cref="DatSectionBlock"/>).
 /// </summary>
 public static partial class DatResultReader
 {
@@ -46,6 +48,10 @@ public static partial class DatResultReader
         var modePrints = false;
         var layout = EigenvalueLayout.Unknown;
         DatForceBlock? forces = null;
+        string? sectionName = null;
+        var sectionTime = 0.0;
+        var sectionNumbers = new List<double>();
+        var sectionLines = 0;
 
         foreach (var line in lines)
         {
@@ -93,6 +99,18 @@ public static partial class DatResultReader
                 mode = Section.Forces;
                 forces = new DatForceBlock(forcesHeader.Groups[1].Value, ParseTime(forcesHeader.Groups[2].Value));
                 step.AddForces(forces);
+                continue;
+            }
+
+            var sectionHeader = SectionHeaderRegex().Match(line);
+            if (sectionHeader.Success)
+            {
+                hasRows = false;
+                mode = modePrints ? Section.Skipped : Section.SectionStatistics;
+                sectionName = sectionHeader.Groups[1].Value;
+                sectionTime = ParseTime(sectionHeader.Groups[2].Value);
+                sectionNumbers.Clear();
+                sectionLines = 0;
                 continue;
             }
 
@@ -152,6 +170,23 @@ public static partial class DatResultReader
                         Parse(numbers[3].Value),
                         line.TrimEnd().EndsWith('L')));
                     hasRows = true;
+                    break;
+
+                // Four rows of numbers under their captions: force and moment
+                // about the origin, centre and mean normal, moment about the
+                // centre, then area and the derived sizes.
+                case Section.SectionStatistics when numbers.Count >= 3:
+                    foreach (Match number in numbers)
+                        sectionNumbers.Add(Parse(number.Value));
+
+                    if (++sectionLines == 4 && sectionNumbers.Count >= 16 && sectionName != null)
+                    {
+                        step.AddSection(new DatSectionBlock(sectionName, sectionTime,
+                            Vector(sectionNumbers, 0), Vector(sectionNumbers, 6), Vector(sectionNumbers, 9),
+                            Vector(sectionNumbers, 12), sectionNumbers[15]));
+                        mode = Section.None;
+                    }
+
                     break;
 
                 // The total row has no node id and may open with a minus sign.
@@ -223,6 +258,11 @@ public static partial class DatResultReader
         return double.Parse(token, NumberStyles.Float, CultureInfo.InvariantCulture);
     }
 
+    private static Vector3D Vector(List<double> numbers, int start)
+    {
+        return new Vector3D(numbers[start], numbers[start + 1], numbers[start + 2]);
+    }
+
     private static double ParseTime(string token)
     {
         return double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var time) ? time : 0.0;
@@ -233,6 +273,9 @@ public static partial class DatResultReader
 
     [GeneratedRegex(@"^ forces \(fx,fy,fz\) for set (\S+) and time\s+(\S+)")]
     private static partial Regex ForcesHeaderRegex();
+
+    [GeneratedRegex(@"^ statistics for surface set (\S+) and time\s+(\S+)")]
+    private static partial Regex SectionHeaderRegex();
 
     [GeneratedRegex(@"^ total force \(fx,fy,fz\) for set (\S+) and time\s+(\S+)")]
     private static partial Regex TotalsHeaderRegex();
@@ -252,7 +295,8 @@ public static partial class DatResultReader
         Buckling = 3,
         Forces = 4,
         Totals = 5,
-        Skipped = 6
+        Skipped = 6,
+        SectionStatistics = 7
     }
 
     private enum EigenvalueLayout

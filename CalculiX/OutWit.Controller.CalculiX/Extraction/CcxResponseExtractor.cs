@@ -11,7 +11,10 @@ namespace OutWit.Controller.CalculiX.Extraction;
 /// back — the artifacts stay behind as blobs. The .frd is streamed, never
 /// held; what cannot be read or must not be reported comes back as a note,
 /// and an extraction that fails as a whole comes back without a row and with
-/// an error note, never as an empty row that passes for a result.
+/// an error note, never as an empty row that passes for a result. The
+/// shell and beam stress of a deck that writes OUTPUT=2D is recovered from
+/// section forces (<see cref="CcxSectionStress"/>), so the .dat - where the
+/// shells' edge prints are - is read before the .frd is streamed.
 /// </summary>
 public static class CcxResponseExtractor
 {
@@ -60,15 +63,24 @@ public static class CcxResponseExtractor
 
         try
         {
+            var dat = datPath == null ? null : DatResultReader.Read(datPath);
+
+            CcxSectionStress? sectionStress = null;
+            if (facts is { OutputIs2D: true, HasShellOrBeamElements: true } && deckPath != null)
+            {
+                var structure = DeckStructureReader.Read(deckPath);
+                sectionStress = new CcxSectionStress(facts, structure, CcxSectionStressPlan.For(facts, structure), dat);
+            }
+
             if (frdPath != null)
             {
-                var accumulator = new FrdResponseAccumulator(facts, facts == null ? null : deckPath, request?.Probes ?? [], sink);
+                var accumulator = new FrdResponseAccumulator(facts, facts == null ? null : deckPath, request?.Probes ?? [], sink, sectionStress);
                 FrdResultReader.Read(frdPath, accumulator);
                 accumulator.Finish();
             }
 
-            if (datPath != null)
-                DatResponseExtractor.Add(DatResultReader.Read(datPath), facts, facts == null ? null : deckPath, sink);
+            if (dat != null)
+                DatResponseExtractor.Add(dat, facts, facts == null ? null : deckPath, sink);
         }
         catch (Exception e)
         {

@@ -174,6 +174,40 @@ public class WitActivityAdapterCcxSolveTests
     }
 
     [Test]
+    public async Task AShellAndBeamDeckWithOutput2DGetsItsSectionOutputBeforeTheSolveTest()
+    {
+        // OUTPUT=2D loses the bending stress of shells and beams: the deck
+        // reaches ccx with a print per shell edge and SECTION FORCES, and the
+        // variant says so. The fake solver echoes the deck into the .frd.
+        var deck = m_blobService.AddText(string.Join("\n",
+        [
+            "*NODE", "1, 0, 0, 0", "2, 1, 0, 0", "3, 1, 1, 0", "4, 0, 1, 0", "5, 0, 0, 5", "6, 1, 0, 5",
+            "*ELEMENT, TYPE=S4, ELSET=PLATE", "1, 1, 2, 3, 4",
+            "*ELEMENT, TYPE=B31, ELSET=BEAM", "2, 5, 6",
+            "*MATERIAL, NAME=STEEL", "*ELASTIC", "210000., 0.3",
+            "*SHELL SECTION, ELSET=PLATE, MATERIAL=STEEL", "0.1",
+            "*BEAM SECTION, ELSET=BEAM, MATERIAL=STEEL, SECTION=RECT", "1., 1.", "0., 1., 0.",
+            "*STEP", "*STATIC", "*NODE FILE, OUTPUT=2D", "U", "*EL FILE", "S", "*END STEP", ""
+        ]), "deck.inp");
+
+        var job = m_engine.Compile(SCRIPT);
+        var status = await m_engine.ScheduleAndWaitAsync(job, Tasks(deck));
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
+        var result = (job.Variables["wave"].Value as IReadOnlyList<CcxResultData?>)?.Single();
+        Assert.That(result?.ExitCode, Is.EqualTo(0));
+
+        var (_, notes) = CcxNoteLog.Parse(result?.LogTail);
+        Assert.That(notes.Select(note => note.Kind), Is.EqualTo(new[] { CcxNoteKind.Info, CcxNoteKind.Info }));
+        Assert.That(notes[0].Text, Does.StartWith("*EL FILE, OUTPUT=2D, SECTION FORCES was added to step 1"));
+        Assert.That(notes[1].Text, Does.StartWith("4 *SECTION PRINT requests, one per shell element edge"));
+
+        var solved = await File.ReadAllTextAsync(await m_blobService.GetLocalPathAsync(result!.FrdBlobId!.Value));
+        Assert.That(solved, Does.Contain("*EL FILE, OUTPUT=2D, SECTION FORCES").And.Contain("*SECTION PRINT, SURFACE=WITEDGE4, NAME=WITPRINT4"));
+        AssertScratchGivenBack();
+    }
+
+    [Test]
     public async Task AFailedSolveGivesItsScratchBackTest()
     {
         var deck = m_blobService.AddText("*HEADING\nFAKE-FAIL\n", "deck.inp");

@@ -39,6 +39,16 @@ public sealed class DatStepResult
             ForceBlocks.Add(block);
     }
 
+    /// <summary>
+    /// Records a section-print block: a later block for the same surface
+    /// replaces the earlier one (ccx prints one per increment).
+    /// </summary>
+    /// <param name="block">The block.</param>
+    public void AddSection(DatSectionBlock block)
+    {
+        Sections[block.SetName] = block;
+    }
+
     public override string ToString()
     {
         return $"step {Number}: {Eigenfrequencies.Count} eigenfrequencies, {BucklingFactors.Count} buckling factors, {ForceBlocks.Count} force block(s)";
@@ -62,6 +72,9 @@ public sealed class DatStepResult
 
     /// <summary>Reaction-force blocks, the last one per printed set.</summary>
     public List<DatForceBlock> ForceBlocks { get; } = [];
+
+    /// <summary>Section-print blocks, the last one per surface, by surface name (case-insensitive).</summary>
+    public Dictionary<string, DatSectionBlock> Sections { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Number of forces blocks printed per mode after an eigenvalue solve and left out.</summary>
     public int ModeShapeForceBlocks { get; set; }
