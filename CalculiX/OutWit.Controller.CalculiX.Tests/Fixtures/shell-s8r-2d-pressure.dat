@@ -1,0 +1,632 @@
+
+                        S T E P       1
+
+
+                                INCREMENT     1
+
+
+ forces (fx,fy,fz) for set FIX and time  0.1000000E+01
+
+         1 -4.251543E-09 -3.213400E-10 -1.750002E-03
+        22 -5.753392E-11 -1.298115E-09 -6.333335E-03
+        43  4.233470E-09 -3.218580E-10 -1.749999E-03
+
+
+
+ statistics for surface set WITEDGE1 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+   -1.925988E-09  7.988494E-12 -4.548215E-11 -1.226618E-10 -1.152729E-09  6.620437E-12
+
+   center of gravity and mean normal
+
+    5.000000E-01  0.000000E+00 -1.084202E-18  0.000000E+00 -1.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+   -1.226618E-10 -1.175470E-09  2.626190E-12
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01 -7.988494E-12  1.926525E-09  1.175470E-09  1.226899E-10
+
+
+
+ statistics for surface set WITEDGE2 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    7.523410E-11  1.931268E-09  8.999643E-03  4.499820E-03 -4.941607E-02  4.194807E-09
+
+   center of gravity and mean normal
+
+    1.000000E+00  5.000000E-01 -1.084202E-18  1.000000E+00  5.551115E-17  5.551115E-16
+
+   moment about the center of gravity(mx,my,mz)
+
+   -1.433883E-09 -4.041643E-02  2.301156E-09
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  7.523410E-11  8.999643E-03 -1.433883E-09  4.041643E-02
+
+
+
+ statistics for surface set WITEDGE3 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    1.952841E-09  1.037764E-11  1.205667E-09  1.321917E-09 -3.849854E-10 -1.947228E-09
+
+   center of gravity and mean normal
+
+    5.000000E-01  1.000000E+00 -1.084202E-18 -5.551115E-17  1.000000E+00  5.551115E-16
+
+   moment about the center of gravity(mx,my,mz)
+
+    1.162498E-10  2.178480E-10  4.241980E-13
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  1.037764E-11  2.295042E-09  2.178480E-10  1.162506E-10
+
+
+
+ statistics for surface set WITEDGE4 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+   -7.559792E-11 -1.941372E-09 -9.999620E-03 -4.999808E-03  4.991634E-02 -4.204534E-09
+
+   center of gravity and mean normal
+
+    0.000000E+00  5.000000E-01 -1.084202E-18 -1.000000E+00  0.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+    1.430439E-09  4.991634E-02 -4.242333E-09
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  7.559792E-11  9.999620E-03 -1.430439E-09  4.991634E-02
+
+
+
+ statistics for surface set WITEDGE5 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+   -1.906639E-09 -8.345365E-11 -2.302756E-09  4.929318E-10  4.043665E-09 -1.693654E-10
+
+   center of gravity and mean normal
+
+    1.500000E+00  0.000000E+00 -1.084202E-18  0.000000E+00 -1.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+    4.929318E-10  5.895310E-10 -4.418489E-11
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  8.345365E-11  2.989642E-09 -5.895310E-10  4.949082E-10
+
+
+
+ statistics for surface set WITEDGE6 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    2.342765E-11  1.909567E-09  7.999688E-03  3.999843E-03 -4.791585E-02  4.119447E-09
+
+   center of gravity and mean normal
+
+    2.000000E+00  5.000000E-01 -1.084202E-18  1.000000E+00  1.110223E-16  1.110223E-15
+
+   moment about the center of gravity(mx,my,mz)
+
+   -6.255907E-10 -3.191648E-02  3.120276E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  2.342766E-11  7.999688E-03 -6.255907E-10  3.191648E-02
+
+
+
+ statistics for surface set WITEDGE7 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    1.962725E-09  2.530164E-11 -3.218172E-09 -3.692324E-09  6.710143E-09 -1.896729E-09
+
+   center of gravity and mean normal
+
+    1.500000E+00  1.000000E+00 -2.168404E-18 -5.551115E-17  1.000000E+00  5.551115E-16
+
+   moment about the center of gravity(mx,my,mz)
+
+   -4.741523E-10  1.882885E-09  2.804383E-11
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  2.530164E-11  3.769472E-09  1.882885E-09  4.749809E-10
+
+
+
+ statistics for surface set WITEDGE8 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+   -1.652983E-09  1.040880E-09  3.223470E-09  2.104867E-11 -9.517154E-09  2.894349E-09
+
+   center of gravity and mean normal
+
+    2.500000E+00  0.000000E+00  6.505213E-18  0.000000E+00 -1.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+    2.104867E-11 -1.458480E-09  2.921485E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01 -1.040880E-09  3.622583E-09  1.458480E-09  2.929058E-10
+
+
+
+ statistics for surface set WITEDGE9 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+   -1.039464E-10  5.961137E-10  6.999731E-03  3.499872E-03 -4.541571E-02  6.151462E-10
+
+   center of gravity and mean normal
+
+    3.000000E+00  5.000000E-01 -1.084202E-18  1.000000E+00  0.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+    6.695924E-09 -2.441651E-02 -1.225168E-09
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01 -1.039464E-10  6.999731E-03  6.695924E-09  2.441651E-02
+
+
+
+ statistics for surface set WITEDGE10 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    1.327931E-09  1.621036E-10 -3.797820E-09 -3.872290E-09  7.246357E-09 -9.883293E-10
+
+   center of gravity and mean normal
+
+    2.500000E+00  1.000000E+00  1.084202E-18 -5.551115E-17  1.000000E+00  5.551115E-16
+
+   moment about the center of gravity(mx,my,mz)
+
+   -7.446993E-11 -2.248194E-09 -6.565780E-11
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  1.621036E-10  4.023287E-09 -2.248194E-09  9.928100E-11
+
+
+
+ statistics for surface set WITEDGE11 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    1.175462E-10  7.452936E-10  3.556825E-09 -1.870917E-10 -4.878930E-09  2.257911E-09
+
+   center of gravity and mean normal
+
+    3.500000E+00  0.000000E+00 -4.336809E-18  0.000000E+00 -1.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+   -1.870917E-10  7.569958E-09 -3.506169E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01 -7.452936E-10  3.558767E-09 -7.569958E-09  3.974110E-10
+
+
+
+ statistics for surface set WITEDGE12 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+   -1.084632E-10  2.958398E-10  5.999770E-03  2.999897E-03 -4.191562E-02  1.253654E-11
+
+   center of gravity and mean normal
+
+    4.000000E+00  5.000000E-01 -1.084202E-18  1.000000E+00  2.220446E-16  2.220446E-15
+
+   moment about the center of gravity(mx,my,mz)
+
+    1.209731E-08 -1.791655E-02 -1.225054E-09
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01 -1.084632E-10  5.999770E-03  1.209731E-08  1.791655E-02
+
+
+
+ statistics for surface set WITEDGE13 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    5.175372E-10 -3.781546E-10 -1.999779E-09 -1.874893E-09  2.647359E-09 -1.855271E-09
+
+   center of gravity and mean normal
+
+    3.500000E+00  1.000000E+00 -6.505213E-18 -5.551115E-17  1.000000E+00  5.551115E-16
+
+   moment about the center of gravity(mx,my,mz)
+
+    1.248863E-10 -4.351868E-09 -1.419308E-11
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01 -3.781546E-10  2.065662E-09 -4.351868E-09  1.256902E-10
+
+
+
+ statistics for surface set WITEDGE14 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+   -1.732701E-10  1.584152E-10  2.514392E-09  1.366835E-11 -6.421659E-09  9.113935E-10
+
+   center of gravity and mean normal
+
+    4.500000E+00  0.000000E+00  0.000000E+00  0.000000E+00 -1.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+    1.366835E-11  4.893105E-09  1.985251E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01 -1.584152E-10  2.520355E-09 -4.893105E-09  1.989951E-10
+
+
+
+ statistics for surface set WITEDGE15 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    9.260750E-11 -6.195872E-10  4.999808E-03  2.499920E-03 -3.741561E-02 -4.829984E-09
+
+   center of gravity and mean normal
+
+    5.000000E+00  5.000000E-01 -1.084202E-18  1.000000E+00 -4.622232E-32 -4.440892E-15
+
+   moment about the center of gravity(mx,my,mz)
+
+    1.613503E-08 -1.241657E-02 -1.685744E-09
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  9.260748E-11  4.999808E-03  1.613503E-08  1.241657E-02
+
+
+
+ statistics for surface set WITEDGE16 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    2.778066E-10  1.025181E-09 -2.213441E-09 -2.233577E-09  3.059481E-09  4.637312E-09
+
+   center of gravity and mean normal
+
+    4.500000E+00  1.000000E+00 -4.336809E-18 -5.551115E-17  1.000000E+00  5.551115E-16
+
+   moment about the center of gravity(mx,my,mz)
+
+   -2.013587E-11 -6.901005E-09  3.018016E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  1.025181E-09  2.230807E-09 -6.901005E-09  3.024725E-10
+
+
+
+ statistics for surface set WITEDGE17 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    1.401426E-09  8.053860E-11  6.874413E-09 -1.411896E-09 -2.802508E-08  2.220805E-10
+
+   center of gravity and mean normal
+
+    5.500000E+00  0.000000E+00  1.301043E-17  0.000000E+00 -1.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+   -1.411896E-09  9.784194E-09 -2.208818E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01 -8.053860E-11  7.015807E-09 -9.784194E-09  1.429069E-09
+
+
+
+ statistics for surface set WITEDGE18 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    1.672838E-10 -9.683052E-10  3.999838E-03  1.999933E-03 -3.191562E-02 -5.714861E-09
+
+   center of gravity and mean normal
+
+    6.000000E+00  5.000000E-01 -1.084202E-18  1.000000E+00  0.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+    1.429390E-08 -7.916592E-03  1.786121E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  1.672838E-10  3.999838E-03  1.429390E-08  7.916592E-03
+
+
+
+ statistics for surface set WITEDGE19 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+   -1.435777E-09  1.535658E-10  9.528738E-09  1.099059E-08 -6.419080E-08  1.841900E-09
+
+   center of gravity and mean normal
+
+    5.500000E+00  1.000000E+00  1.301043E-17 -5.551115E-17  1.000000E+00  5.551115E-16
+
+   moment about the center of gravity(mx,my,mz)
+
+    1.461852E-09 -1.178274E-08 -4.384888E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  1.535658E-10  9.636302E-09 -1.178274E-08  1.526199E-09
+
+
+
+ statistics for surface set WITEDGE20 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+   -2.812163E-11 -2.636551E-10 -3.576131E-09 -3.405757E-10  2.815680E-08 -1.476929E-09
+
+   center of gravity and mean normal
+
+    6.500000E+00  0.000000E+00 -2.602085E-17  0.000000E+00 -1.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+   -3.405757E-10  4.911946E-09  2.368292E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  2.636551E-10  3.576242E-09 -4.911946E-09  4.148251E-10
+
+
+
+ statistics for surface set WITEDGE21 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    1.887418E-10  9.418554E-11  2.999871E-03  1.499938E-03 -2.541572E-02  8.597748E-10
+
+   center of gravity and mean normal
+
+    7.000000E+00  5.000000E-01 -1.084202E-18  1.000000E+00 -1.110223E-15 -1.332268E-14
+
+   moment about the center of gravity(mx,my,mz)
+
+    2.677406E-09 -4.416624E-03  2.948469E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  1.887417E-10  2.999871E-03  2.677406E-09  4.416624E-03
+
+
+
+ statistics for surface set WITEDGE22 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+   -5.028990E-10 -1.388187E-09  7.662503E-09  8.056833E-09 -4.990903E-08 -8.411464E-09
+
+   center of gravity and mean normal
+
+    6.500000E+00  1.000000E+00  0.000000E+00 -5.551115E-17  1.000000E+00  5.551115E-16
+
+   moment about the center of gravity(mx,my,mz)
+
+    3.943303E-10 -1.027658E-10  1.088537E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01 -1.388187E-09  7.678988E-09 -1.027658E-10  4.090788E-10
+
+
+
+ statistics for surface set WITEDGE23 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    5.082732E-12  4.316233E-10 -5.208122E-09  6.979893E-10  3.839343E-08  3.105280E-09
+
+   center of gravity and mean normal
+
+    7.500000E+00  0.000000E+00 -8.673617E-18  0.000000E+00 -1.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+    6.979893E-10 -6.674859E-10 -1.318949E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01 -4.316233E-10  5.208124E-09  6.674859E-10  7.103417E-10
+
+
+
+ statistics for surface set WITEDGE24 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    2.697769E-10  2.063035E-10  1.999913E-03  9.999570E-04 -1.791595E-02  1.555108E-09
+
+   center of gravity and mean normal
+
+    8.000000E+00  5.000000E-01 -1.084202E-18  1.000000E+00  4.440892E-16  4.440892E-15
+
+   moment about the center of gravity(mx,my,mz)
+
+    3.292542E-10 -1.916646E-03  3.956839E-11
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  2.697769E-10  1.999913E-03  3.292542E-10  1.916646E-03
+
+
+
+ statistics for surface set WITEDGE25 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    3.818117E-10 -2.404575E-10 -2.919261E-09 -3.628900E-09  2.029973E-08 -2.091963E-09
+
+   center of gravity and mean normal
+
+    7.500000E+00  1.000000E+00  3.794708E-17 -5.551115E-17  1.000000E+00  5.551115E-16
+
+   moment about the center of gravity(mx,my,mz)
+
+   -7.096388E-10 -1.594722E-09  9.327927E-11
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01 -2.404575E-10  2.944123E-09 -1.594722E-09  7.157432E-10
+
+
+
+ statistics for surface set WITEDGE26 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+   -2.626193E-10 -4.227898E-11  1.045492E-09 -2.107399E-10 -9.066730E-09 -3.791155E-10
+
+   center of gravity and mean normal
+
+    8.500000E+00  0.000000E+00 -3.144186E-17  0.000000E+00 -1.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+   -2.107399E-10 -1.800466E-10 -1.974424E-11
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  4.227898E-11  1.077972E-09  1.800466E-10  2.116628E-10
+
+
+
+ statistics for surface set WITEDGE27 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    2.739137E-10  2.399378E-11  9.999557E-04  4.999781E-04 -9.416262E-03 -4.058768E-11
+
+   center of gravity and mean normal
+
+    9.000000E+00  5.000000E-01 -1.084202E-18  1.000000E+00  6.661338E-16 -4.440892E-15
+
+   moment about the center of gravity(mx,my,mz)
+
+    1.936539E-10 -4.166609E-04 -1.195749E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  2.739137E-10  9.999557E-04  1.936539E-10  4.166609E-04
+
+
+
+ statistics for surface set WITEDGE28 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    4.689123E-11  1.692640E-10  1.137998E-09  1.352871E-09 -1.001654E-08  1.439267E-09
+
+   center of gravity and mean normal
+
+    8.500000E+00  1.000000E+00  1.951564E-17 -5.551115E-17  1.000000E+00  5.551115E-16
+
+   moment about the center of gravity(mx,my,mz)
+
+    2.148735E-10 -3.435524E-10  4.741416E-11
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  1.692640E-10  1.138964E-09 -3.435524E-10  2.200425E-10
+
+
+
+ statistics for surface set WITEDGE29 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    2.074763E-10 -8.249339E-11 -4.367096E-09  7.000918E-10  4.308204E-08 -6.960751E-10
+
+   center of gravity and mean normal
+
+    9.500000E+00  0.000000E+00 -5.095750E-17  0.000000E+00 -1.000000E+00  0.000000E+00
+
+   moment about the center of gravity(mx,my,mz)
+
+    7.000918E-10  1.594626E-09  8.761212E-11
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  8.249339E-11  4.372021E-09 -1.594626E-09  7.055525E-10
+
+
+
+ statistics for surface set WITEDGE30 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    1.910389E-10  2.552811E-11 -2.368484E-08 -1.127525E-08  8.356822E-05  8.195697E-11
+
+   center of gravity and mean normal
+
+    1.000000E+01  5.000000E-01 -1.084202E-18  1.000000E+00 -9.244464E-32 -8.881784E-15
+
+   moment about the center of gravity(mx,my,mz)
+
+    5.671660E-10  8.333137E-05 -7.780462E-11
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  1.910389E-10  2.368485E-08  5.671660E-10  8.333137E-05
+
+
+
+ statistics for surface set WITEDGE31 and time  0.1000000E+01
+
+   total surface force (fx,fy,fz) and moment about the origin(mx,my,mz)
+
+    1.586987E-10  6.822247E-11 -4.084336E-09 -4.790309E-09  3.967371E-08  3.509936E-10
+
+   center of gravity and mean normal
+
+    9.500000E+00  1.000000E+00 -1.951564E-17 -5.551115E-17  1.000000E+00  5.551115E-16
+
+   moment about the center of gravity(mx,my,mz)
+
+   -7.059731E-10  8.725130E-10 -1.384211E-10
+
+   area, normal force (+ = tension), shear force (size), torque and bending moment (size)
+
+    1.000000E-01  6.822247E-11  4.087418E-09  8.725130E-10  7.194154E-10

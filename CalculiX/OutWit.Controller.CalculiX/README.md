@@ -10,7 +10,7 @@ companion `OutWit.Controller.Sweep` orchestrates into parameter studies.
 
 | Activity | Side | Purpose |
 |---|---|---|
-| `Ccx.Solve(CcxTask) → CcxResult` | node | Download the variant deck, run the bundled ccx (`<ccx> <jobname>` in a scratch directory - a scope of the temp folder the host hands the controller, on a node the client's controllers' temp folder - `OMP_NUM_THREADS` from the task), upload `.frd`/`.dat` as blobs, extract the requested responses on the node, return artifact ids + exit code + measured solve time + the response row. A nonzero solver exit is **data** in the result, not a task failure. |
+| `Ccx.Solve(CcxTask) → CcxResult` | node | Download the variant deck, run the bundled ccx (`<ccx> <jobname>` in a scratch directory - a scope of the temp folder the host hands the controller, on a node the client's controllers' temp folder - `OMP_NUM_THREADS` from the task), extract the requested responses on the node, upload `.frd`/`.dat` as blobs, return artifact ids + exit code + measured solve time + the response row. A nonzero solver exit is **data** in the result, not a task failure. |
 
 The task rides as one envelope (`CcxTaskData`): deck blob id, explicit
 node/element counts (work estimation never opens the blob), thread policy and
@@ -23,15 +23,16 @@ The node reads the variant's `.frd` and `.dat` right after ccx exits and
 returns numbers, not files: the response row (`CcxResultData.ResponseRow`, a
 list of named values) and the notes, carried as note lines inside
 `CcxResultData.LogTail` (see *Notes* below). A column appears only when the
-deck asked ccx for the output it is computed from; the controller adds no
-output requests to a deck.
+deck asked ccx for the output it is computed from; the controller adds output
+requests to a deck only to recover the shell and beam stress of a deck that
+writes `OUTPUT=2D` (*Shells and beams under OUTPUT=2D* below).
 
 ### Columns
 
 | Column | From | What it is |
 |---|---|---|
 | `max_disp_magnitude`, `max_disp_x`, `max_disp_y`, `max_disp_z` | `.frd` DISP (`*NODE FILE` with `U`) | Largest displacement magnitude and largest absolute component per axis over the nodes of the step's last DISP block |
-| `max_von_mises`, `min_von_mises` | `.frd` STRESS (`*EL FILE` with `S`) | Largest and smallest nodal von Mises stress of the step's last STRESS block |
+| `max_von_mises`, `min_von_mises` | `.frd` STRESS (`*EL FILE` with `S`); under `OUTPUT=2D` at shell and beam nodes recovered from section forces (below) | Largest and smallest nodal von Mises stress of the step's last STRESS block |
 | `max_temp`, `min_temp` | `.frd` NDTEMP (`*NODE FILE` with `NT`) | Largest and smallest temperature of the step's last NDTEMP block |
 | `max_temp_any_step` | `.frd` NDTEMP | Peak temperature over every NDTEMP block of the step; only when the step wrote more than one (a transient) |
 | `eigenfrequency_<k>` | `.dat` eigenvalue table | Frequency in cycles per time of mode `k`, numbered as ccx numbers the modes of that table |
@@ -90,16 +91,86 @@ set; `avg` weights each deck node once. An info note on the column counts the
 nodes taken by nearest position; a deck node with no result node at all is
 left out, with an info note, and a set with none gets no column and a warning.
 
+### Shells and beams under OUTPUT=2D
+
+With `OUTPUT=2D` ccx writes a shell's stress as the mean through the thickness
+and a beam's as the mean over the section: the bending stress is gone (an S8R
+cantilever read 0.81 against 75 analytic, a B32 4.75 against 60). ccx 2.22
+writes no field of shell section forces (`*EL FILE, SECTION FORCES` changes the
+beams only, map3dto1d2d.f; `SNEG` and `SPOS` fill the US3/US45 user shells
+only), so the node adds the output the stress is recovered from to the deck
+before the solve, with an info note on the variant for each addition (controller
+1.1.4 and earlier refused the von Mises columns of every such deck):
+
+- **Beams** (B31, B32, B32R with RECT, PIPE or BOX sections): `*EL FILE,
+  OUTPUT=2D, SECTION FORCES` at the end of step 1. ccx then writes, at the beam
+  nodes of the `.frd` STRESS block, the section forces in place of the stress:
+  SXX and SYY the shear forces in the 1- and 2-direction, SZZ the axial force,
+  SXY the torque, SYZ and SZX the moments about the 1- and 2-direction. A beam
+  node's von Mises is the largest over the section's corners, mid-sides and
+  centre of `N/A ± M1/W1 ± M2/W2` with the shear there: torsion (Saint-Venant
+  for RECT, Bredt for BOX) and transverse shear (Jourawski).
+- **Shells** (S4, S6, S8, S8R): one surface per element edge before the first
+  step and a `*SECTION PRINT` (`SOF`) on each in the `*STATIC` steps; a step of
+  another procedure switches them off (`FREQUENCYF=0`) - a frequency step would
+  print every edge for every mode. A print gives the force and the moment
+  through its cut (printoutface.f); at every element corner the two edges give
+  the bending stress `6M/t²` by least squares. A shell node's von Mises is the
+  largest of the top and bottom faces - the `.frd`'s mean stress, which is the
+  membrane stress, plus and minus the bending stress - and of the mid-surface,
+  with 1.5 times the mean transverse shear. The edge prints leave the `.dat`
+  after the extraction; a deck that printed nothing else gets its empty `.dat`
+  back.
+
+Every von Mises column then carries an info note naming the method. Measured
+with the bundled ccx 2.22 (2026-10-29), the analytic root stress in brackets:
+
+| Cantilever | `OUTPUT=2D` before | Recovered | Expanded mesh |
+|---|---|---|---|
+| S8R plate 100 × 20 × 2, tip load (75) | 0.81 | 74.999 | 75.0 |
+| S4, the same plate (75) | 0.54 | 73.125 | 73.13 |
+| CQUAD4 strip 10 × 1 × 0.1 converted from Nastran, 20 × 2 / 40 × 4 / 80 × 8 / 160 × 16 elements (6000) | 17.3 | 5850 / 5925 / 5962.5 / 5981.25 | 5850 / 5925 / 5962 / - |
+| S8R strip 10 × 1 × 0.1 under pressure, 80 × 8 elements (30) | 0.17 | 29.999 | 30.0 |
+| B32, RECT 10 × 10, tip load (60) | 4.75 | 60.10 | 59.73 |
+| B31, RECT 10 × 20, tip load (15) | 0.87 | 14.59 | 14.64 |
+
+An S4 or a B31 bends at constant curvature, so its root reads the stress half
+an element in, 6000 (1 - h/2L) on the strip; nothing grows at the clamp as the
+mesh is refined. At a node where a point load acts, ccx's section forces of the
+loaded beam element are disturbed (a tip torque of 1000 on a PIPE read 1300 at
+the tip node, an axial tip force of 1000 on a RECT 524; the expanded mesh read
+an axial stress of 40 against 5 there).
+
+The edge prints cost solver time: ccx checks every new print request against
+all earlier ones (sectionprints.f), so the cost grows with the square of their
+number. A 9 800-element S4 plate (19 810 edges) solved in 3.1 s against 1.5 s,
+and its `.dat` grew to 12.6 MB before the strip; an 80 500-edge plate took
+26.5 s against 5.3 s, so a deck with more than 20 000 shell edges is not
+recovered.
+
 ### Columns that are not reported
 
 A column that would carry a wrong number is left out, with a warning note on
 the column (the note line's column field names it) saying why:
 
-- `max_von_mises`, `min_von_mises` and every `von_mises` probe when the deck
-  has shell or beam elements and its file cards say `OUTPUT=2D`: ccx then maps
-  the stress onto the mid-surface or the beam axis, where the bending stress is
-  gone (an S8R cantilever read 0.81 against 75 analytic, a B32 4.75 against
-  59.7). Remove `OUTPUT=2D` to get the expanded-mesh stress.
+- `max_von_mises`, `min_von_mises` and every `von_mises` probe of an
+  `OUTPUT=2D` deck whose shell and beam stress cannot be recovered (above); the
+  note says why. The columns cover the whole model, so when one family cannot
+  be recovered nothing is added to the deck. Not recovered: S3 and S4R shells
+  (ccx integrates their edge faces at one point, so the prints carry no
+  moment) and B31R beams (likewise); CIRC sections (SECTION FORCES integrates
+  them 8 % high: a root moment of 10 000 read 10 848) and BOX sections with
+  unequal opposite walls; beam nodes that are nodes of shell, membrane, plane
+  or truss elements too, and beam nodes where elements meet at more than 5°,
+  against each other's direction or with different sections - ccx writes one
+  value per node, the mean over the elements on it, so a beam's forces get
+  averaged with a shell's stress or with another beam's forces in another
+  frame; trusses beside beams (SECTION FORCES would turn their stress into
+  forces); a material that is not linear elastic; COMPOSITE or NODAL THICKNESS
+  shell sections; element output in local frames (`GLOBAL=NO`); `*SECTION
+  PRINT` cards of the deck's own; for the shells, steps other than `*STATIC`
+  and more than 20 000 edges. Remove `OUTPUT=2D` to get the expanded-mesh
+  stress.
 - Every column of a field whose `.frd` block carries a value that is not a
   number (`nan`, `-nan(ind)`, `inf` - a solve that blew up): the note names the
   field and the node. Before, `nan` parsed to NaN and `-nan(ind)` to 0.
@@ -134,7 +205,7 @@ without notes. The grammar (`CcxNoteLog` composes and parses it):
 
 | Kind | Meaning |
 |---|---|
-| `INFO` | The value stands; the note says how it was obtained (reaction forces rotated from a local frame, probe nodes taken by nearest position, a mode-shape column of an eigenvalue step: `max_disp_*` and `*_von_mises` of a `*FREQUENCY` or `*BUCKLE` step describe the last mode shape, normalised). |
+| `INFO` | The value stands; the note says how it was obtained (reaction forces rotated from a local frame, probe nodes taken by nearest position, a von Mises recovered from section forces under `OUTPUT=2D`, a mode-shape column of an eigenvalue step: `max_disp_*` and `*_von_mises` of a `*FREQUENCY` or `*BUCKLE` step describe the last mode shape, normalised), or the deck was given the output that recovery reads (`SECTION FORCES`, one `*SECTION PRINT` per shell edge). |
 | `WARNING` | A column is not reported (the column field names it; the text says why), or the deck was changed before the solve: a step card naming a solver the bundled ccx does not link (`SOLVER=PASTIX` anywhere, `SOLVER=PARDISO` on a macOS node, `TAUCS`, `SGI`) has the parameter removed and ccx takes its default - PARDISO on Windows and Linux, SPOOLES on macOS; such a card ended the solve with exit 201 before. |
 | `ERROR` | The extraction failed as a whole (a reader threw: a file that could not be read, memory that ran out). `ResponseRow` is then **null** with `ExitCode` 0 - that pair is the "extraction failed" signal - and the variant is not a result; before, an empty row passed for a solve with nothing to report. |
 

@@ -67,6 +67,20 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
             // 201 at once: the parameter is removed and the variant says so.
             var notes = CcxSolverFallback.Apply(jobDeckPath, CcxEquationSolver.PardisoLinked(OperatingSystem.IsMacOS()));
 
+            // A deck that writes OUTPUT=2D loses the bending stress of its
+            // shells and beams; the output it is recovered from goes in now.
+            // A deck the rewrite cannot read is solved as it is, and the
+            // extraction says why its stress is not reported.
+            var shellPrints = false;
+            try
+            {
+                notes.AddRange(CcxSectionOutput.Apply(jobDeckPath, out shellPrints));
+            }
+            catch (Exception e) when (e is IOException or FormatException or InvalidOperationException)
+            {
+                Logger.LogWarning(e, "Ccx.Solve: the section output could not be added to the deck.");
+            }
+
             // The job's cancellation must reach the RUNNING solver: without
             // the token a cancelled overnight sweep keeps every node's
             // in-flight ccx solving to completion, and cancel only takes
@@ -92,12 +106,6 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
                 ExitCode = outcome.ExitCode,
                 SolveSeconds = outcome.ElapsedSeconds
             };
-
-            if (frdPath != null)
-                result.FrdBlobId = await BlobService.UploadFileAsync(frdPath);
-
-            if (datPath != null)
-                result.DatBlobId = await BlobService.UploadFileAsync(datPath);
 
             // A nonzero exit is data, not a task failure: the orchestration
             // records the failed variant and moves on; only infrastructure
@@ -125,6 +133,28 @@ internal sealed class WitActivityAdapterCcxSolve : WitActivityAdapterFunction<Wi
                     Logger.LogWarning("Ccx.Solve: response extraction failed — {Reason}; the row is missing, artifacts remain.",
                         notes.LastOrDefault(note => note.Kind == CcxNoteKind.Error)?.Text);
             }
+
+            // The edge prints served the extraction; the .dat goes up as the
+            // deck asked for it (and not at all when they were all it held).
+            if (shellPrints && datPath != null)
+            {
+                try
+                {
+                    CcxSectionOutput.StripDat(datPath);
+                }
+                catch (IOException e)
+                {
+                    Logger.LogWarning(e, "Ccx.Solve: the edge prints could not be taken out of the .dat.");
+                }
+
+                datPath = ExistingArtifact(scratchDirectory, ".dat");
+            }
+
+            if (frdPath != null)
+                result.FrdBlobId = await BlobService.UploadFileAsync(frdPath);
+
+            if (datPath != null)
+                result.DatBlobId = await BlobService.UploadFileAsync(datPath);
 
             // The notes ride inside the log tail, after the solver's own tail
             // (kept for a failed solve only): the result keeps the shipped
