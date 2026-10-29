@@ -18,6 +18,9 @@
 //   - a line "FAKE-PROBES=<name>" also writes the probes files p and U under
 //     postProcessing/<name>/0/ in v2606's shape, a row per time, probe 1 at
 //     (9 9 9) outside the mesh ("# Not Found", -1e+300);
+//   - a line "FAKE-BAD-PROBES=<name>" writes a probes file p under
+//     postProcessing/<name>/0/ whose header numbers its probe beyond what
+//     an int holds: a file the controller's reader cannot read;
 //   - otherwise it "solves" ITERATIONS steps (system/fake may say
 //     "ITERATIONS=n"), converging on the last one, and writes <n>/U.
 // Every copy prints "nCells: 12225" unless system/fake says
@@ -127,6 +130,16 @@ foreach (var line in text.Split('\n'))
 
     File.WriteAllText(Path.Combine(probes, "p"), scalar.ToString());
     File.WriteAllText(Path.Combine(probes, "U"), vector.ToString());
+}
+
+foreach (var line in text.Split('\n'))
+{
+    if (!line.StartsWith("FAKE-BAD-PROBES=", StringComparison.Ordinal))
+        continue;
+
+    var probes = Path.Combine(caseDirectory, "postProcessing", line["FAKE-BAD-PROBES=".Length..].Trim(), "0");
+    Directory.CreateDirectory(probes);
+    File.WriteAllText(Path.Combine(probes, "p"), $"# Probe 99999999999 (0.1 0 0)\n# Time 99999999999\n{iterations} -3.68615\n");
 }
 
 Console.WriteLine("End");

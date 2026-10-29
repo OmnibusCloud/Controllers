@@ -566,6 +566,36 @@ public class FoamCaseSessionTests
     }
 
     [Test]
+    public async Task ResponsesThatCannotBeReadAreAnErrorAndNoRowTest()
+    {
+        // A probes file whose header numbers its probe beyond an int: the
+        // reader throws. Before, the variant came back a success with an
+        // empty row, as if the run had nothing to report.
+        var session = RequireSession();
+        var data = PitzCase("ITERATIONS=2\nFAKE-BAD-PROBES=wake\n");
+        data.Extraction = new FoamExtractionRequestData
+        {
+            Responses =
+            [
+                new FoamResponseSpecData
+                {
+                    Name = "wake", Kind = FoamResponseKind.Probe, Fields = ["p"],
+                    Parameters = [new FoamNamedValueData { Name = "probeLocations", Value = "((0.1 0 0))" }]
+                }
+            ]
+        };
+
+        var result = await session.RunAsync(Task(data));
+
+        Assert.That(result.ExitCode, Is.EqualTo(0), "the run itself finished cleanly");
+        Assert.That(result.FailedStep, Is.Null);
+        Assert.That(result.ResponseRow, Is.Null, "exit code 0 with no row: the extraction failed");
+        Assert.That(NotesOf(result).Select(note => (note.Kind, note.Column)), Is.EqualTo(new[] { (FoamNoteKind.Error, (string?)null) }));
+        Assert.That(NotesOf(result).Single().Text, Does.StartWith("responses could not be read: OverflowException: "));
+        Assert.That(result.ArtifactBlobId, Is.Not.Null, "the artifact still comes back: it is how the failure is read");
+    }
+
+    [Test]
     public async Task ARefusedVariantCarriesNoNotesTest()
     {
         // The reference value follows before the refusal is known: a run

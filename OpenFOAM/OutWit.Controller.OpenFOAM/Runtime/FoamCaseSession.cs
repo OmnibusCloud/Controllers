@@ -13,7 +13,8 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 /// case, the refusals (recipe, files, run-time code), the steps, the facts
 /// read from the logs, the responses, the notes (in the log tail, by
 /// <see cref="FoamNoteLog"/>), the artifact. A refused or failed variant is
-/// a result with the reasons; only infrastructure errors throw.
+/// a result with the reasons, and so is a run whose responses could not be
+/// read (no row, an ERROR note); only infrastructure errors throw.
 /// </summary>
 public sealed class FoamCaseSession
 {
@@ -196,29 +197,46 @@ public sealed class FoamCaseSession
         result.CellCount = meshed > 0 ? meshed : logged;
     }
 
-    private FoamResponseRowData ExtractResponses(string caseDirectory, FoamExtractionRequestData? extraction, double finalTime, IReadOnlyList<FoamNote> before, List<FoamNote> extracted)
+    private FoamResponseRowData? ExtractResponses(string caseDirectory, FoamExtractionRequestData? extraction, double finalTime, IReadOnlyList<FoamNote> before, List<FoamNote> extracted)
     {
-        // A parsing surprise must not turn a finished run into a failure: the
-        // row degrades to empty and the run's other facts stand.
+        FoamResponseRowData row;
         try
         {
             // A response whose last row is not the run's final time is left
             // out and named in log.responses, which travels with the logs;
             // an unknown final time (no solver log) checks nothing.
-            var row = FoamResponseExtractor.Extract(caseDirectory, extraction, finalTime > 0 ? finalTime : null, extracted);
-            List<FoamNote> notes = [.. before, .. extracted];
-            foreach (var sentence in FoamResponseExtractor.Sentences(notes))
-                Logger?.LogInformation("Foam.Run: {Note}", sentence);
-            FoamResponseExtractor.WriteNotes(caseDirectory, notes);
-            return row;
+            row = FoamResponseExtractor.Extract(caseDirectory, extraction, finalTime > 0 ? finalTime : null, extracted);
         }
         catch (Exception e)
         {
-            // The row is empty: what the extraction said of its columns says nothing more.
+            // A parsing surprise must not turn a finished run into a failure,
+            // nor pass for a result: the row is null - with exit code 0 the
+            // "extraction failed" signal, as in the CalculiX contract - and
+            // an ERROR says why; the artifact still comes back. What the
+            // extraction said of single columns before it threw says nothing
+            // more. Before, an empty row passed for a run with nothing to report.
             extracted.Clear();
-            Logger?.LogWarning(e, "Foam.Run: response extraction failed - the row stays empty.");
-            return new FoamResponseRowData();
+            extracted.Add(new FoamNote { Kind = FoamNoteKind.Error, Text = $"responses could not be read: {e.GetType().Name}: {e.Message}" });
+            Logger?.LogWarning(e, "Foam.Run: response extraction failed - the row is missing, the artifact remains.");
+            return null;
         }
+
+        List<FoamNote> notes = [.. before, .. extracted];
+        foreach (var sentence in FoamResponseExtractor.Sentences(notes))
+            Logger?.LogInformation("Foam.Run: {Note}", sentence);
+
+        // log.responses is the logs' copy of the notes the result carries:
+        // a file that cannot be written costs the copy, not the values.
+        try
+        {
+            FoamResponseExtractor.WriteNotes(caseDirectory, notes);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Logger?.LogWarning(e, "Foam.Run: log.responses could not be written - the notes travel in the result only.");
+        }
+
+        return row;
     }
 
     private async Task UploadArtifactAsync(FoamResultData result, string caseDirectory, string scratch, FoamArtifactPolicyData? policy, CancellationToken cancellationToken)

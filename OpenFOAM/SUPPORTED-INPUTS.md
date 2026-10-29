@@ -338,7 +338,7 @@ The grammar is the CalculiX controller's, so one reader serves both families
 |---|---|
 | `INFO` | The values stand; the note says how they were obtained or what the run did besides. |
 | `WARNING` | A column is not reported (the column field names it; the text says why), or a swept value does not do what the study meant. |
-| `ERROR` | The extraction failed as a whole. This controller writes none yet: an extraction that throws leaves the row empty, with no note. |
+| `ERROR` | The extraction failed as a whole (a reader threw: a file that could not be read or parsed). `ResponseRow` is then **null** with `ExitCode` 0 - that pair is the "extraction failed" signal, as in the CalculiX contract - and the variant is not a result; the artifact still comes back. Before 1.1.5 an empty row passed for a run with nothing to report. |
 
 ### What the notes say
 
@@ -352,6 +352,7 @@ The grammar is the CalculiX controller's, so one reader serves both families
 | A function object stopped writing before the run ended | `WARNING` | every value column of the file | `<response>: the last row of <file> is at time <time>, the run ended at <final time> - not reported.` |
 | A probe outside the mesh | `WARNING` | every component column of the probe | `<response>: probe <N> (x y z) of <field> is outside the mesh - not reported.` |
 | -1e+300 in a file that is not a probes file | `WARNING` | that column | `<response>: <column> is -1e+300, a probe outside the mesh - not reported.` |
+| The responses could not be read | `ERROR` | empty | `responses could not be read: <exception type>: <message>` - then the only note of the responses: what was said of single columns before the reader threw is dropped |
 
 A token the `setFields` note names may be reached through a reference: the
 text then reads `carries <token> through $<entry>` (`of <file>` when the entry
