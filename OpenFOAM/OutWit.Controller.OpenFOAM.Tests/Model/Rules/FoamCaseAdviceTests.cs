@@ -88,6 +88,47 @@ public class FoamCaseAdviceTests
     }
 
     [Test]
+    public void ASweptValueReachedThroughAReferenceToAnIncludedEntryIsNoticedTest()
+    {
+        // motorBike's shape: the velocity written once in 0/include/initialConditions
+        // and reached by U's internalField through $flowVelocity; the token
+        // sits in the include, the field itself carries none.
+        var dictionary =
+            "defaultFieldValues ( volVectorFieldValue U (0 0 0) volScalarFieldValue p 0 );\n" +
+            "regions ( boxToCell { box (0 0 -1) (1 1 1); fieldValues ( volScalarFieldValue T 300 volScalarFieldValue k 1 ); } );\n";
+        var files = new List<(string, string?)>
+        {
+            ("system/setFieldsDict", dictionary),
+            ("0/include/initialConditions", "flowVelocity         ({{oc1}} 0 0);\npressure             {{oc3}};\n"),
+            ("0/U", "FoamFile { class volVectorField; object U; }\n#include \"include/initialConditions\"\ndimensions [0 1 -1 0 0 0 0];\ninternalField uniform $flowVelocity;\nboundaryField\n{\n    inlet { type fixedValue; value $internalField; }\n}\n"),
+            ("0/p", "#include \"include/initialConditions\"\ninternalField uniform ${pressure};\n"),
+            ("0/T", "T0 {{oc2}};\ninternalField uniform $T0;\n"),
+            ("0/k", "internalField uniform $missing;\n")
+        };
+
+        var advice = FoamCaseAdvice.OfSetFields(Recipe(setFields: true), files);
+
+        Assert.That(advice, Is.EqualTo(new[]
+        {
+            "0/U: internalField carries {{oc1}} through $flowVelocity of 0/include/initialConditions, which the study sweeps, and the recipe's setFields step overwrites it everywhere (system/setFieldsDict defaultFieldValues names U): the swept value has no effect.",
+            "0/p: internalField carries {{oc3}} through ${pressure} of 0/include/initialConditions, which the study sweeps, and the recipe's setFields step overwrites it everywhere (system/setFieldsDict defaultFieldValues names p): the swept value has no effect.",
+            "0/T: internalField carries {{oc2}} through $T0, which the study sweeps, and the recipe's setFields step overwrites it inside the regions of system/setFieldsDict: the swept value holds outside them only."
+        }), "a reference no file answers (k) says nothing");
+    }
+
+    [Test]
+    public void AReferenceThatNeverEndsSaysNothingTest()
+    {
+        var files = new List<(string, string?)>
+        {
+            ("system/setFieldsDict", SET_FIELDS_DICT),
+            ("0/alpha.water", "a $b;\nb $a;\ninternalField uniform $a;\n")
+        };
+
+        Assert.That(FoamCaseAdvice.OfSetFields(Recipe(setFields: true), files), Is.Empty);
+    }
+
+    [Test]
     public void WithoutASetFieldsStepOrItsDictionaryNothingIsSaidTest()
     {
         var files = new List<(string, string?)> { ("system/setFieldsDict", SET_FIELDS_DICT), ("0/alpha.water", "internalField uniform {{oc1}};\n") };

@@ -6,10 +6,12 @@ namespace OutWit.Controller.OpenFOAM.Runtime;
 
 /// <summary>
 /// The node's side of <see cref="FoamCaseAdvice"/>: the task's data, and
-/// the templated files the advice reads - <c>system/setFieldsDict</c> and
-/// the initial fields the study templated, tokens in place, from the node's
-/// blob cache - given to the Model, the sentences kept for
-/// <c>log.responses</c>. A file that cannot be read says nothing.
+/// the files the advice reads - <c>system/setFieldsDict</c>, the initial
+/// fields and the files they <c>#include</c> (a swept value reaches an
+/// <c>internalField</c> through a reference to an included entry as often
+/// as it is written in the field), as the study templated them, tokens in
+/// place, from the node's blob cache - given to the Model, the sentences
+/// kept for <c>log.responses</c>. A file that cannot be read says nothing.
 /// </summary>
 public static class FoamCaseAdvisor
 {
@@ -36,16 +38,29 @@ public static class FoamCaseAdvisor
         if (task.Case?.Recipe == null || task.Case.Recipe.Steps.All(step => step.Utility != "setFields"))
             return advice;
 
-        var files = new List<(string RelativePath, string? Text)>();
+        var byPath = new Dictionary<string, FoamFileRefData>(StringComparer.Ordinal);
         foreach (var file in task.Case.BaseFiles)
+            byPath.TryAdd(file.RelativePath, file);
+
+        // The dictionary and the initial fields first, then what each field
+        // read includes, each file once.
+        var wanted = new Queue<string>(byPath.Keys.Where(path => path == SET_FIELDS_DICT || IsInitialField(path)));
+        var read = new HashSet<string>(StringComparer.Ordinal);
+        var files = new List<(string RelativePath, string? Text)>();
+        while (wanted.TryDequeue(out var path))
         {
-            var wanted = file.RelativePath == SET_FIELDS_DICT
-                         || (file.Templated && INITIAL_FOLDERS.Any(folder => file.RelativePath.StartsWith(folder, StringComparison.Ordinal)));
-            if (!wanted || !FoamCaseContentRules.IsScanned(file.RelativePath, file.Size))
+            if (!read.Add(path) || !byPath.TryGetValue(path, out var file) || !FoamCaseContentRules.IsScanned(path, file.Size))
                 continue;
 
             cancellationToken.ThrowIfCancellationRequested();
-            files.Add((file.RelativePath, await ReadBlobAsync(blobService, file, cancellationToken)));
+            var text = await ReadBlobAsync(blobService, file, cancellationToken);
+            files.Add((path, text));
+
+            if (text != null && path != SET_FIELDS_DICT)
+            {
+                foreach (var included in FoamCaseFunctionObjects.IncludedFiles(text, path))
+                    wanted.Enqueue(included);
+            }
         }
 
         advice.AddRange(FoamCaseAdvice.OfSetFields(task.Case.Recipe, files));
@@ -55,6 +70,13 @@ public static class FoamCaseAdvisor
     #endregion
 
     #region Tools
+
+    /// <summary>A file directly under an initial folder: <c>0/U</c>, not <c>0/include/initialConditions</c>.</summary>
+    private static bool IsInitialField(string relativePath)
+    {
+        var folder = INITIAL_FOLDERS.FirstOrDefault(folder => relativePath.StartsWith(folder, StringComparison.Ordinal));
+        return folder != null && !relativePath[folder.Length..].Contains('/');
+    }
 
     private static async Task<string?> ReadBlobAsync(IWitBlobService blobService, FoamFileRefData file, CancellationToken cancellationToken)
     {

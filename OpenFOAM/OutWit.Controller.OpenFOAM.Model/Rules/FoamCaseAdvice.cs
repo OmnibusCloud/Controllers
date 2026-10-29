@@ -9,8 +9,12 @@ namespace OutWit.Controller.OpenFOAM.Model.Rules;
 /// <c>setFields</c> step that overwrites an <c>internalField</c> the study
 /// sweeps (<c>defaultFieldValues</c> everywhere, a region's
 /// <c>fieldValues</c> inside it), so the swept value has no effect or holds
-/// outside the regions only. An initiator shows the sentences at preflight;
-/// the node writes them into <c>log.responses</c> beside the run's notes.
+/// outside the regions only - the token written in the entry itself, or
+/// reached through a <c>$</c> reference to an entry of the file or of a
+/// file it <c>#include</c>s (motorBike's <c>internalField uniform
+/// $flowVelocity</c>, the velocity written in <c>0/include/initialConditions</c>).
+/// An initiator shows the sentences at preflight; the node writes them
+/// into <c>log.responses</c> beside the run's notes.
 /// </summary>
 public static class FoamCaseAdvice
 {
@@ -28,11 +32,18 @@ public static class FoamCaseAdvice
     /// <summary>A field a setFields value names: <c>volScalarFieldValue alpha.water 0</c>, <c>volVectorFieldValue U (0 0 0)</c>.</summary>
     private static readonly Regex FIELD_VALUE = new(@"(?<![A-Za-z0-9_])vol[A-Za-z]+FieldValue\s+([A-Za-z][A-Za-z0-9_.]*)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private static readonly Regex DEFAULT_VALUES = new(@"(?<![A-Za-z0-9_])defaultFieldValues\s*\(([^)]*(?:\([^)]*\)[^)]*)*)\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    /// <summary>The whole <c>defaultFieldValues</c> list, a vector value's parentheses inside it: the class leaves <c>(</c> to the inner group, or a scalar after a vector (<c>U (0 0 0) volScalarFieldValue p 0</c>) would fall outside the list.</summary>
+    private static readonly Regex DEFAULT_VALUES = new(@"(?<![A-Za-z0-9_])defaultFieldValues\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex LINE_COMMENT = new(@"//[^\n]*", RegexOptions.Compiled);
 
     private static readonly Regex BLOCK_COMMENT = new(@"/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Singleline);
+
+    /// <summary>A reference to another entry inside a value: <c>$name</c> or <c>${name}</c>.</summary>
+    private static readonly Regex REFERENCE = new(@"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>How many times a value's references are followed before the chain is given up as circular.</summary>
+    private const int MAX_REFERENCE_DEPTH = 8;
 
     #endregion
 
@@ -59,7 +70,7 @@ public static class FoamCaseAdvice
     /// <c>internalField</c> the study sweeps.
     /// </summary>
     /// <param name="recipe">The recipe; without a <c>setFields</c> step there is nothing to say.</param>
-    /// <param name="files">The case's files that matter, by relative path (forward slashes) with their templated text, tokens in place: <c>system/setFieldsDict</c> and the initial fields; a file not given is not read.</param>
+    /// <param name="files">The case's files that matter, by relative path (forward slashes) with their templated text, tokens in place: <c>system/setFieldsDict</c>, the initial fields and the files they <c>#include</c>; a file not given is not read.</param>
     /// <returns>Sentences, one per swept field the step overwrites; empty when there is nothing to say.</returns>
     public static IReadOnlyList<string> OfSetFields(FoamRecipeData? recipe, IReadOnlyList<(string RelativePath, string? Text)> files)
     {
@@ -77,6 +88,14 @@ public static class FoamCaseAdvice
             .ToHashSet(StringComparer.Ordinal);
         var inRegions = FIELD_VALUE.Matches(dictionary).Select(match => match.Groups[1].Value).Where(field => !everywhere.Contains(field)).ToHashSet(StringComparer.Ordinal);
 
+        // The files by path, comments blanked, for the references a value follows.
+        var texts = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (relativePath, text) in files)
+        {
+            if (text != null)
+                texts.TryAdd(relativePath, StripComments(text));
+        }
+
         foreach (var (relativePath, text) in files)
         {
             if (text == null || !INITIAL_FOLDERS.Any(folder => relativePath.StartsWith(folder, StringComparison.Ordinal)))
@@ -90,14 +109,15 @@ public static class FoamCaseAdvice
             if (!internalField.Success)
                 continue;
 
-            var token = FoamTemplating.TOKEN.Match(internalField.Groups[1].Value);
+            var value = Resolve(internalField.Groups[1].Value, relativePath, texts, out var through);
+            var token = FoamTemplating.TOKEN.Match(value);
             if (!token.Success)
                 continue;
 
             if (everywhere.Contains(field))
-                advice.Add($"{relativePath}: internalField carries {token.Value}, which the study sweeps, and the recipe's {SET_FIELDS} step overwrites it everywhere ({SET_FIELDS_DICT} defaultFieldValues names {field}): the swept value has no effect.");
+                advice.Add($"{relativePath}: internalField carries {token.Value}{through}, which the study sweeps, and the recipe's {SET_FIELDS} step overwrites it everywhere ({SET_FIELDS_DICT} defaultFieldValues names {field}): the swept value has no effect.");
             else if (inRegions.Contains(field))
-                advice.Add($"{relativePath}: internalField carries {token.Value}, which the study sweeps, and the recipe's {SET_FIELDS} step overwrites it inside the regions of {SET_FIELDS_DICT}: the swept value holds outside them only.");
+                advice.Add($"{relativePath}: internalField carries {token.Value}{through}, which the study sweeps, and the recipe's {SET_FIELDS} step overwrites it inside the regions of {SET_FIELDS_DICT}: the swept value holds outside them only.");
         }
 
         return advice;
@@ -106,6 +126,68 @@ public static class FoamCaseAdvice
     #endregion
 
     #region Tools
+
+    // The value with its $ references followed, as OpenFOAM looks an entry up
+    // through the enclosing dictionary: the field file's top level, the
+    // entries of the files it #includes (and theirs) among them. A reference
+    // no file answers stays as written. Says which reference brought the
+    // token and from which file - " through $flowVelocity of 0/include/initialConditions",
+    // the file left out when it is the field's own - or nothing when the
+    // token is written in the entry itself.
+    private static string Resolve(string value, string relativePath, IReadOnlyDictionary<string, string> texts, out string through)
+    {
+        through = string.Empty;
+        if (FoamTemplating.TOKEN.IsMatch(value))
+            return value;
+
+        var origin = string.Empty;
+        for (var depth = 0; depth < MAX_REFERENCE_DEPTH && REFERENCE.IsMatch(value); depth++)
+        {
+            var followed = false;
+            value = REFERENCE.Replace(value, match =>
+            {
+                var entry = Lookup(match.Groups[1].Value, relativePath, texts, new HashSet<string>(StringComparer.Ordinal), out var file);
+                if (entry == null)
+                    return match.Value;
+
+                followed = true;
+                if (origin.Length == 0 && FoamTemplating.TOKEN.IsMatch(entry))
+                    origin = file == relativePath ? $" through {match.Value}" : $" through {match.Value} of {file}";
+
+                return entry;
+            });
+
+            if (!followed)
+                break;
+        }
+
+        if (FoamTemplating.TOKEN.IsMatch(value))
+            through = origin;
+
+        return value;
+    }
+
+    // An entry at the top level of a file, or of a file it #includes, and so
+    // on; each file read once along a chain.
+    private static string? Lookup(string name, string relativePath, IReadOnlyDictionary<string, string> texts, HashSet<string> visited, out string file)
+    {
+        file = relativePath;
+        if (!visited.Add(relativePath) || !texts.TryGetValue(relativePath, out var text))
+            return null;
+
+        var entry = FoamCaseFunctionObjects.Entry(text, name);
+        if (entry != null)
+            return entry;
+
+        foreach (var included in FoamCaseFunctionObjects.IncludedFiles(text, relativePath))
+        {
+            entry = Lookup(name, included, texts, visited, out file);
+            if (entry != null)
+                return entry;
+        }
+
+        return null;
+    }
 
     private static string StripComments(string text)
     {

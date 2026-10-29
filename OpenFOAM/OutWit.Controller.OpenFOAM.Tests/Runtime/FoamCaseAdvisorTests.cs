@@ -6,9 +6,9 @@ using OutWit.Controller.OpenFOAM.Tests.Utils;
 namespace OutWit.Controller.OpenFOAM.Tests.Runtime;
 
 /// <summary>
-/// The node reads the templated files the advice needs from its blob cache
-/// - the setFieldsDict and the initial fields the study templated - and
-/// says what the Model says.
+/// The node reads the files the advice needs from its blob cache - the
+/// setFieldsDict, the initial fields and the files they include, tokens in
+/// place - and says what the Model says.
 /// </summary>
 [TestFixture]
 public class FoamCaseAdvisorTests
@@ -74,6 +74,25 @@ public class FoamCaseAdvisorTests
         Assert.That(advice, Has.Count.EqualTo(2));
         Assert.That(advice[0], Does.StartWith("The task asks for 4 ranks, and no step of the recipe runs in parallel"));
         Assert.That(advice[1], Is.EqualTo("0/alpha.water: internalField carries {{oc1}}, which the study sweeps, and the recipe's setFields step overwrites it everywhere (system/setFieldsDict defaultFieldValues names alpha.water): the swept value has no effect."));
+    }
+
+    [Test]
+    public async Task AFieldThatReachesASweptIncludedValueIsReadWithItsIncludeTest()
+    {
+        // motorBike's shape: U carries no token and is not templated; the
+        // include it reaches through $flowVelocity is.
+        var task = Task(threads: 1, parallel: false, setFields: true);
+        task.Case!.BaseFiles.RemoveAll(file => file.RelativePath.StartsWith("0/", StringComparison.Ordinal) || file.RelativePath == "system/setFieldsDict");
+        task.Case.BaseFiles.Add(BlobFile("system/setFieldsDict", "defaultFieldValues ( volVectorFieldValue U (0 0 0) );\nregions ();\n"));
+        task.Case.BaseFiles.Add(BlobFile("0/U", "#include \"include/initialConditions\"\ninternalField uniform $flowVelocity;\n"));
+        task.Case.BaseFiles.Add(BlobFile("0/include/initialConditions", "flowVelocity ({{oc2}} 0 0);\n", templated: true));
+
+        var advice = await FoamCaseAdvisor.AdviseAsync(task, m_blobs);
+
+        Assert.That(advice, Is.EqualTo(new[]
+        {
+            "0/U: internalField carries {{oc2}} through $flowVelocity of 0/include/initialConditions, which the study sweeps, and the recipe's setFields step overwrites it everywhere (system/setFieldsDict defaultFieldValues names U): the swept value has no effect."
+        }));
     }
 
     [Test]

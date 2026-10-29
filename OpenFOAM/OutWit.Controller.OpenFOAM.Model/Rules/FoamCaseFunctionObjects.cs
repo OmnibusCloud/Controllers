@@ -226,6 +226,29 @@ public static class FoamCaseFunctionObjects
     }
 
     /// <summary>
+    /// The case files a dictionary text <c>#include</c>s (<c>#include</c>,
+    /// <c>#sinclude</c>, <c>#includeIfPresent</c>), each resolved the way
+    /// OpenFOAM resolves it from the including file, in the order they are
+    /// written and each once; a target outside the case is left out.
+    /// Comments are blanked first.
+    /// </summary>
+    /// <param name="text">The including file's text.</param>
+    /// <param name="includingFile">The including file's relative path.</param>
+    /// <returns>The relative paths, forward slashes.</returns>
+    public static IReadOnlyList<string> IncludedFiles(string text, string includingFile)
+    {
+        var files = new List<string>();
+        foreach (Match match in INCLUDE_FILE.Matches(StripComments(text)))
+        {
+            var path = ResolveCasePath(match.Groups[1].Value, includingFile);
+            if (path != null && !files.Contains(path, StringComparer.Ordinal))
+                files.Add(path);
+        }
+
+        return files;
+    }
+
+    /// <summary>
     /// A case file's path as OpenFOAM resolves an include target from the
     /// including file: a case-root prefix from the root, a relative path
     /// beside the including file, <c>..</c> walked; null when the target is
