@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The live proof runner of the Verify controller: drives VerifyRuntimeDiagnostics and
+       VerifyRun on a real server through the public SDK, the way an initiator does, and
+       compares the verdict reports of repeated runs byte for byte. A developer tool, not a
+       package: it is never packed or published. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>verify-live</AssemblyName>
+    <RootNamespace>OutWit.Controller.AI.Verify.Live</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OutWit.Cloud.SDK" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify.Model\OutWit.Controller.AI.Verify.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="tasksets\*.jsonl" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
