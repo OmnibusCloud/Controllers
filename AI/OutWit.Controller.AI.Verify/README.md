@@ -31,6 +31,8 @@ proof checks or it does not.
 | `Verify.CollectOutputs` | host | result batches → the corpus (one JSON line per task with its outputs; byte-deterministic) |
 | `Verify.MakeCheckTasks` | host | generator results + a checker spec → check task batches, one check per passing candidate under the candidate's index |
 | `Verify.Provenance` | host | result batches → the provenance document (which node ran which tasks, with which wasmtime and runtime module, at which degree, and what each task cost: fuel, peak memory, wall time) |
+| `Verify.Sample` | host | the primary batches + options → replica batches of the sampled share of tasks (`SamplingRate`), re-planned so the allocator places them on its own; empty at rate 0 |
+| `Verify.Integrity` | host | primary + replica result batches → the integrity document (each sampled task paired with its re-execution, the nodes of each side, agreement on verdict, exit, outputs and cases; same-node pairs counted, not compared; the mismatch rate) |
 | `Verify.Preflight` | host | counts, runtimes referenced, unknown runtimes, size estimate, ceiling notes — before anything runs |
 | `Verify.RuntimeDiagnostics` | host | wasmtime version (the native library is loaded to prove it), runtime target, per-runtime availability and hash — of the server's module; a node's module is exercised by `Verify.ExecuteBatch` and described by the provenance |
 
@@ -40,15 +42,15 @@ proof checks or it does not.
 
 | Script | Shape | Returns |
 |---|---|---|
-| `VerifyRun(Blob taskset, VerifyOptions opts)` | Split → ForEach ⇒ ExecuteBatch → Collect, Provenance | `report`, `provenance` |
-| `VerifyGenerate(Blob taskset, VerifyOptions opts)` | the same fan-out; the programs are generators | `corpus`, `report`, `provenance` |
-| `VerifyGenerateAndCheck(Blob generators, Blob checker, VerifyOptions opts)` | generators fan out → MakeCheckTasks → checks fan out → Collect | `report` (the checks), `corpus` (the candidates), `provenance` |
+| `VerifyRun(Blob taskset, VerifyOptions opts)` | Split → ForEach ⇒ ExecuteBatch → Sample → ForEach ⇒ ExecuteBatch → Collect, Provenance, Integrity | `report`, `provenance`, `integrity` |
+| `VerifyGenerate(Blob taskset, VerifyOptions opts)` | the same fan-out; the programs are generators | `corpus`, `report`, `provenance`, `integrity` |
+| `VerifyGenerateAndCheck(Blob generators, Blob checker, VerifyOptions opts)` | generators fan out → MakeCheckTasks → checks fan out (sampled checks re-run) → Collect | `report` (the checks), `corpus` (the candidates), `provenance`, `integrity` |
 | `VerifyPreflight(Blob taskset, VerifyOptions opts)` | one host activity | `result` |
 | `VerifyRuntimeDiagnostics()` | one host activity | `result` |
 
 `VerifyOptions`: `DefaultLimits`, `BatchSize` (tasks per chunk, 0 = 32),
-`MaxDegree` (concurrent sandboxes per node, 0 = 16), `SamplingRate` (reserved),
-`ReportFormat` (reserved).
+`MaxDegree` (concurrent sandboxes per node, 0 = 16), `SamplingRate` (the share
+of tasks re-executed for integrity, 0–1; 0 = none), `ReportFormat` (reserved).
 
 ## Documents — authoring without the SDK
 
@@ -63,6 +65,7 @@ results; the SDK only moves blobs and submits scripts.
 | verdict report | [`verify-report.schema.json`](docs/verify-report.schema.json) | out |
 | corpus (JSON lines) | [`verify-corpus.schema.json`](docs/verify-corpus.schema.json) | out |
 | provenance | [`verify-provenance.schema.json`](docs/verify-provenance.schema.json) | out |
+| integrity | [`verify-integrity.schema.json`](docs/verify-integrity.schema.json) | out |
 
 A minimal taskset — one code-vs-tests task and one plain run:
 
@@ -85,6 +88,19 @@ index, so the check report lines up with the generators; candidates that
 produced nothing usable are skipped (and still appear in the corpus). The
 recommended checker contract: print the verdict and exit 0, so that a crash
 of the checker itself stays distinguishable as a `RuntimeError`.
+
+## Integrity
+
+Anonymous nodes are trusted by checking, not by assumption. `SamplingRate`
+re-executes a deterministic share of the tasks (a task is in the sample by
+its index alone, so a lab can reproduce the choice) as a second fan-out the
+allocator places on its own, and the integrity document pairs each sampled
+task with its primary: the nodes of each side and whether the two agree on
+verdict, exit code, outputs and per-case outcomes — exactly the fields an
+honest execution reproduces anywhere. A pair that landed on one node is
+counted, not compared (a node cannot vouch for itself); a distinct-node
+guarantee is the allocator's job in a later version. The mismatch rate is over
+the compared pairs.
 
 ## Determinism
 

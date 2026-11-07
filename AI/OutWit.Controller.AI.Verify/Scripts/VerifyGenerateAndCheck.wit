@@ -10,7 +10,13 @@ Job:VerifyGenerateAndCheck(Blob:generators, Blob:checker, VerifyOptions:opts)
     VerifyResultBatchCollection:verdicts = Grid.ForEach(batch in checkBatches)
         => Verify.ExecuteBatch(batch);
 
+    VerifyTaskBatchCollection:replicaBatches = Verify.Sample(checkBatches, opts);
+
+    VerifyResultBatchCollection:replicas = Grid.ForEach(batch in replicaBatches)
+        => Verify.ExecuteBatch(batch);
+
     Blob:report = Verify.Collect(verdicts, opts);
     Blob:corpus = Verify.CollectOutputs(candidates, opts);
     Blob:provenance = Verify.Provenance(verdicts);
+    Blob:integrity = Verify.Integrity(verdicts, replicas);
 }

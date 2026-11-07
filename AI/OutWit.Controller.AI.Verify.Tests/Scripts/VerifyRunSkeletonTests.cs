@@ -42,7 +42,47 @@ public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
         Assert.That(job, Is.Not.Null);
         Assert.That(job.Activities.Count, Is.GreaterThan(0));
         var variables = job.Variables.Select(variable => variable.Name).ToList();
-        Assert.That(variables, Is.SupersetOf(new[] { "taskset", "opts", "batches", "results", "report", "provenance" }));
+        Assert.That(variables, Is.SupersetOf(new[] { "taskset", "opts", "batches", "results", "replicaBatches", "replicas", "report", "provenance", "integrity" }));
+    }
+
+    [Test]
+    public async Task SamplingReExecutesAndComparesTest()
+    {
+        // Every task re-executed (rate 1): each pair agrees; a pair on one node is counted, not compared.
+        var taskset = new StringBuilder();
+        taskset.AppendLine("""{"index":0,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"print(2+2)"},"suite":[{"expected_stdout":"4\n"}]}""");
+        taskset.AppendLine("""{"index":1,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"print('wrong')"},"suite":[{"expected_stdout":"right\n"}]}""");
+        taskset.AppendLine("""{"index":2,"runtime":"quickjs-0.15.1","entry":"m.js","sources":{"m.js":"console.log(6*7)"}}""");
+        taskset.AppendLine("""{"index":3,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"raise SystemExit(4)"}}""");
+
+        var tasksetBlobId = await UploadAsync(taskset.ToString(), "taskset.jsonl");
+
+        var job = Engine.Compile(m_verifyRunScript);
+        var status = await Engine.ScheduleAndWaitAsync(job, tasksetBlobId, new VerifyOptionsData { SamplingRate = 1.0, BatchSize = 2 });
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
+
+        using var integrity = await ReadJsonAsync((Guid)job.Variables["integrity"].Value!);
+        var summary = integrity.RootElement.GetProperty("summary");
+        var pairs = integrity.RootElement.GetProperty("pairs").EnumerateArray().ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(4));
+            Assert.That(summary.GetProperty("unpaired").GetInt32(), Is.Zero);
+            Assert.That(summary.GetProperty("compared").GetInt32() + summary.GetProperty("same_node").GetInt32(), Is.EqualTo(4));
+            Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.Zero);
+            Assert.That(pairs.Select(p => p.GetProperty("index").GetInt32()), Is.EqualTo(new[] { 0, 1, 2, 3 }));
+            Assert.That(pairs.Where(p => p.GetProperty("compared").GetBoolean()).All(p => p.GetProperty("match").GetBoolean()), Is.True);
+            Assert.That(pairs[1].GetProperty("replica").GetProperty("verdict").GetString(), Is.EqualTo("Fail"));
+        });
+
+        // Rate 0 (the default) leaves the integrity document empty and the run untouched.
+        var plainJob = Engine.Compile(m_verifyRunScript);
+        var plainStatus = await Engine.ScheduleAndWaitAsync(plainJob, tasksetBlobId, new VerifyOptionsData());
+        Assert.That(plainStatus.Result, Is.EqualTo(WitProcessingResult.Completed));
+        using var empty = await ReadJsonAsync((Guid)plainJob.Variables["integrity"].Value!);
+        Assert.That(empty.RootElement.GetProperty("summary").GetProperty("sampled").GetInt32(), Is.Zero);
     }
 
     [Test]

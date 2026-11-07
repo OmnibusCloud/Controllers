@@ -34,6 +34,7 @@ public static class Program
     private const string REPORT = "report";
     private const string CORPUS = "corpus";
     private const string PROVENANCE = "provenance";
+    private const string INTEGRITY = "integrity";
 
     private const int DEFAULT_RUNS = 1;
     private const int DEFAULT_BATCH_SIZE = 8;
@@ -62,6 +63,7 @@ public static class Program
             OptionValue(args, "--runs", DEFAULT_RUNS),
             OptionValue(args, "--batch-size", DEFAULT_BATCH_SIZE),
             OptionValue(args, "--max-degree", 0),
+            OptionValue(args, "--sampling", 0.0),
             OptionValue(args, "--save", null));
 
         Console.WriteLine($"server   : {server}");
@@ -76,9 +78,9 @@ public static class Program
         return args[0] switch
         {
             "diagnostics" => await DiagnosticsAsync(client, options.Runs),
-            "run" when args.Length >= 2 => await ScriptAsync(client, RUN_SCRIPT, [args[1]], [REPORT, PROVENANCE], options),
-            "generate" when args.Length >= 2 => await ScriptAsync(client, GENERATE_SCRIPT, [args[1]], [CORPUS, REPORT, PROVENANCE], options),
-            "check" when args.Length >= 3 => await ScriptAsync(client, CHECK_SCRIPT, [args[1], args[2]], [REPORT, CORPUS, PROVENANCE], options),
+            "run" when args.Length >= 2 => await ScriptAsync(client, RUN_SCRIPT, [args[1]], [REPORT, PROVENANCE, INTEGRITY], options),
+            "generate" when args.Length >= 2 => await ScriptAsync(client, GENERATE_SCRIPT, [args[1]], [CORPUS, REPORT, PROVENANCE, INTEGRITY], options),
+            "check" when args.Length >= 3 => await ScriptAsync(client, CHECK_SCRIPT, [args[1], args[2]], [REPORT, CORPUS, PROVENANCE, INTEGRITY], options),
             _ => Usage()
         };
     }
@@ -129,7 +131,7 @@ public static class Program
             inputs.Add((Path.GetFileName(path), bytes));
         }
 
-        Console.WriteLine($"options  : batch size {options.BatchSize}, max degree {(options.MaxDegree > 0 ? options.MaxDegree.ToString() : "default")}");
+        Console.WriteLine($"options  : batch size {options.BatchSize}, max degree {(options.MaxDegree > 0 ? options.MaxDegree.ToString() : "default")}, sampling {options.Sampling:0.##}");
 
         var identity = outputs.Where(name => name is REPORT or CORPUS).ToDictionary(name => name, _ => new List<byte[]>());
 
@@ -138,7 +140,7 @@ public static class Program
             var parameters = new List<object?>();
             foreach (var (name, bytes) in inputs)
                 parameters.Add(await client.Blobs.UploadBlobAsync(bytes, name));
-            parameters.Add(new VerifyOptionsData { BatchSize = options.BatchSize, MaxDegree = options.MaxDegree });
+            parameters.Add(new VerifyOptionsData { BatchSize = options.BatchSize, MaxDegree = options.MaxDegree, SamplingRate = options.Sampling });
 
             var handle = await client.Scripts.SubmitAsync(script, parameters);
             Console.WriteLine($"[{i}/{options.Runs}] {script} submitted: job {handle.JobId}");
@@ -216,6 +218,9 @@ public static class Program
             case PROVENANCE:
                 PrintProvenance(bytes);
                 break;
+            case INTEGRITY:
+                PrintIntegrity(bytes);
+                break;
             default:
                 Console.WriteLine($"  {name}: {bytes.Length} byte(s)");
                 break;
@@ -256,6 +261,30 @@ public static class Program
         }
     }
 
+    private static void PrintIntegrity(byte[] integrity)
+    {
+        using var document = JsonDocument.Parse(integrity);
+        var summary = document.RootElement.GetProperty("summary");
+        var sampled = summary.GetProperty("sampled").GetInt32();
+        if (sampled == 0)
+        {
+            Console.WriteLine("  integrity: no sampling");
+            return;
+        }
+
+        Console.WriteLine($"  integrity: sampled {sampled}, compared {summary.GetProperty("compared").GetInt32()}, same node {summary.GetProperty("same_node").GetInt32()}, unpaired {summary.GetProperty("unpaired").GetInt32()}, mismatches {summary.GetProperty("mismatches").GetInt32()} (rate {summary.GetProperty("mismatch_rate").GetDouble():0.###})");
+        foreach (var pair in document.RootElement.GetProperty("pairs").EnumerateArray())
+        {
+            if (!pair.GetProperty("compared").GetBoolean() || pair.GetProperty("match").GetBoolean())
+                continue;
+
+            var primary = pair.GetProperty("primary");
+            var replica = pair.GetProperty("replica");
+            var differs = string.Join(",", pair.GetProperty("differs").EnumerateArray().Select(f => f.GetString()));
+            Console.WriteLine($"    MISMATCH task {pair.GetProperty("index").GetInt32()}: {primary.GetProperty("node_name").GetString()} {primary.GetProperty("verdict").GetString()} vs {replica.GetProperty("node_name").GetString()} {replica.GetProperty("verdict").GetString()} ({differs})");
+        }
+    }
+
     private static string Sha256(byte[] bytes)
     {
         return Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
@@ -273,12 +302,21 @@ public static class Program
         return index >= 0 && index + 1 < args.Length && int.TryParse(args[index + 1], out var value) ? value : fallback;
     }
 
+    private static double OptionValue(string[] args, string name, double fallback)
+    {
+        var index = Array.IndexOf(args, name);
+        return index >= 0 && index + 1 < args.Length
+               && double.TryParse(args[index + 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? value
+            : fallback;
+    }
+
     private static int Usage()
     {
         Console.WriteLine("verify-live diagnostics [--runs N]");
-        Console.WriteLine("verify-live run      <taskset.jsonl>                  [--runs N] [--batch-size B] [--max-degree D] [--save DIR]");
-        Console.WriteLine("verify-live generate <generators.jsonl>               [--runs N] [--batch-size B] [--max-degree D] [--save DIR]");
-        Console.WriteLine("verify-live check    <generators.jsonl> <checker.json> [--runs N] [--batch-size B] [--max-degree D] [--save DIR]");
+        Console.WriteLine("verify-live run      <taskset.jsonl>                  [--runs N] [--batch-size B] [--max-degree D] [--sampling R] [--save DIR]");
+        Console.WriteLine("verify-live generate <generators.jsonl>               [--runs N] [--batch-size B] [--max-degree D] [--sampling R] [--save DIR]");
+        Console.WriteLine("verify-live check    <generators.jsonl> <checker.json> [--runs N] [--batch-size B] [--max-degree D] [--sampling R] [--save DIR]");
         Console.WriteLine();
         Console.WriteLine($"  {SERVER_ENV}    server URL (default {DEFAULT_SERVER})");
         Console.WriteLine($"  {IDENTITY_ENV}  identity URL (default {DEFAULT_IDENTITY})");
@@ -290,7 +328,7 @@ public static class Program
 
     #region Types
 
-    private sealed record RunOptions(int Runs, int BatchSize, int MaxDegree, string? SaveDir);
+    private sealed record RunOptions(int Runs, int BatchSize, int MaxDegree, double Sampling, string? SaveDir);
 
     #endregion
 }

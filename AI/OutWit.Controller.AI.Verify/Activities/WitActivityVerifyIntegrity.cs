@@ -1,0 +1,61 @@
+using MemoryPack;
+using OutWit.Common.Abstract;
+using OutWit.Common.Values;
+using OutWit.Engine.Data.Activities;
+using OutWit.Engine.Data.Attributes;
+using OutWit.Engine.Interfaces;
+
+namespace OutWit.Controller.AI.Verify.Activities;
+
+/// <summary>
+/// Host-side: the primary result batches + the replica result batches → the integrity
+/// document (every sampled task paired with its re-execution, the nodes of each side, agreement
+/// on verdict, exit, outputs and cases; pairs that landed on one node counted, not compared;
+/// the mismatch rate) as a blob.
+/// </summary>
+[Activity("Verify.Integrity")]
+[MemoryPackable]
+public sealed partial class WitActivityVerifyIntegrity : WitActivityFunction
+{
+    #region Functions
+
+    protected override string InnerString()
+    {
+        return $"{Results}, {Replicas}";
+    }
+
+    #endregion
+
+    #region Model Base
+
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not WitActivityVerifyIntegrity activity)
+            return false;
+
+        return base.Is(activity, tolerance)
+               && Results.Check(activity.Results)
+               && Replicas.Check(activity.Replicas);
+    }
+
+    protected override WitActivityVerifyIntegrity InnerClone()
+    {
+        return new WitActivityVerifyIntegrity
+        {
+            Results = Results?.Clone() as IWitReference,
+            Replicas = Replicas?.Clone() as IWitReference
+        };
+    }
+
+    #endregion
+
+    #region Properties
+
+    [MemoryPackAllowSerialize]
+    public IWitReference? Results { get; init; }
+
+    [MemoryPackAllowSerialize]
+    public IWitReference? Replicas { get; init; }
+
+    #endregion
+}

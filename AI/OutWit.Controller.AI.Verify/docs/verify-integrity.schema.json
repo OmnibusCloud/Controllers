@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-integrity.schema.json",
+  "title": "Verify integrity",
+  "description": "The integrity blob of every Verify script: the sampled share of tasks (VerifyOptions.SamplingRate) re-executed as a second fan-out and compared with the primary execution on everything an honest node cannot vary (verdict, exit code, outputs, per-case outcomes). A pair that landed on one node is counted, not compared. Empty pairs at rate 0.",
+  "type": "object",
+  "required": ["summary", "pairs"],
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "object",
+      "required": ["sampled", "compared", "same_node", "unpaired", "mismatches", "mismatch_rate"],
+      "additionalProperties": false,
+      "properties": {
+        "sampled": { "type": "integer", "description": "Tasks re-executed." },
+        "compared": { "type": "integer", "description": "Pairs whose two sides ran on different nodes." },
+        "same_node": { "type": "integer", "description": "Pairs whose replica landed on the primary's node (not compared)." },
+        "unpaired": { "type": "integer", "description": "Replicas whose primary result is missing." },
+        "mismatches": { "type": "integer", "description": "Compared pairs that disagree." },
+        "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." }
+      }
+    },
+    "pairs": {
+      "type": "array",
+      "description": "One record per sampled task, ordered by index.",
+      "items": {
+        "type": "object",
+        "required": ["index", "primary", "replica", "compared"],
+        "additionalProperties": false,
+        "properties": {
+          "index": { "type": "integer" },
+          "primary": { "$ref": "#/$defs/side" },
+          "replica": { "$ref": "#/$defs/side" },
+          "compared": { "type": "boolean" },
+          "match": { "type": "boolean", "description": "Present when compared." },
+          "differs": { "type": "array", "items": { "type": "string", "enum": ["verdict", "exit", "stdout", "stderr", "cases"] }, "description": "Present on a mismatch: the fields that differ." }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "side": {
+      "type": ["object", "null"],
+      "required": ["verdict", "exit"],
+      "additionalProperties": false,
+      "properties": {
+        "node_id": { "type": "string", "format": "uuid" },
+        "node_name": { "type": "string" },
+        "verdict": { "type": "string" },
+        "exit": { "type": "integer" }
+      }
+    }
+  }
+}

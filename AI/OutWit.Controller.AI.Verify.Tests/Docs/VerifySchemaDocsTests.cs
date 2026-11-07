@@ -18,7 +18,8 @@ public sealed class VerifySchemaDocsTests
         "verify-checker.schema.json",
         "verify-report.schema.json",
         "verify-corpus.schema.json",
-        "verify-provenance.schema.json"
+        "verify-provenance.schema.json",
+        "verify-integrity.schema.json"
     ];
 
     #endregion
@@ -101,6 +102,23 @@ public sealed class VerifySchemaDocsTests
             Assert.That(nodeProperties, Is.EquivalentTo(new[] { "node_id", "node_name", "runtime_target", "wasmtime", "native_library", "controller", "batches", "tasks", "fuel", "runtimes" }));
             Assert.That(batchProperties, Is.EquivalentTo(new[] { "node_id", "node_name", "runtime", "runtime_sha256", "degree", "wall_ms", "fuel", "tasks", "metrics" }));
             Assert.That(metricProperties, Is.EquivalentTo(new[] { "index", "fuel", "peak_memory", "wall_ms" }));
+        });
+    }
+
+    [Test]
+    public void IntegritySchemaListsTheWriterFieldsTest()
+    {
+        using var document = Load("verify-integrity.schema.json");
+        var root = document.RootElement.GetProperty("properties");
+        var summary = PropertyNames(root.GetProperty("summary").GetProperty("properties"));
+        var pair = PropertyNames(root.GetProperty("pairs").GetProperty("items").GetProperty("properties"));
+        var side = PropertyNames(document.RootElement.GetProperty("$defs").GetProperty("side").GetProperty("properties"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary, Is.EquivalentTo(new[] { "sampled", "compared", "same_node", "unpaired", "mismatches", "mismatch_rate" }));
+            Assert.That(pair, Is.EquivalentTo(new[] { "index", "primary", "replica", "compared", "match", "differs" }));
+            Assert.That(side, Is.EquivalentTo(new[] { "node_id", "node_name", "verdict", "exit" }));
         });
     }
 
