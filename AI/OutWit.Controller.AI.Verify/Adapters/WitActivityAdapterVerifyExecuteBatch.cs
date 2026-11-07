@@ -5,6 +5,7 @@ using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
 using OutWit.Controller.AI.Verify.Sandbox;
 using OutWit.Engine.Data.ActivityAdapters;
+using OutWit.Engine.Data.Benchmark;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
@@ -43,6 +44,40 @@ internal sealed class WitActivityAdapterVerifyExecuteBatch : WitActivityAdapterF
 
         if (!pool.TrySetValue(activity.ReturnReference, result))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+    }
+
+    public override async Task<IWitBenchmarkResult> RunBenchmark(IWitBenchmarkOptions? options, CancellationToken cancellationToken)
+    {
+        var runtimesRoot = VerifyRuntimeLocator.Locate();
+        if (runtimesRoot == null)
+        {
+            // No language runtimes on this node: report the default (unranked) score instead of
+            // failing the registration, the CalculiX precedent for a missing solver.
+            Logger.LogWarning("Verify.ExecuteBatch benchmark: language runtimes not found - reporting the default score.");
+            return WitBenchmarkResult.Default;
+        }
+
+        try
+        {
+            var result = await Task.Run(() => VerifyBenchmark.Measure(VerifySandboxHost.Instance, runtimesRoot, options, cancellationToken), cancellationToken);
+
+            Logger.LogInformation(
+                "Verify.ExecuteBatch benchmark: {Rate:F2} {Unit} at degree {Degree} (median of {Runs} runs: {RunTimes} s; warm-up {Warmup} s)",
+                result.Rate, result.Unit, result.Custom?["degree"], result.Iterations, result.Custom?["runs_s"], result.Custom?["warmup_s"]);
+
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            // A sandbox that cannot run the reference workload must not score; the node stays
+            // registered, ranked last, with the reason in its log.
+            Logger.LogWarning(exception, "Verify.ExecuteBatch benchmark failed - reporting the default score.");
+            return WitBenchmarkResult.Default;
+        }
     }
 
     protected override double EstimateWork(WitActivityVerifyExecuteBatch activity, IWitVariablesCollection pool)
