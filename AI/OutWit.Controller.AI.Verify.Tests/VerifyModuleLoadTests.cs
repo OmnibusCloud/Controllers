@@ -40,6 +40,7 @@ public class VerifyModuleLoadTests
     private const string WASM_ROOT_PREFIX = "wasm-root: ";
     private const string NATIVE_PATH_PREFIX = "wasmtime-native-path: ";
     private const string PYTHON_PASS = "python-3.14.6: Pass exit=0 stdout=42";
+    private const string SYMPY_PASS = "python-3.14.6-sympy-1.14.0: Pass exit=0 stdout=1.14.0";
     private const string QUICKJS_PASS = "quickjs-0.15.1: Pass exit=0 stdout=42";
     private const string WASI_PASS = "wasi: Pass exit=0 stdout=hello";
 
@@ -80,7 +81,7 @@ public class VerifyModuleLoadTests
         var fixtureRuntimes = Path.Combine(solutionRoot, "AI", "OutWit.Controller.AI.Verify.Tests", "@Data", "runtimes");
         if (!Directory.Exists(Path.Combine(fixtureRuntimes, "python-3.14.6")) ||
             !File.Exists(Path.Combine(fixtureRuntimes, "qjs-wasi.wasm")))
-            Assert.Ignore($"Pinned runtimes not found under '{fixtureRuntimes}' — run download-spike-runtimes.ps1 to opt in.");
+            Assert.Ignore($"Pinned runtimes not found under '{fixtureRuntimes}' — run verify-assets build @Data/runtimes to opt in.");
 
         m_controllersPath = Path.Combine(solutionRoot, "@Controllers", "Debug");
         m_moduleDir = Path.Combine(m_controllersPath, "verify.module");
@@ -152,6 +153,7 @@ public class VerifyModuleLoadTests
         {
             Assert.That(report, Does.Contain(NATIVE_LOADED), report);
             Assert.That(report, Does.Contain(PYTHON_PASS), report);
+            Assert.That(report, Does.Contain(SYMPY_PASS), report);
             Assert.That(report, Does.Contain(QUICKJS_PASS), report);
             Assert.That(report, Does.Contain(WASI_PASS), report);
             Assert.That(ReportValue(report, MANAGED_PREFIX), Does.StartWith(m_moduleDir).IgnoreCase,

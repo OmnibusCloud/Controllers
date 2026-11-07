@@ -126,8 +126,26 @@ one compiled module.
 | Runtime id | What runs | Entry |
 |---|---|---|
 | `python-3.14.6` | CPython 3.14.6 (WASI build), pure Python with the standard library | the source, inline |
+| `python-3.14.6-sympy-1.14.0` | the same interpreter with sympy 1.14.0 and mpmath 1.4.1 on `PYTHONPATH` | the source, inline |
 | `quickjs-0.15.1` | QuickJS-NG 0.15.1, JavaScript | the source, inline |
 | `wasi` | the task's own WASI command module: Rust, C/C++, Zig, TinyGo, anything that targets wasm32-wasi (`_start`, WASI preview 1) | the module's bytes, base64; its name is `argv[0]` |
+
+The Python library code is bytecode layers, one zip each, that CPython's
+zipimport loads straight from `sys.path`: `python314.zip` (the standard
+library) and `sympy-1.14.0.zip` (sympy + mpmath). Each layer is compiled by the
+pinned interpreter itself as unchecked-hash `.pyc` (no source parsing, no
+source stat at import) and pinned by SHA-256 in the catalog next to the
+module, so every node runs byte-identical library code and a hello costs a
+quarter less fuel than with a source tree, a stdlib import set a tenth. The
+prefix is pinned (`PYTHONHOME=/`), nothing lists a directory at start-up.
+Library frames show no source line in tracebacks; the sandbox compares
+outputs, not tracebacks. sympy's `external/gmpy.py` is patched before
+compiling (the C long size comes from a constant: the WASI build has no
+`_ctypes`); the patch is declared in the layer's NOTICE.
+
+`OutWit.Controller.AI.Verify.Assets` (`verify-assets build <dir>`) rebuilds
+the whole set from pinned downloads, byte for byte, and prints the hashes the
+catalog pins.
 
 The raw `wasi` runtime has no module of its own: each task carries one,
 compiled by the lab offline, and the sandbox compiles it on the node (cached by
@@ -183,5 +201,6 @@ can call it as a doctor-style check.
 the sandbox verdict and adversarial suites, the worker pool and the benchmark,
 the taskset and check-task pipelines, the end-to-end runs of every script
 through the engine on in-process nodes, and the module self-containment
-proof. The sandbox suites are opt-in on the pinned runtime modules
-(`download-spike-runtimes.ps1`, `@Data/` is gitignored).
+proof. The sandbox suites are opt-in on the pinned runtime set
+(`verify-assets build OutWit.Controller.AI.Verify.Tests/@Data/runtimes`;
+`@Data/` is gitignored).

@@ -39,6 +39,7 @@ public static class VerifySelfCheck
     private static readonly (string Id, string Entry, string Source)[] PROBES =
     [
         (VerifyRuntimeCatalog.PYTHON_3_14_6, "m.py", "print(6*7)"),
+        (VerifyRuntimeCatalog.PYTHON_3_14_6_SYMPY_1_14_0, "m.py", "import sympy; print(sympy.__version__)"),
         (VerifyRuntimeCatalog.QUICKJS_0_15_1, "m.js", "console.log(6*7)"),
         (VerifyRuntimeCatalog.WASI, "hello.wasm", HELLO_WASM_BASE64)
     ];

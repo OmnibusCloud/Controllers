@@ -1,0 +1,7 @@
+{"index":0,"runtime":"python-3.14.6-sympy-1.14.0","entry":"m.py","sources":{"m.py":"import sympy\nx = sympy.symbols('x')\nprint(sympy.solve(x**2 - 4, x))"},"suite":[{"expected_stdout":"[-2, 2]\n"}]}
+{"index":1,"runtime":"python-3.14.6-sympy-1.14.0","entry":"m.py","sources":{"m.py":"import sympy\nx = sympy.symbols('x')\nprint(sympy.integrate(sympy.sin(x) * x, x))"},"suite":[{"expected_stdout":"-x*cos(x) + sin(x)\n"}]}
+{"index":2,"runtime":"python-3.14.6-sympy-1.14.0","entry":"m.py","sources":{"m.py":"import sympy\nprint(sympy.factorint(2**64 + 1))"},"suite":[{"expected_stdout":"{274177: 1, 67280421310721: 1}\n"}]}
+{"index":3,"runtime":"python-3.14.6-sympy-1.14.0","entry":"m.py","sources":{"m.py":"import mpmath\nmpmath.mp.dps = 50\nprint(mpmath.pi)"},"suite":[{"expected_stdout":"3.1415926535897932384626433832795028841971693993751\n"}]}
+{"index":4,"runtime":"python-3.14.6-sympy-1.14.0","entry":"m.py","sources":{"m.py":"import sys, sympy\nexpr, value = sys.stdin.read().split('=')\nprint('OK' if sympy.sympify(expr) == int(value) else 'MISMATCH')"},"suite":[{"stdin":"7 * 6 = 42","expected_stdout":"OK\n"},{"stdin":"2 + 2 = 5","expected_stdout":"MISMATCH\n"},{"stdin":"sqrt(16) * 3 = 12","expected_stdout":"OK\n"}]}
+{"index":5,"runtime":"python-3.14.6-sympy-1.14.0","entry":"m.py","sources":{"m.py":"import sympy\nx = sympy.symbols('x')\nprint(sympy.solve(x**2 - 4, x))"},"suite":[{"expected_stdout":"[2]\n"}]}
+{"index":6,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"import sympy\nprint('unreachable')"}}

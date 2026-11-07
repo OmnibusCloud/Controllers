@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The asset builder of the Verify controller: rebuilds the language-runtime set
+       (@Prerequisites/wasm, and the tests' @Data/runtimes) from pinned downloads -
+       the CPython-WASI build, QuickJS-NG, the sympy and mpmath wheels - compiling the
+       Python bytecode with the pinned interpreter itself and writing the layers as
+       deterministic zips, so the set is reproducible byte for byte and its hashes go
+       into the runtime catalog. A developer tool, not a package: never packed or
+       published. outwit-assets-pack then cuts the release archive from the folder. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>verify-assets</AssemblyName>
+    <RootNamespace>OutWit.Controller.AI.Verify.Assets</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Wasmtime" Version="44.0.0" />
+  </ItemGroup>
+
+</Project>

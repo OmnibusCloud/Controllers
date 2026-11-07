@@ -25,9 +25,11 @@
     <ExcludedControllerModule Include="renderdcc.module" />
   </ItemGroup>
 
-  <!-- Wasmtime sandbox spike. The sandbox tests are opt-in: they Assert.Ignore
-       unless @Data/runtimes/ holds the pinned CPython-WASI + QuickJS modules
-       (fetch via download-spike-runtimes.ps1; @Data/ is gitignored). -->
+  <!-- Wasmtime sandbox. The sandbox tests are opt-in: they Assert.Ignore unless
+       @Data/runtimes/ holds the pinned runtime set (CPython-WASI with its bytecode
+       layers, QuickJS). Build it with the asset tool:
+         dotnet run --project ../OutWit.Controller.AI.Verify.Assets -- build @Data/runtimes
+       (@Data/ is gitignored). -->
   <ItemGroup>
     <PackageReference Include="Wasmtime" Version="44.0.0" />
   </ItemGroup>

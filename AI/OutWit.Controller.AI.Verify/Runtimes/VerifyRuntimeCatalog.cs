@@ -5,23 +5,43 @@ namespace OutWit.Controller.AI.Verify.Runtimes;
 
 /// <summary>
 /// The node-side runtime registry: the known (pinned) runtime set, resolved against a
-/// runtimes root directory with content-hash verification. Verification results are
-/// memoized per absolute path for the process lifetime — runtime files are immutable
-/// by contract (they are hash-pinned), so one check per process is enough.
+/// runtimes root directory with content-hash verification of the module and of every
+/// layer. Verification results are memoized per absolute path for the process lifetime —
+/// runtime files are immutable by contract (they are hash-pinned), so one check per
+/// process is enough.
 /// </summary>
 public static class VerifyRuntimeCatalog
 {
     #region Constants
 
     public const string PYTHON_3_14_6 = "python-3.14.6";
+
+    /// <summary>CPython 3.14.6 with the sympy 1.14.0 + mpmath 1.4.1 layer on PYTHONPATH.</summary>
+    public const string PYTHON_3_14_6_SYMPY_1_14_0 = "python-3.14.6-sympy-1.14.0";
+
     public const string QUICKJS_0_15_1 = "quickjs-0.15.1";
 
     /// <summary>The raw WASI runtime: the task's entry source is the command module itself.</summary>
     public const string WASI = "wasi";
 
+    private const string PYTHON_DIR = "python-3.14.6";
+    private const string PYTHON_SHA256 = "cd71a34d8467882a4ad0e6a5e64509d68975ed6bd6831ca549bcd0517ac14655";
+
     #endregion
 
     #region Fields
+
+    // The layers verify-assets builds (bytecode-only zips, reproducible byte for byte): the
+    // standard library, which sys.path holds by default, and the sympy layer on PYTHONPATH.
+    private static readonly VerifyRuntimeLayer PYTHON_STDLIB = new(
+        Path.Combine(PYTHON_DIR, "lib", "python314.zip"),
+        "c61e719af81d000e8b611a0908502517c42c3d91d74785f845d13bc6651ddf66",
+        null);
+
+    private static readonly VerifyRuntimeLayer PYTHON_SYMPY = new(
+        Path.Combine(PYTHON_DIR, "lib", "sympy-1.14.0.zip"),
+        "d15dce77126085b9e7c327474e0574975d62515a28ea1551bec2cc90079a2b2a",
+        "/lib/sympy-1.14.0.zip");
 
     private static readonly IReadOnlyDictionary<string, VerifyRuntimeDescriptor> s_known =
         new Dictionary<string, VerifyRuntimeDescriptor>(StringComparer.OrdinalIgnoreCase)
@@ -30,10 +50,21 @@ public static class VerifyRuntimeCatalog
             {
                 Id = PYTHON_3_14_6,
                 Language = VerifyRuntimeLanguage.Python,
-                ModulePath = Path.Combine("python-3.14.6", "python.wasm"),
-                RootDir = "python-3.14.6",
-                Sha256 = "cd71a34d8467882a4ad0e6a5e64509d68975ed6bd6831ca549bcd0517ac14655",
-                Argv0 = "python.wasm"
+                ModulePath = Path.Combine(PYTHON_DIR, "python.wasm"),
+                RootDir = PYTHON_DIR,
+                Sha256 = PYTHON_SHA256,
+                Argv0 = "python.wasm",
+                Layers = [PYTHON_STDLIB]
+            },
+            [PYTHON_3_14_6_SYMPY_1_14_0] = new()
+            {
+                Id = PYTHON_3_14_6_SYMPY_1_14_0,
+                Language = VerifyRuntimeLanguage.Python,
+                ModulePath = Path.Combine(PYTHON_DIR, "python.wasm"),
+                RootDir = PYTHON_DIR,
+                Sha256 = PYTHON_SHA256,
+                Argv0 = "python.wasm",
+                Layers = [PYTHON_STDLIB, PYTHON_SYMPY]
             },
             [QUICKJS_0_15_1] = new()
             {
@@ -122,6 +153,22 @@ public static class VerifyRuntimeCatalog
         {
             unavailableReason = $"runtime module at '{modulePath}' failed its SHA-256 pin";
             return null;
+        }
+
+        foreach (var layer in descriptor.Layers)
+        {
+            var layerPath = Path.GetFullPath(Path.Combine(runtimesRoot, layer.Path));
+            if (!File.Exists(layerPath))
+            {
+                unavailableReason = $"runtime layer not found at '{layerPath}'";
+                return null;
+            }
+
+            if (!s_hashChecks.GetOrAdd(layerPath, path => HashMatches(path, layer.Sha256)))
+            {
+                unavailableReason = $"runtime layer at '{layerPath}' failed its SHA-256 pin";
+                return null;
+            }
         }
 
         unavailableReason = null;

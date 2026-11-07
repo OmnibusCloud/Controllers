@@ -15,6 +15,7 @@ public abstract class VerifySandboxTestBase
 
     protected string RuntimesRoot { get; private set; } = null!;
     protected VerifyResolvedRuntime Python { get; private set; } = null!;
+    protected VerifyResolvedRuntime PythonSympy { get; private set; } = null!;
     protected VerifyResolvedRuntime QuickJs { get; private set; } = null!;
     protected VerifyWasmSandbox Sandbox { get; private set; } = null!;
 
@@ -32,16 +33,18 @@ public abstract class VerifySandboxTestBase
         RuntimesRoot = Path.Combine(projectRoot, "@Data", "runtimes");
 
         var python = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.PYTHON_3_14_6, out var pyReason);
+        var sympy = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.PYTHON_3_14_6_SYMPY_1_14_0, out var sympyReason);
         var quickJs = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.QUICKJS_0_15_1, out var jsReason);
-        if (python == null || quickJs == null)
+        if (python == null || sympy == null || quickJs == null)
         {
             Assert.Ignore(
                 $"Pinned runtimes not resolvable under '{RuntimesRoot}' " +
-                $"(python: {pyReason ?? "ok"}; quickjs: {jsReason ?? "ok"}) — " +
-                "run download-spike-runtimes.ps1 to opt in.");
+                $"(python: {pyReason ?? "ok"}; sympy: {sympyReason ?? "ok"}; quickjs: {jsReason ?? "ok"}) — " +
+                "run verify-assets build @Data/runtimes to opt in.");
         }
 
         Python = python!;
+        PythonSympy = sympy!;
         QuickJs = quickJs!;
         Sandbox = new VerifyWasmSandbox();
     }

@@ -361,13 +361,21 @@ public sealed class VerifyWasmSandbox : IDisposable
         var argv = BuildArgv(runtime, task, args);
         var wasi = new WasiConfiguration().WithArgs(argv);
 
-        // Pin the interpreter's environment for reproducibility (hash seed off, no bytecode writes).
+        // Pin the interpreter's environment for reproducibility: the prefix is "/" (no
+        // landmark search, no directory scans, no "platform dependent libraries" warning),
+        // the hash seed is fixed, no bytecode is written, and the layers that need it are
+        // on PYTHONPATH (the standard library zip is on sys.path by itself).
         if (runtime.Descriptor.Language == VerifyRuntimeLanguage.Python)
         {
             wasi = wasi
+                .WithEnvironmentVariable("PYTHONHOME", "/")
                 .WithEnvironmentVariable("PYTHONHASHSEED", "0")
                 .WithEnvironmentVariable("PYTHONDONTWRITEBYTECODE", "1")
                 .WithEnvironmentVariable("PYTHONUNBUFFERED", "1");
+
+            var pythonPath = string.Join(':', runtime.Descriptor.Layers.Where(layer => layer.PythonPath != null).Select(layer => layer.PythonPath));
+            if (pythonPath.Length > 0)
+                wasi = wasi.WithEnvironmentVariable("PYTHONPATH", pythonPath);
         }
 
         // Stdlib preopen, read-only. The task's own sources travel inline via -c/-e (or are
@@ -392,6 +400,8 @@ public sealed class VerifyWasmSandbox : IDisposable
         switch (runtime.Descriptor.Language)
         {
             case VerifyRuntimeLanguage.Python:
+                // -P: no '' on sys.path (nothing lists the guest root); -B: no bytecode writes.
+                argv.Add("-P");
                 argv.Add("-B");
                 argv.Add("-c");
                 argv.Add(code);
@@ -460,13 +470,14 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     private WasmModule GetOrCompile(VerifyResolvedRuntime runtime)
     {
+        // Keyed by the module file: runtimes that differ only in their layers share one compile.
         lock (m_modulesLock)
         {
-            if (m_modules.TryGetValue(runtime.Descriptor.Id, out var cached))
+            if (m_modules.TryGetValue(runtime.ModulePath, out var cached))
                 return cached;
 
             var module = WasmModule.FromFile(m_engine, runtime.ModulePath);
-            m_modules[runtime.Descriptor.Id] = module;
+            m_modules[runtime.ModulePath] = module;
             return module;
         }
     }

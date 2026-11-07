@@ -20,7 +20,8 @@ public static class VerifyBenchmark
 {
     #region Constants
 
-    public const string UNIT = "verify-task@mixed-v1";
+    /// <summary>Bumped with every change to the reference workload's cost (v2: the bytecode stdlib layer).</summary>
+    public const string UNIT = "verify-task@mixed-v2";
 
     /// <summary>Reference tasks per worker thread, per runtime.</summary>
     public const int TASKS_PER_WORKER = 4;

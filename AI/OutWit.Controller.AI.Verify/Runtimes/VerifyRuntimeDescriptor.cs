@@ -34,4 +34,11 @@ public sealed record VerifyRuntimeDescriptor
 
     /// <summary>argv[0] the guest sees (interpreters derive their prefix from it).</summary>
     public required string Argv0 { get; init; }
+
+    /// <summary>
+    /// The bytecode layers the runtime loads from its root (relative to the runtimes root),
+    /// each hash-pinned and verified at resolution like the module. Empty for a runtime that
+    /// is its module alone.
+    /// </summary>
+    public IReadOnlyList<VerifyRuntimeLayer> Layers { get; init; } = [];
 }
