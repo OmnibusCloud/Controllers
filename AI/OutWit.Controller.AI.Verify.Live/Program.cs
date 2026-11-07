@@ -108,7 +108,10 @@ public static class Program
             var d = result.Result;
             Console.WriteLine($"  completed in {result.Duration}: target={d.RuntimeTarget} wasmtime={d.WasmtimeVersion} root={(d.RuntimesRootFound ? "found" : "MISSING")}");
             foreach (var runtime in d.Runtimes)
-                Console.WriteLine($"    {runtime.RuntimeId,-16} {(runtime.Available ? "available" : "MISSING")}  sha256 {runtime.Sha256[..12]}…");
+            {
+                var pin = runtime.Sha256.Length >= 12 ? $"sha256 {runtime.Sha256[..12]}…" : "(task-supplied module)";
+                Console.WriteLine($"    {runtime.RuntimeId,-28} {(runtime.Available ? "available" : "MISSING")}  {pin}");
+            }
         }
 
         return failures == 0 ? 0 : 1;
@@ -156,9 +159,24 @@ public static class Program
 
             foreach (var name in outputs)
             {
-                var blobId = name == outputs[0]
-                    ? first.Result
-                    : (await handle.WaitAsync<Guid?>(name, pollInterval: POLL_INTERVAL)).Result;
+                Guid? blobId;
+                if (name == outputs[0])
+                {
+                    blobId = first.Result;
+                }
+                else
+                {
+                    // An output the server's script version does not produce (an older Scripts package) is reported, not fatal.
+                    try
+                    {
+                        blobId = (await handle.WaitAsync<Guid?>(name, pollInterval: POLL_INTERVAL)).Result;
+                    }
+                    catch (InvalidOperationException exception) when (exception.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Console.WriteLine($"  {name}: (not an output of the server's script version)");
+                        continue;
+                    }
+                }
 
                 if (blobId == null)
                 {
