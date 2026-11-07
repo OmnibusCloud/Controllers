@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Activities;
 using OutWit.Controller.AI.Verify.Model;
@@ -12,6 +13,13 @@ namespace OutWit.Controller.AI.Verify.Adapters;
 
 internal sealed class WitActivityAdapterVerifyExecuteBatch : WitActivityAdapterFunction<WitActivityVerifyExecuteBatch>
 {
+    #region Constants
+
+    /// <summary>Per-task progress reaches the host at most this often (the final report always does).</summary>
+    private static readonly TimeSpan PROGRESS_INTERVAL = TimeSpan.FromMilliseconds(500);
+
+    #endregion
+
     #region Constructors
 
     public WitActivityAdapterVerifyExecuteBatch(IWitProcessingManager processingManager, ILogger logger)
@@ -29,7 +37,9 @@ internal sealed class WitActivityAdapterVerifyExecuteBatch : WitActivityAdapterF
             throw new InvalidOperationException("Failed to get parameter 'Batch'.");
 
         var runtimesRoot = VerifyRuntimeLocator.Locate();
-        var result = await Task.Run(() => VerifyBatchExecutor.Execute(VerifySandboxHost.Instance, runtimesRoot, batch));
+        var progress = CreateProgress(status.JobId, batch.Tasks.Count);
+        var nodeId = status.EngineId;
+        var result = await Task.Run(() => VerifyBatchExecutor.Execute(VerifySandboxHost.Instance, runtimesRoot, batch, nodeId, progress));
 
         if (!pool.TrySetValue(activity.ReturnReference, result))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
@@ -41,6 +51,35 @@ internal sealed class WitActivityAdapterVerifyExecuteBatch : WitActivityAdapterF
         return pool.TryGetValue(activity.Batch, out VerifyTaskBatchData? batch) && batch != null
             ? Math.Max(1, batch.Tasks.Count)
             : 1.0;
+    }
+
+    #endregion
+
+    #region Tools
+
+    /// <summary>
+    /// Per-task completion → the host's activity progress sink, throttled to one report per
+    /// <see cref="PROGRESS_INTERVAL"/> plus the final one; null when the host has no sink.
+    /// </summary>
+    private Action<int, int>? CreateProgress(Guid jobId, int total)
+    {
+        var report = VerifyActivityProgressReporter.Create(ProcessingManager, jobId);
+        if (report == null || total <= 0)
+            return null;
+
+        var gate = new object();
+        var since = Stopwatch.StartNew();
+        return (done, count) =>
+        {
+            lock (gate)
+            {
+                if (done < count && since.Elapsed < PROGRESS_INTERVAL)
+                    return;
+                since.Restart();
+            }
+
+            report((double)done / count, $"{done}/{count} tasks");
+        };
     }
 
     #endregion

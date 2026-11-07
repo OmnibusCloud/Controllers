@@ -45,7 +45,8 @@ public static class VerifyRuntimeDiagnosticsBuilder
         };
     }
 
-    private static string RuntimeTarget()
+    /// <summary>OS and architecture as the diagnostics name them, e.g. <c>linux-x64</c>.</summary>
+    public static string RuntimeTarget()
     {
         var os = OperatingSystem.IsWindows() ? "windows"
             : OperatingSystem.IsLinux() ? "linux"

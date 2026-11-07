@@ -96,7 +96,7 @@ public sealed class VerifyRunSkeletonTests
         Assert.That(job, Is.Not.Null);
         Assert.That(job.Activities.Count, Is.GreaterThan(0));
         var variables = job.Variables.Select(variable => variable.Name).ToList();
-        Assert.That(variables, Is.SupersetOf(new[] { "taskset", "opts", "batches", "results", "report" }));
+        Assert.That(variables, Is.SupersetOf(new[] { "taskset", "opts", "batches", "results", "report", "provenance" }));
     }
 
     [Test]
@@ -132,6 +132,16 @@ public sealed class VerifyRunSkeletonTests
         Assert.That(verdictByIndex[1], Is.EqualTo("Fail"));
         Assert.That(verdictByIndex[2], Is.EqualTo("RuntimeError"));
         Assert.That(verdictByIndex[3], Is.EqualTo("Pass"));
+
+        // Provenance: every task attributed to exactly one batch, every batch to a node.
+        var provenanceBlobId = (Guid)job.Variables["provenance"].Value!;
+        using var provenance = JsonDocument.Parse(await File.ReadAllBytesAsync(await m_blobService.GetLocalPathAsync(provenanceBlobId)));
+        var covered = provenance.RootElement.GetProperty("batches").EnumerateArray()
+            .SelectMany(batch => batch.GetProperty("tasks").EnumerateArray().Select(task => task.GetInt32()))
+            .OrderBy(index => index)
+            .ToList();
+        Assert.That(covered, Is.EqualTo(new[] { 0, 1, 2, 3 }));
+        Assert.That(provenance.RootElement.GetProperty("nodes").GetArrayLength(), Is.GreaterThan(0));
     }
 
     [Test]

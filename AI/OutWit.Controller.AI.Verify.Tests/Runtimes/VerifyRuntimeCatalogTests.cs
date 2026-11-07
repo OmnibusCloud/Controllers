@@ -85,4 +85,23 @@ public sealed class VerifySandboxDegreeTests
     {
         Assert.That(VerifySandboxDegree.Compute(12, 8L * 1024 * 1024 * 1024, 0), Is.EqualTo(12));
     }
+
+    [Test]
+    public void DefaultCapHoldsADesktopToSixteenTest()
+    {
+        Assert.That(VerifySandboxDegree.Compute(32, 64L * 1024 * 1024 * 1024, 256L * 1024 * 1024),
+            Is.EqualTo(VerifySandboxDegree.DEFAULT_MAX_DEGREE));
+    }
+
+    [Test]
+    public void ExplicitMaxDegreeOverridesTheDefaultCapTest()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(VerifySandboxDegree.Compute(32, 64L * 1024 * 1024 * 1024, 256L * 1024 * 1024, 24), Is.EqualTo(24));
+            Assert.That(VerifySandboxDegree.Compute(8, 64L * 1024 * 1024 * 1024, 256L * 1024 * 1024, 24), Is.EqualTo(8));
+            Assert.That(VerifySandboxDegree.Compute(32, 2L * 1024 * 1024 * 1024, 512L * 1024 * 1024, 24), Is.EqualTo(4));
+            Assert.That(VerifySandboxDegree.Compute(32, 64L * 1024 * 1024 * 1024, 256L * 1024 * 1024, 0), Is.EqualTo(16));
+        });
+    }
 }

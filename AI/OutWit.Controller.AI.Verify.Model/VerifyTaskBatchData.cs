@@ -32,7 +32,8 @@ public sealed partial class VerifyTaskBatchData : ModelBase
         }
 
         return RuntimeId.Is(other.RuntimeId)
-               && DefaultLimits.Check(other.DefaultLimits);
+               && DefaultLimits.Check(other.DefaultLimits)
+               && MaxDegree.Is(other.MaxDegree);
     }
 
     public override VerifyTaskBatchData Clone()
@@ -41,7 +42,8 @@ public sealed partial class VerifyTaskBatchData : ModelBase
         {
             RuntimeId = RuntimeId,
             DefaultLimits = DefaultLimits?.Clone(),
-            Tasks = Tasks.Select(t => t.Clone()).ToList()
+            Tasks = Tasks.Select(t => t.Clone()).ToList(),
+            MaxDegree = MaxDegree
         };
     }
 
@@ -63,6 +65,11 @@ public sealed partial class VerifyTaskBatchData : ModelBase
     [MemoryPackAllowSerialize]
     [MemoryPackOrder(2)]
     public List<VerifyTaskData> Tasks { get; set; } = [];
+
+    /// <summary>Upper bound on concurrent sandboxes for this batch (0 = the controller default).</summary>
+    [ToString]
+    [MemoryPackOrder(3)]
+    public int MaxDegree { get; set; }
 
     #endregion
 }

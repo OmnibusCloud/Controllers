@@ -13,6 +13,41 @@ namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
 public sealed class VerifyBatchExecutorTests : VerifySandboxTestBase
 {
     [Test]
+    public void BatchCarriesDiagnosticsAndReportsProgressTest()
+    {
+        var batch = new VerifyTaskBatchData
+        {
+            RuntimeId = OutWit.Controller.AI.Verify.Runtimes.VerifyRuntimeCatalog.QUICKJS_0_15_1,
+            Tasks = [JsTask("console.log(1)", 0), JsTask("console.log(2)", 1), JsTask("console.log(3)", 2)]
+        };
+        var nodeId = Guid.NewGuid();
+        var reports = new List<(int Done, int Total)>();
+
+        var result = VerifyBatchExecutor.Execute(Sandbox, RuntimesRoot, batch, nodeId, (done, total) =>
+        {
+            lock (reports)
+                reports.Add((done, total));
+        });
+
+        var diagnostics = result.Diagnostics;
+        Assert.That(diagnostics, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(diagnostics!.NodeId, Is.EqualTo(nodeId));
+            Assert.That(diagnostics.NodeName, Is.EqualTo(Environment.MachineName));
+            Assert.That(diagnostics.RuntimeId, Is.EqualTo(batch.RuntimeId));
+            Assert.That(diagnostics.RuntimeSha256, Is.Not.Empty);
+            Assert.That(diagnostics.Degree, Is.GreaterThanOrEqualTo(1));
+            Assert.That(diagnostics.TaskCount, Is.EqualTo(3));
+            Assert.That(diagnostics.WallMs, Is.GreaterThanOrEqualTo(0));
+            Assert.That(diagnostics.WasmtimeVersion, Does.StartWith("44."));
+            Assert.That(diagnostics.ControllerVersion, Is.Not.Empty);
+            Assert.That(reports.Select(r => r.Done).OrderBy(d => d), Is.EqualTo(new[] { 1, 2, 3 }));
+            Assert.That(reports.Select(r => r.Total), Is.All.EqualTo(3));
+        });
+    }
+
+    [Test]
     public void MixedPoisonBatchCompletesWithPerTaskVerdictsTest()
     {
         var batch = new VerifyTaskBatchData

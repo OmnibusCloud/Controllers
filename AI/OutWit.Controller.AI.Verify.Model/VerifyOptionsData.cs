@@ -23,7 +23,8 @@ public sealed partial class VerifyOptionsData : ModelBase
         return DefaultLimits.Check(other.DefaultLimits)
                && BatchSize.Is(other.BatchSize)
                && SamplingRate.Is(other.SamplingRate, tolerance)
-               && ReportFormat.Is(other.ReportFormat);
+               && ReportFormat.Is(other.ReportFormat)
+               && MaxDegree.Is(other.MaxDegree);
     }
 
     public override VerifyOptionsData Clone()
@@ -33,7 +34,8 @@ public sealed partial class VerifyOptionsData : ModelBase
             DefaultLimits = DefaultLimits?.Clone(),
             BatchSize = BatchSize,
             SamplingRate = SamplingRate,
-            ReportFormat = ReportFormat
+            ReportFormat = ReportFormat,
+            MaxDegree = MaxDegree
         };
     }
 
@@ -60,6 +62,11 @@ public sealed partial class VerifyOptionsData : ModelBase
     [ToString]
     [MemoryPackOrder(3)]
     public VerifyReportFormat ReportFormat { get; set; }
+
+    /// <summary>Upper bound on concurrent sandboxes per node (0 = the controller default, 16).</summary>
+    [ToString]
+    [MemoryPackOrder(4)]
+    public int MaxDegree { get; set; }
 
     #endregion
 }

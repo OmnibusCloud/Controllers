@@ -1,5 +1,6 @@
 using MemoryPack;
 using OutWit.Common.Abstract;
+using OutWit.Common.Values;
 
 namespace OutWit.Controller.AI.Verify.Model;
 
@@ -26,14 +27,15 @@ public sealed partial class VerifyResultBatchData : ModelBase
                 return false;
         }
 
-        return true;
+        return Diagnostics.Check(other.Diagnostics);
     }
 
     public override VerifyResultBatchData Clone()
     {
         return new VerifyResultBatchData
         {
-            Results = Results.Select(r => r.Clone()).ToList()
+            Results = Results.Select(r => r.Clone()).ToList(),
+            Diagnostics = Diagnostics?.Clone()
         };
     }
 
@@ -45,6 +47,11 @@ public sealed partial class VerifyResultBatchData : ModelBase
     [MemoryPackAllowSerialize]
     [MemoryPackOrder(0)]
     public List<VerifyResultData> Results { get; set; } = [];
+
+    /// <summary>Where and how the batch ran; null only for batches produced before 0.2.0.</summary>
+    [MemoryPackAllowSerialize]
+    [MemoryPackOrder(1)]
+    public VerifyBatchDiagnosticsData? Diagnostics { get; set; }
 
     #endregion
 }

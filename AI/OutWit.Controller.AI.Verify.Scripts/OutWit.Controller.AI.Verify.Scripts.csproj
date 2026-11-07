@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Verify</ControllerName>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Description>Bundled .wit scripts for the OutWit Verify controller — VerifyRun (sandboxed code-vs-tests verification), VerifyPreflight, and VerifyRuntimeDiagnostics.</Description>
     <PackageTags>verify;sandbox;wasm;scripts;rlvr;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>

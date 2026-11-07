@@ -6,4 +6,5 @@ Job:VerifyRun(Blob:taskset, VerifyOptions:opts)
         => Verify.ExecuteBatch(batch);
 
     Blob:report = Verify.Collect(results, opts);
+    Blob:provenance = Verify.Provenance(results);
 }

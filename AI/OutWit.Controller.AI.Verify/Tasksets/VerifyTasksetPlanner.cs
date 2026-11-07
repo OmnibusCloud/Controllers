@@ -47,7 +47,8 @@ public static class VerifyTasksetPlanner
                 {
                     RuntimeId = group.Key,
                     DefaultLimits = defaultLimits,
-                    Tasks = chunk
+                    Tasks = chunk,
+                    MaxDegree = options?.MaxDegree ?? 0
                 });
             }
         }
