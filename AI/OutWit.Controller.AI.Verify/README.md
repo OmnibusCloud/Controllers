@@ -104,16 +104,18 @@ the compared pairs.
 
 ## Determinism
 
-The verdict report is the run's identity: it carries verdicts, exit codes,
-per-case outcomes and peak memory — the fields two honest executions agree on
-wherever they ran — and is byte-identical for a taskset regardless of which
-nodes ran which batches. Fuel is reproducible per host but drifts by about
-0.01–0.06 % between hosts for CPython tasks (the import machinery scans the
-stdlib directory and each file system lists it its own way), while QuickJS
-tasks are byte-equal everywhere; wall time is hardware. Both are metrics and
-live per task in the provenance document. The sandbox pins the clock and seeds
-the random source from the task, so a program sees the same world on every
-node.
+The verdict report is the run's identity: it carries verdicts, exit codes and
+per-case outcomes — the fields two honest executions agree on wherever they
+ran — and is byte-identical for a taskset regardless of which nodes ran which
+batches (proven on the test fleet across three placements). Fuel is
+reproducible per host but drifts between hosts for CPython tasks — by
+0.0002–0.06 % with the bytecode layers (the remaining difference is in how
+each host's WASI answers the interpreter's stat and descriptor queries), while
+QuickJS tasks and raw WASI modules are byte-equal everywhere — and the peak
+linear memory of a CPython task can differ by one 64 KiB page with it; wall
+time is hardware. All three are metrics and live per task in the provenance
+document. The sandbox pins the clock and seeds the random source from the
+task, so a program sees the same world on every node.
 
 ## Node behaviour
 

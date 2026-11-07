@@ -13,10 +13,11 @@ namespace OutWit.Controller.AI.Verify.Tests.Tasksets;
 public sealed class VerifyReportWriterTests
 {
     [Test]
-    public void ReportIgnoresFuelAndWallTimeTest()
+    public void ReportIgnoresFuelPeakMemoryAndWallTimeTest()
     {
         var cheap = Results(fuel: 100, wallMs: 5);
         var costly = Results(fuel: 100_123, wallMs: 900);
+        costly[1].PeakMemoryBytes += 65536; // one page more on another host, as seen on the fleet
 
         var one = Encoding.UTF8.GetString(VerifyReportWriter.Write(cheap));
         var two = Encoding.UTF8.GetString(VerifyReportWriter.Write(costly));
@@ -25,6 +26,7 @@ public sealed class VerifyReportWriterTests
         {
             Assert.That(two, Is.EqualTo(one));
             Assert.That(one, Does.Not.Contain("fuel"));
+            Assert.That(one, Does.Not.Contain("memory"));
             Assert.That(one, Does.Not.Contain("wall"));
         });
     }
@@ -65,7 +67,7 @@ public sealed class VerifyReportWriterTests
             Assert.That(summary.GetProperty("verdicts").GetProperty("Timeout").GetInt32(), Is.Zero);
             Assert.That(failed.GetProperty("verdict").GetString(), Is.EqualTo("Fail"));
             Assert.That(failed.GetProperty("exit").GetInt32(), Is.EqualTo(1));
-            Assert.That(failed.GetProperty("peak_memory").GetInt64(), Is.EqualTo(2 * 65536));
+            Assert.That(failed.TryGetProperty("peak_memory", out _), Is.False, "a metric of the provenance");
             Assert.That(failed.GetProperty("cases").GetArrayLength(), Is.EqualTo(1));
         });
     }

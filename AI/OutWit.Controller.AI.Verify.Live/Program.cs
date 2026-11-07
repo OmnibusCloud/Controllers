@@ -171,7 +171,7 @@ public static class Program
                     {
                         blobId = (await handle.WaitAsync<Guid?>(name, pollInterval: POLL_INTERVAL)).Result;
                     }
-                    catch (InvalidOperationException exception) when (exception.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+                    catch (InvalidOperationException exception) when (exception.InnerException?.Message.Contains("not found", StringComparison.OrdinalIgnoreCase) == true)
                     {
                         Console.WriteLine($"  {name}: (not an output of the server's script version)");
                         continue;

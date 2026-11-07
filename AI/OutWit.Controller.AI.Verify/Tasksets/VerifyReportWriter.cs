@@ -10,10 +10,11 @@ namespace OutWit.Controller.AI.Verify.Tasksets;
 /// deterministic output the suitability filter wants and an RLVR pipeline consumes.
 ///
 /// The report is the run's identity: it carries only the fields two honest executions
-/// agree on wherever they ran (verdict, exit code, per-case outcome, peak memory), so it is
-/// byte-identical for a taskset regardless of placement. Fuel is reproducible on a host but
-/// drifts between hosts for CPython tasks, and wall time is hardware; both are metrics and
-/// live per task in the provenance document (<see cref="VerifyProvenanceWriter"/>).
+/// agree on wherever they ran (verdict, exit code, per-case outcome), so it is byte-identical
+/// for a taskset regardless of placement. Fuel is reproducible on a host but drifts between
+/// hosts for CPython tasks, peak memory can differ by a page with it, and wall time is
+/// hardware; all three are metrics and live per task in the provenance document
+/// (<see cref="VerifyProvenanceWriter"/>).
 /// </summary>
 public static class VerifyReportWriter
 {
@@ -48,7 +49,6 @@ public static class VerifyReportWriter
                 writer.WriteNumber("index", result.TaskIndex);
                 writer.WriteString("verdict", result.Verdict.ToString());
                 writer.WriteNumber("exit", result.ExitCode);
-                writer.WriteNumber("peak_memory", result.PeakMemoryBytes);
                 if (result.CaseResults.Count > 0)
                 {
                     writer.WriteStartArray("cases");

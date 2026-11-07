@@ -79,7 +79,7 @@ public sealed class VerifySchemaDocsTests
         Assert.Multiple(() =>
         {
             Assert.That(summary, Is.EquivalentTo(new[] { "total", "pass", "pass_rate", "verdicts" }));
-            Assert.That(result, Is.EquivalentTo(new[] { "index", "verdict", "exit", "peak_memory", "cases" }));
+            Assert.That(result, Is.EquivalentTo(new[] { "index", "verdict", "exit", "cases" }));
             Assert.That(verdicts, Is.EquivalentTo(Enum.GetNames<OutWit.Controller.AI.Verify.Model.VerifyVerdict>()));
         });
     }
