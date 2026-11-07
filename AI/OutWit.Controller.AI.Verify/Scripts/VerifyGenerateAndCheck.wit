@@ -1,0 +1,16 @@
+Job:VerifyGenerateAndCheck(Blob:generators, Blob:checker, VerifyOptions:opts)
+{
+    VerifyTaskBatchCollection:generatorBatches = Verify.Split(generators, opts);
+
+    VerifyResultBatchCollection:candidates = Grid.ForEach(batch in generatorBatches)
+        => Verify.ExecuteBatch(batch);
+
+    VerifyTaskBatchCollection:checkBatches = Verify.MakeCheckTasks(candidates, checker, opts);
+
+    VerifyResultBatchCollection:verdicts = Grid.ForEach(batch in checkBatches)
+        => Verify.ExecuteBatch(batch);
+
+    Blob:report = Verify.Collect(verdicts, opts);
+    Blob:corpus = Verify.CollectOutputs(candidates, opts);
+    Blob:provenance = Verify.Provenance(verdicts);
+}

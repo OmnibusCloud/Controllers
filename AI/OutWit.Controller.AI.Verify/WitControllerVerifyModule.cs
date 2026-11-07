@@ -31,6 +31,8 @@ public sealed class WitControllerVerifyModule : WitPluginBase, IWitControllerNod
         services.AddActivityAdapter<WitActivityVerifySplit, WitActivityAdapterVerifySplit>();
         services.AddActivityAdapter<WitActivityVerifyCollect, WitActivityAdapterVerifyCollect>();
         services.AddActivityAdapter<WitActivityVerifyProvenance, WitActivityAdapterVerifyProvenance>();
+        services.AddActivityAdapter<WitActivityVerifyCollectOutputs, WitActivityAdapterVerifyCollectOutputs>();
+        services.AddActivityAdapter<WitActivityVerifyMakeCheckTasks, WitActivityAdapterVerifyMakeCheckTasks>();
         services.AddActivityAdapter<WitActivityVerifyPreflight, WitActivityAdapterVerifyPreflight>();
         services.AddActivityAdapter<WitActivityVerifyRuntimeDiagnostics, WitActivityAdapterVerifyRuntimeDiagnostics>();
     }

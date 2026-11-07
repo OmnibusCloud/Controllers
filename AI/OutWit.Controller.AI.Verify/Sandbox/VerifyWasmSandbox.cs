@@ -144,15 +144,28 @@ public sealed class VerifyWasmSandbox : IDisposable
             lastStderr = run.Stderr;
             lastStderrTruncated = run.StderrTruncated;
 
-            var passed = run.Verdict == VerifyVerdict.Pass
-                         && run.ExitCode == testCase.ExpectedExitCode
+            // A run that reached its exit (code 0 or not) completed; a resource verdict did not.
+            var completed = run.Verdict is VerifyVerdict.Pass or VerifyVerdict.RuntimeError;
+            var exitMatches = run.ExitCode == testCase.ExpectedExitCode;
+            var passed = completed
+                         && exitMatches
                          && (testCase.ExpectedStdout == null || run.Stdout == testCase.ExpectedStdout);
+
+            // A resource verdict (Timeout/Memory/Output) is reported as-is. A completed run with
+            // the expected exit code but the wrong output is a Fail, and so is a run that was
+            // expected to signal with a non-zero code and did not. A crash the case did not
+            // expect (non-zero exit where 0 was expected) stays a RuntimeError.
+            var caseVerdict = passed ? VerifyVerdict.Pass
+                : !completed ? run.Verdict
+                : exitMatches ? VerifyVerdict.Fail
+                : testCase.ExpectedExitCode == 0 ? VerifyVerdict.RuntimeError
+                : VerifyVerdict.Fail;
 
             caseResults.Add(new VerifyCaseResultData
             {
                 CaseIndex = i,
                 Passed = passed,
-                Verdict = run.Verdict,
+                Verdict = caseVerdict,
                 ExitCode = run.ExitCode,
                 ActualStdout = run.Stdout
             });
@@ -160,9 +173,7 @@ public sealed class VerifyWasmSandbox : IDisposable
             if (!passed && allPassed)
             {
                 allPassed = false;
-                // A resource verdict (Timeout/Memory/Output) is reported as-is; a clean
-                // run that simply mismatched expectations is a Fail.
-                firstFailure = run.Verdict == VerifyVerdict.Pass ? VerifyVerdict.Fail : run.Verdict;
+                firstFailure = caseVerdict;
                 firstFailureExit = run.ExitCode;
             }
         }

@@ -1,31 +1,23 @@
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
 using OutWit.Controller.AI.Verify.Model;
-using OutWit.Controller.AI.Verify.Runtimes;
-using OutWit.Controller.AI.Verify.Tests.Mock;
 using OutWit.Engine.Interfaces;
-using OutWit.Engine.Sdk;
 
 namespace OutWit.Controller.AI.Verify.Tests.Scripts;
 
 /// <summary>
 /// The distributed gate: the bundled VerifyRun.wit script running through the engine
-/// (Verify.Split → Grid.ForEach ⇒ Verify.ExecuteBatch → Verify.Collect, blob transport,
-/// mock in-process nodes) executes a real taskset in the sandbox and returns a verdict
-/// report — the RLVR code-vs-tests pipeline end to end. Opt-in on the runtime download,
-/// like the sandbox tests: it actually runs Python/JS in wasmtime on the "nodes".
+/// (Verify.Split → Grid.ForEach ⇒ Verify.ExecuteBatch → Verify.Collect + Verify.Provenance,
+/// blob transport, mock in-process nodes) executes a real taskset in the sandbox and returns a
+/// verdict report — the RLVR code-vs-tests pipeline end to end.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
-public sealed class VerifyRunSkeletonTests
+public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
 {
     #region Fields
 
-    private string m_blobStoragePath = null!;
-    private VerifyTestBlobService m_blobService = null!;
     private string m_verifyRunScript = null!;
-    private IWitEngine m_engine = null!;
 
     #endregion
 
@@ -34,54 +26,7 @@ public sealed class VerifyRunSkeletonTests
     [OneTimeSetUp]
     public void Setup()
     {
-        var solutionRoot = FindSolutionRoot();
-        if (solutionRoot == null)
-            Assert.Ignore("Solution root not found");
-
-        var runtimesRoot = Path.Combine(
-            solutionRoot, "AI", "OutWit.Controller.AI.Verify.Tests", "@Data", "runtimes");
-        if (VerifyRuntimeCatalog.Resolve(runtimesRoot, VerifyRuntimeCatalog.PYTHON_3_14_6, out _) == null)
-            Assert.Ignore($"Pinned runtimes not resolvable under '{runtimesRoot}' — run download-spike-runtimes.ps1 to opt in.");
-
-        // The in-process nodes read this to locate the runtime archive.
-        Environment.SetEnvironmentVariable(VerifyRuntimeLocator.OverrideEnvVar, runtimesRoot);
-
-        var scriptPath = Path.Combine(
-            solutionRoot, "AI", "OutWit.Controller.AI.Verify", "Scripts", "VerifyRun.wit");
-        if (!File.Exists(scriptPath))
-            Assert.Ignore($"VerifyRun.wit not found at {scriptPath}");
-        m_verifyRunScript = File.ReadAllText(scriptPath);
-
-        var controllersPath = FindControllersPath();
-        if (controllersPath == null)
-            Assert.Ignore("@Controllers not found");
-
-        m_blobStoragePath = Path.Combine(Path.GetTempPath(), $"witai_verify_e2e_{Guid.NewGuid():N}");
-        m_blobService = new VerifyTestBlobService(m_blobStoragePath);
-
-        WitEngineNodeSdk.Instance.Reload(
-            useIsolatedContext: false,
-            moduleFolder: controllersPath,
-            configureServices: services => services.AddSingleton<IWitBlobService>(m_blobService));
-
-        m_engine = WitEngineSdk.Instance;
-        m_engine.Reload(
-            useIsolatedContext: false,
-            logger: null,
-            moduleFolder: controllersPath,
-            configureServices: services =>
-            {
-                services.AddSingleton<IWitBlobService>(m_blobService);
-                services.AddSingleton<IWitNodesManager>(new VerifyTestNodesManager(WitEngineNodeSdk.Instance));
-            });
-    }
-
-    [OneTimeTearDown]
-    public void TearDown()
-    {
-        Environment.SetEnvironmentVariable(VerifyRuntimeLocator.OverrideEnvVar, null);
-        if (Directory.Exists(m_blobStoragePath))
-            Directory.Delete(m_blobStoragePath, recursive: true);
+        m_verifyRunScript = LoadScript("VerifyRun.wit");
     }
 
     #endregion
@@ -91,7 +36,7 @@ public sealed class VerifyRunSkeletonTests
     [Test]
     public void BundledScriptCompilesTest()
     {
-        var job = m_engine.Compile(m_verifyRunScript);
+        var job = Engine.Compile(m_verifyRunScript);
 
         Assert.That(job, Is.Not.Null);
         Assert.That(job.Activities.Count, Is.GreaterThan(0));
@@ -110,17 +55,14 @@ public sealed class VerifyRunSkeletonTests
         taskset.AppendLine("""{"index":2,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"raise SystemExit(4)"}}""");
         taskset.AppendLine("""{"index":3,"runtime":"quickjs-0.15.1","entry":"m.js","sources":{"m.js":"console.log(6*7)"}}""");
 
-        var tasksetBlobId = await m_blobService.UploadBytesAsync(
-            Encoding.UTF8.GetBytes(taskset.ToString()), "taskset.jsonl");
+        var tasksetBlobId = await UploadAsync(taskset.ToString(), "taskset.jsonl");
 
-        var job = m_engine.Compile(m_verifyRunScript);
-        var status = await m_engine.ScheduleAndWaitAsync(job, tasksetBlobId, new VerifyOptionsData());
+        var job = Engine.Compile(m_verifyRunScript);
+        var status = await Engine.ScheduleAndWaitAsync(job, tasksetBlobId, new VerifyOptionsData());
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
 
-        var reportBlobId = (Guid)job.Variables["report"].Value!;
-        var reportPath = await m_blobService.GetLocalPathAsync(reportBlobId);
-        using var report = JsonDocument.Parse(await File.ReadAllBytesAsync(reportPath));
+        using var report = await ReadJsonAsync((Guid)job.Variables["report"].Value!);
 
         var summary = report.RootElement.GetProperty("summary");
         Assert.That(summary.GetProperty("total").GetInt32(), Is.EqualTo(4));
@@ -134,8 +76,7 @@ public sealed class VerifyRunSkeletonTests
         Assert.That(verdictByIndex[3], Is.EqualTo("Pass"));
 
         // Provenance: every task attributed to exactly one batch, every batch to a node.
-        var provenanceBlobId = (Guid)job.Variables["provenance"].Value!;
-        using var provenance = JsonDocument.Parse(await File.ReadAllBytesAsync(await m_blobService.GetLocalPathAsync(provenanceBlobId)));
+        using var provenance = await ReadJsonAsync((Guid)job.Variables["provenance"].Value!);
         var covered = provenance.RootElement.GetProperty("batches").EnumerateArray()
             .SelectMany(batch => batch.GetProperty("tasks").EnumerateArray().Select(task => task.GetInt32()))
             .OrderBy(index => index)
@@ -154,12 +95,11 @@ public sealed class VerifyRunSkeletonTests
 
         async Task<string> RunOnce()
         {
-            var blobId = await m_blobService.UploadBytesAsync(Encoding.UTF8.GetBytes(tasksetJson + "\n"), "taskset.jsonl");
-            var job = m_engine.Compile(m_verifyRunScript);
-            var status = await m_engine.ScheduleAndWaitAsync(job, blobId, new VerifyOptionsData());
+            var blobId = await UploadAsync(tasksetJson + "\n", "taskset.jsonl");
+            var job = Engine.Compile(m_verifyRunScript);
+            var status = await Engine.ScheduleAndWaitAsync(job, blobId, new VerifyOptionsData());
             Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
-            var reportPath = await m_blobService.GetLocalPathAsync((Guid)job.Variables["report"].Value!);
-            return await File.ReadAllTextAsync(reportPath);
+            return await ReadTextAsync((Guid)job.Variables["report"].Value!);
         }
 
         var first = await RunOnce();
@@ -167,37 +107,6 @@ public sealed class VerifyRunSkeletonTests
 
         Assert.That(second, Is.EqualTo(first), "verdict report must be byte-identical across runs");
         Assert.That(first, Does.Contain("\"pass\":1"));
-    }
-
-    #endregion
-
-    #region Helpers
-
-    private static string? FindSolutionRoot()
-    {
-        var dir = TestContext.CurrentContext.TestDirectory;
-        while (dir != null)
-        {
-            if (File.Exists(Path.Combine(dir, "OutWit.slnx")))
-                return dir;
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        return null;
-    }
-
-    private static string? FindControllersPath()
-    {
-        var dir = AppContext.BaseDirectory;
-        while (dir != null)
-        {
-            var candidate = Path.Combine(dir, "@Controllers", "Debug");
-            if (Directory.Exists(candidate))
-                return candidate;
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        return null;
     }
 
     #endregion
