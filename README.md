@@ -1,19 +1,22 @@
 # OutWit Controllers
 
 Open-source SDK and reference implementations of OmnibusCloud controllers.
-Distributed via [nuget.org](https://www.nuget.org/profiles/dmitrat) as a set
-of consumable NuGet packages. Each controller demonstrates a distinct
+Shipped as consumable NuGet packages — most via
+[nuget.org](https://www.nuget.org/profiles/dmitrat), the Simulation pair via
+the OmnibusCloud organization feed. Each controller demonstrates a distinct
 slice of OmnibusCloud's distributed-compute capabilities — basic types,
 distributed iteration, control flow, linear algebra, distributed
-rendering — and serves as a working template for authors writing their
-own controllers.
+rendering, distributed numerical simulation — and serves as a working
+template for authors writing their own controllers.
 
 ---
 
 ## Published controllers
 
-All packages are on nuget.org under the `OutWit.Controller.*` namespace.
-Each row is a stable, supported release.
+All packages live under the `OutWit.Controller.*` namespace. Rows carrying a
+NuGet badge are stable, supported releases on nuget.org; the two Simulation
+rows ship on the OmnibusCloud organization feed instead — see the note under
+the table.
 
 | Package                                                                                            | Latest                                                                                                                                                              | Tier | Purpose                                                                                                                       |
 | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -23,13 +26,40 @@ Each row is a stable, supported release.
 | [`OutWit.Controller.Matrices`](https://www.nuget.org/packages/OutWit.Controller.Matrices)          | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Matrices.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Matrices)                         | 2    | Dense + sparse matrix / vector operations with Gustavson multiplication. Ships benchmark `.smat` data via GitHub Release.     |
 | [`OutWit.Controller.Render.Dcc`](https://www.nuget.org/packages/OutWit.Controller.Render.Dcc)      | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Render.Dcc.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Render.Dcc)                     | 1    | Host-only neutral DCC scene validation and `.blend` build bootstrap, upstream of Render.                                      |
 | [`OutWit.Controller.Render`](https://www.nuget.org/packages/OutWit.Controller.Render)              | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Render.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Render)                             | 2    | Distributed rendering via Blender CLI + FFmpeg, delivering external scene dependencies (libraries, caches, volumes, …) to render nodes. Ships per-platform Blender / FFmpeg / benchmark scenes via GitHub Release.    |
-| `OutWit.Controller.Simulation.Schwarz` ([`Simulation/`](Simulation/))                               | v0.1 — in development, not yet published                                                                                                                              | 1    | Distributed stationary solves (steady heat / Poisson-class) via overlapping Schwarz domain decomposition. LAN-profile.        |
-| `OutWit.Controller.Simulation.Parareal` ([`Simulation/`](Simulation/))                              | v0.1 — in development, not yet published                                                                                                                              | 1    | Distributed transient solves (heat / diffusion) via parareal parallel-in-time integration. Crowd/WAN-profile.                 |
+| `OutWit.Controller.Simulation.Schwarz` ([`Simulation/`](Simulation/))                               | v1.0.1 — nuget.org + OmnibusCloud org feed                                                                                                                                      | 1    | Distributed stationary solves — steady heat / Poisson-class fields on structured Cartesian or axisymmetric (r-z) grids — via overlapping Schwarz domain decomposition. LAN-profile. |
+| `OutWit.Controller.Simulation.Parareal` ([`Simulation/`](Simulation/))                              | v1.0.3 — nuget.org + OmnibusCloud org feed                                                                                                                                      | 1    | Distributed transient solves — heat / diffusion over a time horizon — via parareal parallel-in-time integration. Crowd/WAN-profile. |
+| [`OutWit.Controller.Visualization.ParaView`](https://www.nuget.org/packages/OutWit.Controller.Visualization.ParaView) ([`Visualization/`](Visualization/)) | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Visualization.ParaView.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Visualization.ParaView) | 2    | Headless scientific visualization: validates OmnibusCloud ParaView packages (state + content-addressed data) as untrusted input, splits them into per-timestep tasks with per-task attachment subsets, renders through a controller-owned pvpython runner on the software-rendering baseline. Per-platform ParaView runtimes ship via GitHub Release (runtime-proof milestone). |
+| [`OutWit.Controller.CalculiX`](https://www.nuget.org/packages/OutWit.Controller.CalculiX) ([`CalculiX/`](CalculiX/)) | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.CalculiX.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.CalculiX) | 2    | Whole-deck CalculiX (ccx 2.22) solves on compute nodes, responses extracted on the node. Pinned ccx builds for Windows / Linux / macOS ship as release assets of [OmnibusCloud/CalculiX](https://github.com/OmnibusCloud/CalculiX). |
+| [`OutWit.Controller.Sweep`](https://www.nuget.org/packages/OutWit.Controller.Sweep) ([`Sweep/`](Sweep/)) | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Sweep.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Sweep) | 1    | Host-side parameter studies for every solver family - CalculiX decks and OpenFOAM cases - with one activity vocabulary: the study validated up front, chunks fanned out with `Grid.ForEach`, a manifest of every harvested variant after each chunk (partial results survive cancellation), the `sweep.state@2` document for non-.NET clients; OpenFOAM case sets (every variant its own ready case) from 2.1. |
+| [`OutWit.Controller.OpenFOAM`](https://www.nuget.org/packages/OutWit.Controller.OpenFOAM) ([`OpenFOAM/`](OpenFOAM/)) | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.OpenFOAM.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.OpenFOAM) | 2    | Whole-case OpenFOAM® runs on compute nodes: one case per node through an allow-listed recipe (meshing, decomposition, solver, post step), run-time code refused before anything runs, convergence facts and requested responses read on the node (forces measured during the solve). What it runs and refuses: [SUPPORTED-INPUTS.md](OpenFOAM/SUPPORTED-INPUTS.md). Pinned OpenFOAM v2606 kits for Windows / Linux / macOS ship as release assets of [OmnibusCloud/OpenFOAM](https://github.com/OmnibusCloud/OpenFOAM). |
+
+OpenFOAM® is a registered trademark of OpenCFD Limited. This offering is not
+approved or endorsed by OpenCFD Limited, producer and distributor of the OpenFOAM
+software via www.openfoam.com, and owner of the OPENFOAM® and OpenCFD® trade marks.
 
 Each controller comes with a companion `OutWit.Controller.<Name>.Model`
 NuGet that contains shared data types — referenced transitively by
-consumers, available standalone for tooling (the two Simulation controllers
-share a single `OutWit.Controller.Simulation.Model`).
+consumers, available standalone for tooling.
+
+The two Simulation controllers are the exception: the numerics they share
+are not in this repository at all. They consume two packages built from
+the private WitMath repository: `OutWit.Math.Simulation.Model`, the contract
+— problem model, wire DTOs and the blob formats these travel in — and
+`OutWit.Math.Simulation`, the numerics on top of it: the control-volume
+assembly, the transient stepper, the decomposition and parallel-in-time
+kernels. Building
+these two projects therefore needs credentials for that feed; every other
+controller here builds from nuget.org alone.
+
+Those two controllers are off nuget.org by choice, not by readiness: both
+algorithms are complete and live-proven on real distributed pools — a
+distributed run reproduces the single-machine reference bitwise, and a node
+lost mid-wave is absorbed by reassignment with an identical result. They
+are published to the OmnibusCloud organization feed together with their
+bundled job scripts (`OutWit.Controller.Simulation.Schwarz.Scripts` and
+`OutWit.Controller.Simulation.Parareal.Scripts`, v0.1.1). Per-controller
+scope and the honest v1 limits are documented in each controller's own
+README under [`Simulation/`](Simulation/).
 
 ---
 
@@ -133,6 +163,16 @@ adjust `ControllerName` / `Description` / `PackageTags` / activities, and
 let the shared `Build/OutWit.Controller.props` + `OutWit.Controller.targets`
 handle the rest of the wiring.
 
+Controllers serve **managed (.NET) initiators with zero extra work**. If you
+also want **non-.NET initiators** (C++/Python hosts on the OmnibusCloud
+native SDK), publishing is opt-in and fully automated: annotate your Model
+DTOs with `[JobDocumentContract("<component>.<name>@<major>")]` and a
+build-time generator emits the JSON Schema + C++/Python bindings; the server
+materializes documents into your types at its boundary. See
+[the guide section](docs/controller-author-guide.md#non-net-initiators-publishing-a-document-vocabulary)
+and the worked example in
+[`Render/OutWit.Controller.Render.Model`](Render/OutWit.Controller.Render.Model/README.md).
+
 Minimal controller csproj:
 
 ```xml
@@ -194,12 +234,37 @@ canonical minimal Model shape.
 │   ├── OutWit.Controller.Render.Dcc.Model/
 │   └── OutWit.Controller.Render.Dcc.Scripts/ # Bundled RenderDcc*.wit scripts (content-only nupkg)
 │
-├── Simulation/                      # Distributed numerical simulation (in development)
-│   ├── OutWit.Controller.Simulation.Model/    # Shared numerics + OWSM blob formats + wire DTOs
+├── Visualization/                   # Headless scientific visualization (ParaView)
+│   ├── OutWit.Controller.Visualization.ParaView/        # Tier-2 controller (pvpython runner, allowlist validation, subsetting)
+│   ├── OutWit.Controller.Visualization.ParaView.Model/  # Shared data types + paraview.*@1 document vocabulary
+│   ├── OutWit.Controller.Visualization.ParaView.Scripts/ # Bundled RenderParaView*.wit scripts (content-only nupkg)
+│   ├── OutWit.Controller.Visualization.ParaView.Tests/
+│   └── OutWit.Controller.Visualization.ParaView.Tests.FakePvpython/  # Test-only pvpython stand-in (never shipped)
+│
+├── CalculiX/                        # Whole-deck CalculiX solves (Tier-2: pinned ccx from OmnibusCloud/CalculiX releases)
+│   ├── OutWit.Controller.CalculiX/          # Ccx.Solve activity: ccx runtime, response extraction, benchmark
+│   ├── OutWit.Controller.CalculiX.Model/    # Task / result / extraction data types
+│   ├── OutWit.Controller.CalculiX.Tests/
+│   └── OutWit.Controller.CalculiX.Tests.FakeCcx/  # Test-only solver stand-in (never shipped)
+│
+├── Sweep/                           # Parameter studies over every solver family (host-only)
+│   ├── OutWit.Controller.Sweep/             # Sweep.* activities, the solver families (ISweepFamily), the bundled scripts
+│   ├── OutWit.Controller.Sweep.Model/       # Study / plan / state / manifest data types + the sweep.* document vocabulary
+│   ├── OutWit.Controller.Sweep.Scripts/     # SweepCalculiX.wit, SweepOpenFOAM.wit (content-only nupkg)
+│   └── OutWit.Controller.Sweep.Tests/       # Engine gates for both families, the fault gate, model and family tests
+│
+├── OpenFOAM/                        # Whole-case OpenFOAM runs (Tier-2: pinned kits from OmnibusCloud/OpenFOAM releases)
+│   ├── OutWit.Controller.OpenFOAM/          # Foam.Run activity: case inspection, kit runtime, extraction
+│   ├── OutWit.Controller.OpenFOAM.Model/    # Case / task / result / response data types + the case rules (Rules/)
+│   ├── OutWit.Controller.OpenFOAM.Tests/    # Unit + engine-gate tests, plus the real-kit oracle (Category=Kit)
+│   └── OutWit.Controller.OpenFOAM.Tests.FakeFoam/  # Test-only solver stand-in (never shipped)
+│
+├── Simulation/                      # Distributed numerical simulation (org-feed packages)
+│                                    # model + numerics come from OutWit.Math.Simulation[.Model] (private feed)
 │   ├── OutWit.Controller.Simulation.Schwarz/  # Stationary solves (domain decomposition)
-│   ├── OutWit.Controller.Simulation.Schwarz.Scripts/
+│   ├── OutWit.Controller.Simulation.Schwarz.Scripts/  # Bundled SchwarzSolve.wit (content-only nupkg)
 │   ├── OutWit.Controller.Simulation.Parareal/ # Transient solves (parallel-in-time)
-│   └── OutWit.Controller.Simulation.Parareal.Scripts/
+│   └── OutWit.Controller.Simulation.Parareal.Scripts/ # Bundled PararealSolve.wit (content-only nupkg)
 │
 ├── Tools/
 │   ├── OutWit.Controller.Pack/              # Path-B author tool: pack module/ -> contributor zip
@@ -210,7 +275,9 @@ canonical minimal Model shape.
 ├── .github/workflows/
 │   ├── publish.yml                          # Unified publish pipeline (any controller / model / tool)
 │   ├── verify-render-consumer.yml           # Cold-build smoke test of the published Render package
-│   └── verify-scripts-consumer.yml          # Cold-build smoke test of a published Scripts package
+│   ├── verify-scripts-consumer.yml          # Cold-build smoke test of a published Scripts package
+│   ├── openfoam-oracle.yml                  # The OpenFOAM controller against the real kits (Linux, macOS, Windows)
+│   └── sweep.yml                            # Sweep, CalculiX and OpenFOAM tests on Linux, macOS and Windows
 │
 ├── OutWit.slnx                              # Solution file (SLNX format, .NET 10)
 ├── LICENSE                                  # MIT
@@ -288,14 +355,17 @@ See [Tools/OutWit.Controller.Pack/README.md](Tools/OutWit.Controller.Pack/README
 
 | Workflow                            | Trigger                       | Purpose                                                                                           |
 | ----------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------- |
-| [`publish.yml`](.github/workflows/publish.yml)                       | `workflow_dispatch`             | Publish any project. Tier-2 controllers (Render) have a release-assets-exist guard before the nuget.org push. |
+| [`publish.yml`](.github/workflows/publish.yml)                       | `workflow_dispatch`             | Publish any project. Tier-2 controllers (Render, ParaView, OpenFOAM) have a release-assets-exist guard before the nuget.org push. |
 | [`verify-render-consumer.yml`](.github/workflows/verify-render-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference the published Render package, assert every external asset materialised. |
 | [`verify-scripts-consumer.yml`](.github/workflows/verify-scripts-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference a published Scripts package, assert the staged `@Scripts/*.wit` layout matches what WitCloud's ScriptSeeder expects. |
+| [`openfoam-oracle.yml`](.github/workflows/openfoam-oracle.yml) | PR touching `OpenFOAM/**`, `workflow_dispatch` | The OpenFOAM controller against the real v2606 kits downloaded from OmnibusCloud/OpenFOAM: pitzDaily through `Foam.Run` serially and on two ranks (Linux, macOS), serially on Windows, plus the whole ordinary test run per platform. |
+| [`sweep.yml`](.github/workflows/sweep.yml) | PR touching `Sweep/**`, `CalculiX/**`, `OpenFOAM/**`, `workflow_dispatch` | The sweep and its solver families on Linux, macOS and Windows: the Sweep engine gates for CalculiX and OpenFOAM (fake solvers), the fault gate, the model and family tests, and the CalculiX and OpenFOAM controller tests. |
 
-A separate external smoke test lives outside this repo at
-`@Verify/ControllerConsumerCheck/` and consumes every published
-controller through nuget.org in a single `dotnet build`, then runs
-`verify.ps1` to assert all 28 expected paths land correctly.
+A separate external smoke test lives outside this repository: it
+consumes the nuget.org-published controllers in a single `dotnet build`
+and asserts that every expected path lands in the `@Controllers/`
+layout. The organization-feed Simulation packages are covered by their
+own test suites instead.
 
 ---
 

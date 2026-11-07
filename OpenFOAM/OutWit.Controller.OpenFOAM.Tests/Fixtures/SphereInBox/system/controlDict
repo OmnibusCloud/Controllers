@@ -1,0 +1,43 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  A sphere in a box: the controller's oracle case for meshing on the
+  decomposed case. blockMesh makes the box, snappyHexMesh cuts the sphere out
+  of it (an analytic surface, no geometry file), simpleFoam runs a few
+  laminar iterations past it.
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+
+application     simpleFoam;
+
+startFrom       startTime;
+
+startTime       0;
+
+stopAt          endTime;
+
+endTime         20;
+
+deltaT          1;
+
+writeControl    timeStep;
+
+writeInterval   20;
+
+purgeWrite      0;
+
+writeFormat     ascii;
+
+writePrecision  8;
+
+writeCompression off;
+
+timeFormat      general;
+
+timePrecision   6;
+
+runTimeModifiable false;

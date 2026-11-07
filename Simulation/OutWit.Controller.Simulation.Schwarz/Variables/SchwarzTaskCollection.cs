@@ -3,10 +3,11 @@ using System.Linq;
 using MemoryPack;
 using OutWit.Common.Abstract;
 using OutWit.Common.Collections;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 using OutWit.Engine.Data.Attributes;
 using OutWit.Engine.Data.Collections;
 using OutWit.Engine.Interfaces;
+using OutWit.Math.Simulation.Model.Schwarz;
 
 namespace OutWit.Controller.Simulation.Schwarz.Variables;
 
@@ -19,11 +20,22 @@ public sealed partial class WitVariableSchwarzTaskCollection : WitCollection<Sch
 {
     #region Constructors
 
+    /// <summary>
+    /// Creates the collection with no items yet — the form used when the script
+    /// declares it ahead of the first wave.
+    /// </summary>
+    /// <param name="name">Script name of the variable.</param>
     public WitVariableSchwarzTaskCollection(string name)
         : base(name)
     {
     }
 
+    /// <summary>
+    /// Deserialization constructor: rehydrates name and items together when the
+    /// collection crosses the wire.
+    /// </summary>
+    /// <param name="name">Script name of the variable.</param>
+    /// <param name="value">Deserialized items, one per subdomain of the wave.</param>
     [MemoryPackConstructor]
     public WitVariableSchwarzTaskCollection(string name, IReadOnlyList<SchwarzTaskData?> value)
         : base(name, value)
@@ -56,6 +68,12 @@ public sealed partial class WitVariableSchwarzTaskCollection : WitCollection<Sch
 
     #region IWitVariableFactory
 
+    /// <summary>
+    /// Factory hook the engine calls when the script declares a collection of
+    /// this type.
+    /// </summary>
+    /// <param name="name">Script name of the variable.</param>
+    /// <returns>An empty collection awaiting its first wave.</returns>
     public static WitVariableSchwarzTaskCollection Create(string name)
     {
         return new WitVariableSchwarzTaskCollection(name);

@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<VTKFile type="PPolyData" version="1.0" byte_order="LittleEndian" header_type="UInt64">
+  <PPolyData GhostLevel="0">
+    <PPointData Scalars="Elevation">
+      <PDataArray type="Float32" Name="Elevation"/>
+    </PPointData>
+    <PPoints>
+      <PDataArray type="Float32" Name="Points" NumberOfComponents="3"/>
+    </PPoints>
+    <Piece Source="shell_0.vtp"/>
+    <Piece Source="shell_1.vtp"/>
+  </PPolyData>
+</VTKFile>

@@ -1,11 +1,12 @@
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 using OutWit.Controller.Simulation.Parareal.Activities;
 using OutWit.Controller.Simulation.Parareal.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
+using OutWit.Math.Simulation.Model.Parareal;
 
 namespace OutWit.Controller.Simulation.Parareal.Adapters;
 
@@ -34,6 +35,11 @@ internal sealed class WitActivityAdapterPararealMakeTasks : WitActivityAdapterFu
 
         if (!pool.TrySetCollection(activity.ReturnReference, tasks))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+
+        // The first report claims the job's progress bar for this controller; later iterations are
+        // reported by Parareal.Correct, once their correction is known.
+        if (state.Round == 0)
+            JobProgressReporter.Report(ProcessingManager, status.JobId, 0.0, PararealProgress.DescribeFirstIteration(plan));
 
         await Task.CompletedTask;
     }

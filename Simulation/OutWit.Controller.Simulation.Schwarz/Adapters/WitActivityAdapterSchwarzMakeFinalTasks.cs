@@ -1,11 +1,12 @@
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 using OutWit.Controller.Simulation.Schwarz.Activities;
 using OutWit.Controller.Simulation.Schwarz.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
+using OutWit.Math.Simulation.Model.Schwarz;
 
 namespace OutWit.Controller.Simulation.Schwarz.Adapters;
 
@@ -34,6 +35,8 @@ internal sealed class WitActivityAdapterSchwarzMakeFinalTasks : WitActivityAdapt
 
         if (!pool.TrySetCollection(activity.ReturnReference, tasks))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+
+        JobProgressReporter.Report(ProcessingManager, status.JobId, SchwarzProgress.BeforeFinalPass(state), SchwarzProgress.DescribeFinalPass(plan));
 
         await Task.CompletedTask;
     }

@@ -7,6 +7,10 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Parareal.Activities;
 
+/// <summary>
+/// Extracts the iteration budget from the options as the Loop bound — the
+/// .wit grammar has no property access, so the read lives in an activity.
+/// </summary>
 [Activity("Parareal.IterationBudget")]
 [MemoryPackable]
 public sealed partial class WitActivityPararealIterationBudget : WitActivityFunction
@@ -43,6 +47,10 @@ public sealed partial class WitActivityPararealIterationBudget : WitActivityFunc
 
     #region Properties
 
+    /// <summary>
+    /// Pool reference to the solve options; MaxIterations becomes the loop
+    /// bound.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Options { get; init; }
 

@@ -1,0 +1,607 @@
+using System.Diagnostics;
+using OutWit.Controller.Visualization.ParaView.Model;
+using OutWit.Controller.Visualization.ParaView.Output;
+using OutWit.Controller.Visualization.ParaView.Runtime;
+using OutWit.Controller.Visualization.ParaView.Tests.Utils;
+using OutWit.Controller.Visualization.ParaView.Validation;
+
+namespace OutWit.Controller.Visualization.ParaView.Tests.Runtime;
+
+/// <summary>
+/// Runs the REAL controller-owned runner (the embedded render_task.py) under a local Python with a
+/// stub <c>paraview</c> package on PYTHONPATH, so the runner's own control flow — task file parsing,
+/// state resolution, plugin/state load, the post-load policy check, view/timestep selection, the
+/// screenshot call, output verification, the status document on every exit path and the exit codes —
+/// is exercised end to end rather than only mirrored by the C# fake. Ignored when no python is on PATH.
+/// </summary>
+[TestFixture]
+public sealed class ParaViewRunnerScriptTests
+{
+    #region Fields
+
+    private string m_python = null!;
+
+    private string m_root = null!;
+
+    private string m_stubDir = null!;
+
+    private string m_runnerPath = null!;
+
+    #endregion
+
+    #region Setup
+
+    [OneTimeSetUp]
+    public void OneTimeSetUp()
+    {
+        m_python = FindPython() ?? string.Empty;
+        if (m_python.Length == 0)
+            Assert.Ignore("no python interpreter on PATH");
+    }
+
+    [SetUp]
+    public void SetUp()
+    {
+        m_root = Path.Combine(Path.GetTempPath(), $"pv_runner_{Guid.NewGuid():N}");
+        m_stubDir = Path.Combine(m_root, "stub");
+        Directory.CreateDirectory(m_stubDir);
+        ParaViewStubPackage.WriteTo(m_stubDir);
+
+        m_runnerPath = Path.Combine(m_root, ParaViewRuntimeInfo.RUNNER_FILE_NAME);
+        File.WriteAllText(m_runnerPath, ParaViewRuntimeInfo.ReadEmbeddedText(ParaViewRuntimeInfo.RUNNER_RESOURCE)!);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        if (Directory.Exists(m_root))
+            Directory.Delete(m_root, recursive: true);
+    }
+
+    #endregion
+
+    #region Tests
+
+    [Test]
+    public void RunnerRendersATimestepThroughTheStubParaViewTest()
+    {
+        var state = new ParaViewStateBuilder().WithTimesteps(0, 0.5, 1.0);
+        var reader = state.AddReader("XMLUnstructuredGridReader", "field", "data/field_0.vtu", "data/field_1.vtu", "data/field_2.vtu");
+        state.AddRepresentation("UnstructuredGridRepresentation", reader);
+        state.AddRenderView();
+        var (task, workDir) = Prepare(state.Build(), timestepIndex: 1, timeValue: 0.5, materialize: ["data/field_1.vtu"]);
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(status!.Ok, Is.True, status.Error);
+            Assert.That(status.Stage, Is.EqualTo("done"));
+            Assert.That(status.ParaviewVersion, Is.EqualTo("6.1.1-stub"));
+            Assert.That(status.Width, Is.EqualTo(48));
+            Assert.That(status.Height, Is.EqualTo(32));
+            Assert.That(status.ProxyCount, Is.GreaterThan(0));
+            Assert.That(status.MissingReferences, Is.EqualTo(2));
+            Assert.That(status.VtkErrors, Is.EqualTo(0));
+            Assert.That(status.Backend, Is.EqualTo("vtkStubRenderWindow"));
+        });
+
+        var image = ParaViewImageInfo.TryRead(task.Outputs[0].OutputPath);
+        Assert.That(image, Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 48, 32, false)));
+
+        // The stub records what the runner asked for.
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        Assert.That(log, Does.Contain("animation_time=0.5"));
+        Assert.That(log, Does.Contain("view=RenderView1"));
+        Assert.That(log, Does.Contain("load_state="));
+    }
+
+    [Test]
+    public void RunnerOrbitsTheCameraAboutItsViewUpTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
+        var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
+        task.Outputs[0].CameraAzimuth = 135.0;
+        task.Outputs[0].CameraAxis = ParaViewCameraAxes.VIEW_UP;
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status!.Ok, Is.True, status.Error);
+
+        // The stub records the orbit: vtkCamera.Azimuth before the render, nothing else touched.
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(log, Does.Contain("azimuth=135.0"));
+            Assert.That(log, Does.Not.Contain("position=").And.Not.Contain("view_up="));
+            Assert.That(log.IndexOf("azimuth=135.0", StringComparison.Ordinal), Is.LessThan(log.IndexOf("render view=", StringComparison.Ordinal)));
+        });
+    }
+
+    [Test]
+    public void RunnerRevolvesTheCameraRigidlyAboutAWorldAxisTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
+        var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
+        task.Outputs[0].CameraAzimuth = 90.0;
+        task.Outputs[0].CameraAxis = ParaViewCameraAxes.Y;
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status!.Ok, Is.True, status.Error);
+
+        // The stub camera sits at (0,0,10) looking at the origin, up +Y: a 90-degree right-hand turn
+        // about +Y moves it to (10,0,0) and leaves the view-up alone (it lies on the axis).
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(log, Does.Contain("position=10.0000,0.0000,0.0000"));
+            Assert.That(log, Does.Contain("view_up=0.0000,1.0000,0.0000"));
+            Assert.That(log, Does.Not.Contain("azimuth="));
+            Assert.That(log.IndexOf("position=", StringComparison.Ordinal), Is.LessThan(log.IndexOf("render view=", StringComparison.Ordinal)));
+        });
+    }
+
+    [Test]
+    public void RunnerRaisesTheCameraRigidlyAboutItsRightAxisTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
+        var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
+        task.Outputs[0].CameraElevation = 90.0;
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status!.Ok, Is.True, status.Error);
+
+        // The stub camera sits at (0,0,10) looking at the origin, up +Y: a 90-degree rise about the
+        // right axis (view-up x direction = -X) lifts it to (0,10,0) looking straight down, and the
+        // view-up follows rigidly to -Z - no view-up reset, no flip.
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(log, Does.Contain("position=0.0000,10.0000,0.0000"));
+            Assert.That(log, Does.Contain("view_up=0.0000,0.0000,-1.0000"));
+            Assert.That(log, Does.Not.Contain("azimuth="));
+        });
+    }
+
+    [Test]
+    public void RunnerDolliesTheCameraTowardTheFocalPointTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
+        var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
+        task.Outputs[0].CameraDolly = 0.5;
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status!.Ok, Is.True, status.Error);
+
+        // Half the distance: (0,0,10) -> (0,0,5); the view-up is untouched.
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(log, Does.Contain("position=0.0000,0.0000,5.0000"));
+            Assert.That(log, Does.Not.Contain("view_up=").And.Not.Contain("azimuth="));
+        });
+    }
+
+    [Test]
+    public void RunnerAppliesAzimuthThenElevationThenDollyTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
+        var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
+        task.Outputs[0].CameraAzimuth = 90.0;
+        task.Outputs[0].CameraAxis = ParaViewCameraAxes.Y;
+        task.Outputs[0].CameraElevation = 90.0;
+        task.Outputs[0].CameraDolly = 0.5;
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status!.Ok, Is.True, status.Error);
+
+        // Azimuth 90 about +Y: (0,0,10) -> (10,0,0), up stays +Y; rise 90 about the new right axis
+        // (+Y x direction(-X) = +Z): (10,0,0) -> (0,10,0), up -> -X... then half the distance.
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        var lines = log.Split('\n').Select(me => me.TrimEnd('\r')).Where(me => me.StartsWith("position=", StringComparison.Ordinal)).ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(lines, Has.Count.EqualTo(3), "azimuth, elevation, dolly each move the position once");
+            Assert.That(lines[0], Is.EqualTo("position=10.0000,0.0000,0.0000"));
+            Assert.That(lines[1], Is.EqualTo("position=0.0000,10.0000,0.0000"));
+            Assert.That(lines[2], Is.EqualTo("position=0.0000,5.0000,0.0000"));
+        });
+    }
+
+    [Test]
+    public void RunnerLeavesTheCameraAloneWithoutATurntableTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").Build();
+        var (task, workDir) = Prepare(state, timestepIndex: 0, timeValue: null, materialize: ["data/field.vtu"]);
+
+        var (exitCode, _, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        Assert.That(log, Does.Not.Contain("azimuth=").And.Not.Contain("view_up="));
+    }
+
+    [Test]
+    public void RunnerRendersABatchOfOutputsFromOneLoadedStateTest()
+    {
+        // FrameBatch: three outputs in one process - the state loads once, every output selects its
+        // own timestep, the camera move of each starts from the captured framing (restored between
+        // outputs, never cumulative), every output gets its own file and verdict.
+        var state = new ParaViewStateBuilder().WithTimesteps(0, 0.5, 1.0);
+        var reader = state.AddReader("XMLUnstructuredGridReader", "field", "data/field_0.vtu", "data/field_1.vtu", "data/field_2.vtu");
+        state.AddRepresentation("UnstructuredGridRepresentation", reader);
+        state.AddRenderView();
+        var (task, workDir) = Prepare(state.Build(), timestepIndex: 0, timeValue: 0.0, materialize: ["data/field_0.vtu", "data/field_1.vtu", "data/field_2.vtu"]);
+        task.Outputs =
+        [
+            new ParaViewRunnerOutput { Index = 0, TaskId = "a", OutputPath = Path.Combine(workDir, "out", "frame_000000.png"), TimestepIndex = 0, TimeValue = 0.0, CameraAzimuth = 90.0, CameraAxis = ParaViewCameraAxes.Y },
+            new ParaViewRunnerOutput { Index = 1, TaskId = "b", OutputPath = Path.Combine(workDir, "out", "frame_000001.png"), TimestepIndex = 1, TimeValue = 0.5 },
+            new ParaViewRunnerOutput { Index = 2, TaskId = "c", OutputPath = Path.Combine(workDir, "out", "frame_000002.png"), TimestepIndex = 2, TimeValue = 1.0, CameraDolly = 0.5 }
+        ];
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(status!.Ok, Is.True, status.Error);
+            Assert.That(status.Outputs.Select(me => me.Index), Is.EqualTo(new[] { 0, 1, 2 }));
+            Assert.That(status.Outputs.All(me => me.Ok && me.Stage == "done"), Is.True);
+            Assert.That(status.RenderSeconds, Is.EqualTo(status.Outputs.Sum(me => me.RenderSeconds)).Within(0.01));
+        });
+
+        foreach (var output in task.Outputs)
+            Assert.That(ParaViewImageInfo.TryRead(output.OutputPath), Is.EqualTo(new ParaViewImageInfo(ParaViewImageFormat.Png, 48, 32, false)), output.OutputPath);
+
+        // One load, three timesteps in order; the first output's world-axis orbit moved the camera to
+        // (10,0,0), the second output starts again from the captured (0,0,10) - restored, not moved on -
+        // and the third dollies from the captured framing to (0,0,5).
+        var log = File.ReadAllText(Path.Combine(workDir, "stub.log"));
+        var positions = log.Split('\n').Select(me => me.TrimEnd('\r')).Where(me => me.StartsWith("position=", StringComparison.Ordinal)).ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(log.Split("load_state=").Length - 1, Is.EqualTo(1), "the state loads once per process");
+            Assert.That(log, Does.Contain("animation_time=0.0").And.Contain("animation_time=0.5").And.Contain("animation_time=1.0"));
+            Assert.That(positions, Is.EqualTo(new[] { "position=10.0000,0.0000,0.0000", "position=0.0000,0.0000,10.0000", "position=0.0000,0.0000,5.0000" }));
+            Assert.That(log.Split("save_screenshot=").Length - 1, Is.EqualTo(3));
+        });
+    }
+
+    [Test]
+    public void RunnerFailsTheWholeBatchOnOneBadOutputTest()
+    {
+        // All-or-nothing: the second output's timestep lies outside the timeline; the first rendered,
+        // the status names the failed output, the exit code is the policy refusal.
+        var (task, workDir) = Prepare(ParaViewStateBuilder.Typical("data/field.vtu").WithTimesteps(0, 1).Build(), timestepIndex: 0, timeValue: 0.0, materialize: ["data/field.vtu"]);
+        task.Outputs =
+        [
+            new ParaViewRunnerOutput { Index = 0, OutputPath = Path.Combine(workDir, "out", "frame_000000.png"), TimestepIndex = 0, TimeValue = 0.0 },
+            new ParaViewRunnerOutput { Index = 1, OutputPath = Path.Combine(workDir, "out", "frame_000007.png"), TimestepIndex = 7, TimeValue = 7.0 }
+        ];
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(status!.Ok, Is.False);
+            Assert.That(status.Error, Does.Contain("output 2 of 2").And.Contain("outside the timeline"));
+            Assert.That(status.Outputs.Select(me => (me.Index, me.Ok)), Is.EqualTo(new[] { (0, true), (1, false) }));
+            Assert.That(status.FirstFailedOutput()!.Stage, Is.EqualTo("select"));
+        });
+    }
+
+    [Test]
+    public void RunnerRefusesAnOutputPathUsedTwiceTest()
+    {
+        var (task, workDir) = Prepare(ParaViewStateBuilder.Typical("data/field.vtu").Build(), 0, null, ["data/field.vtu"]);
+        task.Outputs =
+        [
+            new ParaViewRunnerOutput { Index = 0, OutputPath = Path.Combine(workDir, "out", "frame.png"), TimestepIndex = 0 },
+            new ParaViewRunnerOutput { Index = 1, OutputPath = Path.Combine(workDir, "out", "frame.png"), TimestepIndex = 0 }
+        ];
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+
+        // A task-file refusal happens before the status path is known: the verdict travels through
+        // the exit code and stderr, like every other task-file error.
+        var (exitCode, _, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(stderr, Does.Contain("used twice"));
+    }
+
+    [Test]
+    public void RunnerRefusesAReferenceOutsideThePackageBeforeImportingParaViewTest()
+    {
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("C:/Users/me/field.vtu").Build(), 0, null, ["data/field.vtu"]);
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Stage, Is.EqualTo("resolve-state"));
+        Assert.That(status.Error, Does.Contain("drive letter"));
+    }
+
+    [TestCase("../../outside.vti")]
+    [TestCase("/etc/secret.vti")]
+    [TestCase("C:/Users/me/secret.vti")]
+    [TestCase("~/secret.vti")]
+    [TestCase("file:///etc/secret.vti")]
+    public void RunnerRefusesACollectionPieceOutsideThePackageTest(string piece)
+    {
+        // A .pvd's reader opens what the collection names - '..' and absolute names included - and
+        // the state check never sees those names: the runner checks them before ParaView loads.
+        var collection = $"<?xml version=\"1.0\"?>\n<VTKFile type=\"Collection\" version=\"0.1\">\n  <Collection>\n    <DataSet timestep=\"0\" file=\"{piece}\"/>\n  </Collection>\n</VTKFile>\n";
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/series.pvd").Build(), 0, null, ["data/series.pvd"],
+            contents: new Dictionary<string, string> { ["data/series.pvd"] = collection });
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Stage, Is.EqualTo("resolve-state"));
+        Assert.That(status.Error, Does.Contain("data/series.pvd").And.Contain("outside the package root"));
+    }
+
+    [Test]
+    public void RunnerRefusesAnEscapeNestedBehindAnIndexInsideThePackageTest()
+    {
+        // A multiblock index names a parallel index inside the package, which names a piece outside it.
+        var multiblock = "<VTKFile type=\"vtkMultiBlockDataSet\" version=\"1.0\"><vtkMultiBlockDataSet><DataSet index=\"0\" file=\"blocks/solid.pvtu\"/></vtkMultiBlockDataSet></VTKFile>";
+        var parallel = "<VTKFile type=\"PUnstructuredGrid\" version=\"1.0\"><PUnstructuredGrid GhostLevel=\"0\"><Piece Source=\"../../../piece_0.vtu\"/></PUnstructuredGrid></VTKFile>";
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/blocks.vtm").Build(), 0, null, ["data/blocks.vtm", "data/blocks/solid.pvtu"],
+            contents: new Dictionary<string, string> { ["data/blocks.vtm"] = multiblock, ["data/blocks/solid.pvtu"] = parallel });
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Error, Does.Contain("data/blocks/solid.pvtu").And.Contain("'../../../piece_0.vtu', outside the package root"));
+    }
+
+    [Test]
+    public void RunnerRefusesAFileSeriesListNamingAnAbsolutePathTest()
+    {
+        // Every file-series reader reads a <name>.series list (ParaView 6.2 follows an absolute name in it).
+        var list = "{ \"file-series-version\" : \"1.0\", \"files\" : [ { \"name\" : \"field_0.vtu\", \"time\" : 0 }, { \"name\" : \"/home/someone/secret.vtu\", \"time\" : 1 } ] }";
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/field.vtu.series").Build(), 0, null, ["data/field.vtu.series", "data/field_0.vtu"],
+            contents: new Dictionary<string, string> { ["data/field.vtu.series"] = list });
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Error, Does.Contain("data/field.vtu.series").And.Contain("outside the package root"));
+    }
+
+    [Test]
+    public void RunnerRefusesAFileSeriesListItCannotParseTest()
+    {
+        // The reader's JSON parser takes comments; the node's does not - what it cannot check it refuses.
+        var list = "{ /* comment */ \"files\" : [ { \"name\" : \"/etc/secret.vtu\" } ] }";
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/field.vtu.series").Build(), 0, null, ["data/field.vtu.series"],
+            contents: new Dictionary<string, string> { ["data/field.vtu.series"] = list });
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Error, Does.Contain("not a file-series list the node can check"));
+    }
+
+    [Test]
+    public void RunnerRefusesXmlWhoseVtkFileElementOpensPastTheCheckWindowTest()
+    {
+        var padded = "<?xml version=\"1.0\"?>\n<!--" + new string(' ', 70_000) + "-->\n<VTKFile type=\"Collection\"><Collection><DataSet file=\"/etc/secret.vti\"/></Collection></VTKFile>";
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/series.pvd").Build(), 0, null, ["data/series.pvd"],
+            contents: new Dictionary<string, string> { ["data/series.pvd"] = padded });
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Error, Does.Contain("without a VTKFile element"));
+    }
+
+    [Test]
+    public void RunnerAcceptsIndexesWhosePiecesStayInsideThePackageTest()
+    {
+        // The corpus shape: a multiblock index over pieces in its own subfolder, a nested parallel
+        // index beside them, a piece the task did not materialize (left to the reader).
+        var multiblock = "<?xml version=\"1.0\"?>\n<VTKFile type=\"vtkMultiBlockDataSet\" version=\"1.0\" byte_order=\"LittleEndian\"><vtkMultiBlockDataSet>"
+                         + "<DataSet index=\"0\" name=\"solid\" file=\"blocks/blocks_0.vtu\"/><DataSet index=\"1\" file=\"blocks/shell.pvtp\"/><DataSet index=\"2\" file=\"blocks/absent.vtu\"/>"
+                         + "</vtkMultiBlockDataSet></VTKFile>";
+        var parallel = "<VTKFile type=\"PPolyData\" version=\"1.0\"><PPolyData GhostLevel=\"0\"><Piece Source=\"shell_0.vtp\"/><Piece Source=\"./shell_1.vtp\"/></PPolyData></VTKFile>";
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/blocks.vtm").Build(), 0, null,
+            ["data/blocks.vtm", "data/blocks/blocks_0.vtu", "data/blocks/shell.pvtp", "data/blocks/shell_0.vtp", "data/blocks/shell_1.vtp"],
+            contents: new Dictionary<string, string> { ["data/blocks.vtm"] = multiblock, ["data/blocks/shell.pvtp"] = parallel, ["data/blocks/blocks_0.vtu"] = "<VTKFile type=\"UnstructuredGrid\"/>" });
+
+        var (exitCode, status, stderr) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(0), stderr);
+        Assert.That(status!.Ok, Is.True, status.Error);
+    }
+
+    [Test]
+    public void RunnerRefusesAProxyOutsideTheAllowlistAfterLoadTest()
+    {
+        var state = ParaViewStateBuilder.Typical("data/field.vtu");
+        state.AddFilter("SomeExoticFilter", "Exotic1", 1000);
+        var (task, _) = Prepare(state.Build(), 0, null, ["data/field.vtu"]);
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Stage, Is.EqualTo("validate"));
+        Assert.That(status.Error, Does.Contain("filters/SomeExoticFilter"));
+    }
+
+    [Test]
+    public void RunnerRefusesAnUnknownViewTest()
+    {
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/field.vtu").Build(), 0, null, ["data/field.vtu"], viewId: "Nope");
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Stage, Is.EqualTo("select"));
+        Assert.That(status.Error, Does.Contain("'Nope'"));
+    }
+
+    [Test]
+    public void RunnerFailsOnVtkErrorsInsteadOfPublishingTest()
+    {
+        // An element, not a comment: the runner re-serializes the resolved state and comments do not survive.
+        var state = ParaViewStateBuilder.Typical("data/field.vtu").WithExtraStateContent("<StubMarker name=\"STUB-VTK-ERROR\"/>");
+        var (task, _) = Prepare(state.Build(), 0, null, ["data/field.vtu"]);
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(1));
+        Assert.That(status!.Ok, Is.False);
+        Assert.That(status.VtkErrors, Is.EqualTo(1));
+        Assert.That(status.Error, Does.Contain("VTK reported 1 error"));
+    }
+
+    [Test]
+    public void RunnerRefusesATimestepMismatchTest()
+    {
+        var (task, _) = Prepare(ParaViewStateBuilder.Typical("data/field.vtu").WithTimesteps(0, 1, 2).Build(), timestepIndex: 2, timeValue: 7.0, materialize: ["data/field.vtu"]);
+
+        var (exitCode, status, _) = Run(task);
+
+        Assert.That(exitCode, Is.EqualTo(3));
+        Assert.That(status!.Error, Does.Contain("expects 7.0"));
+    }
+
+    [Test]
+    public void RunnerWritesStatusForAMissingTaskFileTest()
+    {
+        var (exitCode, _, stderr) = RunRaw(["--task-file", Path.Combine(m_root, "absent.json")]);
+
+        Assert.That(exitCode, Is.EqualTo(2));
+        Assert.That(stderr, Does.Contain("cannot read task file"));
+    }
+
+    #endregion
+
+    #region Tools
+
+    private (ParaViewRunnerTask Task, string WorkDir) Prepare(string stateXml, int timestepIndex, double? timeValue, string[] materialize, string viewId = "RenderView1",
+        IReadOnlyDictionary<string, string>? contents = null)
+    {
+        var workDir = Path.Combine(m_root, "work_" + Guid.NewGuid().ToString("N")[..8]);
+        var packageRoot = Path.Combine(workDir, "package");
+        Directory.CreateDirectory(Path.Combine(workDir, "out"));
+        Directory.CreateDirectory(packageRoot);
+
+        foreach (var logical in materialize)
+        {
+            var path = Path.Combine(packageRoot, logical.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, contents != null && contents.TryGetValue(logical, out var content) ? content : "data");
+        }
+
+        var statePath = Path.Combine(workDir, "state.pvsm");
+        File.WriteAllText(statePath, stateXml);
+
+        var task = new ParaViewRunnerTask
+        {
+            TaskId = "t",
+            StatePath = statePath,
+            PackageRoot = packageRoot,
+            WorkDir = workDir,
+            StatusPath = Path.Combine(workDir, "status.json"),
+            ViewId = viewId,
+            Width = 48,
+            Height = 32,
+            Format = "png",
+            AllowedProxies = [.. ParaViewProxyAllowlist.Bundled.EffectiveKeys([])],
+            BlockedProxyTypes = [.. ParaViewProxyPolicy.BLOCKED_PROXY_TYPES],
+            BlockedPropertyNames = [.. ParaViewProxyPolicy.BLOCKED_PROPERTY_NAMES],
+            FilePropertyNames = [.. ParaViewProxyPolicy.FILE_PROPERTY_NAMES],
+            FileReferenceGroups = [.. ParaViewProxyPolicy.FILE_REFERENCE_GROUPS],
+            MaxStateBytes = ParaViewInputLimits.MAX_STATE_BYTES,
+            MaxLogicalPathChars = ParaViewInputLimits.MAX_LOGICAL_PATH_CHARS,
+            Outputs = [new ParaViewRunnerOutput { Index = 0, TaskId = "t", OutputPath = Path.Combine(workDir, "out", "frame.png"), TimestepIndex = timestepIndex, TimeValue = timeValue }]
+        };
+
+        File.WriteAllText(Path.Combine(workDir, "task.json"), task.ToJson());
+        return (task, workDir);
+    }
+
+    private (int ExitCode, ParaViewRunnerStatus? Status, string Stderr) Run(ParaViewRunnerTask task)
+    {
+        var (exitCode, _, stderr) = RunRaw(["--task-file", Path.Combine(task.WorkDir, "task.json")], task.PackageRoot);
+        return (exitCode, ParaViewRunnerStatus.TryRead(task.StatusPath), stderr);
+    }
+
+    private (int ExitCode, string Stdout, string Stderr) RunRaw(string[] arguments, string? workingDirectory = null)
+    {
+        var startInfo = new ProcessStartInfo(m_python)
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WorkingDirectory = workingDirectory ?? m_root
+        };
+        startInfo.ArgumentList.Add(m_runnerPath);
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+        startInfo.Environment["PYTHONPATH"] = m_stubDir;
+        startInfo.Environment["PYTHONDONTWRITEBYTECODE"] = "1";
+
+        using var process = Process.Start(startInfo)!;
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(60_000))
+        {
+            process.Kill(entireProcessTree: true);
+            Assert.Fail("the runner did not exit in time");
+        }
+
+        return (process.ExitCode, stdout.Result, stderr.Result);
+    }
+
+    private static string? FindPython()
+    {
+        foreach (var candidate in new[] { "python3", "python" })
+        {
+            try
+            {
+                var info = new ProcessStartInfo(candidate, "--version") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+                using var process = Process.Start(info);
+                if (process == null)
+                    continue;
+
+                var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+                process.WaitForExit(10_000);
+                if (process.ExitCode == 0 && output.Contains("Python 3", StringComparison.Ordinal))
+                    return candidate;
+            }
+            catch
+            {
+                // Not on PATH.
+            }
+        }
+
+        return null;
+    }
+
+    #endregion
+}

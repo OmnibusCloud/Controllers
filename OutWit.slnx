@@ -31,14 +31,37 @@
     <Project Path="Render/OutWit.Controller.Render.Tests/OutWit.Controller.Render.Tests.csproj" />
   </Folder>
   <Folder Name="/Simulation/">
-    <Project Path="Simulation/OutWit.Controller.Simulation.Model/OutWit.Controller.Simulation.Model.csproj" />
-    <Project Path="Simulation/OutWit.Controller.Simulation.Model.Tests/OutWit.Controller.Simulation.Model.Tests.csproj" />
     <Project Path="Simulation/OutWit.Controller.Simulation.Schwarz/OutWit.Controller.Simulation.Schwarz.csproj" />
     <Project Path="Simulation/OutWit.Controller.Simulation.Schwarz.Scripts/OutWit.Controller.Simulation.Schwarz.Scripts.csproj" />
     <Project Path="Simulation/OutWit.Controller.Simulation.Schwarz.Tests/OutWit.Controller.Simulation.Schwarz.Tests.csproj" />
     <Project Path="Simulation/OutWit.Controller.Simulation.Parareal/OutWit.Controller.Simulation.Parareal.csproj" />
     <Project Path="Simulation/OutWit.Controller.Simulation.Parareal.Scripts/OutWit.Controller.Simulation.Parareal.Scripts.csproj" />
     <Project Path="Simulation/OutWit.Controller.Simulation.Parareal.Tests/OutWit.Controller.Simulation.Parareal.Tests.csproj" />
+  </Folder>
+  <Folder Name="/CalculiX/">
+    <Project Path="CalculiX/OutWit.Controller.CalculiX/OutWit.Controller.CalculiX.csproj" />
+    <Project Path="CalculiX/OutWit.Controller.CalculiX.Model/OutWit.Controller.CalculiX.Model.csproj" />
+    <Project Path="CalculiX/OutWit.Controller.CalculiX.Tests/OutWit.Controller.CalculiX.Tests.csproj" />
+    <Project Path="CalculiX/OutWit.Controller.CalculiX.Tests.FakeCcx/OutWit.Controller.CalculiX.Tests.FakeCcx.csproj" />
+  </Folder>
+  <Folder Name="/Sweep/">
+    <Project Path="Sweep/OutWit.Controller.Sweep/OutWit.Controller.Sweep.csproj" />
+    <Project Path="Sweep/OutWit.Controller.Sweep.Model/OutWit.Controller.Sweep.Model.csproj" />
+    <Project Path="Sweep/OutWit.Controller.Sweep.Scripts/OutWit.Controller.Sweep.Scripts.csproj" />
+    <Project Path="Sweep/OutWit.Controller.Sweep.Tests/OutWit.Controller.Sweep.Tests.csproj" />
+  </Folder>
+  <Folder Name="/OpenFOAM/">
+    <Project Path="OpenFOAM/OutWit.Controller.OpenFOAM/OutWit.Controller.OpenFOAM.csproj" />
+    <Project Path="OpenFOAM/OutWit.Controller.OpenFOAM.Model/OutWit.Controller.OpenFOAM.Model.csproj" />
+    <Project Path="OpenFOAM/OutWit.Controller.OpenFOAM.Tests/OutWit.Controller.OpenFOAM.Tests.csproj" />
+    <Project Path="OpenFOAM/OutWit.Controller.OpenFOAM.Tests.FakeFoam/OutWit.Controller.OpenFOAM.Tests.FakeFoam.csproj" />
+  </Folder>
+  <Folder Name="/Visualization/">
+    <Project Path="Visualization/OutWit.Controller.Visualization.ParaView/OutWit.Controller.Visualization.ParaView.csproj" />
+    <Project Path="Visualization/OutWit.Controller.Visualization.ParaView.Model/OutWit.Controller.Visualization.ParaView.Model.csproj" />
+    <Project Path="Visualization/OutWit.Controller.Visualization.ParaView.Scripts/OutWit.Controller.Visualization.ParaView.Scripts.csproj" />
+    <Project Path="Visualization/OutWit.Controller.Visualization.ParaView.Tests/OutWit.Controller.Visualization.ParaView.Tests.csproj" />
+    <Project Path="Visualization/OutWit.Controller.Visualization.ParaView.Tests.FakePvpython/OutWit.Controller.Visualization.ParaView.Tests.FakePvpython.csproj" />
   </Folder>
   <Folder Name="/AI/">
     <Project Path="AI/OutWit.Controller.AI.Verify/OutWit.Controller.AI.Verify.csproj" />

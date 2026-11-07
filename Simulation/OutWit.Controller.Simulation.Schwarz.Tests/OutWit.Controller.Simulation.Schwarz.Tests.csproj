@@ -25,6 +25,8 @@
   <ItemGroup>
     <ExcludedControllerModule Include="render.module" />
     <ExcludedControllerModule Include="renderdcc.module" />
+    <ExcludedControllerModule Include="calculix.module" />
+    <ExcludedControllerModule Include="sweep.module" />
   </ItemGroup>
 
 </Project>

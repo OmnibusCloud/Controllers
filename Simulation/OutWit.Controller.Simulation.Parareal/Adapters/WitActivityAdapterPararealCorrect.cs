@@ -1,9 +1,9 @@
 using System.Collections;
 using System.Linq;
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Numerics;
-using OutWit.Controller.Simulation.Model.Parareal;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Numerics;
+using OutWit.Math.Simulation.Parareal;
 using OutWit.Controller.Simulation.Parareal.Activities;
 using OutWit.Controller.Simulation.Parareal.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
@@ -12,6 +12,9 @@ using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Parareal.Adapters;
+
+using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
+using OutWit.Math.Simulation.Model.Parareal;
 
 internal sealed class WitActivityAdapterPararealCorrect : WitActivityAdapterFunction<WitActivityPararealCorrect>
 {
@@ -74,8 +77,8 @@ internal sealed class WitActivityAdapterPararealCorrect : WitActivityAdapterFunc
 
         for (var slab = frontier; slab < plan.Slabs; slab++)
         {
-            var coarseNew = kernel.CoarsePropagate(newFields[slab]);
-            var coarseOld = kernel.CoarsePropagate(oldFields[slab]);
+            var coarseNew = kernel.CoarsePropagate(newFields[slab], slab);
+            var coarseOld = kernel.CoarsePropagate(oldFields[slab], slab);
 
             var next = new double[coarseNew.Length];
             for (var i = 0; i < next.Length; i++)
@@ -104,11 +107,14 @@ internal sealed class WitActivityAdapterPararealCorrect : WitActivityAdapterFunc
             CorrectionNorm = correction,
             Scale = state.Scale,
             Eps = state.Eps,
-            StateBlobIds = newBlobIds
+            StateBlobIds = newBlobIds,
+            History = [.. state.History, correction]
         };
 
         if (!pool.TrySetValue(activity.ReturnReference, next2))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+
+        JobProgressReporter.Report(ProcessingManager, status.JobId, PararealProgress.AfterIteration(plan, next2), PararealProgress.DescribeIteration(next2));
     }
 
     private async Task<double[]> DownloadFieldAsync(Guid blobId)

@@ -1,0 +1,30 @@
+FoamFile { version 2.0; format ascii; class dictionary; object controlDict; }
+
+// The lid-driven cavity, nine steps of 0.005 s to 0.045 s, written every
+// four steps: 0.02 and 0.04 are written, the final time is not. What a
+// sweep of endTime or writeInterval does to any case.
+application     icoFoam;
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         0.045;
+deltaT          0.005;
+writeControl    timeStep;
+writeInterval   4;
+writeFormat     ascii;
+writePrecision  6;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable true;
+
+functions
+{
+    ownMinMax
+    {
+        type            fieldMinMax;
+        libs            (fieldFunctionObjects);
+        fields          (p);
+        log             false;
+        writeControl    writeTime;
+    }
+}

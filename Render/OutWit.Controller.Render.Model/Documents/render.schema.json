@@ -1,0 +1,686 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:omnibuscloud:documents:render",
+  "title": "OmnibusCloud job document vocabulary: render",
+  "description": "Published document types of one controller component. Each $defs entry keyed by a type id (<component>.<name>@<major>) is the value shape carried by a job request parameter of kind \"document\" and by the value document of a job variable; each entry keyed by a plain name is an enum referenced by those shapes. Wire convention: camelCase properties, enum member names as strings, null properties omitted.",
+  "x-oc-vocabulary": {
+    "schemaVersion": 1,
+    "component": "render",
+    "types": [
+      "render.bakeOptions@1",
+      "render.options@1",
+      "render.preflight@1",
+      "render.preflightFrames@1",
+      "render.preflightStillTiled@1",
+      "render.preflightVideo@1",
+      "render.runtimeDiagnostics@1",
+      "render.sceneAttachmentRef@1",
+      "render.sceneRef@1",
+      "render.tileOptions@1",
+      "render.validateBlend@1",
+      "render.videoOptions@1"
+    ],
+    "source": {
+      "assembly": "OutWit.Controller.Render.Model",
+      "version": "1.8.0"
+    },
+    "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
+  },
+  "$defs": {
+    "render.bakeOptions@1": {
+      "type": "object",
+      "title": "RenderBakeOptions",
+      "description": "Options for a host-delegated simulation bake (Render.BakeSimulation). The bake runs once on a single node selected by Grid.Delegate (the fastest compatible node, by the same render-throughput benchmark used for distribution), converting an unbaked sequential simulation into a per-frame, frame-addressable OpenVDB cache that is then sliced and rendered distributed.",
+      "x-oc-type-id": "render.bakeOptions@1",
+      "x-oc-binding-name": "RenderBakeOptions",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderBakeOptionsData, OutWit.Controller.Render.Model",
+      "properties": {
+        "simulationKinds": {
+          "description": "Comma-separated simulation kinds to bake. v1 honours \"Fluid\" (Mantaflow gas/liquid domains). Other kinds (Cloth, Particles, …) reuse the same delegate-bake framework in later iterations.",
+          "x-oc-clr-name": "SimulationKinds",
+          "type": "string"
+        },
+        "cacheFormat": {
+          "description": "Cache format for the baked sequence. v1 produces \"OpenVDB\" (per-frame, frame-addressable).",
+          "x-oc-clr-name": "CacheFormat",
+          "type": "string"
+        },
+        "resolutionMax": {
+          "description": "Optional override for the fluid domain resolution (resolution_max). 0 keeps the scene's value. Lets a submitter cap network bake cost / cache size without editing the scene.",
+          "x-oc-clr-name": "ResolutionMax",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      }
+    },
+    "render.options@1": {
+      "type": "object",
+      "title": "RenderOptions",
+      "description": "Rendering parameters: format, engine, and quality settings. Shared between SDK, controller, and plugins.",
+      "x-oc-type-id": "render.options@1",
+      "x-oc-binding-name": "RenderOptions",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderOptionsData, OutWit.Controller.Render.Model",
+      "properties": {
+        "format": {
+          "description": "Output image format.",
+          "x-oc-clr-name": "Format",
+          "$ref": "#/$defs/RenderFormat"
+        },
+        "engine": {
+          "description": "Render engine.",
+          "x-oc-clr-name": "Engine",
+          "$ref": "#/$defs/RenderEngine"
+        },
+        "samples": {
+          "description": "Sample count. 0 = use scene default.",
+          "x-oc-clr-name": "Samples",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "resolutionX": {
+          "description": "Output width. 0 = use scene default.",
+          "x-oc-clr-name": "ResolutionX",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "resolutionY": {
+          "description": "Output height. 0 = use scene default.",
+          "x-oc-clr-name": "ResolutionY",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "denoise": {
+          "description": "Apply denoising to the rendered image.",
+          "x-oc-clr-name": "Denoise",
+          "type": "boolean"
+        },
+        "batchSize": {
+          "description": "Persistent-batch chunk size: how many frames/tiles Render.SplitBatched groups into one chunk (each chunk renders in a single Blender process). 0 = use the per-engine default (Render.Split derives it from Engine). Declared last so the wire format stays backward compatible — callers (plugin/SDK) that don't set it deserialize to 0 and get the default.",
+          "x-oc-clr-name": "BatchSize",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "colorMode": {
+          "description": "Output colour channels. Default reproduces legacy behaviour (RGB for PNG/JPEG, scene default for EXR). Declared after BatchSize so the wire format stays backward compatible — old callers deserialize to Default and render as before.",
+          "x-oc-clr-name": "ColorMode",
+          "$ref": "#/$defs/RenderColorMode"
+        },
+        "filmTransparent": {
+          "description": "Whether the film/world background is rendered transparent. Default leaves the scene's own setting untouched. Appended for wire back-compat.",
+          "x-oc-clr-name": "FilmTransparent",
+          "$ref": "#/$defs/RenderFilmTransparency"
+        },
+        "colorDepth": {
+          "description": "Output bit depth. Default leaves the scene/format default untouched. Appended for wire back-compat.",
+          "x-oc-clr-name": "ColorDepth",
+          "$ref": "#/$defs/RenderColorDepth"
+        }
+      }
+    },
+    "render.preflight@1": {
+      "type": "object",
+      "title": "RenderPreflight",
+      "description": "Unified preflight validation result across the currently supported render modes.",
+      "x-oc-type-id": "render.preflight@1",
+      "x-oc-binding-name": "RenderPreflight",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderPreflightData, OutWit.Controller.Render.Model",
+      "properties": {
+        "runtimeDiagnostics": {
+          "description": "Packaged runtime diagnostics used to evaluate the preflight request.",
+          "x-oc-clr-name": "RuntimeDiagnostics",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/render.runtimeDiagnostics@1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "still": {
+          "description": "Single-frame still preflight result, evaluated as a one-frame specialization of frame rendering.",
+          "x-oc-clr-name": "Still",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/render.preflightFrames@1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frames": {
+          "description": "Frame-range render preflight result.",
+          "x-oc-clr-name": "Frames",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/render.preflightFrames@1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stillTiled": {
+          "description": "Tiled-still render preflight result.",
+          "x-oc-clr-name": "StillTiled",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/render.preflightStillTiled@1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "video": {
+          "description": "Video render preflight result.",
+          "x-oc-clr-name": "Video",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/render.preflightVideo@1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "canRenderAll": {
+          "description": "Whether all currently evaluated render modes are ready on the current packaged runtime.",
+          "x-oc-clr-name": "CanRenderAll",
+          "type": "boolean"
+        }
+      }
+    },
+    "render.preflightFrames@1": {
+      "type": "object",
+      "title": "RenderPreflightFrames",
+      "description": "Preflight validation result for frame-based rendering on the current packaged runtime.",
+      "x-oc-type-id": "render.preflightFrames@1",
+      "x-oc-binding-name": "RenderPreflightFrames",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderPreflightFramesData, OutWit.Controller.Render.Model",
+      "properties": {
+        "canRender": {
+          "description": "Whether the current packaged runtime can execute the requested frame render.",
+          "x-oc-clr-name": "CanRender",
+          "type": "boolean"
+        },
+        "runtimeTarget": {
+          "description": "Runtime target resolved for the current process, such as windows-x64.",
+          "x-oc-clr-name": "RuntimeTarget",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issues": {
+          "description": "Human-readable preflight issues that block the requested frame render.",
+          "x-oc-clr-name": "Issues",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "description": "Human-readable preflight warnings that do not block the requested frame render.",
+          "x-oc-clr-name": "Warnings",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "render.preflightStillTiled@1": {
+      "type": "object",
+      "title": "RenderPreflightStillTiled",
+      "description": "Preflight validation result for tiled still rendering on the current packaged runtime.",
+      "x-oc-type-id": "render.preflightStillTiled@1",
+      "x-oc-binding-name": "RenderPreflightStillTiled",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderPreflightStillTiledData, OutWit.Controller.Render.Model",
+      "properties": {
+        "canRender": {
+          "description": "Whether the current packaged runtime can execute the requested tiled still render.",
+          "x-oc-clr-name": "CanRender",
+          "type": "boolean"
+        },
+        "runtimeTarget": {
+          "description": "Runtime target resolved for the current process, such as windows-x64.",
+          "x-oc-clr-name": "RuntimeTarget",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requestedBlendMode": {
+          "description": "Requested tile blend mode for the preflight validation.",
+          "x-oc-clr-name": "RequestedBlendMode",
+          "$ref": "#/$defs/TileBlendMode"
+        },
+        "issues": {
+          "description": "Human-readable preflight issues that block the requested tiled render.",
+          "x-oc-clr-name": "Issues",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "description": "Human-readable preflight warnings that do not block the requested tiled render.",
+          "x-oc-clr-name": "Warnings",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "render.preflightVideo@1": {
+      "type": "object",
+      "title": "RenderPreflightVideo",
+      "description": "Preflight validation result for video rendering on the current packaged runtime.",
+      "x-oc-type-id": "render.preflightVideo@1",
+      "x-oc-binding-name": "RenderPreflightVideo",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderPreflightVideoData, OutWit.Controller.Render.Model",
+      "properties": {
+        "canRender": {
+          "description": "Whether the current packaged runtime can execute the requested video render.",
+          "x-oc-clr-name": "CanRender",
+          "type": "boolean"
+        },
+        "runtimeTarget": {
+          "description": "Runtime target resolved for the current process, such as windows-x64.",
+          "x-oc-clr-name": "RuntimeTarget",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issues": {
+          "description": "Human-readable preflight issues that block the requested video render.",
+          "x-oc-clr-name": "Issues",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "description": "Human-readable preflight warnings that do not block the requested video render.",
+          "x-oc-clr-name": "Warnings",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "render.runtimeDiagnostics@1": {
+      "type": "object",
+      "title": "RenderRuntimeDiagnostics",
+      "description": "Runtime diagnostics for the packaged render controller tools available on the current node.",
+      "x-oc-type-id": "render.runtimeDiagnostics@1",
+      "x-oc-binding-name": "RenderRuntimeDiagnostics",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderRuntimeDiagnosticsData, OutWit.Controller.Render.Model",
+      "properties": {
+        "runtimeTarget": {
+          "description": "Runtime target resolved for the current process, such as windows-x64.",
+          "x-oc-clr-name": "RuntimeTarget",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blenderAvailable": {
+          "description": "Whether the packaged Blender runtime is available.",
+          "x-oc-clr-name": "BlenderAvailable",
+          "type": "boolean"
+        },
+        "blenderVersion": {
+          "description": "Blender version string when available.",
+          "x-oc-clr-name": "BlenderVersion",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "availableRenderBackends": {
+          "description": "Render backends detected as available for automatic local selection.",
+          "x-oc-clr-name": "AvailableRenderBackends",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "selectedRenderBackend": {
+          "description": "Backend currently selected by the node for automatic rendering.",
+          "x-oc-clr-name": "SelectedRenderBackend",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "usesGpuForRendering": {
+          "description": "Whether automatic local selection resolved to a GPU backend.",
+          "x-oc-clr-name": "UsesGpuForRendering",
+          "type": "boolean"
+        },
+        "renderBackendSelectionMessage": {
+          "description": "Human-readable automatic backend selection summary.",
+          "x-oc-clr-name": "RenderBackendSelectionMessage",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ffmpegAvailable": {
+          "description": "Whether the packaged ffmpeg runtime is available.",
+          "x-oc-clr-name": "FfmpegAvailable",
+          "type": "boolean"
+        },
+        "ffmpegVersion": {
+          "description": "ffmpeg version string when available.",
+          "x-oc-clr-name": "FfmpegVersion",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ffprobeAvailable": {
+          "description": "Whether the packaged ffprobe runtime is available.",
+          "x-oc-clr-name": "FfprobeAvailable",
+          "type": "boolean"
+        },
+        "ffprobeVersion": {
+          "description": "ffprobe version string when available.",
+          "x-oc-clr-name": "FfprobeVersion",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "supportsCenterPriorityCrop": {
+          "description": "Whether tiled center-priority crop stitching is supported.",
+          "x-oc-clr-name": "SupportsCenterPriorityCrop",
+          "type": "boolean"
+        },
+        "supportsAlphaBlend": {
+          "description": "Whether tiled alpha-blend stitching is supported.",
+          "x-oc-clr-name": "SupportsAlphaBlend",
+          "type": "boolean"
+        }
+      }
+    },
+    "render.sceneAttachmentRef@1": {
+      "type": "object",
+      "title": "RenderSceneAttachmentRef",
+      "description": "Metadata about one addon-side dependency artifact associated with a scene reference.",
+      "x-oc-type-id": "render.sceneAttachmentRef@1",
+      "x-oc-binding-name": "RenderSceneAttachmentRef",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderSceneAttachmentRefData, OutWit.Controller.Render.Model",
+      "properties": {
+        "kind": {
+          "description": "Logical dependency kind, for example ImageAsset or Font.",
+          "x-oc-clr-name": "Kind",
+          "type": "string"
+        },
+        "blobId": {
+          "description": "Cloud blob identifier of the uploaded dependency artifact when it is transferred separately from the blend file.",
+          "x-oc-clr-name": "BlobId",
+          "type": "string",
+          "format": "uuid"
+        },
+        "originalPath": {
+          "description": "Original addon-side source path observed in the Blender scene.",
+          "x-oc-clr-name": "OriginalPath",
+          "type": "string"
+        },
+        "relativePath": {
+          "description": "Logical relative path or slot name inside the addon-side scene package.",
+          "x-oc-clr-name": "RelativePath",
+          "type": "string"
+        },
+        "packagingStrategy": {
+          "description": "Packaging strategy attempted by the addon for this dependency.",
+          "x-oc-clr-name": "PackagingStrategy",
+          "type": "string"
+        },
+        "frame": {
+          "description": "Frame this artifact belongs to, for per-frame baked simulation caches (one cache file per frame). null = applies to all frames (textures, linked libraries, and other non-frame-specific deps). Lets Render.Split* send each render node only the cache files for the frames it renders. Appended last for MemoryPack wire back-compatibility.",
+          "x-oc-clr-name": "Frame",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      }
+    },
+    "render.sceneRef@1": {
+      "type": "object",
+      "title": "RenderSceneRef",
+      "description": "Bootstrap blob-backed typed-scene reference for host-side BuildBlendFromRefs execution. Current implementation points directly at a prepared .blend blob in storage.",
+      "x-oc-type-id": "render.sceneRef@1",
+      "x-oc-binding-name": "RenderSceneRef",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderSceneRefData, OutWit.Controller.Render.Model",
+      "properties": {
+        "blendBlobId": {
+          "description": "Blob identifier of a prepared .blend payload.",
+          "x-oc-clr-name": "BlendBlobId",
+          "type": "string",
+          "format": "uuid"
+        },
+        "attachedFiles": {
+          "description": "Addon-side metadata about dependency artifacts associated with the referenced scene payload.",
+          "x-oc-clr-name": "AttachedFiles",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/render.sceneAttachmentRef@1"
+          }
+        }
+      }
+    },
+    "render.tileOptions@1": {
+      "type": "object",
+      "title": "RenderTileOptions",
+      "description": "Tile-specific options for tiled still rendering. Kept separate from RenderOptionsData because different scripts may need different tiling inputs.",
+      "x-oc-type-id": "render.tileOptions@1",
+      "x-oc-binding-name": "RenderTileOptions",
+      "x-oc-clr": "OutWit.Controller.Render.Model.TileOptionsData, OutWit.Controller.Render.Model",
+      "properties": {
+        "overlapPx": {
+          "description": "Tile overlap in pixels. Current tiled slice uses center-priority crop when overlap is greater than zero.",
+          "x-oc-clr-name": "OverlapPx",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "blendMode": {
+          "description": "Stitching strategy for overlap regions.",
+          "x-oc-clr-name": "BlendMode",
+          "$ref": "#/$defs/TileBlendMode"
+        }
+      }
+    },
+    "render.validateBlend@1": {
+      "type": "object",
+      "title": "RenderValidateBlend",
+      "description": "Validation result for one uploaded .blend scene.",
+      "x-oc-type-id": "render.validateBlend@1",
+      "x-oc-binding-name": "RenderValidateBlend",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderValidateBlendData, OutWit.Controller.Render.Model",
+      "properties": {
+        "isValid": {
+          "description": "Whether the scene is currently considered portable and valid for the supported remote render flow.",
+          "x-oc-clr-name": "IsValid",
+          "type": "boolean"
+        },
+        "issues": {
+          "description": "Validation issues that block the current remote render flow.",
+          "x-oc-clr-name": "Issues",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "description": "Validation findings that do not currently block the remote render flow but may require user attention.",
+          "x-oc-clr-name": "Warnings",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "render.videoOptions@1": {
+      "type": "object",
+      "title": "RenderVideoOptions",
+      "description": "Video encoding options for the first production RenderVideo path. Current scope is intentionally minimal: MP4 container with H.264 video and no audio.",
+      "x-oc-type-id": "render.videoOptions@1",
+      "x-oc-binding-name": "RenderVideoOptions",
+      "x-oc-clr": "OutWit.Controller.Render.Model.VideoOptionsData, OutWit.Controller.Render.Model",
+      "properties": {
+        "frameRate": {
+          "description": "Output frame rate in frames per second.",
+          "x-oc-clr-name": "FrameRate",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "constantRateFactor": {
+          "description": "CRF quality setting passed to the ffmpeg encoder (libx264/libx265/libvpx-vp9). Lower values mean higher quality and larger output.",
+          "x-oc-clr-name": "ConstantRateFactor",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "format": {
+          "description": "Container + codec preset. APPENDED after ConstantRateFactor (wire order is append-only); Default keeps the legacy MP4/H.264 behaviour for old payloads.",
+          "x-oc-clr-name": "Format",
+          "$ref": "#/$defs/VideoFormat"
+        }
+      }
+    },
+    "RenderColorDepth": {
+      "type": "string",
+      "title": "RenderColorDepth",
+      "description": "Output bit depth per channel (Blender's image_settings.color_depth).",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderColorDepth",
+      "enum": [
+        "Default",
+        "Eight",
+        "Sixteen",
+        "ThirtyTwo"
+      ],
+      "x-oc-member-descriptions": {
+        "Default": "Leave the scene/format default untouched (legacy behaviour).",
+        "Eight": "8-bit (PNG/JPEG).",
+        "Sixteen": "16-bit (PNG, EXR half).",
+        "ThirtyTwo": "32-bit (EXR full float)."
+      }
+    },
+    "RenderColorMode": {
+      "type": "string",
+      "title": "RenderColorMode",
+      "description": "Output colour channels for a render.",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderColorMode",
+      "enum": [
+        "Default",
+        "RGB",
+        "RGBA"
+      ],
+      "x-oc-member-descriptions": {
+        "Default": "Legacy behaviour: force RGB for PNG/JPEG, leave the scene default for EXR. Keeps old clients (which don't send a colour mode) rendering exactly as before.",
+        "RGB": "RGB (no alpha).",
+        "RGBA": "RGBA (with alpha) — needed for transparent renders / compositing."
+      }
+    },
+    "RenderEngine": {
+      "type": "string",
+      "title": "RenderEngine",
+      "description": "Render engine selection.",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderEngine",
+      "enum": [
+        "Cycles",
+        "Eevee",
+        "GreasePencil"
+      ]
+    },
+    "RenderFilmTransparency": {
+      "type": "string",
+      "title": "RenderFilmTransparency",
+      "description": "Whether the film/world background is rendered transparent (Blender's render.film_transparent).",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderFilmTransparency",
+      "enum": [
+        "Default",
+        "Opaque",
+        "Transparent"
+      ],
+      "x-oc-member-descriptions": {
+        "Default": "Leave the scene's own film-transparent setting untouched (legacy behaviour).",
+        "Opaque": "Force an opaque background.",
+        "Transparent": "Force a transparent background (combine with RGBA for transparent output)."
+      }
+    },
+    "RenderFormat": {
+      "type": "string",
+      "title": "RenderFormat",
+      "description": "Output image format for rendering. APPEND-ONLY: values travel as MemoryPack ints — never reorder or remove members.",
+      "x-oc-clr": "OutWit.Controller.Render.Model.RenderFormat",
+      "enum": [
+        "PNG",
+        "EXR",
+        "JPEG",
+        "TIFF",
+        "WEBP"
+      ]
+    },
+    "TileBlendMode": {
+      "type": "string",
+      "title": "TileBlendMode",
+      "description": "Stitching mode for tiled still rendering.",
+      "x-oc-clr": "OutWit.Controller.Render.Model.TileBlendMode",
+      "enum": [
+        "CenterPriorityCrop",
+        "AlphaBlend"
+      ],
+      "x-oc-member-descriptions": {
+        "CenterPriorityCrop": "Crop each rendered tile back to its logical core area before overlay.",
+        "AlphaBlend": "Blend overlap regions with linear feathering and normalized weight accumulation."
+      }
+    },
+    "VideoFormat": {
+      "type": "string",
+      "title": "VideoFormat",
+      "description": "Video container + codec PRESET for the RenderVideo path. A single preset enum (instead of two independent container/codec axes) keeps invalid combinations unrepresentable on the wire. Default = the legacy behaviour (MP4/H.264), so payloads from older clients that do not send the field are encoded exactly as before. APPEND-ONLY: values travel as MemoryPack ints — never reorder or remove members.",
+      "x-oc-clr": "OutWit.Controller.Render.Model.VideoFormat",
+      "enum": [
+        "Default",
+        "Mp4H264",
+        "Mp4H265",
+        "WebMVp9",
+        "MovProres422Hq",
+        "MovProres4444"
+      ],
+      "x-oc-member-descriptions": {
+        "MovProres422Hq": "QuickTime ProRes 422 HQ — the editing/grading intermediate standard. Quality is fixed by the ProRes profile; ConstantRateFactor is ignored.",
+        "MovProres4444": "QuickTime ProRes 4444 — carries an ALPHA channel (transparent video for overlays) when the rendered frames have one (RGBA + transparent film). CRF is ignored."
+      }
+    }
+  }
+}

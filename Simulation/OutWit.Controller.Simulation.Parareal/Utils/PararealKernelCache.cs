@@ -1,6 +1,8 @@
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Parareal;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Parareal;
 using OutWit.Engine.Interfaces;
+using OutWit.Math.Simulation.Model.Parareal;
+using OutWit.Math.Simulation.Model.Problem;
 
 namespace OutWit.Controller.Simulation.Parareal.Utils;
 
@@ -19,7 +21,7 @@ internal static class PararealKernelCache
 
     #region Fields
 
-    private static readonly SimulationComputeCache<string, PararealKernel> s_kernels = new(MAX_CACHED_KERNELS);
+    private static readonly SimulationComputeCache<string, PararealKernel> m_kernels = new(MAX_CACHED_KERNELS);
 
     #endregion
 
@@ -36,7 +38,7 @@ internal static class PararealKernelCache
         var key = $"{modelBlobId:N}:{slabs}:{coarsening}:{totalTime:R}:{fineStepsPerSlab}";
         var modelPath = await blobService.GetLocalPathAsync(modelBlobId);
 
-        return s_kernels.GetOrCreate(key, () =>
+        return m_kernels.GetOrCreate(key, () =>
             new PararealKernel(
                 SimulationModelDefinition.FromBlobBytes(File.ReadAllBytes(modelPath)),
                 slabs,

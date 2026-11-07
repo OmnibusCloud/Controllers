@@ -9,6 +9,13 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Parareal;
 
+/// <summary>
+/// Plugin entry point of the parareal (parallel-in-time) transient solver:
+/// registers the variables, collections and activity adapters the bundled
+/// PararealSolve script is built from. Loads on both sides of the wire — the
+/// server executes every activity except Parareal.Propagate, which runs on the
+/// nodes.
+/// </summary>
 [WitPluginManifest(ControllerBuildInfo.NAME, Version = ControllerBuildInfo.VERSION)]
 [WitPluginDependency("Variables", MinimumVersion = "1.0.0")]
 public sealed class WitControllerPararealModule : WitPluginBase, IWitControllerNode, IWitControllerHost

@@ -1,0 +1,36 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.Visualization.ParaView.Scripts
+      NuGet package. Auto-imported into any csproj that PackageReferences this
+      scripts pack. Copies content/scripts/*.wit into the consumer's
+      $(OutputPath)@Scripts\ so the script seeder finds the bundled jobs.
+
+      Target and property names MUST be unique per scripts package: every
+      scripts pack imports a file of this shape, and MSBuild resolves equal
+      target names by last-definition-wins — a copied name silently disables
+      one pack's staging.
+  -->
+
+  <PropertyGroup>
+    <_OutWitParaViewScriptsContent>$(MSBuildThisFileDirectory)..\content\scripts\</_OutWitParaViewScriptsContent>
+    <_OutWitParaViewScriptsOutputDir>$(OutputPath)@Scripts\</_OutWitParaViewScriptsOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyParaViewScripts"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitParaViewScriptsContent)')">
+    <ItemGroup>
+      <_OutWitParaViewScriptFiles Include="$(_OutWitParaViewScriptsContent)*.wit" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitParaViewScriptFiles)"
+        DestinationFiles="@(_OutWitParaViewScriptFiles->'$(_OutWitParaViewScriptsOutputDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.Visualization.ParaView.Scripts: staged @(_OutWitParaViewScriptFiles->Count()) script(s) to '$(_OutWitParaViewScriptsOutputDir)'." />
+  </Target>
+
+</Project>

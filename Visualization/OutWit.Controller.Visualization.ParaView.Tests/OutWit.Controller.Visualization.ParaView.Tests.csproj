@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.Visualization.ParaView\OutWit.Controller.Visualization.ParaView.csproj" />
+    <ProjectReference Include="..\OutWit.Controller.Visualization.ParaView.Model\OutWit.Controller.Visualization.ParaView.Model.csproj" />
+    <ProjectReference Include="..\OutWit.Controller.Visualization.ParaView.Tests.FakePvpython\OutWit.Controller.Visualization.ParaView.Tests.FakePvpython.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <!-- Build-only references to the controllers the ParaView runtime needs: Variables
+       ([WitPluginDependency]), Grid (the bundled scripts dispatch through Grid.ForEach)
+       and Render (RenderParaViewVideo.wit encodes through Render.EncodeVideo and takes a
+       VideoOptions). ReferenceOutputAssembly=false: they get built so their PostBuild
+       populates @Controllers/<Cfg>/, but their DLLs stay out of this project's output. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Render\OutWit.Controller.Render\OutWit.Controller.Render.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ExcludedControllerModule Include="renderdcc.module" />
+    <ExcludedControllerModule Include="calculix.module" />
+    <ExcludedControllerModule Include="sweep.module" />
+    <ExcludedControllerModule Include="schwarz.module" />
+    <ExcludedControllerModule Include="parareal.module" />
+    <ExcludedControllerModule Include="matrices.module" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

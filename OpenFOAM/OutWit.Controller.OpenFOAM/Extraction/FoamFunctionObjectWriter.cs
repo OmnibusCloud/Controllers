@@ -1,0 +1,146 @@
+using System.Text;
+using OutWit.Controller.OpenFOAM.Model;
+using OutWit.Controller.OpenFOAM.Model.Rules;
+
+namespace OutWit.Controller.OpenFOAM.Extraction;
+
+/// <summary>
+/// Writes the requested responses into the case as function-object
+/// dictionaries, one file per response at <c>system/&lt;Name&gt;</c> - where
+/// OpenFOAM's <c>postProcess -func &lt;Name&gt;</c> (and a solver's
+/// <c>-postProcess</c> form, for the quantities that need the turbulence
+/// model) looks first, before its own <c>etc/caseDicts</c>, and so does a
+/// <c>#includeFunc</c>. A response is a file of its own beside the user's
+/// files: the recipe's post step names it, or the controller's
+/// <c>includeFunc</c> step adds it to the solve (<see cref="Runtime.FoamSolveFunctions"/>).
+/// What a request may say is <see cref="FoamResponseRules"/>; this class only
+/// renders it.
+/// </summary>
+public static class FoamFunctionObjectWriter
+{
+    #region Functions
+
+    /// <summary>
+    /// Validates the request and writes its function objects.
+    /// </summary>
+    /// <param name="caseDirectory">The materialised case.</param>
+    /// <param name="request">The request; null writes nothing.</param>
+    /// <param name="substitutions">The variant's values: a parameter that names a token (<c>magUInf {{oc1}}</c>) takes its value.</param>
+    /// <returns>Findings, one sentence each; nothing is written when there is any.</returns>
+    public static IReadOnlyList<string> Write(string caseDirectory, FoamExtractionRequestData? request, IReadOnlyList<FoamTokenValueData>? substitutions = null)
+    {
+        if (request == null || request.Responses.Count == 0)
+            return [];
+
+        // A parameter that follows a swept value takes this variant's value;
+        // the rules then judge the value itself, not the placeholder.
+        request = Instantiate(request, substitutions ?? []);
+
+        var findings = FoamResponseRules.Validate(request).ToList();
+        foreach (var response in request.Responses)
+        {
+            foreach (var token in response.Parameters.SelectMany(parameter => FoamTemplating.LeftoverTokens(parameter.Value)).Distinct(StringComparer.Ordinal))
+                findings.Add($"Response '{response.Name}': token {token} has no value in this variant.");
+        }
+
+        var system = Path.Combine(caseDirectory, "system");
+
+        // A response never overwrites a file the user shipped under the same name.
+        foreach (var response in request.Responses)
+        {
+            if (File.Exists(Path.Combine(system, response.Name)))
+                findings.Add($"Response '{response.Name}': the case already carries system/{response.Name}; choose another response name.");
+        }
+
+        if (findings.Count > 0)
+            return findings;
+
+        Directory.CreateDirectory(system);
+        foreach (var response in request.Responses)
+            File.WriteAllText(Path.Combine(system, response.Name), Render(response), new UTF8Encoding(false));
+
+        return findings;
+    }
+
+    /// <summary>
+    /// The dictionary text of one response.
+    /// </summary>
+    /// <param name="response">The response.</param>
+    /// <returns>A complete function-object dictionary.</returns>
+    public static string Render(FoamResponseSpecData response)
+    {
+        var text = new StringBuilder();
+        text.Append("// Written by the OmnibusCloud OpenFOAM controller from the response request; the case's own files are untouched.\n");
+
+        switch (response.Kind)
+        {
+            case FoamResponseKind.ForceCoeffs:
+                text.Append("type            forceCoeffs;\nlibs            (forces);\n");
+                text.Append(List("patches", response.Patches));
+                text.Append("log             false;\nwriteControl    timeStep;\nwriteInterval   1;\n");
+                break;
+
+            case FoamResponseKind.Forces:
+                text.Append("type            forces;\nlibs            (forces);\n");
+                text.Append(List("patches", response.Patches));
+                text.Append("log             false;\nwriteControl    timeStep;\nwriteInterval   1;\n");
+                break;
+
+            case FoamResponseKind.PatchValue:
+                text.Append("type            surfaceFieldValue;\nlibs            (fieldFunctionObjects);\nregionType      patch;\n");
+                text.Append($"name            {response.Patches[0]};\n");
+                text.Append($"operation       {response.Operation};\n");
+                text.Append(List("fields", response.Fields));
+                text.Append("writeFields     false;\nlog             false;\nwriteControl    timeStep;\nwriteInterval   1;\n");
+                break;
+
+            case FoamResponseKind.VolumeValue:
+                text.Append("type            volFieldValue;\nlibs            (fieldFunctionObjects);\n");
+                text.Append(response.Parameters.Any(parameter => parameter.Name == "name")
+                    ? "regionType      cellZone;\n"
+                    : "regionType      all;\n");
+                text.Append($"operation       {response.Operation};\n");
+                text.Append(List("fields", response.Fields));
+                text.Append("writeFields     false;\nlog             false;\nwriteControl    timeStep;\nwriteInterval   1;\n");
+                break;
+
+            case FoamResponseKind.FieldMinMax:
+                text.Append("type            fieldMinMax;\nlibs            (fieldFunctionObjects);\nmode            magnitude;\nlocation        false;\n");
+                text.Append(List("fields", response.Fields));
+                text.Append("log             false;\nwriteControl    timeStep;\nwriteInterval   1;\n");
+                break;
+
+            case FoamResponseKind.Probe:
+                text.Append("type            probes;\nlibs            (sampling);\n");
+                text.Append(List("fields", response.Fields));
+                text.Append("log             false;\nwriteControl    timeStep;\nwriteInterval   1;\n");
+                break;
+        }
+
+        // A flat sub-dictionary (coordinateSystem { ... }) ends in its brace:
+        // OpenFOAM reads no semicolon after one.
+        foreach (var parameter in response.Parameters)
+        {
+            var value = parameter.Value.Trim();
+            text.Append(value.EndsWith('}') ? $"{parameter.Name,-16}{value}\n" : $"{parameter.Name,-16}{value};\n");
+        }
+
+        return text.ToString();
+    }
+
+    private static FoamExtractionRequestData Instantiate(FoamExtractionRequestData request, IReadOnlyList<FoamTokenValueData> substitutions)
+    {
+        var instantiated = request.Clone();
+        foreach (var parameter in instantiated.Responses.SelectMany(response => response.Parameters))
+            parameter.Value = FoamTemplating.Substitute(parameter.Value, substitutions);
+
+        return instantiated;
+    }
+
+    private static string List(string keyword, IReadOnlyList<string> items)
+    {
+        return $"{keyword,-16}({string.Join(' ', items)});\n";
+    }
+
+    #endregion
+}

@@ -1,12 +1,15 @@
 using System.Collections;
 using System.Linq;
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 using OutWit.Controller.Simulation.Schwarz.Activities;
+using OutWit.Controller.Simulation.Schwarz.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
+using OutWit.Math.Simulation.Model.Results;
+using OutWit.Math.Simulation.Model.Schwarz;
 
 namespace OutWit.Controller.Simulation.Schwarz.Adapters;
 
@@ -31,6 +34,9 @@ internal sealed class WitActivityAdapterSchwarzAssemble : WitActivityAdapterFunc
 
         if (!pool.TryGetObject(activity.Wave, out var waveObject) || waveObject is not IEnumerable waveEnumerable)
             throw new InvalidOperationException("Failed to get parameter 'Wave'.");
+
+        if (!pool.TryGetValue(activity.State, out SchwarzRoundData? state) || state == null)
+            throw new InvalidOperationException("Failed to get parameter 'State'.");
 
         var wave = waveEnumerable.OfType<SchwarzResultData>().OrderBy(result => result.SubdomainIndex).ToList();
         if (wave.Count != plan.Parts)
@@ -66,13 +72,23 @@ internal sealed class WitActivityAdapterSchwarzAssemble : WitActivityAdapterFunc
             GlobalDims = globalDims!,
             Lo = [0, 0, 0],
             Hi = (int[])globalDims!.Clone(),
-            Values = globalField!
+            Values = globalField!,
+            Convergence = new SimulationConvergenceInfo
+            {
+                Converged = state.Round > 0 && state.Residual <= state.Eps * state.InitialResidual,
+                Iterations = state.Round,
+                Eps = state.Eps,
+                Scale = state.InitialResidual
+            }
         };
+        assembled.Convergence.History.AddRange(state.History);
 
         var fieldBlobId = await BlobService.UploadBytesAsync(assembled.ToBlobBytes(), "field.owsm");
 
         if (!pool.TrySetValue(activity.ReturnReference, fieldBlobId))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+
+        JobProgressReporter.Report(ProcessingManager, status.JobId, 1.0, SchwarzProgress.DescribeAssembled());
     }
 
     #endregion
@@ -83,8 +99,8 @@ internal sealed class WitActivityAdapterSchwarzAssemble : WitActivityAdapterFunc
     {
         try
         {
-            if (parameters.Length != 2)
-                throw new ArgumentException($"Expected 2 parameter(s), got {parameters.Length}.");
+            if (parameters.Length != 3)
+                throw new ArgumentException($"Expected 3 parameter(s), got {parameters.Length}.");
 
             if (parameters[0] is not IWitReference plan)
                 throw new ArgumentException("Parameter 'Plan' must be a variable reference.");
@@ -92,10 +108,14 @@ internal sealed class WitActivityAdapterSchwarzAssemble : WitActivityAdapterFunc
             if (parameters[1] is not IWitReference wave)
                 throw new ArgumentException("Parameter 'Wave' must be a variable reference.");
 
+            if (parameters[2] is not IWitReference state)
+                throw new ArgumentException("Parameter 'State' must be a variable reference.");
+
             return new WitActivitySchwarzAssemble
             {
                 Plan = plan,
-                Wave = wave
+                Wave = wave,
+                State = state
             };
         }
         catch (Exception e)

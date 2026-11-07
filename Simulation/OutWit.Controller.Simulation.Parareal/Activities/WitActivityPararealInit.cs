@@ -7,6 +7,11 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Parareal.Activities;
 
+/// <summary>
+/// Server-side round 0: serial coarse sweep from the initial field, one
+/// uploaded state blob per slab boundary, and the problem scale ‖U⁰‖ that
+/// anchors the relative stopping criterion for the rest of the solve.
+/// </summary>
 [Activity("Parareal.Init")]
 [MemoryPackable]
 public sealed partial class WitActivityPararealInit : WitActivityFunction
@@ -45,9 +50,16 @@ public sealed partial class WitActivityPararealInit : WitActivityFunction
 
     #region Properties
 
+    /// <summary>
+    /// Pool reference to the model blob id; must match the plan's model blob —
+    /// a mismatch fails fast here rather than mid-wave.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Model { get; init; }
 
+    /// <summary>
+    /// Pool reference to the slab plan produced by Parareal.Slice.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Plan { get; init; }
 

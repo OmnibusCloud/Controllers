@@ -1,11 +1,12 @@
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 using OutWit.Controller.Simulation.Schwarz.Activities;
 using OutWit.Controller.Simulation.Schwarz.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
+using OutWit.Math.Simulation.Model.Schwarz;
 
 namespace OutWit.Controller.Simulation.Schwarz.Adapters;
 
@@ -34,6 +35,11 @@ internal sealed class WitActivityAdapterSchwarzMakeTasks : WitActivityAdapterFun
 
         if (!pool.TrySetCollection(activity.ReturnReference, tasks))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+
+        // The first report claims the job's progress bar for this controller; later rounds are
+        // reported by Schwarz.Advance, once their residual is known.
+        if (state.Round == 0)
+            JobProgressReporter.Report(ProcessingManager, status.JobId, 0.0, SchwarzProgress.DescribeFirstRound(plan));
 
         await Task.CompletedTask;
     }

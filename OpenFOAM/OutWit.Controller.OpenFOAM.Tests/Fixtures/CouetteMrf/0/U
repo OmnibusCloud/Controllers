@@ -1,0 +1,31 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0);
+
+boundaryField
+{
+    // At rest as written; the MRF moves the inner wall while it solves, and
+    // writes it back at rest - the case I-37 was found on.
+    innerWall
+    {
+        type            noSlip;
+    }
+
+    outerWall
+    {
+        type            noSlip;
+    }
+
+    frontAndBack
+    {
+        type            empty;
+    }
+}

@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Schwarz;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Schwarz;
 using OutWit.Controller.Simulation.Schwarz.Activities;
 using OutWit.Controller.Simulation.Schwarz.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
@@ -10,6 +10,10 @@ using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Schwarz.Adapters;
+
+using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
+using OutWit.Math.Simulation.Model.Results;
+using OutWit.Math.Simulation.Model.Schwarz;
 
 internal sealed class WitActivityAdapterSchwarzSolveSubdomain : WitActivityAdapterFunction<WitActivitySchwarzSolveSubdomain>
 {
@@ -33,7 +37,7 @@ internal sealed class WitActivityAdapterSchwarzSolveSubdomain : WitActivityAdapt
     /// (the BlenderRunner memo discipline). LRU-bounded (factorizations are large)
     /// and poison-evicting (a transient build fault must not stick to the key).
     /// </summary>
-    private static readonly SimulationComputeCache<Guid, SchwarzLocalSystem> s_systems = new(MAX_CACHED_SYSTEMS);
+    private static readonly SimulationComputeCache<Guid, SchwarzLocalSystem> m_systems = new(MAX_CACHED_SYSTEMS);
 
     #endregion
 
@@ -134,7 +138,7 @@ internal sealed class WitActivityAdapterSchwarzSolveSubdomain : WitActivityAdapt
 
     private static SchwarzLocalSystem GetOrCreateSystem(Guid blobId, string path)
     {
-        return s_systems.GetOrCreate(blobId, () =>
+        return m_systems.GetOrCreate(blobId, () =>
         {
             var definition = SchwarzSubdomainDefinition.FromBlobBytes(File.ReadAllBytes(path));
             return new SchwarzLocalSystem(definition);

@@ -1,5 +1,6 @@
 using System.Linq;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Model.Schwarz;
 
 namespace OutWit.Controller.Simulation.Schwarz.Utils;
 

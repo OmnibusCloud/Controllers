@@ -10,11 +10,11 @@ namespace OutWit.Controller.Grid.Tests.Mock
 {
     internal class MockActivityNode : IWitEngineActivityNode
     {
-        public MockActivityNode(IWitEngineNodeBase node, double rate = 0, Guid? nodeId = null)
+        public MockActivityNode(IWitEngineNodeBase node, double rate = 0, Guid? nodeId = null, long iterations = 0)
         {
             NodeId = nodeId ?? node.Id;
             BenchmarkResult = rate > 0
-                ? new WitBenchmarkResult { Rate = rate }
+                ? new WitBenchmarkResult { Rate = rate, Iterations = iterations }
                 : WitBenchmarkResult.Default;
         }
 

@@ -1,11 +1,13 @@
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Parareal;
 using OutWit.Controller.Simulation.Parareal.Activities;
 using OutWit.Controller.Simulation.Parareal.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
+using OutWit.Math.Simulation.Model.Parareal;
 
 namespace OutWit.Controller.Simulation.Parareal.Adapters;
 
@@ -47,6 +49,17 @@ internal sealed class WitActivityAdapterPararealSlice : WitActivityAdapterFuncti
         // coarsening divisibility, and warms the cache Init/Correct reuse.
         var kernel = await PararealKernelCache.GetOrCreateAsync(
             BlobService, modelBlobId, slabs, options.Coarsening, options.TotalTime, options.FineStepsPerSlab);
+
+        // Closes the silent never-converge hole and bounds the timeline blob
+        // BEFORE any propagation is scheduled.
+        PararealOptionsValidator.Validate(options, slabs, kernel.FineProblem.Geometry.NodeCount);
+
+        // Not an error, but the one shape that makes a parareal run serial on the server: G on the
+        // fine grid. Auto coarsening tries 2, 3, 4; when none divides (n-1) the warning names the
+        // fix (WitCloud P0.1 finding F-9: 28 s before the first wave at 40^3).
+        var coarseningWarning = PararealOptionsValidator.DescribeDegenerateCoarsening(kernel.Coarsening, kernel.FineProblem.Geometry.NodeCount);
+        if (coarseningWarning != null)
+            Logger.LogWarning("Parareal.Slice: {Warning}", coarseningWarning);
 
         // The last boundary is pinned to TotalTime exactly (TotalTime·N/N may
         // round differently) — task δt and the kernel cache key derive from it.

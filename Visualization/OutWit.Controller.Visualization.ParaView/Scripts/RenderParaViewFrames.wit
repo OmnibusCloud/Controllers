@@ -1,0 +1,10 @@
+Job:RenderParaViewFrames(ParaViewSceneRef:scene, ParaViewOutputOptions:options)
+{
+    ParaViewValidationReport:report = ParaView.Validate(scene, options);
+    ParaViewRenderTaskBatchCollection:tasks = ParaView.SplitBatched(scene, report, options);
+
+    ParaViewRenderResultBatchCollection:rendered = Grid.ForEach(task in tasks)
+        => ParaView.RenderFrameBatch(task);
+
+    BlobCollection:result = ParaView.Collect(rendered, options);
+}

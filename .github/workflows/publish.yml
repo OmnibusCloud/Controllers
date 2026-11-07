@@ -34,19 +34,28 @@ on:
           - OutWit.Controller.Render.Dcc
           - OutWit.Controller.Simulation.Schwarz
           - OutWit.Controller.Simulation.Parareal
+          - OutWit.Controller.CalculiX
+          - OutWit.Controller.Sweep
+          - OutWit.Controller.Visualization.ParaView
+          - OutWit.Controller.OpenFOAM
           # Models
           - OutWit.Controller.Grid.Model
           - OutWit.Controller.Variables.Model
           - OutWit.Controller.Matrices.Model
           - OutWit.Controller.Render.Model
           - OutWit.Controller.Render.Dcc.Model
-          - OutWit.Controller.Simulation.Model
+          - OutWit.Controller.CalculiX.Model
+          - OutWit.Controller.Sweep.Model
+          - OutWit.Controller.Visualization.ParaView.Model
+          - OutWit.Controller.OpenFOAM.Model
           # Scripts (content-only nupkgs that ship bundled .wit scripts)
           - OutWit.Controller.Matrices.Scripts
           - OutWit.Controller.Render.Scripts
+          - OutWit.Controller.Sweep.Scripts
           - OutWit.Controller.Render.Dcc.Scripts
           - OutWit.Controller.Simulation.Schwarz.Scripts
           - OutWit.Controller.Simulation.Parareal.Scripts
+          - OutWit.Controller.Visualization.ParaView.Scripts
           # Tools
           - OutWit.Controller.Pack
       pushToNuGet:
@@ -146,6 +155,20 @@ jobs:
       # it explicitly using the runner's workspace root (trailing slash required).
       - name: Build
         shell: bash
+        # Credentials for the private WitMath feed, which nuget.config reads
+        # from these two variables. Only the two Simulation controllers restore
+        # from it — everything else here comes from nuget.org and builds fine
+        # when the secret is absent.
+        #
+        # WitMath belongs to a personal account rather than to this
+        # organization, so this repository's built-in GITHUB_TOKEN has no read
+        # access to it: WITMATH_PACKAGES_TOKEN must be a PAT with read:packages
+        # on that account. Scoped to this step on purpose — setting GITHUB_TOKEN
+        # for the whole job would also hand it to the release step, which needs
+        # this repository's own token to create tags.
+        env:
+          GITHUB_USER: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.WITMATH_PACKAGES_TOKEN }}
         run: dotnet build "${{ steps.paths.outputs.csproj }}" -c Release -p:ContinuousIntegrationBuild=true -p:SolutionDir="${GITHUB_WORKSPACE}/"
 
       - name: Pack
@@ -204,6 +227,12 @@ jobs:
               # The release must already exist with the 9 expected artifacts;
               # this case-branch only verifies that, it does not upload.
               echo "(Render assets are author-uploaded via outwit-assets-pack; verifying release...)"
+              ;;
+            OutWit.Controller.Visualization.ParaView)
+              # ParaView Tier-2: the trimmed per-platform pvpython runtimes are
+              # author-uploaded via outwit-assets-pack (paraview-v<ver>); the
+              # guard step below verifies the release before the nuget.org push.
+              echo "(ParaView assets are author-uploaded via outwit-assets-pack; verifying release...)"
               ;;
             *)
               echo "(no external assets for ${{ env.PROJECT }})"
@@ -292,6 +321,71 @@ jobs:
           if [ "$missing" -gt 0 ]; then
             echo ""
             echo "::error::$missing asset(s) missing on release '$tag'. Run outwit-assets-pack --push-release locally first."
+            exit 1
+          fi
+
+      - name: Verify Tier-2 release assets exist (ParaView)
+        if: inputs.pushToNuGet && env.PROJECT == 'OutWit.Controller.Visualization.ParaView'
+        shell: bash
+        run: |
+          set -e
+          tag="${{ steps.paths.outputs.asset_tag }}"
+          expected=(
+            paraview-windows-x64.zip
+            paraview-linux-x64.zip
+            paraview-macos-arm64.zip
+          )
+          missing=0
+          for asset in "${expected[@]}"; do
+            url="https://github.com/${{ github.repository }}/releases/download/${tag}/${asset}"
+            code=$(curl -s -L -o /dev/null -w "%{http_code}" "$url")
+            if [ "$code" = "200" ]; then
+              echo "  OK   $asset"
+            else
+              echo "  FAIL $asset  (HTTP $code at $url)"
+              missing=$((missing+1))
+            fi
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo ""
+            echo "::error::$missing asset(s) missing on release '$tag'. Run outwit-assets-pack --push-release locally first."
+            exit 1
+          fi
+
+      # The OpenFOAM kits are not staged by outwit-assets-pack: they are the
+      # release assets of OmnibusCloud/OpenFOAM, and the csproj pins their
+      # release tag, names and hashes. The guard checks that release, not ours.
+      - name: Verify kit release assets exist (OpenFOAM)
+        if: inputs.pushToNuGet && env.PROJECT == 'OutWit.Controller.OpenFOAM'
+        shell: bash
+        run: |
+          set -e
+          csproj="${{ steps.paths.outputs.csproj }}"
+          missing=0
+          checked=0
+          # Every gh-release://owner/repo/tag/asset <Uri> of a ControllerDataAsset
+          # in the csproj must answer 200 as a release download.
+          for uri in $(grep -o '<Uri>gh-release://[^<]*</Uri>' "$csproj" | sed -e 's#<Uri>gh-release://##' -e 's#</Uri>##'); do
+            checked=$((checked+1))
+            owner_repo=$(echo "$uri" | cut -d/ -f1-2)
+            tag=$(echo "$uri" | cut -d/ -f3)
+            asset=$(echo "$uri" | cut -d/ -f4-)
+            url="https://github.com/${owner_repo}/releases/download/${tag}/${asset}"
+            code=$(curl -s -L -o /dev/null -w "%{http_code}" "$url")
+            if [ "$code" = "200" ]; then
+              echo "  OK   $asset  ($owner_repo @ $tag)"
+            else
+              echo "  FAIL $asset  (HTTP $code at $url)"
+              missing=$((missing+1))
+            fi
+          done
+          if [ "$checked" -eq 0 ]; then
+            echo "::error::no gh-release:// <Uri> found in $csproj - the kit assets are not declared."
+            exit 1
+          fi
+          if [ "$missing" -gt 0 ]; then
+            echo ""
+            echo "::error::$missing kit asset(s) missing in OmnibusCloud/OpenFOAM releases. Release the kits there first."
             exit 1
           fi
 

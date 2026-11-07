@@ -50,6 +50,12 @@ public sealed partial class WitActivitySchwarzSolveSubdomain : WitActivityFuncti
 
     #region Properties
 
+    /// <summary>
+    /// Reference to this invocation's SchwarzTask — the per-item binding
+    /// Grid.ForEach makes from the task collection; carries the subdomain blob
+    /// handle, incoming boundary blob ids, round and the emit flag whole,
+    /// because the transformer takes exactly one argument.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Task { get; init; }
 

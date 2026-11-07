@@ -1,0 +1,5 @@
+Job:ValidateParaViewData(ParaViewDataScene:data, ParaViewOutputOptions:options)
+{
+    ParaViewSceneRef:scene = Grid.Delegate() => ParaView.Compose(data, options);
+    ParaViewValidationReport:result = ParaView.Validate(scene, options);
+}

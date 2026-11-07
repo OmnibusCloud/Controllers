@@ -1,13 +1,17 @@
 using Microsoft.Extensions.DependencyInjection;
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Numerics;
-using OutWit.Controller.Simulation.Model.Parareal;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Numerics;
+using OutWit.Math.Simulation.Parareal;
 using OutWit.Controller.Simulation.Parareal.Tests.Mock;
 using OutWit.Controller.Simulation.Parareal.Tests.Utils;
 using OutWit.Engine.Interfaces;
 using OutWit.Engine.Sdk;
 
 namespace OutWit.Controller.Simulation.Parareal.Tests.Activities;
+
+using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
+using OutWit.Math.Simulation.Model.Parareal;
+using OutWit.Math.Simulation.Model.Problem;
 
 [TestFixture]
 [Explicit("Distributed-run diagnostics")]
@@ -20,9 +24,15 @@ public class PararealDiagnosticsTests
     [OneTimeSetUp]
     public void Setup()
     {
-        var solutionRoot = SimulationTestPaths.FindSolutionRoot()!;
+        var solutionRoot = SimulationTestPaths.FindSolutionRoot();
+        if (solutionRoot == null)
+            Assert.Ignore("Solution root not found");
+
         m_script = File.ReadAllText(SimulationTestPaths.GetPararealSolveScriptPath(solutionRoot));
-        var controllersPath = SimulationTestPaths.FindControllersPath()!;
+
+        var controllersPath = SimulationTestPaths.FindControllersPath();
+        if (controllersPath == null)
+            Assert.Ignore("@Controllers not found");
 
         m_blobService = new SimulationTestBlobService(Path.Combine(Path.GetTempPath(), $"parareal_diag_{Guid.NewGuid():N}"));
 

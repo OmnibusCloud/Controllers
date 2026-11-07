@@ -1,4 +1,5 @@
 using MemoryPack;
+using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
 using OutWit.Common.Values;
 
@@ -7,6 +8,7 @@ namespace OutWit.Controller.Render.Model;
 /// <summary>
 /// Runtime diagnostics for the packaged render controller tools available on the current node.
 /// </summary>
+[JobDocumentContract("render.runtimeDiagnostics@1")]
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only, and deploy the server before any client that writes a new member (default MemoryPack mode rejects payloads with unknown members).
 public partial class RenderRuntimeDiagnosticsData : ModelBase

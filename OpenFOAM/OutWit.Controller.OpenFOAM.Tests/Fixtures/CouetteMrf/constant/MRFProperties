@@ -1,0 +1,20 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      MRFProperties;
+}
+
+// Every cell turns; the inner wall turns with them, the outer one does not.
+rotor
+{
+    cellZone    rotor;
+    active      yes;
+
+    nonRotatingPatches (outerWall);
+
+    origin      (0 0 0);
+    axis        (0 0 1);
+    omega       1;
+}

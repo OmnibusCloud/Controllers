@@ -1,0 +1,205 @@
+using System.Text.RegularExpressions;
+
+namespace OutWit.Controller.OpenFOAM.Model.Rules;
+
+/// <summary>
+/// The rules a recipe obeys: every step against the allow-list and the
+/// argument grammar, the application a solver that some step runs. The same
+/// code runs on the node before the first process starts, in the Sweep host
+/// when a study is planned and in the initiator's preflight, so a user reads
+/// the same sentence wherever a recipe is refused. Whether the kit carries an
+/// executable is asked through a predicate: the rules know no kit.
+/// </summary>
+public static class FoamRecipeRules
+{
+    #region Constants
+
+    /// <summary>Upper bound on the steps of one recipe; a longer one is a script, not a recipe.</summary>
+    public const int MAX_STEPS = 32;
+
+    private const string DECOMPOSE = "decomposePar";
+
+    private const string POST_PROCESS_FLAG = "-postProcess";
+
+    /// <summary>A flag: a dash, a letter, then letters, digits or dashes.</summary>
+    private static readonly Regex FLAG = new("^-[A-Za-z][A-Za-z0-9-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// A value: OpenFOAM words, numbers, relative paths, lists in parentheses
+    /// (<c>(nonOrthoAngle)</c>), comma lists, and <c>.</c> - the case itself,
+    /// as <c>mergeMeshes</c> names the case it merges into. No shell
+    /// metacharacters, no quotes, no whitespace, never <c>..</c>.
+    /// </summary>
+    private static readonly Regex VALUE = new(@"^(\.|[A-Za-z0-9_(][A-Za-z0-9_.,:=+()/\-]*)$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex WORD = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>A number, which may start with a minus and is a value, not a flag (<c>-time -1</c>).</summary>
+    private static readonly Regex NUMBER = new(@"^-?\d+(\.\d+)?([eE][-+]?\d+)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    #endregion
+
+    #region Functions
+
+    /// <summary>
+    /// Validates a recipe.
+    /// </summary>
+    /// <param name="recipe">The recipe; null is a finding.</param>
+    /// <param name="hasExecutable">Answers whether the kit the steps will run under carries an executable; null skips the kit checks.</param>
+    /// <returns>Findings, one sentence each; empty when the recipe may run.</returns>
+    public static IReadOnlyList<string> Validate(FoamRecipeData? recipe, Func<string, bool>? hasExecutable = null)
+    {
+        var findings = new List<string>();
+
+        if (recipe == null)
+        {
+            findings.Add("The task carries no recipe.");
+            return findings;
+        }
+
+        if (string.IsNullOrEmpty(recipe.Application))
+            findings.Add("The recipe names no application.");
+        else if (FoamAllowList.IsUtility(recipe.Application))
+            findings.Add($"'{recipe.Application}' is a utility on the allow-list, not a solver: the application is the solver the case runs " +
+                         $"(controlDict's 'application', such as simpleFoam); '{recipe.Application}' runs as a step of its own.");
+        else if (!FoamAllowList.IsSolverName(recipe.Application))
+            findings.Add($"'{recipe.Application}' is not a solver name (a solver's name ends in 'Foam').");
+        else if (hasExecutable != null && !hasExecutable(recipe.Application))
+            findings.Add($"The kit has no solver '{recipe.Application}'.");
+
+        if (recipe.Steps.Count == 0)
+            findings.Add("The recipe has no steps.");
+        if (recipe.Steps.Count > MAX_STEPS)
+            findings.Add($"The recipe has {recipe.Steps.Count} steps; at most {MAX_STEPS} are allowed.");
+
+        for (var index = 0; index < recipe.Steps.Count; index++)
+        {
+            var step = recipe.Steps[index];
+            ValidateStep(step, $"Step {index + 1}", hasExecutable, findings);
+
+            // The controller's restore puts the fields into processor directories: a decomposition must have made them.
+            if (step.Utility == FoamAllowList.RESTORE_INITIAL_FIELDS && recipe.Steps.Take(index).All(before => before.Utility != DECOMPOSE))
+                findings.Add($"Step {index + 1}: {FoamAllowList.RESTORE_INITIAL_FIELDS} {FoamAllowList.PROCESSOR_FORM} needs a {DECOMPOSE} step before it.");
+
+            // The controller's include adds a response to the solve: a solve must come after it.
+            if (step.Utility == FoamAllowList.INCLUDE_FUNCTION
+                && step.Arguments is [var response] && WORD.IsMatch(response)
+                && !recipe.Steps.Skip(index + 1).Any(after => IsSolve(after, recipe.Application)))
+                findings.Add($"Step {index + 1}: {FoamAllowList.INCLUDE_FUNCTION} {response} adds a response to the solve, and no step after it runs '{recipe.Application}' to solve.");
+        }
+
+        if (recipe.Steps.Count > 0
+            && !string.IsNullOrEmpty(recipe.Application)
+            && recipe.Steps.All(step => step.Utility != recipe.Application))
+            findings.Add($"No step runs the application '{recipe.Application}'.");
+
+        return findings;
+    }
+
+    /// <summary>
+    /// Validates one step on its own, in the words <see cref="Validate"/>
+    /// uses, under the caller's name for it: a recipe says <c>Step 3</c>, a
+    /// script translated into steps names its file and line.
+    /// </summary>
+    /// <param name="step">The step.</param>
+    /// <param name="prefix">What each finding starts with (<c>Allrun:12</c>).</param>
+    /// <param name="hasExecutable">Answers whether the kit carries an executable; null skips the kit check.</param>
+    /// <returns>Findings, one sentence each; empty when the step may run.</returns>
+    public static IReadOnlyList<string> ValidateStep(FoamStepData step, string prefix, Func<string, bool>? hasExecutable = null)
+    {
+        var findings = new List<string>();
+        ValidateStep(step, prefix, hasExecutable, findings);
+        return findings;
+    }
+
+    private static void ValidateStep(FoamStepData step, string prefix, Func<string, bool>? hasExecutable, List<string> findings)
+    {
+        var name = step.Utility;
+
+        if (string.IsNullOrEmpty(name))
+        {
+            findings.Add($"{prefix} names no utility.");
+            return;
+        }
+
+        if (!WORD.IsMatch(name))
+        {
+            findings.Add($"{prefix}: '{name}' is not a utility name.");
+            return;
+        }
+
+        if (FoamAllowList.IsBuiltIn(name))
+        {
+            ValidateBuiltIn(step, prefix, findings);
+            return;
+        }
+
+        var allowed = FoamAllowList.IsUtility(name) || FoamAllowList.IsSolverName(name);
+        if (!allowed)
+        {
+            findings.Add($"{prefix}: '{name}' is not on the allow-list.");
+            return;
+        }
+
+        if (hasExecutable != null && !hasExecutable(name))
+            findings.Add($"{prefix}: the kit has no '{name}'.");
+
+        if (step.Parallel && !FoamAllowList.IsParallelCapable(name))
+            findings.Add($"{prefix}: '{name}' does not run in parallel.");
+
+        foreach (var argument in step.Arguments)
+        {
+            if (argument.Length == 0)
+            {
+                findings.Add($"{prefix} ({name}): an empty argument.");
+                continue;
+            }
+
+            if (NUMBER.IsMatch(argument))
+                continue;
+
+            if (argument.StartsWith('-'))
+            {
+                if (!FLAG.IsMatch(argument))
+                    findings.Add($"{prefix} ({name}): '{argument}' is not a flag the allow-list knows.");
+                else if (FoamAllowList.IsForbiddenFlag(argument))
+                    findings.Add($"{prefix} ({name}): '{argument}' is decided by the controller and may not be given.");
+                else if (argument == "-parallel")
+                    findings.Add($"{prefix} ({name}): '-parallel' is expressed by the step's parallel flag, not as an argument.");
+                continue;
+            }
+
+            if (!VALUE.IsMatch(argument))
+                findings.Add($"{prefix} ({name}): '{argument}' is not a value the allow-list accepts.");
+            else if (FoamCasePathRules.IsPathEscape(argument))
+                findings.Add($"{prefix} ({name}): '{argument}' points outside the case directory.");
+        }
+    }
+
+    /// <summary>The controller's own step: nothing asked of the kit, never under MPI, one form only.</summary>
+    private static void ValidateBuiltIn(FoamStepData step, string prefix, List<string> findings)
+    {
+        var name = step.Utility;
+
+        if (step.Parallel)
+            findings.Add($"{prefix}: '{name}' is done by the controller itself, never under MPI.");
+
+        if (name == FoamAllowList.INCLUDE_FUNCTION)
+        {
+            if (step.Arguments is not [var response] || !WORD.IsMatch(response))
+                findings.Add($"{prefix} ({name}): the only form is '{name} <response>', one response name.");
+            return;
+        }
+
+        if (step.Arguments is not [FoamAllowList.PROCESSOR_FORM])
+            findings.Add($"{prefix} ({name}): the only form is '{name} {FoamAllowList.PROCESSOR_FORM}'; a serial run's initial fields travel in 0/.");
+    }
+
+    /// <summary>A step that runs the application to solve, not its <c>-postProcess</c> form.</summary>
+    private static bool IsSolve(FoamStepData step, string application)
+    {
+        return step.Utility == application && !step.Arguments.Contains(POST_PROCESS_FLAG);
+    }
+
+    #endregion
+}

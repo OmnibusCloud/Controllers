@@ -7,6 +7,11 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Parareal.Activities;
 
+/// <summary>
+/// Loop-exit predicate: true once at least one correction round has run and
+/// the correction norm is within Eps·Scale — the .wit grammar has no
+/// arithmetic, so the comparison lives in an activity.
+/// </summary>
 [Activity("Parareal.IsConverged")]
 [MemoryPackable]
 public sealed partial class WitActivityPararealIsConverged : WitActivityFunction
@@ -43,6 +48,10 @@ public sealed partial class WitActivityPararealIsConverged : WitActivityFunction
 
     #region Properties
 
+    /// <summary>
+    /// Pool reference to the iteration state whose CorrectionNorm, Eps and
+    /// Scale decide the predicate.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? State { get; init; }
 

@@ -1,11 +1,12 @@
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 using OutWit.Controller.Simulation.Parareal.Activities;
 using OutWit.Controller.Simulation.Parareal.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
+using OutWit.Math.Simulation.Model.Parareal;
 
 namespace OutWit.Controller.Simulation.Parareal.Adapters;
 
@@ -34,6 +35,8 @@ internal sealed class WitActivityAdapterPararealMakeSnapshotTasks : WitActivityA
 
         if (!pool.TrySetCollection(activity.ReturnReference, tasks))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+
+        JobProgressReporter.Report(ProcessingManager, status.JobId, PararealProgress.BeforeSnapshotPass(state), PararealProgress.DescribeSnapshotPass(plan));
 
         await Task.CompletedTask;
     }

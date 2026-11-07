@@ -1,13 +1,14 @@
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Numerics;
-using OutWit.Controller.Simulation.Model.Parareal;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Numerics;
+using OutWit.Math.Simulation.Parareal;
 using OutWit.Controller.Simulation.Parareal.Activities;
 using OutWit.Controller.Simulation.Parareal.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
+using OutWit.Math.Simulation.Model.Parareal;
 
 namespace OutWit.Controller.Simulation.Parareal.Adapters;
 
@@ -42,7 +43,7 @@ internal sealed class WitActivityAdapterPararealInit : WitActivityAdapterFunctio
         var states = new double[plan.Slabs + 1][];
         states[0] = kernel.BuildInitialField();
         for (var slab = 0; slab < plan.Slabs; slab++)
-            states[slab + 1] = kernel.CoarsePropagate(states[slab]);
+            states[slab + 1] = kernel.CoarsePropagate(states[slab], slab);
 
         var scale = states.Max(state => FixedOrderNorms.MaxAbs(state));
         if (scale == 0)

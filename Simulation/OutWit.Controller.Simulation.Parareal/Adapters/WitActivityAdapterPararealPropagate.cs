@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
-using OutWit.Controller.Simulation.Model.Numerics;
-using OutWit.Controller.Simulation.Model.Parareal;
+using OutWit.Math.Simulation;
+using OutWit.Math.Simulation.Numerics;
+using OutWit.Math.Simulation.Parareal;
 using OutWit.Controller.Simulation.Parareal.Activities;
 using OutWit.Controller.Simulation.Parareal.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
@@ -11,6 +11,10 @@ using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Parareal.Adapters;
+
+using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
+using OutWit.Math.Simulation.Model.Parareal;
+using OutWit.Math.Simulation.Model.Problem;
 
 internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFunction<WitActivityPararealPropagate>
 {
@@ -34,7 +38,7 @@ internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFu
     /// (model blob, δt). LRU-bounded (factorizations are large) and
     /// poison-evicting (a transient build fault must not stick to the key).
     /// </summary>
-    private static readonly SimulationComputeCache<string, FdTransientStepper> s_steppers = new(MAX_CACHED_STEPPERS);
+    private static readonly SimulationComputeCache<string, FdTransientStepper> m_steppers = new(MAX_CACHED_STEPPERS);
 
     #endregion
 
@@ -66,7 +70,7 @@ internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFu
         if (task.EmitSnapshots)
         {
             var (final, fractions, snapshots) = PararealFinePropagation.PropagateWithSnapshots(
-                stepper, stateIn.Values, task.Steps, task.SnapshotsPerSlab);
+                stepper, stateIn.Values, task.Steps, task.SnapshotsPerSlab, task.SlabStart);
 
             var pack = new PararealSnapshotPack
             {
@@ -84,7 +88,7 @@ internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFu
         }
         else
         {
-            stateOut = PararealFinePropagation.Propagate(stepper, stateIn.Values, task.Steps);
+            stateOut = PararealFinePropagation.Propagate(stepper, stateIn.Values, task.Steps, task.SlabStart);
         }
 
         var outSnapshot = new PararealStateSnapshot
@@ -133,11 +137,15 @@ internal sealed class WitActivityAdapterPararealPropagate : WitActivityAdapterFu
         var key = $"{modelBlobId:N}:{timeStep:R}";
         var modelPath = await BlobService.GetLocalPathAsync(modelBlobId);
 
-        return s_steppers.GetOrCreate(key, () =>
+        return m_steppers.GetOrCreate(key, () =>
         {
             var model = SimulationModelDefinition.FromBlobBytes(File.ReadAllBytes(modelPath));
-            var problem = FdOperatorAssembler.BuildProblem(model);
-            return new FdTransientStepper(problem, timeStep, theta: 0.5);
+
+            // Transient: no solvability requirement (the time derivative
+            // regularizes the operator) — mirrors the kernel's own build.
+            var problem = FdOperatorAssembler.BuildProblem(model, requireSolvability: false);
+            var sourceFactor = model.SourceCurve.Count > 0 ? model.SourceFactorAt : (Func<double, double>?)null;
+            return new FdTransientStepper(problem, timeStep, theta: 0.5, sourceFactor);
         });
     }
 

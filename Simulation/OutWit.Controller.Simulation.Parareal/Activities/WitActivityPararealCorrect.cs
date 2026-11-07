@@ -51,12 +51,24 @@ public sealed partial class WitActivityPararealCorrect : WitActivityFunction
 
     #region Properties
 
+    /// <summary>
+    /// Pool reference to the slab plan; drives the coarse kernel and the slab
+    /// boundaries.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Plan { get; init; }
 
+    /// <summary>
+    /// Pool reference to the incoming round-k iteration state; the activity
+    /// returns the round-(k+1) state as a new value.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? State { get; init; }
 
+    /// <summary>
+    /// Pool reference to the fine-propagation results of the active slabs;
+    /// arrival order is arbitrary, results are re-keyed by SlabIndex.
+    /// </summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Wave { get; init; }
 

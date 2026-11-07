@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Model.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ControllerName>CalculiX</ControllerName>
+    <Version>2.0.0</Version>
+    <Description>Shared data types of the CalculiX solve controller: the per-variant solve task (deck blob, mesh size for work estimation, thread policy, extraction request) and its result (artifact blob ids, exit code, measured solve time, the extracted response row). Consumed by the node controller, by the Sweep orchestration controller and by client applications.</Description>
+    <PackageTags>calculix;ccx;fem;witengine;witcloud;controller;data-types</PackageTags>
+  </PropertyGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Model.targets" />
+
+  <!-- A shared model must not stage its deps.json into a module: the client
+       install pipeline falls back to inferring the root assembly from THE
+       single deps.json it finds, and a second one breaks that inference —
+       the exact defect that once froze controller updates fleet-wide.
+       Resolution roots at the controller DLL; the model rides as a plain
+       dependency. -->
+  <Target Name="ModelDropDepsJson" BeforeTargets="ModelPostBuild">
+    <ItemGroup>
+      <ModelModuleFile Remove="$(TargetDir)$(TargetName).deps.json" />
+    </ItemGroup>
+  </Target>
+
+  <!-- The Sweep host controller reads these types (they ride inside its
+       options and manifest rows), so the assembly is staged into BOTH module
+       folders. The default ModelPostBuild covers calculix.module; this covers
+       sweep.module. Deliberately DLL-only. -->
+  <Target Name="ModelPostBuildSweep" AfterTargets="ModelPostBuild">
+    <Copy SourceFiles="$(TargetDir)$(TargetName).dll"
+          DestinationFolder="$(SolutionDir)@Controllers\$(Configuration)\sweep.module\"
+          SkipUnchangedFiles="true"
+          OverwriteReadOnlyFiles="true" />
+  </Target>
+
+</Project>

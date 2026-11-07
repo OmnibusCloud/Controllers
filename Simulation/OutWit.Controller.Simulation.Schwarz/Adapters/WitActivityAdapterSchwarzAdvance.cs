@@ -1,14 +1,18 @@
 using System.Collections;
 using System.Linq;
 using Microsoft.Extensions.Logging;
-using OutWit.Controller.Simulation.Model;
+using OutWit.Math.Simulation;
 using OutWit.Controller.Simulation.Schwarz.Activities;
+using OutWit.Controller.Simulation.Schwarz.Utils;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.Simulation.Schwarz.Adapters;
+
+using Math = System.Math; // must be inside the namespace: OutWit.Math.* shadows System.Math
+using OutWit.Math.Simulation.Model.Schwarz;
 
 internal sealed class WitActivityAdapterSchwarzAdvance : WitActivityAdapterFunction<WitActivitySchwarzAdvance>
 {
@@ -64,11 +68,14 @@ internal sealed class WitActivityAdapterSchwarzAdvance : WitActivityAdapterFunct
             {
                 SubdomainIndex = neighbors.SubdomainIndex,
                 BlobIds = [.. neighbors.Producers.Select(producer => wave[producer].BoundaryOutBlobId)]
-            })]
+            })],
+            History = [.. state.History, residual]
         };
 
         if (!pool.TrySetValue(activity.ReturnReference, next))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+
+        JobProgressReporter.Report(ProcessingManager, status.JobId, SchwarzProgress.AfterRound(next), SchwarzProgress.DescribeRound(next));
 
         await Task.CompletedTask;
     }

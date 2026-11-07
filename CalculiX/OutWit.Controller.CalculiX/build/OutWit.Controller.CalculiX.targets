@@ -1,0 +1,46 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.CalculiX NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+
+      Tier-2 controller with per-platform external assets (pinned ccx builds
+      for win-x64 / linux-x64 / osx-arm64).
+
+      ResolveForAllPlatforms="true": the typical consumer is a WitCloud-style
+      distribution host that serves per-platform module archives to worker
+      nodes, so it needs every platform's ccx in its calculix.module/ folder,
+      not just the host's own RID.
+  -->
+
+  <PropertyGroup>
+    <_OutWitCalculiXModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitCalculiXModulePackageContent>
+    <_OutWitCalculiXModuleOutputDir>$(OutputPath)@Controllers\calculix.module\</_OutWitCalculiXModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyCalculiXModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitCalculiXModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitCalculiXFiles Include="$(_OutWitCalculiXModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitCalculiXFiles)"
+        DestinationFiles="@(_OutWitCalculiXFiles->'$(_OutWitCalculiXModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.CalculiX: staged module to '$(_OutWitCalculiXModuleOutputDir)'." />
+  </Target>
+
+  <Target Name="OutWitResolveCalculiXAssets"
+          AfterTargets="OutWitCopyCalculiXModule"
+          Condition="Exists('$(_OutWitCalculiXModuleOutputDir)controller.json')">
+    <ResolveControllerAssetsTask
+        ManifestPath="$(_OutWitCalculiXModuleOutputDir)controller.json"
+        OutputPath="$(OutputPath)@Controllers\"
+        ResolveForAllPlatforms="true" />
+  </Target>
+
+</Project>

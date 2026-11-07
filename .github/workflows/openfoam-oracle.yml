@@ -1,0 +1,116 @@
+name: OpenFOAM oracle
+run-name: "OpenFOAM oracle: ${{ inputs.kit_release }}"
+
+# The OpenFOAM controller against the REAL kit, on the platforms the kit
+# ships for: pitzDaily through Foam.Run serially, on two ranks under the
+# kit's own MPI, and with a diverging variant. The ordinary test run skips
+# these (they need the kit); here the kit is downloaded from its release in
+# OmnibusCloud/OpenFOAM and named to the tests through OUTWIT_OPENFOAM, the
+# same override the resolver honours on a node.
+#
+# On a pull request that touches the controller, and on request with the
+# kit release to test against.
+
+on:
+  workflow_dispatch:
+    inputs:
+      kit_release:
+        description: 'Release tag in OmnibusCloud/OpenFOAM whose kits to test'
+        required: true
+        default: 'openfoam-v2606-3'
+  pull_request:
+    paths:
+      - 'OpenFOAM/**'
+      - '.github/workflows/openfoam-oracle.yml'
+
+env:
+  KIT_RELEASE: ${{ inputs.kit_release || 'openfoam-v2606-3' }}
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+
+jobs:
+  oracle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            kit: openfoam-linux-x64
+            platform: linux-x64
+          - os: macos-14
+            kit: openfoam-macos-arm64
+            platform: macos-arm64
+          - os: windows-2022
+            kit: openfoam-windows-x64
+            platform: windows-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # The kit is fetched by its release checksum and unpacked the way a node
+      # unpacks it: no mode bits kept (the resolver restores the executable
+      # bits from KIT.env), under a path without a space.
+      - name: Fetch the kit
+        if: runner.os != 'Windows'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/kitdl" "$RUNNER_TEMP/kit"
+          gh release download "$KIT_RELEASE" --repo OmnibusCloud/OpenFOAM --pattern "${{ matrix.kit }}.zip" --pattern SHA256SUMS --dir "$RUNNER_TEMP/kitdl"
+          cd "$RUNNER_TEMP/kitdl"
+          grep "${{ matrix.kit }}.zip" SHA256SUMS | shasum -a 256 -c -
+          unzip -q "${{ matrix.kit }}.zip" -d "$RUNNER_TEMP/kit"
+          find "$RUNNER_TEMP/kit" -type f -exec chmod a-x {} +
+          test -f "$RUNNER_TEMP/kit/openfoam/${{ matrix.platform }}/KIT.env"
+          echo "OUTWIT_OPENFOAM=$RUNNER_TEMP/kit/openfoam/${{ matrix.platform }}" >> "$GITHUB_ENV"
+
+      # The Windows runner has no MS-MPI, so this is the serial path of the
+      # oracle (the parallel case is skipped by the tests when the kit reports
+      # no launcher); the kit's own CI proves the MS-MPI path. The kit lives
+      # under a short path: OpenFOAM strips whitespace from paths and the
+      # runner's temp is already space-free, but a short root keeps the logs
+      # readable.
+      - name: Fetch the kit (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dl = "C:\kitdl"; $kit = "C:\kit"
+          New-Item -ItemType Directory -Force $dl, $kit | Out-Null
+          gh release download $env:KIT_RELEASE --repo OmnibusCloud/OpenFOAM --pattern "${{ matrix.kit }}.zip" --pattern SHA256SUMS --dir $dl
+          if ($LASTEXITCODE -ne 0) { throw "gh release download failed" }
+          $expected = (Select-String -Path "$dl\SHA256SUMS" -Pattern "${{ matrix.kit }}.zip").Line.Split(' ')[0]
+          $actual = (Get-FileHash "$dl\${{ matrix.kit }}.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($expected -ne $actual) { throw "checksum mismatch: expected $expected, got $actual" }
+          Expand-Archive "$dl\${{ matrix.kit }}.zip" -DestinationPath $kit
+          if (-not (Test-Path "$kit\openfoam\${{ matrix.platform }}\KIT.env")) { throw "KIT.env missing after unpack" }
+          "OUTWIT_OPENFOAM=$kit\openfoam\${{ matrix.platform }}" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # AspectInjector (a build-time dependency of OutWit.Common) ships a native
+      # osx-arm64 helper that Apple Silicon kills on launch ("Killed: 9") when
+      # its signature is missing or invalid, and the Model project's build dies
+      # with AI_FAIL. An ad-hoc signature after the restore is enough.
+      - name: Restore and sign the AspectInjector helper (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          dotnet restore OpenFOAM/OutWit.Controller.OpenFOAM.Tests/OutWit.Controller.OpenFOAM.Tests.csproj
+          for helper in "$HOME"/.nuget/packages/aspectinjector/*/build/_bin/osx-arm64/AspectInjector; do
+            chmod +x "$helper"
+            codesign --force -s - "$helper"
+            codesign --verify --verbose "$helper"
+          done
+
+      - name: Build the controller and its tests
+        run: dotnet build OpenFOAM/OutWit.Controller.OpenFOAM.Tests/OutWit.Controller.OpenFOAM.Tests.csproj -c Release
+
+      - name: The oracle
+        run: dotnet test OpenFOAM/OutWit.Controller.OpenFOAM.Tests/OutWit.Controller.OpenFOAM.Tests.csproj -c Release --no-build --filter Category=Kit --logger "console;verbosity=detailed"
+
+      - name: Every other test
+        run: dotnet test OpenFOAM/OutWit.Controller.OpenFOAM.Tests/OutWit.Controller.OpenFOAM.Tests.csproj -c Release --no-build --filter Category!=Kit
