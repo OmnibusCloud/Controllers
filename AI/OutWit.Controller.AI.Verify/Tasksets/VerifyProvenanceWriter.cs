@@ -5,9 +5,10 @@ namespace OutWit.Controller.AI.Verify.Tasksets;
 
 /// <summary>
 /// Writes the provenance document of a run: one entry per result batch (node, wasmtime, runtime
-/// module and hash, degree, the task indices it covered, wall time) and one per node, aggregated.
-/// Batches are ordered by their first task index so the document is stable for a stable
-/// placement; wall times make it a record, not an identity — the verdict report is the identity.
+/// module and hash, degree, wall time, the task indices it covered and each task's metrics —
+/// fuel, peak memory, wall time) and one per node, aggregated. Batches are ordered by their
+/// first task index so the document is stable for a stable placement; the metrics make it a
+/// record, not an identity — the verdict report is the identity.
 /// </summary>
 public static class VerifyProvenanceWriter
 {
@@ -63,7 +64,8 @@ public static class VerifyProvenanceWriter
                     .Select(runtime => (runtime.Key, runtime.First().Diagnostics!.RuntimeSha256))
                     .ToList();
 
-                return new NodeSummary(first, group.Count(), group.Sum(batch => batch.Results.Count), runtimes);
+                return new NodeSummary(first, group.Count(), group.Sum(batch => batch.Results.Count),
+                    group.Sum(batch => batch.Results.Sum(result => result.FuelConsumed)), runtimes);
             })
             .OrderBy(node => node.First.NodeName, StringComparer.Ordinal)
             .ThenBy(node => node.First.NodeId);
@@ -80,6 +82,7 @@ public static class VerifyProvenanceWriter
         writer.WriteString("controller", node.First.ControllerVersion);
         writer.WriteNumber("batches", node.Batches);
         writer.WriteNumber("tasks", node.Tasks);
+        writer.WriteNumber("fuel", node.Fuel);
         writer.WriteStartObject("runtimes");
         foreach (var (runtimeId, sha256) in node.Runtimes)
             writer.WriteString(runtimeId, sha256);
@@ -90,6 +93,7 @@ public static class VerifyProvenanceWriter
     private static void WriteBatch(Utf8JsonWriter writer, VerifyResultBatchData batch)
     {
         var diagnostics = batch.Diagnostics;
+        var results = batch.Results.OrderBy(result => result.TaskIndex).ToList();
 
         writer.WriteStartObject();
         if (diagnostics != null)
@@ -102,10 +106,26 @@ public static class VerifyProvenanceWriter
             writer.WriteNumber("wall_ms", diagnostics.WallMs);
         }
 
+        writer.WriteNumber("fuel", results.Sum(result => result.FuelConsumed));
+
         writer.WriteStartArray("tasks");
-        foreach (var index in batch.Results.Select(result => result.TaskIndex).OrderBy(index => index))
-            writer.WriteNumberValue(index);
+        foreach (var result in results)
+            writer.WriteNumberValue(result.TaskIndex);
         writer.WriteEndArray();
+
+        // The per-task metrics: what a run cost, never what it computed (that is the report's).
+        writer.WriteStartArray("metrics");
+        foreach (var result in results)
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("index", result.TaskIndex);
+            writer.WriteNumber("fuel", result.FuelConsumed);
+            writer.WriteNumber("peak_memory", result.PeakMemoryBytes);
+            writer.WriteNumber("wall_ms", result.WallMs);
+            writer.WriteEndObject();
+        }
+        writer.WriteEndArray();
+
         writer.WriteEndObject();
     }
 
@@ -117,6 +137,7 @@ public static class VerifyProvenanceWriter
         VerifyBatchDiagnosticsData First,
         int Batches,
         int Tasks,
+        long Fuel,
         IReadOnlyList<(string RuntimeId, string Sha256)> Runtimes);
 
     #endregion

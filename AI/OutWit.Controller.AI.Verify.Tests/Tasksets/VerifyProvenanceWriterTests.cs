@@ -78,6 +78,35 @@ public sealed class VerifyProvenanceWriterTests
         });
     }
 
+    [Test]
+    public void BatchCarriesItsTasksMetricsTest()
+    {
+        var batch = Batch(Guid.NewGuid(), "n", "python-3.14.6", "aaa", [3, 1]);
+        batch.Results[0].FuelConsumed = 300;
+        batch.Results[0].PeakMemoryBytes = 65536;
+        batch.Results[0].WallMs = 30;
+        batch.Results[1].FuelConsumed = 100;
+        batch.Results[1].PeakMemoryBytes = 131072;
+        batch.Results[1].WallMs = 10;
+
+        using var document = JsonDocument.Parse(VerifyProvenanceWriter.Write([batch]));
+        var entry = document.RootElement.GetProperty("batches")[0];
+        var metrics = entry.GetProperty("metrics").EnumerateArray().ToList();
+        var node = document.RootElement.GetProperty("nodes")[0];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(entry.GetProperty("fuel").GetInt64(), Is.EqualTo(400));
+            Assert.That(entry.GetProperty("tasks").EnumerateArray().Select(t => t.GetInt32()), Is.EqualTo(new[] { 1, 3 }));
+            Assert.That(metrics.Select(m => m.GetProperty("index").GetInt32()), Is.EqualTo(new[] { 1, 3 }));
+            Assert.That(metrics[0].GetProperty("fuel").GetInt64(), Is.EqualTo(100));
+            Assert.That(metrics[0].GetProperty("peak_memory").GetInt64(), Is.EqualTo(131072));
+            Assert.That(metrics[0].GetProperty("wall_ms").GetInt32(), Is.EqualTo(10));
+            Assert.That(metrics[1].GetProperty("fuel").GetInt64(), Is.EqualTo(300));
+            Assert.That(node.GetProperty("fuel").GetInt64(), Is.EqualTo(400));
+        });
+    }
+
     private static VerifyResultBatchData Batch(Guid nodeId, string nodeName, string runtimeId, string sha256, int[] tasks)
     {
         return new VerifyResultBatchData

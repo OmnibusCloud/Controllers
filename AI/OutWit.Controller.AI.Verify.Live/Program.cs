@@ -226,7 +226,7 @@ public static class Program
     {
         using var document = JsonDocument.Parse(report);
         var summary = document.RootElement.GetProperty("summary");
-        Console.WriteLine($"    summary: total={summary.GetProperty("total").GetInt32()} pass={summary.GetProperty("pass").GetInt32()} pass_rate={summary.GetProperty("pass_rate").GetDouble():F3} total_fuel={summary.GetProperty("total_fuel").GetInt64()}");
+        Console.WriteLine($"    summary: total={summary.GetProperty("total").GetInt32()} pass={summary.GetProperty("pass").GetInt32()} pass_rate={summary.GetProperty("pass_rate").GetDouble():F3}");
 
         var verdicts = summary.GetProperty("verdicts");
         var histogram = string.Join(", ", verdicts.EnumerateObject().Where(p => p.Value.GetInt32() > 0).Select(p => $"{p.Name}={p.Value.GetInt32()}"));
@@ -251,7 +251,8 @@ public static class Program
             var runtime = batch.TryGetProperty("runtime", out var r) ? r.GetString() : "?";
             var degree = batch.TryGetProperty("degree", out var d) ? d.GetInt32() : 0;
             var wall = batch.TryGetProperty("wall_ms", out var w) ? w.GetInt32() : 0;
-            Console.WriteLine($"    batch {nodeName,-14} {runtime,-16} degree {degree,2}  tasks {range}  {wall} ms");
+            var fuel = batch.TryGetProperty("fuel", out var f) ? f.GetInt64() : 0;
+            Console.WriteLine($"    batch {nodeName,-14} {runtime,-16} degree {degree,2}  tasks {range}  {wall} ms  fuel {fuel:N0}");
         }
     }
 

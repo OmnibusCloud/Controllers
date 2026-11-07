@@ -2,20 +2,19 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-report.schema.json",
   "title": "Verify verdict report",
-  "description": "The report blob of VerifyRun, VerifyGenerate (over the generators) and VerifyGenerateAndCheck (over the checks). One JSON object. Byte-identical for a taskset on a given placement: wall time is excluded; fuel is deterministic per host but drifts by ~0.01-0.06% between hosts for CPython tasks, so compare verdicts and outputs across hosts, not fuel.",
+  "description": "The report blob of VerifyRun, VerifyGenerate (over the generators) and VerifyGenerateAndCheck (over the checks). One JSON object: the run's identity. It carries only what two honest executions agree on wherever they ran (verdict, exit code, per-case outcome, peak memory), so it is byte-identical for a taskset regardless of placement. Fuel and wall time are metrics and live per task in the provenance blob.",
   "type": "object",
   "required": ["summary", "results"],
   "additionalProperties": false,
   "properties": {
     "summary": {
       "type": "object",
-      "required": ["total", "pass", "pass_rate", "total_fuel", "verdicts"],
+      "required": ["total", "pass", "pass_rate", "verdicts"],
       "additionalProperties": false,
       "properties": {
         "total": { "type": "integer", "description": "Tasks in the report." },
         "pass": { "type": "integer", "description": "Tasks with verdict Pass." },
         "pass_rate": { "type": "number", "minimum": 0, "maximum": 1 },
-        "total_fuel": { "type": "integer", "description": "Sum of the tasks' fuel." },
         "verdicts": {
           "type": "object",
           "description": "Histogram over every verdict name, zero included.",
@@ -28,7 +27,7 @@
       "description": "One record per task, ordered by index.",
       "items": {
         "type": "object",
-        "required": ["index", "verdict", "exit", "fuel", "peak_memory"],
+        "required": ["index", "verdict", "exit", "peak_memory"],
         "additionalProperties": false,
         "properties": {
           "index": { "type": "integer" },
@@ -37,8 +36,7 @@
             "enum": ["Pass", "Fail", "CompileError", "RuntimeError", "Timeout", "MemoryExceeded", "OutputExceeded", "RuntimeUnavailable"]
           },
           "exit": { "type": "integer", "description": "Exit code; 0 for a passing task, -1 for a trap." },
-          "fuel": { "type": "integer", "description": "Fuel consumed; the cap for a Timeout." },
-          "peak_memory": { "type": "integer", "description": "Peak linear memory in bytes." },
+          "peak_memory": { "type": "integer", "description": "Peak linear memory in bytes (64 KiB pages; identical across hosts)." },
           "cases": {
             "type": "array",
             "description": "Present for tasks with a suite: one record per case.",

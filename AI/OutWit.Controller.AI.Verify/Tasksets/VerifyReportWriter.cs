@@ -9,10 +9,11 @@ namespace OutWit.Controller.AI.Verify.Tasksets;
 /// record per task, ordered by task index. Verdict-first and kilobyte-scale — the small,
 /// deterministic output the suitability filter wants and an RLVR pipeline consumes.
 ///
-/// The report is byte-deterministic for a given taskset: it carries only reproducible
-/// fields (verdict, exit, fuel, peak memory), never wall time — wall time is
-/// hardware-dependent telemetry and lives on <see cref="VerifyResultData"/> for the
-/// allocator, not in the reward artifact.
+/// The report is the run's identity: it carries only the fields two honest executions
+/// agree on wherever they ran (verdict, exit code, per-case outcome, peak memory), so it is
+/// byte-identical for a taskset regardless of placement. Fuel is reproducible on a host but
+/// drifts between hosts for CPython tasks, and wall time is hardware; both are metrics and
+/// live per task in the provenance document (<see cref="VerifyProvenanceWriter"/>).
 /// </summary>
 public static class VerifyReportWriter
 {
@@ -34,7 +35,6 @@ public static class VerifyReportWriter
             writer.WriteNumber("total", ordered.Count);
             writer.WriteNumber("pass", passCount);
             writer.WriteNumber("pass_rate", ordered.Count == 0 ? 0.0 : (double)passCount / ordered.Count);
-            writer.WriteNumber("total_fuel", ordered.Sum(r => r.FuelConsumed));
             writer.WriteStartObject("verdicts");
             foreach (var (verdict, count) in histogram)
                 writer.WriteNumber(verdict, count);
@@ -48,7 +48,6 @@ public static class VerifyReportWriter
                 writer.WriteNumber("index", result.TaskIndex);
                 writer.WriteString("verdict", result.Verdict.ToString());
                 writer.WriteNumber("exit", result.ExitCode);
-                writer.WriteNumber("fuel", result.FuelConsumed);
                 writer.WriteNumber("peak_memory", result.PeakMemoryBytes);
                 if (result.CaseResults.Count > 0)
                 {

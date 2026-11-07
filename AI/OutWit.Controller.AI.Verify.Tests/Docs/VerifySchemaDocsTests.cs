@@ -77,8 +77,8 @@ public sealed class VerifySchemaDocsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(summary, Is.EquivalentTo(new[] { "total", "pass", "pass_rate", "total_fuel", "verdicts" }));
-            Assert.That(result, Is.EquivalentTo(new[] { "index", "verdict", "exit", "fuel", "peak_memory", "cases" }));
+            Assert.That(summary, Is.EquivalentTo(new[] { "total", "pass", "pass_rate", "verdicts" }));
+            Assert.That(result, Is.EquivalentTo(new[] { "index", "verdict", "exit", "peak_memory", "cases" }));
             Assert.That(verdicts, Is.EquivalentTo(Enum.GetNames<OutWit.Controller.AI.Verify.Model.VerifyVerdict>()));
         });
     }
@@ -91,13 +91,16 @@ public sealed class VerifySchemaDocsTests
 
         var corpusProperties = PropertyNames(corpus.RootElement.GetProperty("properties"));
         var nodeProperties = PropertyNames(provenance.RootElement.GetProperty("properties").GetProperty("nodes").GetProperty("items").GetProperty("properties"));
-        var batchProperties = PropertyNames(provenance.RootElement.GetProperty("properties").GetProperty("batches").GetProperty("items").GetProperty("properties"));
+        var batchItem = provenance.RootElement.GetProperty("properties").GetProperty("batches").GetProperty("items").GetProperty("properties");
+        var batchProperties = PropertyNames(batchItem);
+        var metricProperties = PropertyNames(batchItem.GetProperty("metrics").GetProperty("items").GetProperty("properties"));
 
         Assert.Multiple(() =>
         {
             Assert.That(corpusProperties, Is.EquivalentTo(new[] { "index", "verdict", "exit", "stdout", "stdout_truncated", "stderr", "stderr_truncated" }));
-            Assert.That(nodeProperties, Is.EquivalentTo(new[] { "node_id", "node_name", "runtime_target", "wasmtime", "native_library", "controller", "batches", "tasks", "runtimes" }));
-            Assert.That(batchProperties, Is.EquivalentTo(new[] { "node_id", "node_name", "runtime", "runtime_sha256", "degree", "wall_ms", "tasks" }));
+            Assert.That(nodeProperties, Is.EquivalentTo(new[] { "node_id", "node_name", "runtime_target", "wasmtime", "native_library", "controller", "batches", "tasks", "fuel", "runtimes" }));
+            Assert.That(batchProperties, Is.EquivalentTo(new[] { "node_id", "node_name", "runtime", "runtime_sha256", "degree", "wall_ms", "fuel", "tasks", "metrics" }));
+            Assert.That(metricProperties, Is.EquivalentTo(new[] { "index", "fuel", "peak_memory", "wall_ms" }));
         });
     }
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-provenance.schema.json",
   "title": "Verify provenance",
-  "description": "The provenance blob of every Verify script: which node ran which tasks, with which wasmtime and runtime module, at which degree. A record, not an identity (wall times vary); the fleet's inventory is a by-product of any run.",
+  "description": "The provenance blob of every Verify script: which node ran which tasks, with which wasmtime and runtime module, at which degree, and what each task cost (fuel, peak memory, wall time). A record, not an identity (fuel drifts between hosts, wall times vary); the fleet's inventory is a by-product of any run.",
   "type": "object",
   "required": ["nodes", "batches"],
   "additionalProperties": false,
@@ -12,7 +12,7 @@
       "description": "One entry per node that executed a batch, ordered by name.",
       "items": {
         "type": "object",
-        "required": ["node_id", "node_name", "runtime_target", "wasmtime", "native_library", "controller", "batches", "tasks", "runtimes"],
+        "required": ["node_id", "node_name", "runtime_target", "wasmtime", "native_library", "controller", "batches", "tasks", "fuel", "runtimes"],
         "additionalProperties": false,
         "properties": {
           "node_id": { "type": "string", "format": "uuid", "description": "The node's engine id (the client id on the server)." },
@@ -23,6 +23,7 @@
           "controller": { "type": "string", "description": "The controller version the node ran." },
           "batches": { "type": "integer" },
           "tasks": { "type": "integer" },
+          "fuel": { "type": "integer", "description": "Fuel the node's tasks consumed in total." },
           "runtimes": {
             "type": "object",
             "description": "Runtime id → the SHA-256 the module was verified against, for every runtime the node ran.",
@@ -36,7 +37,7 @@
       "description": "One entry per result batch, ordered by first task index.",
       "items": {
         "type": "object",
-        "required": ["tasks"],
+        "required": ["fuel", "tasks", "metrics"],
         "additionalProperties": false,
         "properties": {
           "node_id": { "type": "string", "format": "uuid" },
@@ -44,8 +45,24 @@
           "runtime": { "type": "string" },
           "runtime_sha256": { "type": "string" },
           "degree": { "type": "integer", "description": "Concurrent sandboxes the batch ran at." },
-          "wall_ms": { "type": "integer" },
-          "tasks": { "type": "array", "items": { "type": "integer" }, "description": "Task indices of the batch, ascending." }
+          "wall_ms": { "type": "integer", "description": "Wall time of the whole batch on the node." },
+          "fuel": { "type": "integer", "description": "Fuel the batch's tasks consumed in total." },
+          "tasks": { "type": "array", "items": { "type": "integer" }, "description": "Task indices of the batch, ascending." },
+          "metrics": {
+            "type": "array",
+            "description": "One record per task of the batch, in the order of `tasks`: what the task cost on this node. Fuel is reproducible on a host (the cap for a Timeout) but drifts between hosts for CPython tasks; wall time is hardware.",
+            "items": {
+              "type": "object",
+              "required": ["index", "fuel", "peak_memory", "wall_ms"],
+              "additionalProperties": false,
+              "properties": {
+                "index": { "type": "integer" },
+                "fuel": { "type": "integer" },
+                "peak_memory": { "type": "integer", "description": "Peak linear memory in bytes." },
+                "wall_ms": { "type": "integer" }
+              }
+            }
+          }
         }
       }
     }

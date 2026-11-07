@@ -130,7 +130,7 @@ public sealed class VerifyTasksetPipelineTests
         // results ordered by index: 0,1,2
         Assert.That(summary.Json.IndexOf("\"index\":0", StringComparison.Ordinal),
             Is.LessThan(summary.Json.IndexOf("\"index\":2", StringComparison.Ordinal)));
-        Assert.That(summary.Json, Does.Contain("\"total_fuel\":220"));
+        Assert.That(summary.Json, Does.Not.Contain("fuel"), "fuel is a metric of the provenance, not of the identity");
         Assert.That(summary.Json, Does.Contain("\"Pass\":2"));
         Assert.That(summary.Json, Does.Contain("\"Fail\":1"));
     }

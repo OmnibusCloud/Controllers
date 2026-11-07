@@ -27,10 +27,10 @@ proof checks or it does not.
 | `Verify.Split` | host | taskset (JSON lines) + options → batches, grouped by runtime, limits clamped to the host ceilings |
 | `Verify.ExecuteBatch` | node | the primitive: one compiled runtime module, the batch's tasks executed concurrently in isolated stores under fuel, memory and wall-clock limits; per-task progress; batch provenance |
 | `Verify.Execute` | node | the single-task variant |
-| `Verify.Collect` | host | result batches → the verdict report (aggregates + one record per task; byte-deterministic) |
+| `Verify.Collect` | host | result batches → the verdict report (aggregates + one record per task; the run's identity, byte-identical regardless of placement) |
 | `Verify.CollectOutputs` | host | result batches → the corpus (one JSON line per task with its outputs; byte-deterministic) |
 | `Verify.MakeCheckTasks` | host | generator results + a checker spec → check task batches, one check per passing candidate under the candidate's index |
-| `Verify.Provenance` | host | result batches → the provenance document (which node ran which tasks, with which wasmtime and runtime module, at which degree) |
+| `Verify.Provenance` | host | result batches → the provenance document (which node ran which tasks, with which wasmtime and runtime module, at which degree, and what each task cost: fuel, peak memory, wall time) |
 | `Verify.Preflight` | host | counts, runtimes referenced, unknown runtimes, size estimate, ceiling notes — before anything runs |
 | `Verify.RuntimeDiagnostics` | host | wasmtime version (the native library is loaded to prove it), runtime target, per-runtime availability and hash — of the server's module; a node's module is exercised by `Verify.ExecuteBatch` and described by the provenance |
 
@@ -88,14 +88,16 @@ of the checker itself stays distinguishable as a `RuntimeError`.
 
 ## Determinism
 
-The verdict report excludes wall time and is byte-identical for a taskset
-across runs on the same placement. Across hosts, verdicts, outputs and peak
-memory are identical; fuel is reproducible per host but drifts by about
+The verdict report is the run's identity: it carries verdicts, exit codes,
+per-case outcomes and peak memory — the fields two honest executions agree on
+wherever they ran — and is byte-identical for a taskset regardless of which
+nodes ran which batches. Fuel is reproducible per host but drifts by about
 0.01–0.06 % between hosts for CPython tasks (the import machinery scans the
 stdlib directory and each file system lists it its own way), while QuickJS
-tasks are byte-equal everywhere. Compare verdicts and outputs across hosts,
-treat fuel as a metric. The sandbox pins the clock and seeds the random source
-from the task, so a program sees the same world on every node.
+tasks are byte-equal everywhere; wall time is hardware. Both are metrics and
+live per task in the provenance document. The sandbox pins the clock and seeds
+the random source from the task, so a program sees the same world on every
+node.
 
 ## Node behaviour
 
