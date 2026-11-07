@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Sandbox;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Verify.Tests.Scripts;
@@ -83,6 +84,43 @@ public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
             .ToList();
         Assert.That(covered, Is.EqualTo(new[] { 0, 1, 2, 3 }));
         Assert.That(provenance.RootElement.GetProperty("nodes").GetArrayLength(), Is.GreaterThan(0));
+    }
+
+    [Test]
+    public async Task RunSpansTheRawWasiAndSympyRuntimesTest()
+    {
+        // One taskset over three runtimes: a hand-assembled WASI module, a sympy solve, and
+        // plain Python — three batches, one report, a provenance that names each runtime.
+        var taskset = new StringBuilder();
+        taskset.AppendLine("""{"index":0,"runtime":"wasi","entry":"hello.wasm","sources":{"hello.wasm":""" + "\"" + VerifySelfCheck.HELLO_WASM_BASE64 + "\"" + """},"suite":[{"expected_stdout":"hello\n"}]}""");
+        taskset.AppendLine("""{"index":1,"runtime":"python-3.14.6-sympy-1.14.0","entry":"m.py","sources":{"m.py":"import sympy\nx=sympy.symbols('x')\nprint(sympy.solve(x**2-4, x))"},"suite":[{"expected_stdout":"[-2, 2]\n"}]}""");
+        taskset.AppendLine("""{"index":2,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"import sympy"}}""");
+
+        var tasksetBlobId = await UploadAsync(taskset.ToString(), "taskset.jsonl");
+
+        var job = Engine.Compile(m_verifyRunScript);
+        var status = await Engine.ScheduleAndWaitAsync(job, tasksetBlobId, new VerifyOptionsData());
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
+
+        using var report = await ReadJsonAsync((Guid)job.Variables["report"].Value!);
+        var verdictByIndex = report.RootElement.GetProperty("results").EnumerateArray()
+            .ToDictionary(r => r.GetProperty("index").GetInt32(), r => r.GetProperty("verdict").GetString());
+
+        using var provenance = await ReadJsonAsync((Guid)job.Variables["provenance"].Value!);
+        var runtimes = provenance.RootElement.GetProperty("batches").EnumerateArray()
+            .Select(batch => batch.GetProperty("runtime").GetString())
+            .OrderBy(runtime => runtime, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(verdictByIndex[0], Is.EqualTo("Pass"), "the raw module");
+            Assert.That(verdictByIndex[1], Is.EqualTo("Pass"), "sympy on its runtime");
+            Assert.That(verdictByIndex[2], Is.EqualTo("RuntimeError"), "sympy is not on the plain runtime");
+            Assert.That(runtimes, Is.EqualTo(new[] { "python-3.14.6", "python-3.14.6-sympy-1.14.0", "wasi" }));
+            Assert.That(report.RootElement.GetProperty("summary").GetProperty("pass").GetInt32(), Is.EqualTo(2));
+        });
     }
 
     [Test]

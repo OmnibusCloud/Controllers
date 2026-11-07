@@ -34,7 +34,7 @@ public abstract class VerifyScriptTestBase
 
         var runtimesRoot = Path.Combine(solutionRoot, "AI", "OutWit.Controller.AI.Verify.Tests", "@Data", "runtimes");
         if (VerifyRuntimeCatalog.Resolve(runtimesRoot, VerifyRuntimeCatalog.PYTHON_3_14_6, out _) == null)
-            Assert.Ignore($"Pinned runtimes not resolvable under '{runtimesRoot}' — run download-spike-runtimes.ps1 to opt in.");
+            Assert.Ignore($"Pinned runtimes not resolvable under '{runtimesRoot}' — run verify-assets build @Data/runtimes to opt in.");
 
         // The in-process nodes read this to locate the runtime archive.
         Environment.SetEnvironmentVariable(VerifyRuntimeLocator.OverrideEnvVar, runtimesRoot);
