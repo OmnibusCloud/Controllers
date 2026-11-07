@@ -16,6 +16,9 @@ public static class VerifyRuntimeCatalog
     public const string PYTHON_3_14_6 = "python-3.14.6";
     public const string QUICKJS_0_15_1 = "quickjs-0.15.1";
 
+    /// <summary>The raw WASI runtime: the task's entry source is the command module itself.</summary>
+    public const string WASI = "wasi";
+
     #endregion
 
     #region Fields
@@ -40,6 +43,16 @@ public static class VerifyRuntimeCatalog
                 RootDir = null,
                 Sha256 = "b4071ef2fbb2bb693c0bbcfc07cb9d28639fd9cea2fd986824a57aeac929817b",
                 Argv0 = "qjs"
+            },
+            [WASI] = new()
+            {
+                Id = WASI,
+                Language = VerifyRuntimeLanguage.Wasi,
+                TaskSupplied = true,
+                ModulePath = "",
+                RootDir = null,
+                Sha256 = "",
+                Argv0 = "main.wasm"
             }
         };
 
@@ -59,15 +72,33 @@ public static class VerifyRuntimeCatalog
 
     /// <summary>
     /// Resolves a runtime id to verified on-disk paths. Returns null (with a reason)
-    /// when the id is unknown, files are missing, or the module fails its hash pin —
-    /// all of which map to the RuntimeUnavailable verdict, never to an exception.
+    /// when the id is unknown, the runtimes root is missing, files are missing, or the
+    /// module fails its hash pin — all of which map to the RuntimeUnavailable verdict,
+    /// never to an exception. A task-supplied runtime needs nothing on disk and resolves
+    /// without a root.
     /// </summary>
-    public static VerifyResolvedRuntime? Resolve(string runtimesRoot, string runtimeId, out string? unavailableReason)
+    /// <param name="runtimesRoot">The runtimes root, or null when the node has none.</param>
+    /// <param name="runtimeId">The runtime id a task names.</param>
+    /// <param name="unavailableReason">Why the runtime is unavailable, when it is.</param>
+    /// <returns>The resolved runtime, or null.</returns>
+    public static VerifyResolvedRuntime? Resolve(string? runtimesRoot, string runtimeId, out string? unavailableReason)
     {
         var descriptor = Find(runtimeId);
         if (descriptor == null)
         {
             unavailableReason = $"unknown runtime id '{runtimeId}' (known: {string.Join(", ", KnownIds)})";
+            return null;
+        }
+
+        if (descriptor.TaskSupplied)
+        {
+            unavailableReason = null;
+            return new VerifyResolvedRuntime(descriptor, "", null);
+        }
+
+        if (runtimesRoot == null)
+        {
+            unavailableReason = $"runtimes root not found (set {VerifyRuntimeLocator.OverrideEnvVar} or stage the runtime archive)";
             return null;
         }
 
@@ -107,5 +138,8 @@ public static class VerifyRuntimeCatalog
     #endregion
 }
 
-/// <summary>A runtime that passed resolution: descriptor plus verified absolute paths.</summary>
+/// <summary>
+/// A runtime that passed resolution: descriptor plus verified absolute paths (both empty
+/// for a task-supplied runtime).
+/// </summary>
 public sealed record VerifyResolvedRuntime(VerifyRuntimeDescriptor Descriptor, string ModulePath, string? RootPath);

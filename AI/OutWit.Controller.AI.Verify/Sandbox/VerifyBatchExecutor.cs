@@ -40,12 +40,7 @@ public static class VerifyBatchExecutor
         var stopwatch = Stopwatch.StartNew();
         var results = new VerifyResultData[batch.Tasks.Count];
 
-        if (runtimesRoot == null)
-        {
-            FillUnavailable(results, batch, $"runtimes root not found (set {VerifyRuntimeLocator.OverrideEnvVar} or stage the runtime archive)");
-            return Finish(results, batch, nodeId, null, 0, stopwatch);
-        }
-
+        // A missing root is one more unavailable reason (the raw WASI runtime needs none).
         var runtime = VerifyRuntimeCatalog.Resolve(runtimesRoot, batch.RuntimeId, out var reason);
         if (runtime == null)
         {

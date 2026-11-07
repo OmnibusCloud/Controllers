@@ -3,7 +3,9 @@ namespace OutWit.Controller.AI.Verify.Runtimes;
 /// <summary>
 /// One pinned language runtime: a platform-independent WASI command module identified
 /// by content hash. Reproducibility and byte-comparison integrity both hang on the
-/// pin — a runtime that fails its hash check is treated as absent.
+/// pin — a runtime that fails its hash check is treated as absent. The one exception is
+/// the task-supplied runtime (<see cref="TaskSupplied"/>): no module of its own, the
+/// task carries it, and the hash the provenance records is empty.
 /// </summary>
 public sealed record VerifyRuntimeDescriptor
 {
@@ -11,6 +13,12 @@ public sealed record VerifyRuntimeDescriptor
     public required string Id { get; init; }
 
     public required VerifyRuntimeLanguage Language { get; init; }
+
+    /// <summary>
+    /// True when the module comes with each task (the raw WASI runtime): nothing on disk to
+    /// resolve or pin, <see cref="ModulePath"/> and <see cref="Sha256"/> are empty.
+    /// </summary>
+    public bool TaskSupplied { get; init; }
 
     /// <summary>Path of the .wasm command module, relative to the runtimes root.</summary>
     public required string ModulePath { get; init; }

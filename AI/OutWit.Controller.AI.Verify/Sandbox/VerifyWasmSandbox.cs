@@ -40,6 +40,7 @@ public sealed class VerifyWasmSandbox : IDisposable
     private readonly string m_ioDir;
     private readonly object m_modulesLock = new();
     private readonly Dictionary<string, WasmModule> m_modules = new();
+    private readonly VerifyTaskModuleCache m_taskModules;
     private bool m_disposed;
 
     #endregion
@@ -66,6 +67,8 @@ public sealed class VerifyWasmSandbox : IDisposable
         // (SetEpochDeadline) convert a wall-time budget into a tick count.
         m_epochTimer = new Timer(_ => m_engine.IncrementEpoch(), null, EPOCH_TICK_MS, EPOCH_TICK_MS);
 
+        m_taskModules = new VerifyTaskModuleCache(m_engine);
+
         m_ioDir = Path.Combine(Path.GetTempPath(), $"witai_verify_{Guid.NewGuid():N}");
         Directory.CreateDirectory(m_ioDir);
     }
@@ -81,13 +84,32 @@ public sealed class VerifyWasmSandbox : IDisposable
     public VerifyResultData Execute(VerifyResolvedRuntime runtime, VerifyTaskData task, VerifyLimitsData limits)
     {
         WasmModule module;
-        try
+        if (runtime.Descriptor.TaskSupplied)
         {
-            module = GetOrCompile(runtime);
+            // The task's own module: a bad one is the task's verdict, not the node's.
+            try
+            {
+                module = CompileTaskModule(task);
+            }
+            catch (FormatException exception)
+            {
+                return Verdict(task.TaskIndex, VerifyVerdict.CompileError, exception.Message);
+            }
+            catch (WasmtimeException exception)
+            {
+                return Verdict(task.TaskIndex, VerifyVerdict.CompileError, $"module failed to compile: {exception.Message}");
+            }
         }
-        catch (WasmtimeException exception)
+        else
         {
-            return Unavailable(task.TaskIndex, $"runtime module failed to compile: {exception.Message}");
+            try
+            {
+                module = GetOrCompile(runtime);
+            }
+            catch (WasmtimeException exception)
+            {
+                return Verdict(task.TaskIndex, VerifyVerdict.RuntimeUnavailable, $"runtime module failed to compile: {exception.Message}");
+            }
         }
 
         return task.Suite is { Cases.Count: > 0 }
@@ -216,7 +238,7 @@ public sealed class VerifyWasmSandbox : IDisposable
             using var linker = BuildLinker(task.RandomSeed);
 
             var start = DateTime.UtcNow;
-            var (verdict, exitCode, trapMemoryFault, peakMemory) = Invoke(linker, store, module);
+            var (verdict, exitCode, trapMemoryFault, peakMemory, fault) = Invoke(linker, store, module);
             var wallMs = (int)(DateTime.UtcNow - start).TotalMilliseconds;
 
             var fuelConsumed = trapMemoryFault ? limits.FuelBudget : (long)((ulong)limits.FuelBudget - store.Fuel);
@@ -228,6 +250,10 @@ public sealed class VerifyWasmSandbox : IDisposable
 
             var (stdout, stdoutTruncated) = ReadCapped(stdoutPath, limits.StdoutLimitBytes);
             var (stderr, stderrTruncated) = ReadCapped(stderrPath, limits.StderrLimitBytes);
+
+            // A module that could not be instantiated never ran: the host's reason is its stderr.
+            if (fault != null && stderr.Length == 0)
+                stderr = fault;
 
             // An allocation past the store cap usually surfaces as a graceful in-guest OOM
             // (a clean nonzero exit), not a hard trap. Reclassify it to MemoryExceeded so the
@@ -254,7 +280,7 @@ public sealed class VerifyWasmSandbox : IDisposable
         }
     }
 
-    private static (VerifyVerdict Verdict, int ExitCode, bool MemoryFault, long PeakMemory) Invoke(Linker linker, Store store, WasmModule module)
+    private static InvokeOutcome Invoke(Linker linker, Store store, WasmModule module)
     {
         Instance instance;
         try
@@ -264,27 +290,33 @@ public sealed class VerifyWasmSandbox : IDisposable
         catch (WasmtimeException exception) when (exception.ExitCode is { } code)
         {
             // A guest that proc_exits during module init (before _start) still lands here.
-            return code == 0 ? (VerifyVerdict.Pass, 0, false, 0) : (VerifyVerdict.RuntimeError, code, false, 0);
+            return code == 0 ? new(VerifyVerdict.Pass, 0, false, 0) : new(VerifyVerdict.RuntimeError, code, false, 0);
         }
         catch (TrapException trap)
         {
             return MapTrap(trap);
+        }
+        catch (WasmtimeException exception)
+        {
+            // Unresolved imports, a type mismatch against WASI, a memory the store cannot
+            // grant: the module never ran. A task-supplied module owns this verdict.
+            return new(VerifyVerdict.CompileError, -1, false, 0, $"module failed to instantiate: {exception.Message}");
         }
 
         try
         {
             var startAction = instance.GetAction("_start");
             if (startAction == null)
-                return (VerifyVerdict.RuntimeError, -1, false, PeakMemory(instance));
+                return new(VerifyVerdict.RuntimeError, -1, false, PeakMemory(instance), "module exports no _start");
 
             startAction();
-            return (VerifyVerdict.Pass, 0, false, PeakMemory(instance));
+            return new(VerifyVerdict.Pass, 0, false, PeakMemory(instance));
         }
         catch (WasmtimeException exception) when (exception.ExitCode is { } code)
         {
             // WASI proc_exit — a clean guest exit with a code (0 = success).
             var peak = PeakMemory(instance);
-            return code == 0 ? (VerifyVerdict.Pass, 0, false, peak) : (VerifyVerdict.RuntimeError, code, false, peak);
+            return code == 0 ? new(VerifyVerdict.Pass, 0, false, peak) : new(VerifyVerdict.RuntimeError, code, false, peak);
         }
         catch (TrapException trap)
         {
@@ -292,7 +324,7 @@ public sealed class VerifyWasmSandbox : IDisposable
         }
     }
 
-    private static (VerifyVerdict Verdict, int ExitCode, bool MemoryFault, long PeakMemory) MapTrap(TrapException trap)
+    private static InvokeOutcome MapTrap(TrapException trap)
     {
         var verdict = trap.Type switch
         {
@@ -303,7 +335,7 @@ public sealed class VerifyWasmSandbox : IDisposable
             TrapCode.MemoryOutOfBounds => VerifyVerdict.MemoryExceeded,
             _ => VerifyVerdict.RuntimeError
         };
-        return (verdict, -1, true, 0);
+        return new(verdict, -1, true, 0);
     }
 
     private static long PeakMemory(Instance instance)
@@ -338,8 +370,8 @@ public sealed class VerifyWasmSandbox : IDisposable
                 .WithEnvironmentVariable("PYTHONUNBUFFERED", "1");
         }
 
-        // Stdlib preopen, read-only. The task's own sources travel inline via -c/-e, so
-        // v1 needs no writable guest FS — the strongest containment posture.
+        // Stdlib preopen, read-only. The task's own sources travel inline via -c/-e (or are
+        // the module), so v1 needs no writable guest FS — the strongest containment posture.
         if (runtime.RootPath != null)
             wasi = wasi.WithPreopenedDirectory(runtime.RootPath, "/", WasiDirectoryPermissions.Read, WasiFilePermissions.Read);
 
@@ -351,8 +383,7 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     private static string[] BuildArgv(VerifyResolvedRuntime runtime, VerifyTaskData task, IReadOnlyList<string> args)
     {
-        var entry = task.Sources.FirstOrDefault(s => s.Name == task.EntryPoint)
-                    ?? task.Sources.FirstOrDefault();
+        var entry = EntrySource(task);
         var code = entry?.Content ?? "";
 
         // v1 executes the entry source inline (no writable guest FS). Multi-file programs
@@ -369,10 +400,20 @@ public sealed class VerifyWasmSandbox : IDisposable
                 argv.Add("-e");
                 argv.Add(code);
                 break;
+            case VerifyRuntimeLanguage.Wasi:
+                // The module is the program: argv[0] is its name, the rest the task's args.
+                argv[0] = entry?.Name is { Length: > 0 } name ? name : runtime.Descriptor.Argv0;
+                break;
         }
 
         argv.AddRange(args);
         return argv.ToArray();
+    }
+
+    private static VerifySourceFileData? EntrySource(VerifyTaskData task)
+    {
+        return task.Sources.FirstOrDefault(s => s.Name == task.EntryPoint)
+               ?? task.Sources.FirstOrDefault();
     }
 
     /// <summary>
@@ -430,6 +471,26 @@ public sealed class VerifyWasmSandbox : IDisposable
         }
     }
 
+    /// <summary>The raw WASI runtime: the entry source holds the module bytes, base64.</summary>
+    /// <exception cref="FormatException">The entry is missing or not base64.</exception>
+    /// <exception cref="WasmtimeException">The bytes are not a valid module.</exception>
+    private WasmModule CompileTaskModule(VerifyTaskData task)
+    {
+        var entry = EntrySource(task) ?? throw new FormatException("a wasi task needs an entry source: the module bytes, base64");
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(entry.Content);
+        }
+        catch (FormatException)
+        {
+            throw new FormatException($"entry '{entry.Name}' of a wasi task must hold the module bytes in base64");
+        }
+
+        return m_taskModules.GetOrCompile(entry.Name, bytes);
+    }
+
     private static ulong WallToTicks(int wallMs)
     {
         var ticks = (wallMs + EPOCH_TICK_MS - 1) / EPOCH_TICK_MS;
@@ -455,12 +516,12 @@ public sealed class VerifyWasmSandbox : IDisposable
         return (System.Text.Encoding.UTF8.GetString(bytes), false);
     }
 
-    private static VerifyResultData Unavailable(int taskIndex, string reason)
+    private static VerifyResultData Verdict(int taskIndex, VerifyVerdict verdict, string reason)
     {
         return new VerifyResultData
         {
             TaskIndex = taskIndex,
-            Verdict = VerifyVerdict.RuntimeUnavailable,
+            Verdict = verdict,
             ExitCode = -1,
             Stderr = reason
         };
@@ -498,6 +559,7 @@ public sealed class VerifyWasmSandbox : IDisposable
             m_modules.Clear();
         }
 
+        m_taskModules.Dispose();
         m_engine.Dispose();
 
         try
@@ -519,6 +581,9 @@ public sealed class VerifyWasmSandbox : IDisposable
         VerifyVerdict Verdict, int ExitCode,
         string Stdout, bool StdoutTruncated, string Stderr, bool StderrTruncated,
         long FuelConsumed, long PeakMemoryBytes, int WallMs);
+
+    /// <summary>What one instantiate-and-start attempt came to; Fault is the host's reason when the guest never ran.</summary>
+    private sealed record InvokeOutcome(VerifyVerdict Verdict, int ExitCode, bool MemoryFault, long PeakMemory, string? Fault = null);
 
     private sealed class RandomState(ulong seed)
     {

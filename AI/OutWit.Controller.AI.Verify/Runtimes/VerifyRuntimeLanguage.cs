@@ -7,5 +7,12 @@ namespace OutWit.Controller.AI.Verify.Runtimes;
 public enum VerifyRuntimeLanguage
 {
     Python = 0,
-    JavaScript = 1
+    JavaScript = 1,
+
+    /// <summary>
+    /// No interpreter: the task's entry source is itself a WASI command module (its bytes,
+    /// base64), run as compiled — Rust, C/C++, Zig, TinyGo and anything else that targets
+    /// wasm32-wasi. argv[0] is the entry name; args, stdin, suite and limits as for any task.
+    /// </summary>
+    Wasi = 2
 }

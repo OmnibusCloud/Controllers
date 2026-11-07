@@ -41,6 +41,7 @@ public class VerifyModuleLoadTests
     private const string NATIVE_PATH_PREFIX = "wasmtime-native-path: ";
     private const string PYTHON_PASS = "python-3.14.6: Pass exit=0 stdout=42";
     private const string QUICKJS_PASS = "quickjs-0.15.1: Pass exit=0 stdout=42";
+    private const string WASI_PASS = "wasi: Pass exit=0 stdout=hello";
 
     #endregion
 
@@ -152,6 +153,7 @@ public class VerifyModuleLoadTests
             Assert.That(report, Does.Contain(NATIVE_LOADED), report);
             Assert.That(report, Does.Contain(PYTHON_PASS), report);
             Assert.That(report, Does.Contain(QUICKJS_PASS), report);
+            Assert.That(report, Does.Contain(WASI_PASS), report);
             Assert.That(ReportValue(report, MANAGED_PREFIX), Does.StartWith(m_moduleDir).IgnoreCase,
                 "Wasmtime.Dotnet must resolve from the module, not from the test bin");
             Assert.That(ReportValue(report, WASM_ROOT_PREFIX), Is.EqualTo(m_wasmDir).IgnoreCase,

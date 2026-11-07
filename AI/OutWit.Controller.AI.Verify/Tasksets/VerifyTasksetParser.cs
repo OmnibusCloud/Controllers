@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Runtimes;
 
 namespace OutWit.Controller.AI.Verify.Tasksets;
 
@@ -14,8 +15,9 @@ namespace OutWit.Controller.AI.Verify.Tasksets;
 ///              "stdout_bytes":262144,"stderr_bytes":65536}}
 ///
 /// `index` defaults to the line ordinal; `entry` defaults to the sole source; `suite`
-/// and `limits` are optional. Parsing collects errors rather than throwing, so a
-/// preflight can report every malformed line at once.
+/// and `limits` are optional. For the raw WASI runtime (`"runtime":"wasi"`) the entry
+/// source is the module's bytes in base64. Parsing collects errors rather than throwing,
+/// so a preflight can report every malformed line at once.
 /// </summary>
 public static class VerifyTasksetParser
 {
@@ -70,6 +72,14 @@ public static class VerifyTasksetParser
         if (sources.All(s => s.Name != entry))
             throw new FormatException($"'entry' '{entry}' is not among the sources");
 
+        // A task-supplied runtime (wasi) carries its module in the entry, base64; say so
+        // here rather than as a CompileError on a node.
+        if (VerifyRuntimeCatalog.Find(runtime)?.TaskSupplied == true
+            && !IsBase64(sources.First(s => s.Name == entry).Content))
+        {
+            throw new FormatException($"'entry' '{entry}' of a '{runtime}' task must hold the module bytes in base64");
+        }
+
         return new VerifyTaskData
         {
             TaskIndex = GetInt(root, "index") ?? ordinal,
@@ -122,6 +132,11 @@ public static class VerifyTasksetParser
     #endregion
 
     #region JSON Helpers
+
+    private static bool IsBase64(string content)
+    {
+        return content.Length > 0 && Convert.TryFromBase64String(content, new byte[content.Length], out _);
+    }
 
     private static string? GetString(JsonElement element, string name)
     {

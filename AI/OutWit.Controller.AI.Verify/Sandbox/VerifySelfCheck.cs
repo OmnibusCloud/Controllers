@@ -24,6 +24,14 @@ public static class VerifySelfCheck
     public const string NATIVE_PATH_PREFIX = "wasmtime-native-path: ";
     public const string NATIVE_RESOLVER_PREFIX = "wasmtime-native-resolver: ";
 
+    /// <summary>
+    /// A 224-byte WASI command module that writes "hello\n" (fd_write) and returns — the raw
+    /// wasi runtime's probe, and the example the README shows. Assembled by hand; the tests
+    /// pin it against their own assembler.
+    /// </summary>
+    public const string HELLO_WASM_BASE64 =
+        "AGFzbQEAAAABEANgBH9/f38Bf2ABfwBgAAACZwMWd2FzaV9zbmFwc2hvdF9wcmV2aWV3MQhmZF93cml0ZQAAFndhc2lfc25hcHNob3RfcHJldmlldzEHZmRfcmVhZAAAFndhc2lfc25hcHNob3RfcHJldmlldzEJcHJvY19leGl0AAEDAgECBQMBAAEHEwIGbWVtb3J5AgAGX3N0YXJ0AAMKDwENAEEBQQBBAUEIEAAaCwssAQBBAAsmIAAAAAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABoZWxsbwo=";
+
     #endregion
 
     #region Fields
@@ -31,7 +39,8 @@ public static class VerifySelfCheck
     private static readonly (string Id, string Entry, string Source)[] PROBES =
     [
         (VerifyRuntimeCatalog.PYTHON_3_14_6, "m.py", "print(6*7)"),
-        (VerifyRuntimeCatalog.QUICKJS_0_15_1, "m.js", "console.log(6*7)")
+        (VerifyRuntimeCatalog.QUICKJS_0_15_1, "m.js", "console.log(6*7)"),
+        (VerifyRuntimeCatalog.WASI, "hello.wasm", HELLO_WASM_BASE64)
     ];
 
     #endregion
@@ -75,12 +84,12 @@ public static class VerifySelfCheck
 
     private static string Probe(VerifyWasmSandbox sandbox, string? root, string id, string entry, string source)
     {
-        if (root == null)
-            return $"{id}: no wasm root";
-
+        // A task-supplied runtime needs no root; the others report its absence as such.
         var runtime = VerifyRuntimeCatalog.Resolve(root, id, out var reason);
         if (runtime == null)
-            return $"{id}: unavailable ({reason})";
+            return root == null && VerifyRuntimeCatalog.Find(id)?.TaskSupplied != true
+                ? $"{id}: no wasm root"
+                : $"{id}: unavailable ({reason})";
 
         var task = new VerifyTaskData
         {

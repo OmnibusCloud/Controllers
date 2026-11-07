@@ -120,11 +120,28 @@ rate), which the batch work estimate (task count) matches.
 ## Runtimes
 
 Language runtimes are WebAssembly modules, platform-independent and pinned by
-SHA-256 in the controller's catalog: CPython 3.14.6 (WASI) and QuickJS-NG
-0.15.1. A task names its runtime; a batch shares one compiled module.
+SHA-256 in the controller's catalog. A task names its runtime; a batch shares
+one compiled module.
 
-Honest v1 scope: pure Python with the standard library, and JavaScript. No C
-extensions inside WASI yet.
+| Runtime id | What runs | Entry |
+|---|---|---|
+| `python-3.14.6` | CPython 3.14.6 (WASI build), pure Python with the standard library | the source, inline |
+| `quickjs-0.15.1` | QuickJS-NG 0.15.1, JavaScript | the source, inline |
+| `wasi` | the task's own WASI command module: Rust, C/C++, Zig, TinyGo, anything that targets wasm32-wasi (`_start`, WASI preview 1) | the module's bytes, base64; its name is `argv[0]` |
+
+The raw `wasi` runtime has no module of its own: each task carries one,
+compiled by the lab offline, and the sandbox compiles it on the node (cached by
+content hash within a batch). args, stdin, suite and limits work as for any
+task; a module that does not validate or cannot be instantiated (an import the
+sandbox does not provide) is a `CompileError`, one without `_start` a
+`RuntimeError`. A 224-byte hello, assembled by hand in the tests:
+
+```json
+{"runtime":"wasi","entry":"hello.wasm","sources":{"hello.wasm":"AGFzbQEAAAABEANgBH9/f38Bf2ABfwBgAAACZwMWd2FzaV9zbmFwc2hvdF9wcmV2aWV3MQhmZF93cml0ZQAAFndhc2lfc25hcHNob3RfcHJldmlldzEHZmRfcmVhZAAAFndhc2lfc25hcHNob3RfcHJldmlldzEJcHJvY19leGl0AAEDAgECBQMBAAEHEwIGbWVtb3J5AgAGX3N0YXJ0AAMKDwENAEEBQQBBAUEIEAAaCwssAQBBAAsmIAAAAAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABoZWxsbwo="},"suite":[{"expected_stdout":"hello\n"}]}
+```
+
+Honest v1 scope: pure Python with the standard library, JavaScript, and
+compiled WASI modules. No C extensions inside CPython-WASI yet.
 
 ## What the module carries
 
