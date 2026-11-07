@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-corpus.schema.json",
+  "title": "Verify corpus line",
+  "description": "One line of the corpus blob of VerifyGenerate and VerifyGenerateAndCheck (the candidates): JSON lines, one object per task, ordered by index, outputs verbatim. Byte-identical for a taskset.",
+  "type": "object",
+  "required": ["index", "verdict", "exit", "stdout", "stderr"],
+  "additionalProperties": false,
+  "properties": {
+    "index": { "type": "integer" },
+    "verdict": { "type": "string" },
+    "exit": { "type": "integer" },
+    "stdout": { "type": "string" },
+    "stdout_truncated": { "type": "boolean", "const": true, "description": "Present only when stdout hit its cap." },
+    "stderr": { "type": "string" },
+    "stderr_truncated": { "type": "boolean", "const": true, "description": "Present only when stderr hit its cap." }
+  }
+}

@@ -9,9 +9,11 @@ namespace OutWit.Controller.AI.Verify.Live;
 
 /// <summary>
 /// Drives the Verify scripts on a real server through the public SDK, as an initiator would:
-/// <c>diagnostics</c> runs <c>VerifyRuntimeDiagnostics</c> (one node per run, so repeated runs
-/// sample the fleet); <c>run</c> uploads a taskset, runs <c>VerifyRun</c>, downloads the verdict
-/// report and, over repeated runs, checks that the reports are byte-identical.
+/// <c>diagnostics</c> runs <c>VerifyRuntimeDiagnostics</c> (the server's module); <c>run</c>,
+/// <c>generate</c> and <c>check</c> upload their documents, run <c>VerifyRun</c>,
+/// <c>VerifyGenerate</c> or <c>VerifyGenerateAndCheck</c>, download every output blob, print
+/// the report summary and the provenance (which node ran what), and over repeated runs check
+/// that the report and the corpus are byte-identical.
 /// </summary>
 public static class Program
 {
@@ -26,9 +28,17 @@ public static class Program
 
     private const string DIAGNOSTICS_SCRIPT = "VerifyRuntimeDiagnostics";
     private const string RUN_SCRIPT = "VerifyRun";
+    private const string GENERATE_SCRIPT = "VerifyGenerate";
+    private const string CHECK_SCRIPT = "VerifyGenerateAndCheck";
+
+    private const string REPORT = "report";
+    private const string CORPUS = "corpus";
+    private const string PROVENANCE = "provenance";
 
     private const int DEFAULT_RUNS = 1;
     private const int DEFAULT_BATCH_SIZE = 8;
+
+    private static readonly TimeSpan POLL_INTERVAL = TimeSpan.FromSeconds(2);
 
     #endregion
 
@@ -48,7 +58,11 @@ public static class Program
 
         var server = Environment.GetEnvironmentVariable(SERVER_ENV) ?? DEFAULT_SERVER;
         var identity = Environment.GetEnvironmentVariable(IDENTITY_ENV) ?? DEFAULT_IDENTITY;
-        var runs = OptionValue(args, "--runs", DEFAULT_RUNS);
+        var options = new RunOptions(
+            OptionValue(args, "--runs", DEFAULT_RUNS),
+            OptionValue(args, "--batch-size", DEFAULT_BATCH_SIZE),
+            OptionValue(args, "--max-degree", 0),
+            OptionValue(args, "--save", null));
 
         Console.WriteLine($"server   : {server}");
         Console.WriteLine($"identity : {identity}");
@@ -61,8 +75,10 @@ public static class Program
 
         return args[0] switch
         {
-            "diagnostics" => await DiagnosticsAsync(client, runs),
-            "run" when args.Length >= 2 => await RunAsync(client, args[1], runs, OptionValue(args, "--batch-size", DEFAULT_BATCH_SIZE), OptionValue(args, "--save", null)),
+            "diagnostics" => await DiagnosticsAsync(client, options.Runs),
+            "run" when args.Length >= 2 => await ScriptAsync(client, RUN_SCRIPT, [args[1]], [REPORT, PROVENANCE], options),
+            "generate" when args.Length >= 2 => await ScriptAsync(client, GENERATE_SCRIPT, [args[1]], [CORPUS, REPORT, PROVENANCE], options),
+            "check" when args.Length >= 3 => await ScriptAsync(client, CHECK_SCRIPT, [args[1], args[2]], [REPORT, CORPUS, PROVENANCE], options),
             _ => Usage()
         };
     }
@@ -96,70 +112,147 @@ public static class Program
         return failures == 0 ? 0 : 1;
     }
 
-    private static async Task<int> RunAsync(WitCloudClient client, string tasksetPath, int runs, int batchSize, string? saveDir)
+    private static async Task<int> ScriptAsync(WitCloudClient client, string script, IReadOnlyList<string> inputPaths, IReadOnlyList<string> outputs, RunOptions options)
     {
-        if (!File.Exists(tasksetPath))
+        var inputs = new List<(string Name, byte[] Bytes)>();
+        foreach (var path in inputPaths)
         {
-            Console.Error.WriteLine($"taskset not found: {tasksetPath}");
-            return 2;
+            if (!File.Exists(path))
+            {
+                Console.Error.WriteLine($"input not found: {path}");
+                return 2;
+            }
+
+            var bytes = await File.ReadAllBytesAsync(path);
+            var lines = Encoding.UTF8.GetString(bytes).Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
+            Console.WriteLine($"input    : {Path.GetFileName(path)}, {lines} line(s), {bytes.Length} byte(s)");
+            inputs.Add((Path.GetFileName(path), bytes));
         }
 
-        var taskset = await File.ReadAllBytesAsync(tasksetPath);
-        var lines = Encoding.UTF8.GetString(taskset).Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
-        Console.WriteLine($"taskset  : {Path.GetFileName(tasksetPath)}, {lines} line(s), {taskset.Length} byte(s), batch size {batchSize}");
+        Console.WriteLine($"options  : batch size {options.BatchSize}, max degree {(options.MaxDegree > 0 ? options.MaxDegree.ToString() : "default")}");
 
-        var reports = new List<byte[]>();
-        for (var i = 1; i <= runs; i++)
+        var identity = outputs.Where(name => name is REPORT or CORPUS).ToDictionary(name => name, _ => new List<byte[]>());
+
+        for (var i = 1; i <= options.Runs; i++)
         {
-            var blobId = await client.Blobs.UploadBlobAsync(taskset, Path.GetFileName(tasksetPath));
-            var options = new VerifyOptionsData { BatchSize = batchSize };
+            var parameters = new List<object?>();
+            foreach (var (name, bytes) in inputs)
+                parameters.Add(await client.Blobs.UploadBlobAsync(bytes, name));
+            parameters.Add(new VerifyOptionsData { BatchSize = options.BatchSize, MaxDegree = options.MaxDegree });
 
-            var handle = await client.Scripts.SubmitAsync(RUN_SCRIPT, [blobId, options]);
-            Console.WriteLine($"[{i}/{runs}] {RUN_SCRIPT} submitted: job {handle.JobId} (taskset blob {blobId})");
+            var handle = await client.Scripts.SubmitAsync(script, parameters);
+            Console.WriteLine($"[{i}/{options.Runs}] {script} submitted: job {handle.JobId}");
 
-            var result = await handle.WaitAsync<Guid?>("report", pollInterval: TimeSpan.FromSeconds(2));
-            if (result.Status != ProcessingJobStatus.Completed || result.Result == null)
+            var first = await handle.WaitAsync<Guid?>(outputs[0], pollInterval: POLL_INTERVAL);
+            if (first.Status != ProcessingJobStatus.Completed)
             {
-                Console.WriteLine($"  {result.Status} after {result.Duration}: {result.ErrorMessage}");
+                Console.WriteLine($"  {first.Status} after {first.Duration}: {first.ErrorMessage}");
                 return 1;
             }
 
-            var report = await client.Blobs.DownloadBlobAsync(result.Result.Value);
-            reports.Add(report);
-            if (saveDir != null)
+            Console.WriteLine($"  completed in {first.Duration}");
+
+            foreach (var name in outputs)
             {
-                Directory.CreateDirectory(saveDir);
-                var savedPath = Path.Combine(saveDir, $"report-{i}.json");
-                await File.WriteAllBytesAsync(savedPath, report);
-                Console.WriteLine($"  saved: {savedPath}");
+                var blobId = name == outputs[0]
+                    ? first.Result
+                    : (await handle.WaitAsync<Guid?>(name, pollInterval: POLL_INTERVAL)).Result;
+
+                if (blobId == null)
+                {
+                    Console.WriteLine($"  {name}: (none)");
+                    continue;
+                }
+
+                var bytes = await client.Blobs.DownloadBlobAsync(blobId.Value);
+                if (identity.TryGetValue(name, out var history))
+                    history.Add(bytes);
+
+                if (options.SaveDir != null)
+                {
+                    Directory.CreateDirectory(options.SaveDir);
+                    var extension = name == CORPUS ? "jsonl" : "json";
+                    var savedPath = Path.Combine(options.SaveDir, $"{name}-{i}.{extension}");
+                    await File.WriteAllBytesAsync(savedPath, bytes);
+                }
+
+                Print(name, bytes);
             }
-            Console.WriteLine($"  completed in {result.Duration}: report {report.Length} byte(s), sha256 {Sha256(report)[..16]}…");
-            PrintSummary(report);
         }
 
-        if (reports.Count < 2)
-            return 0;
+        var verdict = 0;
+        foreach (var (name, history) in identity)
+        {
+            if (history.Count < 2)
+                continue;
 
-        var identical = reports.All(r => r.AsSpan().SequenceEqual(reports[0]));
-        Console.WriteLine(identical
-            ? $"reports  : all {reports.Count} byte-identical"
-            : $"reports  : DIFFER across {reports.Count} run(s)");
-        return identical ? 0 : 1;
+            var identical = history.All(bytes => bytes.AsSpan().SequenceEqual(history[0]));
+            Console.WriteLine(identical
+                ? $"{name,-9}: all {history.Count} byte-identical"
+                : $"{name,-9}: DIFFER across {history.Count} run(s)");
+            if (!identical)
+                verdict = 1;
+        }
+
+        return verdict;
     }
 
     #endregion
 
     #region Tools
 
+    private static void Print(string name, byte[] bytes)
+    {
+        switch (name)
+        {
+            case REPORT:
+                Console.WriteLine($"  report: {bytes.Length} byte(s), sha256 {Sha256(bytes)[..16]}…");
+                PrintSummary(bytes);
+                break;
+            case CORPUS:
+                var lines = Encoding.UTF8.GetString(bytes).Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
+                Console.WriteLine($"  corpus: {lines} line(s), {bytes.Length} byte(s), sha256 {Sha256(bytes)[..16]}…");
+                break;
+            case PROVENANCE:
+                PrintProvenance(bytes);
+                break;
+            default:
+                Console.WriteLine($"  {name}: {bytes.Length} byte(s)");
+                break;
+        }
+    }
+
     private static void PrintSummary(byte[] report)
     {
         using var document = JsonDocument.Parse(report);
         var summary = document.RootElement.GetProperty("summary");
-        Console.WriteLine($"  summary: total={summary.GetProperty("total").GetInt32()} pass={summary.GetProperty("pass").GetInt32()} pass_rate={summary.GetProperty("pass_rate").GetDouble():F3} total_fuel={summary.GetProperty("total_fuel").GetInt64()}");
+        Console.WriteLine($"    summary: total={summary.GetProperty("total").GetInt32()} pass={summary.GetProperty("pass").GetInt32()} pass_rate={summary.GetProperty("pass_rate").GetDouble():F3} total_fuel={summary.GetProperty("total_fuel").GetInt64()}");
 
         var verdicts = summary.GetProperty("verdicts");
-        var histogram = string.Join(", ", verdicts.EnumerateObject().Select(p => $"{p.Name}={p.Value.GetInt32()}"));
-        Console.WriteLine($"  verdicts: {histogram}");
+        var histogram = string.Join(", ", verdicts.EnumerateObject().Where(p => p.Value.GetInt32() > 0).Select(p => $"{p.Name}={p.Value.GetInt32()}"));
+        Console.WriteLine($"    verdicts: {histogram}");
+    }
+
+    private static void PrintProvenance(byte[] provenance)
+    {
+        using var document = JsonDocument.Parse(provenance);
+        var nodes = document.RootElement.GetProperty("nodes").EnumerateArray().ToList();
+        Console.WriteLine($"  provenance: {nodes.Count} node(s)");
+        foreach (var node in nodes)
+        {
+            Console.WriteLine($"    {node.GetProperty("node_name").GetString(),-14} {node.GetProperty("runtime_target").GetString(),-11} wasmtime {node.GetProperty("wasmtime").GetString()}  controller {node.GetProperty("controller").GetString()}  batches {node.GetProperty("batches").GetInt32()}  tasks {node.GetProperty("tasks").GetInt32()}  native {node.GetProperty("native_library").GetString()}");
+        }
+
+        foreach (var batch in document.RootElement.GetProperty("batches").EnumerateArray())
+        {
+            var tasks = batch.GetProperty("tasks").EnumerateArray().Select(t => t.GetInt32()).ToList();
+            var range = tasks.Count == 0 ? "[]" : tasks.Count == 1 ? $"[{tasks[0]}]" : $"[{tasks[0]}..{tasks[^1]}] ({tasks.Count})";
+            var nodeName = batch.TryGetProperty("node_name", out var n) ? n.GetString() : "?";
+            var runtime = batch.TryGetProperty("runtime", out var r) ? r.GetString() : "?";
+            var degree = batch.TryGetProperty("degree", out var d) ? d.GetInt32() : 0;
+            var wall = batch.TryGetProperty("wall_ms", out var w) ? w.GetInt32() : 0;
+            Console.WriteLine($"    batch {nodeName,-14} {runtime,-16} degree {degree,2}  tasks {range}  {wall} ms");
+        }
     }
 
     private static string Sha256(byte[] bytes)
@@ -182,13 +275,21 @@ public static class Program
     private static int Usage()
     {
         Console.WriteLine("verify-live diagnostics [--runs N]");
-        Console.WriteLine("verify-live run <taskset.jsonl> [--runs N] [--batch-size B] [--save DIR]");
+        Console.WriteLine("verify-live run      <taskset.jsonl>                  [--runs N] [--batch-size B] [--max-degree D] [--save DIR]");
+        Console.WriteLine("verify-live generate <generators.jsonl>               [--runs N] [--batch-size B] [--max-degree D] [--save DIR]");
+        Console.WriteLine("verify-live check    <generators.jsonl> <checker.json> [--runs N] [--batch-size B] [--max-degree D] [--save DIR]");
         Console.WriteLine();
         Console.WriteLine($"  {SERVER_ENV}    server URL (default {DEFAULT_SERVER})");
         Console.WriteLine($"  {IDENTITY_ENV}  identity URL (default {DEFAULT_IDENTITY})");
         Console.WriteLine($"  {KEY_ENV}       a wit_sk_ application key (required)");
         return 2;
     }
+
+    #endregion
+
+    #region Types
+
+    private sealed record RunOptions(int Runs, int BatchSize, int MaxDegree, string? SaveDir);
 
     #endregion
 }

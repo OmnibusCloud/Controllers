@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <None Update="tasksets\*.jsonl" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="tasksets\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

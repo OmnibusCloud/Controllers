@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-checker.schema.json",
+  "title": "Verify checker spec",
+  "description": "The checker of VerifyGenerateAndCheck: one JSON object (not JSON lines). A taskset line without index/stdin/suite, plus the verdict rule at the top level. Every candidate that passed generation with output becomes one run of this program with the candidate's stdout on stdin, under the candidate's index.",
+  "type": "object",
+  "required": ["runtime", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "runtime": { "type": "string", "description": "The checker's runtime id." },
+    "entry": { "type": "string", "description": "The checker's entry file. Defaults to the first source." },
+    "sources": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string" },
+      "description": "File name → file content."
+    },
+    "args": { "type": "array", "items": { "type": "string" }, "description": "Arguments passed to every check." },
+    "limits": { "$ref": "verify-taskset.schema.json#/properties/limits" },
+    "expected_stdout": {
+      "type": "string",
+      "description": "The exact stdout of a passing check (the recommended contract: the checker prints its verdict and exits 0, so a crash stays distinguishable as a RuntimeError). Absent = only the exit code counts."
+    },
+    "expected_exit": {
+      "type": "integer",
+      "default": 0,
+      "description": "The exit code of a passing check."
+    }
+  }
+}

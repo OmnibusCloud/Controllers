@@ -1,0 +1,1 @@
+{"runtime":"python-3.14.6","entry":"check.py","sources":{"check.py":"import sys\nline = sys.stdin.readline().strip()\nexpr, _, value = line.rpartition(' = ')\nok = str(eval(expr, {'__builtins__': {}}, {})) == value\nprint('OK' if ok else 'MISMATCH ' + line)\n"},"expected_stdout":"OK\n","expected_exit":0}

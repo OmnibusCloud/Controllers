@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-taskset.schema.json",
+  "title": "Verify taskset line",
+  "description": "One task of a Verify taskset. A taskset is JSON lines: one object per line, no enclosing array. Submitted as the taskset blob of VerifyRun, VerifyGenerate and (as the generators) VerifyGenerateAndCheck.",
+  "type": "object",
+  "required": ["runtime", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The task's index in the report. Defaults to the line's ordinal."
+    },
+    "runtime": {
+      "type": "string",
+      "description": "A runtime id from the controller's catalog, e.g. python-3.14.6 or quickjs-0.15.1. An unknown id yields RuntimeUnavailable for the task."
+    },
+    "entry": {
+      "type": "string",
+      "description": "The source file to run. Defaults to the first source."
+    },
+    "sources": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string" },
+      "description": "File name → file content. The entry is passed to the interpreter inline; other files are a planned extension (a writable preopen)."
+    },
+    "args": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Arguments after the entry (Python: sys.argv[1:])."
+    },
+    "stdin": {
+      "type": "string",
+      "description": "Standard input for a run without a suite."
+    },
+    "seed": {
+      "type": "integer",
+      "description": "Seed of the sandbox's deterministic random source (WASI random_get). Default 0."
+    },
+    "suite": {
+      "type": "array",
+      "description": "Test cases. The task passes when every case passes; the first failing case sets the verdict.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "stdin": { "type": "string", "description": "Standard input of this case." },
+          "args": { "type": "array", "items": { "type": "string" }, "description": "Appended to the task's args for this case." },
+          "expected_stdout": { "type": "string", "description": "The exact stdout of a passing case; absent = only the exit code counts." },
+          "expected_exit": { "type": "integer", "default": 0, "description": "The exit code of a passing case. A non-zero exit where 0 was expected is a RuntimeError (the program crashed); any other mismatch is a Fail." }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-task limits; omitted fields take the job defaults, and every field is clamped to the host ceilings (fuel 2e12, memory 2 GiB, wall 120 s, stdout 8 MiB, stderr 1 MiB).",
+      "properties": {
+        "fuel": { "type": "integer", "minimum": 1, "description": "wasmtime fuel (instructions); default 50e9." },
+        "memory": { "type": "integer", "minimum": 1, "description": "Linear memory cap in bytes; default 256 MiB." },
+        "wall_ms": { "type": "integer", "minimum": 1, "description": "Wall-clock cap in milliseconds; default 10000." },
+        "stdout_bytes": { "type": "integer", "minimum": 1, "description": "Captured stdout cap; default 256 KiB. Beyond it the task is OutputExceeded." },
+        "stderr_bytes": { "type": "integer", "minimum": 1, "description": "Captured stderr cap; default 64 KiB." }
+      }
+    }
+  }
+}
