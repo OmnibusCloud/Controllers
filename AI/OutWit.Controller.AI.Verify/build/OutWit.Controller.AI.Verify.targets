@@ -30,4 +30,13 @@
              Text="OutWit.Controller.AI.Verify: staged module to '$(_OutWitVerifyModuleOutputDir)'." />
   </Target>
 
+  <Target Name="OutWitResolveVerifyAssets"
+          AfterTargets="OutWitCopyVerifyModule"
+          Condition="Exists('$(_OutWitVerifyModuleOutputDir)controller.json')">
+    <ResolveControllerAssetsTask
+        ManifestPath="$(_OutWitVerifyModuleOutputDir)controller.json"
+        OutputPath="$(OutputPath)@Controllers\"
+        ResolveForAllPlatforms="true" />
+  </Target>
+
 </Project>

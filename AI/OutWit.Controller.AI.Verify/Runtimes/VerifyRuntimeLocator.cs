@@ -3,15 +3,18 @@ using System.Reflection;
 namespace OutWit.Controller.AI.Verify.Runtimes;
 
 /// <summary>
-/// Finds the on-disk root of the pinned runtime modules on a node. Resolution order:
-/// the WITAI_VERIFY_RUNTIMES override (tests and non-standard layouts), then a
-/// "runtimes" folder next to the controller assembly (where the archive stages them).
+/// Finds the on-disk root of the pinned language-runtime modules on a node. Resolution order:
+/// the WITAI_VERIFY_RUNTIMES override (tests and non-standard layouts), then the "wasm"
+/// folder next to the controller assembly, where the module's data asset extracts them.
+/// The folder is deliberately not called "runtimes": that name is the .NET convention for
+/// RID-specific native assets (runtimes/&lt;rid&gt;/native/), which the module also carries
+/// for wasmtime itself and which the plugin load context resolves through the deps.json.
 /// </summary>
 public static class VerifyRuntimeLocator
 {
     public const string OverrideEnvVar = "WITAI_VERIFY_RUNTIMES";
 
-    private const string RuntimesFolderName = "runtimes";
+    private const string RuntimesFolderName = "wasm";
 
     public static string? Locate()
     {

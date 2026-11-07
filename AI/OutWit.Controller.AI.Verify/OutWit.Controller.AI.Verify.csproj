@@ -19,12 +19,71 @@
     <ProjectReference Include="..\OutWit.Controller.AI.Verify.Model\OutWit.Controller.AI.Verify.Model.csproj" />
   </ItemGroup>
 
-  <!-- WASM sandbox host. Ships native wasmtime runtimes for the full client matrix.
-       NB: staging the native libs + the language runtime modules into the deployable
-       module/zip is the node-deploy step (a later phase); in-solution tests resolve
-       them from the referenced test bin, like the render controller's native prereqs. -->
+  <!-- WASM sandbox host: the Wasmtime.Dotnet managed binding over the native wasmtime
+       library. A package stages nothing into the module by itself (the Simulation
+       precedent), so the binding is declared below and copied next to the controller.
+       The natives (one per RID, under runtimes/<rid>/native/) and the language runtime
+       modules (under wasm/) are Tier-2 data assets fetched by consumers at build time;
+       the module's deps.json names the natives, and the engine's plugin load context
+       (AssemblyDependencyResolver + LoadUnmanagedDll) resolves them from the module
+       folder. In-solution tests resolve wasmtime from the test bin; the module-load test
+       proves the deployed layout through the real isolated loader. -->
   <ItemGroup>
     <PackageReference Include="Wasmtime" Version="44.0.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ControllerModuleAssembly Include="Wasmtime.Dotnet" />
+  </ItemGroup>
+
+  <!-- Tier-2 data assets, fetched by consumers at build time from a GitHub release of this
+       repository (tag verify-v<version>; the URIs stay on an older tag while the bytes do
+       not change). Three native wasmtime libraries, one per RID, extracted to the folder
+       the module's deps.json names, and one platform-independent set of language runtime
+       modules extracted to wasm/. Sha256/Size are filled by outwit-assets-pack from
+       @Prerequisites/ (PackSource/PackKind are author-only and never reach the manifest).
+       RuntimeIdentifier uses RIDs; the node-side layout uses the same names here because
+       the .NET resolver, not our own probe, reads them. -->
+  <ItemGroup>
+    <ControllerDataAsset Include="wasmtime-win-x64">
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.1.0/wasmtime-win-x64.zip</Uri>
+      <Sha256>ca9f1b1dbcf401f4d5c28db79f8ae96d007f36f64502cf8e7640bd1c3a39f2f2</Sha256>
+      <Size>7531924</Size>
+      <ExtractTo>runtimes/win-x64/native/</ExtractTo>
+      <PackSource>wasmtime/win-x64</PackSource>
+      <PackKind>zip-folder</PackKind>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="wasmtime-linux-x64">
+      <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.1.0/wasmtime-linux-x64.zip</Uri>
+      <Sha256>20948b9b5b545ae236575f67b7f43a97ff6b25200d42d67545e5a9f9f162cbff</Sha256>
+      <Size>9137544</Size>
+      <ExtractTo>runtimes/linux-x64/native/</ExtractTo>
+      <PackSource>wasmtime/linux-x64</PackSource>
+      <PackKind>zip-folder</PackKind>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="wasmtime-osx-arm64">
+      <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.1.0/wasmtime-osx-arm64.zip</Uri>
+      <Sha256>494aecefbe61514841e07da5e14660945fd042106cfc523ed19e62948bb0ba45</Sha256>
+      <Size>7804075</Size>
+      <ExtractTo>runtimes/osx-arm64/native/</ExtractTo>
+      <PackSource>wasmtime/osx-arm64</PackSource>
+      <PackKind>zip-folder</PackKind>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="verify-wasm">
+      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.1.0/verify-wasm.zip</Uri>
+      <Sha256>89196d5e393b05785f5b3fe3265df4d073a100bbfdbf0b6198206759cfceea18</Sha256>
+      <Size>14983691</Size>
+      <ExtractTo>wasm/</ExtractTo>
+      <PackSource>wasm</PackSource>
+      <PackKind>zip-folder</PackKind>
+    </ControllerDataAsset>
   </ItemGroup>
 
   <ItemGroup>
