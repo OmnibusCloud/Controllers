@@ -4,13 +4,23 @@ using OutWit.Controller.AI.Verify.Model;
 namespace OutWit.Controller.AI.Verify.Runtimes;
 
 /// <summary>
-/// Builds a node's sandbox runtime inventory: the wasmtime host version and, for each
-/// known runtime, whether its module is present and hash-verified on this node.
+/// Builds the sandbox runtime inventory of the process it runs in: the wasmtime host version
+/// and, for each known runtime, whether its module is present and hash-verified. A plain
+/// script function evaluates on the host, so through <c>VerifyRuntimeDiagnostics</c> this
+/// describes the server's module; a node's module is exercised by <c>Verify.ExecuteBatch</c>.
 /// </summary>
 public static class VerifyRuntimeDiagnosticsBuilder
 {
     public static VerifyRuntimeDiagnosticsData Build()
     {
+        // The version below is a managed fact; the engine makes the native library a proven one.
+        // A module whose wasmtime cannot load fails the diagnostic with the loader's message
+        // instead of reporting a version it cannot run.
+        VerifyNativeLibrary.EnsureRegistered();
+        using (new Wasmtime.Engine())
+        {
+        }
+
         var root = VerifyRuntimeLocator.Locate();
 
         var runtimes = new List<VerifyRuntimeInfoData>();

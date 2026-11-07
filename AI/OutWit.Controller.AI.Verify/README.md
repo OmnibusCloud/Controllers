@@ -29,7 +29,7 @@ proof checks or it does not.
 | `Verify.Execute` | node | the single-task variant |
 | `Verify.Collect` | host | result batches → the verdict report (aggregates + one record per task; byte-deterministic) |
 | `Verify.Preflight` | host | counts, runtimes referenced, unknown runtimes, size estimate, ceiling notes — before anything runs |
-| `Verify.RuntimeDiagnostics` | node | wasmtime version, runtime target, per-runtime availability and hash |
+| `Verify.RuntimeDiagnostics` | host | wasmtime version (the native library is loaded to prove it), runtime target, per-runtime availability and hash — of the server's module; a node's module is exercised by `Verify.ExecuteBatch` |
 
 Scripts (`OutWit.Controller.AI.Verify.Scripts`): `VerifyRun`, `VerifyPreflight`,
 `VerifyRuntimeDiagnostics`.
@@ -46,9 +46,8 @@ extensions inside WASI yet.
 ## What the module carries
 
 This is the first controller that calls a native library in-process (wasmtime,
-through the `Wasmtime.Dotnet` binding), so the deployed module is laid out for
-the engine's plugin load context, which resolves native libraries from the
-module's own `deps.json`:
+through the `Wasmtime.Dotnet` binding), so the deployed module carries the
+library per platform in the .NET layout its `deps.json` describes:
 
 ```
 verify.module/
@@ -58,6 +57,15 @@ verify.module/
   runtimes/<rid>/native/                   wasmtime, one data asset per RID
   wasm/                                    the language runtime modules, one data asset
 ```
+
+Two load modes meet this layout. An isolated plugin load context (the server,
+the module-load test) resolves the library through the module's `deps.json`.
+The cloud client loads controllers into the shared load context, where that
+file is never read and a P/Invoke probes only the application folder and the
+module root — so the controller registers `VerifyNativeLibrary` as the
+binding's DllImport resolver before its first wasmtime call, and it loads
+`runtimes/<rid>/native/` from the module itself (the host's runtime
+identifier first, then the portable one).
 
 The natives and the runtime modules are Tier-2 data assets (`ControllerDataAsset`),
 fetched by consumers at build time from the `verify-v<version>` release of this

@@ -21,6 +21,8 @@ public static class VerifySelfCheck
     public const string NATIVE_FAILED = "wasmtime-native: FAILED";
     public const string MANAGED_PREFIX = "wasmtime-managed: ";
     public const string WASM_ROOT_PREFIX = "wasm-root: ";
+    public const string NATIVE_PATH_PREFIX = "wasmtime-native-path: ";
+    public const string NATIVE_RESOLVER_PREFIX = "wasmtime-native-resolver: ";
 
     #endregion
 
@@ -38,7 +40,8 @@ public static class VerifySelfCheck
 
     /// <summary>
     /// Runs the self-check and returns a line-per-fact report: the controller and binding
-    /// locations, the RID, the language-runtime root, whether the native library loaded,
+    /// locations, the RID, the native library the module-aware resolver would load, the
+    /// language-runtime root, whether the native library loaded (and through which path),
     /// and one verdict line per known runtime.
     /// </summary>
     /// <returns>The report text; never throws for a missing or broken sandbox.</returns>
@@ -48,6 +51,7 @@ public static class VerifySelfCheck
         report.AppendLine($"controller: {typeof(VerifySelfCheck).Assembly.Location}");
         report.AppendLine($"{MANAGED_PREFIX}{typeof(Wasmtime.Engine).Assembly.Location}");
         report.AppendLine($"rid: {RuntimeInformation.RuntimeIdentifier}");
+        report.AppendLine($"{NATIVE_PATH_PREFIX}{VerifyNativeLibrary.Locate() ?? "(none)"}");
 
         var root = VerifyRuntimeLocator.Locate();
         report.AppendLine($"{WASM_ROOT_PREFIX}{root ?? "(none)"}");
@@ -56,6 +60,7 @@ public static class VerifySelfCheck
         {
             using var sandbox = new VerifyWasmSandbox();
             report.AppendLine(NATIVE_LOADED);
+            report.AppendLine($"{NATIVE_RESOLVER_PREFIX}{VerifyNativeLibrary.ResolvedPath ?? "not used (the load context resolved the library)"}");
 
             foreach (var (id, entry, source) in PROBES)
                 report.AppendLine(Probe(sandbox, root, id, entry, source));

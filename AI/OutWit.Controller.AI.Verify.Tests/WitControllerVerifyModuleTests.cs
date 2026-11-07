@@ -43,7 +43,9 @@ public sealed class WitControllerVerifyModuleTests
         using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
 
         Assert.That(manifest.RootElement.GetProperty("name").GetString(), Is.EqualTo("Verify"));
-        Assert.That(manifest.RootElement.GetProperty("version").GetString(), Is.EqualTo("0.1.0"));
+        var expectedVersion = typeof(WitControllerVerifyModule).Assembly.GetName().Version!.ToString(3);
+        Assert.That(manifest.RootElement.GetProperty("version").GetString(), Is.EqualTo(expectedVersion),
+            "the staged manifest must carry the version the controller assembly was built with");
         Assert.That(manifest.RootElement.GetProperty("assemblyName").GetString(), Is.EqualTo("OutWit.Controller.AI.Verify"));
     }
 

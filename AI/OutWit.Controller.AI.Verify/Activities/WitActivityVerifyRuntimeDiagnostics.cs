@@ -6,8 +6,10 @@ using OutWit.Engine.Data.Attributes;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Node-side: report the node's sandbox runtime inventory (wasmtime version + pinned
-/// language runtimes with hashes). Mirrors Render.RuntimeDiagnostics.
+/// Reports the sandbox runtime inventory (wasmtime version + pinned language runtimes with
+/// hashes) of the process that evaluates it. A plain script function runs on the host, so
+/// this is the server's module; the fleet's modules are exercised by <c>Verify.ExecuteBatch</c>
+/// inside <c>Grid.ForEach</c>, where each batch lands on a node. Mirrors Render.RuntimeDiagnostics.
 /// </summary>
 [Activity("Verify.RuntimeDiagnostics")]
 [MemoryPackable]

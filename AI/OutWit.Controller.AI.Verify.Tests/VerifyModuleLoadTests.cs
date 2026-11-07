@@ -38,6 +38,7 @@ public class VerifyModuleLoadTests
     private const string NATIVE_LOADED = "wasmtime-native: loaded";
     private const string MANAGED_PREFIX = "wasmtime-managed: ";
     private const string WASM_ROOT_PREFIX = "wasm-root: ";
+    private const string NATIVE_PATH_PREFIX = "wasmtime-native-path: ";
     private const string PYTHON_PASS = "python-3.14.6: Pass exit=0 stdout=42";
     private const string QUICKJS_PASS = "quickjs-0.15.1: Pass exit=0 stdout=42";
 
@@ -155,6 +156,8 @@ public class VerifyModuleLoadTests
                 "Wasmtime.Dotnet must resolve from the module, not from the test bin");
             Assert.That(ReportValue(report, WASM_ROOT_PREFIX), Is.EqualTo(m_wasmDir).IgnoreCase,
                 "the language runtimes must be found in the module's wasm/ folder");
+            Assert.That(ReportValue(report, NATIVE_PATH_PREFIX), Does.StartWith(m_moduleDir).IgnoreCase,
+                "the module-aware resolver must point at the module's runtimes/<rid>/native copy");
             Assert.That(LoadedNativeModulesUnder(m_moduleDir), Is.Not.Empty,
                 "the native wasmtime library must be the module's copy, not the test bin's");
         });

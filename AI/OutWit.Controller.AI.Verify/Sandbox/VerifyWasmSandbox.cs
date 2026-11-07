@@ -46,6 +46,13 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     #region Constructors
 
+    static VerifyWasmSandbox()
+    {
+        // Before the first wasmtime P/Invoke: in the shared load context the cloud client uses,
+        // the native library is found only through the module-aware resolver.
+        VerifyNativeLibrary.EnsureRegistered();
+    }
+
     public VerifyWasmSandbox()
     {
         // NaN canonicalization pins float bit patterns across platforms; fuel and epoch
