@@ -62,7 +62,7 @@ public static class Program
         return args[0] switch
         {
             "diagnostics" => await DiagnosticsAsync(client, runs),
-            "run" when args.Length >= 2 => await RunAsync(client, args[1], runs, OptionValue(args, "--batch-size", DEFAULT_BATCH_SIZE)),
+            "run" when args.Length >= 2 => await RunAsync(client, args[1], runs, OptionValue(args, "--batch-size", DEFAULT_BATCH_SIZE), OptionValue(args, "--save", null)),
             _ => Usage()
         };
     }
@@ -96,7 +96,7 @@ public static class Program
         return failures == 0 ? 0 : 1;
     }
 
-    private static async Task<int> RunAsync(WitCloudClient client, string tasksetPath, int runs, int batchSize)
+    private static async Task<int> RunAsync(WitCloudClient client, string tasksetPath, int runs, int batchSize, string? saveDir)
     {
         if (!File.Exists(tasksetPath))
         {
@@ -126,6 +126,13 @@ public static class Program
 
             var report = await client.Blobs.DownloadBlobAsync(result.Result.Value);
             reports.Add(report);
+            if (saveDir != null)
+            {
+                Directory.CreateDirectory(saveDir);
+                var savedPath = Path.Combine(saveDir, $"report-{i}.json");
+                await File.WriteAllBytesAsync(savedPath, report);
+                Console.WriteLine($"  saved: {savedPath}");
+            }
             Console.WriteLine($"  completed in {result.Duration}: report {report.Length} byte(s), sha256 {Sha256(report)[..16]}…");
             PrintSummary(report);
         }
@@ -160,6 +167,12 @@ public static class Program
         return Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     }
 
+    private static string? OptionValue(string[] args, string name, string? fallback)
+    {
+        var index = Array.IndexOf(args, name);
+        return index >= 0 && index + 1 < args.Length ? args[index + 1] : fallback;
+    }
+
     private static int OptionValue(string[] args, string name, int fallback)
     {
         var index = Array.IndexOf(args, name);
@@ -169,7 +182,7 @@ public static class Program
     private static int Usage()
     {
         Console.WriteLine("verify-live diagnostics [--runs N]");
-        Console.WriteLine("verify-live run <taskset.jsonl> [--runs N] [--batch-size B]");
+        Console.WriteLine("verify-live run <taskset.jsonl> [--runs N] [--batch-size B] [--save DIR]");
         Console.WriteLine();
         Console.WriteLine($"  {SERVER_ENV}    server URL (default {DEFAULT_SERVER})");
         Console.WriteLine($"  {IDENTITY_ENV}  identity URL (default {DEFAULT_IDENTITY})");
