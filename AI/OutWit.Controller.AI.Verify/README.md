@@ -97,10 +97,11 @@ its index alone, so a lab can reproduce the choice) as a second fan-out the
 allocator places on its own, and the integrity document pairs each sampled
 task with its primary: the nodes of each side and whether the two agree on
 verdict, exit code, outputs and per-case outcomes — exactly the fields an
-honest execution reproduces anywhere. A pair that landed on one node is
-counted, not compared (a node cannot vouch for itself); a distinct-node
-guarantee is the allocator's job in a later version. The mismatch rate is over
-the compared pairs.
+honest execution reproduces anywhere. The replica batches reach the allocator
+in reverse order, so a rate-partitioned placement puts most pairs on different
+nodes; a pair that still landed on one node is counted, not compared (a node
+cannot vouch for itself), and a distinct-node guarantee is the allocator's job
+in a later version. The mismatch rate is over the compared pairs.
 
 ## Determinism
 

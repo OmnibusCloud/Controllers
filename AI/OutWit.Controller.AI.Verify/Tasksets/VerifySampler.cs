@@ -6,8 +6,12 @@ namespace OutWit.Controller.AI.Verify.Tasksets;
 /// Picks the tasks a run re-executes for integrity: a deterministic share of the taskset
 /// (a task is in the sample or not by its index alone, so the same taskset samples the same
 /// tasks on every run and a lab can reproduce the choice), re-planned into fresh batches the
-/// allocator places independently of the primaries. The comparison itself is
-/// <see cref="VerifyIntegrityWriter"/>'s.
+/// allocator places independently of the primaries. The replica batches go to the allocator
+/// in reverse order: a rate-partitioned placement (the engine's Balanced strategy) hands the
+/// first batches to the fastest node and the last to the slowest, so the same list in the same
+/// order would land every replica next to its primary — reversed, most pairs land apart. The
+/// distinct-node guarantee is the allocator's (X-7); the comparison itself is
+/// <see cref="VerifyIntegrityWriter"/>'s, which counts the pairs that still met.
 /// </summary>
 public static class VerifySampler
 {
@@ -25,7 +29,7 @@ public static class VerifySampler
     /// </summary>
     /// <param name="batches">The primary batches (the tasks as the nodes ran them, limits resolved).</param>
     /// <param name="options">The run options; the rate is <see cref="VerifyOptionsData.SamplingRate"/>, clamped to [0, 1].</param>
-    /// <returns>The replica batches; empty when the rate is 0 or nothing was selected.</returns>
+    /// <returns>The replica batches in reverse planning order; empty when the rate is 0 or nothing was selected.</returns>
     public static List<VerifyTaskBatchData> Sample(IReadOnlyList<VerifyTaskBatchData> batches, VerifyOptionsData? options)
     {
         var rate = Math.Clamp(options?.SamplingRate ?? 0, 0, 1);
@@ -39,7 +43,12 @@ public static class VerifySampler
             .Select(task => task.Clone())
             .ToList();
 
-        return selected.Count == 0 ? [] : VerifyTasksetPlanner.Plan(selected, options).Batches;
+        if (selected.Count == 0)
+            return [];
+
+        var replicas = VerifyTasksetPlanner.Plan(selected, options).Batches;
+        replicas.Reverse();
+        return replicas;
     }
 
     /// <summary>

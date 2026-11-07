@@ -50,6 +50,20 @@ public sealed class VerifySamplerTests
     }
 
     [Test]
+    public void ReplicaBatchesGoToTheAllocatorInReverseOrderTest()
+    {
+        // A rate-partitioned placement of the same list in the same order would land every
+        // replica next to its primary (seen on the test fleet: 10 sampled, 10 same node).
+        var replicas = VerifySampler.Sample(Batches(8), new VerifyOptionsData { SamplingRate = 1, BatchSize = 3 });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(replicas.Select(b => b.Tasks[0].TaskIndex), Is.EqualTo(new[] { 6, 3, 0 }));
+            Assert.That(replicas.SelectMany(b => b.Tasks).Select(t => t.TaskIndex), Is.EqualTo(new[] { 6, 7, 3, 4, 5, 0, 1, 2 }));
+        });
+    }
+
+    [Test]
     public void ReplicasKeepTheTasksLimitsAndRuntimeTest()
     {
         var batches = Batches(8);
