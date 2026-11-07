@@ -57,6 +57,16 @@ public sealed class VerifyCorpusWriterTests
     }
 
     [Test]
+    public void OutputsAreNotHtmlEscapedTest()
+    {
+        var results = new List<VerifyResultData> { new() { TaskIndex = 0, Verdict = VerifyVerdict.Pass, Stdout = "2 + 2 < 5 & true é\n" } };
+
+        var line = Encoding.UTF8.GetString(VerifyCorpusWriter.Write(results));
+
+        Assert.That(line, Does.Contain("2 + 2 < 5 & true é"));
+    }
+
+    [Test]
     public void EmptyRunIsAnEmptyCorpusTest()
     {
         Assert.That(VerifyCorpusWriter.Write([]), Is.Empty);

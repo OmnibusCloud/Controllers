@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using OutWit.Controller.AI.Verify.Model;
 
@@ -10,6 +11,13 @@ namespace OutWit.Controller.AI.Verify.Tasksets;
 /// </summary>
 public static class VerifyCorpusWriter
 {
+    #region Constants
+
+    // Outputs verbatim: no HTML-safe escaping of +, <, > or non-ASCII (the corpus is read by parsers, never embedded in HTML).
+    private static readonly JsonWriterOptions WRITER_OPTIONS = new() { Indented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    #endregion
+
     #region Functions
 
     /// <summary>
@@ -22,7 +30,7 @@ public static class VerifyCorpusWriter
         using var stream = new MemoryStream();
         foreach (var result in results.OrderBy(result => result.TaskIndex))
         {
-            using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
+            using (var writer = new Utf8JsonWriter(stream, WRITER_OPTIONS))
             {
                 writer.WriteStartObject();
                 writer.WriteNumber("index", result.TaskIndex);

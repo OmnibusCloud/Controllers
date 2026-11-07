@@ -78,6 +78,20 @@ public sealed class VerifyBenchmarkTests : VerifySandboxTestBase
     }
 
     [Test]
+    public void EngineDefaultDegreeOfOneMeansTheMachineDegreeTest()
+    {
+        var machine = VerifySandboxDegree.ForCurrentMachine(VerifySandboxDefaults.DEFAULT_MEMORY_BYTES);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(VerifyBenchmark.ResolveDegree(null), Is.EqualTo(machine));
+            Assert.That(VerifyBenchmark.ResolveDegree(WitBenchmarkOptions.Default), Is.EqualTo(machine), "the engine default carries DegreeOfParallelism = 1");
+            Assert.That(VerifyBenchmark.ResolveDegree(new WitBenchmarkOptions { DegreeOfParallelism = 1 }), Is.EqualTo(machine));
+            Assert.That(VerifyBenchmark.ResolveDegree(new WitBenchmarkOptions { DegreeOfParallelism = 3 }), Is.EqualTo(3));
+        });
+    }
+
+    [Test]
     public void MedianOfAnEvenCountIsTheMiddleAverageTest()
     {
         var median = VerifyBenchmark.Median([TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)]);

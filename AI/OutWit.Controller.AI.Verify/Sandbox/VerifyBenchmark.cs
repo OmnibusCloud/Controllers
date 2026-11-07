@@ -57,7 +57,7 @@ public static class VerifyBenchmark
     /// </summary>
     /// <param name="sandbox">The node's sandbox.</param>
     /// <param name="runtimesRoot">The language runtime root.</param>
-    /// <param name="options">Engine benchmark options; the degree of parallelism, when set, overrides the machine's.</param>
+    /// <param name="options">Engine benchmark options; a degree of parallelism above 1 overrides the machine's (see <see cref="ResolveDegree"/>).</param>
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>Rate in tasks per second with the run details in <c>Custom</c>.</returns>
     /// <exception cref="InvalidOperationException">A reference task did not pass (a runtime is missing or the sandbox computes wrong).</exception>
@@ -65,9 +65,7 @@ public static class VerifyBenchmark
     {
         var target = options is { MinDuration.Ticks: > 0 } ? options.MinDuration : FALLBACK_TARGET;
         var warmupRuns = Math.Clamp(Math.Max(WARMUP_RUNS, options?.WarmupIterations ?? 0), WARMUP_RUNS, MAX_WARMUP_RUNS);
-        var degree = options?.DegreeOfParallelism is > 0
-            ? options.DegreeOfParallelism.Value
-            : VerifySandboxDegree.ForCurrentMachine(VerifySandboxDefaults.DEFAULT_MEMORY_BYTES);
+        var degree = ResolveDegree(options);
 
         var batches = ReferenceBatches(degree);
         var taskCount = batches.Sum(batch => batch.Tasks.Count);
@@ -101,6 +99,21 @@ public static class VerifyBenchmark
         };
 
         return ToResult(runs, warmup, taskCount, custom);
+    }
+
+    /// <summary>
+    /// The degree the benchmark runs at: the machine's batch degree (cores, memory, the default
+    /// cap) — the throughput a batch actually gets — unless the options name a degree above 1.
+    /// The engine's default options carry <c>DegreeOfParallelism = 1</c>, which here means
+    /// "unspecified": a single-sandbox rate would rank a 12-thread desktop next to a 2-vCPU VM.
+    /// </summary>
+    /// <param name="options">Engine benchmark options, or null.</param>
+    /// <returns>The degree, at least 1.</returns>
+    public static int ResolveDegree(IWitBenchmarkOptions? options)
+    {
+        return options?.DegreeOfParallelism is > 1
+            ? options.DegreeOfParallelism.Value
+            : VerifySandboxDegree.ForCurrentMachine(VerifySandboxDefaults.DEFAULT_MEMORY_BYTES);
     }
 
     /// <summary>
