@@ -82,7 +82,9 @@ jobs:
           dotnet build AI/OutWit.Controller.AI.Vision.Tests/OutWit.Controller.AI.Vision.Tests.csproj -c Release
           dotnet test AI/OutWit.Controller.AI.Vision.Tests/OutWit.Controller.AI.Vision.Tests.csproj -c Release --no-build
 
-      # The Corpus stage libraries on the golden Common Crawl shards (committed fixtures).
+      # The Corpus controller on the golden Common Crawl shards (committed fixtures): the stage
+      # libraries, the node-side task against a loopback origin, and the bundled scripts through
+      # the engine rig with in-process nodes.
       - name: Corpus
         shell: bash
         run: |

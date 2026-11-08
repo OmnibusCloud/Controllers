@@ -1,0 +1,117 @@
+using MemoryPack;
+using OutWit.Common.Abstract;
+using OutWit.Common.Attributes;
+using OutWit.Common.Values;
+
+namespace OutWit.Controller.AI.Corpus.Model;
+
+/// <summary>
+/// What happened to one shard: records in, documents out, where the rest went (by rule), the
+/// language histogram, bytes moved and time spent. The per-shard observability of a run and
+/// the raw material of the aggregate report; the counts are a function of the shard and the
+/// pipeline, the times are not.
+/// </summary>
+[MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only.
+public sealed partial class CorpusShardStatsData : ModelBase
+{
+    #region Model Base
+
+    /// <summary>Value comparison with another model: the same type and equal fields (the OutWit model paradigm).</summary>
+    /// <param name="modelBase">The model to compare with.</param>
+    /// <param name="tolerance">Tolerance for floating-point fields.</param>
+    /// <returns>True when the models are equal by value.</returns>
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not CorpusShardStatsData other)
+            return false;
+
+        if (Drops.Count != other.Drops.Count || Languages.Count != other.Languages.Count)
+            return false;
+
+        for (var i = 0; i < Drops.Count; i++)
+        {
+            if (!Drops[i].Is(other.Drops[i], tolerance))
+                return false;
+        }
+
+        for (var i = 0; i < Languages.Count; i++)
+        {
+            if (!Languages[i].Is(other.Languages[i], tolerance))
+                return false;
+        }
+
+        return RecordsIn.Is(other.RecordsIn)
+               && DocumentsExtracted.Is(other.DocumentsExtracted)
+               && DocumentsOut.Is(other.DocumentsOut)
+               && BytesFetched.Is(other.BytesFetched)
+               && BytesProduced.Is(other.BytesProduced)
+               && FetchMs.Is(other.FetchMs)
+               && ProcessMs.Is(other.ProcessMs);
+    }
+
+    /// <summary>Deep copy.</summary>
+    /// <returns>The copy.</returns>
+    public override CorpusShardStatsData Clone()
+    {
+        return new CorpusShardStatsData
+        {
+            RecordsIn = RecordsIn,
+            DocumentsExtracted = DocumentsExtracted,
+            DocumentsOut = DocumentsOut,
+            Drops = Drops.Select(d => d.Clone()).ToList(),
+            Languages = Languages.Select(l => l.Clone()).ToList(),
+            BytesFetched = BytesFetched,
+            BytesProduced = BytesProduced,
+            FetchMs = FetchMs,
+            ProcessMs = ProcessMs
+        };
+    }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>Records read from the shard (every type).</summary>
+    [ToString]
+    [MemoryPackOrder(0)]
+    public int RecordsIn { get; set; }
+
+    /// <summary>Documents that yielded text.</summary>
+    [ToString]
+    [MemoryPackOrder(1)]
+    public int DocumentsExtracted { get; set; }
+
+    /// <summary>Documents in the product.</summary>
+    [ToString]
+    [MemoryPackOrder(2)]
+    public int DocumentsOut { get; set; }
+
+    /// <summary>Documents dropped, by rule name, in rule-name order.</summary>
+    [MemoryPackOrder(3)]
+    public List<CorpusCountData> Drops { get; set; } = [];
+
+    /// <summary>Documents in the product by language code, in code order.</summary>
+    [MemoryPackOrder(4)]
+    public List<CorpusCountData> Languages { get; set; } = [];
+
+    /// <summary>Bytes fetched from the origin.</summary>
+    [ToString]
+    [MemoryPackOrder(5)]
+    public long BytesFetched { get; set; }
+
+    /// <summary>Bytes of the compressed product.</summary>
+    [ToString]
+    [MemoryPackOrder(6)]
+    public long BytesProduced { get; set; }
+
+    /// <summary>Wall time of the fetch.</summary>
+    [MemoryPackOrder(7)]
+    public int FetchMs { get; set; }
+
+    /// <summary>Wall time of the processing.</summary>
+    [MemoryPackOrder(8)]
+    public int ProcessMs { get; set; }
+
+    #endregion
+}

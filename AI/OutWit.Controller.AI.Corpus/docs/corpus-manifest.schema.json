@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-manifest.schema.json",
+  "title": "Corpus manifest",
+  "description": "The input of CorpusProcess.wit and CorpusPreflight.wit: the pipeline contract, the origins the nodes may fetch from, and the shards. Unknown keys are errors.",
+  "type": "object",
+  "required": ["pipeline", "allowed_origins", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "pipeline": {
+      "type": "object",
+      "required": ["version"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "string", "minLength": 1, "description": "The lab's name for the contract; travels into every product." },
+        "language_model_sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$", "description": "Pin of the language model blob's bytes; the job does not start when the blob differs." },
+        "target_languages": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "ISO 639-3 codes to keep; empty keeps every identified language." },
+        "identify_language": { "type": "boolean", "default": true },
+        "filter_quality": { "type": "boolean", "default": true },
+        "sign": { "type": "boolean", "default": true, "description": "Whether a MinHash signature is produced per document." },
+        "quality": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Thresholds of the Gopher-style rules; a key left out (or 0) is the stage default.",
+          "properties": {
+            "min_words": { "type": "integer", "minimum": 0 },
+            "max_words": { "type": "integer", "minimum": 0 },
+            "min_mean_word_length": { "type": "number", "minimum": 0 },
+            "max_mean_word_length": { "type": "number", "minimum": 0 },
+            "max_symbol_to_word_ratio": { "type": "number", "minimum": 0 },
+            "max_bullet_line_ratio": { "type": "number", "minimum": 0 },
+            "max_ellipsis_line_ratio": { "type": "number", "minimum": 0 },
+            "min_alphabetic_word_ratio": { "type": "number", "minimum": 0 },
+            "max_duplicate_line_ratio": { "type": "number", "minimum": 0 },
+            "max_duplicate_line_char_ratio": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "allowed_origins": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Host names (a URL or host:port is reduced to its host); matched exactly, case-insensitively."
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          { "type": "string", "format": "uri", "description": "A shard URL whose extension tells the format: .warc.wet.gz is WET, .warc.gz is WARC." },
+          {
+            "type": "object",
+            "required": ["url"],
+            "additionalProperties": false,
+            "properties": {
+              "url": { "type": "string", "format": "uri" },
+              "format": { "type": "string", "enum": ["wet", "warc"] },
+              "size": { "type": "integer", "minimum": 0, "description": "Estimated bytes on the wire: the traffic line and the cap check." },
+              "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$", "description": "The origin's published hash; the node verifies the fetched bytes against it." }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

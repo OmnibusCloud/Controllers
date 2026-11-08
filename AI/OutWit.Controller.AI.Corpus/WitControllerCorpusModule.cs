@@ -1,6 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using OutWit.Common.Plugins.Abstractions;
 using OutWit.Common.Plugins.Abstractions.Attributes;
+using OutWit.Controller.AI.Corpus.Activities;
+using OutWit.Controller.AI.Corpus.Adapters;
+using OutWit.Controller.AI.Corpus.Variables;
+using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Corpus;
@@ -18,7 +22,17 @@ public sealed class WitControllerCorpusModule : WitPluginBase, IWitControllerNod
     /// <param name="services">The service collection of the engine host or node.</param>
     public override void Initialize(IServiceCollection services)
     {
-        // CO-1 spike: the stage libraries (the WARC/WET reader first) land before any activity;
-        // variables and adapters arrive with ProcessShard in CO-2.
+        services.AddVariable<WitVariableCorpusTask>();
+        services.AddVariable<WitVariableCorpusResult>();
+        services.AddVariable<WitVariableCorpusOptions>();
+        services.AddVariable<WitVariableCorpusPreflight>();
+
+        services.AddCollection<WitVariableCorpusTaskCollection>();
+        services.AddCollection<WitVariableCorpusResultCollection>();
+
+        services.AddActivityAdapter<WitActivityCorpusProcessShard, WitActivityAdapterCorpusProcessShard>();
+        services.AddActivityAdapter<WitActivityCorpusSplit, WitActivityAdapterCorpusSplit>();
+        services.AddActivityAdapter<WitActivityCorpusPreflight, WitActivityAdapterCorpusPreflight>();
+        services.AddActivityAdapter<WitActivityCorpusCollect, WitActivityAdapterCorpusCollect>();
     }
 }

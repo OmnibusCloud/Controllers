@@ -1,0 +1,114 @@
+using Microsoft.Extensions.Logging;
+using OutWit.Controller.AI.Corpus.Activities;
+using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Engine.Data.ActivityAdapters;
+using OutWit.Engine.Data.Status;
+using OutWit.Engine.Data.Utils;
+using OutWit.Engine.Interfaces;
+
+namespace OutWit.Controller.AI.Corpus.Adapters;
+
+internal sealed class WitActivityAdapterCorpusProcessShard : WitActivityAdapterFunction<WitActivityCorpusProcessShard>
+{
+    #region Constants
+
+    /// <summary>Work estimate per shard when the manifest gives no size: one typical Common Crawl WET file.</summary>
+    private const double DEFAULT_SHARD_MEGABYTES = 150;
+
+    private static readonly Lazy<ShardFetcher> FETCHER = new(() => new ShardFetcher(ShardFetcher.CreateClient(), ShardFetchPolicy.Default));
+
+    #endregion
+
+    #region Constructors
+
+    public WitActivityAdapterCorpusProcessShard(IWitProcessingManager processingManager, IWitBlobService blobService, IWitTempStorage tempStorage, ILogger logger)
+        : base(processingManager, logger)
+    {
+        BlobService = blobService;
+        TempStorage = tempStorage;
+    }
+
+    #endregion
+
+    #region Processing
+
+    protected override async Task Process(WitActivityCorpusProcessShard activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
+    {
+        if (!pool.TryGetValue(activity.Task, out CorpusTaskData? task) || task == null)
+            throw new InvalidOperationException("Failed to get parameter 'Task'.");
+
+        var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
+        var scope = TempStorage.CreateScope($"corpus-{status.JobId:N}-{task.TaskIndex}");
+
+        try
+        {
+            var result = await ShardTaskRunner.RunAsync(task, FETCHER.Value, BlobService, scope, status.EngineId, cancellationToken);
+
+            if (result.Verdict == CorpusShardVerdict.Completed)
+                Logger.LogInformation("Corpus.ProcessShard {Index}: {Out}/{In} documents kept, {Bytes} bytes in, {Fetch} ms fetch, {Process} ms process",
+                    task.TaskIndex, result.Stats?.DocumentsOut, result.Stats?.RecordsIn, result.Stats?.BytesFetched, result.Stats?.FetchMs, result.Stats?.ProcessMs);
+            else
+                Logger.LogWarning("Corpus.ProcessShard {Index}: {Verdict} - {Error}", task.TaskIndex, result.Verdict, result.Error);
+
+            if (!pool.TrySetValue(activity.ReturnReference, result))
+                throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+        }
+        finally
+        {
+            try
+            {
+                TempStorage.DeleteScope(scope);
+            }
+            catch (Exception exception)
+            {
+                Logger.LogWarning(exception, "Corpus.ProcessShard {Index}: the work directory could not be deleted.", task.TaskIndex);
+            }
+        }
+    }
+
+    protected override double EstimateWork(WitActivityCorpusProcessShard activity, IWitVariablesCollection pool)
+    {
+        // O(1): megabytes on the wire when the manifest says, else a typical shard.
+        if (pool.TryGetValue(activity.Task, out CorpusTaskData? task) && task?.Source is { SizeBytes: > 0 } source)
+            return Math.Max(1, source.SizeBytes / (1024.0 * 1024.0));
+
+        return DEFAULT_SHARD_MEGABYTES;
+    }
+
+    #endregion
+
+    #region Parsing
+
+    protected override WitActivityCorpusProcessShard CreateActivity(IWitParameter[] parameters)
+    {
+        try
+        {
+            if (parameters.Length != 1)
+                throw new ArgumentException($"Expected 1 parameter(s), got {parameters.Length}.");
+
+            if (parameters[0] is not IWitReference task)
+                throw new ArgumentException("Parameter 'Task' must be a variable reference.");
+
+            return new WitActivityCorpusProcessShard
+            {
+                Task = task
+            };
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Failed to parse activity parameters.");
+            throw;
+        }
+    }
+
+    #endregion
+
+    #region Properties
+
+    private IWitBlobService BlobService { get; }
+
+    private IWitTempStorage TempStorage { get; }
+
+    #endregion
+}

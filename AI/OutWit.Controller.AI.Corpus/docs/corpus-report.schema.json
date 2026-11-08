@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-report.schema.json",
+  "title": "Corpus report",
+  "description": "The output of Corpus.Collect: every shard's verdict, product blobs and content hash in task order, and the aggregate over the fleet.",
+  "type": "object",
+  "required": ["schema", "controller", "summary", "shards"],
+  "properties": {
+    "schema": { "const": "corpus-report/1" },
+    "controller": { "type": "string", "description": "The controller version that wrote the report." },
+    "summary": {
+      "type": "object",
+      "required": ["tasks", "verdicts", "records_in", "documents_extracted", "documents_out", "bytes_fetched", "bytes_produced", "drops", "languages"],
+      "properties": {
+        "tasks": { "type": "integer" },
+        "verdicts": { "$ref": "#/$defs/counts", "description": "Shards per verdict." },
+        "records_in": { "type": "integer" },
+        "documents_extracted": { "type": "integer" },
+        "documents_out": { "type": "integer" },
+        "bytes_fetched": { "type": "integer" },
+        "bytes_produced": { "type": "integer" },
+        "drops": { "$ref": "#/$defs/counts", "description": "Documents dropped per rule, summed over the completed shards." },
+        "languages": { "$ref": "#/$defs/counts", "description": "Documents out per ISO 639-3 code, summed over the completed shards." }
+      }
+    },
+    "shards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["index", "url", "verdict", "text_blob", "signatures_blob", "content_sha256", "error", "node", "node_name", "controller", "stats"],
+        "properties": {
+          "index": { "type": "integer" },
+          "url": { "type": "string" },
+          "verdict": { "type": "string", "enum": ["Completed", "OriginRefused", "FetchFailed", "Oversized", "Malformed", "PipelineUnavailable", "Failed"] },
+          "text_blob": { "type": "string", "description": "Blob id of the zstd JSON lines, or \"\"." },
+          "signatures_blob": { "type": "string", "description": "Blob id of the signatures, or \"\"." },
+          "content_sha256": { "type": "string", "description": "SHA-256 of the uncompressed JSON lines: the identity a re-execution must reproduce." },
+          "error": { "type": "string" },
+          "node": { "type": "string" },
+          "node_name": { "type": "string" },
+          "controller": { "type": "string" },
+          "stats": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "required": ["records_in", "documents_extracted", "documents_out", "bytes_fetched", "bytes_produced", "fetch_ms", "process_ms", "drops", "languages"],
+                "properties": {
+                  "records_in": { "type": "integer" },
+                  "documents_extracted": { "type": "integer" },
+                  "documents_out": { "type": "integer" },
+                  "bytes_fetched": { "type": "integer" },
+                  "bytes_produced": { "type": "integer" },
+                  "fetch_ms": { "type": "integer" },
+                  "process_ms": { "type": "integer" },
+                  "drops": { "$ref": "#/$defs/counts" },
+                  "languages": { "$ref": "#/$defs/counts" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "counts": {
+      "type": "object",
+      "additionalProperties": { "type": "integer" },
+      "description": "Name to count, names in ordinal order."
+    }
+  }
+}

@@ -1,0 +1,9 @@
+Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
+{
+    CorpusTaskCollection:tasks = Corpus.Split(manifest, languageModel, opts);
+
+    CorpusResultCollection:results = Grid.ForEach(task in tasks)
+        => Corpus.ProcessShard(task);
+
+    Blob:report = Corpus.Collect(results, opts);
+}

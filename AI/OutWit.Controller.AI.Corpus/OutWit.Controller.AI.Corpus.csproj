@@ -15,6 +15,10 @@
     <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Corpus.Model\OutWit.Controller.AI.Corpus.Model.csproj" />
+  </ItemGroup>
+
   <!-- Stage libraries, managed and deterministic on every client platform: AngleSharp parses the
        HTML the same way everywhere (no native parser, no platform-forked stage). -->
   <ItemGroup>

@@ -73,6 +73,7 @@
     <Project Path="AI/OutWit.Controller.AI.Vision/OutWit.Controller.AI.Vision.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Vision.Tests/OutWit.Controller.AI.Vision.Tests.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Corpus/OutWit.Controller.AI.Corpus.csproj" />
+    <Project Path="AI/OutWit.Controller.AI.Corpus.Model/OutWit.Controller.AI.Corpus.Model.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Corpus.Assets/OutWit.Controller.AI.Corpus.Assets.csproj" />
   </Folder>
