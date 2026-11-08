@@ -14,11 +14,15 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, an origin allowlist checked on the host and again on the node,
 retries with jitter towards the origin.
 
-**Status: 0.1.0-dev — CO-2: the controller runs end to end.** The stage
-libraries (CO-1) are wired into four activities and two bundled scripts; the
+**Status: 0.1.1 — proven on the test fleet, not yet released to nuget.org.**
+The stage libraries are wired into six activities and two bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
-through mock nodes and reproduces a direct run's content hashes. Not yet
-released; the fleet proof on the test server (CO-3) comes next.
+through mock nodes and reproduces a direct run's content hashes. On the test
+server the controller processed real Common Crawl WET shards on Windows and
+Linux nodes with every sampled pair agreeing on the content hash (0
+mismatches). What remains before 1.0: the dedup merge over the signature blobs
+(`CorpusDedup`), the quality thresholds tuned on real crawl text, and the
+preflight's traffic estimate when the manifest carries no sizes.
 
 ## Activities
 
