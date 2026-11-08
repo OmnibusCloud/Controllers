@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Corpus\OutWit.Controller.AI.Corpus.csproj" />
+  </ItemGroup>
+
+  <!-- Build-only reference: Variables must be built (so its PostBuild populates
+       @Controllers/<Cfg>/variables.module/) because the Corpus module declares a
+       [WitPluginDependency("Variables")]; its DLL is not pulled into the test
+       compile output. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ExcludedControllerModule Include="render.module" />
+    <ExcludedControllerModule Include="renderdcc.module" />
+  </ItemGroup>
+
+  <!-- Golden shards: the first complete gzip members of one Common Crawl WET and one WARC
+       file (CC-MAIN-2026-43, segment 1791170053823.21, file 00000), 1.5 MB each, committed. -->
+  <ItemGroup>
+    <None Update="Fixtures\*.gz" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

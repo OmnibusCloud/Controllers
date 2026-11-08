@@ -1,0 +1,33 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.AI.Corpus NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+      Copies the package's content/module/* into the consumer's
+      $(OutputPath)@Controllers\vision.module\ so the controller runtime can
+      find the controller DLL and the manifest.
+      Tier-1: no external data assets, so no ResolveControllerAssetsTask step.
+  -->
+
+  <PropertyGroup>
+    <_OutWitCorpusModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitCorpusModulePackageContent>
+    <_OutWitCorpusModuleOutputDir>$(OutputPath)@Controllers\vision.module\</_OutWitCorpusModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyCorpusModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitCorpusModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitCorpusFiles Include="$(_OutWitCorpusModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitCorpusFiles)"
+        DestinationFiles="@(_OutWitCorpusFiles->'$(_OutWitCorpusModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.AI.Corpus: staged module to '$(_OutWitCorpusModuleOutputDir)'." />
+  </Target>
+
+</Project>

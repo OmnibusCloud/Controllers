@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.props" />
+
+  <PropertyGroup>
+    <ControllerName>Corpus</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Public-corpus processing at CPU scale on anonymous nodes: streamed WARC/WET reading, HTML to text, language identification, quality filtering and MinHash deduplication signatures - deterministic by requirement, the node fetching its shard straight from the public origin (Common Crawl first).</Description>
+    <PackageTags>corpus;common-crawl;warc;wet;text-extraction;language-id;dedup;minhash;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>corpus-process-shard</ControllerFeatures>
+    <ControllerUseCases>Cleaning, language-tagging and deduplicating public web text for training corpora</ControllerUseCases>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.AI.Corpus.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
+
+</Project>
