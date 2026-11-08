@@ -18,8 +18,7 @@ retries with jitter towards the origin.
 libraries (CO-1) are wired into four activities and two bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. Not yet
-released; the fleet proof on the test server and integrity sampling (CO-3)
-come next.
+released; the fleet proof on the test server (CO-3) comes next.
 
 ## Activities
 
@@ -29,6 +28,8 @@ come next.
 | `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate, every message by manifest line |
 | `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline, the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception; several shards may run on one client at once |
 | `Corpus.Collect` | host | `(CorpusResultCollection, CorpusOptions) → Blob report` | the job report: every shard's verdict, blobs and content hash in task order, the aggregate counters over the fleet |
+| `Corpus.Sample` | host | `(CorpusTaskCollection, CorpusOptions) → CorpusTaskCollection` | the sampled share of the tasks (`SamplingRate`) as replica tasks for a second fan-out, chosen by index alone and handed over in reverse so the allocator lands most of them away from their primaries |
+| `Corpus.Integrity` | host | `(CorpusResultCollection results, CorpusResultCollection replicas) → Blob integrity` | primary and replica of every sampled shard compared on verdict, content hash, document counts and histograms; a pair that landed on one node is counted, not compared |
 
 ## Scripts
 
@@ -40,15 +41,22 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
     CorpusResultCollection:results = Grid.ForEach(task in tasks)
         => Corpus.ProcessShard(task);
 
+    CorpusTaskCollection:replicaTasks = Corpus.Sample(tasks, opts);
+
+    CorpusResultCollection:replicas = Grid.ForEach(task in replicaTasks)
+        => Corpus.ProcessShard(task);
+
     Blob:report = Corpus.Collect(results, opts);
+    Blob:integrity = Corpus.Integrity(results, replicas);
 }
 ```
 
 `CorpusPreflight.wit` runs `Corpus.Preflight` alone. `languageModel` is the
 blob of a model trained by `corpus-assets` (see below); pass an empty blob when
 the pipeline's `identify_language` is `false`. `CorpusOptions`: `MaxShardBytes`
-(0 = the controller's cap of 1 GiB; a smaller value lowers it), `FetchConcurrency`
-and `SamplingRate` (reserved for CO-3).
+(0 = the controller's cap of 1 GiB; a smaller value lowers it), `SamplingRate`
+(the share of shards re-executed for integrity, 0 to 1; 0 by default) and
+`FetchConcurrency` (reserved).
 
 ## The manifest
 
@@ -101,6 +109,18 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   shard the verdict, blob ids, content hash, error and statistics (records in,
   documents extracted and out, drops by rule, languages, bytes, times); the
   summary sums them over the fleet.
+
+## Integrity
+
+`SamplingRate` re-executes a share of the shards on the fleet a second time and
+`Corpus.Integrity` writes `corpus-integrity.json` (`docs/corpus-integrity.schema.json`):
+for every sampled shard the primary and the replica with the nodes that ran
+them, compared on everything an honest node cannot vary — the verdict, the
+content hash of the product, the record and document counts, the drop and
+language histograms. Times and bytes are not compared. A pair whose replica
+landed on the primary's node proves nothing about that node and is counted as
+`same_node`, not compared; the mismatch rate is over the compared pairs. The
+sample is a function of the shard index, so a lab can reproduce the choice.
 
 ## Node behaviour
 

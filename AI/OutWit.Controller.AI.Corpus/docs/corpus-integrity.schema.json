@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-integrity.schema.json",
+  "title": "Corpus integrity",
+  "description": "The integrity blob of CorpusProcess.wit: the sampled share of shards (CorpusOptions.SamplingRate) re-executed as a second fan-out and compared with the primary execution on everything an honest node cannot vary (verdict, content hash, document counts, drop and language histograms). A pair that landed on one node is counted, not compared. Empty pairs at rate 0.",
+  "type": "object",
+  "required": ["schema", "summary", "pairs"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "corpus-integrity/1" },
+    "summary": {
+      "type": "object",
+      "required": ["sampled", "compared", "same_node", "unpaired", "mismatches", "mismatch_rate"],
+      "additionalProperties": false,
+      "properties": {
+        "sampled": { "type": "integer", "description": "Shards re-executed." },
+        "compared": { "type": "integer", "description": "Pairs whose two sides ran on different nodes." },
+        "same_node": { "type": "integer", "description": "Pairs whose replica landed on the primary's node (not compared)." },
+        "unpaired": { "type": "integer", "description": "Replicas whose primary result is missing." },
+        "mismatches": { "type": "integer", "description": "Compared pairs that disagree." },
+        "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." }
+      }
+    },
+    "pairs": {
+      "type": "array",
+      "description": "One record per sampled shard, ordered by index.",
+      "items": {
+        "type": "object",
+        "required": ["index", "primary", "replica", "compared"],
+        "additionalProperties": false,
+        "properties": {
+          "index": { "type": "integer" },
+          "primary": { "$ref": "#/$defs/side" },
+          "replica": { "$ref": "#/$defs/side" },
+          "compared": { "type": "boolean" },
+          "match": { "type": "boolean", "description": "Present when compared." },
+          "differs": { "type": "array", "items": { "type": "string", "enum": ["verdict", "content", "documents", "drops", "languages"] }, "description": "Present on a mismatch: the fields that differ." }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "side": {
+      "type": ["object", "null"],
+      "required": ["node_id", "node_name", "verdict", "content_sha256", "documents_out"],
+      "additionalProperties": false,
+      "properties": {
+        "node_id": { "type": "string" },
+        "node_name": { "type": "string" },
+        "verdict": { "type": "string" },
+        "content_sha256": { "type": "string" },
+        "documents_out": { "type": "integer" }
+      }
+    }
+  }
+}

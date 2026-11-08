@@ -3,4 +3,9 @@
 Data types for the OutWit Verify controller: tasks, batches, test suites,
 resource limits, and results for sandboxed execution.
 
-**Status: v0.1.0-dev — project skeleton. No types yet.**
+Tasks (`VerifyTaskData` with sources, entry point, args, stdin, seed, an
+optional `VerifySuiteData` of cases), batches (`VerifyTaskBatchData` with
+default `VerifyLimitsData`), results (`VerifyResultData`, `VerifyResultBatchData`
+with `VerifyBatchDiagnosticsData`), options, preflight and runtime diagnostics.
+Every type derives from `ModelBase` and is MemoryPack-serializable with
+explicit, append-only member order.

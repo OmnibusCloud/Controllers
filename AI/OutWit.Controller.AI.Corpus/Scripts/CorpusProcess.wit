@@ -5,5 +5,11 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
     CorpusResultCollection:results = Grid.ForEach(task in tasks)
         => Corpus.ProcessShard(task);
 
+    CorpusTaskCollection:replicaTasks = Corpus.Sample(tasks, opts);
+
+    CorpusResultCollection:replicas = Grid.ForEach(task in replicaTasks)
+        => Corpus.ProcessShard(task);
+
     Blob:report = Corpus.Collect(results, opts);
+    Blob:integrity = Corpus.Integrity(results, replicas);
 }

@@ -56,7 +56,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
         Assert.Multiple(() =>
         {
             Assert.That(process.Activities.Count, Is.GreaterThan(0));
-            Assert.That(process.Variables.Select(v => v.Name), Is.SupersetOf(new[] { "manifest", "languageModel", "opts", "tasks", "results", "report" }));
+            Assert.That(process.Variables.Select(v => v.Name), Is.SupersetOf(new[] { "manifest", "languageModel", "opts", "tasks", "results", "replicaTasks", "replicas", "report", "integrity" }));
             Assert.That(preflight.Variables.Select(v => v.Name), Is.SupersetOf(new[] { "manifest", "languageModel", "opts", "result" }));
         });
     }
@@ -101,6 +101,44 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
             var signatures = ShardSignatureWriter.Read(await ReadBytesAsync(Guid.Parse(reported.GetProperty("signatures_blob").GetString()!)));
             Assert.That(signatures, Has.Count.EqualTo(direct.Stats.DocumentsOut));
         }
+    }
+
+    [Test]
+    public async Task SamplingReExecutesAndComparesTest()
+    {
+        // Every shard re-executed (rate 1): each pair agrees on the content hash; a pair on one
+        // node is counted, not compared (the mock nodes share one process, so either may happen).
+        var manifestBlob = await UploadAsync(Manifest(WET_FIXTURE, WARC_FIXTURE), "manifest.json");
+
+        var job = Engine.Compile(m_processScript);
+        var status = await Engine.ScheduleAndWaitAsync(job, manifestBlob, m_modelBlob, new CorpusOptionsData { SamplingRate = 1.0 });
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+
+        using var integrity = await ReadJsonAsync((Guid)job.Variables["integrity"].Value!);
+        var summary = integrity.RootElement.GetProperty("summary");
+        var pairs = integrity.RootElement.GetProperty("pairs").EnumerateArray().ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(2));
+            Assert.That(summary.GetProperty("unpaired").GetInt32(), Is.Zero);
+            Assert.That(summary.GetProperty("compared").GetInt32() + summary.GetProperty("same_node").GetInt32(), Is.EqualTo(2));
+            Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.Zero);
+            Assert.That(pairs.Select(p => p.GetProperty("index").GetInt32()), Is.EqualTo(new[] { 0, 1 }));
+            Assert.That(pairs.All(p => p.GetProperty("primary").GetProperty("content_sha256").GetString() == p.GetProperty("replica").GetProperty("content_sha256").GetString()), Is.True);
+        });
+
+        // Rate 0 (the default) leaves the integrity document empty.
+        var plain = Engine.Compile(m_processScript);
+        var plainStatus = await Engine.ScheduleAndWaitAsync(plain, manifestBlob, m_modelBlob, new CorpusOptionsData());
+        using var empty = await ReadJsonAsync((Guid)plain.Variables["integrity"].Value!);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(plainStatus.Result, Is.EqualTo(WitProcessingResult.Completed));
+            Assert.That(empty.RootElement.GetProperty("summary").GetProperty("sampled").GetInt32(), Is.Zero);
+        });
     }
 
     [Test]
