@@ -7,7 +7,8 @@ namespace OutWit.Controller.AI.Corpus.Model;
 
 /// <summary>
 /// Job-level knobs: the byte cap per shard (the contributor's traffic is a granted resource),
-/// how many shards a node may fetch at once, and the share of tasks re-executed for integrity.
+/// how many shards a node may fetch at once, the share of tasks re-executed for integrity, and
+/// the near-duplicate threshold of the merge.
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only.
@@ -26,14 +27,15 @@ public sealed partial class CorpusOptionsData : ModelBase
 
         return MaxShardBytes.Is(other.MaxShardBytes)
                && FetchConcurrency.Is(other.FetchConcurrency)
-               && SamplingRate.Is(other.SamplingRate, tolerance);
+               && SamplingRate.Is(other.SamplingRate, tolerance)
+               && DedupThreshold.Is(other.DedupThreshold, tolerance);
     }
 
     /// <summary>Deep copy.</summary>
     /// <returns>The copy.</returns>
     public override CorpusOptionsData Clone()
     {
-        return new CorpusOptionsData { MaxShardBytes = MaxShardBytes, FetchConcurrency = FetchConcurrency, SamplingRate = SamplingRate };
+        return new CorpusOptionsData { MaxShardBytes = MaxShardBytes, FetchConcurrency = FetchConcurrency, SamplingRate = SamplingRate, DedupThreshold = DedupThreshold };
     }
 
     #endregion
@@ -54,6 +56,11 @@ public sealed partial class CorpusOptionsData : ModelBase
     [ToString]
     [MemoryPackOrder(2)]
     public double SamplingRate { get; set; }
+
+    /// <summary>The Jaccard estimate two documents need to be near-duplicates in Corpus.Dedup (0 = 0.8).</summary>
+    [ToString]
+    [MemoryPackOrder(3)]
+    public double DedupThreshold { get; set; }
 
     #endregion
 }

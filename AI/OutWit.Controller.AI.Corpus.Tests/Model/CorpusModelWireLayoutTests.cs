@@ -38,7 +38,7 @@ public sealed class CorpusModelWireLayoutTests
     [TestCase(typeof(CorpusTaskData), 5)]
     [TestCase(typeof(CorpusShardStatsData), 9)]
     [TestCase(typeof(CorpusResultData), 11)]
-    [TestCase(typeof(CorpusOptionsData), 3)]
+    [TestCase(typeof(CorpusOptionsData), 4)]
     [TestCase(typeof(CorpusPreflightData), 6)]
     public void WireLayoutIsPinnedTest(Type type, int expectedMemberCount)
     {

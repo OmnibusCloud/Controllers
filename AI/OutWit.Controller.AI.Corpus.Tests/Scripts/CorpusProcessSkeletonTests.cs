@@ -29,6 +29,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
 
     private string m_processScript = null!;
     private string m_preflightScript = null!;
+    private string m_dedupScript = null!;
     private Guid m_modelBlob;
 
     #endregion
@@ -40,6 +41,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
     {
         m_processScript = LoadScript("CorpusProcess.wit");
         m_preflightScript = LoadScript("CorpusPreflight.wit");
+        m_dedupScript = LoadScript("CorpusDedup.wit");
         m_modelBlob = await UploadFixtureAsync(MODEL_FIXTURE);
     }
 
@@ -138,6 +140,42 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
         {
             Assert.That(plainStatus.Result, Is.EqualTo(WitProcessingResult.Completed));
             Assert.That(empty.RootElement.GetProperty("summary").GetProperty("sampled").GetInt32(), Is.Zero);
+        });
+    }
+
+    [Test]
+    public async Task DedupOverTheReportFindsTheRepeatedShardTest()
+    {
+        // The same shard listed twice: every document of the second copy is a duplicate of the
+        // first's; the WET shard alone has a few near-duplicates of its own, if any.
+        var manifestBlob = await UploadAsync(Manifest(WET_FIXTURE, WET_FIXTURE), "manifest.json");
+        var process = Engine.Compile(m_processScript);
+        var processStatus = await Engine.ScheduleAndWaitAsync(process, manifestBlob, m_modelBlob, new CorpusOptionsData());
+        Assert.That(processStatus.Result, Is.EqualTo(WitProcessingResult.Completed), processStatus.ToString());
+
+        var reportBlob = (Guid)process.Variables["report"].Value!;
+        var dedup = Engine.Compile(m_dedupScript);
+        var dedupStatus = await Engine.ScheduleAndWaitAsync(dedup, reportBlob, new CorpusOptionsData());
+        Assert.That(dedupStatus.Result, Is.EqualTo(WitProcessingResult.Completed), dedupStatus.ToString());
+
+        using var report = await ReadJsonAsync(reportBlob);
+        var documentsOut = report.RootElement.GetProperty("summary").GetProperty("documents_out").GetInt64();
+        var perShard = documentsOut / 2;
+
+        using var document = await ReadJsonAsync((Guid)dedup.Variables["dedup"].Value!);
+        var summary = document.RootElement.GetProperty("summary");
+        var shards = document.RootElement.GetProperty("shards").EnumerateArray().ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(document.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-dedup/1"));
+            Assert.That(summary.GetProperty("documents").GetInt64(), Is.EqualTo(documentsOut));
+            Assert.That(summary.GetProperty("duplicates").GetInt64(), Is.GreaterThanOrEqualTo(perShard), "the second copy is all duplicates");
+            Assert.That(summary.GetProperty("duplicates").GetInt64(), Is.LessThan(documentsOut), "the first copy's representatives stay");
+            Assert.That(shards, Has.Count.EqualTo(2));
+            Assert.That(shards[1].GetProperty("duplicates").GetInt64(), Is.EqualTo(perShard), "every document of the repeated shard is dropped");
+            Assert.That(shards[0].GetProperty("documents").GetInt64(), Is.EqualTo(perShard));
+            Assert.That(summary.GetProperty("clusters").GetInt64(), Is.GreaterThanOrEqualTo(perShard - shards[0].GetProperty("duplicates").GetInt64()));
         });
     }
 

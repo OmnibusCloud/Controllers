@@ -15,13 +15,13 @@ opting in, an origin allowlist checked on the host and again on the node,
 retries with jitter towards the origin.
 
 **Status: 0.1.1 — proven on the test fleet, not yet released to nuget.org.**
-The stage libraries are wired into six activities and two bundled scripts; the
+The stage libraries are wired into seven activities and three bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
 server the controller processed real Common Crawl WET shards on Windows and
 Linux nodes with every sampled pair agreeing on the content hash (0
-mismatches). What remains before 1.0: the dedup merge over the signature blobs
-(`CorpusDedup`) and the quality thresholds tuned on real crawl text.
+mismatches). What remains before 1.0: the quality thresholds tuned on real
+crawl text, and the dedup merge measured at the scale of a crawl segment.
 
 ## Activities
 
@@ -32,6 +32,7 @@ mismatches). What remains before 1.0: the dedup merge over the signature blobs
 | `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline, the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception; several shards may run on one client at once |
 | `Corpus.Collect` | host | `(CorpusResultCollection, CorpusOptions) → Blob report` | the job report: every shard's verdict, blobs and content hash in task order, the aggregate counters over the fleet |
 | `Corpus.Sample` | host | `(CorpusTaskCollection, CorpusOptions) → CorpusTaskCollection` | the sampled share of the tasks (`SamplingRate`) as replica tasks for a second fan-out, chosen by index alone and handed over in reverse so the allocator lands most of them away from their primaries |
+| `Corpus.Dedup` | host | `(Blob report, CorpusOptions) → Blob dedup` | the near-duplicate merge over the signature blobs a report names: LSH over the MinHash signatures (16 bands of 8), a candidate pair joins a cluster at a Jaccard estimate of `DedupThreshold` (0.8 by default), the lowest document of a cluster is kept; per shard a keep mask, plus the clusters |
 | `Corpus.Integrity` | host | `(CorpusResultCollection results, CorpusResultCollection replicas) → Blob integrity` | primary and replica of every sampled shard compared on verdict, content hash, document counts and histograms; a pair that landed on one node is counted, not compared |
 
 ## Scripts
@@ -54,12 +55,14 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
 }
 ```
 
-`CorpusPreflight.wit` runs `Corpus.Preflight` alone. `languageModel` is the
+`CorpusPreflight.wit` runs `Corpus.Preflight` alone; `CorpusDedup.wit` runs
+`Corpus.Dedup` over a finished run's report (`Job:CorpusDedup(Blob:report, CorpusOptions:opts)`). `languageModel` is the
 blob of a model trained by `corpus-assets` (see below); pass an empty blob when
 the pipeline's `identify_language` is `false`. `CorpusOptions`: `MaxShardBytes`
 (0 = the controller's cap of 1 GiB; a smaller value lowers it), `SamplingRate`
-(the share of shards re-executed for integrity, 0 to 1; 0 by default) and
-`FetchConcurrency` (reserved).
+(the share of shards re-executed for integrity, 0 to 1; 0 by default),
+`DedupThreshold` (0 = 0.8) and `FetchConcurrency` (reserved; the node's own
+ceiling is two downloads at once).
 
 ## The manifest
 
@@ -108,6 +111,11 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   per signature (int32 LE, 128), then one MinHash signature per document in
   product order (128 × uint64 LE) — a fixed layout, document *i* at
   `12 + i × 1024`. Absent when `sign` is `false`.
+- **Dedup** (`corpus-dedup.json`, `docs/corpus-dedup.schema.json`): per shard
+  a keep mask over the product (a base64 bitset, bit *i* = the *i*-th JSON line,
+  1 = keep) and the clusters of two or more as (shard, ordinal) pairs with the
+  kept document first; a lab assembles the corpus by reading each text blob
+  and skipping the lines whose bit is 0.
 - **Report** (`corpus-report.json`, `docs/corpus-report.schema.json`): per
   shard the verdict, blob ids, content hash, error and statistics (records in,
   documents extracted and out, drops by rule, languages, bytes, times); the

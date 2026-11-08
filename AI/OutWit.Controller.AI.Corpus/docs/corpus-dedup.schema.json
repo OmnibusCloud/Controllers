@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-dedup.schema.json",
+  "title": "Corpus dedup",
+  "description": "The output of Corpus.Dedup over a corpus-report/1 document: the near-duplicate merge across every completed shard of a run. Per shard a keep mask over the product's documents; the clusters of two or more as (shard, ordinal) pairs, listed up to a cap — the masks carry the complete decision.",
+  "type": "object",
+  "required": ["schema", "controller", "summary", "shards", "clusters"],
+  "properties": {
+    "schema": { "const": "corpus-dedup/1" },
+    "controller": { "type": "string" },
+    "summary": {
+      "type": "object",
+      "required": ["threshold", "bands", "shards", "documents", "duplicates", "kept", "clusters", "clusters_listed"],
+      "properties": {
+        "threshold": { "type": "number", "description": "The Jaccard estimate a pair needed to be one cluster." },
+        "bands": { "type": "integer", "description": "LSH bands over the 128-hash signature." },
+        "shards": { "type": "integer" },
+        "documents": { "type": "integer" },
+        "duplicates": { "type": "integer", "description": "Documents that are near-duplicates of an earlier one (the mask drops them)." },
+        "kept": { "type": "integer" },
+        "clusters": { "type": "integer", "description": "Clusters of two or more." },
+        "clusters_listed": { "type": "integer", "description": "How many of them the document lists." }
+      }
+    },
+    "shards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["index", "signatures_blob", "documents", "duplicates", "keep"],
+        "properties": {
+          "index": { "type": "integer" },
+          "signatures_blob": { "type": "string" },
+          "documents": { "type": "integer" },
+          "duplicates": { "type": "integer" },
+          "keep": { "type": "string", "contentEncoding": "base64", "description": "A bitset over the shard's product: bit i of byte i/8, least significant first, 1 = keep document i (the i-th JSON line of the text blob)." }
+        }
+      }
+    },
+    "clusters": {
+      "type": "array",
+      "description": "Each cluster: its documents as [shard index, ordinal] pairs in ascending order, the representative (the kept one) first.",
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "items": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 }
+      }
+    }
+  }
+}

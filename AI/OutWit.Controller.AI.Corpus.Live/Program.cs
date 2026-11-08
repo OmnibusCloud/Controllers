@@ -25,10 +25,12 @@ public static class Program
 
     private const string PROCESS_SCRIPT = "CorpusProcess";
     private const string PREFLIGHT_SCRIPT = "CorpusPreflight";
+    private const string DEDUP_SCRIPT = "CorpusDedup";
 
     private const string REPORT = "report";
     private const string INTEGRITY = "integrity";
     private const string RESULT = "result";
+    private const string DEDUP = "dedup";
 
     private static readonly TimeSpan POLL_INTERVAL = TimeSpan.FromSeconds(5);
 
@@ -68,11 +70,12 @@ public static class Program
             OptionValue(args, "--runs", 1),
             OptionValue(args, "--sampling", 0.0),
             OptionValue(args, "--max-shard-mb", 0),
-            OptionValue(args, "--save", null));
+            OptionValue(args, "--save", null),
+            OptionValue(args, "--threshold", 0.0));
 
         Console.WriteLine($"server   : {server}");
         Console.WriteLine($"identity : {identity}");
-        Console.WriteLine($"manifest : {Path.GetFileName(manifestPath)}, {new FileInfo(manifestPath).Length} byte(s)");
+        Console.WriteLine($"input    : {Path.GetFileName(manifestPath)}, {new FileInfo(manifestPath).Length} byte(s)");
         Console.WriteLine($"model    : {(modelPath == null ? "(none)" : $"{Path.GetFileName(modelPath)}, {new FileInfo(modelPath).Length} byte(s)")}");
 
         await using var client = new WitCloudClient(server, identity, key);
@@ -85,6 +88,7 @@ public static class Program
         {
             "preflight" => await PreflightAsync(client, manifestPath, modelPath, options),
             "process" => await ProcessAsync(client, manifestPath, modelPath, options),
+            "dedup" => await DedupAsync(client, manifestPath, options),
             _ => Usage()
         };
     }
@@ -161,6 +165,33 @@ public static class Program
             ? $"content  : all {identities.Count} run(s) give the same content hashes"
             : $"content  : DIFFER across {identities.Count} run(s)");
         return identical ? 0 : 1;
+    }
+
+    private static async Task<int> DedupAsync(WitCloudClient client, string reportPath, RunOptions options)
+    {
+        var reportBlob = await client.Blobs.UploadBlobAsync(await File.ReadAllBytesAsync(reportPath), Path.GetFileName(reportPath));
+        var handle = await client.Scripts.SubmitAsync(DEDUP_SCRIPT, [reportBlob, new CorpusOptionsData { DedupThreshold = options.Threshold }]);
+        Console.WriteLine($"{DEDUP_SCRIPT} submitted: job {handle.JobId}");
+
+        var result = await handle.WaitAsync<Guid?>(DEDUP, pollInterval: POLL_INTERVAL);
+        if (result.Status != ProcessingJobStatus.Completed || result.Result == null)
+        {
+            Console.WriteLine($"  {result.Status} after {result.Duration}: {result.ErrorMessage}");
+            return 1;
+        }
+
+        Console.WriteLine($"  completed in {result.Duration}");
+        var bytes = await client.Blobs.DownloadBlobAsync(result.Result.Value);
+        await SaveAsync(options, $"{DEDUP}.json", bytes);
+
+        using var document = JsonDocument.Parse(bytes);
+        var summary = document.RootElement.GetProperty("summary");
+        Console.WriteLine($"  dedup    : {summary.GetProperty("documents").GetInt64()} documents in {summary.GetProperty("shards").GetInt32()} shard(s), " +
+                          $"{summary.GetProperty("duplicates").GetInt64()} near-duplicates in {summary.GetProperty("clusters").GetInt64()} cluster(s) at threshold {summary.GetProperty("threshold").GetDouble():0.##}, kept {summary.GetProperty("kept").GetInt64()}");
+        foreach (var shard in document.RootElement.GetProperty("shards").EnumerateArray())
+            Console.WriteLine($"    [{shard.GetProperty("index").GetInt32(),3}] {shard.GetProperty("documents").GetInt64()} docs, {shard.GetProperty("duplicates").GetInt64()} dropped");
+
+        return 0;
     }
 
     #endregion
@@ -261,6 +292,7 @@ public static class Program
     {
         Console.WriteLine("corpus-live preflight <manifest.json> [--model <model.bin>]");
         Console.WriteLine("corpus-live process   <manifest.json> [--model <model.bin>] [--sampling R] [--max-shard-mb N] [--runs N] [--save <dir>]");
+        Console.WriteLine("corpus-live dedup     <report.json> [--threshold J] [--save <dir>]");
         Console.WriteLine();
         Console.WriteLine($"env: {KEY_ENV} (wit_sk_ key, required), {SERVER_ENV} (default {DEFAULT_SERVER}), {IDENTITY_ENV} (default {DEFAULT_IDENTITY})");
         return 2;
@@ -270,7 +302,7 @@ public static class Program
 
     #region Types
 
-    private sealed record RunOptions(int Runs, double Sampling, int MaxShardMb, string? SaveDir);
+    private sealed record RunOptions(int Runs, double Sampling, int MaxShardMb, string? SaveDir, double Threshold);
 
     #endregion
 }
