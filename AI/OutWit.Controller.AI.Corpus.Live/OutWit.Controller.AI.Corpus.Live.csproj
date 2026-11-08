@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The live proof runner of the Corpus controller: drives CorpusPreflight and CorpusProcess
+       on a real server through the public SDK, the way a lab's initiator does, and compares the
+       content hashes of repeated runs. A developer tool, not a package: never packed or
+       published. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>corpus-live</AssemblyName>
+    <RootNamespace>OutWit.Controller.AI.Corpus.Live</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OutWit.Cloud.SDK" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Corpus.Model\OutWit.Controller.AI.Corpus.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="manifests\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

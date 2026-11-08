@@ -1,0 +1,15 @@
+{
+  "pipeline": {
+    "version": "cc-text-v1",
+    "language_model_sha256": "9670e262a8453661e47f0a4e838e0970fff561e20b3865b383227b01ba25558f",
+    "identify_language": true,
+    "filter_quality": true,
+    "sign": true
+  },
+  "allowed_origins": ["data.commoncrawl.org"],
+  "sources": [
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00000.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00001.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00002.warc.wet.gz"
+  ]
+}

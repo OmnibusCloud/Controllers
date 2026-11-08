@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.props" />
+
+  <PropertyGroup>
+    <ControllerName>Corpus</ControllerName>
+    <Version>0.1.0</Version>
+    <Description>Bundled .wit scripts for the OutWit Corpus controller — CorpusProcess (public-corpus shards fetched by the nodes, cleaned, language-tagged, quality-filtered and signed, with sampled re-execution) and CorpusPreflight.</Description>
+    <PackageTags>corpus;common-crawl;scripts;witengine;witcloud;controller</PackageTags>
+  </PropertyGroup>
+
+  <!-- Compatibility marker: enable at first publish of the controller package, when it exists
+       on a feed (a reference to a package no feed has breaks restore until then).
+  <ItemGroup>
+    <PackageReference Include="OutWit.Controller.AI.Corpus" Version="[0.1.0, 1.0.0)" />
+  </ItemGroup>
+  -->
+
+  <ItemGroup>
+    <None Include="..\OutWit.Controller.AI.Corpus\Scripts\*.wit"
+          Pack="true"
+          PackagePath="content/scripts/" />
+
+    <None Include="build\OutWit.Controller.AI.Corpus.Scripts.targets"
+          Pack="true"
+          PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.targets" />
+
+</Project>
