@@ -136,7 +136,19 @@ public static class ShardTaskRunner
         using var text = new FileStream(textPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 1 << 20);
         using var signatures = new FileStream(signaturesPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 1 << 16);
 
-        return processor.Process(shard, task.Source!.Format, text, signatures, cancellationToken);
+        // A worker is often a desktop: the minutes of CPU a shard takes run below the owner's
+        // foreground work, the way the solvers run their processes below normal priority.
+        var thread = Thread.CurrentThread;
+        var priority = thread.Priority;
+        try
+        {
+            thread.Priority = ThreadPriority.BelowNormal;
+            return processor.Process(shard, task.Source!.Format, text, signatures, cancellationToken);
+        }
+        finally
+        {
+            thread.Priority = priority;
+        }
     }
 
     private static CorpusResultData Fail(CorpusResultData result, CorpusShardVerdict verdict, string error)

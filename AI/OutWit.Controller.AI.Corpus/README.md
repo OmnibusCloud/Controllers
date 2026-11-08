@@ -136,8 +136,9 @@ sample is a function of the shard index, so a lab can reproduce the choice.
   trusted only when its bytes hash to the pipeline's pin; a model that does
   not match is `PipelineUnavailable`, not a different result.
 - Processing is one streaming pass: one record in memory at a time, the
-  product hashed and compressed as it is written. The task's temp scope is
-  deleted when the task ends, whatever the verdict.
+  product hashed and compressed as it is written, on a thread below normal
+  priority (a worker is often a desktop). The task's temp scope is deleted
+  when the task ends, whatever the verdict.
 
 ## What is here
 
@@ -180,5 +181,10 @@ the trained language model, committed under `Fixtures/`) and on hostile input
 pipeline's determinism and counters; the fetcher against a loopback origin
 (retries, caps, final refusals, stalls); the node-side task's verdicts; the
 manifest parser and planner; the report; the wire layout of every model type;
-and the distributed gate — the bundled scripts through the engine SDK with
-in-process nodes fetching from the loopback origin.
+the hostile-input suite over synthetic shards (`WarcSynth` writes WARC/WET the
+way Common Crawl does: truncation mid-record, invalid UTF-8, hostile HTML,
+non-WARC records, corrupt gzip members); and the distributed gate — the bundled
+scripts through the engine SDK with in-process nodes fetching from the loopback
+origin. `Category=Load` (not run in CI): a 40k-document synthetic shard streams
+through the processor in bounded memory to the same hash twice, and several
+shards on one process agree with the single run.

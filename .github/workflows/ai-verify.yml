@@ -89,4 +89,4 @@ jobs:
         shell: bash
         run: |
           dotnet build AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj -c Release
-          dotnet test AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj -c Release --no-build --logger "console;verbosity=normal"
+          dotnet test AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj -c Release --no-build --filter "Category!=Load" --logger "console;verbosity=normal"
