@@ -15,6 +15,20 @@
     <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
   </ItemGroup>
 
+  <!-- Stage libraries, managed and deterministic on every client platform: AngleSharp parses the
+       HTML the same way everywhere (no native parser, no platform-forked stage). -->
+  <ItemGroup>
+    <PackageReference Include="AngleSharp" Version="1.10.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ControllerModuleAssembly Include="AngleSharp" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="build\OutWit.Controller.AI.Corpus.targets" Pack="true" PackagePath="build\" />
   </ItemGroup>

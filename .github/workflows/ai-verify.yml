@@ -81,3 +81,10 @@ jobs:
         run: |
           dotnet build AI/OutWit.Controller.AI.Vision.Tests/OutWit.Controller.AI.Vision.Tests.csproj -c Release
           dotnet test AI/OutWit.Controller.AI.Vision.Tests/OutWit.Controller.AI.Vision.Tests.csproj -c Release --no-build
+
+      # The Corpus stage libraries on the golden Common Crawl shards (committed fixtures).
+      - name: Corpus
+        shell: bash
+        run: |
+          dotnet build AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj -c Release
+          dotnet test AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj -c Release --no-build --logger "console;verbosity=normal"

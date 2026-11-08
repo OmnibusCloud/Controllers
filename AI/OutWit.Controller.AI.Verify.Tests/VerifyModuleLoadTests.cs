@@ -83,7 +83,12 @@ public class VerifyModuleLoadTests
             !File.Exists(Path.Combine(fixtureRuntimes, "qjs-wasi.wasm")))
             Assert.Ignore($"Pinned runtimes not found under '{fixtureRuntimes}' — run verify-assets build @Data/runtimes to opt in.");
 
-        m_controllersPath = Path.Combine(solutionRoot, "@Controllers", "Debug");
+        // The configuration this test assembly was built with (Release in CI) names the staging folder.
+        var configuration = typeof(VerifyModuleLoadTests).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), false)
+            .OfType<System.Reflection.AssemblyConfigurationAttribute>()
+            .FirstOrDefault()?.Configuration ?? "Debug";
+        m_controllersPath = Path.Combine(solutionRoot, "@Controllers", configuration);
         m_moduleDir = Path.Combine(m_controllersPath, "verify.module");
         if (!File.Exists(Path.Combine(m_moduleDir, "controller.json")))
             Assert.Ignore($"Staged module not found at '{m_moduleDir}'");

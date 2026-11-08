@@ -115,10 +115,17 @@ public abstract class VerifyScriptTestBase
 
     private static string? FindControllersPath()
     {
+        // The staged modules live under @Controllers/<Configuration> at the solution root; the
+        // configuration is the one this test assembly was built with (Release in CI).
+        var configuration = typeof(VerifyScriptTestBase).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), false)
+            .OfType<System.Reflection.AssemblyConfigurationAttribute>()
+            .FirstOrDefault()?.Configuration ?? "Debug";
+
         var dir = AppContext.BaseDirectory;
         while (dir != null)
         {
-            var candidate = Path.Combine(dir, "@Controllers", "Debug");
+            var candidate = Path.Combine(dir, "@Controllers", configuration);
             if (Directory.Exists(candidate))
                 return candidate;
             dir = Path.GetDirectoryName(dir);
