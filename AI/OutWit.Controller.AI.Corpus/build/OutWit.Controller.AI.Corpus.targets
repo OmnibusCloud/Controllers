@@ -4,14 +4,14 @@
       Consumer-side targets for the OutWit.Controller.AI.Corpus NuGet package.
       Auto-imported into any csproj that PackageReferences this controller.
       Copies the package's content/module/* into the consumer's
-      $(OutputPath)@Controllers\vision.module\ so the controller runtime can
+      $(OutputPath)@Controllers\corpus.module\ so the controller runtime can
       find the controller DLL and the manifest.
       Tier-1: no external data assets, so no ResolveControllerAssetsTask step.
   -->
 
   <PropertyGroup>
     <_OutWitCorpusModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitCorpusModulePackageContent>
-    <_OutWitCorpusModuleOutputDir>$(OutputPath)@Controllers\vision.module\</_OutWitCorpusModuleOutputDir>
+    <_OutWitCorpusModuleOutputDir>$(OutputPath)@Controllers\corpus.module\</_OutWitCorpusModuleOutputDir>
   </PropertyGroup>
 
   <Target Name="OutWitCopyCorpusModule"
