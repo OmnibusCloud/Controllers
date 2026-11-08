@@ -19,6 +19,7 @@
        HTML the same way everywhere (no native parser, no platform-forked stage). -->
   <ItemGroup>
     <PackageReference Include="AngleSharp" Version="1.10.0" />
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -27,6 +28,7 @@
 
   <ItemGroup>
     <ControllerModuleAssembly Include="AngleSharp" />
+    <ControllerModuleAssembly Include="ZstdSharp" />
   </ItemGroup>
 
   <ItemGroup>
