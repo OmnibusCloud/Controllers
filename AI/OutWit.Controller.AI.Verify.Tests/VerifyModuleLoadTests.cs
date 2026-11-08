@@ -167,8 +167,15 @@ public class VerifyModuleLoadTests
                 "the language runtimes must be found in the module's wasm/ folder");
             Assert.That(ReportValue(report, NATIVE_PATH_PREFIX), Does.StartWith(m_moduleDir).IgnoreCase,
                 "the module-aware resolver must point at the module's runtimes/<rid>/native copy");
-            Assert.That(LoadedNativeModulesUnder(m_moduleDir), Is.Not.Empty,
-                "the native wasmtime library must be the module's copy, not the test bin's");
+            // The process module list names the loaded library's path on Windows and Linux; macOS
+            // reports dyld images by their canonical path, which need not share the module folder's
+            // prefix (the runner's temp and symlinked folders), so the resolver's own report is the
+            // evidence there.
+            if (!OperatingSystem.IsMacOS())
+            {
+                Assert.That(LoadedNativeModulesUnder(m_moduleDir), Is.Not.Empty,
+                    "the native wasmtime library must be the module's copy, not the test bin's");
+            }
         });
     }
 

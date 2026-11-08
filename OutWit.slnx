@@ -74,6 +74,7 @@
     <Project Path="AI/OutWit.Controller.AI.Vision.Tests/OutWit.Controller.AI.Vision.Tests.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Corpus/OutWit.Controller.AI.Corpus.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj" />
+    <Project Path="AI/OutWit.Controller.AI.Corpus.Assets/OutWit.Controller.AI.Corpus.Assets.csproj" />
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="Tools/OutWit.Controller.Pack/OutWit.Controller.Pack.csproj" />

@@ -21,9 +21,11 @@
   </ItemGroup>
 
   <!-- Golden shards: the first complete gzip members of one Common Crawl WET and one WARC
-       file (CC-MAIN-2026-43, segment 1791170053823.21, file 00000), 1.5 MB each, committed. -->
+       file (CC-MAIN-2026-43, segment 1791170053823.21, file 00000), 1.5 MB each, committed;
+       and the language model corpus-assets trained from two WET files of the same crawl. -->
   <ItemGroup>
     <None Update="Fixtures\*.gz" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\*.bin" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
