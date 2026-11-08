@@ -13,9 +13,9 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// (the persistent-batch economy); tasks are otherwise independent, so callers run many
 /// <see cref="Execute"/> calls concurrently across a node's cores.
 ///
-/// WASI clock and randomness are shadowed with deterministic implementations: the same
-/// task yields byte-identical output (and, with the clock pinned, byte-identical fuel)
-/// on any node — the integrity foundation the controller compares against.
+/// The guest's world is <see cref="VerifyGuestWiring"/> (argv, environment, read-only root,
+/// stdio), its clock and randomness <see cref="VerifyDeterministicLinker"/>'s, a suite's
+/// verdict <see cref="VerifySuiteEvaluator"/>'s.
 /// </summary>
 public sealed class VerifyWasmSandbox : IDisposable
 {
@@ -24,12 +24,8 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// <summary>Epoch tick granularity — the wall-clock interrupt resolution.</summary>
     private const int EPOCH_TICK_MS = 10;
 
-    /// <summary>Fixed value returned by the pinned clock (nanoseconds); constant → deterministic.</summary>
-    private const long PINNED_CLOCK_NS = 0;
-
-    private const string WASI_MODULE = "wasi_snapshot_preview1";
     private const string GUEST_MEMORY = "memory";
-    private const int ERRNO_SUCCESS = 0;
+    private const string START_EXPORT = "_start";
 
     #endregion
 
@@ -54,6 +50,10 @@ public sealed class VerifyWasmSandbox : IDisposable
         VerifyNativeLibrary.EnsureRegistered();
     }
 
+    /// <summary>
+    /// Creates a sandbox: one engine with fuel accounting, epoch interruption and NaN
+    /// canonicalization, one epoch timer, one temp folder for the stdio redirects.
+    /// </summary>
     public VerifyWasmSandbox()
     {
         // NaN canonicalization pins float bit patterns across platforms; fuel and epoch
@@ -81,15 +81,22 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// Executes one task: its suite case-by-case if present, otherwise a single run.
     /// Never throws for guest-side faults — every failure mode is a verdict.
     /// </summary>
-    public VerifyResultData Execute(VerifyResolvedRuntime runtime, VerifyTaskData task, VerifyLimitsData limits)
+    /// <param name="runtime">The resolved runtime.</param>
+    /// <param name="task">The task.</param>
+    /// <param name="limits">The task's effective limits.</param>
+    /// <param name="cancellationToken">Checked between a suite's cases; a run already started ends within its wall limit.</param>
+    /// <returns>The task's result.</returns>
+    /// <exception cref="OperationCanceledException">The token was cancelled between two cases of a suite.</exception>
+    public VerifyResultData Execute(VerifyResolvedRuntime runtime, VerifyTaskData task, VerifyLimitsData limits, CancellationToken cancellationToken = default)
     {
-        WasmModule module;
         if (runtime.Descriptor.TaskSupplied)
         {
-            // The task's own module: a bad one is the task's verdict, not the node's.
+            // The task's own module: a bad one is the task's verdict, not the node's. The lease
+            // keeps the compiled module alive for the whole task while other workers churn the cache.
+            VerifyTaskModuleLease lease;
             try
             {
-                module = CompileTaskModule(task);
+                lease = LeaseTaskModule(task);
             }
             catch (FormatException exception)
             {
@@ -99,28 +106,32 @@ public sealed class VerifyWasmSandbox : IDisposable
             {
                 return Verdict(task.TaskIndex, VerifyVerdict.CompileError, $"module failed to compile: {exception.Message}");
             }
-        }
-        else
-        {
-            try
+
+            using (lease)
             {
-                module = GetOrCompile(runtime);
-            }
-            catch (WasmtimeException exception)
-            {
-                return Verdict(task.TaskIndex, VerifyVerdict.RuntimeUnavailable, $"runtime module failed to compile: {exception.Message}");
+                return Run(runtime, lease.Module, task, limits, cancellationToken);
             }
         }
 
-        return task.Suite is { Cases.Count: > 0 }
-            ? ExecuteSuite(runtime, module, task, limits)
-            : ExecuteSingle(runtime, module, task, limits);
+        WasmModule module;
+        try
+        {
+            module = GetOrCompile(runtime);
+        }
+        catch (WasmtimeException exception)
+        {
+            return Verdict(task.TaskIndex, VerifyVerdict.RuntimeUnavailable, $"runtime module failed to compile: {exception.Message}");
+        }
+
+        return Run(runtime, module, task, limits, cancellationToken);
     }
 
-    private VerifyResultData ExecuteSingle(VerifyResolvedRuntime runtime, WasmModule module, VerifyTaskData task, VerifyLimitsData limits)
+    private VerifyResultData Run(VerifyResolvedRuntime runtime, WasmModule module, VerifyTaskData task, VerifyLimitsData limits, CancellationToken cancellationToken)
     {
-        var run = RunProgram(runtime, module, task, task.Args, task.Stdin, limits);
+        if (task.Suite is { Cases.Count: > 0 })
+            return VerifySuiteEvaluator.Evaluate(task, (args, stdin) => RunProgram(runtime, module, task, args, stdin, limits), cancellationToken);
 
+        var run = RunProgram(runtime, module, task, task.Args, task.Stdin, limits);
         return new VerifyResultData
         {
             TaskIndex = task.TaskIndex,
@@ -136,88 +147,8 @@ public sealed class VerifyWasmSandbox : IDisposable
         };
     }
 
-    private VerifyResultData ExecuteSuite(VerifyResolvedRuntime runtime, WasmModule module, VerifyTaskData task, VerifyLimitsData limits)
-    {
-        var suite = task.Suite!;
-        var caseResults = new List<VerifyCaseResultData>(suite.Cases.Count);
-
-        long totalFuel = 0;
-        long peakMemory = 0;
-        var totalWall = 0;
-        var allPassed = true;
-        var firstFailure = VerifyVerdict.Pass;
-        var firstFailureExit = 0;
-        var lastStdout = "";
-        var lastStdoutTruncated = false;
-        var lastStderr = "";
-        var lastStderrTruncated = false;
-
-        for (var i = 0; i < suite.Cases.Count; i++)
-        {
-            var testCase = suite.Cases[i];
-            var args = task.Args.Concat(testCase.Args).ToList();
-            var run = RunProgram(runtime, module, task, args, testCase.Stdin, limits);
-
-            totalFuel += run.FuelConsumed;
-            peakMemory = Math.Max(peakMemory, run.PeakMemoryBytes);
-            totalWall += run.WallMs;
-            lastStdout = run.Stdout;
-            lastStdoutTruncated = run.StdoutTruncated;
-            lastStderr = run.Stderr;
-            lastStderrTruncated = run.StderrTruncated;
-
-            // A run that reached its exit (code 0 or not) completed; a resource verdict did not.
-            var completed = run.Verdict is VerifyVerdict.Pass or VerifyVerdict.RuntimeError;
-            var exitMatches = run.ExitCode == testCase.ExpectedExitCode;
-            var passed = completed
-                         && exitMatches
-                         && (testCase.ExpectedStdout == null || run.Stdout == testCase.ExpectedStdout);
-
-            // A resource verdict (Timeout/Memory/Output) is reported as-is. A completed run with
-            // the expected exit code but the wrong output is a Fail, and so is a run that was
-            // expected to signal with a non-zero code and did not. A crash the case did not
-            // expect (non-zero exit where 0 was expected) stays a RuntimeError.
-            var caseVerdict = passed ? VerifyVerdict.Pass
-                : !completed ? run.Verdict
-                : exitMatches ? VerifyVerdict.Fail
-                : testCase.ExpectedExitCode == 0 ? VerifyVerdict.RuntimeError
-                : VerifyVerdict.Fail;
-
-            caseResults.Add(new VerifyCaseResultData
-            {
-                CaseIndex = i,
-                Passed = passed,
-                Verdict = caseVerdict,
-                ExitCode = run.ExitCode,
-                ActualStdout = run.Stdout
-            });
-
-            if (!passed && allPassed)
-            {
-                allPassed = false;
-                firstFailure = caseVerdict;
-                firstFailureExit = run.ExitCode;
-            }
-        }
-
-        return new VerifyResultData
-        {
-            TaskIndex = task.TaskIndex,
-            Verdict = allPassed ? VerifyVerdict.Pass : firstFailure,
-            ExitCode = allPassed ? 0 : firstFailureExit,
-            Stdout = lastStdout,
-            StdoutTruncated = lastStdoutTruncated,
-            Stderr = lastStderr,
-            StderrTruncated = lastStderrTruncated,
-            CaseResults = caseResults,
-            FuelConsumed = totalFuel,
-            PeakMemoryBytes = peakMemory,
-            WallMs = totalWall
-        };
-    }
-
     /// <summary>One guest invocation in its own store. The heart of the sandbox.</summary>
-    private RunOutcome RunProgram(VerifyResolvedRuntime runtime, WasmModule module, VerifyTaskData task,
+    private VerifyRunOutcome RunProgram(VerifyResolvedRuntime runtime, WasmModule module, VerifyTaskData task,
         IReadOnlyList<string> args, string? stdin, VerifyLimitsData limits)
     {
         var stdoutPath = Path.Combine(m_ioDir, $"{Guid.NewGuid():N}.out");
@@ -230,12 +161,12 @@ public sealed class VerifyWasmSandbox : IDisposable
         var storeDisposed = false;
         try
         {
-            store.SetWasiConfiguration(BuildWasi(runtime, task, args, stdinPath, stdoutPath, stderrPath));
+            store.SetWasiConfiguration(VerifyGuestWiring.Build(runtime, task, args, stdinPath, stdoutPath, stderrPath));
             store.Fuel = (ulong)Math.Max(1, limits.FuelBudget);
             store.SetLimits(memorySize: Math.Max(1, limits.MemoryBytes));
             store.SetEpochDeadline(WallToTicks(limits.WallTimeMs));
 
-            using var linker = BuildLinker(task.RandomSeed);
+            using var linker = VerifyDeterministicLinker.Create(m_engine, task.RandomSeed);
 
             var start = DateTime.UtcNow;
             var (verdict, exitCode, trapMemoryFault, peakMemory, fault) = Invoke(linker, store, module);
@@ -266,7 +197,7 @@ public sealed class VerifyWasmSandbox : IDisposable
             if (stdoutTruncated && verdict is VerifyVerdict.Pass)
                 verdict = VerifyVerdict.OutputExceeded;
 
-            return new RunOutcome(verdict, exitCode, stdout, stdoutTruncated, stderr, stderrTruncated,
+            return new VerifyRunOutcome(verdict, exitCode, stdout, stdoutTruncated, stderr, stderrTruncated,
                 fuelConsumed, peakMemory, wallMs);
         }
         finally
@@ -305,9 +236,9 @@ public sealed class VerifyWasmSandbox : IDisposable
 
         try
         {
-            var startAction = instance.GetAction("_start");
+            var startAction = instance.GetAction(START_EXPORT);
             if (startAction == null)
-                return new(VerifyVerdict.RuntimeError, -1, false, PeakMemory(instance), "module exports no _start");
+                return new(VerifyVerdict.RuntimeError, -1, false, PeakMemory(instance), $"module exports no {START_EXPORT}");
 
             startAction();
             return new(VerifyVerdict.Pass, 0, false, PeakMemory(instance));
@@ -353,120 +284,7 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     #endregion
 
-    #region Sandbox Wiring
-
-    private WasiConfiguration BuildWasi(VerifyResolvedRuntime runtime, VerifyTaskData task,
-        IReadOnlyList<string> args, string? stdinPath, string stdoutPath, string stderrPath)
-    {
-        var argv = BuildArgv(runtime, task, args);
-        var wasi = new WasiConfiguration().WithArgs(argv);
-
-        // Pin the interpreter's environment for reproducibility: the prefix is "/" (no
-        // landmark search, no directory scans, no "platform dependent libraries" warning),
-        // the hash seed is fixed, no bytecode is written, and the layers that need it are
-        // on PYTHONPATH (the standard library zip is on sys.path by itself).
-        if (runtime.Descriptor.Language == VerifyRuntimeLanguage.Python)
-        {
-            wasi = wasi
-                .WithEnvironmentVariable("PYTHONHOME", "/")
-                .WithEnvironmentVariable("PYTHONHASHSEED", "0")
-                .WithEnvironmentVariable("PYTHONDONTWRITEBYTECODE", "1")
-                .WithEnvironmentVariable("PYTHONUNBUFFERED", "1");
-
-            var pythonPath = string.Join(':', runtime.Descriptor.Layers.Where(layer => layer.PythonPath != null).Select(layer => layer.PythonPath));
-            if (pythonPath.Length > 0)
-                wasi = wasi.WithEnvironmentVariable("PYTHONPATH", pythonPath);
-        }
-
-        // Stdlib preopen, read-only. The task's own sources travel inline via -c/-e (or are
-        // the module), so v1 needs no writable guest FS — the strongest containment posture.
-        if (runtime.RootPath != null)
-            wasi = wasi.WithPreopenedDirectory(runtime.RootPath, "/", WasiDirectoryPermissions.Read, WasiFilePermissions.Read);
-
-        if (stdinPath != null)
-            wasi = wasi.WithStandardInput(stdinPath);
-
-        return wasi.WithStandardOutput(stdoutPath).WithStandardError(stderrPath);
-    }
-
-    private static string[] BuildArgv(VerifyResolvedRuntime runtime, VerifyTaskData task, IReadOnlyList<string> args)
-    {
-        var entry = EntrySource(task);
-        var code = entry?.Content ?? "";
-
-        // v1 executes the entry source inline (no writable guest FS). Multi-file programs
-        // are a planned extension (a writable preopen + materialized sources).
-        var argv = new List<string> { runtime.Descriptor.Argv0 };
-        switch (runtime.Descriptor.Language)
-        {
-            case VerifyRuntimeLanguage.Python:
-                // -P: no '' on sys.path (nothing lists the guest root); -B: no bytecode writes.
-                argv.Add("-P");
-                argv.Add("-B");
-                argv.Add("-c");
-                argv.Add(code);
-                break;
-            case VerifyRuntimeLanguage.JavaScript:
-                argv.Add("-e");
-                argv.Add(code);
-                break;
-            case VerifyRuntimeLanguage.Wasi:
-                // The module is the program: argv[0] is its name, the rest the task's args.
-                argv[0] = entry?.Name is { Length: > 0 } name ? name : runtime.Descriptor.Argv0;
-                break;
-        }
-
-        argv.AddRange(args);
-        return argv.ToArray();
-    }
-
-    private static VerifySourceFileData? EntrySource(VerifyTaskData task)
-    {
-        return task.Sources.FirstOrDefault(s => s.Name == task.EntryPoint)
-               ?? task.Sources.FirstOrDefault();
-    }
-
-    /// <summary>
-    /// A WASI linker whose clock and randomness are replaced with deterministic
-    /// implementations, so a task's execution — output and fuel — is reproducible.
-    /// </summary>
-    private Linker BuildLinker(long randomSeed)
-    {
-        var linker = new Linker(m_engine) { AllowShadowing = true };
-        linker.DefineWasi();
-
-        // Fixed clock: every clock_time_get returns the same instant. Removes the last
-        // source of fuel non-determinism found in the runtime spike.
-        linker.DefineFunction(WASI_MODULE, "clock_time_get",
-            (Caller caller, int clockId, long precision, int timePtr) =>
-            {
-                caller.GetMemory(GUEST_MEMORY)?.WriteInt64(timePtr, PINNED_CLOCK_NS);
-                return ERRNO_SUCCESS;
-            });
-
-        // Seeded PRNG: deterministic bytes from the task seed (xorshift64*), so any
-        // randomness the guest draws is identical on every node.
-        var state = new RandomState(unchecked((ulong)randomSeed) | 1UL);
-        linker.DefineFunction(WASI_MODULE, "random_get",
-            (Caller caller, int bufferPtr, int length) =>
-            {
-                var memory = caller.GetMemory(GUEST_MEMORY);
-                if (memory == null)
-                    return ERRNO_SUCCESS;
-
-                var span = memory.GetSpan(bufferPtr, length);
-                for (var i = 0; i < length; i++)
-                    span[i] = state.NextByte();
-
-                return ERRNO_SUCCESS;
-            });
-
-        return linker;
-    }
-
-    #endregion
-
-    #region Helpers
+    #region Modules
 
     private WasmModule GetOrCompile(VerifyResolvedRuntime runtime)
     {
@@ -485,9 +303,9 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// <summary>The raw WASI runtime: the entry source holds the module bytes, base64.</summary>
     /// <exception cref="FormatException">The entry is missing or not base64.</exception>
     /// <exception cref="WasmtimeException">The bytes are not a valid module.</exception>
-    private WasmModule CompileTaskModule(VerifyTaskData task)
+    private VerifyTaskModuleLease LeaseTaskModule(VerifyTaskData task)
     {
-        var entry = EntrySource(task) ?? throw new FormatException("a wasi task needs an entry source: the module bytes, base64");
+        var entry = VerifyGuestWiring.EntrySource(task) ?? throw new FormatException("a wasi task needs an entry source: the module bytes, base64");
 
         byte[] bytes;
         try
@@ -499,8 +317,12 @@ public sealed class VerifyWasmSandbox : IDisposable
             throw new FormatException($"entry '{entry.Name}' of a wasi task must hold the module bytes in base64");
         }
 
-        return m_taskModules.GetOrCompile(entry.Name, bytes);
+        return m_taskModules.Lease(entry.Name, bytes);
     }
+
+    #endregion
+
+    #region Helpers
 
     private static ulong WallToTicks(int wallMs)
     {
@@ -555,6 +377,7 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     #region IDisposable
 
+    /// <summary>Releases the compiled modules, the engine, the epoch timer and the stdio folder.</summary>
     public void Dispose()
     {
         if (m_disposed)
@@ -586,29 +409,23 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     #endregion
 
-    #region Nested Types
+    #region Properties
 
-    private sealed record RunOutcome(
-        VerifyVerdict Verdict, int ExitCode,
-        string Stdout, bool StdoutTruncated, string Stderr, bool StderrTruncated,
-        long FuelConsumed, long PeakMemoryBytes, int WallMs);
+    /// <summary>The folder the stdio redirects of running tasks live in; empty between runs, gone after Dispose.</summary>
+    public string IoDirectory => m_ioDir;
+
+    /// <summary>Compiled task-supplied modules held right now (bounded by <see cref="TaskModuleCacheCapacity"/>).</summary>
+    public int TaskModuleCacheCount => m_taskModules.Count;
+
+    /// <summary>The most task-supplied modules the sandbox keeps compiled at once.</summary>
+    public static int TaskModuleCacheCapacity => VerifyTaskModuleCache.DEFAULT_CAPACITY;
+
+    #endregion
+
+    #region Nested Types
 
     /// <summary>What one instantiate-and-start attempt came to; Fault is the host's reason when the guest never ran.</summary>
     private sealed record InvokeOutcome(VerifyVerdict Verdict, int ExitCode, bool MemoryFault, long PeakMemory, string? Fault = null);
-
-    private sealed class RandomState(ulong seed)
-    {
-        private ulong m_state = seed;
-
-        public byte NextByte()
-        {
-            // xorshift64* — deterministic, seed-driven; quality is irrelevant, reproducibility is the point.
-            m_state ^= m_state >> 12;
-            m_state ^= m_state << 25;
-            m_state ^= m_state >> 27;
-            return (byte)((m_state * 0x2545F4914F6CDD1DUL) >> 56);
-        }
-    }
 
     #endregion
 }

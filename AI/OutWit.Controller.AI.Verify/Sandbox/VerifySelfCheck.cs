@@ -17,11 +17,17 @@ public static class VerifySelfCheck
 {
     #region Constants
 
+    /// <summary>Self-check line: the native wasmtime loaded.</summary>
     public const string NATIVE_LOADED = "wasmtime-native: loaded";
+    /// <summary>Self-check line prefix: the native wasmtime failed to load.</summary>
     public const string NATIVE_FAILED = "wasmtime-native: FAILED";
+    /// <summary>Self-check line prefix: where the managed binding resolved from.</summary>
     public const string MANAGED_PREFIX = "wasmtime-managed: ";
+    /// <summary>Self-check line prefix: the language-runtime root.</summary>
     public const string WASM_ROOT_PREFIX = "wasm-root: ";
+    /// <summary>Self-check line prefix: the native library the module-aware resolver would load.</summary>
     public const string NATIVE_PATH_PREFIX = "wasmtime-native-path: ";
+    /// <summary>Self-check line prefix: the native library the resolver loaded, or that it was not asked.</summary>
     public const string NATIVE_RESOLVER_PREFIX = "wasmtime-native-resolver: ";
 
     /// <summary>

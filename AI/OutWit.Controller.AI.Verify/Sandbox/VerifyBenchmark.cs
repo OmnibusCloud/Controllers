@@ -26,16 +26,22 @@ public static class VerifyBenchmark
     /// <summary>Reference tasks per worker thread, per runtime.</summary>
     public const int TASKS_PER_WORKER = 4;
 
+    /// <summary>Reference runs discarded before timing (the module compile and the first stores).</summary>
     public const int WARMUP_RUNS = 1;
 
+    /// <summary>Most warm-up runs before timing starts regardless of their duration.</summary>
     public const int MAX_WARMUP_RUNS = 2;
 
+    /// <summary>Fewest timed runs a benchmark takes.</summary>
     public const int MIN_RUNS = 3;
 
+    /// <summary>Most timed runs a benchmark takes.</summary>
     public const int MAX_RUNS = 5;
 
+    /// <summary>Timed duration to aim for when the engine passes no minimum.</summary>
     public static readonly TimeSpan FALLBACK_TARGET = TimeSpan.FromSeconds(1.5);
 
+    /// <summary>Wall-clock budget past which a slow node stops after its minimum runs.</summary>
     public static readonly TimeSpan SLOW_NODE_BUDGET = TimeSpan.FromSeconds(60);
 
     private const string PYTHON_ENTRY = "bench.py";

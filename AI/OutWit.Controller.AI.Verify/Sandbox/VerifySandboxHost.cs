@@ -9,5 +9,6 @@ public static class VerifySandboxHost
 {
     private static readonly Lazy<VerifyWasmSandbox> s_instance = new(() => new VerifyWasmSandbox());
 
+    /// <summary>The process-wide sandbox, created on first use.</summary>
     public static VerifyWasmSandbox Instance => s_instance.Value;
 }

@@ -1,0 +1,83 @@
+name: AI Verify
+run-name: "AI Verify: ${{ github.event.pull_request.title || github.ref_name }}"
+
+# The Verify controller on the three node platforms: the wire-layout and schema guards,
+# the sandbox verdict, adversarial, raw-WASI and Python-layer suites against the pinned
+# runtime set (built from its pins by verify-assets, so nothing is Assert.Ignore'd here),
+# the worker pool and the benchmark, the taskset pipelines, every bundled script end to
+# end through the engine on in-process nodes, and the module self-containment proof.
+# Load tests (Category=Load) are not part of the sweep.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'AI/**'
+      - 'Build/**'
+      - '.github/workflows/ai-verify.yml'
+  push:
+    branches: [main, ai-controllers]
+    paths:
+      - 'AI/**'
+      - 'Build/**'
+      - '.github/workflows/ai-verify.yml'
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # AspectInjector (a build-time dependency of OutWit.Common) ships a native
+      # osx-arm64 helper that Apple Silicon kills on launch ("Killed: 9") when
+      # its signature is missing or invalid. An ad-hoc signature after the
+      # restore lets the build through.
+      - name: Restore and sign the AspectInjector helper (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          dotnet restore AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj
+          for helper in "$HOME"/.nuget/packages/aspectinjector/*/build/_bin/osx-arm64/AspectInjector; do
+            chmod +x "$helper"
+            codesign --force -s - "$helper"
+            codesign --verify --verbose "$helper"
+          done
+
+      # The pinned downloads (the CPython-WASI build, QuickJS, the sympy and mpmath
+      # wheels) are cached by the pins file; the bytecode layers are compiled by the
+      # pinned interpreter on every run (~30 s) so the set is exactly what the catalog pins.
+      - name: Cache the runtime downloads
+        uses: actions/cache@v4
+        with:
+          path: AI/OutWit.Controller.AI.Verify.Tests/@Data/@Downloads
+          key: verify-runtime-downloads-${{ hashFiles('AI/OutWit.Controller.AI.Verify.Assets/AssetPins.cs') }}
+
+      - name: Build the runtime set
+        shell: bash
+        run: |
+          dotnet run --project AI/OutWit.Controller.AI.Verify.Assets/OutWit.Controller.AI.Verify.Assets.csproj -c Release -- build AI/OutWit.Controller.AI.Verify.Tests/@Data/runtimes --clean
+
+      - name: Build
+        shell: bash
+        run: dotnet build AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj -c Release
+
+      - name: Verify
+        run: dotnet test AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj -c Release --no-build --filter Category!=Load --logger "console;verbosity=normal"
+
+      - name: Vision
+        shell: bash
+        run: |
+          dotnet build AI/OutWit.Controller.AI.Vision.Tests/OutWit.Controller.AI.Vision.Tests.csproj -c Release
+          dotnet test AI/OutWit.Controller.AI.Vision.Tests/OutWit.Controller.AI.Vision.Tests.csproj -c Release --no-build

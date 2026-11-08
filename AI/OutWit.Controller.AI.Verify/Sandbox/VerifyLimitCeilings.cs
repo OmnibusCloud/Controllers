@@ -9,10 +9,15 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// </summary>
 public static class VerifyLimitCeilings
 {
+    /// <summary>Ceiling on a task's fuel budget (about thousands of interpreter-seconds).</summary>
     public const long MAX_FUEL_BUDGET = 2_000_000_000_000; // ~thousands of interpreter-seconds
+    /// <summary>Ceiling on a task's linear memory.</summary>
     public const long MAX_MEMORY_BYTES = 2L * 1024 * 1024 * 1024;
+    /// <summary>Ceiling on a task's wall-clock budget.</summary>
     public const int MAX_WALL_TIME_MS = 120_000;
+    /// <summary>Ceiling on the stdout a task may keep.</summary>
     public const int MAX_STDOUT_LIMIT_BYTES = 8 * 1024 * 1024;
+    /// <summary>Ceiling on the stderr a task may keep.</summary>
     public const int MAX_STDERR_LIMIT_BYTES = 1024 * 1024;
 
     /// <summary>

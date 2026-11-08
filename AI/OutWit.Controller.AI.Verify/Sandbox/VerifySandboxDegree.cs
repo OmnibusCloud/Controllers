@@ -10,8 +10,10 @@ public static class VerifySandboxDegree
 {
     #region Constants
 
+    /// <summary>Most concurrent sandboxes a batch runs at when the options set no cap.</summary>
     public const int DEFAULT_MAX_DEGREE = 16;
 
+    /// <summary>Share of the available RAM the sandboxes may claim together.</summary>
     public const double DEFAULT_RAM_HEADROOM = 0.75;
 
     #endregion

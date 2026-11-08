@@ -11,6 +11,8 @@ namespace OutWit.Controller.AI.Verify.Runtimes;
 /// </summary>
 public static class VerifyRuntimeDiagnosticsBuilder
 {
+    /// <summary>Builds the inventory of this process: wasmtime version, runtime target, every known runtime with its availability and pin.</summary>
+    /// <returns>The diagnostics record.</returns>
     public static VerifyRuntimeDiagnosticsData Build()
     {
         // The version below is a managed fact; the engine makes the native library a proven one.

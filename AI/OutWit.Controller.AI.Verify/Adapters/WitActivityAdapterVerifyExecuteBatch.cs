@@ -40,12 +40,20 @@ internal sealed class WitActivityAdapterVerifyExecuteBatch : WitActivityAdapterF
         var runtimesRoot = VerifyRuntimeLocator.Locate();
         var progress = CreateProgress(status.JobId, batch.Tasks.Count);
         var nodeId = status.EngineId;
-        var result = await Task.Run(() => VerifyBatchExecutor.Execute(VerifySandboxHost.Instance, runtimesRoot, batch, nodeId, progress));
+
+        // The job's token: a cancelled job stops at the next task boundary instead of burning
+        // the rest of the batch on the node.
+        var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
+        var result = await Task.Run(() => VerifyBatchExecutor.Execute(VerifySandboxHost.Instance, runtimesRoot, batch, nodeId, progress, cancellationToken), cancellationToken);
 
         if (!pool.TrySetValue(activity.ReturnReference, result))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
     }
 
+    /// <summary>Measures this node's throughput on the reference workload; a node without runtimes or with a failing sandbox reports the default (unranked) score.</summary>
+    /// <param name="options">The engine's benchmark options.</param>
+    /// <param name="cancellationToken">Cancels the measurement.</param>
+    /// <returns>The rate in tasks per second at the node's degree.</returns>
     public override async Task<IWitBenchmarkResult> RunBenchmark(IWitBenchmarkOptions? options, CancellationToken cancellationToken)
     {
         var runtimesRoot = VerifyRuntimeLocator.Locate();

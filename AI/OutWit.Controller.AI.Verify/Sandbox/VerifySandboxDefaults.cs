@@ -16,12 +16,16 @@ public static class VerifySandboxDefaults
     /// </summary>
     public const long DEFAULT_FUEL_BUDGET = 50_000_000_000;
 
+    /// <summary>Linear memory cap when the task and the batch set none.</summary>
     public const long DEFAULT_MEMORY_BYTES = 256 * 1024 * 1024;
 
+    /// <summary>Wall-clock cap when the task and the batch set none.</summary>
     public const int DEFAULT_WALL_TIME_MS = 10_000;
 
+    /// <summary>Captured stdout cap when the task and the batch set none; beyond it a passing task is OutputExceeded.</summary>
     public const int DEFAULT_STDOUT_LIMIT_BYTES = 256 * 1024;
 
+    /// <summary>Captured stderr cap when the task and the batch set none.</summary>
     public const int DEFAULT_STDERR_LIMIT_BYTES = 64 * 1024;
 
     #endregion

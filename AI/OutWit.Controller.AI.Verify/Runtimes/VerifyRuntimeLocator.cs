@@ -12,10 +12,13 @@ namespace OutWit.Controller.AI.Verify.Runtimes;
 /// </summary>
 public static class VerifyRuntimeLocator
 {
+    /// <summary>Environment variable that overrides the runtime root (tests and non-standard layouts).</summary>
     public const string OverrideEnvVar = "WITAI_VERIFY_RUNTIMES";
 
     private const string RuntimesFolderName = "wasm";
 
+    /// <summary>Finds the on-disk root of the pinned language runtimes.</summary>
+    /// <returns>The root folder, or null when none is found.</returns>
     public static string? Locate()
     {
         var overridePath = Environment.GetEnvironmentVariable(OverrideEnvVar);

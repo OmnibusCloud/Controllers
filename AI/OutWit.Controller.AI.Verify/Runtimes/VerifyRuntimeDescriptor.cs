@@ -12,6 +12,7 @@ public sealed record VerifyRuntimeDescriptor
     /// <summary>Runtime id as tasks reference it (e.g. "python-3.14.6").</summary>
     public required string Id { get; init; }
 
+    /// <summary>Language family: drives argv, environment and the preopen.</summary>
     public required VerifyRuntimeLanguage Language { get; init; }
 
     /// <summary>

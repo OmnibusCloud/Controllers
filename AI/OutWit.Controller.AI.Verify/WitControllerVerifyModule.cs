@@ -13,6 +13,8 @@ namespace OutWit.Controller.AI.Verify;
 [WitPluginDependency("Variables", MinimumVersion = "1.0.0")]
 public sealed class WitControllerVerifyModule : WitPluginBase, IWitControllerNode, IWitControllerHost
 {
+    /// <summary>Registers the Verify variables, collections and activity adapters.</summary>
+    /// <param name="services">The service collection of the engine host or node.</param>
     public override void Initialize(IServiceCollection services)
     {
         services.AddVariable<WitVariableVerifyTask>();

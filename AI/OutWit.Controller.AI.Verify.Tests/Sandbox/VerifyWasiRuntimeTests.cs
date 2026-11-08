@@ -259,6 +259,32 @@ public sealed class VerifyWasiRuntimeTests
     }
 
     [Test]
+    public void ManyDistinctModulesInOneParallelBatchAllRunTest()
+    {
+        // More distinct modules than the cache holds, several workers at once: a module in
+        // flight is never evicted under another worker's feet (the load suite found that one).
+        var count = VerifyWasmSandbox.TaskModuleCacheCapacity + 40;
+        var batch = new VerifyTaskBatchData
+        {
+            RuntimeId = VerifyRuntimeCatalog.WASI,
+            MaxDegree = 8,
+            Tasks = Enumerable.Range(0, count).Select(i => Task(WasiModules.Hello($"m{i}\n"), i, new VerifySuiteData
+            {
+                Cases = [new VerifySuiteCaseData { ExpectedStdout = $"m{i}\n" }]
+            })).ToList()
+        };
+
+        var result = VerifyBatchExecutor.Execute(m_sandbox, null, batch);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Results.Select(r => r.Verdict).Distinct(), Is.EqualTo(new[] { VerifyVerdict.Pass }),
+                string.Join("; ", result.Results.Where(r => r.Verdict != VerifyVerdict.Pass).Take(3).Select(r => $"{r.TaskIndex}: {r.Verdict} {r.Stderr}")));
+            Assert.That(m_sandbox.TaskModuleCacheCount, Is.LessThanOrEqualTo(VerifyWasmSandbox.TaskModuleCacheCapacity));
+        });
+    }
+
+    [Test]
     public void ParserAcceptsBase64AndRejectsAnythingElseForWasiTest()
     {
         var good = "{\"runtime\":\"wasi\",\"entry\":\"hello.wasm\",\"sources\":{\"hello.wasm\":\"" + HELLO_BASE64 + "\"},\"args\":[\"one\"]}";

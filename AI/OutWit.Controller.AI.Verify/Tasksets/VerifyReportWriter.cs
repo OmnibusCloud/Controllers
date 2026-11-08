@@ -18,6 +18,9 @@ namespace OutWit.Controller.AI.Verify.Tasksets;
 /// </summary>
 public static class VerifyReportWriter
 {
+    /// <summary>Writes the verdict report: the aggregate summary and one identity record per task, ordered by index.</summary>
+    /// <param name="results">The results of every task, in any order.</param>
+    /// <returns>The UTF-8 JSON bytes.</returns>
     public static byte[] Write(IReadOnlyList<VerifyResultData> results)
     {
         var ordered = results.OrderBy(result => result.TaskIndex).ToList();

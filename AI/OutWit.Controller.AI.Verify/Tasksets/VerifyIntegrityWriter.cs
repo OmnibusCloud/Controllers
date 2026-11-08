@@ -150,6 +150,7 @@ public static class VerifyIntegrityWriter
     /// <summary>A sampled task: compared only when both sides exist and ran on different nodes.</summary>
     private sealed record PairRecord(int Index, Placed? Primary, Placed Replica, bool SameNode, bool Match, List<string> Differing)
     {
+        /// <summary>Whether the pair was compared: both sides exist and ran on different nodes.</summary>
         public bool Compared => Primary != null && !SameNode;
     }
 

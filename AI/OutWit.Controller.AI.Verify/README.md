@@ -217,9 +217,18 @@ can call it as a doctor-style check.
 ## Tests
 
 `OutWit.Controller.AI.Verify.Tests`: wire-layout guards, the schema guards,
-the sandbox verdict and adversarial suites, the worker pool and the benchmark,
-the taskset and check-task pipelines, the end-to-end runs of every script
-through the engine on in-process nodes, and the module self-containment
-proof. The sandbox suites are opt-in on the pinned runtime set
+the parser at its edges, the sandbox verdict, adversarial, hygiene, raw-WASI
+and Python-layer suites, the worker pool (cancellation included) and the
+benchmark, the taskset, sampling and integrity pipelines, the end-to-end runs
+of every bundled script through the engine on in-process nodes, and the
+module self-containment proof. The sandbox suites need the pinned runtime set
 (`verify-assets build OutWit.Controller.AI.Verify.Tests/@Data/runtimes`;
-`@Data/` is gitignored).
+`@Data/` is gitignored) and Assert.Ignore without it; the `AI Verify` workflow
+builds the set and runs everything on Linux, macOS and Windows.
+
+Load tests (`Category=Load`, not in the sweep): a thousand tasks at the
+machine's degree, thousands of runs with bounded memory, hundreds of distinct
+raw modules against the bounded module cache, a hundred thousand lines
+through the parser and the planner and a hundred thousand results through
+every writer, and thousands of tasks through `VerifyRun` with sampling on
+the in-process nodes — `dotnet test --filter Category=Load`.

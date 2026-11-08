@@ -21,15 +21,26 @@ namespace OutWit.Controller.AI.Verify.Tasksets;
 /// </summary>
 public static class VerifyTasksetParser
 {
+    #region Constants
+
+    private const char BOM = '﻿';
+
+    #endregion
+
     #region Functions
 
+    /// <summary>Parses a taskset (JSON lines) into tasks, collecting one error per malformed line instead of throwing.</summary>
+    /// <param name="jsonl">The taskset text.</param>
+    /// <returns>The tasks that parsed and the errors.</returns>
     public static VerifyTasksetParseResult Parse(string jsonl)
     {
         var tasks = new List<VerifyTaskData>();
         var errors = new List<string>();
 
-        var lines = jsonl.Split('\n');
+        // A byte-order mark from an editor is not part of the first line.
+        var lines = jsonl.TrimStart(BOM).Split('\n');
         var ordinal = 0;
+        var lineOfIndex = new Dictionary<int, int>();
         for (var lineNumber = 0; lineNumber < lines.Length; lineNumber++)
         {
             var line = lines[lineNumber].Trim();
@@ -38,8 +49,15 @@ public static class VerifyTasksetParser
 
             try
             {
-                tasks.Add(ParseTask(line, ordinal));
+                var task = ParseTask(line, ordinal);
                 ordinal++;
+
+                // Indices key the report and pair the sampled replicas: one task per index.
+                if (lineOfIndex.TryGetValue(task.TaskIndex, out var earlier))
+                    throw new FormatException($"duplicate 'index' {task.TaskIndex} (already used on line {earlier})");
+                lineOfIndex[task.TaskIndex] = lineNumber + 1;
+
+                tasks.Add(task);
             }
             catch (Exception exception)
             {
@@ -80,9 +98,13 @@ public static class VerifyTasksetParser
             throw new FormatException($"'entry' '{entry}' of a '{runtime}' task must hold the module bytes in base64");
         }
 
+        var index = GetInt(root, "index") ?? ordinal;
+        if (index < 0)
+            throw new FormatException($"'index' must be 0 or more, got {index}");
+
         return new VerifyTaskData
         {
-            TaskIndex = GetInt(root, "index") ?? ordinal,
+            TaskIndex = index,
             RuntimeId = runtime,
             Sources = sources,
             EntryPoint = entry,

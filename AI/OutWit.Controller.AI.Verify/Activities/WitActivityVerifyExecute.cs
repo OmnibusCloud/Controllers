@@ -26,6 +26,10 @@ public sealed partial class WitActivityVerifyExecute : WitActivityFunction
 
     #region Model Base
 
+    /// <summary>Value comparison with another model: the same type and equal fields (the OutWit model paradigm).</summary>
+    /// <param name="modelBase">The model to compare with.</param>
+    /// <param name="tolerance">Tolerance for floating-point fields.</param>
+    /// <returns>True when the models are equal by value.</returns>
     public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
     {
         if (modelBase is not WitActivityVerifyExecute activity)
@@ -47,6 +51,7 @@ public sealed partial class WitActivityVerifyExecute : WitActivityFunction
 
     #region Properties
 
+    /// <summary>Reference to the 'Task' argument of the activity.</summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Task { get; init; }
 

@@ -37,6 +37,22 @@ public static class VerifyBatchExecutor
     /// <returns>One result per task plus the batch diagnostics.</returns>
     public static VerifyResultBatchData Execute(VerifyWasmSandbox sandbox, string? runtimesRoot, VerifyTaskBatchData batch, Guid nodeId, Action<int, int>? progress)
     {
+        return Execute(sandbox, runtimesRoot, batch, nodeId, progress, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Executes a batch on this node, stopping at the next task boundary when the job is cancelled.
+    /// </summary>
+    /// <param name="sandbox">The node's sandbox.</param>
+    /// <param name="runtimesRoot">The language runtime root, or null when none was found.</param>
+    /// <param name="batch">The batch.</param>
+    /// <param name="nodeId">This node's engine id, recorded in the diagnostics.</param>
+    /// <param name="progress">Called after each task with (completed, total), from the worker that finished it.</param>
+    /// <param name="cancellationToken">The job's token: no further task starts once cancelled, a running one ends within its wall limit.</param>
+    /// <returns>One result per task plus the batch diagnostics.</returns>
+    /// <exception cref="OperationCanceledException">The job was cancelled before the batch finished.</exception>
+    public static VerifyResultBatchData Execute(VerifyWasmSandbox sandbox, string? runtimesRoot, VerifyTaskBatchData batch, Guid nodeId, Action<int, int>? progress, CancellationToken cancellationToken)
+    {
         var stopwatch = Stopwatch.StartNew();
         var results = new VerifyResultData[batch.Tasks.Count];
 
@@ -57,9 +73,10 @@ public static class VerifyBatchExecutor
             {
                 var task = batch.Tasks[i];
                 var limits = VerifySandboxDefaults.Resolve(task.Limits, batch.DefaultLimits);
-                results[i] = sandbox.Execute(runtime, task, limits);
+                results[i] = sandbox.Execute(runtime, task, limits, cancellationToken);
             },
-            _ => progress?.Invoke(Interlocked.Increment(ref completed), batch.Tasks.Count));
+            _ => progress?.Invoke(Interlocked.Increment(ref completed), batch.Tasks.Count),
+            cancellationToken);
 
         return Finish(results, batch, nodeId, runtime, degree, stopwatch);
     }

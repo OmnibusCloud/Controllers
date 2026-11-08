@@ -110,5 +110,39 @@ public sealed class VerifyWorkerPoolTests
         Assert.That(exception!.Message, Is.EqualTo("boom 7"));
     }
 
+    [Test]
+    public void CancellationStopsNewIndicesAndThrowsTest()
+    {
+        using var cts = new CancellationTokenSource();
+        var started = new List<int>();
+        var gate = new object();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            VerifyWorkerPool.Run(100, 2, index =>
+            {
+                lock (gate)
+                    started.Add(index);
+                if (index == 3)
+                    cts.Cancel();
+                Thread.Sleep(5);
+            }, cancellationToken: cts.Token));
+
+        Assert.That(started, Has.Count.LessThan(100), "no index starts after the cancel");
+        Assert.That(started, Does.Contain(3));
+    }
+
+    [Test]
+    public void PreCancelledTokenRunsNothingTest()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var ran = 0;
+
+        Assert.Throws<OperationCanceledException>(() =>
+            VerifyWorkerPool.Run(10, 2, _ => Interlocked.Increment(ref ran), cancellationToken: cts.Token));
+
+        Assert.That(ran, Is.Zero);
+    }
+
     #endregion
 }

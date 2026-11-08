@@ -13,6 +13,7 @@ public static class VerifyWorkerPool
 {
     #region Constants
 
+    /// <summary>Priority of the worker threads: below normal, so a desktop stays usable.</summary>
     public const ThreadPriority WORKER_PRIORITY = ThreadPriority.BelowNormal;
 
     private const string WORKER_NAME = "verify-sandbox";
@@ -29,8 +30,10 @@ public static class VerifyWorkerPool
     /// <param name="degree">Upper bound on concurrent workers; clamped to <c>[1, count]</c>.</param>
     /// <param name="body">The work for one index; may run concurrently with itself.</param>
     /// <param name="completed">Called after each index finishes, on the worker that ran it.</param>
+    /// <param name="cancellationToken">Once cancelled, no further index starts; the indices already running finish, then the call throws.</param>
+    /// <exception cref="OperationCanceledException">The token was cancelled before every index ran.</exception>
     /// <exception cref="Exception">The first exception a worker threw, rethrown after every worker stopped.</exception>
-    public static void Run(int count, int degree, Action<int> body, Action<int>? completed = null)
+    public static void Run(int count, int degree, Action<int> body, Action<int>? completed = null, CancellationToken cancellationToken = default)
     {
         if (count <= 0)
             return;
@@ -47,7 +50,7 @@ public static class VerifyWorkerPool
                 while (true)
                 {
                     var index = Interlocked.Increment(ref next);
-                    if (index >= count || Volatile.Read(ref failure) != null)
+                    if (index >= count || Volatile.Read(ref failure) != null || cancellationToken.IsCancellationRequested)
                         return;
 
                     try
@@ -72,6 +75,12 @@ public static class VerifyWorkerPool
 
         foreach (var thread in threads)
             thread.Join();
+
+        if (failure != null && failure is not OperationCanceledException)
+            ExceptionDispatchInfo.Capture(failure).Throw();
+
+        // Cancelled (by the token, or by a body that observed it): the caller's token says so.
+        cancellationToken.ThrowIfCancellationRequested();
 
         if (failure != null)
             ExceptionDispatchInfo.Capture(failure).Throw();

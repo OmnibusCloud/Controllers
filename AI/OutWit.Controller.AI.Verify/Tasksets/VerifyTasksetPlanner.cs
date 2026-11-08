@@ -14,12 +14,17 @@ public static class VerifyTasksetPlanner
 {
     #region Constants
 
+    /// <summary>Tasks per batch when the options set none.</summary>
     public const int DEFAULT_BATCH_SIZE = 32;
 
     #endregion
 
     #region Functions
 
+    /// <summary>Groups the tasks by runtime and splits each group into batches, resolving and clamping every task's limits.</summary>
+    /// <param name="tasks">The tasks, in taskset order.</param>
+    /// <param name="options">The run options, or null for the defaults.</param>
+    /// <returns>The batches and the clamping notes.</returns>
     public static VerifyTasksetPlan Plan(IReadOnlyList<VerifyTaskData> tasks, VerifyOptionsData? options)
     {
         var batchSize = options?.BatchSize is > 0 ? options.BatchSize : DEFAULT_BATCH_SIZE;

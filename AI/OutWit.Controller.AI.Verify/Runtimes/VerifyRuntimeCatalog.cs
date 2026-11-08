@@ -14,11 +14,13 @@ public static class VerifyRuntimeCatalog
 {
     #region Constants
 
+    /// <summary>CPython 3.14.6 (WASI) with the standard library as a bytecode layer.</summary>
     public const string PYTHON_3_14_6 = "python-3.14.6";
 
     /// <summary>CPython 3.14.6 with the sympy 1.14.0 + mpmath 1.4.1 layer on PYTHONPATH.</summary>
     public const string PYTHON_3_14_6_SYMPY_1_14_0 = "python-3.14.6-sympy-1.14.0";
 
+    /// <summary>QuickJS-NG 0.15.1 (WASI), JavaScript.</summary>
     public const string QUICKJS_0_15_1 = "quickjs-0.15.1";
 
     /// <summary>The raw WASI runtime: the task's entry source is the command module itself.</summary>
@@ -96,6 +98,9 @@ public static class VerifyRuntimeCatalog
     /// <summary>All runtime ids this build knows how to pin.</summary>
     public static IEnumerable<string> KnownIds => s_known.Keys;
 
+    /// <summary>Looks a runtime id up in the catalog.</summary>
+    /// <param name="runtimeId">The runtime id a task names.</param>
+    /// <returns>The descriptor, or null for an unknown id.</returns>
     public static VerifyRuntimeDescriptor? Find(string runtimeId)
     {
         return s_known.GetValueOrDefault(runtimeId);

@@ -29,6 +29,10 @@ public sealed partial class WitVariableVerifyTaskBatch : WitVariable<VerifyTaskB
 
     #region Model Base
 
+    /// <summary>Value comparison with another model: the same type and equal fields (the OutWit model paradigm).</summary>
+    /// <param name="modelBase">The model to compare with.</param>
+    /// <param name="tolerance">Tolerance for floating-point fields.</param>
+    /// <returns>True when the models are equal by value.</returns>
     public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
     {
         if (modelBase is not WitVariableVerifyTaskBatch variable)
@@ -38,6 +42,8 @@ public sealed partial class WitVariableVerifyTaskBatch : WitVariable<VerifyTaskB
                && Value.Check(variable.Value);
     }
 
+    /// <summary>Deep copy of the variable.</summary>
+    /// <returns>The copy.</returns>
     public override WitVariableVerifyTaskBatch Clone()
     {
         return new WitVariableVerifyTaskBatch(Name, (VerifyTaskBatchData?)GetValue()?.Clone());
@@ -47,6 +53,9 @@ public sealed partial class WitVariableVerifyTaskBatch : WitVariable<VerifyTaskB
 
     #region IWitVariableFactory
 
+    /// <summary>Creates a variable of this type under a name.</summary>
+    /// <param name="name">The variable name in the script's pool.</param>
+    /// <returns>The new variable.</returns>
     public static WitVariableVerifyTaskBatch Create(string name)
     {
         return new WitVariableVerifyTaskBatch(name);
