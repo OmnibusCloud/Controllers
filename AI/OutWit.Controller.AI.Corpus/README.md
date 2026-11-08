@@ -14,13 +14,14 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, an origin allowlist checked on the host and again on the node,
 retries with jitter towards the origin.
 
-**Status: 0.1.1 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.1.4 — proven on the test fleet, not yet released to nuget.org.**
 The stage libraries are wired into seven activities and three bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
 server the controller processed real Common Crawl WET shards on Windows and
 Linux nodes with every sampled pair agreeing on the content hash (0
-mismatches). What remains before 1.0: the quality thresholds tuned on real
+mismatches), and the dedup merge found the near-duplicates across twenty
+shards' signatures in seconds. What remains before 1.0: the quality thresholds tuned on real
 crawl text, and the dedup merge measured at the scale of a crawl segment.
 
 ## Activities
