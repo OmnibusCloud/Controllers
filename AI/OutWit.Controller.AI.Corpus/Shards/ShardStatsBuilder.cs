@@ -50,8 +50,9 @@ public sealed class ShardStatsBuilder
     /// <param name="bytesProduced">Bytes of the compressed product.</param>
     /// <param name="fetchMs">Wall time of the fetch.</param>
     /// <param name="processMs">Wall time of the processing.</param>
+    /// <param name="waitMs">Wall time spent waiting for the node's download and processing slots.</param>
     /// <returns>The statistics.</returns>
-    public CorpusShardStatsData Build(long bytesFetched, long bytesProduced, int fetchMs, int processMs)
+    public CorpusShardStatsData Build(long bytesFetched, long bytesProduced, int fetchMs, int processMs, int waitMs = 0)
     {
         return new CorpusShardStatsData
         {
@@ -63,7 +64,8 @@ public sealed class ShardStatsBuilder
             BytesFetched = bytesFetched,
             BytesProduced = bytesProduced,
             FetchMs = fetchMs,
-            ProcessMs = processMs
+            ProcessMs = processMs,
+            WaitMs = waitMs
         };
     }
 

@@ -4,6 +4,7 @@ using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Compression;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Quality;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Signatures;
 using OutWit.Controller.AI.Corpus.Warc;
@@ -115,6 +116,21 @@ public sealed class ShardProcessorTests
             Assert.That(signatures[i], Is.EqualTo(MinHashSigner.Sign(texts[i])), $"signature {i} is not the document's");
     }
 
+    [TestCase(WET_FIXTURE, CorpusSourceFormat.Wet)]
+    [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc)]
+    public void ConcurrentShardsGiveTheSingleRunsProductTest(string fixture, CorpusSourceFormat format)
+    {
+        // A node runs several shards at once in one process: nothing a stage shares between
+        // threads (the HTML parser, the language model, the signer's coefficients) may move a product.
+        var single = Run(fixture, format, DefaultPipeline()).Product.ContentSha256;
+        var hashes = new string[8];
+        var workers = Enumerable.Range(0, hashes.Length).Select(i => new Thread(() => hashes[i] = Run(fixture, format, DefaultPipeline()).Product.ContentSha256)).ToList();
+        workers.ForEach(worker => worker.Start());
+        workers.ForEach(worker => worker.Join());
+
+        Assert.That(hashes, Is.All.EqualTo(single));
+    }
+
     #endregion
 
     #region Stage Tests
@@ -158,7 +174,7 @@ public sealed class ShardProcessorTests
     [Test]
     public void StagesSwitchOffTest()
     {
-        var raw = Run(WET_FIXTURE, CorpusSourceFormat.Wet, new CorpusPipelineData { Version = "test-v1", IdentifyLanguage = false, FilterQuality = false, Sign = false }, model: null);
+        var raw = Run(WET_FIXTURE, CorpusSourceFormat.Wet, new CorpusPipelineData { Version = "test-v1", IdentifyLanguage = false, CleanLines = false, FilterQuality = false, Sign = false }, model: null);
         var stats = raw.Product.Stats.Build(0, 0, 0, 0);
 
         Assert.Multiple(() =>
@@ -167,6 +183,24 @@ public sealed class ShardProcessorTests
             Assert.That(stats.Languages.Select(l => l.Name), Is.EqualTo(new[] { "" }));
             Assert.That(raw.Signatures, Is.Empty);
             Assert.That(Lines(CorpusCompressor.Decompress(raw.Text)).All(line => line.Contains("\"lang\":\"\"")), Is.True);
+        });
+    }
+
+    [Test]
+    public void LineStageKeepsLinesAndCleansThemTest()
+    {
+        var raw = Run(WET_FIXTURE, CorpusSourceFormat.Wet, new CorpusPipelineData { Version = "test-v1", IdentifyLanguage = false, CleanLines = false, FilterQuality = false, Sign = false });
+        var cleaned = Run(WET_FIXTURE, CorpusSourceFormat.Wet, new CorpusPipelineData { Version = "test-v1", IdentifyLanguage = false, CleanLines = true, FilterQuality = false, Sign = false });
+
+        var rawTexts = Lines(CorpusCompressor.Decompress(raw.Text)).Select(line => JsonDocument.Parse(line).RootElement.GetProperty("text").GetString()!).ToList();
+        var cleanTexts = Lines(CorpusCompressor.Decompress(cleaned.Text)).Select(line => JsonDocument.Parse(line).RootElement.GetProperty("text").GetString()!).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rawTexts.Count(text => text.Contains('\n')), Is.GreaterThan(rawTexts.Count * 9 / 10), "WET documents keep their lines");
+            Assert.That(cleaned.Product.Stats.Build(0, 0, 0, 0).Drops.Single(d => d.Name == ShardProcessor.DROP_NO_PROSE_LINES).Count, Is.GreaterThan(0), "pages without a prose line drop");
+            Assert.That(cleanTexts.Sum(text => text.Length), Is.LessThan(rawTexts.Sum(text => text.Length) * 3 / 4), "the stage removes a real share of the text");
+            Assert.That(cleanTexts.SelectMany(text => text.Split('\n')).All(line => LineCleaner.Keep(line, QualityRules.Spaced)), Is.True, "every line left reads like prose");
         });
     }
 

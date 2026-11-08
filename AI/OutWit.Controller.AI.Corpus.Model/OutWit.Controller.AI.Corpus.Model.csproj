@@ -5,7 +5,7 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>Corpus</ControllerName>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <Description>Data types for the OutWit Corpus controller: sources, the pipeline contract, shard tasks, results, statistics and options for public-corpus processing.</Description>
     <PackageTags>corpus;common-crawl;warc;witengine;witcloud;controller;data-types</PackageTags>
   </PropertyGroup>

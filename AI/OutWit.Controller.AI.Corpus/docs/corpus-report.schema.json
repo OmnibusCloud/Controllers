@@ -44,7 +44,7 @@
               { "type": "null" },
               {
                 "type": "object",
-                "required": ["records_in", "documents_extracted", "documents_out", "bytes_fetched", "bytes_produced", "fetch_ms", "process_ms", "drops", "languages"],
+                "required": ["records_in", "documents_extracted", "documents_out", "bytes_fetched", "bytes_produced", "fetch_ms", "process_ms", "wait_ms", "drops", "languages"],
                 "properties": {
                   "records_in": { "type": "integer" },
                   "documents_extracted": { "type": "integer" },
@@ -53,6 +53,7 @@
                   "bytes_produced": { "type": "integer" },
                   "fetch_ms": { "type": "integer" },
                   "process_ms": { "type": "integer" },
+                  "wait_ms": { "type": "integer", "description": "Time the shard waited on the node for a download slot and a processing slot." },
                   "drops": { "$ref": "#/$defs/counts" },
                   "languages": { "$ref": "#/$defs/counts" }
                 }

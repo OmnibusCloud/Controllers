@@ -17,6 +17,7 @@ public sealed class CorpusManifestParserTests
                 "language_model_sha256": "9670e262a8453661e47f0a4e838e0970fff561e20b3865b383227b01ba25558f",
                 "target_languages": ["eng", "deu"],
                 "identify_language": true,
+                "clean_lines": false,
                 "filter_quality": true,
                 "sign": false,
                 "quality": { "min_words": 80, "max_duplicate_line_ratio": 0.25 }
@@ -36,6 +37,7 @@ public sealed class CorpusManifestParserTests
             Assert.That(manifest.Pipeline.LanguageModelSha256, Is.EqualTo("9670e262a8453661e47f0a4e838e0970fff561e20b3865b383227b01ba25558f"));
             Assert.That(manifest.Pipeline.TargetLanguages, Is.EqualTo(new[] { "eng", "deu" }));
             Assert.That(manifest.Pipeline.Sign, Is.False);
+            Assert.That(manifest.Pipeline.CleanLines, Is.False);
             Assert.That(manifest.Pipeline.Quality!.MinWords, Is.EqualTo(80));
             Assert.That(manifest.Pipeline.Quality.MaxDuplicateLineRatio, Is.EqualTo(0.25));
             Assert.That(manifest.Pipeline.Quality.MaxWords, Is.Zero, "unset thresholds stay 0 = default");
@@ -58,6 +60,7 @@ public sealed class CorpusManifestParserTests
             Assert.That(manifest.Pipeline.IdentifyLanguage, Is.True);
             Assert.That(manifest.Pipeline.FilterQuality, Is.True);
             Assert.That(manifest.Pipeline.Sign, Is.True);
+            Assert.That(manifest.Pipeline.CleanLines, Is.True, "the line stage is on unless the manifest turns it off");
             Assert.That(manifest.Pipeline.Quality, Is.Null);
             Assert.That(manifest.Pipeline.TargetLanguages, Is.Empty);
         });

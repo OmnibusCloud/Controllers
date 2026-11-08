@@ -12,6 +12,12 @@ namespace OutWit.Controller.AI.Corpus.Adapters;
 
 internal sealed class WitActivityAdapterCorpusSplit : WitActivityAdapterFunction<WitActivityCorpusSplit>
 {
+    #region Constants
+
+    private static readonly Lazy<HttpClient> CLIENT = new(ShardFetcher.CreateClient);
+
+    #endregion
+
     #region Constructors
 
     public WitActivityAdapterCorpusSplit(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
@@ -34,8 +40,43 @@ internal sealed class WitActivityAdapterCorpusSplit : WitActivityAdapterFunction
         foreach (var note in plan.Notes)
             Logger.LogInformation("Corpus.Split: {Note}", note);
 
+        await FillSizesAsync(plan.Tasks, ProcessingManager.CancellationToken(status.JobId));
+
         if (!pool.TrySetCollection(activity.ReturnReference, plan.Tasks))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+    }
+
+    /// <summary>
+    /// The work estimate of a task is its shard's size: sources the manifest left unsized are
+    /// asked at the origin (HEAD, within the probe budget) and the rest take the mean of the
+    /// answers, so the allocator weighs a 1 GB WARC file against a 60 MB WET file correctly.
+    /// A failed probe leaves the size unknown; the node enforces the cap either way.
+    /// </summary>
+    private async Task FillSizesAsync(IReadOnlyList<CorpusTaskData> tasks, CancellationToken cancellationToken)
+    {
+        var sources = tasks.Select(task => task.Source!).ToList();
+        if (sources.All(source => source.SizeBytes > 0))
+            return;
+
+        try
+        {
+            var origins = tasks.SelectMany(task => task.AllowedOrigins).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var sizes = await ShardSizeProbe.ProbeSizesAsync(sources, origins, CLIENT.Value, cancellationToken);
+            var known = sizes.Where(size => size is > 0).Select(size => size!.Value).ToList();
+            var mean = known.Count > 0 ? (long)known.Average() : 0;
+
+            for (var index = 0; index < sources.Count; index++)
+            {
+                if (sources[index].SizeBytes <= 0)
+                    sources[index].SizeBytes = sizes[index] ?? mean;
+            }
+
+            Logger.LogInformation("Corpus.Split: {Probed} shard size(s) from the origin, {Total:F1} MB in all", known.Count, sources.Sum(source => source.SizeBytes) / (1024.0 * 1024.0));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            Logger.LogWarning(exception, "Corpus.Split: the shard sizes could not be probed; the work estimate falls back to a typical shard.");
+        }
     }
 
     #endregion

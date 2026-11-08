@@ -230,7 +230,8 @@ public static class Program
             var stats = shard.GetProperty("stats");
             var line = stats.ValueKind == JsonValueKind.Null
                 ? shard.GetProperty("error").GetString()
-                : $"{stats.GetProperty("documents_out").GetInt32()} docs, {stats.GetProperty("bytes_fetched").GetInt64() / (1024.0 * 1024.0):F1} MB, fetch {stats.GetProperty("fetch_ms").GetInt32() / 1000.0:F1} s, process {stats.GetProperty("process_ms").GetInt32() / 1000.0:F1} s";
+                : $"{stats.GetProperty("documents_out").GetInt32()} docs, {stats.GetProperty("bytes_fetched").GetInt64() / (1024.0 * 1024.0):F1} MB, fetch {stats.GetProperty("fetch_ms").GetInt32() / 1000.0:F1} s, process {stats.GetProperty("process_ms").GetInt32() / 1000.0:F1} s" +
+                  (stats.TryGetProperty("wait_ms", out var wait) ? $", wait {wait.GetInt32() / 1000.0:F1} s" : "");
             Console.WriteLine($"    [{shard.GetProperty("index").GetInt32(),3}] {shard.GetProperty("verdict").GetString(),-19} {shard.GetProperty("node_name").GetString(),-14} {line}");
             hashes.Add($"{shard.GetProperty("index").GetInt32()}:{shard.GetProperty("content_sha256").GetString()}");
         }

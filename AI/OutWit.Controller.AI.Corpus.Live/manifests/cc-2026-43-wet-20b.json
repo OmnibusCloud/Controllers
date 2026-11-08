@@ -1,0 +1,34 @@
+{
+  "pipeline": {
+    "version": "cc-text-v1",
+    "language_model_sha256": "9670e262a8453661e47f0a4e838e0970fff561e20b3865b383227b01ba25558f",
+    "identify_language": true,
+    "filter_quality": true,
+    "sign": true
+  },
+  "allowed_origins": [
+    "data.commoncrawl.org"
+  ],
+  "sources": [
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00020.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00021.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00022.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00023.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00024.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00025.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00026.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00027.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00028.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00029.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00030.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00031.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00032.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00033.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00034.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00035.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00036.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00037.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00038.warc.wet.gz",
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00039.warc.wet.gz"
+  ]
+}

@@ -49,6 +49,28 @@ public sealed class CorpusIntegrityWriterTests
     }
 
     [Test]
+    public void VersionSkewIsCountedNotComparedTest()
+    {
+        var primary = Result(0, Guid.NewGuid(), "aaa", 10);
+        primary.ControllerVersion = "0.1.4";
+        var replica = Result(0, Guid.NewGuid(), "bbb", 12);
+        replica.ControllerVersion = "0.1.5";
+
+        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write([primary], [replica]));
+        var summary = document.RootElement.GetProperty("summary");
+        var pair = document.RootElement.GetProperty("pairs")[0];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.GetProperty("version_skew").GetInt32(), Is.EqualTo(1));
+            Assert.That(summary.GetProperty("compared").GetInt32(), Is.Zero);
+            Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.Zero, "a different product from a different controller is not a mismatch");
+            Assert.That(pair.GetProperty("compared").GetBoolean(), Is.False);
+            Assert.That(pair.GetProperty("replica").GetProperty("controller").GetString(), Is.EqualTo("0.1.5"));
+        });
+    }
+
+    [Test]
     public void DifferencesNameEveryFieldTest()
     {
         var primary = Result(0, Guid.NewGuid(), "aaa", 10);

@@ -56,16 +56,31 @@ public sealed class ShardFetcher
     /// <exception cref="HttpRequestException">The origin refused or kept failing.</exception>
     public async Task<long> FetchAsync(Uri uri, string destinationPath, long maxBytes, CancellationToken cancellationToken)
     {
+        return (await FetchMeasuredAsync(uri, destinationPath, maxBytes, cancellationToken)).Bytes;
+    }
+
+    /// <summary>Fetches a shard to a file like <see cref="FetchAsync"/> and says how long it waited for a download slot first.</summary>
+    /// <param name="uri">The shard URL (already allowlisted).</param>
+    /// <param name="destinationPath">The file to write; replaced on every attempt.</param>
+    /// <param name="maxBytes">Most bytes accepted (0 = no cap).</param>
+    /// <param name="cancellationToken">Cancels the fetch.</param>
+    /// <returns>The byte count written and the wait for the slot.</returns>
+    /// <exception cref="ShardOversizedException">The shard exceeds the cap.</exception>
+    /// <exception cref="HttpRequestException">The origin refused or kept failing.</exception>
+    public async Task<(long Bytes, TimeSpan Waited)> FetchMeasuredAsync(Uri uri, string destinationPath, long maxBytes, CancellationToken cancellationToken)
+    {
         if (m_gate == null)
-            return await FetchWithRetriesAsync(uri, destinationPath, maxBytes, cancellationToken);
+            return (await FetchWithRetriesAsync(uri, destinationPath, maxBytes, cancellationToken), TimeSpan.Zero);
 
         // Several shards may run on one node at once; the origin sees at most the policy's
         // number of them downloading, the rest wait their turn (fetch is a small share of a
         // shard's time, so the wait costs little throughput).
+        var queued = System.Diagnostics.Stopwatch.StartNew();
         await m_gate.WaitAsync(cancellationToken);
+        var waited = queued.Elapsed;
         try
         {
-            return await FetchWithRetriesAsync(uri, destinationPath, maxBytes, cancellationToken);
+            return (await FetchWithRetriesAsync(uri, destinationPath, maxBytes, cancellationToken), waited);
         }
         finally
         {

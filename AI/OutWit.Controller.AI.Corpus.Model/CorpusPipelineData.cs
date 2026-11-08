@@ -33,7 +33,8 @@ public sealed partial class CorpusPipelineData : ModelBase
                && FilterQuality.Is(other.FilterQuality)
                && Sign.Is(other.Sign)
                && Quality.Check(other.Quality)
-               && LanguageModelBlobId.Is(other.LanguageModelBlobId);
+               && LanguageModelBlobId.Is(other.LanguageModelBlobId)
+               && CleanLines.Is(other.CleanLines);
     }
 
     /// <summary>Deep copy.</summary>
@@ -49,7 +50,8 @@ public sealed partial class CorpusPipelineData : ModelBase
             FilterQuality = FilterQuality,
             Sign = Sign,
             Quality = Quality?.Clone(),
-            LanguageModelBlobId = LanguageModelBlobId
+            LanguageModelBlobId = LanguageModelBlobId,
+            CleanLines = CleanLines
         };
     }
 
@@ -92,6 +94,11 @@ public sealed partial class CorpusPipelineData : ModelBase
     /// <summary>The blob that carries the language model (Guid.Empty = none); the node checks it against <see cref="LanguageModelSha256"/>.</summary>
     [MemoryPackOrder(7)]
     public Guid LanguageModelBlobId { get; set; }
+
+    /// <summary>Whether the boilerplate-line stage runs: lines that do not read like prose (navigation, prices, footers) leave each document before it is judged.</summary>
+    [ToString]
+    [MemoryPackOrder(8)]
+    public bool CleanLines { get; set; } = true;
 
     #endregion
 }

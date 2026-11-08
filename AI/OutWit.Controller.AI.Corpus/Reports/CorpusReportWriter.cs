@@ -104,6 +104,7 @@ public static class CorpusReportWriter
             writer.WriteNumber("bytes_produced", stats.BytesProduced);
             writer.WriteNumber("fetch_ms", stats.FetchMs);
             writer.WriteNumber("process_ms", stats.ProcessMs);
+            writer.WriteNumber("wait_ms", stats.WaitMs);
             WriteCounts(writer, "drops", stats.Drops.ToDictionary(count => count.Name, count => (long)count.Count, StringComparer.Ordinal));
             WriteCounts(writer, "languages", stats.Languages.ToDictionary(count => count.Name, count => (long)count.Count, StringComparer.Ordinal));
             writer.WriteEndObject();

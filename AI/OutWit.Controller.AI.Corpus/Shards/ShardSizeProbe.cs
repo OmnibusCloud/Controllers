@@ -34,20 +34,40 @@ public static class ShardSizeProbe
     /// <returns>What was learned.</returns>
     public static async Task<ShardSizeProbeResult> ProbeAsync(IReadOnlyList<CorpusSourceData> sources, IReadOnlyCollection<string> allowedOrigins, HttpClient client, CancellationToken cancellationToken = default)
     {
-        var unsized = sources.Where(source => source.SizeBytes <= 0).ToList();
-        if (unsized.Count == 0)
+        var sizes = await ProbeSizesAsync(sources, allowedOrigins, client, cancellationToken);
+
+        var unsized = sources.Count(source => source.SizeBytes <= 0);
+        if (unsized == 0)
             return new ShardSizeProbeResult(0, 0, 0, 0);
 
-        var candidates = unsized.Take(MAX_PROBES).ToList();
-        var sizes = new long?[candidates.Count];
+        var known = sizes.Where(size => size.HasValue).Select(size => size!.Value).ToList();
+        var probed = known.Count;
+        var attempted = Math.Min(unsized, MAX_PROBES);
+        var failed = attempted - probed;
+        var unprobed = unsized - attempted;
+        var mean = probed > 0 ? (long)known.Average() : 0;
+
+        return new ShardSizeProbeResult(known.Sum() + mean * (failed + unprobed), probed, failed, unprobed);
+    }
+
+    /// <summary>The origin's size of every unsized source, aligned with the sources (null = sized already, not probed, or unanswered).</summary>
+    /// <param name="sources">The manifest's sources.</param>
+    /// <param name="allowedOrigins">The allowlist; a source off it is not probed.</param>
+    /// <param name="client">The HTTP client.</param>
+    /// <param name="cancellationToken">Cancels the probes.</param>
+    /// <returns>One entry per source.</returns>
+    public static async Task<long?[]> ProbeSizesAsync(IReadOnlyList<CorpusSourceData> sources, IReadOnlyCollection<string> allowedOrigins, HttpClient client, CancellationToken cancellationToken = default)
+    {
+        var sizes = new long?[sources.Count];
+        var candidates = sources.Select((source, index) => (source, index)).Where(entry => entry.source.SizeBytes <= 0).Take(MAX_PROBES).ToList();
         using var gate = new SemaphoreSlim(CONCURRENCY, CONCURRENCY);
 
-        await Task.WhenAll(candidates.Select(async (source, index) =>
+        await Task.WhenAll(candidates.Select(async entry =>
         {
             await gate.WaitAsync(cancellationToken);
             try
             {
-                sizes[index] = await HeadAsync(source, allowedOrigins, client, cancellationToken);
+                sizes[entry.index] = await HeadAsync(entry.source, allowedOrigins, client, cancellationToken);
             }
             finally
             {
@@ -55,13 +75,7 @@ public static class ShardSizeProbe
             }
         }));
 
-        var known = sizes.Where(size => size.HasValue).Select(size => size!.Value).ToList();
-        var probed = known.Count;
-        var failed = candidates.Count - probed;
-        var unprobed = unsized.Count - candidates.Count;
-        var mean = probed > 0 ? (long)known.Average() : 0;
-
-        return new ShardSizeProbeResult(known.Sum() + mean * (failed + unprobed), probed, failed, unprobed);
+        return sizes;
     }
 
     private static async Task<long?> HeadAsync(CorpusSourceData source, IReadOnlyCollection<string> allowedOrigins, HttpClient client, CancellationToken cancellationToken)

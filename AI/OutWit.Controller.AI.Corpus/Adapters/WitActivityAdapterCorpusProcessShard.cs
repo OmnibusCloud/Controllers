@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
+using OutWit.Controller.AI.Corpus.Benchmark;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Engine.Data.ActivityAdapters;
+using OutWit.Engine.Data.Benchmark;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
@@ -13,8 +15,8 @@ internal sealed class WitActivityAdapterCorpusProcessShard : WitActivityAdapterF
 {
     #region Constants
 
-    /// <summary>Work estimate per shard when the manifest gives no size: one typical Common Crawl WET file.</summary>
-    private const double DEFAULT_SHARD_MEGABYTES = 150;
+    /// <summary>Work estimate per shard when nothing gives its size: one typical Common Crawl WET file (CC-MAIN-2026-43: 60-65 MB).</summary>
+    private const double DEFAULT_SHARD_MEGABYTES = 64;
 
     private static readonly Lazy<ShardFetcher> FETCHER = new(() => new ShardFetcher(ShardFetcher.CreateClient(), ShardFetchPolicy.Default));
 
@@ -64,6 +66,33 @@ internal sealed class WitActivityAdapterCorpusProcessShard : WitActivityAdapterF
             {
                 Logger.LogWarning(exception, "Corpus.ProcessShard {Index}: the work directory could not be deleted.", task.TaskIndex);
             }
+        }
+    }
+
+    /// <summary>Measures this node on the reference shard at its shard degree; a node whose pipeline computes a different product reports the default (unranked) score.</summary>
+    /// <param name="options">The engine's benchmark options.</param>
+    /// <param name="cancellationToken">Cancels the measurement.</param>
+    /// <returns>The rate in megabytes of real Common Crawl WET per second.</returns>
+    public override async Task<IWitBenchmarkResult> RunBenchmark(IWitBenchmarkOptions? options, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await Task.Run(() => CorpusBenchmark.Measure(options, cancellationToken), cancellationToken);
+
+            Logger.LogInformation(
+                "Corpus.ProcessShard benchmark: {Rate:F2} {Unit} at degree {Degree} (median of {Runs} runs: {RunTimes} s; warm-up {Warmup} s)",
+                result.Rate, result.Unit, result.Custom?["degree"], result.Iterations, result.Custom?["runs_s"], result.Custom?["warmup_s"]);
+
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Corpus.ProcessShard benchmark failed - reporting the default score.");
+            return WitBenchmarkResult.Default;
         }
     }
 

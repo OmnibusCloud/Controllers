@@ -106,9 +106,10 @@ public static class QualityFilter
         var wordChars = words.Sum(w => w.Length);
         if (wordChars > 0)
         {
+            var ngrams = new NgramIndex(words);
             for (var n = 2; n <= 4; n++)
             {
-                var ratio = TopNgramCharRatio(words, n, wordChars);
+                var ratio = TopNgramCharRatio(ngrams, n, wordChars);
                 measures[RULE_TOP_NGRAM + n] = ratio;
                 if (ratio > rules.MaxTopNgramCharRatio[n - 2])
                     failed.Add(RULE_TOP_NGRAM + n);
@@ -116,7 +117,7 @@ public static class QualityFilter
 
             for (var n = 5; n <= 10; n++)
             {
-                var ratio = DuplicateNgramCharRatio(words, n, wordChars);
+                var ratio = DuplicateNgramCharRatio(ngrams, n, wordChars);
                 measures[RULE_DUPLICATE_NGRAM + n] = ratio;
                 if (ratio > rules.MaxDuplicateNgramCharRatio[n - 5])
                     failed.Add(RULE_DUPLICATE_NGRAM + n);
@@ -135,7 +136,7 @@ public static class QualityFilter
     /// <returns>The words.</returns>
     public static List<string> Words(string text, QualityRules rules)
     {
-        if (ReferenceEquals(rules, QualityRules.Unspaced) || rules.MinMeanWordLength == 0 && rules.MinAlphabeticWordRatio == 0)
+        if (rules.CountsLetters)
         {
             var letters = new List<string>();
             foreach (var rune in text.EnumerateRunes())
@@ -150,54 +151,44 @@ public static class QualityFilter
         return text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).ToList();
     }
 
-    private static double TopNgramCharRatio(List<string> words, int n, int wordChars)
+    private static double TopNgramCharRatio(NgramIndex ngrams, int n, int wordChars)
     {
-        if (words.Count < n)
+        if (ngrams.Count < n)
             return 0;
 
-        var counts = new Dictionary<string, (int Count, int Chars)>(StringComparer.Ordinal);
-        for (var i = 0; i + n <= words.Count; i++)
-        {
-            var key = string.Join(' ', words.GetRange(i, n));
-            var chars = key.Length - (n - 1);
-            counts[key] = counts.TryGetValue(key, out var entry) ? (entry.Count + 1, entry.Chars) : (1, chars);
-        }
+        // The n-gram with the most characters in all its occurrences: count × the characters
+        // of its words.
+        var counts = ngrams.Occurrences(n);
+        long top = 0;
+        foreach (var (start, count) in counts)
+            top = Math.Max(top, (long)count * ngrams.Chars(start, n));
 
-        var top = counts.Values.MaxBy(entry => (long)entry.Count * entry.Chars);
-        return (double)top.Count * top.Chars / wordChars;
+        return (double)top / wordChars;
     }
 
-    private static double DuplicateNgramCharRatio(List<string> words, int n, int wordChars)
+    private static double DuplicateNgramCharRatio(NgramIndex ngrams, int n, int wordChars)
     {
-        if (words.Count < n)
+        if (ngrams.Count < n)
             return 0;
 
         // Characters covered by every occurrence of an n-gram that occurs more than once, each
         // word counted once even when several repeated n-grams cover it.
-        var occurrences = new Dictionary<string, List<int>>(StringComparer.Ordinal);
-        for (var i = 0; i + n <= words.Count; i++)
+        var counts = ngrams.Occurrences(n);
+        var covered = new bool[ngrams.Count];
+        for (var i = 0; i + n <= ngrams.Count; i++)
         {
-            var key = string.Join(' ', words.GetRange(i, n));
-            if (!occurrences.TryGetValue(key, out var list))
-                occurrences[key] = list = [];
-            list.Add(i);
-        }
+            if (counts[i] < 2)
+                continue;
 
-        var covered = new bool[words.Count];
-        foreach (var list in occurrences.Values.Where(list => list.Count > 1))
-        {
-            foreach (var start in list)
-            {
-                for (var j = start; j < start + n; j++)
-                    covered[j] = true;
-            }
+            for (var j = i; j < i + n; j++)
+                covered[j] = true;
         }
 
         var chars = 0;
-        for (var i = 0; i < words.Count; i++)
+        for (var i = 0; i < ngrams.Count; i++)
         {
             if (covered[i])
-                chars += words[i].Length;
+                chars += ngrams.Length(i);
         }
 
         return (double)chars / wordChars;

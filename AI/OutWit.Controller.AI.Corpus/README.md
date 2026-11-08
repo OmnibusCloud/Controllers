@@ -14,7 +14,7 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, an origin allowlist checked on the host and again on the node,
 retries with jitter towards the origin.
 
-**Status: 0.1.4 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.1.5 — proven on the test fleet, not yet released to nuget.org.**
 The stage libraries are wired into seven activities and three bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
@@ -76,6 +76,7 @@ One JSON document (`docs/corpus-manifest.schema.json`):
     "language_model_sha256": "9670e262…",
     "target_languages": ["eng", "deu"],
     "identify_language": true,
+    "clean_lines": true,
     "filter_quality": true,
     "sign": true,
     "quality": { "min_words": 50, "max_duplicate_line_ratio": 0.3 }
@@ -99,6 +100,15 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   `.warc.gz` → WARC); an object may state `format`, a `size` estimate for the
   traffic line and the cap check, and the origin's published `sha256`, which
   the node verifies after the fetch.
+- `clean_lines` (on unless the manifest turns it off) removes, before a
+  document is judged, the lines that do not read like prose: a line stays
+  when it ends a sentence and has three words (six letters in a script
+  without word spacing), or when it is long (twelve words, forty letters);
+  menus, prices, counters and footers go. The judged text is the product, so
+  a page whose article outlives its navigation is kept, clean. A document
+  with no such line drops as `no_prose_lines`. WET documents keep their line
+  structure on the way in (one block per line), which the line stage and the
+  quality filter's line rules both rely on.
 - Unknown keys are errors, so a typo cannot silently turn a stage off.
 
 ## The products
@@ -131,7 +141,9 @@ them, compared on everything an honest node cannot vary — the verdict, the
 content hash of the product, the record and document counts, the drop and
 language histograms. Times and bytes are not compared. A pair whose replica
 landed on the primary's node proves nothing about that node and is counted as
-`same_node`, not compared; the mismatch rate is over the compared pairs. The
+`same_node`, not compared; a pair whose sides ran different controller versions
+(a rollout in progress) is counted as `version_skew`, not compared; the
+mismatch rate is over the compared pairs. The
 sample is a function of the shard index, so a lab can reproduce the choice.
 
 ## Node behaviour
@@ -152,8 +164,19 @@ sample is a function of the shard index, so a lab can reproduce the choice.
   not match is `PipelineUnavailable`, not a different result.
 - Processing is one streaming pass: one record in memory at a time, the
   product hashed and compressed as it is written, on a thread below normal
-  priority (a worker is often a desktop). The task's temp scope is deleted
-  when the task ends, whatever the verdict.
+  priority (a worker is often a desktop). At most one shard per core
+  processes at once, fewer when memory is short (256 MB budgeted per shard);
+  the others of a batch wait their turn, already fetched. The task's temp
+  scope is deleted when the task ends, whatever the verdict.
+- **Benchmark.** `Corpus.ProcessShard` measures a node on a synthetic
+  reference shard (400 documents generated from a fixed seed, menus and
+  short pages among them), one copy per slot of the node's degree at once;
+  the product's hash is checked, so a node that computes wrong cannot score.
+  The rate is megabytes of real Common Crawl WET per second
+  (`corpus-wet-mb@synthetic-v1`), the unit of the work estimate — a task's
+  shard size, which `Corpus.Split` asks the origin for when the manifest does
+  not give it — so the allocator gives a 32-thread desktop the share its
+  speed earns.
 
 ## What is here
 
@@ -181,11 +204,23 @@ corpus-assets evaluate-language-model <model.bin> <wet.gz>
 ## Determinism
 
 Every stage is managed code with no platform-dependent path: the same shard
-through the same pipeline version gives the same bytes on Windows, Linux and
-macOS. The tests pin a zstd frame digest and a MinHash signature digest,
+through the same pipeline and the same controller version gives the same bytes
+on Windows, Linux and macOS, on one thread or many. A controller release that
+changes a stage changes the product of an unchanged pipeline (0.1.5 keeps WET
+line structure and adds the line stage), which is why the integrity document
+counts a pair whose sides ran different controller versions as `version_skew`
+instead of comparing it. The tests pin a zstd frame digest and a MinHash signature digest,
 compare extraction, identification and judging across runs, and prove the
 content hash of a shard through the engine equals a direct run's; the
 `AI Verify` workflow runs them on all three platforms.
+
+## Performance
+
+One streaming pass costs about 0.75 s of one core per megabyte of Common
+Crawl WET on a desktop CPU (Ryzen 9 5950X, every stage on); the stages count
+their n-grams over word ids and packed 64-bit keys, so nothing allocates per
+n-gram or per shingle and many shards on one machine do not stall each other
+in the garbage collector. A node runs one shard per core at most.
 
 ## Tests
 

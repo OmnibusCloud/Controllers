@@ -49,7 +49,11 @@ public static class HtmlTextExtractor
         "pre", "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul", "body", "html"
     };
 
-    private static readonly HtmlParser s_parser = new(new HtmlParserOptions { IsScripting = false, IsNotConsumingCharacterReferences = false });
+    /// <summary>One parser per thread: a node runs several shards at once and the parser's thread safety is not a documented contract.</summary>
+    [ThreadStatic]
+    private static HtmlParser? m_parser;
+
+    private static HtmlParser Parser => m_parser ??= new HtmlParser(new HtmlParserOptions { IsScripting = false, IsNotConsumingCharacterReferences = false });
 
     #endregion
 
@@ -86,7 +90,7 @@ public static class HtmlTextExtractor
         if (html.Length > MAX_HTML_CHARS)
             html = html[..MAX_HTML_CHARS];
 
-        using var document = s_parser.ParseDocument(html);
+        using var document = Parser.ParseDocument(html);
 
         var lines = new List<string>();
         var title = Collapse(document.Title ?? "");
@@ -248,6 +252,26 @@ public static class HtmlTextExtractor
         current.Clear();
         if (line.Length > 0)
             lines.Add(line);
+    }
+
+    /// <summary>Collapses whitespace within each line and drops the empty lines, keeping the line structure (a WET document is one block per line).</summary>
+    /// <param name="text">The text.</param>
+    /// <returns>The non-empty lines, collapsed, joined by '\n'.</returns>
+    public static string CollapseLines(string text)
+    {
+        var builder = new StringBuilder(text.Length);
+        foreach (var raw in text.Split('\n'))
+        {
+            var line = Collapse(raw);
+            if (line.Length == 0)
+                continue;
+
+            if (builder.Length > 0)
+                builder.Append('\n');
+            builder.Append(line);
+        }
+
+        return builder.ToString();
     }
 
     /// <summary>Collapses every run of whitespace (including no-break spaces) to one space and trims.</summary>

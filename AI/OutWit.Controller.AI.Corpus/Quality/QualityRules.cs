@@ -25,6 +25,7 @@ public sealed record QualityRules
     /// <summary>Rules for scripts without word spacing: a word is a letter; no word-shape rules.</summary>
     public static readonly QualityRules Unspaced = new()
     {
+        CountsLetters = true,
         MinWords = 100,
         MaxWords = 1_000_000,
         MinMeanWordLength = 0,
@@ -49,6 +50,9 @@ public sealed record QualityRules
     #endregion
 
     #region Properties
+
+    /// <summary>Whether a "word" is a letter (scripts without word spacing) rather than a whitespace-separated token.</summary>
+    public bool CountsLetters { get; init; }
 
     /// <summary>Fewest words a document may have.</summary>
     public int MinWords { get; init; } = 50;

@@ -8,7 +8,8 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// nodes that ran each, and whether the two executions agree on everything an honest node
 /// cannot vary — the verdict, the content hash of the product, the document count, the drop
 /// and language histograms. A pair that landed on one node proves nothing about that node and
-/// is counted, not compared. Schema <c>corpus-integrity/1</c>.
+/// is counted, not compared; so is a pair whose sides ran different controller versions (a
+/// rollout in progress: a stage may have changed between them). Schema <c>corpus-integrity/1</c>.
 /// </summary>
 public static class CorpusIntegrityWriter
 {
@@ -53,6 +54,7 @@ public static class CorpusIntegrityWriter
             writer.WriteNumber("sampled", pairs.Count);
             writer.WriteNumber("compared", compared);
             writer.WriteNumber("same_node", pairs.Count(pair => pair.SameNode));
+            writer.WriteNumber("version_skew", pairs.Count(pair => pair.VersionSkew && !pair.SameNode));
             writer.WriteNumber("unpaired", pairs.Count(pair => pair.Primary == null));
             writer.WriteNumber("mismatches", mismatches);
             writer.WriteNumber("mismatch_rate", compared == 0 ? 0.0 : (double)mismatches / compared);
@@ -101,11 +103,13 @@ public static class CorpusIntegrityWriter
     private static PairRecord Pair(int index, CorpusResultData? primary, CorpusResultData replica)
     {
         if (primary == null)
-            return new PairRecord(index, null, replica, false, false, []);
+            return new PairRecord(index, null, replica, false, false, false, []);
 
         var sameNode = primary.NodeId != Guid.Empty && primary.NodeId == replica.NodeId;
+        var versionSkew = primary.ControllerVersion.Length > 0 && replica.ControllerVersion.Length > 0
+                          && !string.Equals(primary.ControllerVersion, replica.ControllerVersion, StringComparison.Ordinal);
         var differing = Differences(primary, replica);
-        return new PairRecord(index, primary, replica, sameNode, differing.Count == 0, differing);
+        return new PairRecord(index, primary, replica, sameNode, versionSkew, differing.Count == 0, differing);
     }
 
     private static void WritePair(Utf8JsonWriter writer, PairRecord pair)
@@ -141,6 +145,7 @@ public static class CorpusIntegrityWriter
         writer.WriteStartObject(name);
         writer.WriteString("node_id", result.NodeId == Guid.Empty ? "" : result.NodeId.ToString("D"));
         writer.WriteString("node_name", result.NodeName);
+        writer.WriteString("controller", result.ControllerVersion);
         writer.WriteString("verdict", result.Verdict.ToString());
         writer.WriteString("content_sha256", result.ContentSha256);
         writer.WriteNumber("documents_out", result.Stats?.DocumentsOut ?? 0);
@@ -151,10 +156,10 @@ public static class CorpusIntegrityWriter
 
     #region Types
 
-    /// <summary>A sampled shard: compared only when both sides exist and ran on different nodes.</summary>
-    private sealed record PairRecord(int Index, CorpusResultData? Primary, CorpusResultData Replica, bool SameNode, bool Match, List<string> Differing)
+    /// <summary>A sampled shard: compared only when both sides exist, ran on different nodes and ran the same controller version.</summary>
+    private sealed record PairRecord(int Index, CorpusResultData? Primary, CorpusResultData Replica, bool SameNode, bool VersionSkew, bool Match, List<string> Differing)
     {
-        public bool Compared => Primary != null && !SameNode;
+        public bool Compared => Primary != null && !SameNode && !VersionSkew;
     }
 
     #endregion

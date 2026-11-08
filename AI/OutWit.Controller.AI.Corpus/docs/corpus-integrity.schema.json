@@ -10,12 +10,13 @@
     "schema": { "const": "corpus-integrity/1" },
     "summary": {
       "type": "object",
-      "required": ["sampled", "compared", "same_node", "unpaired", "mismatches", "mismatch_rate"],
+      "required": ["sampled", "compared", "same_node", "version_skew", "unpaired", "mismatches", "mismatch_rate"],
       "additionalProperties": false,
       "properties": {
         "sampled": { "type": "integer", "description": "Shards re-executed." },
         "compared": { "type": "integer", "description": "Pairs whose two sides ran on different nodes." },
         "same_node": { "type": "integer", "description": "Pairs whose replica landed on the primary's node (not compared)." },
+        "version_skew": { "type": "integer", "description": "Pairs on different nodes whose sides ran different controller versions - a rollout in progress (not compared)." },
         "unpaired": { "type": "integer", "description": "Replicas whose primary result is missing." },
         "mismatches": { "type": "integer", "description": "Compared pairs that disagree." },
         "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." }
@@ -42,11 +43,12 @@
   "$defs": {
     "side": {
       "type": ["object", "null"],
-      "required": ["node_id", "node_name", "verdict", "content_sha256", "documents_out"],
+      "required": ["node_id", "node_name", "controller", "verdict", "content_sha256", "documents_out"],
       "additionalProperties": false,
       "properties": {
         "node_id": { "type": "string" },
         "node_name": { "type": "string" },
+        "controller": { "type": "string", "description": "The controller version that ran this side." },
         "verdict": { "type": "string" },
         "content_sha256": { "type": "string" },
         "documents_out": { "type": "integer" }

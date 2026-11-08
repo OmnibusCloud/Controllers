@@ -23,6 +23,13 @@ public static class ShardTaskRunner
 
     #endregion
 
+    #region Fields
+
+    /// <summary>Shards processing at once in this process: the node's degree (cores, memory). The client starts every task of a parallel batch together; the rest wait here, fetched and ready.</summary>
+    private static readonly SemaphoreSlim PROCESSING = new(ShardDegree.ForCurrentMachine());
+
+    #endregion
+
     #region Functions
 
     /// <summary>Runs one task.</summary>
@@ -75,9 +82,10 @@ public static class ShardTaskRunner
 
         var fetchClock = Stopwatch.StartNew();
         long fetched;
+        TimeSpan fetchWait;
         try
         {
-            fetched = await fetcher.FetchAsync(uri, shardPath, task.MaxShardBytes, cancellationToken);
+            (fetched, fetchWait) = await fetcher.FetchMeasuredAsync(uri, shardPath, task.MaxShardBytes, cancellationToken);
         }
         catch (ShardOversizedException exception)
         {
@@ -97,6 +105,9 @@ public static class ShardTaskRunner
                 return Fail(result, CorpusShardVerdict.FetchFailed, $"The fetched bytes hash to {actual}, not the published {task.Source.Sha256}.");
         }
 
+        var processingQueued = Stopwatch.StartNew();
+        await PROCESSING.WaitAsync(cancellationToken);
+        var processingWait = processingQueued.Elapsed;
         var processClock = Stopwatch.StartNew();
         ShardProduct product;
         try
@@ -111,6 +122,10 @@ public static class ShardTaskRunner
         {
             return Fail(result, CorpusShardVerdict.Failed, exception.Message);
         }
+        finally
+        {
+            PROCESSING.Release();
+        }
 
         processClock.Stop();
 
@@ -120,7 +135,12 @@ public static class ShardTaskRunner
 
         result.Verdict = CorpusShardVerdict.Completed;
         result.ContentSha256 = product.ContentSha256;
-        result.Stats = product.Stats.Build(fetched, new FileInfo(textPath).Length, (int)Math.Min(int.MaxValue, fetchClock.ElapsedMilliseconds), (int)Math.Min(int.MaxValue, processClock.ElapsedMilliseconds));
+        result.Stats = product.Stats.Build(
+            fetched,
+            new FileInfo(textPath).Length,
+            Milliseconds(fetchClock.Elapsed - fetchWait),
+            Milliseconds(processClock.Elapsed),
+            Milliseconds(fetchWait + processingWait));
 
         if (product.Truncated || product.SkippedOversized > 0)
             result.Error = $"The shard ended mid-record: {product.Truncated}; records skipped as oversized: {product.SkippedOversized}.";
@@ -149,6 +169,11 @@ public static class ShardTaskRunner
         {
             thread.Priority = priority;
         }
+    }
+
+    private static int Milliseconds(TimeSpan span)
+    {
+        return (int)Math.Clamp(span.TotalMilliseconds, 0, int.MaxValue);
     }
 
     private static CorpusResultData Fail(CorpusResultData result, CorpusShardVerdict verdict, string error)

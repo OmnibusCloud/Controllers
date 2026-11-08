@@ -47,9 +47,28 @@ public static class MinHashSigner
         var signature = new ulong[HASHES];
         Array.Fill(signature, EMPTY_SLOT);
 
-        foreach (var shingle in Shingles(text))
+        // The shingle hash is FNV-1a over the UTF-8 bytes of the words joined by a space, so it
+        // runs over each word's bytes with a 0x20 between them: no shingle string is built. A
+        // repeated shingle yields the same hash and cannot move a minimum, so no set is kept.
+        var words = Utf8Words(text);
+        for (var start = 0; start + SHINGLE_WORDS <= words.Count; start++)
         {
-            var h = Fnv1a(shingle);
+            var h = FNV_OFFSET;
+            for (var w = start; w < start + SHINGLE_WORDS; w++)
+            {
+                if (w > start)
+                {
+                    h ^= (byte)' ';
+                    h *= FNV_PRIME;
+                }
+
+                foreach (var b in words[w])
+                {
+                    h ^= b;
+                    h *= FNV_PRIME;
+                }
+            }
+
             for (var i = 0; i < HASHES; i++)
             {
                 var (a, b) = s_coefficients[i];
@@ -133,25 +152,7 @@ public static class MinHashSigner
     /// <returns>The distinct shingles, in first-occurrence order.</returns>
     public static IReadOnlyList<string> Shingles(string text)
     {
-        var words = new List<string>();
-        var word = new StringBuilder();
-        foreach (var rune in text.EnumerateRunes())
-        {
-            if (Rune.IsLetterOrDigit(rune))
-            {
-                word.Append(Rune.ToLowerInvariant(rune).ToString());
-                continue;
-            }
-
-            if (word.Length > 0)
-            {
-                words.Add(word.ToString());
-                word.Clear();
-            }
-        }
-
-        if (word.Length > 0)
-            words.Add(word.ToString());
+        var words = Words(text);
 
         var shingles = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -165,16 +166,47 @@ public static class MinHashSigner
         return shingles;
     }
 
-    private static ulong Fnv1a(string text)
+    /// <summary>The tokens of a text: runs of letters and digits, lower-cased by the invariant culture.</summary>
+    private static List<string> Words(string text)
     {
-        var h = FNV_OFFSET;
-        foreach (var b in Encoding.UTF8.GetBytes(text))
+        var words = new List<string>();
+        var word = new StringBuilder();
+        Span<char> utf16 = stackalloc char[2];
+        foreach (var rune in text.EnumerateRunes())
         {
-            h ^= b;
-            h *= FNV_PRIME;
+            if (Rune.IsLetterOrDigit(rune))
+            {
+                var written = Rune.ToLowerInvariant(rune).EncodeToUtf16(utf16);
+                word.Append(utf16[..written]);
+                continue;
+            }
+
+            if (word.Length > 0)
+            {
+                words.Add(word.ToString());
+                word.Clear();
+            }
         }
 
-        return h;
+        if (word.Length > 0)
+            words.Add(word.ToString());
+
+        return words;
+    }
+
+    /// <summary>The tokens as UTF-8, one array per distinct token.</summary>
+    private static List<byte[]> Utf8Words(string text)
+    {
+        var distinct = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        var words = new List<byte[]>();
+        foreach (var word in Words(text))
+        {
+            if (!distinct.TryGetValue(word, out var bytes))
+                distinct[word] = bytes = Encoding.UTF8.GetBytes(word);
+            words.Add(bytes);
+        }
+
+        return words;
     }
 
     private static (ulong, ulong)[] Coefficients()

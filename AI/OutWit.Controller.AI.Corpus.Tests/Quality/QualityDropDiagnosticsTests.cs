@@ -16,8 +16,9 @@ namespace OutWit.Controller.AI.Corpus.Tests.Quality;
 [Explicit("Tuning diagnostic: prints the drop profile of the golden WET shard")]
 public sealed class QualityDropDiagnosticsTests
 {
-    [Test]
-    public void PrintDropProfileTest()
+    [TestCase(false)]
+    [TestCase(true)]
+    public void PrintDropProfileTest(bool cleanLines)
     {
         var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-model-cc-2026-43-16.bin"));
         var identifier = new LanguageIdentifier(model);
@@ -31,13 +32,24 @@ public sealed class QualityDropDiagnosticsTests
 
         foreach (var record in reader.ReadRecords().Where(r => r.Type == "conversion"))
         {
-            var text = HtmlTextExtractor.Collapse(Encoding.UTF8.GetString(record.Payload.Span));
+            var text = HtmlTextExtractor.CollapseLines(Encoding.UTF8.GetString(record.Payload.Span));
             var guess = identifier.Identify(text);
             if (!guess.IsKnown)
                 continue;
 
             documents++;
-            var verdict = QualityFilter.Judge(text, QualityRules.ForLanguage(guess.Code));
+            var rules = QualityRules.ForLanguage(guess.Code);
+            if (cleanLines)
+            {
+                text = LineCleaner.Clean(text, rules, out _);
+                if (text.Length == 0)
+                {
+                    firstRule["(no prose lines)"] = firstRule.GetValueOrDefault("(no prose lines)") + 1;
+                    continue;
+                }
+            }
+
+            var verdict = QualityFilter.Judge(text, rules);
             if (verdict.Passed)
             {
                 passed++;
@@ -50,11 +62,11 @@ public sealed class QualityDropDiagnosticsTests
             if (verdict.FailedRules.Count == 1)
                 onlyRule[verdict.FailedRules[0]] = onlyRule.GetValueOrDefault(verdict.FailedRules[0]) + 1;
 
-            if (verdict.FailedRules[0] == "duplicate_ngram_chars_5" && verdict.FailedRules.Count == 1 && samples.Count < 4)
+            if (samples.Count < 3)
                 samples.Add((record.TargetUri ?? "", text, verdict.Measures));
         }
 
-        TestContext.Out.WriteLine($"documents with a known language: {documents}, passed: {passed} ({100.0 * passed / documents:F1} %)");
+        TestContext.Out.WriteLine($"clean_lines={cleanLines}: documents with a known language: {documents}, passed: {passed} ({100.0 * passed / documents:F1} %)");
         TestContext.Out.WriteLine("first failing rule:   " + string.Join(", ", firstRule.OrderByDescending(p => p.Value).Select(p => $"{p.Key} {p.Value}")));
         TestContext.Out.WriteLine("fails this rule:      " + string.Join(", ", anyRule.OrderByDescending(p => p.Value).Select(p => $"{p.Key} {p.Value}")));
         TestContext.Out.WriteLine("fails ONLY this rule: " + string.Join(", ", onlyRule.OrderByDescending(p => p.Value).Select(p => $"{p.Key} {p.Value}")));

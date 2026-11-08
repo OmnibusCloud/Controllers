@@ -87,6 +87,8 @@ public sealed class ShardTaskRunnerTests
             Assert.That(result.Stats!.DocumentsOut, Is.EqualTo(expected.Stats.DocumentsOut));
             Assert.That(result.Stats.BytesFetched, Is.EqualTo(new FileInfo(Path.Combine(Fixtures(), fixture)).Length));
             Assert.That(result.Stats.BytesProduced, Is.EqualTo(text.Length));
+            Assert.That(result.Stats.WaitMs, Is.GreaterThanOrEqualTo(0));
+            Assert.That(result.Stats.FetchMs, Is.GreaterThanOrEqualTo(0));
             Assert.That(result.Error, Is.Empty);
         });
 

@@ -86,6 +86,14 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
             Assert.That(summary.GetProperty("languages").GetProperty("eng").GetInt64(), Is.GreaterThan(0));
         });
 
+        // Split asked the origin for the sizes the manifest did not give: the work estimate is the shard's real size.
+        var tasks = ((System.Collections.IEnumerable)job.Variables["tasks"].Value!).OfType<CorpusTaskData>().OrderBy(t => t.TaskIndex).ToList();
+        Assert.That(tasks.Select(t => t.Source!.SizeBytes), Is.EqualTo(new[]
+        {
+            new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length,
+            new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WARC_FIXTURE)).Length
+        }));
+
         // The identity: each shard's content hash through the engine equals a direct run's.
         var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", MODEL_FIXTURE));
         foreach (var (fixture, format, index) in new[] { (WET_FIXTURE, CorpusSourceFormat.Wet, 0), (WARC_FIXTURE, CorpusSourceFormat.Warc, 1) })
@@ -126,6 +134,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
             Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(2));
             Assert.That(summary.GetProperty("unpaired").GetInt32(), Is.Zero);
             Assert.That(summary.GetProperty("compared").GetInt32() + summary.GetProperty("same_node").GetInt32(), Is.EqualTo(2));
+            Assert.That(summary.GetProperty("version_skew").GetInt32(), Is.Zero, "one controller version on every mock node");
             Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.Zero);
             Assert.That(pairs.Select(p => p.GetProperty("index").GetInt32()), Is.EqualTo(new[] { 0, 1 }));
             Assert.That(pairs.All(p => p.GetProperty("primary").GetProperty("content_sha256").GetString() == p.GetProperty("replica").GetProperty("content_sha256").GetString()), Is.True);

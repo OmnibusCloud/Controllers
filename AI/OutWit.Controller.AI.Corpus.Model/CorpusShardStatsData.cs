@@ -47,7 +47,8 @@ public sealed partial class CorpusShardStatsData : ModelBase
                && BytesFetched.Is(other.BytesFetched)
                && BytesProduced.Is(other.BytesProduced)
                && FetchMs.Is(other.FetchMs)
-               && ProcessMs.Is(other.ProcessMs);
+               && ProcessMs.Is(other.ProcessMs)
+               && WaitMs.Is(other.WaitMs);
     }
 
     /// <summary>Deep copy.</summary>
@@ -64,7 +65,8 @@ public sealed partial class CorpusShardStatsData : ModelBase
             BytesFetched = BytesFetched,
             BytesProduced = BytesProduced,
             FetchMs = FetchMs,
-            ProcessMs = ProcessMs
+            ProcessMs = ProcessMs,
+            WaitMs = WaitMs
         };
     }
 
@@ -112,6 +114,10 @@ public sealed partial class CorpusShardStatsData : ModelBase
     /// <summary>Wall time of the processing.</summary>
     [MemoryPackOrder(8)]
     public int ProcessMs { get; set; }
+
+    /// <summary>Wall time the shard waited on the node for a download slot and a processing slot (the node's own queue; not part of the fetch or the processing times).</summary>
+    [MemoryPackOrder(9)]
+    public int WaitMs { get; set; }
 
     #endregion
 }

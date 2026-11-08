@@ -52,14 +52,20 @@ public sealed class LanguageIdentifier
     /// <returns>The best language, the runner-up and the normalized margin between them.</returns>
     public LanguageGuess Identify(string text)
     {
-        var counts = new Dictionary<string, long>(StringComparer.Ordinal);
-        LanguageNgrams.Count(text, counts, MAX_CHARS);
+        var counts = new Dictionary<ulong, long>();
+        LanguageNgrams.CountPacked(text, counts, MAX_CHARS);
 
-        var letters = counts.Where(pair => pair.Key.Length == 1).Sum(pair => pair.Value);
+        long letters = 0;
+        foreach (var (key, count) in counts)
+        {
+            if (LanguageNgrams.IsUnigram(key))
+                letters += count;
+        }
+
         if (letters < MIN_LETTERS || m_model.Profiles.Count == 0)
             return LanguageGuess.Unknown;
 
-        var textProfile = LanguageNgrams.Rank(counts, TEXT_PROFILE_SIZE);
+        var textProfile = LanguageNgrams.RankPacked(counts, TEXT_PROFILE_SIZE);
 
         string? best = null;
         string? second = null;

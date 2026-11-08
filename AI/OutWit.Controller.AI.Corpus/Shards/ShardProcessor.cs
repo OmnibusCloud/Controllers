@@ -34,6 +34,7 @@ public sealed class ShardProcessor
     public const string DROP_EMPTY_TEXT = "empty_text";
     public const string DROP_LANGUAGE_UNKNOWN = "language_unknown";
     public const string DROP_LANGUAGE_NOT_TARGET = "language_not_target";
+    public const string DROP_NO_PROSE_LINES = "no_prose_lines";
 
     private static readonly JsonWriterOptions JSON_OPTIONS = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, Indented = false, SkipValidation = true };
 
@@ -121,9 +122,21 @@ public sealed class ShardProcessor
                     language = guess.Code;
                 }
 
+                var content = document.Value.Text;
+                var rules = ShardQualityRules.Resolve(language, m_pipeline.Quality);
+                if (m_pipeline.CleanLines)
+                {
+                    content = LineCleaner.Clean(content, rules, out _);
+                    if (content.Length == 0)
+                    {
+                        stats.Drop(DROP_NO_PROSE_LINES);
+                        continue;
+                    }
+                }
+
                 if (m_pipeline.FilterQuality)
                 {
-                    var verdict = QualityFilter.Judge(document.Value.Text, ShardQualityRules.Resolve(language, m_pipeline.Quality));
+                    var verdict = QualityFilter.Judge(content, rules);
                     if (!verdict.Passed)
                     {
                         stats.Drop(verdict.FailedRules[0]);
@@ -131,13 +144,13 @@ public sealed class ShardProcessor
                     }
                 }
 
-                WriteLine(buffer, document.Value.Url, language, document.Value.Text);
+                WriteLine(buffer, document.Value.Url, language, content);
                 var line = buffer.GetBuffer().AsSpan(0, (int)buffer.Length);
                 hash.AppendData(line);
                 compressor.Write(line);
 
                 if (m_pipeline.Sign)
-                    ShardSignatureWriter.Write(signatures, MinHashSigner.Sign(document.Value.Text));
+                    ShardSignatureWriter.Write(signatures, MinHashSigner.Sign(content));
 
                 stats.Out(language);
             }
@@ -158,7 +171,7 @@ public sealed class ShardProcessor
             if (record.Type != RECORD_CONVERSION)
                 return null;
 
-            var wet = HtmlTextExtractor.Collapse(Encoding.UTF8.GetString(record.Payload.Span));
+            var wet = HtmlTextExtractor.CollapseLines(Encoding.UTF8.GetString(record.Payload.Span));
             if (wet.Length == 0)
             {
                 stats.Drop(DROP_EMPTY_TEXT);
