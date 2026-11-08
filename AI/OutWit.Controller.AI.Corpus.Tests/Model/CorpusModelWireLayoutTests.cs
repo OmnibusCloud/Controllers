@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using MemoryPack;
 using OutWit.Controller.AI.Corpus.Model;
 
@@ -54,6 +55,47 @@ public sealed class CorpusModelWireLayoutTests
             Assert.That(ordered, Has.Count.EqualTo(expectedMemberCount), $"{type.Name}: member count changed");
             Assert.That(ordered.Select(member => member.Order), Is.EqualTo(Enumerable.Range(0, expectedMemberCount)), $"{type.Name}: orders must be contiguous from 0");
         });
+    }
+
+    [Test]
+    public void PublishedLayoutBaselineMatchesTheModelVersionTest()
+    {
+        // The baseline says which member counts the published Model version carries. A count that
+        // differs from it means a wire change: update the baseline AND bump the Model's <Version>
+        // in the same commit, then publish the Model before the controller depends on it.
+        var root = SolutionRoot();
+        if (root == null)
+            Assert.Ignore("Solution root not found");
+
+        using var baseline = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root, "AI", "OutWit.Controller.AI.Corpus.Tests", "Model", "wire-layout.baseline.json")));
+        var expectedVersion = baseline.RootElement.GetProperty("modelVersion").GetString();
+        var csproj = File.ReadAllText(Path.Combine(root, "AI", "OutWit.Controller.AI.Corpus.Model", "OutWit.Controller.AI.Corpus.Model.csproj"));
+        var actualVersion = System.Text.RegularExpressions.Regex.Match(csproj, @"<Version>([^<]+)</Version>").Groups[1].Value;
+
+        var counts = typeof(CorpusTaskData).Assembly
+            .GetTypes()
+            .Where(type => type.GetCustomAttributes(inherit: false).Any(attribute => attribute.GetType().Name == "MemoryPackableAttribute"))
+            .ToDictionary(type => type.Name, type => type.GetProperties(BindingFlags.Public | BindingFlags.Instance).Count(property => property.GetCustomAttribute<MemoryPackOrderAttribute>() != null));
+        var expectedCounts = baseline.RootElement.GetProperty("members").EnumerateObject().ToDictionary(property => property.Name, property => property.Value.GetInt32());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(counts, Is.EquivalentTo(expectedCounts), "a DTO's wire layout differs from the published baseline: update wire-layout.baseline.json and bump the Model <Version> in the same commit");
+            Assert.That(actualVersion, Is.EqualTo(expectedVersion), "the Model csproj version and the baseline's modelVersion must agree");
+        });
+    }
+
+    private static string? SolutionRoot()
+    {
+        var dir = TestContext.CurrentContext.TestDirectory;
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir, "OutWit.slnx")))
+                return dir;
+            dir = Path.GetDirectoryName(dir);
+        }
+
+        return null;
     }
 
     [Test]
