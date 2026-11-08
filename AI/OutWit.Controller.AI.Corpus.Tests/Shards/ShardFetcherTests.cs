@@ -81,6 +81,25 @@ public sealed class ShardFetcherTests
     }
 
     [Test]
+    public async Task BrokenBodyResumesWithARangeRequestTest()
+    {
+        var before = m_origin.Requests;
+        var ranges = m_origin.RangeRequests;
+        var destination = Path.Combine(m_directory, "resumed.gz");
+        var expected = await File.ReadAllBytesAsync(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE));
+
+        var fetched = await m_fetcher.FetchAsync(new Uri(m_origin.CutUrl(WET_FIXTURE, 300_000)), destination, 0, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(fetched, Is.EqualTo(expected.Length));
+            Assert.That(File.ReadAllBytes(destination), Is.EqualTo(expected), "the appended tail completes the file byte for byte");
+            Assert.That(m_origin.Requests - before, Is.EqualTo(2), "the broken answer and one continuation");
+            Assert.That(m_origin.RangeRequests - ranges, Is.EqualTo(1), "the continuation asked for the rest, not the whole");
+        });
+    }
+
+    [Test]
     public void TooManyTransientFailuresFailTheFetchTest()
     {
         var before = m_origin.Requests;

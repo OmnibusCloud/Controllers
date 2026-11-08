@@ -7,7 +7,9 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// Fetches one shard from its public origin to a local file: streamed, capped in bytes,
 /// retried on transient failures (connection errors, 5xx, 429, stalls). A 4xx other than 429
 /// is final — the origin said no. The cap is checked against Content-Length before a byte is
-/// read and against the running count while reading.
+/// read and against the running count while reading. A retry after a broken body asks for the
+/// rest with a Range request and appends when the origin honours it (206); an origin that
+/// answers 200 starts the file over.
 /// </summary>
 public sealed class ShardFetcher
 {
@@ -53,6 +55,7 @@ public sealed class ShardFetcher
     public async Task<long> FetchAsync(Uri uri, string destinationPath, long maxBytes, CancellationToken cancellationToken)
     {
         Exception? last = null;
+        var resume = false;
 
         for (var attempt = 1; attempt <= m_policy.Attempts; attempt++)
         {
@@ -60,7 +63,7 @@ public sealed class ShardFetcher
 
             try
             {
-                return await FetchOnceAsync(uri, destinationPath, maxBytes, cancellationToken);
+                return await FetchOnceAsync(uri, destinationPath, maxBytes, resume, cancellationToken);
             }
             catch (ShardOversizedException)
             {
@@ -77,6 +80,8 @@ public sealed class ShardFetcher
             catch (Exception exception) when (exception is HttpRequestException or IOException or OperationCanceledException)
             {
                 last = exception;
+                // Something arrived before the failure: ask for the rest next time.
+                resume = exception is not HttpRequestException { StatusCode: not null } && File.Exists(destinationPath) && new FileInfo(destinationPath).Length > 0;
             }
 
             if (attempt < m_policy.Attempts)
@@ -102,22 +107,38 @@ public sealed class ShardFetcher
         return client;
     }
 
-    private async Task<long> FetchOnceAsync(Uri uri, string destinationPath, long maxBytes, CancellationToken cancellationToken)
+    private async Task<long> FetchOnceAsync(Uri uri, string destinationPath, long maxBytes, bool resume, CancellationToken cancellationToken)
     {
+        var have = resume && File.Exists(destinationPath) ? new FileInfo(destinationPath).Length : 0;
+
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        if (have > 0)
+            request.Headers.Range = new RangeHeaderValue(have, null);
+
         using var response = await m_client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
+        {
+            // The partial file is not something the origin can continue; start over.
+            File.Delete(destinationPath);
+            throw new IOException($"'{uri}' could not continue from byte {have}.");
+        }
 
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException($"'{uri}' answered {(int)response.StatusCode} {response.ReasonPhrase}.", null, response.StatusCode);
 
-        if (maxBytes > 0 && response.Content.Headers.ContentLength is { } length && length > maxBytes)
+        var appending = have > 0 && response.StatusCode == HttpStatusCode.PartialContent;
+        var expected = appending
+            ? response.Content.Headers.ContentRange?.Length ?? (response.Content.Headers.ContentLength is { } rest ? have + rest : null)
+            : response.Content.Headers.ContentLength;
+        if (maxBytes > 0 && expected is { } length && length > maxBytes)
             throw new ShardOversizedException(maxBytes);
 
         await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using var file = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, BUFFER_SIZE, FileOptions.Asynchronous);
+        await using var file = new FileStream(destinationPath, appending ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.None, BUFFER_SIZE, FileOptions.Asynchronous);
 
         var buffer = new byte[BUFFER_SIZE];
-        long total = 0;
+        var total = appending ? have : 0;
 
         while (true)
         {

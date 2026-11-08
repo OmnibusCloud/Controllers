@@ -130,8 +130,9 @@ sample is a function of the shard index, so a lab can reproduce the choice.
   `Content-Length` past the cap ends the request before a byte is read, a
   streamed body past it is cut. Three attempts with doubling back-off and
   jitter on connection failures, 429 and 5xx; a stalled read (60 s without a
-  byte) counts as a failure; a 4xx other than 429 is final. The user agent
-  names the controller and its version.
+  byte) counts as a failure; a 4xx other than 429 is final. A retry after a
+  broken body asks for the rest with a Range request and appends when the
+  origin honours it. The user agent names the controller and its version.
 - The language model arrives as a blob (the engine caches it per node) and is
   trusted only when its bytes hash to the pipeline's pin; a model that does
   not match is `PipelineUnavailable`, not a different result.

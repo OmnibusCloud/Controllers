@@ -17,6 +17,7 @@ public sealed class CorpusTestOrigin : IDisposable
     private readonly CancellationTokenSource m_stop = new();
     private readonly Task m_loop;
     private int m_failuresLeft;
+    private int m_cutAfter = -1;
 
     #endregion
 
@@ -46,6 +47,13 @@ public sealed class CorpusTestOrigin : IDisposable
     {
         m_failuresLeft = failures;
         return $"{BaseUrl}flaky/{name}";
+    }
+
+    /// <summary>A URL whose first response breaks after the given number of body bytes; later requests honour Range.</summary>
+    public string CutUrl(string name, int bytesBeforeCut)
+    {
+        m_cutAfter = bytesBeforeCut;
+        return $"{BaseUrl}cut/{name}";
     }
 
     private async Task Loop()
@@ -81,7 +89,7 @@ public sealed class CorpusTestOrigin : IDisposable
                 return;
             }
 
-            if (path.StartsWith("/shards/", StringComparison.Ordinal) || path.StartsWith("/flaky/", StringComparison.Ordinal))
+            if (path.StartsWith("/shards/", StringComparison.Ordinal) || path.StartsWith("/flaky/", StringComparison.Ordinal) || path.StartsWith("/cut/", StringComparison.Ordinal))
             {
                 var file = Path.Combine(m_shardsDirectory, Path.GetFileName(path));
                 if (!File.Exists(file))
@@ -92,9 +100,31 @@ public sealed class CorpusTestOrigin : IDisposable
                 }
 
                 var bytes = File.ReadAllBytes(file);
+                var from = 0;
+                var range = context.Request.Headers["Range"];
+                if (range != null && range.StartsWith("bytes=", StringComparison.Ordinal) && int.TryParse(range[6..].TrimEnd('-'), out from) && from > 0 && from < bytes.Length)
+                {
+                    RangeRequests++;
+                    response.StatusCode = 206;
+                    response.Headers["Content-Range"] = $"bytes {from}-{bytes.Length - 1}/{bytes.Length}";
+                }
+                else
+                    from = 0;
+
                 response.ContentType = "application/octet-stream";
-                response.ContentLength64 = bytes.Length;
-                response.OutputStream.Write(bytes);
+                response.ContentLength64 = bytes.Length - from;
+
+                var cut = path.StartsWith("/cut/", StringComparison.Ordinal) ? Interlocked.Exchange(ref m_cutAfter, -1) : -1;
+                if (cut >= 0)
+                {
+                    // The first answer breaks mid-body: a few bytes, then the connection dies.
+                    response.OutputStream.Write(bytes, from, Math.Min(cut, bytes.Length - from));
+                    response.OutputStream.Flush();
+                    response.Abort();
+                    return;
+                }
+
+                response.OutputStream.Write(bytes, from, bytes.Length - from);
                 response.Close();
                 return;
             }
@@ -166,6 +196,8 @@ public sealed class CorpusTestOrigin : IDisposable
     public string Host => "127.0.0.1";
 
     public int Requests { get; private set; }
+
+    public int RangeRequests { get; private set; }
 
     #endregion
 }
