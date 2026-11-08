@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -10,6 +11,12 @@ namespace OutWit.Controller.AI.Corpus.Adapters;
 
 internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunction<WitActivityCorpusPreflight>
 {
+    #region Constants
+
+    private static readonly Lazy<HttpClient> CLIENT = new(ShardFetcher.CreateClient);
+
+    #endregion
+
     #region Constructors
 
     public WitActivityAdapterCorpusPreflight(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
@@ -24,7 +31,7 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
 
     protected override async Task Process(WitActivityCorpusPreflight activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        var plan = await CorpusPlanning.PlanAsync(BlobService, pool, activity.Manifest, activity.LanguageModel, activity.Options, "Manifest");
+        var (plan, manifest) = await CorpusPlanning.PlanAsync(BlobService, pool, activity.Manifest, activity.LanguageModel, activity.Options, "Manifest");
 
         var report = new CorpusPreflightData
         {
@@ -35,6 +42,20 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
             EstimatedTrafficBytes = plan.EstimatedTrafficBytes,
             Messages = [.. plan.Errors, .. plan.Notes]
         };
+
+        // Sources without a size: ask the origin (HEAD) so the traffic line is not 0, within a
+        // probe budget; the rest is extrapolated at the mean and the message says so.
+        if (plan.Errors.Count == 0 && manifest.Sources.Any(source => source.SizeBytes <= 0))
+        {
+            var origins = manifest.AllowedOrigins.Select(ShardOrigin.Normalize).ToList();
+            var probe = await ShardSizeProbe.ProbeAsync(manifest.Sources, origins, CLIENT.Value, ProcessingManager.CancellationToken(status.JobId));
+            report.EstimatedTrafficBytes += probe.EstimatedBytes;
+            report.Messages.Add($"{probe.Probed} source size(s) probed at the origin" +
+                                (probe.Failed > 0 ? $", {probe.Failed} unanswered" : "") +
+                                (probe.Unprobed > 0 ? $", {probe.Unprobed} beyond the probe budget" : "") +
+                                (probe.Failed + probe.Unprobed > 0 ? " (estimated at the mean)" : "") +
+                                $"; traffic estimate {report.EstimatedTrafficBytes} bytes.");
+        }
 
         if (!pool.TrySetValue(activity.ReturnReference, report))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");

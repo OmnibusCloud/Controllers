@@ -100,6 +100,24 @@ public sealed class ShardFetcherTests
     }
 
     [Test]
+    public async Task ConcurrencyCeilingHoldsAtTheOriginTest()
+    {
+        var polite = new ShardFetcher(ShardFetcher.CreateClient(), ShardFetchPolicy.Immediate with { MaxConcurrent = 2 });
+        var before = m_origin.MaxInFlight;
+
+        var fetches = Enumerable.Range(0, 6)
+            .Select(i => polite.FetchAsync(new Uri(m_origin.SlowUrl(WET_FIXTURE)), Path.Combine(m_directory, $"polite-{i}.gz"), 0, CancellationToken.None))
+            .ToList();
+        await Task.WhenAll(fetches);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(fetches.Select(f => f.Result), Is.All.GreaterThan(0));
+            Assert.That(m_origin.MaxInFlight, Is.LessThanOrEqualTo(Math.Max(before, 2)), "never more than two downloads at once from one fetcher");
+        });
+    }
+
+    [Test]
     public void TooManyTransientFailuresFailTheFetchTest()
     {
         var before = m_origin.Requests;

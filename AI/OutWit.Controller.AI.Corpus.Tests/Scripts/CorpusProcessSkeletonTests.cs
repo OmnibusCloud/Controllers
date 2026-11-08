@@ -177,6 +177,8 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
             Assert.That(goodStatus.Result, Is.EqualTo(WitProcessingResult.Completed));
             Assert.That(goodReport.WellFormed, Is.True, string.Join(" | ", goodReport.Messages));
             Assert.That(goodReport.TaskCount, Is.EqualTo(1));
+            Assert.That(goodReport.EstimatedTrafficBytes, Is.EqualTo(new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length), "a source without a size is probed at the origin");
+            Assert.That(goodReport.Messages, Has.Some.Contains("1 source size(s) probed"));
 
             Assert.That(badStatus.Result, Is.EqualTo(WitProcessingResult.Completed), "preflight reports, it does not fail");
             Assert.That(badReport.WellFormed, Is.False);

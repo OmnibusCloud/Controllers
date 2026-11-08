@@ -26,6 +26,7 @@ public sealed class ShardFetcher
 
     private readonly HttpClient m_client;
     private readonly ShardFetchPolicy m_policy;
+    private readonly SemaphoreSlim? m_gate;
 
     #endregion
 
@@ -38,6 +39,7 @@ public sealed class ShardFetcher
     {
         m_client = client;
         m_policy = policy;
+        m_gate = policy.MaxConcurrent > 0 ? new SemaphoreSlim(policy.MaxConcurrent, policy.MaxConcurrent) : null;
     }
 
     #endregion
@@ -53,6 +55,25 @@ public sealed class ShardFetcher
     /// <exception cref="ShardOversizedException">The shard exceeds the cap.</exception>
     /// <exception cref="HttpRequestException">The origin refused or kept failing.</exception>
     public async Task<long> FetchAsync(Uri uri, string destinationPath, long maxBytes, CancellationToken cancellationToken)
+    {
+        if (m_gate == null)
+            return await FetchWithRetriesAsync(uri, destinationPath, maxBytes, cancellationToken);
+
+        // Several shards may run on one node at once; the origin sees at most the policy's
+        // number of them downloading, the rest wait their turn (fetch is a small share of a
+        // shard's time, so the wait costs little throughput).
+        await m_gate.WaitAsync(cancellationToken);
+        try
+        {
+            return await FetchWithRetriesAsync(uri, destinationPath, maxBytes, cancellationToken);
+        }
+        finally
+        {
+            m_gate.Release();
+        }
+    }
+
+    private async Task<long> FetchWithRetriesAsync(Uri uri, string destinationPath, long maxBytes, CancellationToken cancellationToken)
     {
         Exception? last = null;
         var resume = false;

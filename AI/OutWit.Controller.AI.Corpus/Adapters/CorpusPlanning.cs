@@ -21,9 +21,9 @@ internal static class CorpusPlanning
     /// <param name="languageModel">The language model blob reference (unset or empty = none).</param>
     /// <param name="options">The options reference (unset = defaults).</param>
     /// <param name="manifestName">The manifest parameter's name for the error.</param>
-    /// <returns>The plan.</returns>
+    /// <returns>The plan and the parsed manifest it came from.</returns>
     /// <exception cref="InvalidOperationException">The manifest blob is missing.</exception>
-    public static async Task<CorpusPlan> PlanAsync(IWitBlobService blobService, IWitVariablesCollection pool, IWitReference? manifest, IWitReference? languageModel, IWitReference? options, string manifestName)
+    public static async Task<(CorpusPlan Plan, CorpusManifest Manifest)> PlanAsync(IWitBlobService blobService, IWitVariablesCollection pool, IWitReference? manifest, IWitReference? languageModel, IWitReference? options, string manifestName)
     {
         if (!pool.TryGetValue(manifest, out Guid manifestBlobId) || manifestBlobId == Guid.Empty)
             throw new InvalidOperationException($"Failed to get parameter '{manifestName}'.");
@@ -41,7 +41,7 @@ internal static class CorpusPlanning
         var json = await File.ReadAllTextAsync(await blobService.GetLocalPathAsync(manifestBlobId));
         var parsed = CorpusManifestParser.Parse(json);
 
-        return CorpusTaskPlanner.Plan(parsed, optionsData, modelBlobId, modelSha256);
+        return (CorpusTaskPlanner.Plan(parsed, optionsData, modelBlobId, modelSha256), parsed);
     }
 
     #endregion

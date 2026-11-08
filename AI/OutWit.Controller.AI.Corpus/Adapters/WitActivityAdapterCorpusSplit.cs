@@ -26,7 +26,7 @@ internal sealed class WitActivityAdapterCorpusSplit : WitActivityAdapterFunction
 
     protected override async Task Process(WitActivityCorpusSplit activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        var plan = await CorpusPlanning.PlanAsync(BlobService, pool, activity.Manifest, activity.LanguageModel, activity.Options, "Manifest");
+        var (plan, _) = await CorpusPlanning.PlanAsync(BlobService, pool, activity.Manifest, activity.LanguageModel, activity.Options, "Manifest");
 
         if (plan.Errors.Count > 0)
             throw new InvalidOperationException($"The manifest has {plan.Errors.Count} problem(s): {string.Join(" ", plan.Errors.Take(5))}");

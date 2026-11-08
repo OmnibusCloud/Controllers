@@ -21,15 +21,14 @@ through mock nodes and reproduces a direct run's content hashes. On the test
 server the controller processed real Common Crawl WET shards on Windows and
 Linux nodes with every sampled pair agreeing on the content hash (0
 mismatches). What remains before 1.0: the dedup merge over the signature blobs
-(`CorpusDedup`), the quality thresholds tuned on real crawl text, and the
-preflight's traffic estimate when the manifest carries no sizes.
+(`CorpusDedup`) and the quality thresholds tuned on real crawl text.
 
 ## Activities
 
 | Activity | Runs on | Signature | What it does |
 |---|---|---|---|
 | `Corpus.Split` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusTaskCollection` | parses the manifest, checks every source against the allowlist and the byte cap, hashes the language model blob and pins it into the pipeline, emits one task per shard. Any problem fails the job here — a bad manifest never reaches a node |
-| `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate, every message by manifest line |
+| `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate (sources without a size are asked at the origin with HEAD, up to 64 of them, the rest extrapolated at the mean), every message by manifest line |
 | `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline, the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception; several shards may run on one client at once |
 | `Corpus.Collect` | host | `(CorpusResultCollection, CorpusOptions) → Blob report` | the job report: every shard's verdict, blobs and content hash in task order, the aggregate counters over the fleet |
 | `Corpus.Sample` | host | `(CorpusTaskCollection, CorpusOptions) → CorpusTaskCollection` | the sampled share of the tasks (`SamplingRate`) as replica tasks for a second fan-out, chosen by index alone and handed over in reverse so the allocator lands most of them away from their primaries |
@@ -136,7 +135,9 @@ sample is a function of the shard index, so a lab can reproduce the choice.
   jitter on connection failures, 429 and 5xx; a stalled read (60 s without a
   byte) counts as a failure; a 4xx other than 429 is final. A retry after a
   broken body asks for the rest with a Range request and appends when the
-  origin honours it. The user agent names the controller and its version.
+  origin honours it. At most two shards download at once per node, whatever
+  the node's degree; the others wait their turn. The user agent names the
+  controller and its version.
 - The language model arrives as a blob (the engine caches it per node) and is
   trusted only when its bytes hash to the pipeline's pin; a model that does
   not match is `PipelineUnavailable`, not a different result.

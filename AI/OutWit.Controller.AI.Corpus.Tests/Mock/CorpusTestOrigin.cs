@@ -18,6 +18,8 @@ public sealed class CorpusTestOrigin : IDisposable
     private readonly Task m_loop;
     private int m_failuresLeft;
     private int m_cutAfter = -1;
+    private int m_inFlight;
+    private int m_maxInFlight;
 
     #endregion
 
@@ -47,6 +49,12 @@ public sealed class CorpusTestOrigin : IDisposable
     {
         m_failuresLeft = failures;
         return $"{BaseUrl}flaky/{name}";
+    }
+
+    /// <summary>A URL that serves the shard after a pause, to watch how many requests a client keeps in flight.</summary>
+    public string SlowUrl(string name)
+    {
+        return $"{BaseUrl}slow/{name}";
     }
 
     /// <summary>A URL whose first response breaks after the given number of body bytes; later requests honour Range.</summary>
@@ -79,9 +87,29 @@ public sealed class CorpusTestOrigin : IDisposable
         Requests++;
         var path = context.Request.Url?.AbsolutePath ?? "/";
         var response = context.Response;
+        var inFlight = Interlocked.Increment(ref m_inFlight);
+        var seen = m_maxInFlight;
+        while (inFlight > seen && Interlocked.CompareExchange(ref m_maxInFlight, inFlight, seen) != seen)
+            seen = m_maxInFlight;
 
         try
         {
+            if (path.StartsWith("/slow/", StringComparison.Ordinal))
+            {
+                Thread.Sleep(400);
+                path = "/shards/" + Path.GetFileName(path);
+            }
+
+            if (context.Request.HttpMethod == "HEAD" && path.StartsWith("/shards/", StringComparison.Ordinal))
+            {
+                var headFile = Path.Combine(m_shardsDirectory, Path.GetFileName(path));
+                response.StatusCode = File.Exists(headFile) ? 200 : 404;
+                if (File.Exists(headFile))
+                    response.ContentLength64 = new FileInfo(headFile).Length;
+                response.Close();
+                return;
+            }
+
             if (path.StartsWith("/flaky/", StringComparison.Ordinal) && Interlocked.Decrement(ref m_failuresLeft) >= 0)
             {
                 response.StatusCode = 503;
@@ -163,6 +191,10 @@ public sealed class CorpusTestOrigin : IDisposable
         {
             try { response.Abort(); } catch { /* the client went away */ }
         }
+        finally
+        {
+            Interlocked.Decrement(ref m_inFlight);
+        }
     }
 
     private static int FreePort()
@@ -198,6 +230,9 @@ public sealed class CorpusTestOrigin : IDisposable
     public int Requests { get; private set; }
 
     public int RangeRequests { get; private set; }
+
+    /// <summary>Most requests this origin has seen in flight at once.</summary>
+    public int MaxInFlight => m_maxInFlight;
 
     #endregion
 }
