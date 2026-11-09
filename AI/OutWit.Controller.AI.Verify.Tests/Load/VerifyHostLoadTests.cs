@@ -63,7 +63,7 @@ public sealed class VerifyHostLoadTests
         var corpusTime = stopwatch.Elapsed - reportTime;
         var provenance = VerifyProvenanceWriter.Write(primaries);
         var provenanceTime = stopwatch.Elapsed - reportTime - corpusTime;
-        var integrity = VerifyIntegrityWriter.Write(primaries, replicas);
+        var integrity = VerifyIntegrityWriter.Write([.. primaries, .. replicas]);
         stopwatch.Stop();
 
         TestContext.Out.WriteLine(

@@ -23,12 +23,12 @@ public static class VerifyCorpusWriter
     /// <summary>
     /// Serializes the results as UTF-8 JSON lines.
     /// </summary>
-    /// <param name="results">Task results, in any order.</param>
+    /// <param name="results">The results of every execution, in any order; a task executed twice gets one line.</param>
     /// <returns>The corpus bytes, one line per task, each terminated by a newline.</returns>
     public static byte[] Write(IReadOnlyList<VerifyResultData> results)
     {
         using var stream = new MemoryStream();
-        foreach (var result in results.OrderBy(result => result.TaskIndex))
+        foreach (var result in VerifyExecutions.Canonical(results))
         {
             using (var writer = new Utf8JsonWriter(stream, WRITER_OPTIONS))
             {

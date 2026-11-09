@@ -42,13 +42,14 @@ public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
         Assert.That(job, Is.Not.Null);
         Assert.That(job.Activities.Count, Is.GreaterThan(0));
         var variables = job.Variables.Select(variable => variable.Name).ToList();
-        Assert.That(variables, Is.SupersetOf(new[] { "taskset", "opts", "batches", "results", "replicaBatches", "replicas", "report", "provenance", "integrity" }));
+        Assert.That(variables, Is.SupersetOf(new[] { "taskset", "opts", "batches", "rate", "checked", "results", "report", "provenance", "integrity" }));
     }
 
     [Test]
     public async Task SamplingReExecutesAndComparesTest()
     {
-        // Every task re-executed (rate 1): each pair agrees; a pair on one node is counted, not compared.
+        // Every batch executed twice (rate 1): each pair agrees. The mock nodes share one process,
+        // so the results may report one node and the pair is then counted, not compared.
         var taskset = new StringBuilder();
         taskset.AppendLine("""{"index":0,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"print(2+2)"},"suite":[{"expected_stdout":"4\n"}]}""");
         taskset.AppendLine("""{"index":1,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"print('wrong')"},"suite":[{"expected_stdout":"right\n"}]}""");
@@ -76,6 +77,12 @@ public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
             Assert.That(pairs.Where(p => p.GetProperty("compared").GetBoolean()).All(p => p.GetProperty("match").GetBoolean()), Is.True);
             Assert.That(pairs[1].GetProperty("replica").GetProperty("verdict").GetString(), Is.EqualTo("Fail"));
         });
+
+        // Eight executions of four tasks: the report still has one record for each.
+        using var report = await ReadJsonAsync((Guid)job.Variables["report"].Value!);
+        Assert.That(report.RootElement.GetProperty("summary").GetProperty("total").GetInt32(), Is.EqualTo(4));
+        Assert.That(report.RootElement.GetProperty("results").GetArrayLength(), Is.EqualTo(4));
+        Assert.That(((System.Collections.IEnumerable)job.Variables["results"].Value!).OfType<VerifyResultBatchData>().Sum(batch => batch.Results.Count), Is.EqualTo(8));
 
         // Rate 0 (the default) leaves the integrity document empty and the run untouched.
         var plainJob = Engine.Compile(m_verifyRunScript);

@@ -8,20 +8,18 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: the primary batches + options → the replica batches of the sampled share of
-/// tasks (<c>SamplingRate</c>), re-planned so the allocator places them on its own; empty at
-/// rate 0. The second fan-out of every script runs them, and <c>Verify.Integrity</c>
-/// compares the two executions.
+/// Host-side: the share of the batches a run executes twice (VerifyOptions.SamplingRate), as the
+/// number Grid.Replicas takes.
 /// </summary>
-[Activity("Verify.Sample")]
+[Activity("Verify.SamplingRate")]
 [MemoryPackable]
-public sealed partial class WitActivityVerifySample : WitActivityFunction
+public sealed partial class WitActivityVerifySamplingRate : WitActivityFunction
 {
     #region Functions
 
     protected override string InnerString()
     {
-        return $"{Batches}, {Options}";
+        return $"{Options}";
     }
 
     #endregion
@@ -34,19 +32,17 @@ public sealed partial class WitActivityVerifySample : WitActivityFunction
     /// <returns>True when the models are equal by value.</returns>
     public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
     {
-        if (modelBase is not WitActivityVerifySample activity)
+        if (modelBase is not WitActivityVerifySamplingRate activity)
             return false;
 
         return base.Is(activity, tolerance)
-               && Batches.Check(activity.Batches)
                && Options.Check(activity.Options);
     }
 
-    protected override WitActivityVerifySample InnerClone()
+    protected override WitActivityVerifySamplingRate InnerClone()
     {
-        return new WitActivityVerifySample
+        return new WitActivityVerifySamplingRate
         {
-            Batches = Batches?.Clone() as IWitReference,
             Options = Options?.Clone() as IWitReference
         };
     }
@@ -54,10 +50,6 @@ public sealed partial class WitActivityVerifySample : WitActivityFunction
     #endregion
 
     #region Properties
-
-    /// <summary>Reference to the 'Batches' argument of the activity.</summary>
-    [MemoryPackAllowSerialize]
-    public IWitReference? Batches { get; init; }
 
     /// <summary>Reference to the 'Options' argument of the activity.</summary>
     [MemoryPackAllowSerialize]

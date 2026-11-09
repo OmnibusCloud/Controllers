@@ -5,8 +5,8 @@ using OutWit.Controller.AI.Verify.Tasksets;
 namespace OutWit.Controller.AI.Verify.Tests.Tasksets;
 
 /// <summary>
-/// The integrity document: pairs by index, agreement on the identity fields, same-node pairs
-/// counted but not compared, a replica without a primary reported as unpaired.
+/// The integrity document: executions paired by task index, agreement on the identity fields,
+/// same-node pairs counted but not compared, a task executed once making no pair.
 /// </summary>
 [TestFixture]
 public sealed class VerifyIntegrityWriterTests
@@ -16,10 +16,13 @@ public sealed class VerifyIntegrityWriterTests
     {
         var nodeA = Guid.NewGuid();
         var nodeB = Guid.NewGuid();
-        var primaries = new[] { Batch(nodeA, "alpha", Result(0, VerifyVerdict.Pass, "4\n"), Result(1, VerifyVerdict.Fail, "x\n")) };
-        var replicas = new[] { Batch(nodeB, "beta", Result(0, VerifyVerdict.Pass, "4\n"), Result(1, VerifyVerdict.Fail, "x\n")) };
+        var executions = new[]
+        {
+            Batch(nodeA, "alpha", Result(0, VerifyVerdict.Pass, "4\n"), Result(1, VerifyVerdict.Fail, "x\n")),
+            Batch(nodeB, "beta", Result(0, VerifyVerdict.Pass, "4\n"), Result(1, VerifyVerdict.Fail, "x\n"))
+        };
 
-        using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write(primaries, replicas));
+        using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write(executions));
         var summary = document.RootElement.GetProperty("summary");
         var pairs = document.RootElement.GetProperty("pairs").EnumerateArray().ToList();
 
@@ -27,6 +30,7 @@ public sealed class VerifyIntegrityWriterTests
         {
             Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(2));
             Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));
+            Assert.That(summary.GetProperty("unpaired").GetInt32(), Is.Zero);
             Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.Zero);
             Assert.That(summary.GetProperty("mismatch_rate").GetDouble(), Is.Zero);
             Assert.That(pairs.All(p => p.GetProperty("match").GetBoolean()), Is.True);
@@ -38,10 +42,13 @@ public sealed class VerifyIntegrityWriterTests
     [Test]
     public void DisagreementNamesTheFieldsTest()
     {
-        var primaries = new[] { Batch(Guid.NewGuid(), "alpha", Result(5, VerifyVerdict.Pass, "4\n")) };
-        var replicas = new[] { Batch(Guid.NewGuid(), "beta", Result(5, VerifyVerdict.Fail, "5\n", exit: 1)) };
+        var executions = new[]
+        {
+            Batch(Guid.NewGuid(), "beta", Result(5, VerifyVerdict.Fail, "5\n", exit: 1)),
+            Batch(Guid.NewGuid(), "alpha", Result(5, VerifyVerdict.Pass, "4\n"))
+        };
 
-        using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write(primaries, replicas));
+        using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write(executions));
         var summary = document.RootElement.GetProperty("summary");
         var pair = document.RootElement.GetProperty("pairs")[0];
 
@@ -51,6 +58,7 @@ public sealed class VerifyIntegrityWriterTests
             Assert.That(summary.GetProperty("mismatch_rate").GetDouble(), Is.EqualTo(1.0));
             Assert.That(pair.GetProperty("match").GetBoolean(), Is.False);
             Assert.That(pair.GetProperty("differs").EnumerateArray().Select(f => f.GetString()), Is.EqualTo(new[] { "verdict", "exit", "stdout" }));
+            Assert.That(pair.GetProperty("primary").GetProperty("verdict").GetString(), Is.EqualTo("Pass"), "the rule ranks the lowest verdict first, whatever arrived first");
         });
     }
 
@@ -58,10 +66,13 @@ public sealed class VerifyIntegrityWriterTests
     public void SameNodePairIsCountedNotComparedTest()
     {
         var node = Guid.NewGuid();
-        var primaries = new[] { Batch(node, "alpha", Result(0, VerifyVerdict.Pass, "4\n")) };
-        var replicas = new[] { Batch(node, "alpha", Result(0, VerifyVerdict.Fail, "wrong\n")) };
+        var executions = new[]
+        {
+            Batch(node, "alpha", Result(0, VerifyVerdict.Pass, "4\n")),
+            Batch(node, "alpha", Result(0, VerifyVerdict.Fail, "wrong\n"))
+        };
 
-        using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write(primaries, replicas));
+        using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write(executions));
         var summary = document.RootElement.GetProperty("summary");
         var pair = document.RootElement.GetProperty("pairs")[0];
 
@@ -76,19 +87,34 @@ public sealed class VerifyIntegrityWriterTests
     }
 
     [Test]
-    public void ReplicaWithoutAPrimaryIsUnpairedAndRateZeroIsEmptyTest()
+    public void ATaskExecutedOnceMakesNoPairTest()
     {
-        var replicas = new[] { Batch(Guid.NewGuid(), "beta", Result(9, VerifyVerdict.Pass, "")) };
-
-        using var unpaired = JsonDocument.Parse(VerifyIntegrityWriter.Write([], replicas));
-        using var empty = JsonDocument.Parse(VerifyIntegrityWriter.Write([Batch(Guid.NewGuid(), "alpha", Result(0, VerifyVerdict.Pass, ""))], []));
+        using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write([Batch(Guid.NewGuid(), "alpha", Result(0, VerifyVerdict.Pass, ""), Result(1, VerifyVerdict.Pass, ""))]));
 
         Assert.Multiple(() =>
         {
-            Assert.That(unpaired.RootElement.GetProperty("summary").GetProperty("unpaired").GetInt32(), Is.EqualTo(1));
-            Assert.That(unpaired.RootElement.GetProperty("pairs")[0].GetProperty("primary").ValueKind, Is.EqualTo(JsonValueKind.Null));
-            Assert.That(empty.RootElement.GetProperty("summary").GetProperty("sampled").GetInt32(), Is.Zero);
-            Assert.That(empty.RootElement.GetProperty("pairs").GetArrayLength(), Is.Zero);
+            Assert.That(document.RootElement.GetProperty("summary").GetProperty("sampled").GetInt32(), Is.Zero);
+            Assert.That(document.RootElement.GetProperty("pairs").GetArrayLength(), Is.Zero);
+        });
+    }
+
+    [Test]
+    public void ATaskExecutedThreeTimesMakesTwoPairsTest()
+    {
+        var executions = new[]
+        {
+            Batch(Guid.NewGuid(), "alpha", Result(0, VerifyVerdict.Pass, "4\n")),
+            Batch(Guid.NewGuid(), "beta", Result(0, VerifyVerdict.Pass, "4\n")),
+            Batch(Guid.NewGuid(), "gamma", Result(0, VerifyVerdict.Pass, "5\n"))
+        };
+
+        using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write(executions));
+        var summary = document.RootElement.GetProperty("summary");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(2));
+            Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.EqualTo(1));
         });
     }
 

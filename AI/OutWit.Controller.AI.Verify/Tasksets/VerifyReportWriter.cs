@@ -19,11 +19,11 @@ namespace OutWit.Controller.AI.Verify.Tasksets;
 public static class VerifyReportWriter
 {
     /// <summary>Writes the verdict report: the aggregate summary and one identity record per task, ordered by index.</summary>
-    /// <param name="results">The results of every task, in any order.</param>
+    /// <param name="results">The results of every execution, in any order; a task executed twice gets one record.</param>
     /// <returns>The UTF-8 JSON bytes.</returns>
     public static byte[] Write(IReadOnlyList<VerifyResultData> results)
     {
-        var ordered = results.OrderBy(result => result.TaskIndex).ToList();
+        var ordered = VerifyExecutions.Canonical(results);
 
         var histogram = Enum.GetValues<VerifyVerdict>()
             .ToDictionary(verdict => verdict.ToString(), verdict => ordered.Count(r => r.Verdict == verdict));

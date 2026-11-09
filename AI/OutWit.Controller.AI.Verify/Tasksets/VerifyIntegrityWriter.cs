@@ -4,11 +4,12 @@ using OutWit.Controller.AI.Verify.Model;
 namespace OutWit.Controller.AI.Verify.Tasksets;
 
 /// <summary>
-/// Writes the integrity document of a run: every sampled task paired with its replica, the
-/// nodes that ran each, and whether the two executions agree on everything an honest node
-/// cannot vary (verdict, exit code, outputs, per-case outcomes). A pair that landed on one node
-/// proves nothing about that node and is counted, not compared. The mismatch rate is over the
-/// compared pairs; a mismatch names the fields that differ so an operator can look.
+/// Writes the integrity document of a run: every task executed more than once, its executions
+/// paired, the nodes that ran each, and whether they agree on everything an honest node cannot
+/// vary (verdict, exit code, outputs, per-case outcomes). The platform keeps the executions of
+/// one batch on different machines; a pair that met on one node all the same proves nothing and
+/// is counted, not compared. The mismatch rate is over the compared pairs; a mismatch names the
+/// fields that differ so an operator can look.
 /// </summary>
 public static class VerifyIntegrityWriter
 {
@@ -17,15 +18,15 @@ public static class VerifyIntegrityWriter
     /// <summary>
     /// Serializes the pairs as UTF-8 JSON.
     /// </summary>
-    /// <param name="primaries">The primary result batches.</param>
-    /// <param name="replicas">The replica result batches (the sampled re-execution).</param>
+    /// <param name="executions">The result batches of all executions, any order; a task executed once makes no pair.</param>
     /// <returns>The JSON document bytes.</returns>
-    public static byte[] Write(IReadOnlyList<VerifyResultBatchData> primaries, IReadOnlyList<VerifyResultBatchData> replicas)
+    public static byte[] Write(IReadOnlyList<VerifyResultBatchData> executions)
     {
-        var primaryByIndex = Index(primaries);
-        var pairs = Index(replicas)
-            .OrderBy(entry => entry.Key)
-            .Select(entry => Pair(entry.Key, primaryByIndex.GetValueOrDefault(entry.Key), entry.Value))
+        var pairs = executions
+            .SelectMany(batch => batch.Results.Select(result => new Placed(result, batch.Diagnostics)))
+            .GroupBy(placed => placed.Result.TaskIndex)
+            .OrderBy(task => task.Key)
+            .SelectMany(PairsOf)
             .ToList();
 
         var compared = pairs.Count(pair => pair.Compared);
@@ -40,7 +41,7 @@ public static class VerifyIntegrityWriter
             writer.WriteNumber("sampled", pairs.Count);
             writer.WriteNumber("compared", compared);
             writer.WriteNumber("same_node", pairs.Count(pair => pair.SameNode));
-            writer.WriteNumber("unpaired", pairs.Count(pair => pair.Primary == null));
+            writer.WriteNumber("unpaired", 0);
             writer.WriteNumber("mismatches", mismatches);
             writer.WriteNumber("mismatch_rate", compared == 0 ? 0.0 : (double)mismatches / compared);
             writer.WriteEndObject();
@@ -56,23 +57,17 @@ public static class VerifyIntegrityWriter
         return stream.ToArray();
     }
 
-    private static Dictionary<int, Placed> Index(IReadOnlyList<VerifyResultBatchData> batches)
+    private static IEnumerable<PairRecord> PairsOf(IGrouping<int, Placed> task)
     {
-        var byIndex = new Dictionary<int, Placed>();
-        foreach (var batch in batches)
-        {
-            foreach (var result in batch.Results)
-                byIndex.TryAdd(result.TaskIndex, new Placed(result, batch.Diagnostics));
-        }
+        var ranked = VerifyExecutions.InRuleOrder(task.Select(placed => placed.Result)).ToList();
+        var placedByResult = task.ToDictionary(placed => placed.Result, ReferenceEqualityComparer.Instance);
+        var primary = placedByResult[ranked[0]];
 
-        return byIndex;
+        return ranked.Skip(1).Select(result => Pair(task.Key, primary, placedByResult[result]));
     }
 
-    private static PairRecord Pair(int index, Placed? primary, Placed replica)
+    private static PairRecord Pair(int index, Placed primary, Placed replica)
     {
-        if (primary == null)
-            return new PairRecord(index, null, replica, false, false, []);
-
         var sameNode = primary.Diagnostics != null
                        && replica.Diagnostics != null
                        && primary.Diagnostics.NodeId == replica.Diagnostics.NodeId;
@@ -121,14 +116,8 @@ public static class VerifyIntegrityWriter
         writer.WriteEndObject();
     }
 
-    private static void WriteSide(Utf8JsonWriter writer, string name, Placed? placed)
+    private static void WriteSide(Utf8JsonWriter writer, string name, Placed placed)
     {
-        if (placed == null)
-        {
-            writer.WriteNull(name);
-            return;
-        }
-
         writer.WriteStartObject(name);
         if (placed.Diagnostics != null)
         {
@@ -147,11 +136,11 @@ public static class VerifyIntegrityWriter
 
     private sealed record Placed(VerifyResultData Result, VerifyBatchDiagnosticsData? Diagnostics);
 
-    /// <summary>A sampled task: compared only when both sides exist and ran on different nodes.</summary>
-    private sealed record PairRecord(int Index, Placed? Primary, Placed Replica, bool SameNode, bool Match, List<string> Differing)
+    /// <summary>Two executions of one task: compared only when they ran on different nodes.</summary>
+    private sealed record PairRecord(int Index, Placed Primary, Placed Replica, bool SameNode, bool Match, List<string> Differing)
     {
-        /// <summary>Whether the pair was compared: both sides exist and ran on different nodes.</summary>
-        public bool Compared => Primary != null && !SameNode;
+        /// <summary>Whether the pair was compared: it ran on different nodes.</summary>
+        public bool Compared => !SameNode;
     }
 
     #endregion

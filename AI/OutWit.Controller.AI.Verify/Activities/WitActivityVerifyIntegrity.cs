@@ -8,10 +8,10 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: the primary result batches + the replica result batches → the integrity
-/// document (every sampled task paired with its re-execution, the nodes of each side, agreement
-/// on verdict, exit, outputs and cases; pairs that landed on one node counted, not compared;
-/// the mismatch rate) as a blob.
+/// Host-side: the result batches of all executions → the integrity document (the executions of
+/// every task that ran more than once paired, the nodes of each side, agreement on verdict,
+/// exit, outputs and cases; pairs that met on one node counted, not compared; the mismatch
+/// rate) as a blob.
 /// </summary>
 [Activity("Verify.Integrity")]
 [MemoryPackable]
@@ -21,7 +21,7 @@ public sealed partial class WitActivityVerifyIntegrity : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Results}, {Replicas}";
+        return $"{Results}";
     }
 
     #endregion
@@ -38,16 +38,14 @@ public sealed partial class WitActivityVerifyIntegrity : WitActivityFunction
             return false;
 
         return base.Is(activity, tolerance)
-               && Results.Check(activity.Results)
-               && Replicas.Check(activity.Replicas);
+               && Results.Check(activity.Results);
     }
 
     protected override WitActivityVerifyIntegrity InnerClone()
     {
         return new WitActivityVerifyIntegrity
         {
-            Results = Results?.Clone() as IWitReference,
-            Replicas = Replicas?.Clone() as IWitReference
+            Results = Results?.Clone() as IWitReference
         };
     }
 
@@ -58,10 +56,6 @@ public sealed partial class WitActivityVerifyIntegrity : WitActivityFunction
     /// <summary>Reference to the 'Results' argument of the activity.</summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Results { get; init; }
-
-    /// <summary>Reference to the 'Replicas' argument of the activity.</summary>
-    [MemoryPackAllowSerialize]
-    public IWitReference? Replicas { get; init; }
 
     #endregion
 }
