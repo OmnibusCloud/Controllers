@@ -183,6 +183,7 @@ namespace OutWit.Controller.Grid.Tests
             Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
             Assert.That(Executions(), Is.EqualTo(4));
             Assert.That(m_nodes.Batches.SelectMany(batch => batch.Requests).Any(request => request.ExactNode), Is.False);
+            Assert.That(((WitProcessingOptions)m_nodes.LastOptions!).Replicas, Is.EqualTo(1), "the server must not treat this call as one with copies");
         }
 
         [Test]

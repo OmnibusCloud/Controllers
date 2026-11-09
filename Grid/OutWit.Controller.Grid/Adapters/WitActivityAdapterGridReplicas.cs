@@ -56,7 +56,9 @@ namespace OutWit.Controller.Grid.Adapters
             if (!(share >= 0 && share <= 1))
                 throw new WitEngineActivityProcessingException<WitActivityGridReplicas>(string.Format(ERROR_SHARE_RANGE, share));
 
-            bool result = pool.TrySetValue(activity.ReturnReference, new WitProcessingOptions { Replicas = copies, ReplicaShare = share });
+            // A share of zero asks for nothing: the call must not count as one with copies,
+            // which the server keeps on this cloud's own nodes.
+            bool result = pool.TrySetValue(activity.ReturnReference, new WitProcessingOptions { Replicas = share > 0 ? copies : 1, ReplicaShare = share });
 
             if (!string.IsNullOrEmpty(activity.ReturnReference) && !result)
                 throw this.FailedToSetReturnValueException(activity.ReturnReference);

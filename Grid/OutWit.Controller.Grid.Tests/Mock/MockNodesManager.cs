@@ -23,6 +23,7 @@ namespace OutWit.Controller.Grid.Tests.Mock
         public async Task<IReadOnlyList<IWitEngineActivityNode>> GetCompatibleNodes(Type activityType, IWitProcessingOptions options)
         {
             LastRequestedActivityType = activityType;
+            LastOptions = options;
             return await Task.FromResult(CompatibleNodes);
 
         }
@@ -71,6 +72,8 @@ namespace OutWit.Controller.Grid.Tests.Mock
         public IWitEngineNode Node => WitEngineNodeSdk.Instance;
 
         public Type? LastRequestedActivityType { get; private set; }
+
+        public IWitProcessingOptions? LastOptions { get; private set; }
 
         public IReadOnlyList<WitNodeTaskRequest>? LastBatchRequests { get; private set; }
 
