@@ -7,12 +7,20 @@ namespace OutWit.Controller.Grid.Model;
 
 public static class WitGridTaskAllocator
 {
+    #region Constants
+
+    private const string ERROR_NO_MACHINE_FOR_COPY = "A copy of an item has no machine left that does not already hold one.";
+
+    private static readonly IReadOnlyDictionary<int, HashSet<Guid>> NO_HOLDERS = new Dictionary<int, HashSet<Guid>>();
+
+    #endregion
+
     #region Functions
 
     /// <summary>
     /// Splits the tasks over the nodes: longest tasks first, each to the node that finishes it
     /// earliest by its planning rate, then the node count is trimmed while the makespan does not
-    /// grow beyond the threshold.
+    /// grow beyond the threshold. Tasks that are copies of one item land on different nodes.
     /// </summary>
     /// <remarks>
     /// A node without a measured benchmark for the activity (a default row, zero iterations)
@@ -25,19 +33,44 @@ public static class WitGridTaskAllocator
     /// <param name="tasks">The tasks to place.</param>
     /// <param name="improvementThresholdPct">How much makespan a smaller node count may cost (0.02 = 2%).</param>
     /// <returns>One group per node that received work.</returns>
+    /// <exception cref="InvalidOperationException">An item has more copies than there are machines for them.</exception>
     public static IReadOnlyList<WitGridTaskGroup> Allocate(IReadOnlyList<IWitEngineActivityNode> nodes, IReadOnlyList<WitGridTask> tasks,
         double improvementThresholdPct = 0.02)
+    {
+        return Allocate(nodes, tasks, NO_HOLDERS, improvementThresholdPct);
+    }
+
+    /// <summary>
+    /// Splits the tasks over the nodes like the plain overload, and also keeps each copy away from
+    /// the machines that already hold a result for its item.
+    /// </summary>
+    /// <param name="nodes">Candidate nodes with their benchmark result for the activity.</param>
+    /// <param name="tasks">The tasks to place.</param>
+    /// <param name="holders">For each item, the machines that already returned a copy of it.</param>
+    /// <param name="improvementThresholdPct">How much makespan a smaller node count may cost (0.02 = 2%).</param>
+    /// <returns>One group per node that received work.</returns>
+    /// <exception cref="InvalidOperationException">An item has more copies than there are machines for them.</exception>
+    public static IReadOnlyList<WitGridTaskGroup> Allocate(IReadOnlyList<IWitEngineActivityNode> nodes, IReadOnlyList<WitGridTask> tasks,
+        IReadOnlyDictionary<int, HashSet<Guid>> holders, double improvementThresholdPct = 0.02)
     {
         var candidates = Rank(nodes);
         tasks = tasks.OrderByDescending(task => task.Work).ToList();
 
-        int maxNodesToUse = Math.Min(candidates.Count, tasks.Count);
-        IReadOnlyList<WitGridTaskGroup> optimalAllocation = Allocate(maxNodesToUse, candidates, tasks);
+        // With copies every machine stays a candidate: a machine free of an item may be the slowest one.
+        int maxNodesToUse = tasks.Any(task => task.ReplicaOf != null)
+            ? candidates.Count
+            : Math.Min(candidates.Count, tasks.Count);
+
+        IReadOnlyList<WitGridTaskGroup> optimalAllocation = Allocate(maxNodesToUse, candidates, tasks, holders)
+            ?? throw new InvalidOperationException(ERROR_NO_MACHINE_FOR_COPY);
         double bestMakespan = optimalAllocation.Max(group => group.Eta.TotalSeconds);
 
         for (int nodeCount = maxNodesToUse - 1; nodeCount >= 1; nodeCount--)
         {
-            IReadOnlyList<WitGridTaskGroup> currentAllocation = Allocate(nodeCount, candidates, tasks);
+            IReadOnlyList<WitGridTaskGroup>? currentAllocation = Allocate(nodeCount, candidates, tasks, holders);
+            if (currentAllocation == null)
+                break;
+
             double currentMakespan = currentAllocation.Max(group => group.Eta.TotalSeconds);
 
             if (currentMakespan <= bestMakespan * (1.0 + improvementThresholdPct))
@@ -74,31 +107,56 @@ public static class WitGridTaskAllocator
         return node.BenchmarkResult.Iterations > 0;
     }
 
-    private static List<WitGridTaskGroup> Allocate(int k, IReadOnlyList<(IWitEngineActivityNode Node, double Rate)> nodes, IReadOnlyList<WitGridTask> tasks)
+    /// <summary>Places the tasks on the first <paramref name="k"/> nodes; null when a copy has no machine there.</summary>
+    private static List<WitGridTaskGroup>? Allocate(int k, IReadOnlyList<(IWitEngineActivityNode Node, double Rate)> nodes, IReadOnlyList<WitGridTask> tasks,
+        IReadOnlyDictionary<int, HashSet<Guid>> holders)
     {
         IReadOnlyList<WitGridTaskGroup> groups
             = nodes.Take(k).Select(entry => new WitGridTaskGroup(entry.Node, entry.Rate)).ToArray();
 
+        var placed = new Dictionary<int, HashSet<Guid>>();
+
         foreach (var task in tasks)
         {
-            WitGridTaskGroup bestGroup = groups[0];
-            double minCompletionTime = (bestGroup.TotalWork + task.Work) / bestGroup.Rate;
+            WitGridTaskGroup? bestGroup = null;
+            double minCompletionTime = double.MaxValue;
 
-            for (int i = 1; i < groups.Count; i++)
+            foreach (var group in groups)
             {
-                var currentGroup = groups[i];
-                double currentCompletionTime = (currentGroup.TotalWork + task.Work) / currentGroup.Rate;
+                if (HoldsItem(group, task, holders) || HoldsItem(group, task, placed))
+                    continue;
 
-                if (currentCompletionTime < minCompletionTime)
+                double completionTime = (group.TotalWork + task.Work) / group.Rate;
+
+                if (bestGroup == null || completionTime < minCompletionTime)
                 {
-                    minCompletionTime = currentCompletionTime;
-                    bestGroup = currentGroup;
+                    minCompletionTime = completionTime;
+                    bestGroup = group;
                 }
             }
+
+            if (bestGroup == null)
+                return null;
+
             bestGroup.Add(task);
+
+            if (task.ReplicaOf is int item)
+            {
+                if (!placed.TryGetValue(item, out var machines))
+                    placed[item] = machines = new HashSet<Guid>();
+
+                machines.Add(bestGroup.Node.NodeId);
+            }
         }
 
         return groups.Where(group => group.Count > 0).ToList();
+    }
+
+    private static bool HoldsItem(WitGridTaskGroup group, WitGridTask task, IReadOnlyDictionary<int, HashSet<Guid>> holders)
+    {
+        return task.ReplicaOf is int item
+               && holders.TryGetValue(item, out var machines)
+               && machines.Contains(group.Node.NodeId);
     }
 
     #endregion

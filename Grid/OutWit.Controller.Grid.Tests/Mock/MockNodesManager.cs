@@ -44,9 +44,13 @@ namespace OutWit.Controller.Grid.Tests.Mock
                 {
                     Activity = request.Activity,
                     Pool = request.Pool,
-                    ReturnVariables = request.ReturnVariables.ToArray()
+                    ReturnVariables = request.ReturnVariables.ToArray(),
+                    ExactNode = request.ExactNode
                 })
                 .ToArray();
+
+            lock (Batches)
+                Batches.Add((nodeId, LastBatchRequests));
 
             var allVariables = new List<IWitVariable>();
             IWitProcessingStatus? lastStatus = null;
@@ -69,6 +73,8 @@ namespace OutWit.Controller.Grid.Tests.Mock
         public Type? LastRequestedActivityType { get; private set; }
 
         public IReadOnlyList<WitNodeTaskRequest>? LastBatchRequests { get; private set; }
+
+        public List<(Guid NodeId, IReadOnlyList<WitNodeTaskRequest> Requests)> Batches { get; } = new();
 
         public IReadOnlyList<IWitEngineActivityNode> CompatibleNodes { get; set; }
             = new IWitEngineActivityNode[] { new MockActivityNode(WitEngineNodeSdk.Instance), new MockActivityNode(WitEngineNodeSdk.Instance), new MockActivityNode(WitEngineNodeSdk.Instance) };

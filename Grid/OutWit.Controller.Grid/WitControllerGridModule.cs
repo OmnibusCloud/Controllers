@@ -17,6 +17,7 @@ namespace OutWit.Controller.Grid
         {
             services.AddActivityAdapter<WitActivityGridForEach, WitActivityAdapterGridForEach>();
             services.AddActivityAdapter<WitActivityGridDelegate, WitActivityAdapterGridDelegate>();
+            services.AddActivityAdapter<WitActivityGridReplicas, WitActivityAdapterGridReplicas>();
 
             services.AddResources<Resources>();
         }

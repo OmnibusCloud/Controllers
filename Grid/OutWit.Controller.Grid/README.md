@@ -50,6 +50,32 @@ Like `Grid.ForEach`, node compatibility is keyed off the delegated activity's ty
 only the variables that activity actually references are forwarded to the node. The single
 task is allocated to the fastest compatible node via the same `WitGridTaskAllocator`.
 
+### Grid.Replicas
+
+Builds the options of a `Grid.ForEach` call whose selected items run more than once, as
+optional redundancy for reliability. It runs on the host and needs nothing on the nodes.
+
+```
+ProcessingOptions:checked = Grid.Replicas(2, 0.05);   ~ 5 % of the items run twice ~
+ProcessingOptions:all = Grid.Replicas(2);             ~ every item runs twice ~
+results = Grid.ForEach(item in items, checked) => Transformer(item);
+```
+
+**Parameters:**
+- `copies` - How many times a selected item runs, from 1 to 3
+- `share` - Optional share of the items that are selected, from 0 to 1 (rounded up to a whole item); all of them when omitted
+
+**What it guarantees:**
+- The executions of one item run on **different machines** within the call, also after a node fails and its work moves. Different machines are not necessarily different owners.
+- The platform picks the items at random and shuffles the tasks, so a node cannot tell whether the item it holds also runs elsewhere. Selected and unselected items must be in one call for that to hold: two calls reveal which is which.
+- With too few machines an item gets fewer copies. A job fails only when an item has no result at all.
+
+**What it does not do:**
+- It does not compare results. `results` is a flat list with one entry per execution, in no particular order, so the transformer has to return something that identifies its item. The controller compares; the platform does not vote.
+- It does not speed anything up: the copies are extra work.
+
+Only the `Balanced` strategy supports copies; `Queued` reports an error. Copies are set in a script, because these options are not sent through SDK job parameters. A call with copies uses this cloud's own nodes only.
+
 ## How It Works
 
 1. **Node Discovery**: Finds compatible nodes based on activity requirements
@@ -138,7 +164,8 @@ OutWit.Controller.Grid/
 OutWit.Controller.Grid.Model/
   WitGridTask.cs            - Per-task (activity + variables + estimated work)
   WitGridTaskGroup.cs       - A node's queue of tasks + rate / ETA accounting
-  WitGridTaskAllocator.cs   - LPT-greedy schedule + "minimize node count" heuristic
+  WitGridTaskAllocator.cs   - LPT-greedy schedule + "minimize node count" heuristic, keeps copies of an item apart
+  WitGridReplicaPlanner.cs  - Which items run more than once, and the shuffled order of the executions
 ```
 
 Neither the Grid.ForEach nor the Grid.Delegate activity is MemoryPack-serialised — Grid is host-only (only `IWitControllerHost`, not `IWitControllerNode`), so these activities stay on the host and only their inner transformer crosses the wire per task. See the comment on `WitActivityGridForEach` for the design rationale.
