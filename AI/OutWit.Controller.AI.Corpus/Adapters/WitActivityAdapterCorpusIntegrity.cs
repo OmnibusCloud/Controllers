@@ -35,13 +35,7 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
         if (!pool.TryGetObject(activity.Results, out var resultsObject) || resultsObject is not IEnumerable resultsEnumerable)
             throw new InvalidOperationException("Failed to get parameter 'Results'.");
 
-        if (!pool.TryGetObject(activity.Replicas, out var replicasObject) || replicasObject is not IEnumerable replicasEnumerable)
-            throw new InvalidOperationException("Failed to get parameter 'Replicas'.");
-
-        var primaries = resultsEnumerable.OfType<CorpusResultData>().ToList();
-        var replicas = replicasEnumerable.OfType<CorpusResultData>().ToList();
-
-        var bytes = CorpusIntegrityWriter.Write(primaries, replicas);
+        var bytes = CorpusIntegrityWriter.Write(resultsEnumerable.OfType<CorpusResultData>().ToList());
         var blobId = await BlobService.UploadBytesAsync(bytes, BLOB_NAME);
 
         if (!pool.TrySetValue(activity.ReturnReference, blobId))
@@ -56,19 +50,15 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
     {
         try
         {
-            if (parameters.Length != 2)
-                throw new ArgumentException($"Expected 2 parameter(s), got {parameters.Length}.");
+            if (parameters.Length != 1)
+                throw new ArgumentException($"Expected 1 parameter(s), got {parameters.Length}.");
 
             if (parameters[0] is not IWitReference results)
                 throw new ArgumentException("Parameter 'Results' must be a variable reference.");
 
-            if (parameters[1] is not IWitReference replicas)
-                throw new ArgumentException("Parameter 'Replicas' must be a variable reference.");
-
             return new WitActivityCorpusIntegrity
             {
-                Results = results,
-                Replicas = replicas
+                Results = results
             };
         }
         catch (Exception e)

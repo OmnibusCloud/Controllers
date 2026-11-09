@@ -2,14 +2,12 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
 {
     CorpusTaskCollection:tasks = Corpus.Split(manifest, languageModel, opts);
 
-    CorpusResultCollection:results = Grid.ForEach(task in tasks)
+    Double:rate = Corpus.SamplingRate(opts);
+    ProcessingOptions:checked = Grid.Replicas(2, rate);
+
+    CorpusResultCollection:executions = Grid.ForEach(task in tasks, checked)
         => Corpus.ProcessShard(task);
 
-    CorpusTaskCollection:replicaTasks = Corpus.Sample(tasks, opts);
-
-    CorpusResultCollection:replicas = Grid.ForEach(task in replicaTasks)
-        => Corpus.ProcessShard(task);
-
-    Blob:report = Corpus.Collect(results, opts);
-    Blob:integrity = Corpus.Integrity(results, replicas);
+    Blob:report = Corpus.Collect(executions, opts);
+    Blob:integrity = Corpus.Integrity(executions);
 }

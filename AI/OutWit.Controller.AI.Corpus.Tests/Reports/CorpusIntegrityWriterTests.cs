@@ -4,7 +4,7 @@ using OutWit.Controller.AI.Corpus.Reports;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Reports;
 
-/// <summary>The integrity document: pairs by index, same-node pairs counted not compared, mismatches named by field.</summary>
+/// <summary>The integrity document: executions paired by index, same-node pairs counted not compared, mismatches named by field.</summary>
 [TestFixture]
 public sealed class CorpusIntegrityWriterTests
 {
@@ -14,38 +14,68 @@ public sealed class CorpusIntegrityWriterTests
         var nodeA = Guid.NewGuid();
         var nodeB = Guid.NewGuid();
 
-        var primaries = new List<CorpusResultData> { Result(0, nodeA, "aaa", 10), Result(1, nodeA, "bbb", 20), Result(2, nodeA, "ccc", 30) };
-        var replicas = new List<CorpusResultData>
+        var executions = new List<CorpusResultData>
         {
+            Result(0, nodeA, "aaa", 10),
             Result(2, nodeB, "ccc", 30),
             Result(1, nodeA, "bbb", 20),
-            Result(0, nodeB, "aaa", 11),
-            Result(7, nodeB, "zzz", 1)
+            Result(3, nodeA, "ddd", 40),
+            Result(2, nodeA, "ccc", 30),
+            Result(1, nodeA, "bbb", 20),
+            Result(0, nodeB, "aaa", 11)
         };
 
-        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write(primaries, replicas));
+        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write(executions));
         var summary = document.RootElement.GetProperty("summary");
         var pairs = document.RootElement.GetProperty("pairs").EnumerateArray().ToList();
 
         Assert.Multiple(() =>
         {
             Assert.That(document.RootElement.GetProperty("schema").GetString(), Is.EqualTo(CorpusIntegrityWriter.SCHEMA));
-            Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(4));
+            Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(3), "the shard executed once makes no pair");
             Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));
             Assert.That(summary.GetProperty("same_node").GetInt32(), Is.EqualTo(1));
-            Assert.That(summary.GetProperty("unpaired").GetInt32(), Is.EqualTo(1));
+            Assert.That(summary.GetProperty("unpaired").GetInt32(), Is.Zero);
             Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.EqualTo(1));
             Assert.That(summary.GetProperty("mismatch_rate").GetDouble(), Is.EqualTo(0.5));
 
-            Assert.That(pairs.Select(p => p.GetProperty("index").GetInt32()), Is.EqualTo(new[] { 0, 1, 2, 7 }));
+            Assert.That(pairs.Select(p => p.GetProperty("index").GetInt32()), Is.EqualTo(new[] { 0, 1, 2 }));
             Assert.That(pairs[0].GetProperty("compared").GetBoolean(), Is.True);
             Assert.That(pairs[0].GetProperty("match").GetBoolean(), Is.False);
             Assert.That(pairs[0].GetProperty("differs").EnumerateArray().Select(d => d.GetString()), Is.EqualTo(new[] { "documents" }));
             Assert.That(pairs[1].GetProperty("compared").GetBoolean(), Is.False, "same node");
             Assert.That(pairs[2].GetProperty("match").GetBoolean(), Is.True);
-            Assert.That(pairs[3].GetProperty("primary").ValueKind, Is.EqualTo(JsonValueKind.Null));
-            Assert.That(pairs[3].GetProperty("compared").GetBoolean(), Is.False);
         });
+    }
+
+    [Test]
+    public void AShardExecutedThreeTimesMakesTwoPairsTest()
+    {
+        var executions = new List<CorpusResultData>
+        {
+            Result(0, Guid.NewGuid(), "aaa", 10),
+            Result(0, Guid.NewGuid(), "aaa", 10),
+            Result(0, Guid.NewGuid(), "bbb", 10)
+        };
+
+        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write(executions));
+        var summary = document.RootElement.GetProperty("summary");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(2));
+            Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));
+            Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public void TheOrderOfTheExecutionsDoesNotChangeTheDocumentTest()
+    {
+        var first = Result(0, Guid.NewGuid(), "aaa", 10);
+        var second = Result(0, Guid.NewGuid(), "bbb", 12);
+
+        Assert.That(CorpusIntegrityWriter.Write([first, second]), Is.EqualTo(CorpusIntegrityWriter.Write([second, first])));
     }
 
     [Test]
@@ -56,7 +86,7 @@ public sealed class CorpusIntegrityWriterTests
         var replica = Result(0, Guid.NewGuid(), "bbb", 12);
         replica.ControllerVersion = "0.1.5";
 
-        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write([primary], [replica]));
+        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write([primary, replica]));
         var summary = document.RootElement.GetProperty("summary");
         var pair = document.RootElement.GetProperty("pairs")[0];
 
@@ -87,9 +117,9 @@ public sealed class CorpusIntegrityWriterTests
     }
 
     [Test]
-    public void NoReplicasIsAnEmptyDocumentTest()
+    public void ShardsExecutedOnceAreAnEmptyDocumentTest()
     {
-        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write([Result(0, Guid.NewGuid(), "aaa", 1)], []));
+        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write([Result(0, Guid.NewGuid(), "aaa", 1), Result(1, Guid.NewGuid(), "bbb", 1)]));
 
         Assert.Multiple(() =>
         {

@@ -58,7 +58,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
         Assert.Multiple(() =>
         {
             Assert.That(process.Activities.Count, Is.GreaterThan(0));
-            Assert.That(process.Variables.Select(v => v.Name), Is.SupersetOf(new[] { "manifest", "languageModel", "opts", "tasks", "results", "replicaTasks", "replicas", "report", "integrity" }));
+            Assert.That(process.Variables.Select(v => v.Name), Is.SupersetOf(new[] { "manifest", "languageModel", "opts", "tasks", "rate", "checked", "executions", "report", "integrity" }));
             Assert.That(preflight.Variables.Select(v => v.Name), Is.SupersetOf(new[] { "manifest", "languageModel", "opts", "result" }));
         });
     }
@@ -116,8 +116,9 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
     [Test]
     public async Task SamplingReExecutesAndComparesTest()
     {
-        // Every shard re-executed (rate 1): each pair agrees on the content hash; a pair on one
-        // node is counted, not compared (the mock nodes share one process, so either may happen).
+        // Every shard executed twice (rate 1): each pair agrees on the content hash. The mock
+        // nodes share one process, so the results may report one node and the pair is then
+        // counted, not compared.
         var manifestBlob = await UploadAsync(Manifest(WET_FIXTURE, WARC_FIXTURE), "manifest.json");
 
         var job = Engine.Compile(m_processScript);
@@ -139,6 +140,11 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
             Assert.That(pairs.Select(p => p.GetProperty("index").GetInt32()), Is.EqualTo(new[] { 0, 1 }));
             Assert.That(pairs.All(p => p.GetProperty("primary").GetProperty("content_sha256").GetString() == p.GetProperty("replica").GetProperty("content_sha256").GetString()), Is.True);
         });
+
+        // Four executions, two shards: the report still has one entry for each.
+        using var report = await ReadJsonAsync((Guid)job.Variables["report"].Value!);
+        Assert.That(report.RootElement.GetProperty("shards").GetArrayLength(), Is.EqualTo(2));
+        Assert.That(((System.Collections.IEnumerable)job.Variables["executions"].Value!).OfType<CorpusResultData>().Count(), Is.EqualTo(4));
 
         // Rate 0 (the default) leaves the integrity document empty.
         var plain = Engine.Compile(m_processScript);

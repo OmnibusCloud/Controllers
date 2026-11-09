@@ -19,12 +19,12 @@ public static class CorpusReportWriter
 
     #region Functions
 
-    /// <summary>Writes the report.</summary>
-    /// <param name="results">The shard results, any order.</param>
+    /// <summary>Writes the report: one entry per shard, however many times it was executed.</summary>
+    /// <param name="results">The executions, any order.</param>
     /// <returns>UTF-8 JSON.</returns>
     public static byte[] Write(IReadOnlyList<CorpusResultData> results)
     {
-        var ordered = results.OrderBy(result => result.TaskIndex).ToList();
+        var ordered = CorpusExecutions.Canonical(results);
         var drops = new SortedDictionary<string, long>(StringComparer.Ordinal);
         var languages = new SortedDictionary<string, long>(StringComparer.Ordinal);
         var verdicts = new SortedDictionary<string, int>(StringComparer.Ordinal);

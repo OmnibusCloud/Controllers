@@ -4,12 +4,13 @@ using OutWit.Controller.AI.Corpus.Model;
 namespace OutWit.Controller.AI.Corpus.Reports;
 
 /// <summary>
-/// Writes the integrity document of a run: every sampled shard paired with its replica, the
-/// nodes that ran each, and whether the two executions agree on everything an honest node
-/// cannot vary — the verdict, the content hash of the product, the document count, the drop
-/// and language histograms. A pair that landed on one node proves nothing about that node and
-/// is counted, not compared; so is a pair whose sides ran different controller versions (a
-/// rollout in progress: a stage may have changed between them). Schema <c>corpus-integrity/1</c>.
+/// Writes the integrity document of a run: every shard executed more than once, its executions
+/// paired, the nodes that ran each, and whether they agree on everything an honest node cannot
+/// vary — the verdict, the content hash of the product, the document count, the drop and
+/// language histograms. The platform keeps the executions of one shard on different machines; a
+/// pair that met on one node all the same proves nothing and is counted, not compared. So is a
+/// pair whose sides ran different controller versions (a rollout in progress: a stage may have
+/// changed between them). Schema <c>corpus-integrity/1</c>.
 /// </summary>
 public static class CorpusIntegrityWriter
 {
@@ -23,22 +24,14 @@ public static class CorpusIntegrityWriter
     #region Functions
 
     /// <summary>Serializes the pairs as UTF-8 JSON.</summary>
-    /// <param name="primaries">The primary results.</param>
-    /// <param name="replicas">The replica results (the sampled re-execution).</param>
+    /// <param name="executions">All executions of the run, any order; the shards executed once make no pair.</param>
     /// <returns>The JSON document bytes.</returns>
-    public static byte[] Write(IReadOnlyList<CorpusResultData> primaries, IReadOnlyList<CorpusResultData> replicas)
+    public static byte[] Write(IReadOnlyList<CorpusResultData> executions)
     {
-        var primaryByIndex = new Dictionary<int, CorpusResultData>();
-        foreach (var primary in primaries)
-            primaryByIndex.TryAdd(primary.TaskIndex, primary);
-
-        var replicaByIndex = new Dictionary<int, CorpusResultData>();
-        foreach (var replica in replicas)
-            replicaByIndex.TryAdd(replica.TaskIndex, replica);
-
-        var pairs = replicaByIndex
-            .OrderBy(entry => entry.Key)
-            .Select(entry => Pair(entry.Key, primaryByIndex.GetValueOrDefault(entry.Key), entry.Value))
+        var pairs = executions
+            .GroupBy(execution => execution.TaskIndex)
+            .OrderBy(group => group.Key)
+            .SelectMany(PairsOf)
             .ToList();
 
         var compared = pairs.Count(pair => pair.Compared);
@@ -55,7 +48,7 @@ public static class CorpusIntegrityWriter
             writer.WriteNumber("compared", compared);
             writer.WriteNumber("same_node", pairs.Count(pair => pair.SameNode));
             writer.WriteNumber("version_skew", pairs.Count(pair => pair.VersionSkew && !pair.SameNode));
-            writer.WriteNumber("unpaired", pairs.Count(pair => pair.Primary == null));
+            writer.WriteNumber("unpaired", 0);
             writer.WriteNumber("mismatches", mismatches);
             writer.WriteNumber("mismatch_rate", compared == 0 ? 0.0 : (double)mismatches / compared);
             writer.WriteEndObject();
@@ -100,11 +93,18 @@ public static class CorpusIntegrityWriter
         return first.Count == second.Count && first.Zip(second).All(pair => pair.First.Is(pair.Second));
     }
 
-    private static PairRecord Pair(int index, CorpusResultData? primary, CorpusResultData replica)
+    private static IEnumerable<PairRecord> PairsOf(IGrouping<int, CorpusResultData> shard)
     {
-        if (primary == null)
-            return new PairRecord(index, null, replica, false, false, false, []);
+        var primary = CorpusExecutions.Pick(shard);
 
+        return shard
+            .Where(execution => !ReferenceEquals(execution, primary))
+            .OrderBy(execution => execution.ContentSha256, StringComparer.Ordinal)
+            .Select(execution => Pair(shard.Key, primary, execution));
+    }
+
+    private static PairRecord Pair(int index, CorpusResultData primary, CorpusResultData replica)
+    {
         var sameNode = primary.NodeId != Guid.Empty && primary.NodeId == replica.NodeId;
         var versionSkew = primary.ControllerVersion.Length > 0 && replica.ControllerVersion.Length > 0
                           && !string.Equals(primary.ControllerVersion, replica.ControllerVersion, StringComparison.Ordinal);
@@ -134,14 +134,8 @@ public static class CorpusIntegrityWriter
         writer.WriteEndObject();
     }
 
-    private static void WriteSide(Utf8JsonWriter writer, string name, CorpusResultData? result)
+    private static void WriteSide(Utf8JsonWriter writer, string name, CorpusResultData result)
     {
-        if (result == null)
-        {
-            writer.WriteNull(name);
-            return;
-        }
-
         writer.WriteStartObject(name);
         writer.WriteString("node_id", result.NodeId == Guid.Empty ? "" : result.NodeId.ToString("D"));
         writer.WriteString("node_name", result.NodeName);
@@ -156,10 +150,10 @@ public static class CorpusIntegrityWriter
 
     #region Types
 
-    /// <summary>A sampled shard: compared only when both sides exist, ran on different nodes and ran the same controller version.</summary>
-    private sealed record PairRecord(int Index, CorpusResultData? Primary, CorpusResultData Replica, bool SameNode, bool VersionSkew, bool Match, List<string> Differing)
+    /// <summary>Two executions of one shard: compared only when they ran on different nodes and the same controller version.</summary>
+    private sealed record PairRecord(int Index, CorpusResultData Primary, CorpusResultData Replica, bool SameNode, bool VersionSkew, bool Match, List<string> Differing)
     {
-        public bool Compared => Primary != null && !SameNode && !VersionSkew;
+        public bool Compared => !SameNode && !VersionSkew;
     }
 
     #endregion

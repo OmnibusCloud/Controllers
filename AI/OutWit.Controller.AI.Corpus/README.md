@@ -32,9 +32,9 @@ crawl text, and the dedup merge measured at the scale of a crawl segment.
 | `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate (sources without a size are asked at the origin with HEAD, up to 64 of them, the rest extrapolated at the mean), every message by manifest line |
 | `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline, the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception; several shards may run on one client at once |
 | `Corpus.Collect` | host | `(CorpusResultCollection, CorpusOptions) → Blob report` | the job report: every shard's verdict, blobs and content hash in task order, the aggregate counters over the fleet |
-| `Corpus.Sample` | host | `(CorpusTaskCollection, CorpusOptions) → CorpusTaskCollection` | the sampled share of the tasks (`SamplingRate`) as replica tasks for a second fan-out, chosen by index alone and handed over in reverse so the allocator lands most of them away from their primaries |
+| `Corpus.SamplingRate` | host | `(CorpusOptions) → Double` | `SamplingRate` clamped to 0..1, the share of the shards `Grid.Replicas` runs twice |
 | `Corpus.Dedup` | host | `(Blob report, CorpusOptions) → Blob dedup` | the near-duplicate merge over the signature blobs a report names: LSH over the MinHash signatures (16 bands of 8), a candidate pair joins a cluster at a Jaccard estimate of `DedupThreshold` (0.8 by default), the lowest document of a cluster is kept; per shard a keep mask, plus the clusters |
-| `Corpus.Integrity` | host | `(CorpusResultCollection results, CorpusResultCollection replicas) → Blob integrity` | primary and replica of every sampled shard compared on verdict, content hash, document counts and histograms; a pair that landed on one node is counted, not compared |
+| `Corpus.Integrity` | host | `(CorpusResultCollection executions) → Blob integrity` | the two executions of every shard that ran twice compared on verdict, content hash, document counts and histograms |
 
 ## Scripts
 
@@ -43,16 +43,14 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
 {
     CorpusTaskCollection:tasks = Corpus.Split(manifest, languageModel, opts);
 
-    CorpusResultCollection:results = Grid.ForEach(task in tasks)
+    Double:rate = Corpus.SamplingRate(opts);
+    ProcessingOptions:checked = Grid.Replicas(2, rate);
+
+    CorpusResultCollection:executions = Grid.ForEach(task in tasks, checked)
         => Corpus.ProcessShard(task);
 
-    CorpusTaskCollection:replicaTasks = Corpus.Sample(tasks, opts);
-
-    CorpusResultCollection:replicas = Grid.ForEach(task in replicaTasks)
-        => Corpus.ProcessShard(task);
-
-    Blob:report = Corpus.Collect(results, opts);
-    Blob:integrity = Corpus.Integrity(results, replicas);
+    Blob:report = Corpus.Collect(executions, opts);
+    Blob:integrity = Corpus.Integrity(executions);
 }
 ```
 
@@ -134,17 +132,19 @@ One JSON document (`docs/corpus-manifest.schema.json`):
 
 ## Integrity
 
-`SamplingRate` re-executes a share of the shards on the fleet a second time and
-`Corpus.Integrity` writes `corpus-integrity.json` (`docs/corpus-integrity.schema.json`):
-for every sampled shard the primary and the replica with the nodes that ran
-them, compared on everything an honest node cannot vary — the verdict, the
-content hash of the product, the record and document counts, the drop and
-language histograms. Times and bytes are not compared. A pair whose replica
-landed on the primary's node proves nothing about that node and is counted as
-`same_node`, not compared; a pair whose sides ran different controller versions
-(a rollout in progress) is counted as `version_skew`, not compared; the
-mismatch rate is over the compared pairs. The
-sample is a function of the shard index, so a lab can reproduce the choice.
+`SamplingRate` runs a share of the shards twice, in the same `Grid.ForEach` call
+as the rest, and `Corpus.Integrity` writes `corpus-integrity.json`
+(`docs/corpus-integrity.schema.json`): for every shard that ran twice the two
+executions with the nodes that ran them, compared on everything an honest node
+cannot vary — the verdict, the content hash of the product, the record and
+document counts, the drop and language histograms. Times and bytes are not
+compared. The platform picks the shards at random and keeps the two executions
+on different machines, so a node cannot tell whether its shard is being checked.
+With a single machine available there is nothing to compare and no shard runs
+twice. A pair whose sides ran different controller versions (a rollout in
+progress) is counted as `version_skew`, not compared; the mismatch rate is over
+the compared pairs. The report has one entry per shard: a completed execution,
+then the lowest content hash.
 
 ## Node behaviour
 

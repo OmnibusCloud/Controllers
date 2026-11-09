@@ -8,7 +8,7 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Corpus.Activities;
 
 /// <summary>
-/// Host-side: the sampled shards' primary and replica results compared on everything an
+/// Host-side: the executions of every shard that ran more than once compared on everything an
 /// honest node cannot vary, as the integrity blob of the run.
 /// </summary>
 [Activity("Corpus.Integrity")]
@@ -19,7 +19,7 @@ public sealed partial class WitActivityCorpusIntegrity : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Results}, {Replicas}";
+        return $"{Results}";
     }
 
     #endregion
@@ -36,16 +36,14 @@ public sealed partial class WitActivityCorpusIntegrity : WitActivityFunction
             return false;
 
         return base.Is(activity, tolerance)
-               && Results.Check(activity.Results)
-               && Replicas.Check(activity.Replicas);
+               && Results.Check(activity.Results);
     }
 
     protected override WitActivityCorpusIntegrity InnerClone()
     {
         return new WitActivityCorpusIntegrity
         {
-            Results = Results?.Clone() as IWitReference,
-            Replicas = Replicas?.Clone() as IWitReference
+            Results = Results?.Clone() as IWitReference
         };
     }
 
@@ -53,13 +51,9 @@ public sealed partial class WitActivityCorpusIntegrity : WitActivityFunction
 
     #region Properties
 
-    /// <summary>Reference to the primary 'Results' collection.</summary>
+    /// <summary>Reference to the collection of all executions.</summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Results { get; init; }
-
-    /// <summary>Reference to the 'Replicas' result collection.</summary>
-    [MemoryPackAllowSerialize]
-    public IWitReference? Replicas { get; init; }
 
     #endregion
 }

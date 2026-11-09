@@ -7,7 +7,9 @@ internal sealed class CorpusTestActivityNode : IWitEngineActivityNode
 {
     public CorpusTestActivityNode(IWitEngineNodeBase node)
     {
-        NodeId = node.Id;
+        // A machine of its own: every mock node runs in one process, but copies of a shard
+        // are placed by this id, and three nodes with one id would be a single machine.
+        NodeId = Guid.NewGuid();
     }
 
     public Guid NodeId { get; }

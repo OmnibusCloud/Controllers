@@ -8,19 +8,18 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Corpus.Activities;
 
 /// <summary>
-/// Host-side: the sampled share of the tasks (CorpusOptions.SamplingRate) as replica tasks for
-/// a second fan-out, in reverse order so the allocator lands most of them away from their
-/// primaries.
+/// Host-side: the share of the shards a run executes twice (CorpusOptions.SamplingRate), as the
+/// number Grid.Replicas takes.
 /// </summary>
-[Activity("Corpus.Sample")]
+[Activity("Corpus.SamplingRate")]
 [MemoryPackable]
-public sealed partial class WitActivityCorpusSample : WitActivityFunction
+public sealed partial class WitActivityCorpusSamplingRate : WitActivityFunction
 {
     #region Functions
 
     protected override string InnerString()
     {
-        return $"{Tasks}, {Options}";
+        return $"{Options}";
     }
 
     #endregion
@@ -33,19 +32,17 @@ public sealed partial class WitActivityCorpusSample : WitActivityFunction
     /// <returns>True when the models are equal by value.</returns>
     public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
     {
-        if (modelBase is not WitActivityCorpusSample activity)
+        if (modelBase is not WitActivityCorpusSamplingRate activity)
             return false;
 
         return base.Is(activity, tolerance)
-               && Tasks.Check(activity.Tasks)
                && Options.Check(activity.Options);
     }
 
-    protected override WitActivityCorpusSample InnerClone()
+    protected override WitActivityCorpusSamplingRate InnerClone()
     {
-        return new WitActivityCorpusSample
+        return new WitActivityCorpusSamplingRate
         {
-            Tasks = Tasks?.Clone() as IWitReference,
             Options = Options?.Clone() as IWitReference
         };
     }
@@ -53,10 +50,6 @@ public sealed partial class WitActivityCorpusSample : WitActivityFunction
     #endregion
 
     #region Properties
-
-    /// <summary>Reference to the 'Tasks' collection argument.</summary>
-    [MemoryPackAllowSerialize]
-    public IWitReference? Tasks { get; init; }
 
     /// <summary>Reference to the 'Options' argument.</summary>
     [MemoryPackAllowSerialize]
