@@ -6,7 +6,7 @@
   "type": "object",
   "required": ["schema", "controller", "summary", "shards"],
   "properties": {
-    "schema": { "const": "corpus-report/1" },
+    "schema": { "const": "corpus-report/2" },
     "controller": { "type": "string", "description": "The controller version that wrote the report." },
     "summary": {
       "type": "object",
@@ -27,7 +27,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["index", "url", "verdict", "text_blob", "signatures_blob", "content_sha256", "error", "node", "node_name", "controller", "stats"],
+        "required": ["index", "url", "verdict", "text_blob", "signatures_blob", "content_sha256", "error", "controller", "stats"],
         "properties": {
           "index": { "type": "integer" },
           "url": { "type": "string" },
@@ -36,8 +36,6 @@
           "signatures_blob": { "type": "string", "description": "Blob id of the signatures, or \"\"." },
           "content_sha256": { "type": "string", "description": "SHA-256 of the uncompressed JSON lines: the identity a re-execution must reproduce." },
           "error": { "type": "string" },
-          "node": { "type": "string" },
-          "node_name": { "type": "string" },
           "controller": { "type": "string" },
           "stats": {
             "oneOf": [

@@ -37,17 +37,14 @@ public static class ShardTaskRunner
     /// <param name="fetcher">Fetches the shard.</param>
     /// <param name="blobs">Resolves the model blob and receives the products.</param>
     /// <param name="workDirectory">A directory of this task's own for the shard and the products; the caller deletes it.</param>
-    /// <param name="nodeId">This node.</param>
     /// <param name="cancellationToken">Cancels the task.</param>
     /// <returns>The result, verdict included.</returns>
-    public static async Task<CorpusResultData> RunAsync(CorpusTaskData task, ShardFetcher fetcher, IWitBlobService blobs, string workDirectory, Guid nodeId, CancellationToken cancellationToken)
+    public static async Task<CorpusResultData> RunAsync(CorpusTaskData task, ShardFetcher fetcher, IWitBlobService blobs, string workDirectory, CancellationToken cancellationToken)
     {
         var result = new CorpusResultData
         {
             TaskIndex = task.TaskIndex,
             SourceUrl = task.Source?.Url ?? "",
-            NodeId = nodeId,
-            NodeName = Environment.MachineName,
             ControllerVersion = ControllerBuildInfo.VERSION
         };
 

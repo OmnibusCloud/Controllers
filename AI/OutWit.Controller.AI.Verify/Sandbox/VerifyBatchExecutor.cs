@@ -15,7 +15,7 @@ public static class VerifyBatchExecutor
     #region Functions
 
     /// <summary>
-    /// Executes a batch without node attribution or progress (tests and local runs).
+    /// Executes a batch without progress reporting (tests and local runs).
     /// </summary>
     /// <param name="sandbox">The node's sandbox.</param>
     /// <param name="runtimesRoot">The language runtime root, or null when none was found.</param>
@@ -23,7 +23,7 @@ public static class VerifyBatchExecutor
     /// <returns>One result per task plus the batch diagnostics.</returns>
     public static VerifyResultBatchData Execute(VerifyWasmSandbox sandbox, string? runtimesRoot, VerifyTaskBatchData batch)
     {
-        return Execute(sandbox, runtimesRoot, batch, Guid.Empty, null);
+        return Execute(sandbox, runtimesRoot, batch, null);
     }
 
     /// <summary>
@@ -32,12 +32,11 @@ public static class VerifyBatchExecutor
     /// <param name="sandbox">The node's sandbox.</param>
     /// <param name="runtimesRoot">The language runtime root, or null when none was found.</param>
     /// <param name="batch">The batch.</param>
-    /// <param name="nodeId">This node's engine id, recorded in the diagnostics.</param>
     /// <param name="progress">Called after each task with (completed, total), from the worker that finished it.</param>
     /// <returns>One result per task plus the batch diagnostics.</returns>
-    public static VerifyResultBatchData Execute(VerifyWasmSandbox sandbox, string? runtimesRoot, VerifyTaskBatchData batch, Guid nodeId, Action<int, int>? progress)
+    public static VerifyResultBatchData Execute(VerifyWasmSandbox sandbox, string? runtimesRoot, VerifyTaskBatchData batch, Action<int, int>? progress)
     {
-        return Execute(sandbox, runtimesRoot, batch, nodeId, progress, CancellationToken.None);
+        return Execute(sandbox, runtimesRoot, batch, progress, CancellationToken.None);
     }
 
     /// <summary>
@@ -46,12 +45,11 @@ public static class VerifyBatchExecutor
     /// <param name="sandbox">The node's sandbox.</param>
     /// <param name="runtimesRoot">The language runtime root, or null when none was found.</param>
     /// <param name="batch">The batch.</param>
-    /// <param name="nodeId">This node's engine id, recorded in the diagnostics.</param>
     /// <param name="progress">Called after each task with (completed, total), from the worker that finished it.</param>
     /// <param name="cancellationToken">The job's token: no further task starts once cancelled, a running one ends within its wall limit.</param>
     /// <returns>One result per task plus the batch diagnostics.</returns>
     /// <exception cref="OperationCanceledException">The job was cancelled before the batch finished.</exception>
-    public static VerifyResultBatchData Execute(VerifyWasmSandbox sandbox, string? runtimesRoot, VerifyTaskBatchData batch, Guid nodeId, Action<int, int>? progress, CancellationToken cancellationToken)
+    public static VerifyResultBatchData Execute(VerifyWasmSandbox sandbox, string? runtimesRoot, VerifyTaskBatchData batch, Action<int, int>? progress, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var results = new VerifyResultData[batch.Tasks.Count];
@@ -61,7 +59,7 @@ public static class VerifyBatchExecutor
         if (runtime == null)
         {
             FillUnavailable(results, batch, reason ?? $"runtime '{batch.RuntimeId}' unavailable");
-            return Finish(results, batch, nodeId, null, 0, stopwatch);
+            return Finish(results, batch, null, 0, stopwatch);
         }
 
         var perTaskMemoryCap = MaxMemoryCap(batch);
@@ -78,10 +76,10 @@ public static class VerifyBatchExecutor
             _ => progress?.Invoke(Interlocked.Increment(ref completed), batch.Tasks.Count),
             cancellationToken);
 
-        return Finish(results, batch, nodeId, runtime, degree, stopwatch);
+        return Finish(results, batch, runtime, degree, stopwatch);
     }
 
-    private static VerifyResultBatchData Finish(VerifyResultData[] results, VerifyTaskBatchData batch, Guid nodeId, VerifyResolvedRuntime? runtime, int degree, Stopwatch stopwatch)
+    private static VerifyResultBatchData Finish(VerifyResultData[] results, VerifyTaskBatchData batch, VerifyResolvedRuntime? runtime, int degree, Stopwatch stopwatch)
     {
         stopwatch.Stop();
         var wallMs = (int)Math.Min(int.MaxValue, stopwatch.ElapsedMilliseconds);
@@ -89,7 +87,7 @@ public static class VerifyBatchExecutor
         return new VerifyResultBatchData
         {
             Results = results.ToList(),
-            Diagnostics = VerifyBatchDiagnosticsBuilder.Build(nodeId, batch.RuntimeId, runtime, degree, results.Length, wallMs)
+            Diagnostics = VerifyBatchDiagnosticsBuilder.Build(batch.RuntimeId, runtime, degree, results.Length, wallMs)
         };
     }
 

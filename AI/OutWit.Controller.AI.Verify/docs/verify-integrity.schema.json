@@ -2,20 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-integrity.schema.json",
   "title": "Verify integrity",
-  "description": "The integrity blob of every Verify script: the share of batches (VerifyOptions.SamplingRate) that ran twice in one Grid.ForEach call, the two executions of each task compared on everything an honest node cannot vary (verdict, exit code, outputs, per-case outcomes). The platform keeps the two on different machines; a pair that met on one node all the same is counted, not compared. Empty pairs at rate 0.",
+  "description": "The integrity blob of every Verify script: the share of batches (VerifyOptions.SamplingRate) that ran twice in one Grid.ForEach call, the two executions of each task compared on everything an honest node cannot vary (verdict, exit code, outputs, per-case outcomes). The platform keeps the two on different machines and the document does not say which. Empty pairs at rate 0.",
   "type": "object",
   "required": ["summary", "pairs"],
   "additionalProperties": false,
   "properties": {
     "summary": {
       "type": "object",
-      "required": ["sampled", "compared", "same_node", "unpaired", "mismatches", "mismatch_rate"],
+      "required": ["sampled", "compared", "mismatches", "mismatch_rate"],
       "additionalProperties": false,
       "properties": {
         "sampled": { "type": "integer", "description": "Pairs of executions of one task." },
-        "compared": { "type": "integer", "description": "Pairs whose two sides ran on different nodes." },
-        "same_node": { "type": "integer", "description": "Pairs that met on one node (not compared); the platform keeps this at 0." },
-        "unpaired": { "type": "integer", "description": "Always 0: both sides of a pair come from one call." },
+        "compared": { "type": "integer", "description": "Pairs compared; every pair is." },
         "mismatches": { "type": "integer", "description": "Compared pairs that disagree." },
         "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." }
       }
@@ -44,8 +42,6 @@
       "required": ["verdict", "exit"],
       "additionalProperties": false,
       "properties": {
-        "node_id": { "type": "string", "format": "uuid" },
-        "node_name": { "type": "string" },
         "verdict": { "type": "string" },
         "exit": { "type": "integer" }
       }

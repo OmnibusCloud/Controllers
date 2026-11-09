@@ -134,7 +134,7 @@ public sealed class VerifySandboxHygieneTests : VerifySandboxTestBase
         var completed = 0;
 
         var exception = Assert.Throws<OperationCanceledException>(() =>
-            VerifyBatchExecutor.Execute(Sandbox, RuntimesRoot, batch, Guid.Empty, (done, _) =>
+            VerifyBatchExecutor.Execute(Sandbox, RuntimesRoot, batch, (done, _) =>
             {
                 completed = done;
                 if (done == 2)

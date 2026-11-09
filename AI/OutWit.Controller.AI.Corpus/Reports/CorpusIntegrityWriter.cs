@@ -5,19 +5,19 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 
 /// <summary>
 /// Writes the integrity document of a run: every shard executed more than once, its executions
-/// paired, the nodes that ran each, and whether they agree on everything an honest node cannot
+/// paired, and whether they agree on everything an honest node cannot
 /// vary — the verdict, the content hash of the product, the document count, the drop and
-/// language histograms. The platform keeps the executions of one shard on different machines; a
-/// pair that met on one node all the same proves nothing and is counted, not compared. So is a
-/// pair whose sides ran different controller versions (a rollout in progress: a stage may have
-/// changed between them). Schema <c>corpus-integrity/1</c>.
+/// language histograms. The platform keeps the executions of one shard on different machines,
+/// and the document does not say which. A pair whose sides ran different controller versions (a
+/// rollout in progress: a stage may have changed between them) is counted, not compared.
+/// Schema <c>corpus-integrity/2</c>.
 /// </summary>
 public static class CorpusIntegrityWriter
 {
     #region Constants
 
     /// <summary>The document schema name.</summary>
-    public const string SCHEMA = "corpus-integrity/1";
+    public const string SCHEMA = "corpus-integrity/2";
 
     #endregion
 
@@ -46,9 +46,7 @@ public static class CorpusIntegrityWriter
             writer.WriteStartObject("summary");
             writer.WriteNumber("sampled", pairs.Count);
             writer.WriteNumber("compared", compared);
-            writer.WriteNumber("same_node", pairs.Count(pair => pair.SameNode));
-            writer.WriteNumber("version_skew", pairs.Count(pair => pair.VersionSkew && !pair.SameNode));
-            writer.WriteNumber("unpaired", 0);
+            writer.WriteNumber("version_skew", pairs.Count(pair => pair.VersionSkew));
             writer.WriteNumber("mismatches", mismatches);
             writer.WriteNumber("mismatch_rate", compared == 0 ? 0.0 : (double)mismatches / compared);
             writer.WriteEndObject();
@@ -105,11 +103,10 @@ public static class CorpusIntegrityWriter
 
     private static PairRecord Pair(int index, CorpusResultData primary, CorpusResultData replica)
     {
-        var sameNode = primary.NodeId != Guid.Empty && primary.NodeId == replica.NodeId;
         var versionSkew = primary.ControllerVersion.Length > 0 && replica.ControllerVersion.Length > 0
                           && !string.Equals(primary.ControllerVersion, replica.ControllerVersion, StringComparison.Ordinal);
         var differing = Differences(primary, replica);
-        return new PairRecord(index, primary, replica, sameNode, versionSkew, differing.Count == 0, differing);
+        return new PairRecord(index, primary, replica, versionSkew, differing.Count == 0, differing);
     }
 
     private static void WritePair(Utf8JsonWriter writer, PairRecord pair)
@@ -137,8 +134,6 @@ public static class CorpusIntegrityWriter
     private static void WriteSide(Utf8JsonWriter writer, string name, CorpusResultData result)
     {
         writer.WriteStartObject(name);
-        writer.WriteString("node_id", result.NodeId == Guid.Empty ? "" : result.NodeId.ToString("D"));
-        writer.WriteString("node_name", result.NodeName);
         writer.WriteString("controller", result.ControllerVersion);
         writer.WriteString("verdict", result.Verdict.ToString());
         writer.WriteString("content_sha256", result.ContentSha256);
@@ -150,10 +145,10 @@ public static class CorpusIntegrityWriter
 
     #region Types
 
-    /// <summary>Two executions of one shard: compared only when they ran on different nodes and the same controller version.</summary>
-    private sealed record PairRecord(int Index, CorpusResultData Primary, CorpusResultData Replica, bool SameNode, bool VersionSkew, bool Match, List<string> Differing)
+    /// <summary>Two executions of one shard: compared only when they ran the same controller version.</summary>
+    private sealed record PairRecord(int Index, CorpusResultData Primary, CorpusResultData Replica, bool VersionSkew, bool Match, List<string> Differing)
     {
-        public bool Compared => !SameNode && !VersionSkew;
+        public bool Compared => !VersionSkew;
     }
 
     #endregion

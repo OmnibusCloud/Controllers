@@ -8,7 +8,7 @@ namespace OutWit.Controller.AI.Corpus.Model;
 /// <summary>
 /// The product of one shard task: the verdict, the uploaded product and signature blobs, the
 /// content hash of the uncompressed product (the verification identity a re-execution must
-/// reproduce), the statistics and the node that ran it.
+/// reproduce) and the statistics.
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only.
@@ -92,11 +92,11 @@ public sealed partial class CorpusResultData : ModelBase
     [MemoryPackOrder(6)]
     public CorpusShardStatsData? Stats { get; set; }
 
-    /// <summary>The node that ran the task.</summary>
+    /// <summary>Not filled: a result does not say which machine ran it. Kept for the wire layout.</summary>
     [MemoryPackOrder(7)]
     public Guid NodeId { get; set; }
 
-    /// <summary>The node's machine name.</summary>
+    /// <summary>Not filled: a result does not say which machine ran it. Kept for the wire layout.</summary>
     [MemoryPackOrder(8)]
     public string NodeName { get; set; } = "";
 

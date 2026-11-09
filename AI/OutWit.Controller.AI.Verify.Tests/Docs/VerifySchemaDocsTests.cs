@@ -91,7 +91,6 @@ public sealed class VerifySchemaDocsTests
         using var provenance = Load("verify-provenance.schema.json");
 
         var corpusProperties = PropertyNames(corpus.RootElement.GetProperty("properties"));
-        var nodeProperties = PropertyNames(provenance.RootElement.GetProperty("properties").GetProperty("nodes").GetProperty("items").GetProperty("properties"));
         var batchItem = provenance.RootElement.GetProperty("properties").GetProperty("batches").GetProperty("items").GetProperty("properties");
         var batchProperties = PropertyNames(batchItem);
         var metricProperties = PropertyNames(batchItem.GetProperty("metrics").GetProperty("items").GetProperty("properties"));
@@ -99,8 +98,7 @@ public sealed class VerifySchemaDocsTests
         Assert.Multiple(() =>
         {
             Assert.That(corpusProperties, Is.EquivalentTo(new[] { "index", "verdict", "exit", "stdout", "stdout_truncated", "stderr", "stderr_truncated" }));
-            Assert.That(nodeProperties, Is.EquivalentTo(new[] { "node_id", "node_name", "runtime_target", "wasmtime", "native_library", "controller", "batches", "tasks", "fuel", "runtimes" }));
-            Assert.That(batchProperties, Is.EquivalentTo(new[] { "node_id", "node_name", "runtime", "runtime_sha256", "degree", "wall_ms", "fuel", "tasks", "metrics" }));
+            Assert.That(batchProperties, Is.EquivalentTo(new[] { "runtime_target", "wasmtime", "controller", "runtime", "runtime_sha256", "degree", "wall_ms", "fuel", "tasks", "metrics" }));
             Assert.That(metricProperties, Is.EquivalentTo(new[] { "index", "fuel", "peak_memory", "wall_ms" }));
         });
     }
@@ -116,9 +114,9 @@ public sealed class VerifySchemaDocsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(summary, Is.EquivalentTo(new[] { "sampled", "compared", "same_node", "unpaired", "mismatches", "mismatch_rate" }));
+            Assert.That(summary, Is.EquivalentTo(new[] { "sampled", "compared", "mismatches", "mismatch_rate" }));
             Assert.That(pair, Is.EquivalentTo(new[] { "index", "primary", "replica", "compared", "match", "differs" }));
-            Assert.That(side, Is.EquivalentTo(new[] { "node_id", "node_name", "verdict", "exit" }));
+            Assert.That(side, Is.EquivalentTo(new[] { "verdict", "exit" }));
         });
     }
 

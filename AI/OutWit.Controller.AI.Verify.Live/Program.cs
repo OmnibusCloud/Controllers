@@ -259,23 +259,19 @@ public static class Program
     private static void PrintProvenance(byte[] provenance)
     {
         using var document = JsonDocument.Parse(provenance);
-        var nodes = document.RootElement.GetProperty("nodes").EnumerateArray().ToList();
-        Console.WriteLine($"  provenance: {nodes.Count} node(s)");
-        foreach (var node in nodes)
-        {
-            Console.WriteLine($"    {node.GetProperty("node_name").GetString(),-14} {node.GetProperty("runtime_target").GetString(),-11} wasmtime {node.GetProperty("wasmtime").GetString()}  controller {node.GetProperty("controller").GetString()}  batches {node.GetProperty("batches").GetInt32()}  tasks {node.GetProperty("tasks").GetInt32()}  native {node.GetProperty("native_library").GetString()}");
-        }
+        var batches = document.RootElement.GetProperty("batches").EnumerateArray().ToList();
+        Console.WriteLine($"  provenance: {batches.Count} batch execution(s)");
 
-        foreach (var batch in document.RootElement.GetProperty("batches").EnumerateArray())
+        foreach (var batch in batches)
         {
             var tasks = batch.GetProperty("tasks").EnumerateArray().Select(t => t.GetInt32()).ToList();
             var range = tasks.Count == 0 ? "[]" : tasks.Count == 1 ? $"[{tasks[0]}]" : $"[{tasks[0]}..{tasks[^1]}] ({tasks.Count})";
-            var nodeName = batch.TryGetProperty("node_name", out var n) ? n.GetString() : "?";
+            var platform = batch.TryGetProperty("runtime_target", out var p) ? p.GetString() : "?";
             var runtime = batch.TryGetProperty("runtime", out var r) ? r.GetString() : "?";
             var degree = batch.TryGetProperty("degree", out var d) ? d.GetInt32() : 0;
             var wall = batch.TryGetProperty("wall_ms", out var w) ? w.GetInt32() : 0;
             var fuel = batch.TryGetProperty("fuel", out var f) ? f.GetInt64() : 0;
-            Console.WriteLine($"    batch {nodeName,-14} {runtime,-16} degree {degree,2}  tasks {range}  {wall} ms  fuel {fuel:N0}");
+            Console.WriteLine($"    batch {platform,-11} {runtime,-16} degree {degree,2}  tasks {range}  {wall} ms  fuel {fuel:N0}");
         }
     }
 
@@ -290,16 +286,16 @@ public static class Program
             return;
         }
 
-        Console.WriteLine($"  integrity: sampled {sampled}, compared {summary.GetProperty("compared").GetInt32()}, same node {summary.GetProperty("same_node").GetInt32()}, unpaired {summary.GetProperty("unpaired").GetInt32()}, mismatches {summary.GetProperty("mismatches").GetInt32()} (rate {summary.GetProperty("mismatch_rate").GetDouble():0.###})");
+        Console.WriteLine($"  integrity: sampled {sampled}, compared {summary.GetProperty("compared").GetInt32()}, mismatches {summary.GetProperty("mismatches").GetInt32()} (rate {summary.GetProperty("mismatch_rate").GetDouble():0.###})");
         foreach (var pair in document.RootElement.GetProperty("pairs").EnumerateArray())
         {
-            if (!pair.GetProperty("compared").GetBoolean() || pair.GetProperty("match").GetBoolean())
+            if (pair.GetProperty("match").GetBoolean())
                 continue;
 
             var primary = pair.GetProperty("primary");
             var replica = pair.GetProperty("replica");
             var differs = string.Join(",", pair.GetProperty("differs").EnumerateArray().Select(f => f.GetString()));
-            Console.WriteLine($"    MISMATCH task {pair.GetProperty("index").GetInt32()}: {primary.GetProperty("node_name").GetString()} {primary.GetProperty("verdict").GetString()} vs {replica.GetProperty("node_name").GetString()} {replica.GetProperty("verdict").GetString()} ({differs})");
+            Console.WriteLine($"    MISMATCH task {pair.GetProperty("index").GetInt32()}: {primary.GetProperty("verdict").GetString()} vs {replica.GetProperty("verdict").GetString()} ({differs})");
         }
     }
 

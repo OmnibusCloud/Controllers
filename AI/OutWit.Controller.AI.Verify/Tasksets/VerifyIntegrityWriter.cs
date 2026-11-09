@@ -5,11 +5,10 @@ namespace OutWit.Controller.AI.Verify.Tasksets;
 
 /// <summary>
 /// Writes the integrity document of a run: every task executed more than once, its executions
-/// paired, the nodes that ran each, and whether they agree on everything an honest node cannot
-/// vary (verdict, exit code, outputs, per-case outcomes). The platform keeps the executions of
-/// one batch on different machines; a pair that met on one node all the same proves nothing and
-/// is counted, not compared. The mismatch rate is over the compared pairs; a mismatch names the
-/// fields that differ so an operator can look.
+/// paired, and whether they agree on everything an honest node cannot vary (verdict, exit code,
+/// outputs, per-case outcomes). The platform keeps the executions of one batch on different
+/// machines, and the document does not say which. The mismatch rate is over the pairs; a
+/// mismatch names the fields that differ so an operator can look.
 /// </summary>
 public static class VerifyIntegrityWriter
 {
@@ -23,14 +22,13 @@ public static class VerifyIntegrityWriter
     public static byte[] Write(IReadOnlyList<VerifyResultBatchData> executions)
     {
         var pairs = executions
-            .SelectMany(batch => batch.Results.Select(result => new Placed(result, batch.Diagnostics)))
-            .GroupBy(placed => placed.Result.TaskIndex)
+            .SelectMany(batch => batch.Results)
+            .GroupBy(result => result.TaskIndex)
             .OrderBy(task => task.Key)
             .SelectMany(PairsOf)
             .ToList();
 
-        var compared = pairs.Count(pair => pair.Compared);
-        var mismatches = pairs.Count(pair => pair.Compared && !pair.Match);
+        var mismatches = pairs.Count(pair => !pair.Match);
 
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
@@ -39,11 +37,9 @@ public static class VerifyIntegrityWriter
 
             writer.WriteStartObject("summary");
             writer.WriteNumber("sampled", pairs.Count);
-            writer.WriteNumber("compared", compared);
-            writer.WriteNumber("same_node", pairs.Count(pair => pair.SameNode));
-            writer.WriteNumber("unpaired", 0);
+            writer.WriteNumber("compared", pairs.Count);
             writer.WriteNumber("mismatches", mismatches);
-            writer.WriteNumber("mismatch_rate", compared == 0 ? 0.0 : (double)mismatches / compared);
+            writer.WriteNumber("mismatch_rate", pairs.Count == 0 ? 0.0 : (double)mismatches / pairs.Count);
             writer.WriteEndObject();
 
             writer.WriteStartArray("pairs");
@@ -57,23 +53,17 @@ public static class VerifyIntegrityWriter
         return stream.ToArray();
     }
 
-    private static IEnumerable<PairRecord> PairsOf(IGrouping<int, Placed> task)
+    private static IEnumerable<PairRecord> PairsOf(IGrouping<int, VerifyResultData> task)
     {
-        var ranked = VerifyExecutions.InRuleOrder(task.Select(placed => placed.Result)).ToList();
-        var placedByResult = task.ToDictionary(placed => placed.Result, ReferenceEqualityComparer.Instance);
-        var primary = placedByResult[ranked[0]];
+        var ranked = VerifyExecutions.InRuleOrder(task).ToList();
 
-        return ranked.Skip(1).Select(result => Pair(task.Key, primary, placedByResult[result]));
+        return ranked.Skip(1).Select(replica => Pair(task.Key, ranked[0], replica));
     }
 
-    private static PairRecord Pair(int index, Placed primary, Placed replica)
+    private static PairRecord Pair(int index, VerifyResultData primary, VerifyResultData replica)
     {
-        var sameNode = primary.Diagnostics != null
-                       && replica.Diagnostics != null
-                       && primary.Diagnostics.NodeId == replica.Diagnostics.NodeId;
-
-        var differing = Differences(primary.Result, replica.Result);
-        return new PairRecord(index, primary, replica, sameNode, differing.Count == 0, differing);
+        var differing = Differences(primary, replica);
+        return new PairRecord(index, primary, replica, differing.Count == 0, differing);
     }
 
     private static List<string> Differences(VerifyResultData primary, VerifyResultData replica)
@@ -100,33 +90,24 @@ public static class VerifyIntegrityWriter
         writer.WriteNumber("index", pair.Index);
         WriteSide(writer, "primary", pair.Primary);
         WriteSide(writer, "replica", pair.Replica);
-        writer.WriteBoolean("compared", pair.Compared);
-        if (pair.Compared)
+        writer.WriteBoolean("compared", true);
+        writer.WriteBoolean("match", pair.Match);
+        if (!pair.Match)
         {
-            writer.WriteBoolean("match", pair.Match);
-            if (!pair.Match)
-            {
-                writer.WriteStartArray("differs");
-                foreach (var field in pair.Differing)
-                    writer.WriteStringValue(field);
-                writer.WriteEndArray();
-            }
+            writer.WriteStartArray("differs");
+            foreach (var field in pair.Differing)
+                writer.WriteStringValue(field);
+            writer.WriteEndArray();
         }
 
         writer.WriteEndObject();
     }
 
-    private static void WriteSide(Utf8JsonWriter writer, string name, Placed placed)
+    private static void WriteSide(Utf8JsonWriter writer, string name, VerifyResultData result)
     {
         writer.WriteStartObject(name);
-        if (placed.Diagnostics != null)
-        {
-            writer.WriteString("node_id", placed.Diagnostics.NodeId);
-            writer.WriteString("node_name", placed.Diagnostics.NodeName);
-        }
-
-        writer.WriteString("verdict", placed.Result.Verdict.ToString());
-        writer.WriteNumber("exit", placed.Result.ExitCode);
+        writer.WriteString("verdict", result.Verdict.ToString());
+        writer.WriteNumber("exit", result.ExitCode);
         writer.WriteEndObject();
     }
 
@@ -134,14 +115,8 @@ public static class VerifyIntegrityWriter
 
     #region Types
 
-    private sealed record Placed(VerifyResultData Result, VerifyBatchDiagnosticsData? Diagnostics);
-
-    /// <summary>Two executions of one task: compared only when they ran on different nodes.</summary>
-    private sealed record PairRecord(int Index, Placed Primary, Placed Replica, bool SameNode, bool Match, List<string> Differing)
-    {
-        /// <summary>Whether the pair was compared: it ran on different nodes.</summary>
-        public bool Compared => !SameNode;
-    }
+    /// <summary>Two executions of one task and the fields they disagree on.</summary>
+    private sealed record PairRecord(int Index, VerifyResultData Primary, VerifyResultData Replica, bool Match, List<string> Differing);
 
     #endregion
 }

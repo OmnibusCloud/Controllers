@@ -45,7 +45,7 @@ internal sealed class WitActivityAdapterCorpusProcessShard : WitActivityAdapterF
 
         try
         {
-            var result = await ShardTaskRunner.RunAsync(task, FETCHER.Value, BlobService, scope, status.EngineId, cancellationToken);
+            var result = await ShardTaskRunner.RunAsync(task, FETCHER.Value, BlobService, scope, cancellationToken);
 
             if (result.Verdict == CorpusShardVerdict.Completed)
                 Logger.LogInformation("Corpus.ProcessShard {Index}: {Out}/{In} documents kept, {Bytes} bytes in, {Fetch} ms fetch, {Process} ms process",

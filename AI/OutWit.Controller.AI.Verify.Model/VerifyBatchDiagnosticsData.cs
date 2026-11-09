@@ -57,12 +57,12 @@ public sealed partial class VerifyBatchDiagnosticsData : ModelBase
 
     #region Properties
 
-    /// <summary>The engine id of the node that ran the batch (the client id on the server).</summary>
+    /// <summary>Not filled: a batch does not say which machine ran it. Kept for the wire layout.</summary>
     [ToString]
     [MemoryPackOrder(0)]
     public Guid NodeId { get; set; }
 
-    /// <summary>The node's machine name.</summary>
+    /// <summary>Not filled: a batch does not say which machine ran it. Kept for the wire layout.</summary>
     [ToString]
     [MemoryPackOrder(1)]
     public string NodeName { get; set; } = "";
@@ -77,7 +77,7 @@ public sealed partial class VerifyBatchDiagnosticsData : ModelBase
     [MemoryPackOrder(3)]
     public string WasmtimeVersion { get; set; } = "";
 
-    /// <summary>Where the native wasmtime library came from: a path, or a marker when the load context resolved it.</summary>
+    /// <summary>Not filled: a path on the node can name its account. Kept for the wire layout.</summary>
     [MemoryPackOrder(4)]
     public string NativeLibraryPath { get; set; } = "";
 

@@ -232,7 +232,7 @@ public static class Program
                 ? shard.GetProperty("error").GetString()
                 : $"{stats.GetProperty("documents_out").GetInt32()} docs, {stats.GetProperty("bytes_fetched").GetInt64() / (1024.0 * 1024.0):F1} MB, fetch {stats.GetProperty("fetch_ms").GetInt32() / 1000.0:F1} s, process {stats.GetProperty("process_ms").GetInt32() / 1000.0:F1} s" +
                   (stats.TryGetProperty("wait_ms", out var wait) ? $", wait {wait.GetInt32() / 1000.0:F1} s" : "");
-            Console.WriteLine($"    [{shard.GetProperty("index").GetInt32(),3}] {shard.GetProperty("verdict").GetString(),-19} {shard.GetProperty("node_name").GetString(),-14} {line}");
+            Console.WriteLine($"    [{shard.GetProperty("index").GetInt32(),3}] {shard.GetProperty("verdict").GetString(),-19} {line}");
             hashes.Add($"{shard.GetProperty("index").GetInt32()}:{shard.GetProperty("content_sha256").GetString()}");
         }
 
@@ -244,18 +244,14 @@ public static class Program
         using var document = JsonDocument.Parse(bytes);
         var summary = document.RootElement.GetProperty("summary");
         Console.WriteLine($"  integrity: sampled {summary.GetProperty("sampled").GetInt32()}, compared {summary.GetProperty("compared").GetInt32()}, " +
-                          $"same node {summary.GetProperty("same_node").GetInt32()}, unpaired {summary.GetProperty("unpaired").GetInt32()}, mismatches {summary.GetProperty("mismatches").GetInt32()}");
+                          $"version skew {summary.GetProperty("version_skew").GetInt32()}, mismatches {summary.GetProperty("mismatches").GetInt32()}");
 
         foreach (var pair in document.RootElement.GetProperty("pairs").EnumerateArray())
         {
-            var primary = pair.GetProperty("primary");
-            var replica = pair.GetProperty("replica");
-            var primaryNode = primary.ValueKind == JsonValueKind.Null ? "-" : primary.GetProperty("node_name").GetString();
-            var replicaNode = replica.GetProperty("node_name").GetString();
             var outcome = !pair.GetProperty("compared").GetBoolean()
-                ? (primary.ValueKind == JsonValueKind.Null ? "unpaired" : "same node")
+                ? "version skew"
                 : pair.GetProperty("match").GetBoolean() ? "match" : $"MISMATCH ({string.Join(",", pair.GetProperty("differs").EnumerateArray().Select(d => d.GetString()))})";
-            Console.WriteLine($"    [{pair.GetProperty("index").GetInt32(),3}] {primaryNode,-14} vs {replicaNode,-14} {outcome}");
+            Console.WriteLine($"    [{pair.GetProperty("index").GetInt32(),3}] {outcome}");
         }
     }
 

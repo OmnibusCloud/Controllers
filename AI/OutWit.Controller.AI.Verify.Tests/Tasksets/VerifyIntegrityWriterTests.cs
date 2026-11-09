@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Tasksets;
@@ -5,21 +6,19 @@ using OutWit.Controller.AI.Verify.Tasksets;
 namespace OutWit.Controller.AI.Verify.Tests.Tasksets;
 
 /// <summary>
-/// The integrity document: executions paired by task index, agreement on the identity fields,
-/// same-node pairs counted but not compared, a task executed once making no pair.
+/// The integrity document: executions paired by task index, agreement on the identity fields, a
+/// task executed once making no pair, and no machine named.
 /// </summary>
 [TestFixture]
 public sealed class VerifyIntegrityWriterTests
 {
     [Test]
-    public void AgreeingPairsOnDifferentNodesMatchTest()
+    public void AgreeingPairsMatchTest()
     {
-        var nodeA = Guid.NewGuid();
-        var nodeB = Guid.NewGuid();
         var executions = new[]
         {
-            Batch(nodeA, "alpha", Result(0, VerifyVerdict.Pass, "4\n"), Result(1, VerifyVerdict.Fail, "x\n")),
-            Batch(nodeB, "beta", Result(0, VerifyVerdict.Pass, "4\n"), Result(1, VerifyVerdict.Fail, "x\n"))
+            Batch(Result(0, VerifyVerdict.Pass, "4\n"), Result(1, VerifyVerdict.Fail, "x\n")),
+            Batch(Result(0, VerifyVerdict.Pass, "4\n"), Result(1, VerifyVerdict.Fail, "x\n"))
         };
 
         using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write(executions));
@@ -30,12 +29,9 @@ public sealed class VerifyIntegrityWriterTests
         {
             Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(2));
             Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));
-            Assert.That(summary.GetProperty("unpaired").GetInt32(), Is.Zero);
             Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.Zero);
             Assert.That(summary.GetProperty("mismatch_rate").GetDouble(), Is.Zero);
             Assert.That(pairs.All(p => p.GetProperty("match").GetBoolean()), Is.True);
-            Assert.That(pairs[0].GetProperty("primary").GetProperty("node_name").GetString(), Is.EqualTo("alpha"));
-            Assert.That(pairs[0].GetProperty("replica").GetProperty("node_name").GetString(), Is.EqualTo("beta"));
         });
     }
 
@@ -44,8 +40,8 @@ public sealed class VerifyIntegrityWriterTests
     {
         var executions = new[]
         {
-            Batch(Guid.NewGuid(), "beta", Result(5, VerifyVerdict.Fail, "5\n", exit: 1)),
-            Batch(Guid.NewGuid(), "alpha", Result(5, VerifyVerdict.Pass, "4\n"))
+            Batch(Result(5, VerifyVerdict.Fail, "5\n", exit: 1)),
+            Batch(Result(5, VerifyVerdict.Pass, "4\n"))
         };
 
         using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write(executions));
@@ -63,33 +59,27 @@ public sealed class VerifyIntegrityWriterTests
     }
 
     [Test]
-    public void SameNodePairIsCountedNotComparedTest()
+    public void TheDocumentNamesNoMachineTest()
     {
-        var node = Guid.NewGuid();
-        var executions = new[]
-        {
-            Batch(node, "alpha", Result(0, VerifyVerdict.Pass, "4\n")),
-            Batch(node, "alpha", Result(0, VerifyVerdict.Fail, "wrong\n"))
-        };
+        var first = Batch(Result(0, VerifyVerdict.Pass, "4\n"));
+        var second = Batch(Result(0, VerifyVerdict.Pass, "4\n"));
+        first.Diagnostics!.NodeId = Guid.NewGuid();
+        first.Diagnostics.NodeName = "contributors-laptop";
 
-        using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write(executions));
-        var summary = document.RootElement.GetProperty("summary");
-        var pair = document.RootElement.GetProperty("pairs")[0];
+        var json = Encoding.UTF8.GetString(VerifyIntegrityWriter.Write([first, second]));
 
         Assert.Multiple(() =>
         {
-            Assert.That(summary.GetProperty("same_node").GetInt32(), Is.EqualTo(1));
-            Assert.That(summary.GetProperty("compared").GetInt32(), Is.Zero);
-            Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.Zero, "a node cannot catch itself");
-            Assert.That(pair.GetProperty("compared").GetBoolean(), Is.False);
-            Assert.That(pair.TryGetProperty("match", out _), Is.False);
+            Assert.That(json, Does.Not.Contain("contributors-laptop"));
+            Assert.That(json, Does.Not.Contain(first.Diagnostics.NodeId.ToString()));
+            Assert.That(json, Does.Not.Contain("node"));
         });
     }
 
     [Test]
     public void ATaskExecutedOnceMakesNoPairTest()
     {
-        using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write([Batch(Guid.NewGuid(), "alpha", Result(0, VerifyVerdict.Pass, ""), Result(1, VerifyVerdict.Pass, ""))]));
+        using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write([Batch(Result(0, VerifyVerdict.Pass, ""), Result(1, VerifyVerdict.Pass, ""))]));
 
         Assert.Multiple(() =>
         {
@@ -103,9 +93,9 @@ public sealed class VerifyIntegrityWriterTests
     {
         var executions = new[]
         {
-            Batch(Guid.NewGuid(), "alpha", Result(0, VerifyVerdict.Pass, "4\n")),
-            Batch(Guid.NewGuid(), "beta", Result(0, VerifyVerdict.Pass, "4\n")),
-            Batch(Guid.NewGuid(), "gamma", Result(0, VerifyVerdict.Pass, "5\n"))
+            Batch(Result(0, VerifyVerdict.Pass, "4\n")),
+            Batch(Result(0, VerifyVerdict.Pass, "4\n")),
+            Batch(Result(0, VerifyVerdict.Pass, "5\n"))
         };
 
         using var document = JsonDocument.Parse(VerifyIntegrityWriter.Write(executions));
@@ -118,18 +108,15 @@ public sealed class VerifyIntegrityWriterTests
         });
     }
 
-    private static VerifyResultBatchData Batch(Guid nodeId, string nodeName, params VerifyResultData[] results)
+    private static VerifyResultBatchData Batch(params VerifyResultData[] results)
     {
         return new VerifyResultBatchData
         {
             Results = results.ToList(),
             Diagnostics = new VerifyBatchDiagnosticsData
             {
-                NodeId = nodeId,
-                NodeName = nodeName,
                 RuntimeTarget = "linux-x64",
                 WasmtimeVersion = "44.0.0.0",
-                NativeLibraryPath = "(load context)",
                 RuntimeId = "python-3.14.6",
                 RuntimeSha256 = "aaa",
                 Degree = 2,

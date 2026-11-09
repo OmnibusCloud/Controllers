@@ -65,9 +65,8 @@ public sealed class ShardTaskRunnerTests
     public async Task GoodTaskCompletesWithTheDirectRunsHashTest(string fixture, CorpusSourceFormat format)
     {
         var task = Task(fixture, format);
-        var nodeId = Guid.NewGuid();
 
-        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), nodeId, CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), CancellationToken.None);
 
         var direct = new ShardProcessor(task.Pipeline!, LanguageModel.Load(Path.Combine(Fixtures(), MODEL_FIXTURE)));
         using var shard = File.OpenRead(Path.Combine(Fixtures(), fixture));
@@ -80,8 +79,8 @@ public sealed class ShardTaskRunnerTests
             Assert.That(result.ContentSha256, Is.EqualTo(expected.ContentSha256));
             Assert.That(result.TextBlobId, Is.Not.EqualTo(Guid.Empty));
             Assert.That(result.SignaturesBlobId, Is.Not.EqualTo(Guid.Empty));
-            Assert.That(result.NodeId, Is.EqualTo(nodeId));
-            Assert.That(result.NodeName, Is.EqualTo(Environment.MachineName));
+            Assert.That(result.NodeId, Is.EqualTo(Guid.Empty), "a result does not say which machine ran it");
+            Assert.That(result.NodeName, Is.Empty, "a result does not say which machine ran it");
             Assert.That(result.ControllerVersion, Is.Not.Empty);
             Assert.That(result.SourceUrl, Is.EqualTo(task.Source!.Url));
             Assert.That(result.Stats!.DocumentsOut, Is.EqualTo(expected.Stats.DocumentsOut));
@@ -103,7 +102,7 @@ public sealed class ShardTaskRunnerTests
         task.AllowedOrigins = ["data.commoncrawl.org"];
         var before = m_origin.Requests;
 
-        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), Guid.NewGuid(), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -121,7 +120,7 @@ public sealed class ShardTaskRunnerTests
         task.Pipeline!.LanguageModelBlobId = Guid.Empty;
         var before = m_origin.Requests;
 
-        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), Guid.NewGuid(), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -137,7 +136,7 @@ public sealed class ShardTaskRunnerTests
         var task = Task(WET_FIXTURE, CorpusSourceFormat.Wet);
         task.Pipeline!.LanguageModelSha256 = new string('0', 64);
 
-        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), Guid.NewGuid(), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -152,7 +151,7 @@ public sealed class ShardTaskRunnerTests
         var task = Task(WET_FIXTURE, CorpusSourceFormat.Wet);
         task.MaxShardBytes = 10_000;
 
-        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), Guid.NewGuid(), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), CancellationToken.None);
 
         Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.Oversized));
     }
@@ -162,7 +161,7 @@ public sealed class ShardTaskRunnerTests
     {
         var task = Task("missing.warc.wet.gz", CorpusSourceFormat.Wet);
 
-        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), Guid.NewGuid(), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -177,7 +176,7 @@ public sealed class ShardTaskRunnerTests
         var task = Task(WET_FIXTURE, CorpusSourceFormat.Wet);
         task.Source!.Sha256 = new string('f', 64);
 
-        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), Guid.NewGuid(), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -192,7 +191,7 @@ public sealed class ShardTaskRunnerTests
         var task = Task(WET_FIXTURE, CorpusSourceFormat.Wet);
         task.Source!.Sha256 = ShardLanguageModels.Hash(Path.Combine(Fixtures(), WET_FIXTURE));
 
-        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), Guid.NewGuid(), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), CancellationToken.None);
 
         Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.Completed), result.Error);
     }
@@ -203,7 +202,7 @@ public sealed class ShardTaskRunnerTests
         var task = Task(WET_FIXTURE, CorpusSourceFormat.Wet);
         task.Source!.Url = $"{m_origin.BaseUrl}garbage";
 
-        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), Guid.NewGuid(), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), CancellationToken.None);
 
         Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.Malformed));
     }
@@ -214,7 +213,7 @@ public sealed class ShardTaskRunnerTests
         var task = Task(WET_FIXTURE, CorpusSourceFormat.Wet);
         task.Pipeline = new CorpusPipelineData { Version = "raw", IdentifyLanguage = false, Sign = false };
 
-        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), Guid.NewGuid(), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -231,7 +230,7 @@ public sealed class ShardTaskRunnerTests
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
 
-        Assert.That(() => ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), Guid.NewGuid(), cancelled.Token), Throws.InstanceOf<OperationCanceledException>());
+        Assert.That(() => ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), cancelled.Token), Throws.InstanceOf<OperationCanceledException>());
     }
 
     #endregion

@@ -56,6 +56,23 @@ public sealed class CorpusExecutionsTests
     }
 
     [Test]
+    public void TheReportNamesNoMachineTest()
+    {
+        var result = Result(0, "a");
+        result.NodeId = Guid.NewGuid();
+        result.NodeName = "contributors-laptop";
+
+        var json = System.Text.Encoding.UTF8.GetString(CorpusReportWriter.Write([result]));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(json, Does.Not.Contain("contributors-laptop"));
+            Assert.That(json, Does.Not.Contain(result.NodeId.ToString()));
+            Assert.That(json, Does.Not.Contain("\"node"));
+        });
+    }
+
+    [Test]
     public void TheReportCountsAShardExecutedTwiceOnceTest()
     {
         using var document = JsonDocument.Parse(CorpusReportWriter.Write([Result(0, "a", documentsOut: 7), Result(0, "a", documentsOut: 7), Result(1, "b", documentsOut: 5)]));

@@ -30,9 +30,9 @@ proof checks or it does not.
 | `Verify.Collect` | host | result batches → the verdict report (aggregates + one record per task; the run's identity, byte-identical regardless of placement) |
 | `Verify.CollectOutputs` | host | result batches → the corpus (one JSON line per task with its outputs; byte-deterministic) |
 | `Verify.MakeCheckTasks` | host | generator results + a checker spec → check task batches, one check per passing candidate under the candidate's index |
-| `Verify.Provenance` | host | result batches → the provenance document (which node ran which tasks, with which wasmtime and runtime module, at which degree, and what each task cost: fuel, peak memory, wall time) |
+| `Verify.Provenance` | host | result batches → the provenance document (which tasks ran together, on which platform, with which wasmtime and runtime module, at which degree, and what each task cost: fuel, peak memory, wall time; never which machine) |
 | `Verify.SamplingRate` | host | options → `SamplingRate` clamped to 0..1, the share of the batches `Grid.Replicas` runs twice |
-| `Verify.Integrity` | host | the result batches of all executions → the integrity document (the two executions of each task that ran twice, the nodes of each side, agreement on verdict, exit, outputs and cases; the mismatch rate) |
+| `Verify.Integrity` | host | the result batches of all executions → the integrity document (the two executions of each task that ran twice, agreement on verdict, exit, outputs and cases; the mismatch rate) |
 | `Verify.Preflight` | host | counts, runtimes referenced, unknown runtimes, size estimate, ceiling notes — before anything runs |
 | `Verify.RuntimeDiagnostics` | host | wasmtime version (the native library is loaded to prove it), runtime target, per-runtime availability and hash — of the server's module; a node's module is exercised by `Verify.ExecuteBatch` and described by the provenance |
 
@@ -95,8 +95,8 @@ Anonymous nodes are trusted by checking, not by assumption. `SamplingRate` runs
 a share of the batches twice, in the same `Grid.ForEach` call as the rest. The
 platform picks the batches at random and keeps the two executions on different
 machines, so a node cannot tell whether its batch is being checked. The
-integrity document pairs the two executions of each task: the nodes of each side
-and whether they agree on verdict, exit code, outputs and per-case outcomes —
+integrity document pairs the two executions of each task and says whether they
+agree on verdict, exit code, outputs and per-case outcomes —
 exactly the fields an honest execution reproduces anywhere. With a single machine
 available nothing runs twice. The mismatch rate is over the compared pairs. The
 report and the corpus have one record per task, chosen by rule: the lowest

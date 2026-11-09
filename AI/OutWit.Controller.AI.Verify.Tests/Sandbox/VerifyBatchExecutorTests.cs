@@ -20,10 +20,9 @@ public sealed class VerifyBatchExecutorTests : VerifySandboxTestBase
             RuntimeId = OutWit.Controller.AI.Verify.Runtimes.VerifyRuntimeCatalog.QUICKJS_0_15_1,
             Tasks = [JsTask("console.log(1)", 0), JsTask("console.log(2)", 1), JsTask("console.log(3)", 2)]
         };
-        var nodeId = Guid.NewGuid();
         var reports = new List<(int Done, int Total)>();
 
-        var result = VerifyBatchExecutor.Execute(Sandbox, RuntimesRoot, batch, nodeId, (done, total) =>
+        var result = VerifyBatchExecutor.Execute(Sandbox, RuntimesRoot, batch, (done, total) =>
         {
             lock (reports)
                 reports.Add((done, total));
@@ -33,8 +32,9 @@ public sealed class VerifyBatchExecutorTests : VerifySandboxTestBase
         Assert.That(diagnostics, Is.Not.Null);
         Assert.Multiple(() =>
         {
-            Assert.That(diagnostics!.NodeId, Is.EqualTo(nodeId));
-            Assert.That(diagnostics.NodeName, Is.EqualTo(Environment.MachineName));
+            Assert.That(diagnostics!.NodeId, Is.EqualTo(Guid.Empty), "a batch does not say which machine ran it");
+            Assert.That(diagnostics.NodeName, Is.Empty, "a batch does not say which machine ran it");
+            Assert.That(diagnostics.NativeLibraryPath, Is.Empty, "a path on the node can name its account");
             Assert.That(diagnostics.RuntimeId, Is.EqualTo(batch.RuntimeId));
             Assert.That(diagnostics.RuntimeSha256, Is.Not.Empty);
             Assert.That(diagnostics.Degree, Is.GreaterThanOrEqualTo(1));

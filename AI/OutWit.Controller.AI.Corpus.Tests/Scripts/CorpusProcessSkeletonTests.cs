@@ -2,6 +2,7 @@ using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Compression;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Reports;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Engine.Interfaces;
 
@@ -116,9 +117,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
     [Test]
     public async Task SamplingReExecutesAndComparesTest()
     {
-        // Every shard executed twice (rate 1): each pair agrees on the content hash. The mock
-        // nodes share one process, so the results may report one node and the pair is then
-        // counted, not compared.
+        // Every shard executed twice (rate 1): each pair agrees on the content hash.
         var manifestBlob = await UploadAsync(Manifest(WET_FIXTURE, WARC_FIXTURE), "manifest.json");
 
         var job = Engine.Compile(m_processScript);
@@ -133,8 +132,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
         Assert.Multiple(() =>
         {
             Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(2));
-            Assert.That(summary.GetProperty("unpaired").GetInt32(), Is.Zero);
-            Assert.That(summary.GetProperty("compared").GetInt32() + summary.GetProperty("same_node").GetInt32(), Is.EqualTo(2));
+            Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));
             Assert.That(summary.GetProperty("version_skew").GetInt32(), Is.Zero, "one controller version on every mock node");
             Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.Zero);
             Assert.That(pairs.Select(p => p.GetProperty("index").GetInt32()), Is.EqualTo(new[] { 0, 1 }));
@@ -192,6 +190,23 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
             Assert.That(shards[0].GetProperty("documents").GetInt64(), Is.EqualTo(perShard));
             Assert.That(summary.GetProperty("clusters").GetInt64(), Is.GreaterThanOrEqualTo(perShard - shards[0].GetProperty("duplicates").GetInt64()));
         });
+    }
+
+    [Test]
+    public async Task DedupStillReadsAReportOfThePreviousSchemaTest()
+    {
+        var manifestBlob = await UploadAsync(Manifest(WET_FIXTURE, WET_FIXTURE), "manifest.json");
+        var process = Engine.Compile(m_processScript);
+        var processStatus = await Engine.ScheduleAndWaitAsync(process, manifestBlob, m_modelBlob, new CorpusOptionsData());
+        Assert.That(processStatus.Result, Is.EqualTo(WitProcessingResult.Completed), processStatus.ToString());
+
+        var current = System.Text.Encoding.UTF8.GetString(await ReadBytesAsync((Guid)process.Variables["report"].Value!));
+        var previousBlob = await UploadAsync(current.Replace(CorpusReportWriter.SCHEMA, CorpusReportWriter.PREVIOUS_SCHEMA), "previous-report.json");
+
+        var dedup = Engine.Compile(m_dedupScript);
+        var status = await Engine.ScheduleAndWaitAsync(dedup, previousBlob, new CorpusOptionsData());
+
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
     }
 
     [Test]

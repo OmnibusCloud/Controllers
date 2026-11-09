@@ -134,12 +134,13 @@ One JSON document (`docs/corpus-manifest.schema.json`):
 
 `SamplingRate` runs a share of the shards twice, in the same `Grid.ForEach` call
 as the rest, and `Corpus.Integrity` writes `corpus-integrity.json`
-(`docs/corpus-integrity.schema.json`): for every shard that ran twice the two
-executions with the nodes that ran them, compared on everything an honest node
+(`docs/corpus-integrity.schema.json`): for every shard that ran twice its two
+executions compared on everything an honest node
 cannot vary — the verdict, the content hash of the product, the record and
 document counts, the drop and language histograms. Times and bytes are not
 compared. The platform picks the shards at random and keeps the two executions
 on different machines, so a node cannot tell whether its shard is being checked.
+No document says which machine ran what.
 With a single machine available there is nothing to compare and no shard runs
 twice. A pair whose sides ran different controller versions (a rollout in
 progress) is counted as `version_skew`, not compared; the mismatch rate is over

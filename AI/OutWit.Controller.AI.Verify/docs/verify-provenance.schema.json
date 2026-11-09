@@ -2,46 +2,22 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-provenance.schema.json",
   "title": "Verify provenance",
-  "description": "The provenance blob of every Verify script: which node ran which tasks, with which wasmtime and runtime module, at which degree, and what each task cost (fuel, peak memory, wall time). A record, not an identity (fuel drifts between hosts, wall times vary); the fleet's inventory is a by-product of any run.",
+  "description": "The provenance blob of every Verify script: which tasks ran together, on which platform, with which wasmtime and runtime module, at which degree, and what each task cost (fuel, peak memory, wall time). It does not say which machine ran what. A record, not an identity (fuel drifts between hosts, wall times vary).",
   "type": "object",
-  "required": ["nodes", "batches"],
+  "required": ["batches"],
   "additionalProperties": false,
   "properties": {
-    "nodes": {
-      "type": "array",
-      "description": "One entry per node that executed a batch, ordered by name.",
-      "items": {
-        "type": "object",
-        "required": ["node_id", "node_name", "runtime_target", "wasmtime", "native_library", "controller", "batches", "tasks", "fuel", "runtimes"],
-        "additionalProperties": false,
-        "properties": {
-          "node_id": { "type": "string", "format": "uuid", "description": "The node's engine id (the client id on the server)." },
-          "node_name": { "type": "string", "description": "The node's machine name." },
-          "runtime_target": { "type": "string", "description": "OS and architecture, e.g. linux-x64." },
-          "wasmtime": { "type": "string", "description": "The wasmtime binding version." },
-          "native_library": { "type": "string", "description": "Where the native wasmtime came from: a path under the module, or \"(load context)\"." },
-          "controller": { "type": "string", "description": "The controller version the node ran." },
-          "batches": { "type": "integer" },
-          "tasks": { "type": "integer" },
-          "fuel": { "type": "integer", "description": "Fuel the node's tasks consumed in total." },
-          "runtimes": {
-            "type": "object",
-            "description": "Runtime id → the SHA-256 the module was verified against, for every runtime the node ran.",
-            "additionalProperties": { "type": "string" }
-          }
-        }
-      }
-    },
     "batches": {
       "type": "array",
-      "description": "One entry per result batch, ordered by first task index.",
+      "description": "One entry per execution of a batch, ordered by first task index; a batch that ran twice has two.",
       "items": {
         "type": "object",
         "required": ["fuel", "tasks", "metrics"],
         "additionalProperties": false,
         "properties": {
-          "node_id": { "type": "string", "format": "uuid" },
-          "node_name": { "type": "string" },
+          "runtime_target": { "type": "string", "description": "OS and architecture, e.g. linux-x64." },
+          "wasmtime": { "type": "string", "description": "The wasmtime binding version." },
+          "controller": { "type": "string", "description": "The controller version that ran the batch." },
           "runtime": { "type": "string" },
           "runtime_sha256": { "type": "string" },
           "degree": { "type": "integer", "description": "Concurrent sandboxes the batch ran at." },

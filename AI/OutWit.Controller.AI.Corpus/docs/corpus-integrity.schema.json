@@ -2,22 +2,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-integrity.schema.json",
   "title": "Corpus integrity",
-  "description": "The integrity blob of CorpusProcess.wit: the share of shards (CorpusOptions.SamplingRate) that ran twice in one Grid.ForEach call, their two executions compared on everything an honest node cannot vary (verdict, content hash, document counts, drop and language histograms). The platform keeps the two on different machines; a pair that met on one node all the same is counted, not compared. Empty pairs at rate 0.",
+  "description": "The integrity blob of CorpusProcess.wit: the share of shards (CorpusOptions.SamplingRate) that ran twice in one Grid.ForEach call, their two executions compared on everything an honest node cannot vary (verdict, content hash, document counts, drop and language histograms). The platform keeps the two on different machines and the document does not say which. Empty pairs at rate 0.",
   "type": "object",
   "required": ["schema", "summary", "pairs"],
   "additionalProperties": false,
   "properties": {
-    "schema": { "const": "corpus-integrity/1" },
+    "schema": { "const": "corpus-integrity/2" },
     "summary": {
       "type": "object",
-      "required": ["sampled", "compared", "same_node", "version_skew", "unpaired", "mismatches", "mismatch_rate"],
+      "required": ["sampled", "compared", "version_skew", "mismatches", "mismatch_rate"],
       "additionalProperties": false,
       "properties": {
         "sampled": { "type": "integer", "description": "Pairs of executions of one shard." },
-        "compared": { "type": "integer", "description": "Pairs whose two sides ran on different nodes." },
-        "same_node": { "type": "integer", "description": "Pairs that met on one node (not compared); the platform keeps this at 0." },
-        "version_skew": { "type": "integer", "description": "Pairs on different nodes whose sides ran different controller versions - a rollout in progress (not compared)." },
-        "unpaired": { "type": "integer", "description": "Always 0: both sides of a pair come from one call." },
+        "compared": { "type": "integer", "description": "Pairs whose two sides ran the same controller version." },
+        "version_skew": { "type": "integer", "description": "Pairs whose sides ran different controller versions - a rollout in progress (not compared)." },
         "mismatches": { "type": "integer", "description": "Compared pairs that disagree." },
         "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." }
       }
@@ -43,11 +41,9 @@
   "$defs": {
     "side": {
       "type": ["object", "null"],
-      "required": ["node_id", "node_name", "controller", "verdict", "content_sha256", "documents_out"],
+      "required": ["controller", "verdict", "content_sha256", "documents_out"],
       "additionalProperties": false,
       "properties": {
-        "node_id": { "type": "string" },
-        "node_name": { "type": "string" },
         "controller": { "type": "string", "description": "The controller version that ran this side." },
         "verdict": { "type": "string" },
         "content_sha256": { "type": "string" },

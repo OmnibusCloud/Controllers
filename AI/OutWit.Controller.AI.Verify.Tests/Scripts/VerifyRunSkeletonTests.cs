@@ -48,8 +48,7 @@ public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
     [Test]
     public async Task SamplingReExecutesAndComparesTest()
     {
-        // Every batch executed twice (rate 1): each pair agrees. The mock nodes share one process,
-        // so the results may report one node and the pair is then counted, not compared.
+        // Every batch executed twice (rate 1): each pair agrees.
         var taskset = new StringBuilder();
         taskset.AppendLine("""{"index":0,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"print(2+2)"},"suite":[{"expected_stdout":"4\n"}]}""");
         taskset.AppendLine("""{"index":1,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"print('wrong')"},"suite":[{"expected_stdout":"right\n"}]}""");
@@ -70,11 +69,10 @@ public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
         Assert.Multiple(() =>
         {
             Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(4));
-            Assert.That(summary.GetProperty("unpaired").GetInt32(), Is.Zero);
-            Assert.That(summary.GetProperty("compared").GetInt32() + summary.GetProperty("same_node").GetInt32(), Is.EqualTo(4));
+            Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(4));
             Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.Zero);
             Assert.That(pairs.Select(p => p.GetProperty("index").GetInt32()), Is.EqualTo(new[] { 0, 1, 2, 3 }));
-            Assert.That(pairs.Where(p => p.GetProperty("compared").GetBoolean()).All(p => p.GetProperty("match").GetBoolean()), Is.True);
+            Assert.That(pairs.All(p => p.GetProperty("match").GetBoolean()), Is.True);
             Assert.That(pairs[1].GetProperty("replica").GetProperty("verdict").GetString(), Is.EqualTo("Fail"));
         });
 
@@ -123,14 +121,14 @@ public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
         Assert.That(verdictByIndex[2], Is.EqualTo("RuntimeError"));
         Assert.That(verdictByIndex[3], Is.EqualTo("Pass"));
 
-        // Provenance: every task attributed to exactly one batch, every batch to a node.
+        // Provenance: every task attributed to exactly one batch, and no machine named.
         using var provenance = await ReadJsonAsync((Guid)job.Variables["provenance"].Value!);
         var covered = provenance.RootElement.GetProperty("batches").EnumerateArray()
             .SelectMany(batch => batch.GetProperty("tasks").EnumerateArray().Select(task => task.GetInt32()))
             .OrderBy(index => index)
             .ToList();
         Assert.That(covered, Is.EqualTo(new[] { 0, 1, 2, 3 }));
-        Assert.That(provenance.RootElement.GetProperty("nodes").GetArrayLength(), Is.GreaterThan(0));
+        Assert.That(provenance.RootElement.TryGetProperty("nodes", out _), Is.False);
     }
 
     [Test]

@@ -39,12 +39,11 @@ internal sealed class WitActivityAdapterVerifyExecuteBatch : WitActivityAdapterF
 
         var runtimesRoot = VerifyRuntimeLocator.Locate();
         var progress = CreateProgress(status.JobId, batch.Tasks.Count);
-        var nodeId = status.EngineId;
 
         // The job's token: a cancelled job stops at the next task boundary instead of burning
         // the rest of the batch on the node.
         var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
-        var result = await Task.Run(() => VerifyBatchExecutor.Execute(VerifySandboxHost.Instance, runtimesRoot, batch, nodeId, progress, cancellationToken), cancellationToken);
+        var result = await Task.Run(() => VerifyBatchExecutor.Execute(VerifySandboxHost.Instance, runtimesRoot, batch, progress, cancellationToken), cancellationToken);
 
         if (!pool.TrySetValue(activity.ReturnReference, result))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");

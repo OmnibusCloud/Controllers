@@ -57,7 +57,7 @@ internal sealed class WitActivityAdapterCorpusDedup : WitActivityAdapterFunction
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
     }
 
-    /// <summary>The completed shards' signature blobs from a corpus-report/1 document.</summary>
+    /// <summary>The completed shards' signature blobs from a corpus report.</summary>
     /// <param name="report">The report bytes.</param>
     /// <returns>Shard index and blob id, in report order.</returns>
     /// <exception cref="InvalidOperationException">Not a corpus report.</exception>
@@ -65,7 +65,7 @@ internal sealed class WitActivityAdapterCorpusDedup : WitActivityAdapterFunction
     {
         using var document = JsonDocument.Parse(report);
         var root = document.RootElement;
-        if (root.ValueKind != JsonValueKind.Object || root.GetProperty("schema").GetString() != CorpusReportWriter.SCHEMA)
+        if (root.ValueKind != JsonValueKind.Object || root.GetProperty("schema").GetString() is not (CorpusReportWriter.SCHEMA or CorpusReportWriter.PREVIOUS_SCHEMA))
             throw new InvalidOperationException($"The report is not a {CorpusReportWriter.SCHEMA} document.");
 
         var blobs = new List<(int, Guid)>();

@@ -6,14 +6,17 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// <summary>
 /// The job report: every shard's verdict, blobs and content hash in task order, and the
 /// aggregate — documents in and out, bytes moved, the drop and language histograms summed
-/// over the fleet. Schema <c>corpus-report/1</c>.
+/// over the fleet. No document says which machine ran what. Schema <c>corpus-report/2</c>.
 /// </summary>
 public static class CorpusReportWriter
 {
     #region Constants
 
     /// <summary>The report schema name.</summary>
-    public const string SCHEMA = "corpus-report/1";
+    public const string SCHEMA = "corpus-report/2";
+
+    /// <summary>The earlier report schema, which named the nodes; Corpus.Dedup still reads it.</summary>
+    public const string PREVIOUS_SCHEMA = "corpus-report/1";
 
     #endregion
 
@@ -90,8 +93,6 @@ public static class CorpusReportWriter
         writer.WriteString("signatures_blob", result.SignaturesBlobId == Guid.Empty ? "" : result.SignaturesBlobId.ToString("D"));
         writer.WriteString("content_sha256", result.ContentSha256);
         writer.WriteString("error", result.Error);
-        writer.WriteString("node", result.NodeId == Guid.Empty ? "" : result.NodeId.ToString("D"));
-        writer.WriteString("node_name", result.NodeName);
         writer.WriteString("controller", result.ControllerVersion);
 
         if (result.Stats is { } stats)
