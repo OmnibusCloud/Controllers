@@ -27,6 +27,9 @@
     <ExcludedControllerModule Include="parareal.module" />
     <ExcludedControllerModule Include="calculix.module" />
     <ExcludedControllerModule Include="sweep.module" />
+    <ExcludedControllerModule Include="corpus.module" />
+    <ExcludedControllerModule Include="verify.module" />
+    <ExcludedControllerModule Include="vision.module" />
   </ItemGroup>
 
 </Project>

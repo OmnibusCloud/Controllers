@@ -25,6 +25,12 @@ namespace OutWit.Controller.Grid.Adapters
     internal class WitActivityAdapterGridForEach : WitActivityAdapterTransform<WitActivityGridForEach>,
         IWitActivityAdapter<WitActivityGridForEach>
     {
+        #region Constants
+
+        private const string ERROR_QUEUED_COPIES = "Grid.ForEach: copies need the Balanced strategy; the Queued strategy has no plan that keeps them on different machines.";
+
+        #endregion
+
         #region Constructors
 
         public WitActivityAdapterGridForEach(IWitControllerManager controllerManager,
@@ -60,13 +66,20 @@ namespace OutWit.Controller.Grid.Adapters
                 processingOptions != null)
                 options = processingOptions;
 
+            if (options.Replicas > 1 && options.Strategy == ProcessingStrategy.Queued)
+                throw new InvalidOperationException(ERROR_QUEUED_COPIES);
+
             var benchmarkActivityType = activity.Transformer.GetType();
 
             IReadOnlyList<IWitEngineActivityNode> nodes
                 = await NodesManager.GetCompatibleNodes(benchmarkActivityType, options);
 
             IReadOnlyList<WitGridTask> tasks
-                = ControllerManager.BuildTasks(collection, activity.Transformer, pool, iterationVariableName);
+                = BuildTasks(collection, activity.Transformer, pool, iterationVariableName, options, nodes);
+
+            // A batch with copies must not be moved by the server: a substitute could be the machine
+            // holding the other copy. Reassignment below decides where the work goes instead.
+            bool exactNode = tasks.Any(task => task.ReplicaOf != null);
 
             var resultList = new List<object?>();
 
@@ -96,7 +109,7 @@ namespace OutWit.Controller.Grid.Adapters
                         try
                         {
                             (IWitProcessingStatus groupStatus, IReadOnlyList<IWitVariable> groupVariables)
-                                = await NodesManager.Process(group, status.JobId, canRunInParallelOnClient);
+                                = await NodesManager.Process(group, status.JobId, canRunInParallelOnClient, exactNode);
 
                             bool succeeded = groupStatus.Result != WitProcessingResult.Failed;
                             return new GridReassignment.GroupProcessResult(succeeded, groupStatus, groupVariables);
@@ -126,6 +139,22 @@ namespace OutWit.Controller.Grid.Adapters
             }
             
             pool.TrySetCollection(activity.ReturnReference, resultList);
+        }
+
+        private IReadOnlyList<WitGridTask> BuildTasks(IEnumerable collection, IWitActivity transformer, IWitVariablesCollection pool,
+            string iterationVariableName, WitProcessingOptions options, IReadOnlyList<IWitEngineActivityNode> nodes)
+        {
+            if (options.Replicas <= 1)
+                return ControllerManager.BuildTasks(collection, transformer, pool, iterationVariableName);
+
+            var items = collection.Cast<object>().ToList();
+            int machines = nodes.Select(node => node.NodeId).Distinct().Count();
+
+            IReadOnlyList<int>? slots = WitGridReplicaPlanner.Plan(items.Count, options.Replicas, options.ReplicaShare, machines);
+
+            return slots == null
+                ? ControllerManager.BuildTasks(items, transformer, pool, iterationVariableName)
+                : ControllerManager.BuildTasks(items, slots, transformer, pool, iterationVariableName);
         }
 
         #endregion

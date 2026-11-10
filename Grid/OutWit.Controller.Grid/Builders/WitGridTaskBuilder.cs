@@ -22,28 +22,56 @@ internal static class WitGridTaskBuilder
 
         int index = 0;
         foreach (var value in collection)
-        {
-            string? returnVariableName = null;
-            var taskActivity = (IWitActivity)activity.Clone();
-
-            if (taskActivity is IWitFunction function)
-            {
-                returnVariableName = $"{RETURN_VARIABLE_NAME}{index++}";
-                function.SetReturnReference(returnVariableName);
-            }
-
-            var variables = BuildVariables(pool, iterationVariableName, returnVariableName, value, taskActivity);
-            var work = me.EstimateWork(taskActivity, variables);
-
-            tasks.Add(new WitGridTask
-            {
-                Work = work,
-                Variables = variables,
-                Activity = taskActivity
-            });
-        }
+            tasks.Add(me.BuildIterationTask(value, null, ref index, activity, pool, iterationVariableName));
 
         return tasks.OrderByDescending(task => task.Work).ToList();
+    }
+
+    /// <summary>
+    /// Builds the tasks of a call where some items run more than once. Return slots are numbered
+    /// along the shuffled <paramref name="slots"/>, so a slot's number says nothing about the item.
+    /// </summary>
+    /// <param name="me">The controller manager that estimates the work.</param>
+    /// <param name="items">The items of the call.</param>
+    /// <param name="slots">The item index of every execution, from <see cref="WitGridReplicaPlanner"/>.</param>
+    /// <param name="activity">The transformer activity.</param>
+    /// <param name="pool">The outer variables.</param>
+    /// <param name="iterationVariableName">The name of the iteration variable.</param>
+    /// <returns>One task per execution, longest first.</returns>
+    public static IReadOnlyList<WitGridTask> BuildTasks(this IWitControllerManager me, IReadOnlyList<object> items, IReadOnlyList<int> slots, IWitActivity activity, IWitVariablesCollection pool, string iterationVariableName)
+    {
+        var executions = slots.GroupBy(slot => slot).ToDictionary(group => group.Key, group => group.Count());
+
+        var tasks = new List<WitGridTask>(slots.Count);
+
+        int index = 0;
+        foreach (int slot in slots)
+            tasks.Add(me.BuildIterationTask(items[slot], executions[slot] > 1 ? slot : null, ref index, activity, pool, iterationVariableName));
+
+        return tasks.OrderByDescending(task => task.Work).ToList();
+    }
+
+    private static WitGridTask BuildIterationTask(this IWitControllerManager me, object value, int? replicaOf, ref int index, IWitActivity activity, IWitVariablesCollection pool, string iterationVariableName)
+    {
+        string? returnVariableName = null;
+        var taskActivity = (IWitActivity)activity.Clone();
+
+        if (taskActivity is IWitFunction function)
+        {
+            returnVariableName = $"{RETURN_VARIABLE_NAME}{index++}";
+            function.SetReturnReference(returnVariableName);
+        }
+
+        var variables = BuildVariables(pool, iterationVariableName, returnVariableName, value, taskActivity);
+        var work = me.EstimateWork(taskActivity, variables);
+
+        return new WitGridTask
+        {
+            Work = work,
+            ReplicaOf = replicaOf,
+            Variables = variables,
+            Activity = taskActivity
+        };
     }
 
     /// <summary>

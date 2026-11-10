@@ -20,6 +20,10 @@ namespace OutWit.Controller.Grid.Utils;
 /// without the engine; <see cref="WitActivityAdapterGridForEach"/> supplies the real one over
 /// <c>IWitNodesManager</c>. The happy path (no failures) is behaviourally identical to a plain
 /// allocate-and-run: groups are processed once, results collected in allocator order.
+///
+/// Copies of one item stay on different machines through every round, using only this call's record of
+/// who returned which item. A copy with no machine left is dropped; an item fails the job only when it
+/// has no result at all.
 /// </summary>
 public static class GridReassignment
 {
@@ -58,11 +62,17 @@ public static class GridReassignment
 
         var pending = tasks.ToList();
         var failedNodeIds = new HashSet<Guid>();
+        var holders = new Dictionary<int, HashSet<Guid>>();
         IWitProcessingStatus? lastFailureStatus = null;
 
         while (pending.Count > 0)
         {
             var healthyNodes = nodes.Where(node => !failedNodeIds.Contains(node.NodeId)).ToList();
+
+            pending = KeepPlaceableCopies(pending, healthyNodes, holders, logWarning);
+            if (pending.Count == 0)
+                break;
+
             if (healthyNodes.Count == 0)
             {
                 outcome.Failed = true;
@@ -73,7 +83,7 @@ public static class GridReassignment
                 return outcome;
             }
 
-            IReadOnlyList<WitGridTaskGroup> groups = WitGridTaskAllocator.Allocate(healthyNodes, pending);
+            IReadOnlyList<WitGridTaskGroup> groups = WitGridTaskAllocator.Allocate(healthyNodes, pending, holders);
 
             var running = groups
                 .Select(group => (Group: group, Task: processGroup(group, cancellationToken)))
@@ -103,6 +113,8 @@ public static class GridReassignment
 
                     foreach (var variable in result.Variables)
                         outcome.Results.Add(variable.Value);
+
+                    RecordHolder(holders, group);
                 }
                 else
                 {
@@ -120,5 +132,60 @@ public static class GridReassignment
         }
 
         return outcome;
+    }
+
+    /// <summary>
+    /// Keeps as many copies of each item as there are machines free of it. The first copy of an item
+    /// with no result yet always stays: losing it would lose the item, which only the caller may decide.
+    /// </summary>
+    private static List<WitGridTask> KeepPlaceableCopies(
+        List<WitGridTask> pending,
+        IReadOnlyList<IWitEngineActivityNode> healthyNodes,
+        Dictionary<int, HashSet<Guid>> holders,
+        Action<string>? logWarning)
+    {
+        if (pending.All(task => task.ReplicaOf == null))
+            return pending;
+
+        var machines = healthyNodes.Select(node => node.NodeId).Distinct().ToList();
+        var kept = new List<WitGridTask>(pending.Count);
+        var keptCopies = new Dictionary<int, int>();
+
+        foreach (var task in pending)
+        {
+            if (task.ReplicaOf is not int item)
+            {
+                kept.Add(task);
+                continue;
+            }
+
+            holders.TryGetValue(item, out var holding);
+            int freeMachines = machines.Count(machine => holding == null || !holding.Contains(machine));
+            int keptSoFar = keptCopies.GetValueOrDefault(item);
+
+            if (keptSoFar < freeMachines || (keptSoFar == 0 && holding == null))
+            {
+                kept.Add(task);
+                keptCopies[item] = keptSoFar + 1;
+            }
+            else
+                logWarning?.Invoke($"A copy of item {item} was dropped: no machine is left that does not already hold one.");
+        }
+
+        return kept;
+    }
+
+    private static void RecordHolder(Dictionary<int, HashSet<Guid>> holders, WitGridTaskGroup group)
+    {
+        foreach (var task in group)
+        {
+            if (task.ReplicaOf is not int item)
+                continue;
+
+            if (!holders.TryGetValue(item, out var machines))
+                holders[item] = machines = new HashSet<Guid>();
+
+            machines.Add(group.Node.NodeId);
+        }
     }
 }

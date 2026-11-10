@@ -77,6 +77,9 @@ on:
 permissions:
   contents: write   # action-gh-release needs to create tags + releases
   packages: write   # GitHub Packages push
+  # Lets GitHub mint the OIDC token that nuget.org exchanges for a short-lived
+  # key. Without it the exchange fails quietly rather than loudly.
+  id-token: write
 
 jobs:
   publish:
@@ -399,15 +402,25 @@ jobs:
           --name github
           "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
 
+      # Trusted publishing: nuget.org holds a policy for this repository and this
+      # workflow file and hands out a key that lives for one run. Stored API keys
+      # stopped working on 2026-11-01.
+      - name: Log in to nuget.org
+        id: login
+        if: inputs.pushToNuGet && (steps.collect.outputs.hasNupkg == 'true' || steps.collect.outputs.hasSnupkg == 'true')
+        uses: NuGet/login@v1
+        with:
+          user: dmitrat   # the nuget.org account that holds the policy
+
       - name: Push nupkg to nuget.org
         if: inputs.pushToNuGet && steps.collect.outputs.hasNupkg == 'true'
         shell: bash
-        run: dotnet nuget push NuGet/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push NuGet/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Push snupkg to nuget.org
         if: inputs.pushToNuGet && steps.collect.outputs.hasSnupkg == 'true'
         shell: bash
-        run: dotnet nuget push NuGet/*.snupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push NuGet/*.snupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Push nupkg to GitHub Packages
         if: inputs.pushToGitHubPackages && steps.collect.outputs.hasNupkg == 'true'

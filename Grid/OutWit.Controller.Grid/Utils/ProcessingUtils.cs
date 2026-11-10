@@ -76,7 +76,21 @@ public static class ProcessingUtils
         return (aggregateStatus.Completed(TimeSpan.Zero), aggregateVariables);
     }
 
-    public static async Task<(IWitProcessingStatus, IReadOnlyList<IWitVariable>)> Process(this IWitNodesManager me, WitGridTaskGroup group, Guid jobId, bool inParallel)
+    public static Task<(IWitProcessingStatus, IReadOnlyList<IWitVariable>)> Process(this IWitNodesManager me, WitGridTaskGroup group, Guid jobId, bool inParallel)
+    {
+        return me.Process(group, jobId, inParallel, exactNode: false);
+    }
+
+    /// <summary>
+    /// Runs a node's batch.
+    /// </summary>
+    /// <param name="me">The nodes manager.</param>
+    /// <param name="group">The node and its tasks.</param>
+    /// <param name="jobId">The job.</param>
+    /// <param name="inParallel">Whether the node may run the batch's tasks at once.</param>
+    /// <param name="exactNode">True when the batch must run on exactly this node or come back failed.</param>
+    /// <returns>The batch status and its return variables.</returns>
+    public static async Task<(IWitProcessingStatus, IReadOnlyList<IWitVariable>)> Process(this IWitNodesManager me, WitGridTaskGroup group, Guid jobId, bool inParallel, bool exactNode)
     {
         _ = inParallel;
 
@@ -87,7 +101,8 @@ public static class ProcessingUtils
             ReturnVariables = task.Variables
             .Where(variable => variable.IsReturnVariable())
             .Select(variable => variable.Name)
-            .ToList()
+            .ToList(),
+            ExactNode = exactNode
         }).ToList();
 
         return await me.ProcessBatch(

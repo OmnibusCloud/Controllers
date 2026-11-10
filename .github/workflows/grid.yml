@@ -1,0 +1,42 @@
+name: Grid
+run-name: "Grid: ${{ github.event.pull_request.title || github.ref_name }}"
+
+# The Grid controller: the allocator, the copies of an item on different machines,
+# the fault-tolerant reassignment on synthetic fleets, and Grid.ForEach, Grid.Delegate
+# and Grid.Replicas through the engine SDK on in-process nodes.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'Grid/**'
+      - 'Build/**'
+      - '.github/workflows/grid.yml'
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Debug on purpose: the engine fixtures look for the staged modules of a Debug build.
+      - name: Build
+        shell: bash
+        run: dotnet build Grid/OutWit.Controller.Grid.Tests/OutWit.Controller.Grid.Tests.csproj -c Debug
+
+      - name: Test
+        shell: bash
+        run: dotnet test Grid/OutWit.Controller.Grid.Tests/OutWit.Controller.Grid.Tests.csproj -c Debug --no-build --logger "console;verbosity=normal"
