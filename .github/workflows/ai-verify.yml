@@ -38,11 +38,6 @@ jobs:
         os: [ubuntu-22.04, macos-15, windows-2022]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    # Grid, which the AI tests build, restores the engine prereleases from the account feed.
-    # Nothing in this job needs the repository's own token.
-    env:
-      GITHUB_USER: ${{ github.actor }}
-      GITHUB_TOKEN: ${{ secrets.WITMATH_PACKAGES_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 

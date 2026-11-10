@@ -66,7 +66,7 @@ results = Grid.ForEach(item in items, checked) => Transformer(item);
 - `share` - Optional share of the items that are selected, from 0 to 1 (rounded up to a whole item); all of them when omitted
 
 **What it guarantees:**
-- The executions of one item run on **different machines** within the call, also after a node fails and its work moves. Different machines are not necessarily different owners.
+- The executions of one item run on **different machines** within the call, also after a node fails and its work moves. One computer registered under two accounts counts once. Different machines are not necessarily different owners.
 - The platform picks the items at random and shuffles the tasks, so a node cannot tell whether the item it holds also runs elsewhere. Selected and unselected items must be in one call for that to hold: two calls reveal which is which.
 - With too few machines an item gets fewer copies. A job fails only when an item has no result at all.
 

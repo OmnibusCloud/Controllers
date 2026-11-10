@@ -11,6 +11,8 @@ public static class WitGridTaskAllocator
 
     private const string ERROR_NO_MACHINE_FOR_COPY = "A copy of an item has no machine left that does not already hold one.";
 
+    private const string ERROR_NO_NODES = "There are no nodes to place the tasks on.";
+
     private static readonly IReadOnlyDictionary<int, HashSet<Guid>> NO_HOLDERS = new Dictionary<int, HashSet<Guid>>();
 
     #endregion
@@ -49,11 +51,15 @@ public static class WitGridTaskAllocator
     /// <param name="holders">For each item, the machines that already returned a copy of it.</param>
     /// <param name="improvementThresholdPct">How much makespan a smaller node count may cost (0.02 = 2%).</param>
     /// <returns>One group per node that received work.</returns>
-    /// <exception cref="InvalidOperationException">An item has more copies than there are machines for them.</exception>
+    /// <exception cref="InvalidOperationException">There are tasks and no nodes, or an item has more copies than there are machines for them.</exception>
     public static IReadOnlyList<WitGridTaskGroup> Allocate(IReadOnlyList<IWitEngineActivityNode> nodes, IReadOnlyList<WitGridTask> tasks,
         IReadOnlyDictionary<int, HashSet<Guid>> holders, double improvementThresholdPct = 0.02)
     {
         var candidates = Rank(nodes);
+
+        if (candidates.Count == 0 && tasks.Count > 0)
+            throw new InvalidOperationException(ERROR_NO_NODES);
+
         tasks = tasks.OrderByDescending(task => task.Work).ToList();
 
         // With copies every machine stays a candidate: a machine free of an item may be the slowest one.

@@ -139,6 +139,13 @@ namespace OutWit.Controller.Grid.Tests
         #region Control Tests
 
         [Test]
+        public void TasksWithoutNodesAreRefusedByNameTest()
+        {
+            Assert.That(() => WitGridTaskAllocator.Allocate(Array.Empty<IWitEngineActivityNode>(), new[] { MakeTask(1) }),
+                Throws.InvalidOperationException.With.Message.Contains("no nodes"));
+        }
+
+        [Test]
         public void ACallWithoutCopiesIsPlannedAsBeforeTest()
         {
             var nodes = new[] { Node(100), Node(10), Node(1) };
