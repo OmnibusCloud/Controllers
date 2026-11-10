@@ -538,17 +538,7 @@ namespace OutWit.Controller.Grid.Tests
 
         private static string? FindControllersPath()
         {
-            var dir = AppContext.BaseDirectory;
-            while (dir != null)
-            {
-                var candidate = Path.Combine(dir, "@Controllers", "Debug");
-                if (Directory.Exists(candidate))
-                    return candidate;
-
-                dir = Path.GetDirectoryName(dir);
-            }
-
-            return null;
+            return TestControllers.FindPath();
         }
     }
 }

@@ -4,10 +4,12 @@
 
   <PropertyGroup>
     <ControllerName>Grid</ControllerName>
-    <Version>1.1.2</Version>
+    <!-- 1.2.0.1 was the test build of this release. The plugin loader reads the version through
+         System.Version, which refuses a "-suffix": test builds take a fourth part instead. -->
+    <Version>1.2.1</Version>
     <Description>Distributed execution across compute nodes for the WitEngine runtime: Grid.ForEach (fan-out over a collection) and Grid.Delegate (run one activity on the single most-suitable node). Grid.ForEach is fault-tolerant: when a node fails its assigned batch, that node's tasks are reassigned to the remaining healthy nodes and retried instead of failing the whole job; the job fails only when no node can complete the work.</Description>
     <PackageTags>grid;distributed;foreach;delegate;witengine;witcloud;controller</PackageTags>
-    <ControllerFeatures>grid-foreach;grid-delegate</ControllerFeatures>
+    <ControllerFeatures>grid-foreach;grid-delegate;grid-replicas</ControllerFeatures>
     <ControllerUseCases>Distributed iteration;Single-node delegation</ControllerUseCases>
   </PropertyGroup>
 
@@ -17,6 +19,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OutWit.Controller.Grid.Model\OutWit.Controller.Grid.Model.csproj" />
+  </ItemGroup>
+
+  <!-- The engine that carries the replica options and the exact-node request. Grid is host-only:
+       the host has to run this engine or newer, the nodes keep 1.1.4. -->
+  <ItemGroup>
+    <PackageReference Update="OutWit.Engine.Data" Version="1.1.5" />
+    <PackageReference Include="OutWit.Engine.Interfaces" Version="1.1.6" />
   </ItemGroup>
 
   <ItemGroup>

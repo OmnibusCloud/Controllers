@@ -78,6 +78,10 @@
     </PackageReference>
     <PackageReference Include="OutWit.Common.NUnit" Version="1.1.2" />
     <PackageReference Include="OutWit.Engine.Sdk" Version="1.1.6" />
+    <!-- The Grid module is built against this engine and runs inside the test host, which
+         therefore has to carry it: an older one fails every Grid.ForEach. -->
+    <PackageReference Include="OutWit.Engine.Data" Version="1.1.5" />
+    <PackageReference Include="OutWit.Engine.Interfaces" Version="1.1.6" />
   </ItemGroup>
 
   <ItemGroup>

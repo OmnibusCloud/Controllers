@@ -17,6 +17,7 @@ public class WitGridTask : ModelBase
             return false;
 
         return Work.Is(task.Work) &&
+               ReplicaOf.Is(task.ReplicaOf) &&
                Variables.Is(task.Variables) &&
                Activity.Check(task.Activity);
 
@@ -27,6 +28,7 @@ public class WitGridTask : ModelBase
         return new WitGridTask
         {
             Work = Work,
+            ReplicaOf = ReplicaOf,
             Variables = (IWitVariablesCollection)Variables.Clone(),
             Activity = (IWitActivity)Activity.Clone()
         };
@@ -38,7 +40,15 @@ public class WitGridTask : ModelBase
 
     [ToString]
     public double Work { get; init; }
-    
+
+    /// <summary>
+    /// The item this task is one execution of, when that item runs more than once; null when it
+    /// runs once. Tasks with the same value never share a machine. Stays on the host: a node sees
+    /// a copy exactly as it sees any other task.
+    /// </summary>
+    [ToString]
+    public int? ReplicaOf { get; init; }
+
     public IWitVariablesCollection Variables { get; init; }
     
     [ToString]
