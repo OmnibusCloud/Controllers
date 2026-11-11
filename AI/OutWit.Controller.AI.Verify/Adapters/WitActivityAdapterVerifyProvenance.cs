@@ -2,6 +2,7 @@ using System.Collections;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Activities;
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Delivery;
 using OutWit.Controller.AI.Verify.Tasksets;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -35,7 +36,7 @@ internal sealed class WitActivityAdapterVerifyProvenance : WitActivityAdapterFun
         if (!pool.TryGetObject(activity.Results, out var resultsObject) || resultsObject is not IEnumerable resultsEnumerable)
             throw new InvalidOperationException("Failed to get parameter 'Results'.");
 
-        var batches = resultsEnumerable.OfType<VerifyResultBatchData>().ToList();
+        var batches = await VerifyResultPackages.LoadAsync(resultsEnumerable, BlobService);
 
         var bytes = VerifyProvenanceWriter.Write(batches);
         var blobId = await BlobService.UploadBytesAsync(bytes, BLOB_NAME);

@@ -8,19 +8,19 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Verify.Variables;
 
-[Variable("VerifyResultBatch")]
+[Variable("VerifyResultPackage")]
 [MemoryPackable]
-public sealed partial class WitVariableVerifyResultBatch : WitVariable<VerifyResultBatchData?>, IWitVariableFactory<WitVariableVerifyResultBatch>
+public sealed partial class WitVariableVerifyResultPackage : WitVariable<VerifyResultPackageData?>, IWitVariableFactory<WitVariableVerifyResultPackage>
 {
     #region Constructors
 
-    public WitVariableVerifyResultBatch(string name)
+    public WitVariableVerifyResultPackage(string name)
         : base(name)
     {
     }
 
     [MemoryPackConstructor]
-    public WitVariableVerifyResultBatch(string name, VerifyResultBatchData? value)
+    public WitVariableVerifyResultPackage(string name, VerifyResultPackageData? value)
         : base(name, value)
     {
     }
@@ -35,7 +35,7 @@ public sealed partial class WitVariableVerifyResultBatch : WitVariable<VerifyRes
     /// <returns>True when the models are equal by value.</returns>
     public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
     {
-        if (modelBase is not WitVariableVerifyResultBatch variable)
+        if (modelBase is not WitVariableVerifyResultPackage variable)
             return false;
 
         return base.Is(modelBase, tolerance)
@@ -44,9 +44,9 @@ public sealed partial class WitVariableVerifyResultBatch : WitVariable<VerifyRes
 
     /// <summary>Deep copy of the variable.</summary>
     /// <returns>The copy.</returns>
-    public override WitVariableVerifyResultBatch Clone()
+    public override WitVariableVerifyResultPackage Clone()
     {
-        return new WitVariableVerifyResultBatch(Name, (VerifyResultBatchData?)GetValue()?.Clone());
+        return new WitVariableVerifyResultPackage(Name, (VerifyResultPackageData?)GetValue()?.Clone());
     }
 
     #endregion
@@ -56,9 +56,9 @@ public sealed partial class WitVariableVerifyResultBatch : WitVariable<VerifyRes
     /// <summary>Creates a variable of this type under a name.</summary>
     /// <param name="name">The variable name in the script's pool.</param>
     /// <returns>The new variable.</returns>
-    public static WitVariableVerifyResultBatch Create(string name)
+    public static WitVariableVerifyResultPackage Create(string name)
     {
-        return new WitVariableVerifyResultBatch(name);
+        return new WitVariableVerifyResultPackage(name);
     }
 
     #endregion

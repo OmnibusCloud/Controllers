@@ -4,7 +4,8 @@ namespace OutWit.Controller.AI.Verify.Tests.Mock;
 
 /// <summary>
 /// Three in-process "nodes" over one WitEngineNodeSdk instance — real task building and
-/// serialization paths, no real network distribution (the Grid/Matrices mock pattern).
+/// serialization paths, no real network distribution (the Grid/Matrices mock pattern). A share
+/// whose activity allows it is started all at once, the way the client starts it.
 /// </summary>
 internal sealed class VerifyTestNodesManager : IWitNodesManager
 {
@@ -61,6 +62,23 @@ internal sealed class VerifyTestNodesManager : IWitNodesManager
         var allVariables = new List<IWitVariable>();
         IWitProcessingStatus? lastStatus = null;
 
+        if (canRunInParallelOnClient)
+        {
+            ParallelShares++;
+
+            var executions = await Task.WhenAll(requests.Select(request => m_node.Process(jobId, request.Activity, request.Pool, request.ReturnVariables)));
+            foreach (var (status, variables) in executions)
+            {
+                lastStatus = status;
+                allVariables.AddRange(variables);
+
+                if (status.Result == WitProcessingResult.Failed)
+                    return (status, allVariables);
+            }
+
+            return (lastStatus ?? throw new InvalidOperationException("No requests provided"), allVariables);
+        }
+
         foreach (var request in requests)
         {
             var (status, variables) = await m_node.Process(jobId, request.Activity, request.Pool, request.ReturnVariables);
@@ -79,6 +97,9 @@ internal sealed class VerifyTestNodesManager : IWitNodesManager
     #region Properties
 
     public IReadOnlyList<IWitEngineActivityNode> CompatibleNodes { get; }
+
+    /// <summary>Shares started all at once since the manager was created.</summary>
+    public int ParallelShares { get; private set; }
 
     #endregion
 }

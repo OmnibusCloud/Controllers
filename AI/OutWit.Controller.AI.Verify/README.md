@@ -2,7 +2,7 @@
 
 Sandboxed, deterministic, resource-metered execution of untrusted programs
 against specifications — on anonymous volunteer nodes. One primitive
-(`Verify.ExecuteBatch`) carries several products: code-vs-tests verification
+(`Verify.ExecutePackage`) carries several products: code-vs-tests verification
 (RLVR-style reward checking), code-corpus generation with checking, math
 problem generation with CAS checking, and formal proof checking — generation
 and verification are the same activity with different programs.
@@ -24,17 +24,17 @@ proof checks or it does not.
 
 | Activity | Where | Role |
 |---|---|---|
-| `Verify.Split` | host | taskset (JSON lines) + options → batches, grouped by runtime, limits clamped to the host ceilings |
-| `Verify.ExecuteBatch` | node | the primitive: one compiled runtime module, the batch's tasks executed concurrently in isolated stores under fuel, memory and wall-clock limits; per-task progress; batch provenance |
-| `Verify.Execute` | node | the single-task variant |
-| `Verify.Collect` | host | result batches → the verdict report (aggregates + one record per task; the run's identity, byte-identical regardless of placement) |
-| `Verify.CollectOutputs` | host | result batches → the corpus (one JSON line per task with its outputs; byte-deterministic) |
-| `Verify.MakeCheckTasks` | host | generator results + a checker spec → check task batches, one check per passing candidate under the candidate's index |
-| `Verify.Provenance` | host | result batches → the provenance document (which tasks ran together, on which platform, with which wasmtime and runtime module, at which degree, and what each task cost: fuel, peak memory, wall time; never which machine) |
-| `Verify.SamplingRate` | host | options → `SamplingRate` clamped to 0..1, the share of the batches `Grid.Replicas` runs twice |
-| `Verify.Integrity` | host | the result batches of all executions → the integrity document (the two executions of each task that ran twice, agreement on verdict, exit, outputs and cases; the mismatch rate) |
+| `Verify.Split` | host | taskset (JSON lines) + options → batches, grouped by runtime, limits clamped to the host ceilings; the batches are grouped into packages, each stored as a blob, and what the activity returns is the references |
+| `Verify.ExecutePackage` | node | the primitive: the node downloads the package blob and runs its batches — one compiled runtime module per batch, the tasks executed concurrently in isolated stores under fuel, memory and wall-clock limits — then uploads the results as a blob; progress of the delivery and of the work; batch provenance |
+| `Verify.Execute` | node | one task given inline, for diagnostics; a taskset never travels this way |
+| `Verify.Collect` | host | result packages → the verdict report (aggregates + one record per task; the run's identity, byte-identical regardless of placement) |
+| `Verify.CollectOutputs` | host | result packages → the corpus (one JSON line per task with its outputs; byte-deterministic) |
+| `Verify.MakeCheckTasks` | host | generator results + a checker spec → check task packages, one check per passing candidate under the candidate's index |
+| `Verify.Provenance` | host | result packages → the provenance document (which tasks ran together, on which platform, with which wasmtime and runtime module, at which degree, and what each task cost: fuel, peak memory, wall time; never which machine) |
+| `Verify.SamplingRate` | host | options → `SamplingRate` clamped to 0..1, the share of the packages `Grid.Replicas` runs twice |
+| `Verify.Integrity` | host | the result packages of all executions → the integrity document (the two executions of each task that ran twice, agreement on verdict, exit, outputs and cases; the mismatch rate) |
 | `Verify.Preflight` | host | counts, runtimes referenced, unknown runtimes, size estimate, ceiling notes — before anything runs |
-| `Verify.RuntimeDiagnostics` | host | wasmtime version (the native library is loaded to prove it), runtime target, per-runtime availability and hash — of the server's module; a node's module is exercised by `Verify.ExecuteBatch` and described by the provenance |
+| `Verify.RuntimeDiagnostics` | host | wasmtime version (the native library is loaded to prove it), runtime target, per-runtime availability and hash — of the server's module; a node's module is exercised by `Verify.ExecutePackage` and described by the provenance |
 
 ## Scripts
 
@@ -42,15 +42,33 @@ proof checks or it does not.
 
 | Script | Shape | Returns |
 |---|---|---|
-| `VerifyRun(Blob taskset, VerifyOptions opts)` | Split → ForEach ⇒ ExecuteBatch (a share of the batches twice) → Collect, Provenance, Integrity | `report`, `provenance`, `integrity` |
+| `VerifyRun(Blob taskset, VerifyOptions opts)` | Split → ForEach ⇒ ExecutePackage (a share of the packages twice) → Collect, Provenance, Integrity | `report`, `provenance`, `integrity` |
 | `VerifyGenerate(Blob taskset, VerifyOptions opts)` | the same fan-out; the programs are generators | `corpus`, `report`, `provenance`, `integrity` |
-| `VerifyGenerateAndCheck(Blob generators, Blob checker, VerifyOptions opts)` | generators fan out → MakeCheckTasks → checks fan out (a share of the check batches twice) → Collect | `report` (the checks), `corpus` (the candidates), `provenance`, `integrity` |
+| `VerifyGenerateAndCheck(Blob generators, Blob checker, VerifyOptions opts)` | generators fan out → MakeCheckTasks → checks fan out (a share of the check packages twice) → Collect | `report` (the checks), `corpus` (the candidates), `provenance`, `integrity` |
 | `VerifyPreflight(Blob taskset, VerifyOptions opts)` | one host activity | `result` |
 | `VerifyRuntimeDiagnostics()` | one host activity | `result` |
 
-`VerifyOptions`: `DefaultLimits`, `BatchSize` (tasks per chunk, 0 = 32),
+`VerifyOptions`: `DefaultLimits`, `BatchSize` (tasks per batch, 0 = 32),
 `MaxDegree` (concurrent sandboxes per node, 0 = 16), `SamplingRate` (the share
-of batches executed twice for integrity, 0–1; 0 = none), `ReportFormat` (reserved).
+of packages executed twice for integrity, 0–1; 0 = none), `ReportFormat` (reserved).
+
+## How tasks and results travel
+
+Nothing that grows with the taskset travels inside a message. `Verify.Split`
+groups the batches into packages and stores each package as a blob; the
+collection `Grid.ForEach` places on nodes is a list of references (blob id,
+hash, size, task count). A node is told which packages are its share, downloads
+exactly those over the blob channel — in chunks, resumed after a break — and
+returns each package's results as a blob of its own; the host reads the result
+blobs when it writes the documents. The message that assigns a node its share
+of a million tasks is a few hundred references.
+
+A package is one batch while a run is small, so the split between nodes stays
+as fine as the batches. A large run is cut into about a thousand packages
+(at most 4,096 tasks or 8 MB of task text each), which keeps the number of
+transfers bounded while the shares stay proportional to the nodes' rates. A
+package blob is Brotli-compressed; a node checks its hash before it reads the
+tasks, and the host checks a result blob's hash before it reads the results.
 
 ## Documents — authoring without the SDK
 
@@ -92,9 +110,9 @@ of the checker itself stays distinguishable as a `RuntimeError`.
 ## Integrity
 
 Anonymous nodes are trusted by checking, not by assumption. `SamplingRate` runs
-a share of the batches twice, in the same `Grid.ForEach` call as the rest. The
-platform picks the batches at random and keeps the two executions on different
-machines, so a node cannot tell whether its batch is being checked. The
+a share of the packages twice, in the same `Grid.ForEach` call as the rest. The
+platform picks the packages at random and keeps the two executions on different
+machines, so a node cannot tell whether its package is being checked. The
 integrity document pairs the two executions of each task and says whether they
 agree on verdict, exit code, outputs and per-case outcomes —
 exactly the fields an honest execution reproduces anywhere. With a single machine
@@ -107,7 +125,7 @@ verdict, exit code, then outputs.
 The verdict report is the run's identity: it carries verdicts, exit codes and
 per-case outcomes — the fields two honest executions agree on wherever they
 ran — and is byte-identical for a taskset regardless of which nodes ran which
-batches (proven on the test fleet across three placements). Fuel is
+packages (proven on the test fleet across three placements). Fuel is
 reproducible per host but drifts between hosts for CPython tasks — by
 0.0002–0.06 % with the bytecode layers (the remaining difference is in how
 each host's WASI answers the interpreter's stat and descriptor queries), while
@@ -122,18 +140,29 @@ task, so a program sees the same world on every node.
 A worker is often a desktop. A batch runs on dedicated threads below normal
 priority (Windows honours it; Linux ignores thread priorities, where the
 degree cap is the protection) at `min(cores, usable RAM / per-task memory cap,
-MaxDegree)` — 16 by default. Per-task completion reaches the host's activity
-progress sink about twice a second, so a long chunk moves the job's progress.
-Every result batch carries its provenance: node, runtime target, wasmtime and
-native library origin, runtime module hash, degree, task count, wall time.
+MaxDegree)` — 16 by default. Every result batch carries its provenance: runtime
+target, wasmtime and native library origin, runtime module hash, degree, task
+count, wall time.
 
-The node benchmark (`verify-task@mixed-v1`) is the throughput of a fixed
+A node starts every package of its share together. The package blobs download
+ahead of the work, four at a time, so the share is on the node's disk early and
+the rest of the run needs the link only for progress and results; one package
+executes at a time, since a batch already takes the node's cores. A download or
+an upload that fails is tried again for about two minutes before the package
+fails, on top of the blob channel's own retries.
+
+The node reports its share, not one batch: first the delivery (`receiving
+tasks: 12/215 packages, 3.1/14.8 MB; 0/220160 tasks done`), then the work
+(`51200/220160 tasks`), about twice a second through the host's activity
+progress sink. The fraction is tasks done out of the tasks of the node's share.
+
+The node benchmark (`verify-task@mixed-v2`) is the throughput of a fixed
 reference batch — one CPU-bound Python program and one QuickJS program, four
 per worker thread, with their expected outputs — as tasks per second of the
 median run at the node's degree; a node that computes wrong cannot score, a
 node without runtimes reports the default (unranked) score. `Grid.ForEach`
-allocates batches with the engine's `Balanced` strategy (pre-partitioned by
-rate), which the batch work estimate (task count) matches.
+allocates packages with the engine's `Balanced` strategy (pre-partitioned by
+rate), which the package work estimate (task count) matches.
 
 ## Runtimes
 
@@ -218,7 +247,9 @@ can call it as a doctor-style check.
 `OutWit.Controller.AI.Verify.Tests`: wire-layout guards, the schema guards,
 the parser at its edges, the sandbox verdict, adversarial, hygiene, raw-WASI
 and Python-layer suites, the worker pool (cancellation included) and the
-benchmark, the taskset, sampling and integrity pipelines, the end-to-end runs
+benchmark, the taskset, sampling and integrity pipelines, the package format,
+plan, transfer (a link that drops and comes back included) and the share's
+progress, the end-to-end runs
 of every bundled script through the engine on in-process nodes, and the
 module self-containment proof. The sandbox suites need the pinned runtime set
 (`verify-assets build OutWit.Controller.AI.Verify.Tests/@Data/runtimes`;

@@ -3,7 +3,7 @@ using OutWit.Controller.AI.Verify.Model;
 namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
 
 /// <summary>
-/// One behavioral test per verdict path of the ExecuteBatch primitive: each hostile or
+/// One behavioral test per verdict path of the batch executor behind Verify.ExecutePackage: each hostile or
 /// benign program lands in the correct verdict without harming the host, and the
 /// deterministic-imports shadowing makes output — and fuel — reproducible.
 /// </summary>

@@ -8,8 +8,8 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: gather the result batches into a single verdict report blob (aggregates +
-/// one record per task).
+/// Host-side: read the result packages the nodes uploaded and gather their batches into a
+/// single verdict report blob (aggregates + one record per task).
 /// </summary>
 [Activity("Verify.Collect")]
 [MemoryPackable]

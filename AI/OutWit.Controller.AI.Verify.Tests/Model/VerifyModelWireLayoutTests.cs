@@ -25,7 +25,8 @@ public class VerifyModelWireLayoutTests
             typeof(VerifySuiteData), typeof(VerifyTaskData), typeof(VerifyTaskBatchData),
             typeof(VerifyCaseResultData), typeof(VerifyResultData), typeof(VerifyResultBatchData),
             typeof(VerifyOptionsData), typeof(VerifyRuntimeInfoData), typeof(VerifyRuntimeDiagnosticsData),
-            typeof(VerifyPreflightData), typeof(VerifyBatchDiagnosticsData)
+            typeof(VerifyPreflightData), typeof(VerifyBatchDiagnosticsData),
+            typeof(VerifyTaskPackageData), typeof(VerifyResultPackageData)
         };
 
         var actual = typeof(VerifyTaskData).Assembly
@@ -52,6 +53,8 @@ public class VerifyModelWireLayoutTests
     [TestCase(typeof(VerifyRuntimeDiagnosticsData), 4)]
     [TestCase(typeof(VerifyPreflightData), 7)]
     [TestCase(typeof(VerifyBatchDiagnosticsData), 11)]
+    [TestCase(typeof(VerifyTaskPackageData), 5)]
+    [TestCase(typeof(VerifyResultPackageData), 5)]
     public void WireLayoutIsPinnedTest(Type type, int expectedMemberCount)
     {
         var ordered = type

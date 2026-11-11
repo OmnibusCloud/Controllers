@@ -8,9 +8,10 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: generator result batches + a checker spec blob → check task batches, one check per
-/// candidate that passed with output, under the candidate's index. The second fan-out of
-/// VerifyGenerateAndCheck starts from its return value.
+/// Host-side: generator result packages + a checker spec blob → check task packages, one check per
+/// candidate that passed with output, under the candidate's index. The check tasks are stored as
+/// package blobs, like the tasks of Verify.Split; the second fan-out of VerifyGenerateAndCheck
+/// starts from the references this returns.
 /// </summary>
 [Activity("Verify.MakeCheckTasks")]
 [MemoryPackable]

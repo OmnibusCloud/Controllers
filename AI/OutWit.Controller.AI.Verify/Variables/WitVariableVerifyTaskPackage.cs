@@ -1,29 +1,26 @@
 using MemoryPack;
 using OutWit.Common.Abstract;
-using OutWit.Common.Collections;
+using OutWit.Common.Values;
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Engine.Data.Attributes;
-using OutWit.Engine.Data.Collections;
+using OutWit.Engine.Data.Variables;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Verify.Variables;
 
-/// <summary>
-/// Collection of result batches — output of the Grid.ForEach over ExecuteBatch, input to Verify.Collect.
-/// </summary>
-[Variable("VerifyResultBatchCollection")]
+[Variable("VerifyTaskPackage")]
 [MemoryPackable]
-public sealed partial class WitVariableVerifyResultBatchCollection : WitCollection<VerifyResultBatchData?>, IWitVariableFactory<WitVariableVerifyResultBatchCollection>
+public sealed partial class WitVariableVerifyTaskPackage : WitVariable<VerifyTaskPackageData?>, IWitVariableFactory<WitVariableVerifyTaskPackage>
 {
     #region Constructors
 
-    public WitVariableVerifyResultBatchCollection(string name)
+    public WitVariableVerifyTaskPackage(string name)
         : base(name)
     {
     }
 
     [MemoryPackConstructor]
-    public WitVariableVerifyResultBatchCollection(string name, IReadOnlyList<VerifyResultBatchData?> value)
+    public WitVariableVerifyTaskPackage(string name, VerifyTaskPackageData? value)
         : base(name, value)
     {
     }
@@ -38,22 +35,18 @@ public sealed partial class WitVariableVerifyResultBatchCollection : WitCollecti
     /// <returns>True when the models are equal by value.</returns>
     public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
     {
-        if (modelBase is not WitVariableVerifyResultBatchCollection variable)
+        if (modelBase is not WitVariableVerifyTaskPackage variable)
             return false;
 
         return base.Is(modelBase, tolerance)
-               && GetValue().Is(variable.GetValue());
+               && Value.Check(variable.Value);
     }
 
     /// <summary>Deep copy of the variable.</summary>
     /// <returns>The copy.</returns>
-    public override WitVariableVerifyResultBatchCollection Clone()
+    public override WitVariableVerifyTaskPackage Clone()
     {
-        var clonedItems = GetValue()?
-            .Select(x => (VerifyResultBatchData?)x?.Clone())
-            .ToArray() ?? [];
-
-        return new WitVariableVerifyResultBatchCollection(Name, clonedItems);
+        return new WitVariableVerifyTaskPackage(Name, (VerifyTaskPackageData?)GetValue()?.Clone());
     }
 
     #endregion
@@ -63,9 +56,9 @@ public sealed partial class WitVariableVerifyResultBatchCollection : WitCollecti
     /// <summary>Creates a variable of this type under a name.</summary>
     /// <param name="name">The variable name in the script's pool.</param>
     /// <returns>The new variable.</returns>
-    public static WitVariableVerifyResultBatchCollection Create(string name)
+    public static WitVariableVerifyTaskPackage Create(string name)
     {
-        return new WitVariableVerifyResultBatchCollection(name);
+        return new WitVariableVerifyTaskPackage(name);
     }
 
     #endregion

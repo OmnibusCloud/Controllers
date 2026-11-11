@@ -8,7 +8,7 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: the result batches of all executions → the integrity document (the executions of
+/// Host-side: the result packages of all executions → the integrity document (the executions of
 /// every task that ran more than once paired, the nodes of each side, agreement on verdict,
 /// exit, outputs and cases; pairs that met on one node counted, not compared; the mismatch
 /// rate) as a blob.

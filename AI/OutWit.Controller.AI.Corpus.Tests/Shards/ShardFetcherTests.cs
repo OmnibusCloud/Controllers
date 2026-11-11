@@ -142,6 +142,44 @@ public sealed class ShardFetcherTests
     }
 
     [Test]
+    public async Task TheCallerIsToldHowMuchHasArrivedTest()
+    {
+        var destination = Path.Combine(m_directory, "progress.gz");
+        var expected = new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length;
+        var seen = new List<long>();
+        var uri = new Uri(m_origin.ShardUrl(WET_FIXTURE));
+
+        var (fetched, _) = await m_fetcher.FetchMeasuredAsync(uri, [uri.IdnHost], destination, 0, seen.Add, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(fetched, Is.EqualTo(expected));
+            Assert.That(seen[0], Is.Zero, "an attempt says where it starts from");
+            Assert.That(seen[^1], Is.EqualTo(expected));
+            Assert.That(seen, Is.Ordered);
+        });
+    }
+
+    [Test]
+    public async Task AResumedFetchReportsFromWhereItContinuesTest()
+    {
+        var destination = Path.Combine(m_directory, "progress-resumed.gz");
+        var expected = new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length;
+        var seen = new List<long>();
+        var uri = new Uri(m_origin.CutUrl(WET_FIXTURE, 300_000));
+
+        var (fetched, _) = await m_fetcher.FetchMeasuredAsync(uri, [uri.IdnHost], destination, 0, seen.Add, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(fetched, Is.EqualTo(expected));
+            Assert.That(seen[^1], Is.EqualTo(expected));
+            Assert.That(seen, Is.Ordered, "the second attempt continues from the bytes the first one kept");
+            Assert.That(seen.Count(bytes => bytes == 0), Is.EqualTo(1), "only the first attempt starts from nothing");
+        });
+    }
+
+    [Test]
     public async Task TransientFailuresAreRetriedTest()
     {
         var before = m_origin.Requests;

@@ -8,7 +8,7 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Sandbox;
 
 /// <summary>
-/// The node benchmark of <c>Verify.ExecuteBatch</c>: a fixed reference workload — one CPU-bound
+/// The node benchmark of <c>Verify.ExecutePackage</c>: a fixed reference workload — one CPU-bound
 /// Python program and one QuickJS program, each replicated to fill the node's degree four times
 /// over — run as the two batches the planner would make: a warm-up first (module compilation),
 /// then timed runs until the target duration. The rate is tasks per second of the median run at

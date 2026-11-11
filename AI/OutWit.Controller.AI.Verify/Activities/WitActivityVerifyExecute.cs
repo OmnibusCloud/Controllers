@@ -8,8 +8,8 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Single-task variant for diagnostics and tiny jobs; mirrors the batched primitive
-/// the way Render.Frame mirrors Render.FrameBatch.
+/// Single-task variant for diagnostics: one task, given inline, runs as a batch of one. A
+/// taskset never travels this way; it goes through Verify.Split and Verify.ExecutePackage.
 /// </summary>
 [Activity("Verify.Execute")]
 [MemoryPackable]

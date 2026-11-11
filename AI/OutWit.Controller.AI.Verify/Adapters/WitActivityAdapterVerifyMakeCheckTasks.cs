@@ -2,6 +2,7 @@ using System.Collections;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Activities;
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Delivery;
 using OutWit.Controller.AI.Verify.Tasksets;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -34,8 +35,7 @@ internal sealed class WitActivityAdapterVerifyMakeCheckTasks : WitActivityAdapte
 
         pool.TryGetValue(activity.Options, out VerifyOptionsData? options);
 
-        var candidates = candidatesEnumerable
-            .OfType<VerifyResultBatchData>()
+        var candidates = (await VerifyResultPackages.LoadAsync(candidatesEnumerable, BlobService))
             .SelectMany(batch => batch.Results)
             .ToList();
 
@@ -56,7 +56,9 @@ internal sealed class WitActivityAdapterVerifyMakeCheckTasks : WitActivityAdapte
         foreach (var note in batches.Notes)
             Logger.LogInformation("Verify.MakeCheckTasks: {Note}", note);
 
-        if (!pool.TrySetCollection(activity.ReturnReference, batches.Batches))
+        var packages = await VerifyTaskPackages.PublishAsync(batches.Batches, BlobService, Logger, "Verify.MakeCheckTasks");
+
+        if (!pool.TrySetCollection(activity.ReturnReference, packages))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
     }
 

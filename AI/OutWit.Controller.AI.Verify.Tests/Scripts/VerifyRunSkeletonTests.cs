@@ -8,7 +8,7 @@ namespace OutWit.Controller.AI.Verify.Tests.Scripts;
 
 /// <summary>
 /// The distributed gate: the bundled VerifyRun.wit script running through the engine
-/// (Verify.Split → Grid.ForEach ⇒ Verify.ExecuteBatch → Verify.Collect + Verify.Provenance,
+/// (Verify.Split → Grid.ForEach ⇒ Verify.ExecutePackage → Verify.Collect + Verify.Provenance,
 /// blob transport, mock in-process nodes) executes a real taskset in the sandbox and returns a
 /// verdict report — the RLVR code-vs-tests pipeline end to end.
 /// </summary>
@@ -42,7 +42,7 @@ public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
         Assert.That(job, Is.Not.Null);
         Assert.That(job.Activities.Count, Is.GreaterThan(0));
         var variables = job.Variables.Select(variable => variable.Name).ToList();
-        Assert.That(variables, Is.SupersetOf(new[] { "taskset", "opts", "batches", "rate", "checked", "results", "report", "provenance", "integrity" }));
+        Assert.That(variables, Is.SupersetOf(new[] { "taskset", "opts", "packages", "rate", "checked", "results", "report", "provenance", "integrity" }));
     }
 
     [Test]
@@ -80,7 +80,7 @@ public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
         using var report = await ReadJsonAsync((Guid)job.Variables["report"].Value!);
         Assert.That(report.RootElement.GetProperty("summary").GetProperty("total").GetInt32(), Is.EqualTo(4));
         Assert.That(report.RootElement.GetProperty("results").GetArrayLength(), Is.EqualTo(4));
-        Assert.That(((System.Collections.IEnumerable)job.Variables["results"].Value!).OfType<VerifyResultBatchData>().Sum(batch => batch.Results.Count), Is.EqualTo(8));
+        Assert.That(((System.Collections.IEnumerable)job.Variables["results"].Value!).OfType<VerifyResultPackageData>().Sum(package => package.TaskCount), Is.EqualTo(8));
 
         // Rate 0 (the default) leaves the integrity document empty and the run untouched.
         var plainJob = Engine.Compile(m_verifyRunScript);
@@ -107,6 +107,18 @@ public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
         var status = await Engine.ScheduleAndWaitAsync(job, tasksetBlobId, new VerifyOptionsData());
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed));
+
+        // What was fanned out and what came back are references to blobs: no task and no
+        // result travels inside the message that assigns work to a node or reports it.
+        var packages = ((System.Collections.IEnumerable)job.Variables["packages"].Value!).OfType<VerifyTaskPackageData>().ToList();
+        var returned = ((System.Collections.IEnumerable)job.Variables["results"].Value!).OfType<VerifyResultPackageData>().ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(packages.Sum(package => package.TaskCount), Is.EqualTo(4));
+            Assert.That(packages.All(package => package.TasksBlobId != Guid.Empty && package.SizeBytes > 0), Is.True);
+            Assert.That(returned, Has.Count.EqualTo(packages.Count));
+            Assert.That(returned.All(package => package.ResultsBlobId != Guid.Empty && package.SizeBytes > 0), Is.True);
+        });
 
         using var report = await ReadJsonAsync((Guid)job.Variables["report"].Value!);
 

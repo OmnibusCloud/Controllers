@@ -2,6 +2,7 @@ using System.Collections;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Activities;
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Delivery;
 using OutWit.Controller.AI.Verify.Tasksets;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -35,8 +36,7 @@ internal sealed class WitActivityAdapterVerifyCollectOutputs : WitActivityAdapte
         if (!pool.TryGetObject(activity.Results, out var resultsObject) || resultsObject is not IEnumerable resultsEnumerable)
             throw new InvalidOperationException("Failed to get parameter 'Results'.");
 
-        var results = resultsEnumerable
-            .OfType<VerifyResultBatchData>()
+        var results = (await VerifyResultPackages.LoadAsync(resultsEnumerable, BlobService))
             .SelectMany(batch => batch.Results)
             .ToList();
 

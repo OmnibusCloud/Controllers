@@ -8,7 +8,7 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: result batches → a provenance document (which node ran which tasks, with which
+/// Host-side: result packages → a provenance document (which node ran which tasks, with which
 /// wasmtime and runtime module, at which degree) as a blob. The verdict report stays free of
 /// node identity; this is where it lives. Any run doubles as a fleet inventory through it.
 /// </summary>

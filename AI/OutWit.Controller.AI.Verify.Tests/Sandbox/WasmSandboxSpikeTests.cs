@@ -325,7 +325,7 @@ public sealed class WasmSandboxSpikeTests
     /// <summary>
     /// One sandboxed WASI execution: fresh store (no state bleed), stdio redirected to
     /// files (wasmtime holds the handles until the store is disposed), optional
-    /// fuel / memory / epoch envelope — the shape the ExecuteBatch activity productizes.
+    /// fuel / memory / epoch envelope — the shape the ExecutePackage activity productizes.
     /// </summary>
     private WasmRunResult Run(WasmEngine engine, WasmModule module, string[] argv,
         (string Host, string Guest)[]? preopens, (string Key, string Value)[]? environment,

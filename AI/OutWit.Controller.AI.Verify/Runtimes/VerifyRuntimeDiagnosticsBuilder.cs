@@ -7,7 +7,7 @@ namespace OutWit.Controller.AI.Verify.Runtimes;
 /// Builds the sandbox runtime inventory of the process it runs in: the wasmtime host version
 /// and, for each known runtime, whether its module is present and hash-verified. A plain
 /// script function evaluates on the host, so through <c>VerifyRuntimeDiagnostics</c> this
-/// describes the server's module; a node's module is exercised by <c>Verify.ExecuteBatch</c>.
+/// describes the server's module; a node's module is exercised by <c>Verify.ExecutePackage</c>.
 /// </summary>
 public static class VerifyRuntimeDiagnosticsBuilder
 {

@@ -43,9 +43,13 @@ internal sealed class WitActivityAdapterCorpusProcessShard : WitActivityAdapterF
         var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
         var scope = TempStorage.CreateScope($"corpus-{status.JobId:N}-{task.TaskIndex}");
 
+        // The shard's place in what this node tells the host about its share: how much has
+        // arrived from the origin, then how many shards are processed.
+        using var ticket = ShardShareProgress.Enter(status.JobId, task.Source?.SizeBytes ?? 0, CorpusActivityProgressReporter.Create(ProcessingManager, status.JobId), Logger);
+
         try
         {
-            var result = await ShardTaskRunner.RunAsync(task, FETCHER.Value, BlobService, scope, cancellationToken);
+            var result = await ShardTaskRunner.RunAsync(task, FETCHER.Value, BlobService, scope, ticket, cancellationToken);
 
             if (result.Verdict == CorpusShardVerdict.Completed)
                 Logger.LogInformation("Corpus.ProcessShard {Index}: {Out}/{In} documents kept, {Bytes} bytes in, {Fetch} ms fetch, {Process} ms process",

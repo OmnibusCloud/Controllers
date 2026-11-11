@@ -8,7 +8,7 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: the share of the batches a run executes twice (VerifyOptions.SamplingRate), as the
+/// Host-side: the share of the packages a run executes twice (VerifyOptions.SamplingRate), as the
 /// number Grid.Replicas takes.
 /// </summary>
 [Activity("Verify.SamplingRate")]

@@ -1,12 +1,12 @@
 Job:VerifyRun(Blob:taskset, VerifyOptions:opts)
 {
-    VerifyTaskBatchCollection:batches = Verify.Split(taskset, opts);
+    VerifyTaskPackageCollection:packages = Verify.Split(taskset, opts);
 
     Double:rate = Verify.SamplingRate(opts);
     ProcessingOptions:checked = Grid.Replicas(2, rate);
 
-    VerifyResultBatchCollection:results = Grid.ForEach(batch in batches, checked)
-        => Verify.ExecuteBatch(batch);
+    VerifyResultPackageCollection:results = Grid.ForEach(package in packages, checked)
+        => Verify.ExecutePackage(package);
 
     Blob:report = Verify.Collect(results, opts);
     Blob:provenance = Verify.Provenance(results);

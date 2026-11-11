@@ -9,21 +9,21 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Variables;
 
 /// <summary>
-/// Collection of task batches — output of Verify.Split, input to Grid.ForEach.
+/// Collection of task packages (references to blobs of task batches): output of Verify.Split and Verify.MakeCheckTasks, input to Grid.ForEach.
 /// </summary>
-[Variable("VerifyTaskBatchCollection")]
+[Variable("VerifyTaskPackageCollection")]
 [MemoryPackable]
-public sealed partial class WitVariableVerifyTaskBatchCollection : WitCollection<VerifyTaskBatchData?>, IWitVariableFactory<WitVariableVerifyTaskBatchCollection>
+public sealed partial class WitVariableVerifyTaskPackageCollection : WitCollection<VerifyTaskPackageData?>, IWitVariableFactory<WitVariableVerifyTaskPackageCollection>
 {
     #region Constructors
 
-    public WitVariableVerifyTaskBatchCollection(string name)
+    public WitVariableVerifyTaskPackageCollection(string name)
         : base(name)
     {
     }
 
     [MemoryPackConstructor]
-    public WitVariableVerifyTaskBatchCollection(string name, IReadOnlyList<VerifyTaskBatchData?> value)
+    public WitVariableVerifyTaskPackageCollection(string name, IReadOnlyList<VerifyTaskPackageData?> value)
         : base(name, value)
     {
     }
@@ -38,7 +38,7 @@ public sealed partial class WitVariableVerifyTaskBatchCollection : WitCollection
     /// <returns>True when the models are equal by value.</returns>
     public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
     {
-        if (modelBase is not WitVariableVerifyTaskBatchCollection variable)
+        if (modelBase is not WitVariableVerifyTaskPackageCollection variable)
             return false;
 
         return base.Is(modelBase, tolerance)
@@ -47,13 +47,13 @@ public sealed partial class WitVariableVerifyTaskBatchCollection : WitCollection
 
     /// <summary>Deep copy of the variable.</summary>
     /// <returns>The copy.</returns>
-    public override WitVariableVerifyTaskBatchCollection Clone()
+    public override WitVariableVerifyTaskPackageCollection Clone()
     {
         var clonedItems = GetValue()?
-            .Select(x => (VerifyTaskBatchData?)x?.Clone())
+            .Select(x => (VerifyTaskPackageData?)x?.Clone())
             .ToArray() ?? [];
 
-        return new WitVariableVerifyTaskBatchCollection(Name, clonedItems);
+        return new WitVariableVerifyTaskPackageCollection(Name, clonedItems);
     }
 
     #endregion
@@ -63,9 +63,9 @@ public sealed partial class WitVariableVerifyTaskBatchCollection : WitCollection
     /// <summary>Creates a variable of this type under a name.</summary>
     /// <param name="name">The variable name in the script's pool.</param>
     /// <returns>The new variable.</returns>
-    public static WitVariableVerifyTaskBatchCollection Create(string name)
+    public static WitVariableVerifyTaskPackageCollection Create(string name)
     {
-        return new WitVariableVerifyTaskBatchCollection(name);
+        return new WitVariableVerifyTaskPackageCollection(name);
     }
 
     #endregion

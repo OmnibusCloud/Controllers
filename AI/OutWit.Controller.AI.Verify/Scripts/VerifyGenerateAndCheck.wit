@@ -1,17 +1,17 @@
 Job:VerifyGenerateAndCheck(Blob:generators, Blob:checker, VerifyOptions:opts)
 {
-    VerifyTaskBatchCollection:generatorBatches = Verify.Split(generators, opts);
+    VerifyTaskPackageCollection:generatorPackages = Verify.Split(generators, opts);
 
-    VerifyResultBatchCollection:candidates = Grid.ForEach(batch in generatorBatches)
-        => Verify.ExecuteBatch(batch);
+    VerifyResultPackageCollection:candidates = Grid.ForEach(package in generatorPackages)
+        => Verify.ExecutePackage(package);
 
-    VerifyTaskBatchCollection:checkBatches = Verify.MakeCheckTasks(candidates, checker, opts);
+    VerifyTaskPackageCollection:checkPackages = Verify.MakeCheckTasks(candidates, checker, opts);
 
     Double:rate = Verify.SamplingRate(opts);
     ProcessingOptions:checked = Grid.Replicas(2, rate);
 
-    VerifyResultBatchCollection:verdicts = Grid.ForEach(batch in checkBatches, checked)
-        => Verify.ExecuteBatch(batch);
+    VerifyResultPackageCollection:verdicts = Grid.ForEach(package in checkPackages, checked)
+        => Verify.ExecutePackage(package);
 
     Blob:report = Verify.Collect(verdicts, opts);
     Blob:corpus = Verify.CollectOutputs(candidates, opts);

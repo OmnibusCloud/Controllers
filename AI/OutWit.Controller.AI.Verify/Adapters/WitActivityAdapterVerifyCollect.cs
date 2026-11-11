@@ -2,6 +2,7 @@ using System.Collections;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Activities;
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Delivery;
 using OutWit.Controller.AI.Verify.Tasksets;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -29,10 +30,9 @@ internal sealed class WitActivityAdapterVerifyCollect : WitActivityAdapterFuncti
         if (!pool.TryGetObject(activity.Results, out var resultsObject) || resultsObject is not IEnumerable resultsEnumerable)
             throw new InvalidOperationException("Failed to get parameter 'Results'.");
 
-        // Grid.ForEach returns batches in completion order; results carry their own TaskIndex,
-        // so flatten and let the report writer re-key.
-        var results = resultsEnumerable
-            .OfType<VerifyResultBatchData>()
+        // Grid.ForEach returns the packages in completion order, as references; the results
+        // behind them carry their own TaskIndex, so read, flatten and let the report writer re-key.
+        var results = (await VerifyResultPackages.LoadAsync(resultsEnumerable, BlobService))
             .SelectMany(batch => batch.Results)
             .ToList();
 

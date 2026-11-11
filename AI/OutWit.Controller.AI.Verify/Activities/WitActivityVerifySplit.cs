@@ -8,8 +8,9 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: parse the taskset blob, apply limit ceilings, and chunk by runtime affinity
-/// into the batches Grid.ForEach fans out.
+/// Host-side: parse the taskset blob, apply limit ceilings, chunk by runtime affinity into
+/// batches, group the batches into packages and store each package as a blob. What Grid.ForEach
+/// fans out is the references: the tasks reach a node through the blob channel only.
 /// </summary>
 [Activity("Verify.Split")]
 [MemoryPackable]

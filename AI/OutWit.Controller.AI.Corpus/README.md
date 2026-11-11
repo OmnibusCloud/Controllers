@@ -211,6 +211,11 @@ manifest's `size` values.
   processes at once, fewer when memory is short (256 MB budgeted per shard);
   the others of a batch wait their turn, already fetched. The task's temp
   scope is deleted when the task ends, whatever the verdict.
+- **Progress.** The node reports its share, not one shard, about twice a
+  second through the host's activity progress sink: first the delivery
+  (`receiving shards: 3/12, 512.3/1888.0 MB; 1/12 processed`), then the work
+  (`7/12 shards processed`). Delivery stands for a fifth of the share's
+  progress, processing for the rest.
 - **Benchmark.** `Corpus.ProcessShard` measures a node on a synthetic
   reference shard (400 documents generated from a fixed seed, menus and
   short pages among them), one copy per slot of the node's degree at once;

@@ -39,7 +39,20 @@ public static class ShardTaskRunner
     /// <param name="workDirectory">A directory of this task's own for the shard and the products; the caller deletes it.</param>
     /// <param name="cancellationToken">Cancels the task.</param>
     /// <returns>The result, verdict included.</returns>
-    public static async Task<CorpusResultData> RunAsync(CorpusTaskData task, ShardFetcher fetcher, IWitBlobService blobs, string workDirectory, CancellationToken cancellationToken)
+    public static Task<CorpusResultData> RunAsync(CorpusTaskData task, ShardFetcher fetcher, IWitBlobService blobs, string workDirectory, CancellationToken cancellationToken)
+    {
+        return RunAsync(task, fetcher, blobs, workDirectory, null, cancellationToken);
+    }
+
+    /// <summary>Runs one task and reports its delivery to the node's picture of the share.</summary>
+    /// <param name="task">The task.</param>
+    /// <param name="fetcher">Fetches the shard.</param>
+    /// <param name="blobs">Resolves the model blob and receives the products.</param>
+    /// <param name="workDirectory">A directory of this task's own for the shard and the products; the caller deletes it.</param>
+    /// <param name="ticket">The shard's place in the share's progress, or null for none; the caller disposes it.</param>
+    /// <param name="cancellationToken">Cancels the task.</param>
+    /// <returns>The result, verdict included.</returns>
+    public static async Task<CorpusResultData> RunAsync(CorpusTaskData task, ShardFetcher fetcher, IWitBlobService blobs, string workDirectory, ShardShareTicket? ticket, CancellationToken cancellationToken)
     {
         var result = new CorpusResultData
         {
@@ -84,7 +97,7 @@ public static class ShardTaskRunner
         TimeSpan fetchWait;
         try
         {
-            (fetched, fetchWait) = await fetcher.FetchMeasuredAsync(uri, task.AllowedOrigins, shardPath, task.MaxShardBytes, cancellationToken);
+            (fetched, fetchWait) = await fetcher.FetchMeasuredAsync(uri, task.AllowedOrigins, shardPath, task.MaxShardBytes, ticket == null ? null : ticket.Received, cancellationToken);
         }
         catch (ShardOversizedException exception)
         {
@@ -101,6 +114,7 @@ public static class ShardTaskRunner
         }
 
         fetchClock.Stop();
+        ticket?.Fetched();
 
         if (task.Source.Sha256.Length > 0)
         {

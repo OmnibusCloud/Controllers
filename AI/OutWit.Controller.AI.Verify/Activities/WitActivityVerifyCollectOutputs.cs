@@ -8,7 +8,7 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: result batches → the corpus of outputs (one JSON line per task: verdict, exit,
+/// Host-side: result packages → the corpus of outputs (one JSON line per task: verdict, exit,
 /// stdout, stderr) as a blob. The product of VerifyGenerate; VerifyGenerateAndCheck keeps it
 /// next to the check report so that skipped candidates stay visible.
 /// </summary>

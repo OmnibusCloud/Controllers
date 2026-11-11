@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Activities;
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Delivery;
 using OutWit.Controller.AI.Verify.Tasksets;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -43,7 +44,10 @@ internal sealed class WitActivityAdapterVerifySplit : WitActivityAdapterFunction
         foreach (var note in plan.Notes)
             Logger.LogInformation("Verify.Split: {Note}", note);
 
-        if (!pool.TrySetCollection(activity.ReturnReference, plan.Batches))
+        // The tasks leave the host as blobs; the collection Grid.ForEach fans out is references.
+        var packages = await VerifyTaskPackages.PublishAsync(plan.Batches, BlobService, Logger, "Verify.Split");
+
+        if (!pool.TrySetCollection(activity.ReturnReference, packages))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
     }
 

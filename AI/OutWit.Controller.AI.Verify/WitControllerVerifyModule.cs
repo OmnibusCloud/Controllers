@@ -19,16 +19,16 @@ public sealed class WitControllerVerifyModule : WitPluginBase, IWitControllerNod
     {
         services.AddVariable<WitVariableVerifyTask>();
         services.AddVariable<WitVariableVerifyResult>();
-        services.AddVariable<WitVariableVerifyTaskBatch>();
-        services.AddVariable<WitVariableVerifyResultBatch>();
+        services.AddVariable<WitVariableVerifyTaskPackage>();
+        services.AddVariable<WitVariableVerifyResultPackage>();
         services.AddVariable<WitVariableVerifyOptions>();
         services.AddVariable<WitVariableVerifyPreflight>();
         services.AddVariable<WitVariableVerifyRuntimeDiagnostics>();
 
-        services.AddCollection<WitVariableVerifyTaskBatchCollection>();
-        services.AddCollection<WitVariableVerifyResultBatchCollection>();
+        services.AddCollection<WitVariableVerifyTaskPackageCollection>();
+        services.AddCollection<WitVariableVerifyResultPackageCollection>();
 
-        services.AddActivityAdapter<WitActivityVerifyExecuteBatch, WitActivityAdapterVerifyExecuteBatch>();
+        services.AddActivityAdapter<WitActivityVerifyExecutePackage, WitActivityAdapterVerifyExecutePackage>();
         services.AddActivityAdapter<WitActivityVerifyExecute, WitActivityAdapterVerifyExecute>();
         services.AddActivityAdapter<WitActivityVerifySplit, WitActivityAdapterVerifySplit>();
         services.AddActivityAdapter<WitActivityVerifyCollect, WitActivityAdapterVerifyCollect>();

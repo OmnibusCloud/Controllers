@@ -72,7 +72,7 @@ public sealed class VerifyGenerateAndCheckSkeletonTests : VerifyScriptTestBase
         {
             Assert.That(generate.Variables.Select(v => v.Name), Is.SupersetOf(new[] { "taskset", "opts", "corpus", "report", "provenance" }));
             Assert.That(generateAndCheck.Variables.Select(v => v.Name),
-                Is.SupersetOf(new[] { "generators", "checker", "opts", "candidates", "checkBatches", "verdicts", "report", "corpus", "provenance" }));
+                Is.SupersetOf(new[] { "generators", "checker", "opts", "candidates", "checkPackages", "verdicts", "report", "corpus", "provenance" }));
         });
     }
 
