@@ -18,7 +18,7 @@ internal sealed class WitActivityAdapterCorpusProcessShard : WitActivityAdapterF
     /// <summary>Work estimate per shard when nothing gives its size: one typical Common Crawl WET file (CC-MAIN-2026-43: 60-65 MB).</summary>
     private const double DEFAULT_SHARD_MEGABYTES = 64;
 
-    private static readonly Lazy<ShardFetcher> FETCHER = new(() => new ShardFetcher(ShardFetcher.CreateClient(), ShardFetchPolicy.Default));
+    private static readonly Lazy<ShardFetcher> FETCHER = new(() => new ShardFetcher(ShardFetchPolicy.Default, ShardOriginPolicy.Machine));
 
     #endregion
 

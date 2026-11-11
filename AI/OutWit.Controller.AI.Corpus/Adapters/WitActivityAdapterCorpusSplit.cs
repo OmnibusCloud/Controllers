@@ -14,7 +14,7 @@ internal sealed class WitActivityAdapterCorpusSplit : WitActivityAdapterFunction
 {
     #region Constants
 
-    private static readonly Lazy<HttpClient> CLIENT = new(ShardFetcher.CreateClient);
+    private static readonly Lazy<HttpClient> CLIENT = new(() => ShardHttp.CreateClient(ShardOriginPolicy.Machine));
 
     #endregion
 
@@ -61,7 +61,7 @@ internal sealed class WitActivityAdapterCorpusSplit : WitActivityAdapterFunction
         try
         {
             var origins = tasks.SelectMany(task => task.AllowedOrigins).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            var sizes = await ShardSizeProbe.ProbeSizesAsync(sources, origins, CLIENT.Value, cancellationToken);
+            var sizes = await ShardSizeProbe.ProbeSizesAsync(sources, origins, ShardOriginPolicy.Machine, CLIENT.Value, cancellationToken);
             var known = sizes.Where(size => size is > 0).Select(size => size!.Value).ToList();
             var mean = known.Count > 0 ? (long)known.Average() : 0;
 

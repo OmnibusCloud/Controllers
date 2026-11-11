@@ -6,7 +6,9 @@ namespace OutWit.Controller.AI.Corpus.Manifests;
 /// <summary>
 /// Turns a parsed manifest into node tasks: one shard per task, every source checked against
 /// the allowlist and the byte cap here, on the host, so a bad manifest never reaches a node;
-/// the pipeline completed with the language model's transport and pin.
+/// the pipeline completed with the language model's transport and pin. A host that is not a
+/// public origin does not stop the plan: whether to fetch from it is each machine's own
+/// decision, so the plan names such hosts and the machines answer for themselves.
 /// </summary>
 public static class CorpusTaskPlanner
 {
@@ -24,12 +26,16 @@ public static class CorpusTaskPlanner
     /// <param name="options">Job options (null = defaults).</param>
     /// <param name="languageModelBlobId">The blob carrying the language model, or Guid.Empty.</param>
     /// <param name="languageModelSha256">Lower-case hex SHA-256 of that blob's bytes, or "".</param>
+    /// <param name="policy">What the planning machine fetches from (null = this machine's policy).</param>
     /// <returns>The plan; tasks are empty when there are errors.</returns>
-    public static CorpusPlan Plan(CorpusManifest manifest, CorpusOptionsData? options, Guid languageModelBlobId, string languageModelSha256)
+    public static CorpusPlan Plan(CorpusManifest manifest, CorpusOptionsData? options, Guid languageModelBlobId, string languageModelSha256, ShardOriginPolicy? policy = null)
     {
+        policy ??= ShardOriginPolicy.Machine;
+
         var errors = new List<string>(manifest.Errors);
         var notes = new List<string>();
         var refused = new List<string>();
+        var outside = new List<string>();
         var oversized = 0;
         long traffic = 0;
 
@@ -70,6 +76,15 @@ public static class CorpusTaskPlanner
                 if (Uri.TryCreate(source.Url, UriKind.Absolute, out var parsed) && !refused.Contains(parsed.IdnHost, StringComparer.OrdinalIgnoreCase))
                     refused.Add(parsed.IdnHost);
             }
+            else if (uri != null && policy.Check(uri) is { } unfit)
+            {
+                // A public origin written the wrong way is wrong on every machine; any other
+                // host is for each machine's owner to decide.
+                if (ShardOriginPolicy.IsPublicOrigin(uri.IdnHost))
+                    errors.Add($"sources[{index}]: {unfit}");
+                else if (!outside.Contains(uri.IdnHost, StringComparer.OrdinalIgnoreCase))
+                    outside.Add(uri.IdnHost);
+            }
 
             traffic += source.SizeBytes;
             if (source.SizeBytes > cap)
@@ -95,7 +110,11 @@ public static class CorpusTaskPlanner
         if (tasks.Count > 0)
             notes.Add($"{tasks.Count} shard(s), cap {cap} bytes each, estimated traffic {traffic} bytes.");
 
-        return new CorpusPlan(errors.Count == 0 ? tasks : [], errors, notes, refused, oversized, traffic);
+        if (outside.Count > 0)
+            notes.Add($"{string.Join(", ", outside)}: not a public origin ({string.Join(", ", ShardOriginPolicy.PUBLIC_ORIGINS)}). " +
+                      $"Shards from there run only on machines whose owner lists the host in {ShardOriginPolicy.EXTRA_ORIGINS_VARIABLE}; every other machine answers OriginRefused.");
+
+        return new CorpusPlan(errors.Count == 0 ? tasks : [], errors, notes, refused, outside, oversized, traffic);
     }
 
     /// <summary>The byte cap in force: the options' cap, bounded by the controller's.</summary>

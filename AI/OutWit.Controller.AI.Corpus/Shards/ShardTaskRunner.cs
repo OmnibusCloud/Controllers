@@ -8,8 +8,8 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Corpus.Shards;
 
 /// <summary>
-/// One task on a node, start to finish: the allowlist re-check, the pinned model, the capped
-/// fetch, the pipeline, the uploads. Every way a shard can fail is a verdict in the result,
+/// One task on a node, start to finish: the allowlist re-check against the task and the
+/// machine's own policy, the pinned model, the capped fetch, the pipeline, the uploads. Every way a shard can fail is a verdict in the result,
 /// not an exception — the job completes and the report says what happened to each shard;
 /// only cancellation propagates.
 /// </summary>
@@ -51,7 +51,9 @@ public static class ShardTaskRunner
         if (task.Source == null || task.Pipeline == null)
             return Fail(result, CorpusShardVerdict.Failed, "The task carries no source or no pipeline.");
 
-        var refusal = ShardOrigin.Check(task.Source.Url, task.AllowedOrigins, out var uri);
+        // The task's list AND this machine's policy: the task is written by the submitter and
+        // cannot widen what the machine's owner agreed to fetch from.
+        var refusal = ShardOrigin.Check(task.Source.Url, task.AllowedOrigins, fetcher.Origins, out var uri);
         if (refusal != null || uri == null)
             return Fail(result, CorpusShardVerdict.OriginRefused, refusal ?? "The source URL is not fetchable.");
 
@@ -82,11 +84,16 @@ public static class ShardTaskRunner
         TimeSpan fetchWait;
         try
         {
-            (fetched, fetchWait) = await fetcher.FetchMeasuredAsync(uri, shardPath, task.MaxShardBytes, cancellationToken);
+            (fetched, fetchWait) = await fetcher.FetchMeasuredAsync(uri, task.AllowedOrigins, shardPath, task.MaxShardBytes, cancellationToken);
         }
         catch (ShardOversizedException exception)
         {
             return Fail(result, CorpusShardVerdict.Oversized, exception.Message);
+        }
+        catch (ShardOriginRefusedException exception)
+        {
+            // A redirect off the list, or a name that resolves into the machine's own network.
+            return Fail(result, CorpusShardVerdict.OriginRefused, exception.Message);
         }
         catch (Exception exception) when (exception is HttpRequestException or IOException)
         {

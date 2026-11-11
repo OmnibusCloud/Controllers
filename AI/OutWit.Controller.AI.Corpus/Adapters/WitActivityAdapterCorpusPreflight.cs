@@ -13,7 +13,7 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
 {
     #region Constants
 
-    private static readonly Lazy<HttpClient> CLIENT = new(ShardFetcher.CreateClient);
+    private static readonly Lazy<HttpClient> CLIENT = new(() => ShardHttp.CreateClient(ShardOriginPolicy.Machine));
 
     #endregion
 
@@ -48,11 +48,11 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
         if (plan.Errors.Count == 0 && manifest.Sources.Any(source => source.SizeBytes <= 0))
         {
             var origins = manifest.AllowedOrigins.Select(ShardOrigin.Normalize).ToList();
-            var probe = await ShardSizeProbe.ProbeAsync(manifest.Sources, origins, CLIENT.Value, ProcessingManager.CancellationToken(status.JobId));
+            var probe = await ShardSizeProbe.ProbeAsync(manifest.Sources, origins, ShardOriginPolicy.Machine, CLIENT.Value, ProcessingManager.CancellationToken(status.JobId));
             report.EstimatedTrafficBytes += probe.EstimatedBytes;
             report.Messages.Add($"{probe.Probed} source size(s) probed at the origin" +
                                 (probe.Failed > 0 ? $", {probe.Failed} unanswered" : "") +
-                                (probe.Unprobed > 0 ? $", {probe.Unprobed} beyond the probe budget" : "") +
+                                (probe.Unprobed > 0 ? $", {probe.Unprobed} not asked (beyond the probe budget, or a host this server does not fetch from)" : "") +
                                 (probe.Failed + probe.Unprobed > 0 ? " (estimated at the mean)" : "") +
                                 $"; traffic estimate {report.EstimatedTrafficBytes} bytes.");
         }

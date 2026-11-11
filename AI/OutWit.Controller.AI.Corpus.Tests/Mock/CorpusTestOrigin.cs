@@ -1,15 +1,25 @@
 using System.Net;
 using System.Text;
+using OutWit.Controller.AI.Corpus.Shards;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Mock;
 
 /// <summary>
 /// A public origin on the loopback: serves the golden shards under /shards/&lt;name&gt; and
 /// scripted misbehaviour under /fail/... (a run of 503s before success, a stall, a body that
-/// lies about its length) so the fetcher's retries and caps are tested against a real socket.
+/// lies about its length) so the fetcher's retries and caps are tested against a real socket,
+/// and redirects under /hop so the allowlist gate is tested hop by hop. A loopback origin is
+/// one a machine's owner has to list; <see cref="Policy"/> is that listing for the tests.
 /// </summary>
 public sealed class CorpusTestOrigin : IDisposable
 {
+    #region Constants
+
+    /// <summary>The policy of a machine whose owner listed the loopback origin.</summary>
+    public static readonly ShardOriginPolicy Policy = new(["127.0.0.1"]);
+
+    #endregion
+
     #region Fields
 
     private readonly HttpListener m_listener = new();
@@ -64,6 +74,18 @@ public sealed class CorpusTestOrigin : IDisposable
         return $"{BaseUrl}cut/{name}";
     }
 
+    /// <summary>A URL that answers with a redirect to the given target (absolute, or a path of this origin).</summary>
+    public string HopUrl(string target)
+    {
+        return $"{BaseUrl}hop?to={Uri.EscapeDataString(target)}";
+    }
+
+    /// <summary>A URL that redirects to itself for ever.</summary>
+    public string LoopUrl()
+    {
+        return $"{BaseUrl}loop";
+    }
+
     private async Task Loop()
     {
         while (!m_stop.IsCancellationRequested)
@@ -94,6 +116,14 @@ public sealed class CorpusTestOrigin : IDisposable
 
         try
         {
+            if (path == "/hop" || path == "/loop")
+            {
+                response.StatusCode = 302;
+                response.Headers["Location"] = path == "/loop" ? "/loop" : context.Request.QueryString["to"] ?? "/";
+                response.Close();
+                return;
+            }
+
             if (path.StartsWith("/slow/", StringComparison.Ordinal))
             {
                 Thread.Sleep(400);

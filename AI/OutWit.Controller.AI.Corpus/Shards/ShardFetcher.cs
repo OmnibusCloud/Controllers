@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 
 namespace OutWit.Controller.AI.Corpus.Shards;
 
@@ -9,7 +8,8 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// is final — the origin said no. The cap is checked against Content-Length before a byte is
 /// read and against the running count while reading. A retry after a broken body asks for the
 /// rest with a Range request and appends when the origin honours it (206); an origin that
-/// answers 200 starts the file over.
+/// answers 200 starts the file over. Redirects are followed one hop at a time, each checked
+/// against the task's list and the machine's policy; a refusal there is final.
 /// </summary>
 public sealed class ShardFetcher
 {
@@ -17,28 +17,27 @@ public sealed class ShardFetcher
 
     private const int BUFFER_SIZE = 1 << 20;
 
-    /// <summary>What the origin sees: the controller's name and version.</summary>
-    public static readonly string USER_AGENT = $"OutWit-Corpus/{ControllerBuildInfo.VERSION}";
-
     #endregion
 
     #region Fields
 
     private readonly HttpClient m_client;
     private readonly ShardFetchPolicy m_policy;
+    private readonly ShardOriginPolicy m_origins;
     private readonly SemaphoreSlim? m_gate;
 
     #endregion
 
     #region Constructors
 
-    /// <summary>Creates a fetcher over an HTTP client.</summary>
-    /// <param name="client">The client; its timeout should be infinite — the policy's stall limit bounds the wait.</param>
+    /// <summary>Creates a fetcher for a machine.</summary>
     /// <param name="policy">Retries and stall limit.</param>
-    public ShardFetcher(HttpClient client, ShardFetchPolicy policy)
+    /// <param name="origins">What this machine fetches from.</param>
+    public ShardFetcher(ShardFetchPolicy policy, ShardOriginPolicy origins)
     {
-        m_client = client;
+        m_client = ShardHttp.CreateClient(origins);
         m_policy = policy;
+        m_origins = origins;
         m_gate = policy.MaxConcurrent > 0 ? new SemaphoreSlim(policy.MaxConcurrent, policy.MaxConcurrent) : null;
     }
 
@@ -47,30 +46,34 @@ public sealed class ShardFetcher
     #region Functions
 
     /// <summary>Fetches a shard to a file, retrying per the policy.</summary>
-    /// <param name="uri">The shard URL (already allowlisted).</param>
+    /// <param name="uri">The shard URL (already checked).</param>
+    /// <param name="allowedOrigins">Host names the task allows; a redirect may only lead to one of them.</param>
     /// <param name="destinationPath">The file to write; replaced on every attempt.</param>
     /// <param name="maxBytes">Most bytes accepted (0 = no cap).</param>
     /// <param name="cancellationToken">Cancels the fetch.</param>
     /// <returns>The byte count written.</returns>
     /// <exception cref="ShardOversizedException">The shard exceeds the cap.</exception>
+    /// <exception cref="ShardOriginRefusedException">The request would have left what this machine fetches from.</exception>
     /// <exception cref="HttpRequestException">The origin refused or kept failing.</exception>
-    public async Task<long> FetchAsync(Uri uri, string destinationPath, long maxBytes, CancellationToken cancellationToken)
+    public async Task<long> FetchAsync(Uri uri, IReadOnlyCollection<string> allowedOrigins, string destinationPath, long maxBytes, CancellationToken cancellationToken)
     {
-        return (await FetchMeasuredAsync(uri, destinationPath, maxBytes, cancellationToken)).Bytes;
+        return (await FetchMeasuredAsync(uri, allowedOrigins, destinationPath, maxBytes, cancellationToken)).Bytes;
     }
 
     /// <summary>Fetches a shard to a file like <see cref="FetchAsync"/> and says how long it waited for a download slot first.</summary>
-    /// <param name="uri">The shard URL (already allowlisted).</param>
+    /// <param name="uri">The shard URL (already checked).</param>
+    /// <param name="allowedOrigins">Host names the task allows; a redirect may only lead to one of them.</param>
     /// <param name="destinationPath">The file to write; replaced on every attempt.</param>
     /// <param name="maxBytes">Most bytes accepted (0 = no cap).</param>
     /// <param name="cancellationToken">Cancels the fetch.</param>
     /// <returns>The byte count written and the wait for the slot.</returns>
     /// <exception cref="ShardOversizedException">The shard exceeds the cap.</exception>
+    /// <exception cref="ShardOriginRefusedException">The request would have left what this machine fetches from.</exception>
     /// <exception cref="HttpRequestException">The origin refused or kept failing.</exception>
-    public async Task<(long Bytes, TimeSpan Waited)> FetchMeasuredAsync(Uri uri, string destinationPath, long maxBytes, CancellationToken cancellationToken)
+    public async Task<(long Bytes, TimeSpan Waited)> FetchMeasuredAsync(Uri uri, IReadOnlyCollection<string> allowedOrigins, string destinationPath, long maxBytes, CancellationToken cancellationToken)
     {
         if (m_gate == null)
-            return (await FetchWithRetriesAsync(uri, destinationPath, maxBytes, cancellationToken), TimeSpan.Zero);
+            return (await FetchWithRetriesAsync(uri, allowedOrigins, destinationPath, maxBytes, cancellationToken), TimeSpan.Zero);
 
         // Several shards may run on one node at once; the origin sees at most the policy's
         // number of them downloading, the rest wait their turn (fetch is a small share of a
@@ -80,7 +83,7 @@ public sealed class ShardFetcher
         var waited = queued.Elapsed;
         try
         {
-            return (await FetchWithRetriesAsync(uri, destinationPath, maxBytes, cancellationToken), waited);
+            return (await FetchWithRetriesAsync(uri, allowedOrigins, destinationPath, maxBytes, cancellationToken), waited);
         }
         finally
         {
@@ -88,7 +91,7 @@ public sealed class ShardFetcher
         }
     }
 
-    private async Task<long> FetchWithRetriesAsync(Uri uri, string destinationPath, long maxBytes, CancellationToken cancellationToken)
+    private async Task<long> FetchWithRetriesAsync(Uri uri, IReadOnlyCollection<string> allowedOrigins, string destinationPath, long maxBytes, CancellationToken cancellationToken)
     {
         Exception? last = null;
         var resume = false;
@@ -99,11 +102,20 @@ public sealed class ShardFetcher
 
             try
             {
-                return await FetchOnceAsync(uri, destinationPath, maxBytes, resume, cancellationToken);
+                return await FetchOnceAsync(uri, allowedOrigins, destinationPath, maxBytes, resume, cancellationToken);
             }
             catch (ShardOversizedException)
             {
                 throw;
+            }
+            catch (Exception exception) when (ShardOriginRefusedException.Find(exception) is { } refusal)
+            {
+                // The HTTP stack wraps what the address rule throws while connecting; a retry
+                // cannot change the answer, so the refusal itself goes up.
+                if (ReferenceEquals(refusal, exception))
+                    throw;
+
+                throw refusal;
             }
             catch (HttpRequestException exception) when (!IsTransient(exception.StatusCode))
             {
@@ -127,31 +139,11 @@ public sealed class ShardFetcher
         throw new HttpRequestException($"Fetching '{uri}' failed after {m_policy.Attempts} attempt(s): {last?.Message}", last);
     }
 
-    /// <summary>Creates the client a node uses: no client-side timeout (the policy bounds stalls), automatic decompression off (shards are gzip and stay gzip).</summary>
-    /// <returns>The client.</returns>
-    public static HttpClient CreateClient()
-    {
-        var handler = new SocketsHttpHandler
-        {
-            AutomaticDecompression = DecompressionMethods.None,
-            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
-            ConnectTimeout = TimeSpan.FromSeconds(30)
-        };
-
-        var client = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
-        client.DefaultRequestHeaders.UserAgent.Add(ProductInfoHeaderValue.Parse(USER_AGENT));
-        return client;
-    }
-
-    private async Task<long> FetchOnceAsync(Uri uri, string destinationPath, long maxBytes, bool resume, CancellationToken cancellationToken)
+    private async Task<long> FetchOnceAsync(Uri uri, IReadOnlyCollection<string> allowedOrigins, string destinationPath, long maxBytes, bool resume, CancellationToken cancellationToken)
     {
         var have = resume && File.Exists(destinationPath) ? new FileInfo(destinationPath).Length : 0;
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        if (have > 0)
-            request.Headers.Range = new RangeHeaderValue(have, null);
-
-        using var response = await m_client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using var response = await ShardHttp.SendAsync(m_client, HttpMethod.Get, uri, have, allowedOrigins, m_origins, cancellationToken);
 
         if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
         {
@@ -223,6 +215,13 @@ public sealed class ShardFetcher
         var jitter = delay * (Random.Shared.NextDouble() * 0.5);
         return delay + jitter;
     }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>What this machine fetches from.</summary>
+    public ShardOriginPolicy Origins => m_origins;
 
     #endregion
 }

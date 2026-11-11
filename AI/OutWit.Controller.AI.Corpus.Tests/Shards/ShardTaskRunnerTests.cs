@@ -43,7 +43,7 @@ public sealed class ShardTaskRunnerTests
         m_root = Path.Combine(Path.GetTempPath(), $"witai_corpus_runner_{Guid.NewGuid():N}");
         m_origin = new CorpusTestOrigin(Fixtures());
         m_blobs = new CorpusTestBlobService(Path.Combine(m_root, "blobs"));
-        m_fetcher = new ShardFetcher(ShardFetcher.CreateClient(), ShardFetchPolicy.Immediate);
+        m_fetcher = new ShardFetcher(ShardFetchPolicy.Immediate, CorpusTestOrigin.Policy);
         m_modelBlob = await m_blobs.UploadFileAsync(Path.Combine(Fixtures(), MODEL_FIXTURE));
         m_modelSha = ShardLanguageModels.Hash(Path.Combine(Fixtures(), MODEL_FIXTURE));
     }
@@ -93,6 +93,39 @@ public sealed class ShardTaskRunnerTests
 
         var uploaded = await File.ReadAllBytesAsync(await m_blobs.GetLocalPathAsync(result.TextBlobId));
         Assert.That(CorpusCompressor.Decompress(uploaded), Is.EqualTo(CorpusCompressor.Decompress(text.ToArray())));
+    }
+
+    [Test]
+    public async Task HostTheMachineDoesNotFetchFromIsNeverRequestedTest()
+    {
+        // The task names the loopback origin; this machine's owner did not list it.
+        var strict = new ShardFetcher(ShardFetchPolicy.Immediate, new ShardOriginPolicy());
+        var task = Task(WET_FIXTURE, CorpusSourceFormat.Wet);
+        var before = m_origin.Requests;
+
+        var result = await ShardTaskRunner.RunAsync(task, strict, m_blobs, Work(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.OriginRefused));
+            Assert.That(result.Error, Does.Contain("not a public origin"));
+            Assert.That(m_origin.Requests, Is.EqualTo(before));
+        });
+    }
+
+    [Test]
+    public async Task RedirectOutOfTheAllowlistIsARefusalNotAFetchFailureTest()
+    {
+        var task = Task(WET_FIXTURE, CorpusSourceFormat.Wet);
+        task.Source!.Url = m_origin.HopUrl("http://169.254.169.254/latest/meta-data/");
+
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.OriginRefused));
+            Assert.That(result.Error, Does.Contain("redirects to a place that is not fetched"));
+        });
     }
 
     [Test]

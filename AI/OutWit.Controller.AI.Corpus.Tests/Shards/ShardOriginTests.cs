@@ -46,6 +46,57 @@ public sealed class ShardOriginTests
         Assert.That(ShardOrigin.Check("https://data.commoncrawl.org/x.warc.gz", [], out _), Is.Not.Null);
     }
 
+    [TestCase("https://user:secret@data.commoncrawl.org/x.warc.gz")]
+    [TestCase("https://data.commoncrawl.org@evil.example/x.warc.gz")]
+    public void UrlWithCredentialsIsRefusedTest(string url)
+    {
+        var refusal = ShardOrigin.Check(url, ["data.commoncrawl.org", "evil.example"], out var uri);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(refusal, Does.Contain("user name or password"));
+            Assert.That(uri, Is.Null);
+        });
+    }
+
+    [Test]
+    public void TaskCannotWidenWhatTheMachineFetchesFromTest()
+    {
+        // The task names the host, the machine does not: the task's word is not enough.
+        var refusal = ShardOrigin.Check("http://192.168.1.1/admin", ["192.168.1.1"], new ShardOriginPolicy(), out var uri);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(refusal, Does.Contain("not a public origin"));
+            Assert.That(uri, Is.Null);
+        });
+    }
+
+    [Test]
+    public void TaskNarrowsWhatTheMachineFetchesFromTest()
+    {
+        // The machine fetches from Common Crawl, this task does not name it.
+        var refusal = ShardOrigin.Check("https://data.commoncrawl.org/x.warc.gz", ["datalake.corp.example"], new ShardOriginPolicy(["datalake.corp.example"]), out var uri);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(refusal, Does.Contain("not an allowed origin"));
+            Assert.That(uri, Is.Null);
+        });
+    }
+
+    [Test]
+    public void HostNamedByBothPassesTest()
+    {
+        var refusal = ShardOrigin.Check("https://data.commoncrawl.org/x.warc.gz", ["data.commoncrawl.org"], new ShardOriginPolicy(), out var uri);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(refusal, Is.Null);
+            Assert.That(uri, Is.Not.Null);
+        });
+    }
+
     [TestCase(" Data.CommonCrawl.org ", "data.commoncrawl.org")]
     [TestCase("https://data.commoncrawl.org/", "data.commoncrawl.org")]
     [TestCase("data.commoncrawl.org:443", "data.commoncrawl.org")]

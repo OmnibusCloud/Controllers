@@ -41,7 +41,7 @@
       "type": "array",
       "minItems": 1,
       "items": { "type": "string", "minLength": 1 },
-      "description": "Host names (a URL or host:port is reduced to its host); matched exactly, case-insensitively."
+      "description": "Host names (a URL or host:port is reduced to its host); matched exactly, case-insensitively. The list narrows what a machine fetches from and cannot widen it: beyond the public origins compiled into the controller (data.commoncrawl.org), a machine fetches only from hosts its owner listed in OMNIBUSCLOUD_CORPUS_ORIGINS and answers OriginRefused for the rest."
     },
     "sources": {
       "type": "array",

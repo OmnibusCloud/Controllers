@@ -11,8 +11,8 @@ The data path is the novelty: the task descriptor carries a URL and the node
 fetches its shard straight from the public origin (Pattern U); the platform
 transports descriptors and results only. That capability comes with its
 obligations — a shard cap and a traffic estimate the contributor sees before
-opting in, an origin allowlist checked on the host and again on the node,
-retries with jitter towards the origin.
+opting in, a rule about where a machine fetches from that a job cannot widen
+(see *Where a machine fetches from*), retries with jitter towards the origin.
 
 **Status: 0.1.5 — proven on the test fleet, not yet released to nuget.org.**
 The stage libraries are wired into seven activities and three bundled scripts; the
@@ -93,7 +93,9 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   must match the model blob or the job does not start.
 - `allowed_origins` are host names, matched exactly and case-insensitively
   (ports and paths do not matter); a source whose host is not listed is
-  refused on the host and, should it ever get there, on the node.
+  refused on the host and, should it ever get there, on the node. The list
+  narrows what a machine fetches from; it cannot widen it (see *Where a
+  machine fetches from*).
 - A bare URL's format follows its extension (`.warc.wet.gz` → WET,
   `.warc.gz` → WARC); an object may state `format`, a `size` estimate for the
   traffic line and the cap check, and the origin's published `sha256`, which
@@ -147,10 +149,50 @@ progress) is counted as `version_skew`, not compared; the mismatch rate is over
 the compared pairs. The report has one entry per shard: a completed execution,
 then the lowest content hash.
 
+## Where a machine fetches from
+
+A task says which URL to fetch, and a task is written by whoever submitted
+the job. So the task's word is not enough: without a rule of the machine's
+own, a job could send a contributor's computer to any address, the ones
+inside that contributor's network included, and read the answer back as
+"cleaned text". Every request therefore passes two questions, on a node and
+on the server alike (the server asks origins for shard sizes):
+
+1. **Does the task name the host?** The manifest's `allowed_origins`.
+2. **Does this machine fetch from the host at all?** Not something a
+   manifest can answer.
+
+A machine fetches from two kinds of host:
+
+- **The public origins compiled into the controller**: `data.commoncrawl.org`
+  today. Over HTTPS, on the default port, and only at public internet
+  addresses — a name that resolves into a private, loopback or link-local
+  range is not contacted, and the address that was checked is the address
+  that is connected to.
+- **Hosts the machine's owner listed** in the environment variable
+  `OMNIBUSCLOUD_CORPUS_ORIGINS` (host names separated by `;`, `,` or spaces)
+  of the process that runs the controller. This is the owner's own decision
+  about the owner's own machine, so such a host is taken as written: HTTP or
+  HTTPS, any port, any address. A lab's data server inside its network is the
+  case; on the public network nobody needs to set it.
+
+Redirects are never followed blindly: each hop is put to both questions, at
+most five hops. A URL with a user name or password is refused.
+
+What a job sees when a host is not a public origin: `Corpus.Preflight` and
+`Corpus.Split` still plan the shards and name the host in a message, because
+the answer belongs to each machine. A machine whose owner listed the host
+processes the shard; any other answers `OriginRefused` without sending a
+request. The server does not ask such a host for sizes unless its own
+operator listed it, so the traffic estimate for those shards comes from the
+manifest's `size` values.
+
 ## Node behaviour
 
-- The node fetches only what the task declares: the URL's host must be on the
-  task's allowlist and the scheme HTTP(S); nothing else is ever requested.
+- The node fetches only what the task declares and the machine permits:
+  the URL's host must be on the task's allowlist and pass the machine's own
+  rule above, the scheme HTTP(S); nothing else is ever requested, a redirect
+  included.
 - The fetch is streamed to the task's own temp scope and capped: a
   `Content-Length` past the cap ends the request before a byte is read, a
   streamed body past it is cut. Three attempts with doubling back-off and

@@ -33,7 +33,7 @@ public sealed class ShardFetcherTests
     public void Setup()
     {
         m_origin = new CorpusTestOrigin(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures"));
-        m_fetcher = new ShardFetcher(ShardFetcher.CreateClient(), ShardFetchPolicy.Immediate);
+        m_fetcher = new ShardFetcher(ShardFetchPolicy.Immediate, CorpusTestOrigin.Policy);
         m_directory = Path.Combine(Path.GetTempPath(), $"witai_corpus_fetch_{Guid.NewGuid():N}");
         Directory.CreateDirectory(m_directory);
     }
@@ -44,6 +44,82 @@ public sealed class ShardFetcherTests
         m_origin.Dispose();
         if (Directory.Exists(m_directory))
             Directory.Delete(m_directory, recursive: true);
+    }
+
+    #endregion
+
+    #region Redirect Tests
+
+    [Test]
+    public async Task RedirectInsideTheAllowlistIsFollowedTest()
+    {
+        var destination = Path.Combine(m_directory, "hop.gz");
+        var expected = new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length;
+
+        // A relative and an absolute redirect, one after the other.
+        var url = m_origin.HopUrl(m_origin.HopUrl($"/shards/{WET_FIXTURE}"));
+        var fetched = await m_fetcher.FetchAsync(new Uri(url), destination, 0, CancellationToken.None);
+
+        Assert.That(fetched, Is.EqualTo(expected));
+    }
+
+    [TestCase("http://localhost:{0}/shards/x.gz", "not an allowed origin", Description = "a host the task does not name")]
+    [TestCase("ftp://127.0.0.1/shards/x.gz", "only http and https", Description = "another scheme")]
+    [TestCase("http://user:secret@127.0.0.1:{0}/shards/x.gz", "user name or password", Description = "credentials")]
+    public void RedirectOutOfTheAllowlistIsRefusedTest(string target, string reason)
+    {
+        var before = m_origin.Requests;
+        var url = m_origin.HopUrl(string.Format(target, m_origin.Port));
+
+        var exception = Assert.ThrowsAsync<ShardOriginRefusedException>(() => m_fetcher.FetchAsync(new Uri(url), Path.Combine(m_directory, "out.gz"), 0, CancellationToken.None));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.Message, Does.Contain(reason));
+            Assert.That(m_origin.Requests - before, Is.EqualTo(1), "the redirect is refused once, not retried");
+        });
+    }
+
+    [Test]
+    public void RedirectToAHostTheMachineDoesNotFetchFromIsRefusedTest()
+    {
+        // The task names both hosts; the machine's owner listed only the loopback one.
+        var url = m_origin.HopUrl("http://192.168.1.1/router/status");
+
+        var exception = Assert.ThrowsAsync<ShardOriginRefusedException>(() => m_fetcher.FetchAsync(new Uri(url), ["127.0.0.1", "192.168.1.1"], Path.Combine(m_directory, "lan.gz"), 0, CancellationToken.None));
+
+        Assert.That(exception!.Message, Does.Contain("not a public origin"));
+    }
+
+    [Test]
+    public void EndlessRedirectsStopTest()
+    {
+        var before = m_origin.Requests;
+
+        var exception = Assert.ThrowsAsync<ShardOriginRefusedException>(() => m_fetcher.FetchAsync(new Uri(m_origin.LoopUrl()), Path.Combine(m_directory, "loop.gz"), 0, CancellationToken.None));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.Message, Does.Contain("redirects more than"));
+            Assert.That(m_origin.Requests - before, Is.EqualTo(ShardHttp.MAX_REDIRECTS + 1));
+        });
+    }
+
+    [Test]
+    public void PublicOriginThatResolvesIntoTheMachinesNetworkIsNotContactedTest()
+    {
+        // The name is Common Crawl's, the answer of the resolver is this machine: no connection.
+        var before = m_origin.Requests;
+        var policy = new ShardOriginPolicy(null, (_, _) => Task.FromResult(new[] { IPAddress.Loopback }));
+        var fetcher = new ShardFetcher(ShardFetchPolicy.Immediate, policy);
+
+        var exception = Assert.ThrowsAsync<ShardOriginRefusedException>(() => fetcher.FetchAsync(new Uri("https://data.commoncrawl.org/x.warc.gz"), Path.Combine(m_directory, "rebind.gz"), 0, CancellationToken.None));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.Message, Does.Contain("no public address"));
+            Assert.That(m_origin.Requests, Is.EqualTo(before));
+        });
     }
 
     #endregion
@@ -102,7 +178,7 @@ public sealed class ShardFetcherTests
     [Test]
     public async Task ConcurrencyCeilingHoldsAtTheOriginTest()
     {
-        var polite = new ShardFetcher(ShardFetcher.CreateClient(), ShardFetchPolicy.Immediate with { MaxConcurrent = 2 });
+        var polite = new ShardFetcher(ShardFetchPolicy.Immediate with { MaxConcurrent = 2 }, CorpusTestOrigin.Policy);
         var before = m_origin.MaxInFlight;
 
         var fetches = Enumerable.Range(0, 6)

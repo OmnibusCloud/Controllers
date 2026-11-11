@@ -11,6 +11,7 @@ namespace OutWit.Controller.AI.Corpus.Manifests;
 /// <param name="Errors">Problems that stop the plan.</param>
 /// <param name="Notes">Informational notes.</param>
 /// <param name="RefusedOrigins">Hosts named by sources that the allowlist does not cover.</param>
+/// <param name="OutsideOrigins">Hosts that are neither public origins nor listed by the owner of the machine that planned the job: their shards run only on machines whose owner lists them.</param>
 /// <param name="OversizedSources">Sources whose estimated size exceeds the cap.</param>
 /// <param name="EstimatedTrafficBytes">Sum of the sources' estimated sizes.</param>
 public sealed record CorpusPlan(
@@ -18,5 +19,6 @@ public sealed record CorpusPlan(
     List<string> Errors,
     List<string> Notes,
     List<string> RefusedOrigins,
+    List<string> OutsideOrigins,
     int OversizedSources,
     long EstimatedTrafficBytes);

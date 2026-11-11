@@ -1,5 +1,6 @@
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Shards;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Manifests;
 
@@ -121,6 +122,67 @@ public sealed class CorpusTaskPlannerTests
             Assert.That(plan.Errors, Is.Empty);
             Assert.That(plan.Tasks[0].Pipeline!.LanguageModelBlobId, Is.EqualTo(Guid.Empty));
             Assert.That(plan.Notes, Has.Some.Contains("target_languages are ignored"));
+        });
+    }
+
+    [Test]
+    public void HostOutsideThePublicOriginsIsPlannedAndNamedTest()
+    {
+        // Whether to fetch from such a host is each machine's own decision, so the plan
+        // stands and says which hosts the machines will be asked about.
+        var plan = CorpusTaskPlanner.Plan(Manifest(sources: ["https://h/a.warc.gz", "https://H/b.warc.gz"]), null, Guid.NewGuid(), MODEL_SHA, new ShardOriginPolicy());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(plan.Errors, Is.Empty);
+            Assert.That(plan.Tasks, Has.Count.EqualTo(2));
+            Assert.That(plan.OutsideOrigins, Is.EqualTo(new[] { "h" }));
+            Assert.That(plan.Notes, Has.Some.Contains("not a public origin").And.Contains(ShardOriginPolicy.EXTRA_ORIGINS_VARIABLE));
+        });
+    }
+
+    [Test]
+    public void HostThePlanningMachinesOwnerListedIsNotNamedTest()
+    {
+        var plan = CorpusTaskPlanner.Plan(Manifest(sources: ["https://h/a.warc.gz"]), null, Guid.NewGuid(), MODEL_SHA, new ShardOriginPolicy(["h"]));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(plan.Errors, Is.Empty);
+            Assert.That(plan.OutsideOrigins, Is.Empty);
+            Assert.That(plan.Notes, Has.None.Contains("not a public origin"));
+        });
+    }
+
+    [Test]
+    public void PublicOriginIsPlannedWithoutANoteTest()
+    {
+        var manifest = new CorpusManifest(new CorpusPipelineData { Version = "v" }, ["data.commoncrawl.org"],
+            [new CorpusSourceData { Url = "https://data.commoncrawl.org/crawl-data/a.warc.wet.gz", Format = CorpusSourceFormat.Wet }], []);
+
+        var plan = CorpusTaskPlanner.Plan(manifest, null, Guid.NewGuid(), MODEL_SHA, new ShardOriginPolicy());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(plan.Errors, Is.Empty);
+            Assert.That(plan.Tasks, Has.Count.EqualTo(1));
+            Assert.That(plan.OutsideOrigins, Is.Empty);
+        });
+    }
+
+    [TestCase("http://data.commoncrawl.org/crawl-data/a.warc.wet.gz", "https only")]
+    [TestCase("https://data.commoncrawl.org:8443/crawl-data/a.warc.wet.gz", "default port")]
+    public void PublicOriginWrittenAnotherWayStopsThePlanTest(string url, string reason)
+    {
+        var manifest = new CorpusManifest(new CorpusPipelineData { Version = "v" }, ["data.commoncrawl.org"],
+            [new CorpusSourceData { Url = url, Format = CorpusSourceFormat.Wet }], []);
+
+        var plan = CorpusTaskPlanner.Plan(manifest, null, Guid.NewGuid(), MODEL_SHA, new ShardOriginPolicy());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(plan.Tasks, Is.Empty);
+            Assert.That(plan.Errors, Has.Some.Contains(reason));
         });
     }
 
