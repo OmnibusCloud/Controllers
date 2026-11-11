@@ -100,6 +100,7 @@ Migrations/
 .idea_modules/
 
 # Internal working docs/plans live locally only — this is a public repo.
+@Docs/
 @Archive/
 @AI/
 AI/@Design/
