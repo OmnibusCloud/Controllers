@@ -26,7 +26,7 @@ public sealed class VerifyProvenanceWriterTests
         {
             Assert.That(batches.Select(batch => batch.GetProperty("tasks")[0].GetInt32()), Is.EqualTo(new[] { 0, 3, 4 }));
             Assert.That(batches[0].GetProperty("runtime_target").GetString(), Is.EqualTo("linux-x64"));
-            Assert.That(batches[0].GetProperty("wasmtime").GetString(), Is.EqualTo("44.0.0.0"));
+            Assert.That(batches[0].GetProperty("wasmtime").GetString(), Is.EqualTo("48.0.2.0"));
             Assert.That(batches[0].GetProperty("controller").GetString(), Is.EqualTo("0.2.0-test"));
             Assert.That(batches[0].GetProperty("runtime").GetString(), Is.EqualTo("quickjs-0.15.1"));
             Assert.That(batches[0].GetProperty("runtime_sha256").GetString(), Is.EqualTo("bbb"));
@@ -138,7 +138,7 @@ public sealed class VerifyProvenanceWriterTests
             Diagnostics = new VerifyBatchDiagnosticsData
             {
                 RuntimeTarget = "linux-x64",
-                WasmtimeVersion = "44.0.0.0",
+                WasmtimeVersion = "48.0.2.0",
                 RuntimeId = runtimeId,
                 RuntimeSha256 = sha256,
                 Degree = 2,

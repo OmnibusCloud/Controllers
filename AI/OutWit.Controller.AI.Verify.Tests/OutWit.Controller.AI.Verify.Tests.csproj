@@ -30,7 +30,7 @@
        layers, QuickJS). Build it with the asset tool (OutWit.Controller.AI.Verify.Assets,
        "verify-assets build @Data/runtimes"); @Data/ is gitignored. -->
   <ItemGroup>
-    <PackageReference Include="Wasmtime" Version="44.0.0" />
+    <PackageReference Include="Wasmtime" Version="48.0.2" />
   </ItemGroup>
 
   <ItemGroup>

@@ -17,6 +17,8 @@ public sealed class VerifySafetyPageTests
     private const string PAGE = "safety.md";
     private const string CONTROLLER_PROJECT = "OutWit.Controller.AI.Verify.csproj";
     private const string ENGINE_REFERENCE = "<PackageReference Include=\"Wasmtime\" Version=\"(?<version>[0-9.]+)\" />";
+    private const string NATIVE_PINS = "pins.env";
+    private const string NATIVE_VERSION = "^WASMTIME_NATIVE_VERSION=(?<version>[0-9.]+)\\s*$";
 
     private const long KIBIBYTE = 1024;
     private const long MEBIBYTE = 1024 * KIBIBYTE;
@@ -61,11 +63,24 @@ public sealed class VerifySafetyPageTests
     [Test]
     public void ThePageNamesTheEngineTheControllerIsBuiltWithTest()
     {
+        // The binding is the package the controller references; the native library is the
+        // one the asset tool pins and the data assets carry.
         var project = Load(Path.Combine("..", CONTROLLER_PROJECT));
-        var match = Regex.Match(project, ENGINE_REFERENCE);
-        Assert.That(match.Success, Is.True, "the controller project names its wasmtime package");
+        var binding = Regex.Match(project, ENGINE_REFERENCE);
+        Assert.That(binding.Success, Is.True, "the controller project names its wasmtime package");
 
-        Assert.That(Load(PAGE), Does.Contain($"wasmtime {match.Groups["version"].Value}"));
+        var pins = Load(Path.Combine("..", "..", "OutWit.Controller.AI.Verify.Assets", "toolchain", NATIVE_PINS));
+        var native = Regex.Match(pins, NATIVE_VERSION, RegexOptions.Multiline);
+        Assert.That(native.Success, Is.True, "the asset tool pins the native library's version");
+
+        var page = Load(PAGE);
+        Assert.Multiple(() =>
+        {
+            Assert.That(page, Does.Contain($"binding wasmtime {binding.Groups["version"].Value}"));
+            Assert.That(page, Does.Contain($"native library of wasmtime {native.Groups["version"].Value}"));
+            Assert.That(binding.Groups["version"].Value.Split('.')[0], Is.EqualTo(native.Groups["version"].Value.Split('.')[0]),
+                "the binding and the native library are of one line");
+        });
     }
 
     [TestCaseSource(nameof(NAMED_TESTS))]

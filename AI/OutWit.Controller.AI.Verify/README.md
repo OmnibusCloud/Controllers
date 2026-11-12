@@ -304,8 +304,14 @@ identifier first, then the portable one).
 
 The natives and the runtime modules are Tier-2 data assets (`ControllerDataAsset`),
 fetched by consumers at build time from the `verify-v<version>` release of this
-repository and verified by hash; the nupkg itself stays small. Licences travel
-inside the asset archives (wasmtime: Apache-2.0; CPython: PSF; QuickJS-NG: MIT;
+repository and verified by hash; the nupkg itself stays small. The engine is the
+long-term line 48 of wasmtime: the .NET binding 48.0.2 (the `Wasmtime` package) over
+the native library of its newest patch, 48.0.8, taken unchanged from the engine's own
+release archives (`toolchain/natives.sh` of the asset tool, pinned by the digests the
+release states; the build server runs the tests on the same library on each platform).
+A patch of the line changes neither an output nor a unit of fuel; a major release would
+change fuel, so the fleet stays on one line. Licences travel inside the asset archives
+(wasmtime: Apache-2.0 WITH LLVM-exception; CPython: PSF; QuickJS-NG: MIT;
 Ruby and its bundled gems: Ruby's own terms or BSD-2-Clause; the ruby.wasm
 port: MIT).
 

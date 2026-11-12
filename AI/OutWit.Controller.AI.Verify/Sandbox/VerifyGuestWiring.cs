@@ -55,7 +55,7 @@ internal static class VerifyGuestWiring
 
         // The runtime root (the interpreter's library layers), read-only as "/".
         if (runtime.RootPath != null)
-            wasi = wasi.WithPreopenedDirectory(runtime.RootPath, GUEST_ROOT, WasiDirectoryPermissions.Read, WasiFilePermissions.Read);
+            wasi = wasi.WithPreopenedDirectory(runtime.RootPath, GUEST_ROOT, false);
 
         if (stdinPath != null)
             wasi = wasi.WithStandardInput(stdinPath);

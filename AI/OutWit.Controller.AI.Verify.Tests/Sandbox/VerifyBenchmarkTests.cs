@@ -73,7 +73,7 @@ public sealed class VerifyBenchmarkTests : VerifySandboxTestBase
             Assert.That(result.Custom["runs_s"].Split(';'), Has.Length.EqualTo(result.Iterations));
             Assert.That(result.Custom.ContainsKey("median_s"), Is.True);
             Assert.That(result.Custom.ContainsKey("warmup_s"), Is.True);
-            Assert.That(result.Custom["wasmtime"], Does.StartWith("44."));
+            Assert.That(result.Custom["wasmtime"], Does.StartWith("48."));
         });
     }
 

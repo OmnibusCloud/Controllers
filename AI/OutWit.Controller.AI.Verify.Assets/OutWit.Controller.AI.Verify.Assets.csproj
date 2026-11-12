@@ -20,7 +20,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Wasmtime" Version="44.0.0" />
+    <PackageReference Include="Wasmtime" Version="48.0.2" />
   </ItemGroup>
 
 </Project>

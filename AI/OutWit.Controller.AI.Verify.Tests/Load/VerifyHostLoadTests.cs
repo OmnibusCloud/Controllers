@@ -109,7 +109,7 @@ public sealed class VerifyHostLoadTests
                 Results = results,
                 Diagnostics = new VerifyBatchDiagnosticsData
                 {
-                    NodeId = nodeId, NodeName = nodeName, RuntimeTarget = "linux-x64", WasmtimeVersion = "44.0.0.0",
+                    NodeId = nodeId, NodeName = nodeName, RuntimeTarget = "linux-x64", WasmtimeVersion = "48.0.2.0",
                     NativeLibraryPath = "(load context)", RuntimeId = "python-3.14.6", RuntimeSha256 = "aaa",
                     Degree = 2, TaskCount = results.Count, WallMs = 100, ControllerVersion = "1.0.0-test"
                 }

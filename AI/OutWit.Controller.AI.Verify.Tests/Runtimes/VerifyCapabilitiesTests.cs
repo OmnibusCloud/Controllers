@@ -82,7 +82,7 @@ public sealed class VerifyCapabilitiesTests
     {
         var diagnostics = new VerifyRuntimeDiagnosticsData
         {
-            WasmtimeVersion = "44.0.0.0",
+            WasmtimeVersion = "48.0.2.0",
             Runtimes =
             [
                 new VerifyRuntimeInfoData { RuntimeId = VerifyRuntimeCatalog.PYTHON_3_14_6, Sha256 = "aa", Available = true },
@@ -99,7 +99,7 @@ public sealed class VerifyCapabilitiesTests
         {
             Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo("verify-capabilities/1"));
             Assert.That(root.GetProperty("controller").GetString(), Does.Match("^[0-9]+[.][0-9]+[.][0-9]+"));
-            Assert.That(root.GetProperty("wasmtime").GetString(), Is.EqualTo("44.0.0.0"));
+            Assert.That(root.GetProperty("wasmtime").GetString(), Is.EqualTo("48.0.2.0"));
             Assert.That(root.GetProperty("benchmark_unit").GetString(), Is.EqualTo(VerifyBenchmark.UNIT));
             Assert.That(runtimes.Select(r => r.GetProperty("language").GetString()), Is.EqualTo(new[] { "python", "javascript", "wasi" }));
             Assert.That(runtimes[1].GetProperty("available").GetBoolean(), Is.False);

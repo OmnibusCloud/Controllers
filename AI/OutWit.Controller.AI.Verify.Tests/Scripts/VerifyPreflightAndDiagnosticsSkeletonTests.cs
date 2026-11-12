@@ -94,7 +94,7 @@ public sealed class VerifyPreflightAndDiagnosticsSkeletonTests : VerifyScriptTes
         Assert.Multiple(() =>
         {
             Assert.That(diagnostics.RuntimesRootFound, Is.True);
-            Assert.That(diagnostics.WasmtimeVersion, Does.StartWith("44."));
+            Assert.That(diagnostics.WasmtimeVersion, Does.StartWith("48."));
             Assert.That(diagnostics.RuntimeTarget, Does.Match("^(windows|linux|macos)-"));
             Assert.That(byId.Keys, Is.EquivalentTo(VerifyRuntimeCatalog.KnownIds));
             Assert.That(byId.Values.All(r => r.Available), Is.True, string.Join(", ", byId.Values.Where(r => !r.Available).Select(r => r.RuntimeId)));

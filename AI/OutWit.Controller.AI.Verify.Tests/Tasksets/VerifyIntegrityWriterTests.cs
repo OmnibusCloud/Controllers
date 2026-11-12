@@ -116,7 +116,7 @@ public sealed class VerifyIntegrityWriterTests
             Diagnostics = new VerifyBatchDiagnosticsData
             {
                 RuntimeTarget = "linux-x64",
-                WasmtimeVersion = "44.0.0.0",
+                WasmtimeVersion = "48.0.2.0",
                 RuntimeId = "python-3.14.6",
                 RuntimeSha256 = "aaa",
                 Degree = 2,

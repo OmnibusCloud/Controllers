@@ -40,7 +40,7 @@ public sealed class VerifyBatchExecutorTests : VerifySandboxTestBase
             Assert.That(diagnostics.Degree, Is.GreaterThanOrEqualTo(1));
             Assert.That(diagnostics.TaskCount, Is.EqualTo(3));
             Assert.That(diagnostics.WallMs, Is.GreaterThanOrEqualTo(0));
-            Assert.That(diagnostics.WasmtimeVersion, Does.StartWith("44."));
+            Assert.That(diagnostics.WasmtimeVersion, Does.StartWith("48."));
             Assert.That(diagnostics.ControllerVersion, Is.Not.Empty);
             Assert.That(reports.Select(r => r.Done).OrderBy(d => d), Is.EqualTo(new[] { 1, 2, 3 }));
             Assert.That(reports.Select(r => r.Total), Is.All.EqualTo(3));

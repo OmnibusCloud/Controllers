@@ -69,13 +69,15 @@ change:
 
 ## Where the protection ends
 
-- **The sandbox is the wasmtime engine.** A flaw in the engine itself is a flaw here. This
-  version stands on wasmtime 44.0.0, which its makers stopped supporting in June 2026.
-  The problems published for it since that a program could reach are closed in this
-  controller by configuration, each named in the code next to what closes it. One is not
-  closable that way: a code-generation defect on ARM processors, fixed in wasmtime 48.0.7.
-  The move to the supported long-term line of the engine is the next step for this
-  controller.
+- **The sandbox is the wasmtime engine.** A flaw in the engine itself is a flaw here.
+  This version stands on the engine's long-term line 48, which its makers support with
+  security fixes until August 2028: the native library of wasmtime 48.0.8, its newest
+  patch, under the .NET binding wasmtime 48.0.2. When a new patch of the line comes out,
+  the controller takes it; within the line a patch changes neither what a program prints
+  nor what it costs. The sandbox also leaves out the engine's features no task needs
+  (exceptions, shared memory, the garbage-collected heap, 64-bit memories) and takes away
+  the few system calls that were the subject of past advisories, each named in the code
+  next to what closes it.
 - **A program can use what it is given.** For the seconds it runs it can keep a core busy
   and fill its memory. That is the work, not an escape.
 - **The limits are the lab's to set, up to a ceiling.** A lab can ask for up to 2 minutes

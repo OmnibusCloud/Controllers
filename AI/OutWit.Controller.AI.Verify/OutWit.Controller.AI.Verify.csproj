@@ -29,7 +29,7 @@
        folder. In-solution tests resolve wasmtime from the test bin; the module-load test
        proves the deployed layout through the real isolated loader. -->
   <ItemGroup>
-    <PackageReference Include="Wasmtime" Version="44.0.0" />
+    <PackageReference Include="Wasmtime" Version="48.0.2" />
   </ItemGroup>
 
   <PropertyGroup>

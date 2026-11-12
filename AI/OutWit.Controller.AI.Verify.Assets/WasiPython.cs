@@ -45,13 +45,12 @@ internal static class WasiPython
                 .WithArgs(["python.wasm", .. args])
                 .WithEnvironmentVariable("PYTHONHASHSEED", "0")
                 .WithEnvironmentVariable("PYTHONUNBUFFERED", "1")
-                .WithPreopenedDirectory(rootDir, GUEST_ROOT, WasiDirectoryPermissions.Read, WasiFilePermissions.Read);
+                .WithPreopenedDirectory(rootDir, GUEST_ROOT, false);
 
             if (sourceDir != null)
             {
                 wasi = wasi.WithPreopenedDirectory(sourceDir, GUEST_SOURCE,
-                    WasiDirectoryPermissions.Read | WasiDirectoryPermissions.Write,
-                    WasiFilePermissions.Read | WasiFilePermissions.Write);
+                    true);
             }
 
             wasi = wasi.WithStandardOutput(stdoutPath).WithStandardError(stderrPath);

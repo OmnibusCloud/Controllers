@@ -340,7 +340,7 @@ public sealed class WasmSandboxSpikeTests
 
         foreach (var (host, guest) in preopens ?? [])
             wasi = wasi.WithPreopenedDirectory(host, guest,
-                WasiDirectoryPermissions.Read, WasiFilePermissions.Read);
+                false);
 
         var stdoutPath = Path.Combine(m_ioDir, $"{Guid.NewGuid():N}.out");
         var stderrPath = stdoutPath + ".err";

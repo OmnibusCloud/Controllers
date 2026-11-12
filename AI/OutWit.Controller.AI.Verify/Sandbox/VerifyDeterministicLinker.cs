@@ -106,21 +106,21 @@ internal static class VerifyDeterministicLinker
                 return ERRNO_SUCCESS;
             });
 
-        // No descriptor juggling. fd_renumber (the C library's dup2) leaks host descriptors
-        // in wasmtime 44.0.0 (GHSA-3p27-qvp9-27qf): a guest that can open one file could
-        // exhaust the host's. Nothing a task does needs it; it answers "not implemented".
+        // No descriptor juggling. Nothing a task does needs fd_renumber (the C library's dup2),
+        // and it is where wasmtime up to 44.0.2 leaked host descriptors (GHSA-3p27-qvp9-27qf):
+        // it answers "not implemented".
         linker.DefineFunction(WASI_MODULE, "fd_renumber", (Caller caller, int from, int to) => ERRNO_NOSYS);
 
         // No directory listing. The only folder a guest has is its runtime's library, which a
         // program has no need to list; the order of a listing is the host file system's (two
-        // nodes would print it differently), and in wasmtime before 48.0.4 every entry carries
+        // nodes would print it differently), and before wasmtime 48.0.4 every entry carried
         // three bytes of uninitialized host memory to the guest (GHSA-96f6-r43r-8c24).
         // "Permission denied" is what the interpreters' own importers take for an empty folder.
         linker.DefineFunction(WASI_MODULE, "fd_readdir",
             (Caller caller, int fd, int buffer, int bufferLength, long cookie, int usedPtr) => ERRNO_ACCES);
 
-        // No file times to set: everything a guest can reach is read-only, and an out-of-range
-        // time panics the host in wasmtime before 48.0.3 (GHSA-j2g9-4prp-pf6h).
+        // No file times to set: everything a guest can reach is read-only, and before wasmtime
+        // 48.0.3 an out-of-range time panicked the host (GHSA-j2g9-4prp-pf6h).
         linker.DefineFunction(WASI_MODULE, "fd_filestat_set_times",
             (Caller caller, int fd, long accessed, long modified, int flags) => ERRNO_ROFS);
         linker.DefineFunction(WASI_MODULE, "path_filestat_set_times",

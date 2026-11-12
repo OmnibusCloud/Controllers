@@ -103,9 +103,11 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// platforms; fuel and epoch give the CPU and wall-clock envelopes. Beyond that the
     /// engine runs what a guest built for wasm32-wasi needs and nothing more:
     /// one linear memory with 32-bit addresses (the store's cap is per memory, and 64-bit
-    /// tables are what the table-size panic of wasmtime 44.0.0, GHSA-p8xm-42r7-89xg, needs),
-    /// no shared memory, no GC heap, no components; relaxed SIMD in its
-    /// deterministic mode, so a module that uses it computes the same bits on every CPU.
+    /// tables are what the table-size panic GHSA-p8xm-42r7-89xg of wasmtime 44.0.0 needed),
+    /// no shared memory, no GC heap, no exceptions (on by default since wasmtime 47, the
+    /// subject of four advisories since; no runtime of the catalog uses them), no components;
+    /// relaxed SIMD in its deterministic mode, so a module that uses it computes the same
+    /// bits on every CPU.
     /// </summary>
     private static Config CreateConfig()
     {
@@ -117,6 +119,7 @@ public sealed class VerifyWasmSandbox : IDisposable
             .WithMultiMemory(false)
             .WithWasmThreads(false)
             .WithGc(false)
+            .WithExceptions(false)
             .WithComponentModel(false)
             .WithRelaxedSIMD(true, true);
     }
