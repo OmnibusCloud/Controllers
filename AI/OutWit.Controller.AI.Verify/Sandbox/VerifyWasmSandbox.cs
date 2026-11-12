@@ -51,10 +51,24 @@ public sealed class VerifyWasmSandbox : IDisposable
     }
 
     /// <summary>
-    /// Creates a sandbox: one engine with fuel accounting, epoch interruption and NaN
-    /// canonicalization, one epoch timer, one temp folder for the stdio redirects.
+    /// Creates a sandbox whose working folder is a new one in the operating system's temp
+    /// path: for tests and for a host without a temp storage of its own.
     /// </summary>
     public VerifyWasmSandbox()
+        : this(null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a sandbox: one engine with fuel accounting, epoch interruption and NaN
+    /// canonicalization, one epoch timer, one folder for the stdio redirects.
+    /// </summary>
+    /// <param name="ioDirectory">
+    /// The folder the redirects of running tasks are written to, or null for a new one in the
+    /// operating system's temp path. On a node it is a scope of the client's temp storage, so
+    /// nothing of a task leaves the client's own folders. Created when missing, deleted on Dispose.
+    /// </param>
+    public VerifyWasmSandbox(string? ioDirectory)
     {
         // NaN canonicalization pins float bit patterns across platforms; fuel and epoch
         // give the CPU and wall-clock envelopes. One engine is shared by every store.
@@ -69,7 +83,7 @@ public sealed class VerifyWasmSandbox : IDisposable
 
         m_taskModules = new VerifyTaskModuleCache(m_engine);
 
-        m_ioDir = Path.Combine(Path.GetTempPath(), $"witai_verify_{Guid.NewGuid():N}");
+        m_ioDir = ioDirectory ?? Path.Combine(Path.GetTempPath(), $"witai_verify_{Guid.NewGuid():N}");
         Directory.CreateDirectory(m_ioDir);
     }
 

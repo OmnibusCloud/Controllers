@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Engine.Interfaces;
@@ -7,7 +8,7 @@ namespace OutWit.Controller.AI.Verify.Delivery;
 /// <summary>
 /// The node's side of delivery: a task package is downloaded from the blob channel and a
 /// result package is uploaded to it. The channel moves a blob in chunks and resumes after a
-/// break; on top of that a transfer that fails is tried again here for about two minutes,
+/// break; on top of that a transfer that fails is tried again here for about five minutes,
 /// because one failed item fails the node's whole share. A few downloads run at once, so the
 /// packages of a share arrive ahead of the work instead of one before each.
 /// </summary>
@@ -24,7 +25,10 @@ public static class VerifyPackageTransfer
         TimeSpan.FromSeconds(5),
         TimeSpan.FromSeconds(10),
         TimeSpan.FromSeconds(20),
-        TimeSpan.FromSeconds(40)
+        TimeSpan.FromSeconds(40),
+        TimeSpan.FromSeconds(60),
+        TimeSpan.FromSeconds(60),
+        TimeSpan.FromSeconds(60)
     ];
 
     private static readonly SemaphoreSlim FETCH = new(FETCH_DEGREE, FETCH_DEGREE);
@@ -99,6 +103,8 @@ public static class VerifyPackageTransfer
 
     private static async Task<T> WithRetryAsync<T>(Func<Task<T>> transfer, string what, ILogger logger, CancellationToken cancellationToken)
     {
+        var clock = Stopwatch.StartNew();
+
         for (var attempt = 0; ; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -113,6 +119,12 @@ public static class VerifyPackageTransfer
                     what, attempt + 1, RETRY_DELAYS.Length + 1, RETRY_DELAYS[attempt].TotalSeconds);
 
                 await Task.Delay(RETRY_DELAYS[attempt], cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // The last attempt: the error a submitter or an operator reads is the only trace
+                // a node leaves of it, so it says how long the transfer was tried.
+                throw new IOException($"The {what} failed {attempt + 1} time(s) over {clock.Elapsed.TotalSeconds:F0} s: {exception.Message}", exception);
             }
         }
     }

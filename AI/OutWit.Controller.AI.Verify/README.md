@@ -7,7 +7,7 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking, and formal proof checking — generation
 and verification are the same activity with different programs.
 
-**Status: 0.4.0 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.5.0 — proven on the test fleet, not yet released to nuget.org.**
 `VerifyRun` returns a byte-identical verdict report for a taskset across runs,
 placements and fleets: a million small tasks gave the same report on six nodes
 (22m41s) and on four (41m35s). Every node executes batches at a bounded degree
@@ -152,13 +152,16 @@ priority (Windows honours it; Linux ignores thread priorities, where the
 degree cap is the protection) at `min(cores, usable RAM / per-task memory cap,
 MaxDegree)` — 16 by default. Every result batch carries its provenance: runtime
 target, wasmtime and native library origin, runtime module hash, degree, task
-count, wall time.
+count, wall time. What a run needs on disk — the files a task's input and
+output are redirected to, deleted when the run ends — lives in the client's
+own temp folder, and the task packages in the client's blob cache: nothing of
+a task is written anywhere else on the machine.
 
 A node starts every package of its share together. The package blobs download
 ahead of the work, four at a time, so the share is on the node's disk early and
 the rest of the run needs the link only for progress and results; one package
 executes at a time, since a batch already takes the node's cores. A download or
-an upload that fails is tried again for about two minutes before the package
+an upload that fails is tried again for about five minutes before the package
 fails, on top of the blob channel's own retries.
 
 The node reports its share, not one batch: first the delivery (`receiving

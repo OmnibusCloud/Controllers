@@ -1,7 +1,8 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Activities;
-using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Delivery;
+using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
 using OutWit.Controller.AI.Verify.Sandbox;
 using OutWit.Engine.Data.ActivityAdapters;
@@ -26,10 +27,14 @@ internal sealed class WitActivityAdapterVerifyExecutePackage : WitActivityAdapte
 
     #region Constructors
 
-    public WitActivityAdapterVerifyExecutePackage(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
+    public WitActivityAdapterVerifyExecutePackage(IWitProcessingManager processingManager, IWitBlobService blobService, IServiceProvider services, ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+
+        // Before the sandbox is first used (a benchmark may be that use): its working files
+        // belong in the host's temp storage, the client's own folder on a contributor's machine.
+        VerifySandboxHost.UseTempStorage(services.GetService<IWitTempStorage>());
     }
 
     #endregion

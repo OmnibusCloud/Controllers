@@ -43,6 +43,36 @@ public sealed class VerifySandboxHygieneTests : VerifySandboxTestBase
     }
 
     [Test]
+    public void TheWorkingFolderIsTheOneTheHostGivesTest()
+    {
+        // On a node the folder is a scope of the client's temp storage: nothing of a task is
+        // written outside it, and it is gone with the sandbox.
+        var given = Path.Combine(Path.GetTempPath(), $"witai_host_scope_{Guid.NewGuid():N}", "verify");
+
+        var sandbox = new VerifyWasmSandbox(given);
+        try
+        {
+            var result = sandbox.Execute(Python, PythonTask("print(input())", suite: new VerifySuiteData { Cases = [new VerifySuiteCaseData { Stdin = "7\n", ExpectedStdout = "7\n" }] }),
+                VerifySandboxDefaults.Resolve(null, null));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Pass));
+                Assert.That(sandbox.IoDirectory, Is.EqualTo(given));
+                Assert.That(Directory.Exists(given), Is.True);
+                Assert.That(Directory.GetFiles(given), Is.Empty, "the run's files are deleted when it ends");
+            });
+        }
+        finally
+        {
+            sandbox.Dispose();
+        }
+
+        Assert.That(Directory.Exists(given), Is.False);
+        Directory.Delete(Path.GetDirectoryName(given)!, recursive: true);
+    }
+
+    [Test]
     public void GuestSeesOnlyThePinnedEnvironmentTest()
     {
         var result = Run(Python, PythonTask("import os; print(sorted(os.environ))"));

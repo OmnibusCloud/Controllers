@@ -14,7 +14,7 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.1.10 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.1.11 — proven on the test fleet, not yet released to nuget.org.**
 The stage libraries are wired into seven activities and three bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
@@ -206,8 +206,9 @@ manifest's `size` values.
   trusted only when its bytes hash to the pipeline's pin; a model that does
   not match is `PipelineUnavailable`, not a different result. A transfer over
   the blob channel that fails — the model coming in, a product going out — is
-  tried again for about two minutes, so a link that drops for a moment (a
-  server restart, a reconnect) does not become a failed shard.
+  tried again for about five minutes, so a link that drops for a while (a
+  server restart, a reconnect) does not become a failed shard; a transfer
+  that fails in the end says how many times and for how long it was tried.
 - Processing is one streaming pass: one record in memory at a time, the
   product hashed and compressed as it is written, on a thread below normal
   priority (a worker is often a desktop). At most one shard per core

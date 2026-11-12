@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Activities;
 using OutWit.Controller.AI.Verify.Model;
@@ -14,9 +15,10 @@ internal sealed class WitActivityAdapterVerifyExecute : WitActivityAdapterFuncti
 {
     #region Constructors
 
-    public WitActivityAdapterVerifyExecute(IWitProcessingManager processingManager, ILogger logger)
+    public WitActivityAdapterVerifyExecute(IWitProcessingManager processingManager, IServiceProvider services, ILogger logger)
         : base(processingManager, logger)
     {
+        VerifySandboxHost.UseTempStorage(services.GetService<IWitTempStorage>());
     }
 
     #endregion
