@@ -5,10 +5,10 @@ namespace OutWit.Controller.AI.Verify.Runtimes;
 
 /// <summary>
 /// The node-side runtime registry: the known (pinned) runtime set, resolved against a
-/// runtimes root directory with content-hash verification of the module and of every
-/// layer. Verification results are memoized per absolute path for the process lifetime —
-/// runtime files are immutable by contract (they are hash-pinned), so one check per
-/// process is enough.
+/// runtimes root directory with content-hash verification of the module, of every layer
+/// and of every library tree. Verification results are memoized per absolute path for the
+/// process lifetime — runtime files are immutable by contract (they are hash-pinned), so
+/// one check per process is enough.
 /// </summary>
 public static class VerifyRuntimeCatalog
 {
@@ -23,11 +23,20 @@ public static class VerifyRuntimeCatalog
     /// <summary>QuickJS-NG 0.15.1 (WASI), JavaScript.</summary>
     public const string QUICKJS_0_15_1 = "quickjs-0.15.1";
 
+    /// <summary>
+    /// Ruby 3.4.1 (WASI, the ruby.wasm 2.10.1 build) with the standard library and the
+    /// bundled gems base64, csv, matrix and prime; no RubyGems.
+    /// </summary>
+    public const string RUBY_3_4_1 = "ruby-3.4.1";
+
     /// <summary>The raw WASI runtime: the task's entry source is the command module itself.</summary>
     public const string WASI = "wasi";
 
     private const string PYTHON_DIR = "python-3.14.6";
     private const string PYTHON_SHA256 = "cd71a34d8467882a4ad0e6a5e64509d68975ed6bd6831ca549bcd0517ac14655";
+
+    private const string RUBY_DIR = "ruby-3.4.1";
+    private const string RUBY_GEMS = "/usr/local/lib/ruby/gems/3.4.0/gems/";
 
     #endregion
 
@@ -44,6 +53,13 @@ public static class VerifyRuntimeCatalog
         Path.Combine(PYTHON_DIR, "lib", "sympy-1.14.0.zip"),
         "d15dce77126085b9e7c327474e0574975d62515a28ea1551bec2cc90079a2b2a",
         "/lib/sympy-1.14.0.zip");
+
+    // Ruby loads its library from files, so the library is a tree verify-assets cuts out of
+    // the release archive unchanged. The tree is the guest's whole file system: a program
+    // can read nothing that is not under this pin.
+    private static readonly VerifyRuntimeTree RUBY_ROOT = new(
+        Path.Combine(RUBY_DIR, "root"),
+        "8d91587b3961fc4e96bdad55c9d8309ae1b9434551dc1e5f3e885e7ee9b358c7");
 
     private static readonly IReadOnlyDictionary<string, VerifyRuntimeDescriptor> s_known =
         new Dictionary<string, VerifyRuntimeDescriptor>(StringComparer.OrdinalIgnoreCase)
@@ -76,6 +92,25 @@ public static class VerifyRuntimeCatalog
                 RootDir = null,
                 Sha256 = "b4071ef2fbb2bb693c0bbcfc07cb9d28639fd9cea2fd986824a57aeac929817b",
                 Argv0 = "qjs"
+            },
+            [RUBY_3_4_1] = new()
+            {
+                Id = RUBY_3_4_1,
+                Language = VerifyRuntimeLanguage.Ruby,
+                ModulePath = Path.Combine(RUBY_DIR, "ruby.wasm"),
+                RootDir = RUBY_ROOT.Path,
+                Sha256 = "348305ee0b4e4cdb84ec169223e33721899548577a42a421725b71e481afff11",
+                Argv0 = "ruby",
+                Trees = [RUBY_ROOT],
+                // The bundled gems a program may require: RubyGems is off (it would scan the
+                // file system at every start), so their library folders are named here.
+                LoadPaths =
+                [
+                    RUBY_GEMS + "base64-0.2.0/lib",
+                    RUBY_GEMS + "csv-3.3.2/lib",
+                    RUBY_GEMS + "matrix-0.4.2/lib",
+                    RUBY_GEMS + "prime-0.1.3/lib"
+                ]
             },
             [WASI] = new()
             {
@@ -176,6 +211,22 @@ public static class VerifyRuntimeCatalog
             }
         }
 
+        foreach (var tree in descriptor.Trees)
+        {
+            var treePath = Path.GetFullPath(Path.Combine(runtimesRoot, tree.Path));
+            if (!Directory.Exists(treePath))
+            {
+                unavailableReason = $"runtime library not found at '{treePath}'";
+                return null;
+            }
+
+            if (!s_hashChecks.GetOrAdd(treePath, path => TreeMatches(path, tree.Sha256)))
+            {
+                unavailableReason = $"runtime library at '{treePath}' failed its SHA-256 pin (a file was changed, added or removed)";
+                return null;
+            }
+        }
+
         unavailableReason = null;
         return new VerifyResolvedRuntime(descriptor, modulePath, rootPath);
     }
@@ -185,6 +236,19 @@ public static class VerifyRuntimeCatalog
         using var stream = File.OpenRead(path);
         var actual = Convert.ToHexStringLower(SHA256.HashData(stream));
         return actual == expectedSha256;
+    }
+
+    private static bool TreeMatches(string path, string expectedSha256)
+    {
+        try
+        {
+            return VerifyRuntimeTreeHash.Compute(path) == expectedSha256;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A tree that cannot be read whole cannot be vouched for.
+            return false;
+        }
     }
 
     #endregion

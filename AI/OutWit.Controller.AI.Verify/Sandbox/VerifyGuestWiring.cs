@@ -64,8 +64,8 @@ internal static class VerifyGuestWiring
     }
 
     /// <summary>
-    /// The guest's argv: the interpreter's inline-source form for Python and JavaScript, the
-    /// module's own name for a raw WASI task, then the run's arguments.
+    /// The guest's argv: the interpreter's inline-source form for Python, JavaScript and
+    /// Ruby, the module's own name for a raw WASI task, then the run's arguments.
     /// </summary>
     /// <param name="runtime">The resolved runtime.</param>
     /// <param name="task">The task.</param>
@@ -91,6 +91,22 @@ internal static class VerifyGuestWiring
             case VerifyRuntimeLanguage.JavaScript:
                 argv.Add("-e");
                 argv.Add(code);
+                break;
+            case VerifyRuntimeLanguage.Ruby:
+                // No RubyGems: it would scan the guest file system at every start, and a
+                // program has no gems to install anyway. The bundled gems' library folders
+                // are named instead, so require finds them like any other library.
+                argv.Add("--disable=gems");
+                foreach (var loadPath in runtime.Descriptor.LoadPaths)
+                {
+                    argv.Add("-I");
+                    argv.Add(loadPath);
+                }
+
+                argv.Add("-e");
+                argv.Add(code);
+                // Everything after "--" is the program's (ARGV), even when it starts with a dash.
+                argv.Add("--");
                 break;
             case VerifyRuntimeLanguage.Wasi:
                 // The module is the program: argv[0] is its name, the rest the task's args.

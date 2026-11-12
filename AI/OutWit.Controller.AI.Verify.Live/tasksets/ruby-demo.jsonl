@@ -1,0 +1,13 @@
+{"index":0,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"require 'prime'\nputs 600851475143.prime_division.inspect"},"suite":[{"expected_stdout":"[[71, 1], [839, 1], [1471, 1], [6857, 1]]\n"}]}
+{"index":1,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"require 'matrix'\nputs Matrix[[2, 0, 1], [1, 3, 2], [1, 1, 4]].determinant"},"suite":[{"expected_stdout":"18\n"}]}
+{"index":2,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"require 'csv'\nrows = CSV.parse(STDIN.read, headers: true)\nputs rows.sum { |row| row['qty'].to_i * row['price'].to_i }"},"suite":[{"stdin":"qty,price\n2,10\n3,5\n","expected_stdout":"35\n"},{"stdin":"qty,price\n","expected_stdout":"0\n"}]}
+{"index":3,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"require 'base64'\nputs Base64.strict_encode64(STDIN.read)"},"suite":[{"stdin":"hello","expected_stdout":"aGVsbG8=\n"}]}
+{"index":4,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"require 'json'\ndata = JSON.parse(STDIN.read)\nputs data['items'].sum { |item| item['n'] }"},"suite":[{"stdin":"{\"items\":[{\"n\":1},{\"n\":2}]}","expected_stdout":"3\n"},{"stdin":"{\"items\":[]}","expected_stdout":"0\n"}]}
+{"index":5,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"require 'digest'\nputs Digest::SHA256.hexdigest(ARGV[0])"},"suite":[{"args":["abc"],"expected_stdout":"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\n"}]}
+{"index":6,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"puts (1..10).sum { |n| Rational(1, n) }"},"suite":[{"expected_stdout":"7381/2520\n"}]}
+{"index":7,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"def fib(n) = n < 2 ? n : fib(n - 1) + fib(n - 2)\nputs fib(24)"},"suite":[{"expected_stdout":"46368\n"}]}
+{"index":8,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"puts ARGV.inspect"},"args":["-x","--y=1"],"suite":[{"expected_stdout":"[\"-x\", \"--y=1\"]\n"}]}
+{"index":9,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"puts rand(1_000_000)\nputs 'abc'.hash\nputs Time.now.to_i"},"seed":7}
+{"index":10,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"puts [3, 1, 2].sort.inspect"},"suite":[{"expected_stdout":"[1, 2, 3, 4]\n"}]}
+{"index":11,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"raise ArgumentError, 'boom'"}}
+{"index":12,"runtime":"ruby-3.4.1","entry":"m.rb","sources":{"m.rb":"loop { }"},"limits":{"fuel":2000000000}}

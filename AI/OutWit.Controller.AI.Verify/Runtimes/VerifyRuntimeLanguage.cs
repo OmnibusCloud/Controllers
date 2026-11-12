@@ -14,5 +14,11 @@ public enum VerifyRuntimeLanguage
     /// base64), run as compiled — Rust, C/C++, Zig, TinyGo and anything else that targets
     /// wasm32-wasi. argv[0] is the entry name; args, stdin, suite and limits as for any task.
     /// </summary>
-    Wasi = 2
+    Wasi = 2,
+
+    /// <summary>
+    /// Ruby (CRuby for WASI): the entry source runs inline (-e) without RubyGems; the
+    /// standard library is a pinned tree of files, the guest's whole read-only file system.
+    /// </summary>
+    Ruby = 3
 }

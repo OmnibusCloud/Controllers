@@ -15,6 +15,9 @@ namespace OutWit.Controller.AI.Verify.Assets;
 ///   python-3.14.6/LICENSE, LICENSE-sympy.txt, LICENSE-mpmath.txt
 ///   qjs-wasi.wasm                             QuickJS-NG 0.15.1 for WASI, unchanged
 ///   LICENSE-quickjs-ng.txt
+///   ruby-3.4.1/ruby.wasm                      Ruby 3.4.1 for WASI (ruby.wasm 2.10.1), unchanged
+///   ruby-3.4.1/root/usr/local/lib/ruby/...    its standard library and four bundled gems, as files
+///   ruby-3.4.1/LICENSE-*.txt
 ///   NOTICE.txt                                what, from where, patched how, hashed to what
 ///
 /// The build is reproducible: run it twice and the hashes it prints are the ones the
@@ -70,6 +73,10 @@ internal static class Program
         var quickJsLicense = await AssetDownloader.FetchAsync(AssetPins.QUICKJS_LICENSE, cacheDir, offline);
         var sympyWheel = await AssetDownloader.FetchAsync(AssetPins.SYMPY, cacheDir, offline);
         var mpmathWheel = await AssetDownloader.FetchAsync(AssetPins.MPMATH, cacheDir, offline);
+        var rubyArchive = await AssetDownloader.FetchAsync(AssetPins.RUBY, cacheDir, offline);
+        var rubyLicense = await AssetDownloader.FetchAsync(AssetPins.RUBY_LICENSE, cacheDir, offline);
+        var rubyBsdl = await AssetDownloader.FetchAsync(AssetPins.RUBY_BSDL, cacheDir, offline);
+        var rubyWasmLicense = await AssetDownloader.FetchAsync(AssetPins.RUBY_WASM_LICENSE, cacheDir, offline);
 
         Directory.CreateDirectory(workDir);
         var cpythonDir = Path.Combine(workDir, "cpython");
@@ -100,15 +107,28 @@ internal static class Program
         File.Copy(quickJs, Path.Combine(outDir, AssetPins.QUICKJS.FileName), overwrite: true);
         File.Copy(quickJsLicense, Path.Combine(outDir, AssetPins.QUICKJS_LICENSE.FileName), overwrite: true);
 
+        Console.WriteLine($"{AssetPins.RUBY_RUNTIME_DIR} (Ruby {AssetPins.RUBY_VERSION})");
+        var rubyDir = Path.Combine(outDir, AssetPins.RUBY_RUNTIME_DIR);
+        var ruby = RubyRuntimeBuilder.Build(rubyArchive, rubyDir);
+        File.Copy(rubyLicense, Path.Combine(rubyDir, AssetPins.RUBY_LICENSE.FileName), overwrite: true);
+        File.Copy(rubyBsdl, Path.Combine(rubyDir, AssetPins.RUBY_BSDL.FileName), overwrite: true);
+        File.Copy(rubyWasmLicense, Path.Combine(rubyDir, AssetPins.RUBY_WASM_LICENSE.FileName), overwrite: true);
+        var rubyTree = TreeHash.Compute(Path.Combine(rubyDir, RubyRuntimeBuilder.TREE_DIR));
+        Console.WriteLine($"  {ruby.LibraryFiles} library files, {ruby.GemFiles} files of {AssetPins.RUBY_BUNDLED_GEMS.Length} bundled gems, {rubyTree.Bytes:N0} bytes in the tree");
+
         var hashes = new (string Name, string Path)[]
         {
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/python.wasm", Path.Combine(pythonDir, "python.wasm")),
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.STDLIB_ZIP}", Path.Combine(libDir, AssetPins.STDLIB_ZIP)),
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.SYMPY_ZIP}", Path.Combine(libDir, AssetPins.SYMPY_ZIP)),
-            (AssetPins.QUICKJS.FileName, Path.Combine(outDir, AssetPins.QUICKJS.FileName))
+            (AssetPins.QUICKJS.FileName, Path.Combine(outDir, AssetPins.QUICKJS.FileName)),
+            ($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.MODULE_FILE}", Path.Combine(rubyDir, RubyRuntimeBuilder.MODULE_FILE))
         }.Select(file => (file.Name, Sha256: AssetDownloader.Sha256Hex(file.Path), Bytes: new FileInfo(file.Path).Length)).ToList();
 
-        File.WriteAllText(Path.Combine(outDir, NOTICE), Notice(hashes), new UTF8Encoding(false));
+        // A folder pinned as a whole: the tree hash, the files' bytes.
+        hashes.Add(($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.TREE_DIR}/ (tree of {rubyTree.Files} files)", rubyTree.Sha256, rubyTree.Bytes));
+
+        File.WriteAllText(Path.Combine(outDir, NOTICE), Notice(hashes, ruby), new UTF8Encoding(false));
 
         Console.WriteLine();
         Console.WriteLine("the catalog pins (SHA-256):");
@@ -116,7 +136,7 @@ internal static class Program
             Console.WriteLine($"  {sha256}  {name}  ({bytes:N0} bytes)");
     }
 
-    private static string Notice(IReadOnlyList<(string Name, string Sha256, long Bytes)> hashes)
+    private static string Notice(IReadOnlyList<(string Name, string Sha256, long Bytes)> hashes, RubyRuntimeSummary ruby)
     {
         var text = new StringBuilder();
         text.Append("Language runtime modules for the OmnibusCloud Verify controller (WebAssembly/WASI,\n");
@@ -139,7 +159,22 @@ internal static class Program
         text.Append($"{AssetPins.QUICKJS.FileName}\n");
         text.Append($"    QuickJS-NG {AssetPins.QUICKJS_VERSION} for WASI, taken unchanged from\n");
         text.Append($"    {AssetPins.QUICKJS.Url}\n");
-        text.Append($"    Licence: {AssetPins.QUICKJS_LICENSE.FileName} (MIT).\n\n");
+        text.Append($"    Licence: {AssetPins.QUICKJS_LICENSE.FileName} (MIT).\n");
+        text.Append($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.MODULE_FILE}\n");
+        text.Append($"    Ruby {AssetPins.RUBY_VERSION} built for WASI by the ruby.wasm project (release {AssetPins.RUBY_WASM_RELEASE}, the\n");
+        text.Append("    'full' profile), taken unchanged (usr/local/bin/ruby) from\n");
+        text.Append($"    {AssetPins.RUBY.Url}\n");
+        text.Append($"    Licences: {AssetPins.RUBY_RUNTIME_DIR}/{AssetPins.RUBY_LICENSE.FileName} and {AssetPins.RUBY_BSDL.FileName} (Ruby's own terms or\n");
+        text.Append($"    BSD-2-Clause), {AssetPins.RUBY_WASM_LICENSE.FileName} (the port, MIT).\n");
+        text.Append($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.TREE_DIR}/\n");
+        text.Append($"    From the same archive, unchanged: the standard library (usr/local/lib/ruby/{AssetPins.RUBY_API_VERSION},\n");
+        text.Append($"    {ruby.LibraryFiles} files) and the library folders of the bundled gems\n");
+        text.Append($"    {string.Join(", ", AssetPins.RUBY_BUNDLED_GEMS)} ({ruby.GemFiles} files). Headers, the static\n");
+        text.Append("    library, man pages and the other gems are left out. Pinned as a tree: one SHA-256\n");
+        text.Append("    over the relative paths and the contents of every file.\n");
+        if (ruby.Licences.Count > 0)
+            text.Append($"    Licences of the gems: {string.Join(", ", ruby.Licences)}.\n");
+        text.Append('\n');
         text.Append("SHA-256:\n");
         foreach (var (name, sha256, bytes) in hashes)
             text.Append($"  {sha256}  {name}  ({bytes} bytes)\n");

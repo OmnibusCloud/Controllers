@@ -47,6 +47,7 @@ public static class VerifySelfCheck
         (VerifyRuntimeCatalog.PYTHON_3_14_6, "m.py", "print(6*7)"),
         (VerifyRuntimeCatalog.PYTHON_3_14_6_SYMPY_1_14_0, "m.py", "import sympy; print(sympy.__version__)"),
         (VerifyRuntimeCatalog.QUICKJS_0_15_1, "m.js", "console.log(6*7)"),
+        (VerifyRuntimeCatalog.RUBY_3_4_1, "m.rb", "require 'prime'; puts 6*7 if 7.prime?"),
         (VerifyRuntimeCatalog.WASI, "hello.wasm", HELLO_WASM_BASE64)
     ];
 

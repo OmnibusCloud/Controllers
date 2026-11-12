@@ -98,6 +98,7 @@ public static class VerifyCapabilitiesWriter
             VerifyRuntimeLanguage.Python => "python",
             VerifyRuntimeLanguage.JavaScript => "javascript",
             VerifyRuntimeLanguage.Wasi => "wasi",
+            VerifyRuntimeLanguage.Ruby => "ruby",
             _ => "unknown"
         };
     }

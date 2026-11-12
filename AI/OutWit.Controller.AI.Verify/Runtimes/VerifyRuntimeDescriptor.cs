@@ -42,4 +42,17 @@ public sealed record VerifyRuntimeDescriptor
     /// is its module alone.
     /// </summary>
     public IReadOnlyList<VerifyRuntimeLayer> Layers { get; init; } = [];
+
+    /// <summary>
+    /// The folders of library files the runtime reads (relative to the runtimes root), each
+    /// pinned as a whole by a tree hash and verified at resolution. Empty for a runtime whose
+    /// library is its module or its layers.
+    /// </summary>
+    public IReadOnlyList<VerifyRuntimeTree> Trees { get; init; } = [];
+
+    /// <summary>
+    /// Guest folders the interpreter searches for libraries besides its own defaults, in
+    /// order (Ruby's -I). Empty when the defaults are enough.
+    /// </summary>
+    public IReadOnlyList<string> LoadPaths { get; init; } = [];
 }

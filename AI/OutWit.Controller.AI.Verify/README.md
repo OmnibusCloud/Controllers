@@ -7,7 +7,7 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking, and formal proof checking — generation
 and verification are the same activity with different programs.
 
-**Status: 0.5.0 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.6.0 — proven on the test fleet, not yet released to nuget.org.**
 `VerifyRun` returns a byte-identical verdict report for a taskset across runs,
 placements and fleets: a million small tasks gave the same report on six nodes
 (22m41s) and on four (41m35s). Every node executes batches at a bounded degree
@@ -143,7 +143,10 @@ QuickJS tasks and raw WASI modules are byte-equal everywhere — and the peak
 linear memory of a CPython task can differ by one 64 KiB page with it; wall
 time is hardware. All three are metrics and live per task in the provenance
 document. The sandbox pins the clock and seeds the random source from the
-task, so a program sees the same world on every node.
+task, so a program sees the same world on every node. What it does not pin is
+the metadata of the runtime's own files: their times and the order of a
+directory listing are the host's, so a program that prints them disagrees
+between nodes.
 
 ## Node behaviour
 
@@ -188,6 +191,7 @@ one compiled module.
 | `python-3.14.6` | CPython 3.14.6 (WASI build), pure Python with the standard library | the source, inline |
 | `python-3.14.6-sympy-1.14.0` | the same interpreter with sympy 1.14.0 and mpmath 1.4.1 on `PYTHONPATH` | the source, inline |
 | `quickjs-0.15.1` | QuickJS-NG 0.15.1, JavaScript | the source, inline |
+| `ruby-3.4.1` | Ruby 3.4.1 (the ruby.wasm 2.10.1 build) with the standard library and the bundled gems base64, csv, matrix and prime | the source, inline |
 | `wasi` | the task's own WASI command module: Rust, C/C++, Zig, TinyGo, anything that targets wasm32-wasi (`_start`, WASI preview 1) | the module's bytes, base64; its name is `argv[0]` |
 
 The Python library code is bytecode layers, one zip each, that CPython's
@@ -207,6 +211,21 @@ compiling (the C long size comes from a constant: the WASI build has no
 the whole set from pinned downloads, byte for byte, and prints the hashes the
 catalog pins.
 
+Ruby loads its library from files, not from one archive, so the library is a
+tree: 1,142 files, cut unchanged out of the release archive (the standard
+library and the `lib` folders of four bundled gems; headers, the static
+library and the other gems stay out). The catalog pins the tree with one hash
+over the relative path, the length and the bytes of every file, and a node
+verifies it before the first task: a file changed, added or removed makes the
+runtime unavailable there. The tree is the guest's whole file system, read
+only — a program can read nothing that is not under the pin. A program runs
+inline without RubyGems (it would scan the file system at every start, and
+there is nothing to install); the four gems' folders are on the load path, so
+`require 'prime'` works like any other. Not in this build: `bigdecimal`,
+sockets, processes (`system` and backticks do nothing). It is a 32-bit build:
+an Integer above 2^30 is a bignum, so arithmetic on large totals costs several
+times more than on a desktop Ruby. A hello costs 154 M fuel and takes 55 MiB.
+
 The raw `wasi` runtime has no module of its own: each task carries one,
 compiled by the lab offline, and the sandbox compiles it on the node (cached by
 content hash within a batch). args, stdin, suite and limits work as for any
@@ -218,8 +237,9 @@ sandbox does not provide) is a `CompileError`, one without `_start` a
 {"runtime":"wasi","entry":"hello.wasm","sources":{"hello.wasm":"AGFzbQEAAAABEANgBH9/f38Bf2ABfwBgAAACZwMWd2FzaV9zbmFwc2hvdF9wcmV2aWV3MQhmZF93cml0ZQAAFndhc2lfc25hcHNob3RfcHJldmlldzEHZmRfcmVhZAAAFndhc2lfc25hcHNob3RfcHJldmlldzEJcHJvY19leGl0AAEDAgECBQMBAAEHEwIGbWVtb3J5AgAGX3N0YXJ0AAMKDwENAEEBQQBBAUEIEAAaCwssAQBBAAsmIAAAAAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABoZWxsbwo="},"suite":[{"expected_stdout":"hello\n"}]}
 ```
 
-Honest v1 scope: pure Python with the standard library, JavaScript, and
-compiled WASI modules. No C extensions inside CPython-WASI yet.
+Honest v1 scope: pure Python with the standard library, JavaScript, Ruby
+with its standard library, and compiled WASI modules. No C extensions inside
+CPython-WASI yet, no gems beyond the four named.
 
 ## What the module carries
 
@@ -248,7 +268,9 @@ identifier first, then the portable one).
 The natives and the runtime modules are Tier-2 data assets (`ControllerDataAsset`),
 fetched by consumers at build time from the `verify-v<version>` release of this
 repository and verified by hash; the nupkg itself stays small. Licences travel
-inside the asset archives (wasmtime: Apache-2.0; CPython: PSF; QuickJS-NG: MIT).
+inside the asset archives (wasmtime: Apache-2.0; CPython: PSF; QuickJS-NG: MIT;
+Ruby and its bundled gems: Ruby's own terms or BSD-2-Clause; the ruby.wasm
+port: MIT).
 
 `VerifySelfCheck.Run()` reports, from inside a loaded module, where the binding
 and the runtimes resolved from and whether one task per runtime ran — the
@@ -258,8 +280,9 @@ can call it as a doctor-style check.
 ## Tests
 
 `OutWit.Controller.AI.Verify.Tests`: wire-layout guards, the schema guards,
-the parser at its edges, the sandbox verdict, adversarial, hygiene, raw-WASI
-and Python-layer suites, the worker pool (cancellation included) and the
+the parser at its edges, the sandbox verdict, adversarial, hygiene, raw-WASI,
+Python-layer and Ruby suites, the tree hash, the worker pool (cancellation
+included) and the
 benchmark, the taskset, sampling and integrity pipelines, the package format,
 plan, transfer (a link that drops and comes back included) and the share's
 progress, the end-to-end runs
@@ -267,7 +290,8 @@ of every bundled script through the engine on in-process nodes, and the
 module self-containment proof. The sandbox suites need the pinned runtime set
 (`verify-assets build OutWit.Controller.AI.Verify.Tests/@Data/runtimes`;
 `@Data/` is gitignored) and Assert.Ignore without it; the `AI Verify` workflow
-builds the set and runs everything on Linux, macOS and Windows.
+builds the set and runs everything on Linux, macOS and Windows, where a runtime
+that does not resolve is a failure, not a skip.
 
 Load tests (`Category=Load`, not in the sweep): a thousand tasks at the
 machine's degree, thousands of runs with bounded memory, hundreds of distinct

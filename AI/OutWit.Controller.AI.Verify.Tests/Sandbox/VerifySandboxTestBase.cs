@@ -6,17 +6,25 @@ namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
 
 /// <summary>
 /// Shared plumbing for the sandbox behavioral tests: resolves the pinned runtime root
-/// (Assert.Ignore when absent — the tests are opt-in on the runtime download) and owns
+/// (Assert.Ignore when absent — the tests are opt-in on the runtime download; on the build
+/// server, where the set is always built, an unresolved runtime is a failure) and owns
 /// one <see cref="VerifyWasmSandbox"/> per fixture so runtime modules compile once.
 /// </summary>
 public abstract class VerifySandboxTestBase
 {
+    #region Constants
+
+    private const string CI_ENV = "GITHUB_ACTIONS";
+
+    #endregion
+
     #region Fields
 
     protected string RuntimesRoot { get; private set; } = null!;
     protected VerifyResolvedRuntime Python { get; private set; } = null!;
     protected VerifyResolvedRuntime PythonSympy { get; private set; } = null!;
     protected VerifyResolvedRuntime QuickJs { get; private set; } = null!;
+    protected VerifyResolvedRuntime Ruby { get; private set; } = null!;
     protected VerifyWasmSandbox Sandbox { get; private set; } = null!;
 
     #endregion
@@ -35,17 +43,26 @@ public abstract class VerifySandboxTestBase
         var python = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.PYTHON_3_14_6, out var pyReason);
         var sympy = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.PYTHON_3_14_6_SYMPY_1_14_0, out var sympyReason);
         var quickJs = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.QUICKJS_0_15_1, out var jsReason);
-        if (python == null || sympy == null || quickJs == null)
+        var ruby = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.RUBY_3_4_1, out var rubyReason);
+        if (python == null || sympy == null || quickJs == null || ruby == null)
         {
-            Assert.Ignore(
-                $"Pinned runtimes not resolvable under '{RuntimesRoot}' " +
-                $"(python: {pyReason ?? "ok"}; sympy: {sympyReason ?? "ok"}; quickjs: {jsReason ?? "ok"}) — " +
-                "run verify-assets build @Data/runtimes to opt in.");
+            var reason = $"Pinned runtimes not resolvable under '{RuntimesRoot}' " +
+                         $"(python: {pyReason ?? "ok"}; sympy: {sympyReason ?? "ok"}; quickjs: {jsReason ?? "ok"}; ruby: {rubyReason ?? "ok"}) — " +
+                         "run verify-assets build @Data/runtimes to opt in.";
+
+            // The build server builds the set from its pins before the tests: a runtime that
+            // does not resolve there is a broken pin (a library tree that hashes differently
+            // on this platform, say), and skipping would hide every sandbox test behind it.
+            if (string.Equals(Environment.GetEnvironmentVariable(CI_ENV), "true", StringComparison.OrdinalIgnoreCase))
+                Assert.Fail(reason);
+
+            Assert.Ignore(reason);
         }
 
         Python = python!;
         PythonSympy = sympy!;
         QuickJs = quickJs!;
+        Ruby = ruby!;
         Sandbox = new VerifyWasmSandbox();
     }
 
@@ -83,6 +100,22 @@ public abstract class VerifySandboxTestBase
             RuntimeId = VerifyRuntimeCatalog.QUICKJS_0_15_1,
             Sources = [new VerifySourceFileData { Name = "main.js", Content = code }],
             EntryPoint = "main.js",
+            Limits = limits
+        };
+    }
+
+    protected static VerifyTaskData RubyTask(string code, int index = 0, VerifySuiteData? suite = null,
+        List<string>? args = null, string? stdin = null, VerifyLimitsData? limits = null)
+    {
+        return new VerifyTaskData
+        {
+            TaskIndex = index,
+            RuntimeId = VerifyRuntimeCatalog.RUBY_3_4_1,
+            Sources = [new VerifySourceFileData { Name = "main.rb", Content = code }],
+            EntryPoint = "main.rb",
+            Args = args ?? [],
+            Stdin = stdin,
+            Suite = suite,
             Limits = limits
         };
     }

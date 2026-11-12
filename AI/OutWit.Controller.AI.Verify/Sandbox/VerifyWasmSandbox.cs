@@ -346,7 +346,8 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     private static bool LooksLikeOutOfMemory(string stderr)
     {
-        // Python raises MemoryError; QuickJS-NG prints "out of memory" on allocation failure.
+        // Python raises MemoryError and Ruby NoMemoryError (the same marker is in its name);
+        // QuickJS-NG prints "out of memory" on allocation failure.
         return stderr.Contains("MemoryError", StringComparison.Ordinal)
                || stderr.Contains("out of memory", StringComparison.OrdinalIgnoreCase);
     }
