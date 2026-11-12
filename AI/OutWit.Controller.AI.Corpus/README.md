@@ -14,7 +14,7 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.1.11 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.1.12 — proven on the test fleet, not yet released to nuget.org.**
 The stage libraries are wired into seven activities and three bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
@@ -209,6 +209,10 @@ manifest's `size` values.
   tried again for about five minutes, so a link that drops for a while (a
   server restart, a reconnect) does not become a failed shard; a transfer
   that fails in the end says how many times and for how long it was tried.
+  The first transfer of a node goes alone and the rest wait for it (the
+  channel is connected by its first user; shards that start together would
+  each begin a connection of their own), and retries are spread at random so
+  that transfers that failed together do not come back together.
 - Processing is one streaming pass: one record in memory at a time, the
   product hashed and compressed as it is written, on a thread below normal
   priority (a worker is often a desktop). At most one shard per core

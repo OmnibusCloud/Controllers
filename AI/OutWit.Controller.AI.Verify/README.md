@@ -198,7 +198,10 @@ ahead of the work, four at a time, so the share is on the node's disk early and
 the rest of the run needs the link only for progress and results; one package
 executes at a time, since a batch already takes the node's cores. A download or
 an upload that fails is tried again for about five minutes before the package
-fails, on top of the blob channel's own retries.
+fails, on top of the blob channel's own retries. The first transfer of a node
+goes alone and the rest wait for it (the channel is connected by its first
+user), and retries are spread at random so that transfers that failed together
+do not come back together.
 
 The node reports its share, not one batch: first the delivery (`receiving
 tasks: 12/215 packages, 3.1/14.8 MB; 0/220160 tasks done`), then the work

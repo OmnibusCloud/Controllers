@@ -9,7 +9,9 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// out. The channel moves a blob in chunks and resumes after a break; on top of that a
 /// transfer that fails is tried again here for about five minutes, because a link that drops
 /// for a moment (a server restart, a reconnect) must not turn into a failed shard, and a
-/// failed upload fails the node's whole share.
+/// failed upload fails the node's whole share. The first transfer of all goes alone
+/// (<see cref="ShardBlobGate"/>), and retries are spread so that transfers that failed
+/// together do not come back together.
 /// </summary>
 public static class ShardBlobTransfer
 {
@@ -26,6 +28,11 @@ public static class ShardBlobTransfer
         TimeSpan.FromSeconds(60),
         TimeSpan.FromSeconds(60)
     ];
+
+    /// <summary>How far a retry delay is moved at random, as a share of it.</summary>
+    private const double SPREAD_SHARE = 0.25;
+
+    private static readonly ShardBlobGate GATE = new();
 
     #endregion
 
@@ -63,14 +70,15 @@ public static class ShardBlobTransfer
 
             try
             {
-                return await transfer();
+                return await GATE.RunAsync(transfer, cancellationToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException && attempt < RETRY_DELAYS.Length)
             {
-                logger?.LogWarning(exception, "Corpus: the {What} failed (attempt {Attempt} of {Attempts}); the next one starts in {Delay} s",
-                    what, attempt + 1, RETRY_DELAYS.Length + 1, RETRY_DELAYS[attempt].TotalSeconds);
+                var delay = Spread(RETRY_DELAYS[attempt]);
+                logger?.LogWarning(exception, "Corpus: the {What} failed (attempt {Attempt} of {Attempts}); the next one starts in {Delay:F1} s",
+                    what, attempt + 1, RETRY_DELAYS.Length + 1, delay.TotalSeconds);
 
-                await Task.Delay(RETRY_DELAYS[attempt], cancellationToken);
+                await Task.Delay(delay, cancellationToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -79,6 +87,15 @@ public static class ShardBlobTransfer
                 throw new IOException($"The {what} failed {attempt + 1} time(s) over {clock.Elapsed.TotalSeconds:F0} s: {exception.Message}", exception);
             }
         }
+    }
+
+    /// <summary>
+    /// A delay with a quarter of it taken off or added at random: transfers that failed
+    /// together do not come back together.
+    /// </summary>
+    private static TimeSpan Spread(TimeSpan delay)
+    {
+        return delay * (1 - SPREAD_SHARE + 2 * SPREAD_SHARE * Random.Shared.NextDouble());
     }
 
     #endregion
