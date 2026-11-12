@@ -9,7 +9,7 @@
   "properties": {
     "schema": { "type": "string", "const": "verify-capabilities/1" },
     "controller": { "type": "string", "description": "The controller's version." },
-    "wasmtime": { "type": "string", "description": "Version of the wasmtime binding the sandbox runs on." },
+    "wasmtime": { "type": "string", "description": "The engine the sandbox runs on: the version of the wasmtime .NET binding and of the native library under it, e.g. \"48.0.2.0 (native 48.0.8)\". A native library that is not one the controller ships is \"unpinned\" with the start of its SHA-256." },
     "benchmark_unit": { "type": "string", "description": "The unit of the pool's rate: tasks of the reference workload per second." },
     "runtimes": {
       "type": "array",

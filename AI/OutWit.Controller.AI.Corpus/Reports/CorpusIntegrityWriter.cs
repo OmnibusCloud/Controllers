@@ -8,16 +8,31 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// paired, and whether they agree on everything an honest node cannot
 /// vary — the verdict, the content hash of the product, the document count, the drop and
 /// language histograms. The platform keeps the executions of one shard on different machines,
-/// and the document does not say which. A pair whose sides ran different controller versions (a
-/// rollout in progress: a stage may have changed between them) is counted, not compared.
-/// Schema <c>corpus-integrity/2</c>.
+/// and the document does not say which. Two kinds of pair are counted, not compared: one whose
+/// sides ran different controller versions (a rollout in progress: a stage may have changed
+/// between them), and one whose side did not finish for a reason of its machine or its link (a
+/// fetch that failed, a model that did not arrive, an error on the node) — a mismatch says two
+/// finished executions disagree, never that one of them stopped.
+/// Schema <c>corpus-integrity/3</c>.
 /// </summary>
 public static class CorpusIntegrityWriter
 {
     #region Constants
 
     /// <summary>The document schema name.</summary>
-    public const string SCHEMA = "corpus-integrity/2";
+    public const string SCHEMA = "corpus-integrity/3";
+
+    /// <summary>
+    /// The verdicts of an execution that did not finish for a reason of its machine or its link.
+    /// The others are what the input makes of the shard (completed, refused, oversized,
+    /// malformed) and are the same on every honest node.
+    /// </summary>
+    public static readonly IReadOnlySet<CorpusShardVerdict> UNFINISHED = new HashSet<CorpusShardVerdict>
+    {
+        CorpusShardVerdict.FetchFailed,
+        CorpusShardVerdict.PipelineUnavailable,
+        CorpusShardVerdict.Failed
+    };
 
     #endregion
 
@@ -47,6 +62,7 @@ public static class CorpusIntegrityWriter
             writer.WriteNumber("sampled", pairs.Count);
             writer.WriteNumber("compared", compared);
             writer.WriteNumber("version_skew", pairs.Count(pair => pair.VersionSkew));
+            writer.WriteNumber("incomplete", pairs.Count(pair => pair.Incomplete));
             writer.WriteNumber("mismatches", mismatches);
             writer.WriteNumber("mismatch_rate", compared == 0 ? 0.0 : (double)mismatches / compared);
             writer.WriteEndObject();
@@ -105,8 +121,9 @@ public static class CorpusIntegrityWriter
     {
         var versionSkew = primary.ControllerVersion.Length > 0 && replica.ControllerVersion.Length > 0
                           && !string.Equals(primary.ControllerVersion, replica.ControllerVersion, StringComparison.Ordinal);
+        var incomplete = !versionSkew && (UNFINISHED.Contains(primary.Verdict) || UNFINISHED.Contains(replica.Verdict));
         var differing = Differences(primary, replica);
-        return new PairRecord(index, primary, replica, versionSkew, differing.Count == 0, differing);
+        return new PairRecord(index, primary, replica, versionSkew, incomplete, differing.Count == 0, differing);
     }
 
     private static void WritePair(Utf8JsonWriter writer, PairRecord pair)
@@ -116,6 +133,8 @@ public static class CorpusIntegrityWriter
         WriteSide(writer, "primary", pair.Primary);
         WriteSide(writer, "replica", pair.Replica);
         writer.WriteBoolean("compared", pair.Compared);
+        if (pair.Incomplete)
+            writer.WriteBoolean("incomplete", true);
         if (pair.Compared)
         {
             writer.WriteBoolean("match", pair.Match);
@@ -145,10 +164,10 @@ public static class CorpusIntegrityWriter
 
     #region Types
 
-    /// <summary>Two executions of one shard: compared only when they ran the same controller version.</summary>
-    private sealed record PairRecord(int Index, CorpusResultData Primary, CorpusResultData Replica, bool VersionSkew, bool Match, List<string> Differing)
+    /// <summary>Two executions of one shard: compared only when they ran the same controller version and both finished.</summary>
+    private sealed record PairRecord(int Index, CorpusResultData Primary, CorpusResultData Replica, bool VersionSkew, bool Incomplete, bool Match, List<string> Differing)
     {
-        public bool Compared => !VersionSkew;
+        public bool Compared => !VersionSkew && !Incomplete;
     }
 
     #endregion

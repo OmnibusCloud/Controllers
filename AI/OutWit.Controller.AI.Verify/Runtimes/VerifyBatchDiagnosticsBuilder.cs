@@ -25,7 +25,7 @@ public static class VerifyBatchDiagnosticsBuilder
         return new VerifyBatchDiagnosticsData
         {
             RuntimeTarget = VerifyRuntimeDiagnosticsBuilder.RuntimeTarget(),
-            WasmtimeVersion = typeof(Wasmtime.Engine).Assembly.GetName().Version?.ToString() ?? "unknown",
+            WasmtimeVersion = VerifyEngineVersion.Current,
             RuntimeId = runtimeId,
             RuntimeSha256 = runtime?.Descriptor.Sha256 ?? "",
             Degree = degree,

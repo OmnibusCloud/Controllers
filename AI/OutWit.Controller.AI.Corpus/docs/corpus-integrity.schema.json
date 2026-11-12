@@ -7,15 +7,16 @@
   "required": ["schema", "summary", "pairs"],
   "additionalProperties": false,
   "properties": {
-    "schema": { "const": "corpus-integrity/2" },
+    "schema": { "const": "corpus-integrity/3" },
     "summary": {
       "type": "object",
-      "required": ["sampled", "compared", "version_skew", "mismatches", "mismatch_rate"],
+      "required": ["sampled", "compared", "version_skew", "incomplete", "mismatches", "mismatch_rate"],
       "additionalProperties": false,
       "properties": {
         "sampled": { "type": "integer", "description": "Pairs of executions of one shard." },
-        "compared": { "type": "integer", "description": "Pairs whose two sides ran the same controller version." },
+        "compared": { "type": "integer", "description": "Pairs whose two sides ran the same controller version and both finished." },
         "version_skew": { "type": "integer", "description": "Pairs whose sides ran different controller versions - a rollout in progress (not compared)." },
+        "incomplete": { "type": "integer", "description": "Pairs with a side that did not finish for a reason of its machine or its link: FetchFailed, PipelineUnavailable or Failed (not compared; a mismatch is two finished sides that disagree)." },
         "mismatches": { "type": "integer", "description": "Compared pairs that disagree." },
         "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." }
       }
@@ -32,6 +33,7 @@
           "primary": { "$ref": "#/$defs/side" },
           "replica": { "$ref": "#/$defs/side" },
           "compared": { "type": "boolean" },
+          "incomplete": { "type": "boolean", "description": "Present and true when a side did not finish (FetchFailed, PipelineUnavailable, Failed)." },
           "match": { "type": "boolean", "description": "Present when compared." },
           "differs": { "type": "array", "items": { "type": "string", "enum": ["verdict", "content", "documents", "drops", "languages"] }, "description": "Present on a mismatch: the fields that differ." }
         }

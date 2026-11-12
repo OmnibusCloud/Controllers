@@ -41,7 +41,7 @@ public static class VerifyRuntimeDiagnosticsBuilder
         return new VerifyRuntimeDiagnosticsData
         {
             RuntimeTarget = RuntimeTarget(),
-            WasmtimeVersion = typeof(Wasmtime.Engine).Assembly.GetName().Version?.ToString() ?? "unknown",
+            WasmtimeVersion = VerifyEngineVersion.Current,
             RuntimesRootFound = root != null,
             Runtimes = runtimes
         };

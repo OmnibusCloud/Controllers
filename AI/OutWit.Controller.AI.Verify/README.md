@@ -7,7 +7,7 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking, and formal proof checking — generation
 and verification are the same activity with different programs.
 
-**Status: 0.6.0 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.6.1 — proven on the test fleet, not yet released to nuget.org.**
 `VerifyRun` returns a byte-identical verdict report for a taskset across runs,
 placements and fleets: a million small tasks gave the same report on six nodes
 (22m41s) and on four (41m35s). Every node executes batches at a bounded degree

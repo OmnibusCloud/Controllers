@@ -41,6 +41,76 @@ public sealed class CorpusIntegrityWriterTests
         });
     }
 
+    [TestCase(CorpusShardVerdict.FetchFailed)]
+    [TestCase(CorpusShardVerdict.PipelineUnavailable)]
+    [TestCase(CorpusShardVerdict.Failed)]
+    public void APairWithASideThatDidNotFinishIsIncompleteNotAMismatchTest(CorpusShardVerdict unfinished)
+    {
+        // Seen on the fleet: one side could not fetch its model; the pair read as "a node
+        // computed wrong". It is counted apart and not compared.
+        var stopped = Result(4, "", 0);
+        stopped.Verdict = unfinished;
+
+        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write([Result(4, "eee", 50), stopped, Result(5, "fff", 60), Result(5, "fff", 60)]));
+        var summary = document.RootElement.GetProperty("summary");
+        var pairs = document.RootElement.GetProperty("pairs").EnumerateArray().ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(2));
+            Assert.That(summary.GetProperty("incomplete").GetInt32(), Is.EqualTo(1));
+            Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(1));
+            Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.EqualTo(0));
+            Assert.That(summary.GetProperty("mismatch_rate").GetDouble(), Is.EqualTo(0));
+            Assert.That(pairs[0].GetProperty("compared").GetBoolean(), Is.False);
+            Assert.That(pairs[0].GetProperty("incomplete").GetBoolean(), Is.True);
+            Assert.That(pairs[0].TryGetProperty("match", out _), Is.False);
+            Assert.That(pairs[1].TryGetProperty("incomplete", out _), Is.False);
+            Assert.That(pairs[1].GetProperty("match").GetBoolean(), Is.True);
+        });
+    }
+
+    [TestCase(CorpusShardVerdict.OriginRefused)]
+    [TestCase(CorpusShardVerdict.Oversized)]
+    [TestCase(CorpusShardVerdict.Malformed)]
+    public void AVerdictTheInputDecidesIsComparedTest(CorpusShardVerdict decided)
+    {
+        // Refused, oversized and malformed are what the shard is, on every honest node: a pair
+        // where one side says so and the other completed is a real disagreement.
+        var other = Result(6, "", 0);
+        other.Verdict = decided;
+
+        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write([Result(6, "ggg", 70), other]));
+        var summary = document.RootElement.GetProperty("summary");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.GetProperty("incomplete").GetInt32(), Is.EqualTo(0));
+            Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(1));
+            Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public void VersionSkewWinsOverAnUnfinishedSideTest()
+    {
+        var stopped = Result(7, "", 0);
+        stopped.Verdict = CorpusShardVerdict.FetchFailed;
+        stopped.ControllerVersion = "0.1.12";
+        var finished = Result(7, "hhh", 80);
+        finished.ControllerVersion = "0.1.13";
+
+        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write([finished, stopped]));
+        var summary = document.RootElement.GetProperty("summary");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.GetProperty("version_skew").GetInt32(), Is.EqualTo(1));
+            Assert.That(summary.GetProperty("incomplete").GetInt32(), Is.EqualTo(0));
+            Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(0));
+        });
+    }
+
     [Test]
     public void TheDocumentNamesNoMachineTest()
     {

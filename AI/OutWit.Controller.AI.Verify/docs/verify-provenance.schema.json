@@ -16,7 +16,7 @@
         "additionalProperties": false,
         "properties": {
           "runtime_target": { "type": "string", "description": "OS and architecture, e.g. linux-x64." },
-          "wasmtime": { "type": "string", "description": "The wasmtime binding version." },
+          "wasmtime": { "type": "string", "description": "The engine that ran the batch: the version of the wasmtime .NET binding and of the native library under it, e.g. \"48.0.2.0 (native 48.0.8)\". A native library that is not one the controller ships is \"unpinned\" with the start of its SHA-256." },
           "controller": { "type": "string", "description": "The controller version that ran the batch." },
           "runtime": { "type": "string" },
           "runtime_sha256": { "type": "string" },

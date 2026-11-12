@@ -14,7 +14,7 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.1.12 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.1.13 — proven on the test fleet, not yet released to nuget.org.**
 The stage libraries are wired into seven activities and three bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
@@ -145,8 +145,11 @@ on different machines, so a node cannot tell whether its shard is being checked.
 No document says which machine ran what.
 With a single machine available there is nothing to compare and no shard runs
 twice. A pair whose sides ran different controller versions (a rollout in
-progress) is counted as `version_skew`, not compared; the mismatch rate is over
-the compared pairs. The report has one entry per shard: a completed execution,
+progress) is counted as `version_skew`, not compared. A pair with a side that
+did not finish for a reason of its machine or its link — `FetchFailed`,
+`PipelineUnavailable`, `Failed` — is counted as `incomplete`, not compared: a
+mismatch says that two finished executions disagree, never that one of them
+stopped. The mismatch rate is over the compared pairs. The report has one entry per shard: a completed execution,
 then the lowest content hash.
 
 ## Where a machine fetches from
