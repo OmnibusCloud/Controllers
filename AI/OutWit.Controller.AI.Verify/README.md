@@ -7,11 +7,13 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking, and formal proof checking — generation
 and verification are the same activity with different programs.
 
-**Status: 0.2.0 — proven on a four-node test fleet.** `VerifyRun` returns a
-byte-identical verdict report for a taskset across runs; every node executes
-batches at a bounded degree below normal priority, reports its progress inside
-a chunk, and attaches its provenance; `VerifyGenerateAndCheck` runs the
-generate-then-check shape end to end.
+**Status: 0.4.0 — proven on the test fleet, not yet released to nuget.org.**
+`VerifyRun` returns a byte-identical verdict report for a taskset across runs,
+placements and fleets: a million small tasks gave the same report on six nodes
+(22m41s) and on four (41m35s). Every node executes batches at a bounded degree
+below normal priority, reports the delivery and the progress of its share, and
+attaches its provenance; `VerifyGenerateAndCheck` runs the generate-then-check
+shape end to end.
 
 Isolation targets WASM (wasmtime): deterministic, cross-platform
 (Windows / Linux / macOS, x64 / arm64), no admin rights or Docker required on
@@ -69,6 +71,12 @@ as fine as the batches. A large run is cut into about a thousand packages
 transfers bounded while the shares stay proportional to the nodes' rates. A
 package blob is Brotli-compressed; a node checks its hash before it reads the
 tasks, and the host checks a result blob's hash before it reads the results.
+
+Measured on the test fleet: the million small tasks of the scale run leave the
+host as 1,116 package blobs, 3 MB in all (the tasks are short and alike; real
+tasks shrink less). In a 100,000-task run a node whose link from the server
+was limited to 8 kbit/s received its 77 packages and finished its share before
+the run's last node did.
 
 ## Documents — authoring without the SDK
 

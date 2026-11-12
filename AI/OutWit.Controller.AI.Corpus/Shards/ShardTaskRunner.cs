@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Warc;
@@ -41,7 +42,7 @@ public static class ShardTaskRunner
     /// <returns>The result, verdict included.</returns>
     public static Task<CorpusResultData> RunAsync(CorpusTaskData task, ShardFetcher fetcher, IWitBlobService blobs, string workDirectory, CancellationToken cancellationToken)
     {
-        return RunAsync(task, fetcher, blobs, workDirectory, null, cancellationToken);
+        return RunAsync(task, fetcher, blobs, workDirectory, null, null, cancellationToken);
     }
 
     /// <summary>Runs one task and reports its delivery to the node's picture of the share.</summary>
@@ -50,9 +51,10 @@ public static class ShardTaskRunner
     /// <param name="blobs">Resolves the model blob and receives the products.</param>
     /// <param name="workDirectory">A directory of this task's own for the shard and the products; the caller deletes it.</param>
     /// <param name="ticket">The shard's place in the share's progress, or null for none; the caller disposes it.</param>
+    /// <param name="logger">Receives a warning per failed blob transfer attempt; null for none.</param>
     /// <param name="cancellationToken">Cancels the task.</param>
     /// <returns>The result, verdict included.</returns>
-    public static async Task<CorpusResultData> RunAsync(CorpusTaskData task, ShardFetcher fetcher, IWitBlobService blobs, string workDirectory, ShardShareTicket? ticket, CancellationToken cancellationToken)
+    public static async Task<CorpusResultData> RunAsync(CorpusTaskData task, ShardFetcher fetcher, IWitBlobService blobs, string workDirectory, ShardShareTicket? ticket, ILogger? logger, CancellationToken cancellationToken)
     {
         var result = new CorpusResultData
         {
@@ -78,7 +80,7 @@ public static class ShardTaskRunner
 
             try
             {
-                var modelPath = await blobs.GetLocalPathAsync(task.Pipeline.LanguageModelBlobId);
+                var modelPath = await ShardBlobTransfer.DownloadAsync(blobs, task.Pipeline.LanguageModelBlobId, logger, cancellationToken);
                 model = ShardLanguageModels.Load(modelPath, task.Pipeline.LanguageModelSha256);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
@@ -147,9 +149,9 @@ public static class ShardTaskRunner
 
         processClock.Stop();
 
-        result.TextBlobId = await blobs.UploadFileAsync(textPath);
+        result.TextBlobId = await ShardBlobTransfer.UploadAsync(blobs, textPath, logger, cancellationToken);
         if (task.Pipeline.Sign)
-            result.SignaturesBlobId = await blobs.UploadFileAsync(signaturesPath);
+            result.SignaturesBlobId = await ShardBlobTransfer.UploadAsync(blobs, signaturesPath, logger, cancellationToken);
 
         result.Verdict = CorpusShardVerdict.Completed;
         result.ContentSha256 = product.ContentSha256;

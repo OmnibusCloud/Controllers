@@ -96,6 +96,36 @@ public sealed class ShardTaskRunnerTests
     }
 
     [Test]
+    public async Task ABlobChannelThatDropsForAMomentDoesNotFailTheShardTest()
+    {
+        // The model download and the first upload each fail once: a server restart, a reconnect.
+        var flaky = new CorpusFlakyBlobService(m_blobs, downloadFailures: 1, uploadFailures: 1);
+        var task = Task(WET_FIXTURE, CorpusSourceFormat.Wet);
+
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, flaky, Work(), null, null, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.Completed), result.Error);
+            Assert.That(result.TextBlobId, Is.Not.EqualTo(Guid.Empty));
+            Assert.That(result.SignaturesBlobId, Is.Not.EqualTo(Guid.Empty));
+            Assert.That(flaky.Downloads, Is.EqualTo(2), "the model: one failure, one success");
+            Assert.That(flaky.Uploads, Is.EqualTo(3), "the text twice, the signatures once");
+        });
+    }
+
+    [Test]
+    public void ACancelledJobLeavesTheRetryWaitTest()
+    {
+        var flaky = new CorpusFlakyBlobService(m_blobs, downloadFailures: int.MaxValue);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+
+        Assert.That(
+            async () => await ShardBlobTransfer.DownloadAsync(flaky, Guid.NewGuid(), null, cancellation.Token),
+            Throws.InstanceOf<OperationCanceledException>());
+    }
+
+    [Test]
     public async Task HostTheMachineDoesNotFetchFromIsNeverRequestedTest()
     {
         // The task names the loopback origin; this machine's owner did not list it.
