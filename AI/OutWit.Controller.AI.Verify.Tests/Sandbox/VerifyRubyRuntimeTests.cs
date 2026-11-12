@@ -226,12 +226,62 @@ public sealed class VerifyRubyRuntimeTests : VerifySandboxTestBase
     [Test]
     public void TheGuestSeesItsPinnedLibraryAndNothingElseTest()
     {
-        var result = Run(Ruby, RubyTask("puts Dir.children('/').sort.inspect\nputs ENV.to_h.inspect"));
+        // The guest's root is the library tree: the module and the licence texts beside it do
+        // not exist for a program, the environment is empty, and no folder can be listed.
+        const string program =
+            "puts File.exist?('/usr/local/lib/ruby/3.4.0/set.rb')\n" +
+            "puts File.exist?('/ruby.wasm')\n" +
+            "puts File.exist?('/LICENSE-ruby.txt')\n" +
+            "puts ENV.to_h.inspect\n" +
+            "begin\n" +
+            "  puts Dir.children('/').inspect\n" +
+            "rescue SystemCallError => e\n" +
+            "  puts e.class\n" +
+            "end\n";
+
+        var result = Run(Ruby, RubyTask(program));
 
         Assert.Multiple(() =>
         {
             Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Pass), result.Stderr);
-            Assert.That(result.Stdout, Is.EqualTo("[\"usr\"]\n{}\n"));
+            Assert.That(result.Stdout, Is.EqualTo("true\nfalse\nfalse\n{}\nErrno::EACCES\n"));
+        });
+    }
+
+    [Test]
+    public void ASleepReturnsAtOnceAndMovesTheClockTest()
+    {
+        // Ruby sleeps until the clock is past its deadline, and asks for a wait of no length
+        // when the clock stands exactly on it. In the sandbox a wait moves the run's clock
+        // and takes a nanosecond at the least, so the sleep ends, the clock reads two
+        // seconds later, and both runs cost the same.
+        const string program = "before = Time.now.to_f\nsleep 2\nputs (Time.now.to_f - before).round(1)";
+
+        var first = Run(Ruby, RubyTask(program));
+        var second = Run(Ruby, RubyTask(program));
+        TestContext.Out.WriteLine($"sleep 2: fuel {first.FuelConsumed:N0}, wall {first.WallMs} ms");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(first.Verdict, Is.EqualTo(VerifyVerdict.Pass), first.Stderr);
+            Assert.That(first.Stdout, Is.EqualTo("2.0\n"));
+            Assert.That(second.Stdout, Is.EqualTo(first.Stdout));
+            Assert.That(second.FuelConsumed, Is.EqualTo(first.FuelConsumed));
+        });
+    }
+
+    [Test]
+    public void AnHoursSleepHoldsNoWorkerTest()
+    {
+        var started = DateTime.UtcNow;
+        var result = Run(Ruby, RubyTask("sleep 3600\nputs Time.now.to_i"), new VerifyLimitsData { WallTimeMs = 2_000 });
+        var elapsed = DateTime.UtcNow - started;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Pass), result.Stderr);
+            Assert.That(result.Stdout, Is.EqualTo("3600\n"));
+            Assert.That(elapsed, Is.LessThan(TimeSpan.FromSeconds(30)));
         });
     }
 

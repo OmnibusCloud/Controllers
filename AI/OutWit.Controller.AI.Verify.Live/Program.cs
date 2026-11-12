@@ -147,7 +147,7 @@ public static class Program
 
         if (root.TryGetProperty("pool", out var pool))
         {
-            Console.WriteLine($"    pool: {pool.GetProperty("nodes").GetInt32()} node(s), {pool.GetProperty("measured").GetInt32()} measured, {pool.GetProperty("workers").GetInt32()} worker(s), {pool.GetProperty("rate").GetDouble():F1} reference tasks/s");
+            Console.WriteLine($"    pool: {pool.GetProperty("nodes").GetInt32()} node(s), {pool.GetProperty("measured").GetInt32()} measured, {(pool.TryGetProperty("workers", out var workers) ? workers.GetInt32() + " worker(s)" : "workers not carried by the host")}, {pool.GetProperty("rate").GetDouble():F1} reference tasks/s");
         }
         else
         {

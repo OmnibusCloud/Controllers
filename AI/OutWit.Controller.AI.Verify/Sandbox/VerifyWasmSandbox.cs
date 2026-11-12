@@ -27,6 +27,22 @@ public sealed class VerifyWasmSandbox : IDisposable
     private const string GUEST_MEMORY = "memory";
     private const string START_EXPORT = "_start";
 
+    /// <summary>
+    /// The most elements one table of a guest may hold. A table is host memory the linear
+    /// memory cap does not count (eight bytes an element or more), so it has a cap of its
+    /// own: over a hundred times the largest table of the bundled runtimes.
+    /// </summary>
+    public const uint MAX_TABLE_ELEMENTS = 1_048_576;
+
+    /// <summary>Tables one guest may declare (a runtime module declares one).</summary>
+    private const long MAX_TABLES = 8;
+
+    /// <summary>One linear memory per guest: the memory cap is per memory, a second one would double it.</summary>
+    private const long MAX_MEMORIES = 1;
+
+    /// <summary>Instances one store may hold: the guest's own, with room for none of its making.</summary>
+    private const long MAX_INSTANCES = 4;
+
     #endregion
 
     #region Fields
@@ -70,12 +86,7 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// </param>
     public VerifyWasmSandbox(string? ioDirectory)
     {
-        // NaN canonicalization pins float bit patterns across platforms; fuel and epoch
-        // give the CPU and wall-clock envelopes. One engine is shared by every store.
-        m_engine = new WasmEngine(new Config()
-            .WithFuelConsumption(true)
-            .WithEpochInterruption(true)
-            .WithCraneliftNaNCanonicalization(true));
+        m_engine = new WasmEngine(CreateConfig());
 
         // One timer thread advances the epoch for every store; per-store deadlines
         // (SetEpochDeadline) convert a wall-time budget into a tick count.
@@ -85,6 +96,29 @@ public sealed class VerifyWasmSandbox : IDisposable
 
         m_ioDir = ioDirectory ?? Path.Combine(Path.GetTempPath(), $"witai_verify_{Guid.NewGuid():N}");
         Directory.CreateDirectory(m_ioDir);
+    }
+
+    /// <summary>
+    /// The engine every store shares. NaN canonicalization pins float bit patterns across
+    /// platforms; fuel and epoch give the CPU and wall-clock envelopes. Beyond that the
+    /// engine runs what a guest built for wasm32-wasi needs and nothing more:
+    /// one linear memory with 32-bit addresses (the store's cap is per memory, and 64-bit
+    /// tables are what the table-size panic of wasmtime 44.0.0, GHSA-p8xm-42r7-89xg, needs),
+    /// no shared memory, no GC heap, no components; relaxed SIMD in its
+    /// deterministic mode, so a module that uses it computes the same bits on every CPU.
+    /// </summary>
+    private static Config CreateConfig()
+    {
+        return new Config()
+            .WithFuelConsumption(true)
+            .WithEpochInterruption(true)
+            .WithCraneliftNaNCanonicalization(true)
+            .WithMemory64(false)
+            .WithMultiMemory(false)
+            .WithWasmThreads(false)
+            .WithGc(false)
+            .WithComponentModel(false)
+            .WithRelaxedSIMD(true, true);
     }
 
     #endregion
@@ -177,7 +211,14 @@ public sealed class VerifyWasmSandbox : IDisposable
         {
             store.SetWasiConfiguration(VerifyGuestWiring.Build(runtime, task, args, stdinPath, stdoutPath, stderrPath));
             store.Fuel = (ulong)Math.Max(1, limits.FuelBudget);
-            store.SetLimits(memorySize: Math.Max(1, limits.MemoryBytes));
+            // The memory cap is per linear memory, so the guest gets one; tables are host
+            // memory outside that cap, so their size and number are capped as well.
+            store.SetLimits(
+                memorySize: Math.Max(1, limits.MemoryBytes),
+                tableElements: MAX_TABLE_ELEMENTS,
+                instances: MAX_INSTANCES,
+                tables: MAX_TABLES,
+                memories: MAX_MEMORIES);
             store.SetEpochDeadline(WallToTicks(limits.WallTimeMs));
 
             using var linker = VerifyDeterministicLinker.Create(m_engine, task.RandomSeed);

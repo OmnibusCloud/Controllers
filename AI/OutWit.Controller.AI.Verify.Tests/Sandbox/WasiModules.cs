@@ -28,7 +28,26 @@ internal static class WasiModules
     private const byte OP_MEMORY_GROW = 0x40;
     private const byte OP_I32_CONST = 0x41;
     private const byte OP_I32_EQ = 0x46;
+    private const byte OP_I32_SHR_U = 0x76;
+    private const byte OP_REF_NULL = 0xD0;
+    private const byte OP_PREFIX_FC = 0xFC;
+    private const byte FC_TABLE_GROW = 0x0F;
+    private const byte FC_TABLE_SIZE = 0x10;
+    private const byte FUNCREF = 0x70;
     private const byte BLOCK_VOID = 0x40;
+
+    private const byte LIMITS_MIN = 0x00;
+    private const byte LIMITS_MIN_MAX = 0x01;
+    private const byte LIMITS_64_BIT = 0x04;
+
+    private const int TYPE_START = 2;
+    private const int TYPE_TWO_TO_ONE = 3;
+
+    /// <summary>What a table bomb grows by at a step: 65,536 elements.</summary>
+    public const int TABLE_STEP_SHIFT = 16;
+
+    /// <summary>The most the table bomb's own declaration lets it grow to: 64 times the sandbox's cap.</summary>
+    private const uint TABLE_BOMB_MAXIMUM = 64 * 1_048_576;
 
     private const int FD_WRITE = 0;
     private const int FD_READ = 1;
@@ -103,7 +122,52 @@ internal static class WasiModules
     /// <summary>The hello program with an import nothing provides: instantiation fails.</summary>
     public static byte[] UnknownImport(string text)
     {
-        return Build([.. WriteStdout()], TextData(text), START, extraImport: ("env", "missing"));
+        return Build([.. WriteStdout()], TextData(text), START, extraImport: ("env", "missing", TYPE_START));
+    }
+
+    /// <summary>
+    /// A table bomb: grows a table of function references 65,536 elements at a time until
+    /// the host refuses, then exits with the number of steps it was given. A table is host
+    /// memory the linear memory cap does not count.
+    /// </summary>
+    public static byte[] TableBomb()
+    {
+        var body = new List<byte>
+        {
+            OP_BLOCK, BLOCK_VOID,
+            OP_LOOP, BLOCK_VOID
+        };
+        body.AddRange([OP_REF_NULL, FUNCREF, .. I32Const(1 << TABLE_STEP_SHIFT), OP_PREFIX_FC, FC_TABLE_GROW, 0x00]);
+        body.AddRange([.. I32Const(-1), OP_I32_EQ, OP_BR_IF, 0x01, OP_BR, 0x00, OP_END, OP_END]);
+        body.AddRange([OP_PREFIX_FC, FC_TABLE_SIZE, 0x00, .. I32Const(TABLE_STEP_SHIFT), OP_I32_SHR_U, .. Call(PROC_EXIT)]);
+
+        return Build(body, [], START, tables: [0x01, FUNCREF, LIMITS_MIN_MAX, 0x00, .. Uleb(TABLE_BOMB_MAXIMUM)]);
+    }
+
+    /// <summary>The exit program with two linear memories: twice the memory cap, if it were let in.</summary>
+    public static byte[] TwoMemories()
+    {
+        return Build([.. I32Const(0), .. Call(PROC_EXIT)], [], START, memories: [0x02, LIMITS_MIN, 0x01, LIMITS_MIN, 0x01]);
+    }
+
+    /// <summary>The exit program with a linear memory of 64-bit addresses.</summary>
+    public static byte[] Memory64()
+    {
+        return Build([.. I32Const(0), .. Call(PROC_EXIT)], [], START, memories: [0x01, LIMITS_64_BIT, 0x01]);
+    }
+
+    /// <summary>The exit program with a table of 64-bit indices (one element: only the kind matters).</summary>
+    public static byte[] Table64()
+    {
+        return Build([.. I32Const(0), .. Call(PROC_EXIT)], [], START, tables: [0x01, FUNCREF, LIMITS_64_BIT, 0x01]);
+    }
+
+    /// <summary>Asks to renumber descriptor 0 as 7 (the C library's dup2) and exits with the answer's errno.</summary>
+    public static byte[] RenumberDescriptor()
+    {
+        // The extra import is function 3; the start function follows it.
+        return Build([.. I32Const(0), .. I32Const(7), .. Call(3), .. Call(PROC_EXIT)], [], START,
+            extraImport: (WASI, "fd_renumber", TYPE_TWO_TO_ONE));
     }
 
     /// <summary>A header followed by a section id that does not exist.</summary>
@@ -116,31 +180,42 @@ internal static class WasiModules
 
     #region Assembly
 
-    private static byte[] Build(IReadOnlyList<byte> body, IReadOnlyList<byte> data, string startExport, (string Module, string Name)? extraImport = null)
+    private static byte[] Build(IReadOnlyList<byte> body, IReadOnlyList<byte> data, string startExport,
+        (string Module, string Name, int Type)? extraImport = null, IReadOnlyList<byte>? tables = null, IReadOnlyList<byte>? memories = null)
     {
         var startIndex = extraImport == null ? 3 : 4;
 
         var module = new List<byte> { 0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00 };
 
-        // type 0: (i32 i32 i32 i32) -> i32 ; type 1: (i32) -> () ; type 2: () -> ()
-        module.AddRange(Section(1,
-        [
-            0x03,
+        // type 0: (i32 i32 i32 i32) -> i32 ; type 1: (i32) -> () ; type 2: () -> () ; type 3: (i32 i32) -> i32,
+        // declared only for the module that imports a function of that shape (the hello bytes are pinned).
+        var types = new List<byte>
+        {
             0x60, 0x04, I32, I32, I32, I32, 0x01, I32,
             0x60, 0x01, I32, 0x00,
             0x60, 0x00, 0x00
-        ]));
+        };
+        var typeCount = 3;
+        if (extraImport is { Type: TYPE_TWO_TO_ONE })
+        {
+            types.AddRange([0x60, 0x02, I32, I32, 0x01, I32]);
+            typeCount = 4;
+        }
+
+        module.AddRange(Section(1, [(byte)typeCount, .. types]));
 
         var imports = new List<byte>();
         imports.AddRange([.. Name(WASI), .. Name("fd_write"), 0x00, 0x00]);
         imports.AddRange([.. Name(WASI), .. Name("fd_read"), 0x00, 0x00]);
         imports.AddRange([.. Name(WASI), .. Name("proc_exit"), 0x00, 0x01]);
         if (extraImport is { } extra)
-            imports.AddRange([.. Name(extra.Module), .. Name(extra.Name), 0x00, 0x02]);
+            imports.AddRange([.. Name(extra.Module), .. Name(extra.Name), 0x00, (byte)extra.Type]);
         module.AddRange(Section(2, [.. Uleb((uint)(extraImport == null ? 3 : 4)), .. imports]));
 
         module.AddRange(Section(3, [0x01, 0x02]));
-        module.AddRange(Section(5, [0x01, 0x00, 0x01]));
+        if (tables != null)
+            module.AddRange(Section(4, tables));
+        module.AddRange(Section(5, memories ?? [0x01, 0x00, 0x01]));
         module.AddRange(Section(7, [0x02, .. Name("memory"), 0x02, 0x00, .. Name(startExport), 0x00, .. Uleb((uint)startIndex)]));
 
         var code = new List<byte> { 0x00 };

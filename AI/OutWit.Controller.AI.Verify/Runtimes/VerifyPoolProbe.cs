@@ -41,6 +41,7 @@ public static class VerifyPoolProbe
     {
         var nodes = 0;
         var measured = 0;
+        var withDegree = 0;
         var workers = 0;
         var rate = 0.0;
 
@@ -59,11 +60,14 @@ public static class VerifyPoolProbe
                 && int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var degree)
                 && degree > 0)
             {
+                withDegree++;
                 workers += degree;
             }
         }
 
-        return new VerifyPoolSummary(nodes, measured, workers, rate);
+        // The degree travels in the benchmark's custom values, which a host may not keep
+        // (the cloud server stores a benchmark's rate and unit).
+        return new VerifyPoolSummary(nodes, measured, measured > 0 && withDegree == measured ? workers : null, rate);
     }
 
     #endregion

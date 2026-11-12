@@ -67,12 +67,12 @@
     "pool": {
       "type": "object",
       "description": "The nodes that can take Verify work for this submitter now, as totals; absent when the host cannot say. No node is named.",
-      "required": ["nodes", "measured", "workers", "rate"],
+      "required": ["nodes", "measured", "rate"],
       "additionalProperties": false,
       "properties": {
         "nodes": { "type": "integer" },
         "measured": { "type": "integer", "description": "Nodes that have measured themselves on the reference workload; the next two numbers are theirs." },
-        "workers": { "type": "integer", "description": "Concurrent sandboxes, added up." },
+        "workers": { "type": "integer", "description": "Concurrent sandboxes of the measured nodes, added up. Absent when the host does not carry the degree of every measured node." },
         "rate": { "type": "number", "description": "Reference tasks per second, added up. Real tasks are faster or slower than the reference ones." }
       }
     }

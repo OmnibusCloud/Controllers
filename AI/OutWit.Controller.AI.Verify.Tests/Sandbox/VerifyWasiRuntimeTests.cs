@@ -151,6 +151,56 @@ public sealed class VerifyWasiRuntimeTests
     }
 
     [Test]
+    public void ATableIsBoundedByItsOwnCapTest()
+    {
+        // A table is host memory outside the linear memory cap. The module may grow its
+        // table to 64 times the sandbox's cap by its own declaration; the sandbox stops it
+        // at the cap: 1,048,576 elements, sixteen steps of 65,536.
+        var result = Run(Task(WasiModules.TableBomb()), new VerifyLimitsData { MemoryBytes = 64 * 65536 });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.RuntimeError));
+            Assert.That(result.ExitCode, Is.EqualTo((int)(VerifyWasmSandbox.MAX_TABLE_ELEMENTS >> WasiModules.TABLE_STEP_SHIFT)));
+        });
+    }
+
+    [Test]
+    public void ASecondLinearMemoryIsCompileErrorTest()
+    {
+        // The memory cap is per linear memory: a module is given one.
+        var result = Run(Task(WasiModules.TwoMemories()));
+
+        Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.CompileError), result.Stderr);
+    }
+
+    [Test]
+    public void SixtyFourBitMemoriesAndTablesAreCompileErrorTest()
+    {
+        var memory = Run(Task(WasiModules.Memory64()));
+        var table = Run(Task(WasiModules.Table64()));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(memory.Verdict, Is.EqualTo(VerifyVerdict.CompileError), memory.Stderr);
+            Assert.That(table.Verdict, Is.EqualTo(VerifyVerdict.CompileError), table.Stderr);
+        });
+    }
+
+    [Test]
+    public void RenumberingADescriptorIsNotImplementedTest()
+    {
+        // WASI errno 52 (nosys): the call exists for the linker and does nothing.
+        var result = Run(Task(WasiModules.RenumberDescriptor()));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.RuntimeError));
+            Assert.That(result.ExitCode, Is.EqualTo(52));
+        });
+    }
+
+    [Test]
     public void MissingStartIsRuntimeErrorTest()
     {
         var result = Run(Task(WasiModules.NoStart("hello\n")));

@@ -43,6 +43,28 @@ public sealed class VerifyCapabilitiesTests
     }
 
     [Test]
+    public void TheWorkersAreNotGuessedWhenTheHostDoesNotCarryThemTest()
+    {
+        // The cloud server keeps a benchmark's rate and unit, not its custom values: the
+        // degree of a node does not reach the host. A total over the nodes that happen to
+        // carry it would read as the pool's, and a zero would read as "no workers".
+        var summary = VerifyPoolProbe.Summarize(
+        [
+            Measured(rate: 10, degree: 8),
+            new WitBenchmarkResult { Rate = 5, Unit = VerifyBenchmark.UNIT }
+        ]);
+
+        using var document = JsonDocument.Parse(VerifyCapabilitiesWriter.Write(new VerifyRuntimeDiagnosticsData(), summary));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary, Is.EqualTo(new VerifyPoolSummary(Nodes: 2, Measured: 2, Workers: null, Rate: 15)));
+            Assert.That(document.RootElement.GetProperty("pool").TryGetProperty("workers", out _), Is.False);
+            Assert.That(document.RootElement.GetProperty("pool").GetProperty("rate").GetDouble(), Is.EqualTo(15));
+        });
+    }
+
+    [Test]
     public void AProcessWithoutANodesManagerCannotSayTest()
     {
         // Not an async test on purpose: awaiting a task of a controller type puts that type into

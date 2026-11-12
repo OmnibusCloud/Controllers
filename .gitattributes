@@ -10,3 +10,5 @@ Visualization/**/Plugins/*.py text eol=lf
 *.sh text eol=lf
 # OpenFOAM test cases: dictionaries as OpenFOAM writes them, LF on every checkout
 OpenFOAM/**/Fixtures/** text eol=lf
+# WebAssembly modules kept as test fixtures: bytes, pinned by hash
+*.wasm binary

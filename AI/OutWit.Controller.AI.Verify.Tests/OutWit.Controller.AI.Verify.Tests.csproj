@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <None Update="Sandbox\Golden\*.golden.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Sandbox\Fixtures\*.wasm" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

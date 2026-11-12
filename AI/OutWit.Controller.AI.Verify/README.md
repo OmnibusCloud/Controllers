@@ -142,11 +142,44 @@ each host's WASI answers the interpreter's stat and descriptor queries), while
 QuickJS tasks and raw WASI modules are byte-equal everywhere — and the peak
 linear memory of a CPython task can differ by one 64 KiB page with it; wall
 time is hardware. All three are metrics and live per task in the provenance
-document. The sandbox pins the clock and seeds the random source from the
-task, so a program sees the same world on every node. What it does not pin is
-the metadata of the runtime's own files: their times and the order of a
-directory listing are the host's, so a program that prints them disagrees
-between nodes.
+document. The clock is the run's own (it starts at a pinned instant and moves
+only when the program sleeps) and the random source is seeded from the task,
+so a program sees the same world on every node; a folder cannot be
+listed, so the host's order of a listing is out of sight. What is not pinned
+is the metadata of the runtime's own files: their times and file numbers are
+the host's, so a program that prints them disagrees between nodes.
+
+## What a program can reach
+
+Every run is one WebAssembly instance in a store of its own, created for the
+run and dropped after it. What the store gives a program, and what happens at
+each edge:
+
+| | What a program gets | At the edge |
+|---|---|---|
+| Processor | fuel, one unit an instruction: 50e9 by default, 2e12 at most | `Timeout` |
+| Wall time | 10 s by default, 120 s at most | `Timeout` |
+| Memory | one linear memory of 32-bit addresses: 256 MiB by default, 2 GiB at most | the allocator refuses inside the program: `MemoryExceeded` |
+| Tables | 1,048,576 elements a table, eight tables | growth is refused |
+| Output | 256 KiB of stdout and 64 KiB of stderr by default | `OutputExceeded` |
+| Files | the runtime's own library, read-only; a raw `wasi` module has none | writing, truncating, removing and renaming are refused |
+| Folder listing | none | "permission denied" |
+| Network, processes, threads | none | the calls do not exist or fail |
+| Clock | the run's own: it starts at one pinned instant and moves only when the program waits | nothing of the host's time is visible |
+| Sleeping | returns at once and moves the run's clock by what was asked | an hour's sleep costs nothing, holds no worker, and the clock reads an hour later |
+| Randomness | a stream seeded by the task | the same bytes on every node |
+| Environment | empty, but for what pins the interpreter | |
+
+A module is refused before it runs (`CompileError`) when it asks for what the
+sandbox does not offer: a second linear memory, 64-bit memories or tables,
+shared memory, the GC heap, stack switching, exception handling, an import
+the sandbox does not provide. Four system calls answer with an error and do
+nothing, each for a stated reason (the comments in `VerifyDeterministicLinker`
+name the engine advisories): renumbering a descriptor, listing a folder, and
+setting a file's times by descriptor or by path.
+
+These are tests, not intentions: the adversarial suite and the raw-WASI suite
+run a hostile program or module against every row.
 
 ## Node behaviour
 

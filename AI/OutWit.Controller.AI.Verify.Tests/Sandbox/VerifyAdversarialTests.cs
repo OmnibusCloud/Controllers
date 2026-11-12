@@ -43,6 +43,44 @@ public sealed class VerifyAdversarialTests : VerifySandboxTestBase
     }
 
     [Test]
+    public void ALibraryFileCannotBeOpenedForWritingOrTruncatedTest()
+    {
+        // The runtime root is read-only for files as well as for the folder: opening an
+        // existing library file to write, append or truncate is refused, and its bytes stay.
+        var layer = Path.Combine(Python.RootPath!, "lib", "python314.zip");
+        var before = new FileInfo(layer).Length;
+
+        const string program =
+            "import os\n" +
+            "for mode in ('w', 'r+', 'a', 'wb'):\n" +
+            "    try:\n" +
+            "        open('/lib/python314.zip', mode).close()\n" +
+            "        print('OPENED', mode)\n" +
+            "    except OSError:\n" +
+            "        print('refused')\n" +
+            "for name in ('truncate', 'remove', 'rename'):\n" +
+            "    try:\n" +
+            "        if name == 'rename':\n" +
+            "            os.rename('/lib/python314.zip', '/lib/gone.zip')\n" +
+            "        elif name == 'remove':\n" +
+            "            os.remove('/lib/python314.zip')\n" +
+            "        else:\n" +
+            "            os.truncate('/lib/python314.zip', 0)\n" +
+            "        print('DONE', name)\n" +
+            "    except (OSError, AttributeError):\n" +
+            "        print('refused')\n";
+
+        var result = Run(Python, PythonTask(program));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Pass), result.Stderr);
+            Assert.That(result.Stdout, Is.EqualTo(string.Concat(Enumerable.Repeat("refused\n", 7))));
+            Assert.That(new FileInfo(layer).Length, Is.EqualTo(before));
+        });
+    }
+
+    [Test]
     public void PathTraversalOutOfPreopenIsContainedTest()
     {
         // Even armed with a preopen, ".." must not climb to the real host tree.
@@ -123,6 +161,64 @@ public sealed class VerifyAdversarialTests : VerifySandboxTestBase
     }
 
     [Test]
+    public void ASleepDoesNotHoldAWorkerTest()
+    {
+        // A sleep is a call into the host, where neither fuel nor the wall limit reaches.
+        // In the sandbox it returns at once and moves the run's own clock: an hour asked for
+        // costs nothing, and the clock reads an hour later.
+        var started = DateTime.UtcNow;
+        var result = Run(Python, PythonTask("import time\nbefore = time.time()\ntime.sleep(3600)\nprint(before, time.time(), time.monotonic())"),
+            new VerifyLimitsData { WallTimeMs = 2_000 });
+        var elapsed = DateTime.UtcNow - started;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Pass), result.Stderr);
+            Assert.That(result.Stdout, Is.EqualTo("0.0 3600.0 3600.0\n"));
+            Assert.That(elapsed, Is.LessThan(TimeSpan.FromSeconds(30)));
+        });
+    }
+
+    [Test]
+    public void AFolderCannotBeListedTest()
+    {
+        // The one folder a guest has is its runtime's library: nothing to list for a task, and
+        // a listing's order would be the host file system's.
+        var result = Run(Python, PythonTask(
+            "import os\n" +
+            "for path in ('/', '/lib'):\n" +
+            "    try:\n" +
+            "        print('LISTED', sorted(os.listdir(path)))\n" +
+            "    except OSError as error:\n" +
+            "        print('refused', type(error).__name__)\n"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Pass), result.Stderr);
+            Assert.That(result.Stdout, Is.EqualTo("refused PermissionError\nrefused PermissionError\n"));
+        });
+    }
+
+    [Test]
+    public void AFilesTimesCannotBeSetTest()
+    {
+        var result = Run(Python, PythonTask(
+            "import os\n" +
+            "for times in ((0, 0), (2**62, 2**62), (-2**62, -2**62)):\n" +
+            "    try:\n" +
+            "        os.utime('/lib/python314.zip', times)\n" +
+            "        print('SET')\n" +
+            "    except (OSError, OverflowError, AttributeError, NotImplementedError) as error:\n" +
+            "        print('refused')\n"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Pass), result.Stderr);
+            Assert.That(result.Stdout, Is.EqualTo("refused\nrefused\nrefused\n"));
+        });
+    }
+
+    [Test]
     public void JavaScriptInfiniteLoopIsBoundedTest()
     {
         var result = Run(QuickJs, JsTask("while (true) {}",
@@ -138,12 +234,40 @@ public sealed class VerifyAdversarialTests : VerifySandboxTestBase
     [Test]
     public void WallClockIsPinnedTest()
     {
-        // time.time() reads the pinned clock, so two reads in one run are identical — a program
-        // cannot observe real time (a non-determinism and side-channel source).
+        // time.time() reads the run's own clock, which moves only when the program sleeps, so
+        // two reads in a row are identical — a program cannot observe real time (a
+        // non-determinism and side-channel source).
         var result = Run(Python, PythonTask("import time; print(time.time() == time.time())"));
 
         Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Pass));
         Assert.That(result.Stdout.Trim(), Is.EqualTo("True"));
+    }
+
+    [Test]
+    public void AWaitLoopEndsBecauseSleepingMovesTheClockTest()
+    {
+        // The shape of a retry with a deadline: with a clock that never moved this would spin
+        // until the fuel ran out. Each sleep moves the run's clock, so the loop ends where it
+        // would in real life, and the same way on every node.
+        const string program =
+            "import time\n" +
+            "deadline = time.monotonic() + 5\n" +
+            "turns = 0\n" +
+            "while time.monotonic() < deadline:\n" +
+            "    time.sleep(0.5)\n" +
+            "    turns += 1\n" +
+            "print(turns, time.monotonic())\n";
+
+        var first = Run(Python, PythonTask(program));
+        var second = Run(Python, PythonTask(program));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(first.Verdict, Is.EqualTo(VerifyVerdict.Pass), first.Stderr);
+            Assert.That(first.Stdout, Is.EqualTo("10 5.0\n"));
+            Assert.That(second.Stdout, Is.EqualTo(first.Stdout));
+            Assert.That(second.FuelConsumed, Is.EqualTo(first.FuelConsumed));
+        });
     }
 
     [Test]

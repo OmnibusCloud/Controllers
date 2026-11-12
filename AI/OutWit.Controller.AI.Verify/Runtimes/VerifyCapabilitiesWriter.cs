@@ -80,7 +80,8 @@ public static class VerifyCapabilitiesWriter
                 writer.WriteStartObject("pool");
                 writer.WriteNumber("nodes", pool.Nodes);
                 writer.WriteNumber("measured", pool.Measured);
-                writer.WriteNumber("workers", pool.Workers);
+                if (pool.Workers is { } workers)
+                    writer.WriteNumber("workers", workers);
                 writer.WriteNumber("rate", Math.Round(pool.Rate, 3));
                 writer.WriteEndObject();
             }
