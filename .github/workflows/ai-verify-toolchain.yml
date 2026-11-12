@@ -124,7 +124,7 @@ jobs:
         run: |
           . "$TOOLCHAIN/pins.env"
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/wasmtime.tar.xz" "$WASMTIME_URL"
-          echo "wasmtime archive: $(sha256sum "$RUNNER_TEMP/wasmtime.tar.xz" | cut -d' ' -f1) (pin: ${WASMTIME_SHA256:-none})"
+          echo "$WASMTIME_SHA256  $RUNNER_TEMP/wasmtime.tar.xz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/wasmtime"
           tar -xJf "$RUNNER_TEMP/wasmtime.tar.xz" -C "$RUNNER_TEMP/wasmtime" --strip-components=1
           W="$RUNNER_TEMP/wasmtime/wasmtime"

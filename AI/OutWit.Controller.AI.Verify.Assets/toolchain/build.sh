@@ -23,8 +23,14 @@ WORK="$(cd "$WORK" && pwd)"
 UNPINNED=0
 
 fetch() {
-  local url="$1" pin="$2" file="$3" seen
-  [ -f "$file" ] || curl -fsSL --retry 3 -o "$file" "$url"
+  local url="$1" pin="$2" file="$3" mirror="${4:-}" seen
+  if [ ! -f "$file" ]; then
+    if ! curl -fsSL --retry 2 --max-time 300 -o "$file" "$url"; then
+      [ -n "$mirror" ] || { echo "DOWNLOAD FAILED $url"; exit 1; }
+      echo "no answer from $url, taking the mirror"
+      curl -fsSL --retry 3 --max-time 300 -o "$file" "$mirror"
+    fi
+  fi
   seen="$(sha256sum "$file" | cut -d' ' -f1)"
   if [ -z "$pin" ]; then
     echo "UNPINNED $seen  $(basename "$file")"
@@ -39,7 +45,7 @@ fetch() {
 
 echo "== downloads"
 fetch "$WASI_SDK_URL" "$WASI_SDK_SHA256" "$WORK/wasi-sdk.tar.gz"
-fetch "$LUA_URL" "$LUA_SHA256" "$WORK/lua.tar.gz"
+fetch "$LUA_URL" "$LUA_SHA256" "$WORK/lua.tar.gz" "$LUA_MIRROR_URL"
 
 SDK="$WORK/wasi-sdk"
 if [ ! -x "$SDK/bin/clang" ]; then
