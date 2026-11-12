@@ -179,7 +179,8 @@ name the engine advisories): renumbering a descriptor, listing a folder, and
 setting a file's times by descriptor or by path.
 
 These are tests, not intentions: the adversarial suite and the raw-WASI suite
-run a hostile program or module against every row.
+run a hostile program or module against every row. The same in plain words,
+for someone who lends a computer to the network: [docs/safety.md](docs/safety.md).
 
 ## Node behaviour
 
