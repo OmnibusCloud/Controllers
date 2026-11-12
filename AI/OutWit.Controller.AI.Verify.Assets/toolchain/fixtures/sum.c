@@ -8,6 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The last block of --grow: the allocations are visible to the world, so the compiler makes them. */
+static char *volatile last_block;
+
 int main(int argc, char **argv)
 {
     if (argc >= 3 && strcmp(argv[1], "--exit") == 0)
@@ -23,6 +26,7 @@ int main(int argc, char **argv)
                 break;
 
             memset(block, 1, 1024 * 1024);
+            last_block = block;
             megabytes++;
         }
 

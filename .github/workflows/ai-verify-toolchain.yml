@@ -4,14 +4,16 @@ run-name: "AI Verify toolchain: ${{ github.ref_name }}"
 # The modules of the Verify runtime set that are built here instead of taken ready-made:
 # the Lua interpreter from lua.org's sources and the C and Rust fixtures of the raw-WASI
 # runtime tests, with a pinned wasi-sdk and a pinned Rust. The job builds everything twice
-# in two folders and compares the bytes, runs each module under the pinned wasmtime, and
-# publishes the modules as a workflow artifact with their hashes in the log.
+# in two folders and compares the bytes, checks that the fixtures committed with the tests
+# are those bytes, runs each module under the pinned wasmtime, and publishes the modules as
+# a workflow artifact with their hashes in the log.
 
 on:
   workflow_dispatch:
   push:
     paths:
       - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/**'
+      - 'AI/OutWit.Controller.AI.Verify.Tests/Sandbox/Fixtures/**'
       - '.github/workflows/ai-verify-toolchain.yml'
 
 permissions:
@@ -183,6 +185,22 @@ jobs:
           name: verify-toolchain-modules
           path: ${{ runner.temp }}/out/*.wasm
           if-no-files-found: error
+
+      # The C and Rust fixtures live in the repository as files (the sandbox tests read them
+      # on every platform). They must be exactly what these sources build to.
+      # After the modules are published, so a changed source can be taken from the artifact.
+      - name: The committed fixtures are what the toolchain builds
+        shell: bash
+        run: |
+          FIXTURES=AI/OutWit.Controller.AI.Verify.Tests/Sandbox/Fixtures
+          for name in sum.wasm words.wasm; do
+            if cmp -s "$RUNNER_TEMP/out/$name" "$FIXTURES/$name"; then
+              echo "same bytes: $name  $(sha256sum "$FIXTURES/$name" | cut -d' ' -f1)"
+            else
+              echo "::error::$FIXTURES/$name is not what the toolchain builds ($(sha256sum "$RUNNER_TEMP/out/$name" | cut -d' ' -f1))"
+              exit 1
+            fi
+          done
 
       - name: Every download is pinned
         if: steps.build.outputs.code != '0'
