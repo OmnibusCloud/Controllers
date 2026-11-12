@@ -9,6 +9,7 @@ Job:VerifyRun(Blob:taskset, VerifyOptions:opts)
         => Verify.ExecutePackage(package);
 
     Blob:report = Verify.Collect(results, opts);
+    Blob:outputs = Verify.CollectOutputs(results, opts);
     Blob:provenance = Verify.Provenance(results);
     Blob:integrity = Verify.Integrity(results);
 }

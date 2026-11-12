@@ -42,6 +42,24 @@ public static class VerifyCorpusWriter
                 writer.WriteString("stderr", result.Stderr);
                 if (result.StderrTruncated)
                     writer.WriteBoolean("stderr_truncated", true);
+
+                // A task with a suite ran once per case: each case's own outcome and output.
+                if (result.CaseResults.Count > 0)
+                {
+                    writer.WriteStartArray("cases");
+                    foreach (var caseResult in result.CaseResults)
+                    {
+                        writer.WriteStartObject();
+                        writer.WriteNumber("case", caseResult.CaseIndex);
+                        writer.WriteBoolean("passed", caseResult.Passed);
+                        writer.WriteString("verdict", caseResult.Verdict.ToString());
+                        writer.WriteNumber("exit", caseResult.ExitCode);
+                        writer.WriteString("stdout", caseResult.ActualStdout);
+                        writer.WriteEndObject();
+                    }
+                    writer.WriteEndArray();
+                }
+
                 writer.WriteEndObject();
             }
 

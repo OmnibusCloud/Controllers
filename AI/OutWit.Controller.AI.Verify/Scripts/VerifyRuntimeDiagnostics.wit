@@ -1,4 +1,5 @@
 Job:VerifyRuntimeDiagnostics()
 {
     VerifyRuntimeDiagnostics:result = Verify.RuntimeDiagnostics();
+    Blob:capabilities = Verify.Capabilities();
 }

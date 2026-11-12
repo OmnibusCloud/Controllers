@@ -30,13 +30,14 @@ proof checks or it does not.
 | `Verify.ExecutePackage` | node | the primitive: the node downloads the package blob and runs its batches — one compiled runtime module per batch, the tasks executed concurrently in isolated stores under fuel, memory and wall-clock limits — then uploads the results as a blob; progress of the delivery and of the work; batch provenance |
 | `Verify.Execute` | node | one task given inline, for diagnostics; a taskset never travels this way |
 | `Verify.Collect` | host | result packages → the verdict report (aggregates + one record per task; the run's identity, byte-identical regardless of placement) |
-| `Verify.CollectOutputs` | host | result packages → the corpus (one JSON line per task with its outputs; byte-deterministic) |
+| `Verify.CollectOutputs` | host | result packages → the outputs (one JSON line per task: stdout, stderr, and the outcome and stdout of every case of a suite; byte-deterministic). The sandbox log of a run, the corpus of a generation |
 | `Verify.MakeCheckTasks` | host | generator results + a checker spec → check task packages, one check per passing candidate under the candidate's index |
 | `Verify.Provenance` | host | result packages → the provenance document (which tasks ran together, on which platform, with which wasmtime and runtime module, at which degree, and what each task cost: fuel, peak memory, wall time; never which machine) |
 | `Verify.SamplingRate` | host | options → `SamplingRate` clamped to 0..1, the share of the packages `Grid.Replicas` runs twice |
 | `Verify.Integrity` | host | the result packages of all executions → the integrity document (the two executions of each task that ran twice, agreement on verdict, exit, outputs and cases; the mismatch rate) |
 | `Verify.Preflight` | host | counts, runtimes referenced, unknown runtimes, size estimate, ceiling notes — before anything runs |
 | `Verify.RuntimeDiagnostics` | host | wasmtime version (the native library is loaded to prove it), runtime target, per-runtime availability and hash — of the server's module; a node's module is exercised by `Verify.ExecutePackage` and described by the provenance |
+| `Verify.Capabilities` | host | what a submitter can know before a run, as a document: the controller's version, the runtimes it carries, the defaults and ceilings, and the pool as totals (nodes, concurrent sandboxes, reference tasks per second; no node named) |
 
 ## Scripts
 
@@ -44,11 +45,11 @@ proof checks or it does not.
 
 | Script | Shape | Returns |
 |---|---|---|
-| `VerifyRun(Blob taskset, VerifyOptions opts)` | Split → ForEach ⇒ ExecutePackage (a share of the packages twice) → Collect, Provenance, Integrity | `report`, `provenance`, `integrity` |
+| `VerifyRun(Blob taskset, VerifyOptions opts)` | Split → ForEach ⇒ ExecutePackage (a share of the packages twice) → Collect, CollectOutputs, Provenance, Integrity | `report`, `outputs`, `provenance`, `integrity` |
 | `VerifyGenerate(Blob taskset, VerifyOptions opts)` | the same fan-out; the programs are generators | `corpus`, `report`, `provenance`, `integrity` |
 | `VerifyGenerateAndCheck(Blob generators, Blob checker, VerifyOptions opts)` | generators fan out → MakeCheckTasks → checks fan out (a share of the check packages twice) → Collect | `report` (the checks), `corpus` (the candidates), `provenance`, `integrity` |
 | `VerifyPreflight(Blob taskset, VerifyOptions opts)` | one host activity | `result` |
-| `VerifyRuntimeDiagnostics()` | one host activity | `result` |
+| `VerifyRuntimeDiagnostics()` | two host activities | `result`, `capabilities` |
 
 `VerifyOptions`: `DefaultLimits`, `BatchSize` (tasks per batch, 0 = 32),
 `MaxDegree` (concurrent sandboxes per node, 0 = 16), `SamplingRate` (the share
@@ -89,7 +90,8 @@ results; the SDK only moves blobs and submits scripts.
 | taskset (JSON lines, one task per line) | [`verify-taskset.schema.json`](docs/verify-taskset.schema.json) | in |
 | checker spec (one object) | [`verify-checker.schema.json`](docs/verify-checker.schema.json) | in |
 | verdict report | [`verify-report.schema.json`](docs/verify-report.schema.json) | out |
-| corpus (JSON lines) | [`verify-corpus.schema.json`](docs/verify-corpus.schema.json) | out |
+| outputs of a run, corpus of a generation (JSON lines) | [`verify-corpus.schema.json`](docs/verify-corpus.schema.json) | out |
+| capabilities | [`verify-capabilities.schema.json`](docs/verify-capabilities.schema.json) | out |
 | provenance | [`verify-provenance.schema.json`](docs/verify-provenance.schema.json) | out |
 | integrity | [`verify-integrity.schema.json`](docs/verify-integrity.schema.json) | out |
 

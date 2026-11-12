@@ -8,9 +8,10 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: result packages → the corpus of outputs (one JSON line per task: verdict, exit,
-/// stdout, stderr) as a blob. The product of VerifyGenerate; VerifyGenerateAndCheck keeps it
-/// next to the check report so that skipped candidates stay visible.
+/// Host-side: result packages → the outputs (one JSON line per task: verdict, exit, stdout,
+/// stderr, and the outcome and stdout of every case of a suite) as a blob. In VerifyRun it is
+/// the sandbox log next to the verdict report; in VerifyGenerate it is the product, the corpus;
+/// VerifyGenerateAndCheck keeps it next to the check report so that skipped candidates stay visible.
 /// </summary>
 [Activity("Verify.CollectOutputs")]
 [MemoryPackable]

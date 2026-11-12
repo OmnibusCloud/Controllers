@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-capabilities.schema.json",
+  "title": "Verify capabilities",
+  "description": "The capabilities blob of VerifyRuntimeDiagnostics: what a submitter can know before a run. It takes no taskset. Nodes run the same module as the host (the platform admits no other version to the work), so the runtimes listed are the pool's.",
+  "type": "object",
+  "required": ["schema", "controller", "wasmtime", "benchmark_unit", "runtimes", "defaults", "ceilings", "packages"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "string", "const": "verify-capabilities/1" },
+    "controller": { "type": "string", "description": "The controller's version." },
+    "wasmtime": { "type": "string", "description": "Version of the wasmtime binding the sandbox runs on." },
+    "benchmark_unit": { "type": "string", "description": "The unit of the pool's rate: tasks of the reference workload per second." },
+    "runtimes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "language", "sha256", "available"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "description": "The runtime id a task names." },
+          "language": { "type": "string", "enum": ["python", "javascript", "wasi", "unknown"] },
+          "sha256": { "type": "string", "description": "The pinned hash of the runtime module; empty for the raw wasi runtime, whose module comes with each task." },
+          "available": { "type": "boolean", "description": "The module is present and passed its hash pin in the host's copy of the controller." }
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "description": "What applies when the options and the task leave a value unset.",
+      "required": ["batch_size", "max_degree", "fuel", "memory_bytes", "wall_ms", "stdout_bytes", "stderr_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "batch_size": { "type": "integer" },
+        "max_degree": { "type": "integer" },
+        "fuel": { "type": "integer" },
+        "memory_bytes": { "type": "integer" },
+        "wall_ms": { "type": "integer" },
+        "stdout_bytes": { "type": "integer" },
+        "stderr_bytes": { "type": "integer" }
+      }
+    },
+    "ceilings": {
+      "type": "object",
+      "description": "The most a task may ask for; a larger request is clamped when the taskset is split.",
+      "required": ["fuel", "memory_bytes", "wall_ms", "stdout_bytes", "stderr_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "fuel": { "type": "integer" },
+        "memory_bytes": { "type": "integer" },
+        "wall_ms": { "type": "integer" },
+        "stdout_bytes": { "type": "integer" },
+        "stderr_bytes": { "type": "integer" }
+      }
+    },
+    "packages": {
+      "type": "object",
+      "description": "How a run is cut into the blobs nodes download: one batch per package while the run is small, about `target` packages once it is large.",
+      "required": ["target", "max_tasks", "max_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "type": "integer" },
+        "max_tasks": { "type": "integer" },
+        "max_bytes": { "type": "integer" }
+      }
+    },
+    "pool": {
+      "type": "object",
+      "description": "The nodes that can take Verify work for this submitter now, as totals; absent when the host cannot say. No node is named.",
+      "required": ["nodes", "measured", "workers", "rate"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes": { "type": "integer" },
+        "measured": { "type": "integer", "description": "Nodes that have measured themselves on the reference workload; the next two numbers are theirs." },
+        "workers": { "type": "integer", "description": "Concurrent sandboxes, added up." },
+        "rate": { "type": "number", "description": "Reference tasks per second, added up. Real tasks are faster or slower than the reference ones." }
+      }
+    }
+  }
+}

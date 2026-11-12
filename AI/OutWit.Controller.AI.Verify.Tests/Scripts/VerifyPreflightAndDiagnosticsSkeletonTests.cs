@@ -101,6 +101,20 @@ public sealed class VerifyPreflightAndDiagnosticsSkeletonTests : VerifyScriptTes
             Assert.That(byId[VerifyRuntimeCatalog.WASI].Sha256, Is.Empty, "task-supplied: nothing to pin");
             Assert.That(byId[VerifyRuntimeCatalog.PYTHON_3_14_6].Sha256, Has.Length.EqualTo(64));
         });
+
+        // The same job leaves the capabilities document: version, runtimes, and the pool of
+        // the three in-process nodes as totals (they carry the default, unmeasured score).
+        using var capabilities = await ReadJsonAsync((Guid)job.Variables["capabilities"].Value!);
+        var root = capabilities.RootElement;
+        Assert.Multiple(() =>
+        {
+            Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo("verify-capabilities/1"));
+            Assert.That(root.GetProperty("controller").GetString(), Is.Not.Empty);
+            Assert.That(root.GetProperty("runtimes").EnumerateArray().Select(r => r.GetProperty("id").GetString()), Is.EquivalentTo(VerifyRuntimeCatalog.KnownIds));
+            Assert.That(root.GetProperty("runtimes").EnumerateArray().All(r => r.GetProperty("available").GetBoolean()), Is.True);
+            Assert.That(root.GetProperty("pool").GetProperty("nodes").GetInt32(), Is.EqualTo(3));
+            Assert.That(root.GetProperty("pool").GetProperty("measured").GetInt32(), Is.Zero);
+        });
     }
 
     #endregion

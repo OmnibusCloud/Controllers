@@ -33,6 +33,8 @@ public static class Program
 
     private const string REPORT = "report";
     private const string CORPUS = "corpus";
+    private const string OUTPUTS = "outputs";
+    private const string CAPABILITIES = "capabilities";
     private const string PROVENANCE = "provenance";
     private const string INTEGRITY = "integrity";
 
@@ -78,7 +80,7 @@ public static class Program
         return args[0] switch
         {
             "diagnostics" => await DiagnosticsAsync(client, options.Runs),
-            "run" when args.Length >= 2 => await ScriptAsync(client, RUN_SCRIPT, [args[1]], [REPORT, PROVENANCE, INTEGRITY], options),
+            "run" when args.Length >= 2 => await ScriptAsync(client, RUN_SCRIPT, [args[1]], [REPORT, OUTPUTS, PROVENANCE, INTEGRITY], options),
             "generate" when args.Length >= 2 => await ScriptAsync(client, GENERATE_SCRIPT, [args[1]], [CORPUS, REPORT, PROVENANCE, INTEGRITY], options),
             "check" when args.Length >= 3 => await ScriptAsync(client, CHECK_SCRIPT, [args[1], args[2]], [REPORT, CORPUS, PROVENANCE, INTEGRITY], options),
             _ => Usage()
@@ -112,9 +114,45 @@ public static class Program
                 var pin = runtime.Sha256.Length >= 12 ? $"sha256 {runtime.Sha256[..12]}…" : "(task-supplied module)";
                 Console.WriteLine($"    {runtime.RuntimeId,-28} {(runtime.Available ? "available" : "MISSING")}  {pin}");
             }
+
+            await PrintCapabilitiesAsync(client, handle);
         }
 
         return failures == 0 ? 0 : 1;
+    }
+
+    private static async Task PrintCapabilitiesAsync(WitCloudClient client, WitJobHandle handle)
+    {
+        // The document a server before 0.5.0 does not produce is reported, not fatal.
+        Guid? blobId;
+        try
+        {
+            blobId = (await handle.WaitAsync<Guid?>(CAPABILITIES, pollInterval: POLL_INTERVAL)).Result;
+        }
+        catch (InvalidOperationException exception) when (exception.InnerException?.Message.Contains("not found", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            Console.WriteLine("  capabilities: (not an output of the server's script version)");
+            return;
+        }
+
+        if (blobId == null)
+        {
+            Console.WriteLine("  capabilities: (none)");
+            return;
+        }
+
+        using var document = JsonDocument.Parse(await client.Blobs.DownloadBlobAsync(blobId.Value));
+        var root = document.RootElement;
+        Console.WriteLine($"  capabilities: controller {root.GetProperty("controller").GetString()}, {root.GetProperty("runtimes").GetArrayLength()} runtime(s), unit {root.GetProperty("benchmark_unit").GetString()}");
+
+        if (root.TryGetProperty("pool", out var pool))
+        {
+            Console.WriteLine($"    pool: {pool.GetProperty("nodes").GetInt32()} node(s), {pool.GetProperty("measured").GetInt32()} measured, {pool.GetProperty("workers").GetInt32()} worker(s), {pool.GetProperty("rate").GetDouble():F1} reference tasks/s");
+        }
+        else
+        {
+            Console.WriteLine("    pool: (the host did not say)");
+        }
     }
 
     private static async Task<int> ScriptAsync(WitCloudClient client, string script, IReadOnlyList<string> inputPaths, IReadOnlyList<string> outputs, RunOptions options)
@@ -191,7 +229,7 @@ public static class Program
                 if (options.SaveDir != null)
                 {
                     Directory.CreateDirectory(options.SaveDir);
-                    var extension = name == CORPUS ? "jsonl" : "json";
+                    var extension = name is CORPUS or OUTPUTS ? "jsonl" : "json";
                     var savedPath = Path.Combine(options.SaveDir, $"{name}-{i}.{extension}");
                     await File.WriteAllBytesAsync(savedPath, bytes);
                 }
@@ -230,8 +268,9 @@ public static class Program
                 PrintSummary(bytes);
                 break;
             case CORPUS:
+            case OUTPUTS:
                 var lines = Encoding.UTF8.GetString(bytes).Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
-                Console.WriteLine($"  corpus: {lines} line(s), {bytes.Length} byte(s), sha256 {Sha256(bytes)[..16]}…");
+                Console.WriteLine($"  {name}: {lines} line(s), {bytes.Length} byte(s), sha256 {Sha256(bytes)[..16]}…");
                 break;
             case PROVENANCE:
                 PrintProvenance(bytes);

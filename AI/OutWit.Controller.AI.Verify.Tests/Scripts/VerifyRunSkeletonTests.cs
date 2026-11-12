@@ -42,7 +42,7 @@ public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
         Assert.That(job, Is.Not.Null);
         Assert.That(job.Activities.Count, Is.GreaterThan(0));
         var variables = job.Variables.Select(variable => variable.Name).ToList();
-        Assert.That(variables, Is.SupersetOf(new[] { "taskset", "opts", "packages", "rate", "checked", "results", "report", "provenance", "integrity" }));
+        Assert.That(variables, Is.SupersetOf(new[] { "taskset", "opts", "packages", "rate", "checked", "results", "report", "outputs", "provenance", "integrity" }));
     }
 
     [Test]
@@ -132,6 +132,19 @@ public sealed class VerifyRunSkeletonTests : VerifyScriptTestBase
         Assert.That(verdictByIndex[1], Is.EqualTo("Fail"));
         Assert.That(verdictByIndex[2], Is.EqualTo("RuntimeError"));
         Assert.That(verdictByIndex[3], Is.EqualTo("Pass"));
+
+        // The outputs: one line per task, with what each case of the suite printed.
+        var outputs = (await ReadTextAsync((Guid)job.Variables["outputs"].Value!)).Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => JsonDocument.Parse(line).RootElement)
+            .ToDictionary(line => line.GetProperty("index").GetInt32());
+        Assert.Multiple(() =>
+        {
+            Assert.That(outputs.Keys, Is.EquivalentTo(new[] { 0, 1, 2, 3 }));
+            Assert.That(outputs[0].GetProperty("cases")[0].GetProperty("stdout").GetString(), Is.EqualTo("5\n"));
+            Assert.That(outputs[1].GetProperty("cases")[0].GetProperty("stdout").GetString(), Is.EqualTo("wrong\n"), "the failing case shows what was printed instead");
+            Assert.That(outputs[3].GetProperty("stdout").GetString(), Is.EqualTo("42\n"));
+            Assert.That(outputs[3].TryGetProperty("cases", out _), Is.False);
+        });
 
         // Provenance: every task attributed to exactly one batch, and no machine named.
         using var provenance = await ReadJsonAsync((Guid)job.Variables["provenance"].Value!);

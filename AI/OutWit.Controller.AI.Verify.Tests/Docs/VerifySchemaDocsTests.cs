@@ -97,9 +97,38 @@ public sealed class VerifySchemaDocsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(corpusProperties, Is.EquivalentTo(new[] { "index", "verdict", "exit", "stdout", "stdout_truncated", "stderr", "stderr_truncated" }));
+            Assert.That(corpusProperties, Is.EquivalentTo(new[] { "index", "verdict", "exit", "stdout", "stdout_truncated", "stderr", "stderr_truncated", "cases" }));
+            Assert.That(PropertyNames(corpus.RootElement.GetProperty("properties").GetProperty("cases").GetProperty("items").GetProperty("properties")),
+                Is.EquivalentTo(new[] { "case", "passed", "verdict", "exit", "stdout" }));
             Assert.That(batchProperties, Is.EquivalentTo(new[] { "runtime_target", "wasmtime", "controller", "runtime", "runtime_sha256", "degree", "wall_ms", "fuel", "tasks", "metrics" }));
             Assert.That(metricProperties, Is.EquivalentTo(new[] { "index", "fuel", "peak_memory", "wall_ms" }));
+        });
+    }
+
+    [Test]
+    public void CapabilitiesSchemaListsTheWriterFieldsTest()
+    {
+        using var schema = Load("verify-capabilities.schema.json");
+        var properties = schema.RootElement.GetProperty("properties");
+
+        // What the writer produces, with a pool, against what the schema allows.
+        var diagnostics = new OutWit.Controller.AI.Verify.Model.VerifyRuntimeDiagnosticsData
+        {
+            Runtimes = [new OutWit.Controller.AI.Verify.Model.VerifyRuntimeInfoData { RuntimeId = "python-3.14.6" }]
+        };
+        using var written = JsonDocument.Parse(OutWit.Controller.AI.Verify.Runtimes.VerifyCapabilitiesWriter.Write(
+            diagnostics, new OutWit.Controller.AI.Verify.Runtimes.VerifyPoolSummary(1, 1, 1, 1)));
+        var root = written.RootElement;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(PropertyNames(root), Is.EquivalentTo(PropertyNames(properties)));
+            Assert.That(PropertyNames(root.GetProperty("runtimes")[0]), Is.EquivalentTo(PropertyNames(properties.GetProperty("runtimes").GetProperty("items").GetProperty("properties"))));
+            Assert.That(PropertyNames(root.GetProperty("defaults")), Is.EquivalentTo(PropertyNames(properties.GetProperty("defaults").GetProperty("properties"))));
+            Assert.That(PropertyNames(root.GetProperty("ceilings")), Is.EquivalentTo(PropertyNames(properties.GetProperty("ceilings").GetProperty("properties"))));
+            Assert.That(PropertyNames(root.GetProperty("packages")), Is.EquivalentTo(PropertyNames(properties.GetProperty("packages").GetProperty("properties"))));
+            Assert.That(PropertyNames(root.GetProperty("pool")), Is.EquivalentTo(PropertyNames(properties.GetProperty("pool").GetProperty("properties"))));
+            Assert.That(properties.GetProperty("schema").GetProperty("const").GetString(), Is.EqualTo(root.GetProperty("schema").GetString()));
         });
     }
 

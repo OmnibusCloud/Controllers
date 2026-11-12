@@ -34,6 +34,7 @@ public class VerifyModuleLoadTests
     private const string SELF_CHECK_TYPE = "OutWit.Controller.AI.Verify.Sandbox.VerifySelfCheck";
     private const string SELF_CHECK_METHOD = "Run";
     private const string RUNTIMES_OVERRIDE_ENV = "WITAI_VERIFY_RUNTIMES";
+    private const string CI_ENV = "GITHUB_ACTIONS";
 
     private const string NATIVE_LOADED = "wasmtime-native: loaded";
     private const string MANAGED_PREFIX = "wasmtime-managed: ";
@@ -71,8 +72,17 @@ public class VerifyModuleLoadTests
             .Where(n => n == VERIFY_ASSEMBLY || n == WASMTIME_ASSEMBLY)
             .ToList();
         if (alreadyLoaded.Count > 0)
-            Assert.Ignore($"{string.Join(", ", alreadyLoaded)} already in the default load context (an earlier fixture); " +
-                          "run this fixture alone for the isolation proof.");
+        {
+            var reason = $"{string.Join(", ", alreadyLoaded)} already in the default load context (an earlier fixture, or a test whose " +
+                         "signature or async state machine names a controller type); run this fixture alone for the isolation proof.";
+
+            // On the build server the whole assembly runs in one process and this fixture is the
+            // first: a controller already loaded there means the proof silently stopped running.
+            if (string.Equals(Environment.GetEnvironmentVariable(CI_ENV), "true", StringComparison.OrdinalIgnoreCase))
+                Assert.Fail(reason);
+
+            Assert.Ignore(reason);
+        }
 
         var solutionRoot = FindSolutionRoot();
         if (solutionRoot == null)

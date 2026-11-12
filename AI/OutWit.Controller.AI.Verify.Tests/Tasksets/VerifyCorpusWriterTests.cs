@@ -67,6 +67,43 @@ public sealed class VerifyCorpusWriterTests
     }
 
     [Test]
+    public void ATaskWithASuiteCarriesEveryCaseTest()
+    {
+        var results = new List<VerifyResultData>
+        {
+            new()
+            {
+                TaskIndex = 0,
+                Verdict = VerifyVerdict.Fail,
+                ExitCode = 0,
+                Stderr = "warned\n",
+                CaseResults =
+                [
+                    new VerifyCaseResultData { CaseIndex = 0, Passed = true, Verdict = VerifyVerdict.Pass, ActualStdout = "5\n" },
+                    new VerifyCaseResultData { CaseIndex = 1, Passed = false, Verdict = VerifyVerdict.Fail, ExitCode = 3, ActualStdout = "6\n" }
+                ]
+            },
+            new() { TaskIndex = 1, Verdict = VerifyVerdict.Pass, Stdout = "plain\n" }
+        };
+
+        var lines = Encoding.UTF8.GetString(VerifyCorpusWriter.Write(results)).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var suite = JsonDocument.Parse(lines[0]).RootElement;
+        var cases = suite.GetProperty("cases").EnumerateArray().ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cases, Has.Count.EqualTo(2));
+            Assert.That(cases[0].GetProperty("passed").GetBoolean(), Is.True);
+            Assert.That(cases[0].GetProperty("stdout").GetString(), Is.EqualTo("5\n"));
+            Assert.That(cases[1].GetProperty("case").GetInt32(), Is.EqualTo(1));
+            Assert.That(cases[1].GetProperty("verdict").GetString(), Is.EqualTo("Fail"));
+            Assert.That(cases[1].GetProperty("exit").GetInt32(), Is.EqualTo(3));
+            Assert.That(suite.GetProperty("stderr").GetString(), Is.EqualTo("warned\n"));
+            Assert.That(JsonDocument.Parse(lines[1]).RootElement.TryGetProperty("cases", out _), Is.False, "a task without a suite has no cases");
+        });
+    }
+
+    [Test]
     public void EmptyRunIsAnEmptyCorpusTest()
     {
         Assert.That(VerifyCorpusWriter.Write([]), Is.Empty);
