@@ -51,34 +51,34 @@
   <ItemGroup>
     <ControllerDataAsset Include="wasmtime-win-x64">
       <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.3.0/wasmtime-win-x64.zip</Uri>
-      <Sha256>ca9f1b1dbcf401f4d5c28db79f8ae96d007f36f64502cf8e7640bd1c3a39f2f2</Sha256>
-      <Size>7531924</Size>
+      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.6.0/wasmtime-win-x64.zip</Uri>
+      <Sha256>c4e799ba8b7f625a8e5aee1f6c43d0a57b2ce6ce0824e7a13ca62144c94bfdc5</Sha256>
+      <Size>8284072</Size>
       <ExtractTo>runtimes/win-x64/native/</ExtractTo>
       <PackSource>wasmtime/win-x64</PackSource>
       <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="wasmtime-linux-x64">
       <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.3.0/wasmtime-linux-x64.zip</Uri>
-      <Sha256>20948b9b5b545ae236575f67b7f43a97ff6b25200d42d67545e5a9f9f162cbff</Sha256>
-      <Size>9137544</Size>
+      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.6.0/wasmtime-linux-x64.zip</Uri>
+      <Sha256>9ea38410c9e9ac0e6a2983dbcca5b324cf0c8a12159ed9ec186cd195f987c4a8</Sha256>
+      <Size>9963229</Size>
       <ExtractTo>runtimes/linux-x64/native/</ExtractTo>
       <PackSource>wasmtime/linux-x64</PackSource>
       <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="wasmtime-osx-arm64">
       <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.3.0/wasmtime-osx-arm64.zip</Uri>
-      <Sha256>494aecefbe61514841e07da5e14660945fd042106cfc523ed19e62948bb0ba45</Sha256>
-      <Size>7804075</Size>
+      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.6.0/wasmtime-osx-arm64.zip</Uri>
+      <Sha256>252af1df65b0fa10fa67d0dece7713d6e5e61bde438ae9083993a75c5ef5a3d9</Sha256>
+      <Size>8563340</Size>
       <ExtractTo>runtimes/osx-arm64/native/</ExtractTo>
       <PackSource>wasmtime/osx-arm64</PackSource>
       <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="verify-wasm">
       <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.6.0/verify-wasm.zip</Uri>
-      <Sha256>68c23cb3d4a254ea9c884e4667a6216cd138b3ea8b94103393975ec6137cee79</Sha256>
+      <Sha256>c412f1eba032e2b51bcf51fa5f0748c1781ad12cb2ca5263199bb5208a38afbd</Sha256>
       <Size>39881979</Size>
       <ExtractTo>wasm/</ExtractTo>
       <PackSource>wasm</PackSource>
