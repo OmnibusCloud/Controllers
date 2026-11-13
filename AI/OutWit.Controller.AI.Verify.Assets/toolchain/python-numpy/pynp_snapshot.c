@@ -13,7 +13,8 @@
  * The sandbox needs no change: it calls _start, never _initialize.
  *
  * What a task sees is what a fresh interpreter would show it:
- * - sys.argv and sys.orig_argv are the task's;
+ * - sys.argv and sys.orig_argv are the task's, and the code runs as CPython's -c runs it
+ *   (decoded, dedented, compiled as "<string>" with its source kept for tracebacks);
  * - what drew entropy while the snapshot was made is seeded again from the task's stream when
  *   the task starts (Python's random, numpy's legacy global RandomState, tempfile's name
  *   generator), so unseeded random numbers follow the task's seed;
@@ -30,6 +31,9 @@
  * snapshot.sh links with --wrap for the four calls. The approach is wasi-python's (Apache-2.0,
  * github.com/ClayGendron/wasi_python, recipes/reactor_main.c). */
 #include <Python.h>
+
+#include "pycore_pylifecycle.h"   /* _PyRun_SimpleStringFlagsWithName(), as Modules/main.c */
+#include "pycore_unicodeobject.h" /* _PyUnicode_Dedent() */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -260,6 +264,37 @@ static void set_sys_list(const char *name, PyObject *list) {
     Py_DECREF(list);
 }
 
+/* CPython's pymain_run_command (Modules/main.c), the same steps: the command decoded as argv is,
+ * audited, dedented, and run under the name "<string>" so a traceback shows its lines. */
+static int run_command(const char *command) {
+    PyObject *unicode = PyUnicode_DecodeFSDefault(command);
+    if (unicode == NULL)
+        goto error;
+    if (PySys_Audit("cpython.run_command", "O", unicode) < 0) {
+        Py_DECREF(unicode);
+        PyErr_Print();
+        return 1;
+    }
+    Py_SETREF(unicode, _PyUnicode_Dedent(unicode));
+    if (unicode == NULL)
+        goto error;
+    PyObject *bytes = PyUnicode_AsUTF8String(unicode);
+    Py_DECREF(unicode);
+    if (bytes == NULL)
+        goto error;
+    PyCompilerFlags flags = _PyCompilerFlags_INIT;
+    flags.cf_flags |= PyCF_IGNORE_COOKIE;
+    int failed = _PyRun_SimpleStringFlagsWithName(PyBytes_AsString(bytes), "<string>", &flags);
+    Py_DECREF(bytes);
+    return failed != 0;
+
+error:
+    PySys_WriteStderr("Unable to decode the command from the command line:
+");
+    PyErr_Print();
+    return 1;
+}
+
 static void reseed(void) {
     PyObject *globals = PyDict_New();
     PyObject *builtins = PyImport_ImportModule("builtins");
@@ -305,9 +340,7 @@ __attribute__((export_name("_start"))) void pynp_start(void) {
     set_sys_list("orig_argv", string_list(argv, 0, argc, NULL));
     reseed();
 
-    PyCompilerFlags flags = _PyCompilerFlags_INIT;
-    flags.cf_flags |= PyCF_IGNORE_COOKIE;
-    int code = PyRun_SimpleStringFlags(argv[4], &flags) != 0 ? 1 : 0;
+    int code = run_command(argv[4]);
     if (Py_FinalizeEx() < 0)
         code = 120;
     exit(code);
