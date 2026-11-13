@@ -1,0 +1,92 @@
+name: AI Verify python-numpy
+run-name: "AI Verify python-numpy: ${{ github.ref_name }}"
+
+# The numpy runtime of Verify, built from pinned sources (toolchain/python-numpy/build.sh):
+# CPython 3.14.6 for wasm32-wasip1 with numpy 2.5.4 linked in, numpy's Python package as a
+# bytecode layer. Two builds run side by side in folders of different names; the compare job
+# checks that they made the same bytes. The first build also runs the probes under the pinned
+# wasmtime the way the sandbox runs a task. The module is published as a workflow artifact only.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'spike/python-numpy'
+    paths:
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/**'
+      - '.github/workflows/ai-verify-python-numpy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        copy: [a, b]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      TOOLCHAIN: AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ "${{ matrix.copy }}" = a ]; then WORK="$RUNNER_TEMP/work"; else WORK="$RUNNER_TEMP/another/work-b"; fi
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
+          bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out" "$WORK"
+
+      - name: Probe the way the sandbox runs a task
+        if: matrix.copy == 'a'
+        shell: bash
+        run: bash "$TOOLCHAIN/probe.sh" "$RUNNER_TEMP/out" "$WORK/wasmtime/wasmtime"
+
+      - name: Publish the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-numpy-${{ matrix.copy }}
+          path: ${{ runner.temp }}/out/*
+          if-no-files-found: error
+
+      - name: Publish the logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-numpy-logs-${{ matrix.copy }}
+          path: |
+            ${{ env.WORK }}/logs/**
+            ${{ env.WORK }}/link/*.log
+            ${{ env.WORK }}/link/*.txt
+            ${{ env.WORK }}/link/*.h
+            ${{ env.WORK }}/numpy-build/meson-logs/**
+          if-no-files-found: ignore
+
+  compare:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-numpy-a
+          path: a
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-numpy-b
+          path: b
+      - name: The two builds made the same bytes
+        shell: bash
+        run: |
+          status=0
+          for file in a/*; do
+            name="$(basename "$file")"
+            if cmp -s "$file" "b/$name"; then
+              echo "same bytes: $name  $(sha256sum "$file" | cut -d' ' -f1)  $(wc -c < "$file")"
+            else
+              echo "::error::$name differs between the two builds"
+              status=1
+            fi
+          done
+          exit $status

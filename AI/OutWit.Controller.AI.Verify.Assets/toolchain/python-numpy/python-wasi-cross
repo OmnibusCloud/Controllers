@@ -1,0 +1,12 @@
+#!/bin/sh
+# The "target Python" numpy's meson introspects: the native build-Python CPython's WASI driver
+# built, answering with the WASI build's sysconfig data (the trick CPython's own Makefile uses for
+# PYTHON_FOR_BUILD). build.sh exports the two paths. Adapted from wasi-python's
+# scripts/python-wasi-cross (Apache-2.0).
+: "${PYNP_BUILD_PYTHON:?}" "${PYNP_WASI_BUILD:?}" "${PYNP_CPYTHON:?}"
+export _PYTHON_PROJECT_BASE="$PYNP_WASI_BUILD"
+export _PYTHON_HOST_PLATFORM=wasi-wasm32-wasi
+export _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata__wasi_wasm32-wasi
+export _PYTHON_SYSCONFIGDATA_PATH="$PYNP_WASI_BUILD/build/lib.wasi-wasm32-3.14"
+export PYTHONPATH="$PYNP_CPYTHON/Lib:$_PYTHON_SYSCONFIGDATA_PATH${PYTHONPATH:+:$PYTHONPATH}"
+exec "$PYNP_BUILD_PYTHON" "$@"

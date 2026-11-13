@@ -1,0 +1,2 @@
+# Run on Linux by the toolchain job (the wrappers are executed by meson, the patches applied by patch): LF everywhere.
+* text eol=lf

@@ -1,0 +1,47 @@
+#!/bin/sh
+# Compiler and linker wrapper for numpy's meson cross build to wasm32-wasip1 (adapted from
+# wasi-python's scripts/wasi-cc, Apache-2.0, github.com/ClayGendron/wasi_python).
+#
+# A compile runs the WASI SDK's clang with -fPIC dropped: every object is linked statically into
+# python.wasm. A link meson emits for an extension module (`-shared -o X.so`) writes X.so as a
+# static archive of the module's own objects and X.so.deps naming the libraries it links with
+# (wasi-libc has no dlopen), so numpy's meson.build stays as it is.
+set -eu
+: "${WASI_SDK_PATH:?}"
+tool=${WASI_CC_TOOL:-clang}
+shared=0; out=""; prev=""
+for a in "$@"; do
+  case "$a" in -shared) shared=1;; esac
+  if [ "$prev" = "-o" ]; then out=$a; fi
+  prev=$a
+done
+if [ "$shared" = 1 ] && [ -n "$out" ]; then
+  objs=""; deps=""; prev=""
+  for a in "$@"; do
+    if [ "$prev" = "-o" ]; then prev=$a; continue; fi
+    case "$a" in
+      *.o|*.obj) objs="$objs $a";;
+      *.a|*.so) deps="$deps $a";;
+      -l*|-L*) deps="$deps $a";;
+    esac
+    prev=$a
+  done
+  rm -f "$out"
+  # D: deterministic archive (no times, uids or modes).
+  "$WASI_SDK_PATH/bin/llvm-ar" rcsD "$out" $objs
+  printf '%s\n' $deps > "$out.deps"
+  exit 0
+fi
+args=""
+for a in "$@"; do
+  case "$a" in
+    -fPIC|-fpic|-fPIE|-fpie|-pthread) ;;
+    # wasm-ld has no archive groups; it resolves archives in any order.
+    -Wl,--start-group|-Wl,--end-group) ;;
+    *) args="$args
+$a";;
+  esac
+done
+oldifs=$IFS; IFS='
+'; set -- $args; IFS=$oldifs
+exec "$WASI_SDK_PATH/bin/$tool" --target=wasm32-wasip1 "$@"

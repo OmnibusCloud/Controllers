@@ -1,0 +1,35 @@
+# Meson cross file: numpy for wasm32-wasip1 as static archives (after wasi-python's
+# recipes/wasi-numpy.cross, Apache-2.0). build.sh replaces @HERE@ (this folder), @SDK@ (the WASI
+# SDK) and @TOOLS@ (the build tools) and writes the result into its work folder.
+[binaries]
+c = '@HERE@/wasi-cc'
+cpp = '@HERE@/wasi-cxx'
+ar = '@SDK@/bin/llvm-ar'
+ranlib = '@SDK@/bin/llvm-ranlib'
+strip = '@SDK@/bin/llvm-strip'
+nm = '@SDK@/bin/llvm-nm'
+python = '@HERE@/python-wasi-cross'
+cython = '@TOOLS@/cython'
+# No BLAS from the build host: numpy's own lapack_lite is the linear algebra.
+pkg-config = '/bin/false'
+cmake = '/bin/false'
+
+[host_machine]
+system = 'wasi'
+cpu_family = 'wasm32'
+cpu = 'wasm32'
+endian = 'little'
+
+[properties]
+# wasm32's long double is IEEE binary128 (sizeof 16); numpy cannot run its probe in a cross build.
+longdouble_format = 'IEEE_QUAD_LE'
+needs_exe_wrapper = true
+skip_sanity_check = true
+
+[built-in options]
+# -ffile-prefix-map: no build folder in __FILE__ strings, so the bytes do not depend on where the
+# build ran. The two headers: npy_random_legacy_rename.h and npy_fenv_flags.h. The emulations are
+# wasi-libc's, the ones CPython's WASI build links. -fexceptions without -fwasm-exceptions: clang
+# compiles catch away and a throw calls cxa_stubs.c, so no exception-handling instruction.
+c_args = ['-ffile-prefix-map=@HERE@=/toolchain', '-ffile-prefix-map=@WORK@=/build', '-include', '@HERE@/npy_random_legacy_rename.h', '-include', '@HERE@/npy_fenv_flags.h', '-D_WASI_EMULATED_SIGNAL', '-D_WASI_EMULATED_PROCESS_CLOCKS', '-D_WASI_EMULATED_GETPID', '-DNPY_NO_SIGNAL', '-Wno-return-type']
+cpp_args = ['-ffile-prefix-map=@HERE@=/toolchain', '-ffile-prefix-map=@WORK@=/build', '-include', '@HERE@/npy_fenv_flags.h', '-D_WASI_EMULATED_SIGNAL', '-D_WASI_EMULATED_PROCESS_CLOCKS', '-D_WASI_EMULATED_GETPID', '-DNPY_NO_SIGNAL', '-fexceptions', '-Wno-return-type']
