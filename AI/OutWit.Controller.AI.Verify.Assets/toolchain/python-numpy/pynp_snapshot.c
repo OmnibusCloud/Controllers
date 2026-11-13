@@ -289,8 +289,7 @@ static int run_command(const char *command) {
     return failed != 0;
 
 error:
-    PySys_WriteStderr("Unable to decode the command from the command line:
-");
+    PySys_WriteStderr("Unable to decode the command from the command line:\n");
     PyErr_Print();
     return 1;
 }
