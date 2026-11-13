@@ -12,3 +12,5 @@ Visualization/**/Plugins/*.py text eol=lf
 OpenFOAM/**/Fixtures/** text eol=lf
 # WebAssembly modules kept as test fixtures: bytes, pinned by hash
 *.wasm binary
+# Modules the Verify runtime set ships as built (lua.wasm and its licence): bytes, pinned by hash
+AI/OutWit.Controller.AI.Verify.Assets/modules/** -text

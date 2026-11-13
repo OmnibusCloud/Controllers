@@ -2,7 +2,9 @@
 # Builds the modules the Verify runtime set cannot take ready-made, from pinned sources with
 # a pinned toolchain, on Linux x64:
 #
-#   lua.wasm      the stock Lua interpreter (lua.org sources, lua-wasi.h in front of each file)
+#   lua.wasm      the stock Lua interpreter (lua.org sources unchanged, lua-wasi.h and
+#                 lua-asyncify.h in front of each file, errors by an asyncify unwind), with
+#                 LICENSE-lua.txt beside it
 #   sum.wasm      the C fixture of the raw-WASI runtime tests
 #   words.wasm    the Rust fixture of the raw-WASI runtime tests
 #
@@ -46,6 +48,7 @@ fetch() {
 echo "== downloads"
 fetch "$WASI_SDK_URL" "$WASI_SDK_SHA256" "$WORK/wasi-sdk.tar.gz"
 fetch "$LUA_URL" "$LUA_SHA256" "$WORK/lua.tar.gz" "$LUA_MIRROR_URL"
+fetch "$BINARYEN_URL" "$BINARYEN_SHA256" "$WORK/binaryen.tar.gz"
 
 SDK="$WORK/wasi-sdk"
 if [ ! -x "$SDK/bin/clang" ]; then
@@ -54,31 +57,68 @@ if [ ! -x "$SDK/bin/clang" ]; then
 fi
 "$SDK/bin/clang" --version | head -1
 
+BINARYEN="$WORK/binaryen"
+if [ ! -x "$BINARYEN/bin/wasm-opt" ]; then
+  mkdir -p "$BINARYEN"
+  tar -xzf "$WORK/binaryen.tar.gz" -C "$BINARYEN" --strip-components=1
+fi
+"$BINARYEN/bin/wasm-opt" --version
+
 LUA="$WORK/lua-$LUA_VERSION"
 rm -rf "$LUA"
 tar -xzf "$WORK/lua.tar.gz" -C "$WORK"
 
 echo "== lua.wasm (Lua $LUA_VERSION)"
-# Every source of the interpreter except the compiler's own main. Lua raises errors with
-# longjmp; in WebAssembly that is the exception-handling proposal (-wasm-enable-sjlj, the
-# standard encoding, libsetjmp). The signal and process-clock emulations are wasi-libc's
-# own; the stack is 1 MiB because Lua's C recursion (200 nested calls) does not fit the
-# linker's default 64 KiB.
-(
-  cd "$LUA/src"
-  SOURCES="$(ls *.c | grep -v '^luac\.c$' | sort | tr '\n' ' ')"
-  # shellcheck disable=SC2086
-  "$SDK/bin/clang" --target=wasm32-wasip1 --sysroot="$SDK/share/wasi-sysroot" \
-    -O2 -DNDEBUG \
-    -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS \
-    -include "$HERE/lua-wasi.h" \
-    -mllvm -wasm-enable-sjlj -mllvm -wasm-use-legacy-eh=false \
-    -ffile-prefix-map="$WORK"=. -ffile-prefix-map="$HERE"=. \
-    $SOURCES \
-    -lwasi-emulated-signal -lwasi-emulated-process-clocks -lsetjmp -lm \
-    -Wl,-z,stack-size=1048576 -Wl,--strip-debug \
-    -o "$OUT/lua.wasm"
-)
+# Every source of the interpreter except the compiler's own main, Lua's files unchanged.
+# Lua raises an error by a jump to the nearest protected call (LUAI_THROW / LUAI_TRY in
+# ldo.c). lua-asyncify.h makes that jump an asyncify unwind that stops at the protected call
+# and is never rewound, so the module needs no exception-handling feature and runs in the
+# sandbox as it is. It relies on LUAI_TRY being used once, around "(*f)(L, ud);": checked here.
+# The signal and process-clock emulations are wasi-libc's own; the stack is 1 MiB because
+# Lua's C recursion (200 nested calls) does not fit the linker's default 64 KiB.
+grep -q '^    (\*f)(L, ud);$' "$LUA/src/ldo.c" || { echo "ldo.c: the LUAI_TRY block is not the expected one"; exit 1; }
+[ "$(grep -c 'LUAI_TRY(L, ' "$LUA/src/ldo.c")" = 1 ] || { echo "ldo.c: LUAI_TRY is not used exactly once"; exit 1; }
+
+# lua_raw <output> [extra clang options]: the interpreter linked with its function names,
+# which wasm-opt needs for the remove-list (it strips them afterwards). luaD_throw is declared
+# not to return, and it does return now: into the unwind, which leaves every frame above it at
+# once. clang's warning about that is expected and silenced (-Wno-invalid-noreturn).
+lua_raw() {
+  local output="$1"; shift
+  (
+    cd "$LUA/src"
+    SOURCES="$(ls *.c | grep -v '^luac\.c$' | sort | tr '\n' ' ')"
+    "$SDK/bin/clang" --target=wasm32-wasip1 -c "$HERE/lua-asyncify-sp.S" -o "$WORK/lua-asyncify-sp.o"
+    # shellcheck disable=SC2086
+    "$SDK/bin/clang" --target=wasm32-wasip1 --sysroot="$SDK/share/wasi-sysroot" \
+      -O2 -DNDEBUG -Wno-invalid-noreturn \
+      -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS \
+      -include "$HERE/lua-wasi.h" -include "$HERE/lua-asyncify.h" "$@" \
+      -ffile-prefix-map="$WORK"=. -ffile-prefix-map="$HERE"=. \
+      $SOURCES "$HERE/lua-asyncify.c" "$WORK/lua-asyncify-sp.o" \
+      -lwasi-emulated-signal -lwasi-emulated-process-clocks -lm \
+      -Wl,-z,stack-size=1048576 \
+      -o "$output"
+  )
+}
+
+# Asyncify instruments what can reach the unwind (WASI's imports never do) except the
+# protected call itself; the asyncify_* exports it adds are removed (the host calls _start).
+ASYNCIFY=(--asyncify --pass-arg=asyncify-ignore-imports --pass-arg=asyncify-removelist@lua_asyncify_call
+          -O2 --remove-exports --pass-arg=remove-exports@asyncify_* --remove-unused-module-elements
+          --strip-debug --strip-producers)
+
+lua_raw "$WORK/lua.raw.wasm"
+"$BINARYEN/bin/wasm-opt" "$WORK/lua.raw.wasm" "${ASYNCIFY[@]}" -o "$OUT/lua.wasm"
+
+# The licence the module ships with: the notice at the end of lua.h, as it is.
+sed -n '/^\* Copyright (C) 1994/,/SOFTWARE OR THE USE OR OTHER DEALINGS/p' "$LUA/src/lua.h" | sed 's/^\* \{0,1\}//' > "$OUT/LICENSE-lua.txt"
+[ "$(wc -l < "$OUT/LICENSE-lua.txt")" -ge 15 ] || { echo "lua.h: the licence notice was not found"; exit 1; }
+
+# The gate's build (gates.sh), not shipped: the same module counting how deep its unwinds go.
+mkdir -p "$WORK/gates"
+lua_raw "$WORK/gates/lua-stats.raw.wasm" -DLUA_ASYNCIFY_STATS
+"$BINARYEN/bin/wasm-opt" "$WORK/gates/lua-stats.raw.wasm" "${ASYNCIFY[@]}" -o "$WORK/gates/lua-stats.wasm"
 
 echo "== sum.wasm (C)"
 "$SDK/bin/clang" --target=wasm32-wasip1 --sysroot="$SDK/share/wasi-sysroot" \

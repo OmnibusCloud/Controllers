@@ -13,6 +13,7 @@ on:
   push:
     paths:
       - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/modules/**'
       - 'AI/OutWit.Controller.AI.Verify.Tests/Sandbox/Fixtures/**'
       - '.github/workflows/ai-verify-toolchain.yml'
 
@@ -22,7 +23,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       TOOLCHAIN: AI/OutWit.Controller.AI.Verify.Assets/toolchain
     steps:
@@ -44,12 +45,12 @@ jobs:
         run: |
           set +e
           mkdir -p "$RUNNER_TEMP/work2"
-          cp "$RUNNER_TEMP/work/wasi-sdk.tar.gz" "$RUNNER_TEMP/work/lua.tar.gz" "$RUNNER_TEMP/work2/"
+          cp "$RUNNER_TEMP/work/wasi-sdk.tar.gz" "$RUNNER_TEMP/work/lua.tar.gz" "$RUNNER_TEMP/work/binaryen.tar.gz" "$RUNNER_TEMP/work2/"
           bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out2" "$RUNNER_TEMP/work2" > "$RUNNER_TEMP/build2.log" 2>&1
           code=$?
           [ "$code" -eq 0 ] || [ "$code" -eq 3 ] || { cat "$RUNNER_TEMP/build2.log"; exit "$code"; }
           set -e
-          for module in "$RUNNER_TEMP"/out/*.wasm; do
+          for module in "$RUNNER_TEMP"/out/*.wasm "$RUNNER_TEMP"/out/LICENSE-lua.txt; do
             name="$(basename "$module")"
             if cmp -s "$module" "$RUNNER_TEMP/out2/$name"; then
               echo "same bytes: $name"
@@ -119,6 +120,13 @@ jobs:
               print(path.split("/")[-1], len(data), "bytes; sections", sections)
               print("  imports:", ", ".join(imports))
               print("  exception tag section (13):", 13 in sections)
+              # lua.wasm raises its errors by an asyncify unwind: WASI imports only (Binaryen
+              # connects the asyncify ones inside), and nothing of exception handling.
+              if path.endswith("/lua.wasm"):
+                  foreign = [name for name in imports if not name.startswith("wasi_snapshot_preview1.")]
+                  if foreign or 13 in sections:
+                      print("::error::lua.wasm imports", foreign, "or has an exception tag section")
+                      sys.exit(1)
           EOF
 
       - name: Run the modules under the pinned wasmtime
@@ -140,11 +148,8 @@ jobs:
           echo "-- lua: inline code"
           "$W" run "$O/lua.wasm" -e 'print(6*7, _VERSION, math.maxinteger)'
           echo "[exit $?]"
-          echo "-- lua: an error caught by pcall (needs the exception-handling proposal)"
-          "$W" run "$O/lua.wasm" -e 'print(pcall(error, "caught")); print(pcall(function() local t = nil; return t.x end)); print(select(2, pcall(string.rep)))'
-          echo "[exit $?]"
-          echo "-- lua: the same with exceptions switched on explicitly"
-          "$W" run -W exceptions=y "$O/lua.wasm" -e 'print(pcall(error, "caught"))'
+          echo "-- lua: errors caught by pcall, with the exception-handling feature off as in the sandbox"
+          "$W" run -W exceptions=n "$O/lua.wasm" -e 'print(pcall(error, "caught")); print(pcall(function() local t = nil; return t.x end)); print(select(2, pcall(string.rep)))'
           echo "[exit $?]"
           echo "-- lua: an uncaught error"
           "$W" run "$O/lua.wasm" -e 'error("boom")'
@@ -179,11 +184,17 @@ jobs:
           fi
           exit 0
 
+      - name: Lua's own test suite and the depth of an unwind
+        shell: bash
+        run: bash "$TOOLCHAIN/gates.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/work" "$RUNNER_TEMP/wasmtime/wasmtime"
+
       - name: Publish the modules
         uses: actions/upload-artifact@v4
         with:
           name: verify-toolchain-modules
-          path: ${{ runner.temp }}/out/*.wasm
+          path: |
+            ${{ runner.temp }}/out/*.wasm
+            ${{ runner.temp }}/out/LICENSE-lua.txt
           if-no-files-found: error
 
       # The C and Rust fixtures live in the repository as files (the sandbox tests read them
@@ -198,6 +209,21 @@ jobs:
               echo "same bytes: $name  $(sha256sum "$FIXTURES/$name" | cut -d' ' -f1)"
             else
               echo "::error::$FIXTURES/$name is not what the toolchain builds ($(sha256sum "$RUNNER_TEMP/out/$name" | cut -d' ' -f1))"
+              exit 1
+            fi
+          done
+
+      # lua.wasm ships in the runtime set as built here; the asset tool takes it from the
+      # repository, so the committed copy must be exactly what these sources build to.
+      - name: The committed Lua module is what the toolchain builds
+        shell: bash
+        run: |
+          MODULES=AI/OutWit.Controller.AI.Verify.Assets/modules/lua-5.4.8
+          for name in lua.wasm LICENSE-lua.txt; do
+            if cmp -s "$RUNNER_TEMP/out/$name" "$MODULES/$name"; then
+              echo "same bytes: $name  $(sha256sum "$MODULES/$name" | cut -d' ' -f1)"
+            else
+              echo "::error::$MODULES/$name is not what the toolchain builds ($(sha256sum "$RUNNER_TEMP/out/$name" | cut -d' ' -f1))"
               exit 1
             fi
           done
