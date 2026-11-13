@@ -159,7 +159,7 @@ echo "numpy: $(find "$NB" -name "*$EXT_SUFFIX" | wc -l) extension archives"
 SITE="$(find "$WORK/numpy-install" -type f -name __init__.py -path '*site-packages/numpy/__init__.py' | head -n 1)"
 [ -n "$SITE" ] || fail /dev/null "no installed numpy package under $WORK/numpy-install"
 SITE="$(dirname "$SITE")"
-grep -q 'NPY_SIZEOF_LONGDOUBLE 16' "$NB/numpy/_core/include/numpy/_numpyconfig.h" \
+grep -q -E 'NPY_SIZEOF_LONGDOUBLE[[:space:]]+16' "$NB/numpy/_core/_numpyconfig.h" \
   || fail /dev/null "numpy's generated _numpyconfig.h does not describe wasm32's 16-byte long double"
 
 echo "== link (numpy's modules as builtins)"

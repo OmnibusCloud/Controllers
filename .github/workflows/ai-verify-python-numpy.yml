@@ -4,8 +4,10 @@ run-name: "AI Verify python-numpy: ${{ github.ref_name }}"
 # The numpy runtime of Verify, built from pinned sources (toolchain/python-numpy/build.sh):
 # CPython 3.14.6 for wasm32-wasip1 with numpy 2.5.4 linked in, numpy's Python package as a
 # bytecode layer. Two builds run side by side in folders of different names; the compare job
-# checks that they made the same bytes. The first build also runs the probes under the pinned
-# wasmtime the way the sandbox runs a task. The module is published as a workflow artifact only.
+# checks that they made the same bytes. Each build also makes the start-up snapshot
+# (snapshot.sh, an experiment that may fail without failing the job). The first build runs the
+# probes under the pinned wasmtime the way the sandbox runs a task. Everything is published as a
+# workflow artifact only.
 
 on:
   workflow_dispatch:
@@ -39,6 +41,14 @@ jobs:
           echo "WORK=$WORK" >> "$GITHUB_ENV"
           bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out" "$WORK"
 
+      # The start-up snapshot is an experiment: when it fails, the plain module is still probed
+      # and published.
+      - name: Snapshot
+        id: snapshot
+        continue-on-error: true
+        shell: bash
+        run: bash "$TOOLCHAIN/snapshot.sh" "$RUNNER_TEMP/out" "$WORK"
+
       - name: Probe the way the sandbox runs a task
         if: matrix.copy == 'a'
         shell: bash
@@ -52,7 +62,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish the logs
-        if: failure()
+        if: failure() || steps.snapshot.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: python-numpy-logs-${{ matrix.copy }}
@@ -62,6 +72,9 @@ jobs:
             ${{ env.WORK }}/link/*.txt
             ${{ env.WORK }}/link/*.h
             ${{ env.WORK }}/numpy-build/meson-logs/**
+            ${{ env.WORK }}/snapshot/*.log
+            ${{ env.WORK }}/snapshot/*.txt
+            ${{ env.WORK }}/snapshot/*.err
           if-no-files-found: ignore
 
   compare:
