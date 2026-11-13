@@ -38,10 +38,9 @@ DEEP_FILES="calls cstack errors coroutine"
 BUFFER=$((256 * 1024))
 
 echo "== Lua's test suite"
-TESTS="$WORK/lua-tests.tar.gz"
-if [ ! -f "$TESTS" ]; then
-  curl -fsSL --retry 3 --max-time 120 -o "$TESTS" "$LUA_TESTS_URL" || { echo "DOWNLOAD FAILED $LUA_TESTS_URL"; exit 1; }
-fi
+# The suite's archive is kept next to this script (lua.org resets connections from the build
+# servers, and no mirror carries the tests); it is the file of $LUA_TESTS_URL, checked by its pin.
+TESTS="$HERE/gates/lua-$LUA_VERSION-tests.tar.gz"
 echo "$LUA_TESTS_SHA256  $TESTS" | sha256sum -c - || exit 1
 SUITE="$WORK/lua-tests"
 rm -rf "$SUITE"
