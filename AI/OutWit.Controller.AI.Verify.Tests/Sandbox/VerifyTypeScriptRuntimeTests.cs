@@ -1,5 +1,6 @@
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
+using OutWit.Controller.AI.Verify.Tasksets;
 
 namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
 
@@ -15,6 +16,8 @@ namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
 public sealed class VerifyTypeScriptRuntimeTests : VerifySandboxTestBase
 {
     #region Constants
+
+    private static readonly string DEMO_TASKSET = Path.Combine("OutWit.Controller.AI.Verify.Live", "tasksets", "ts-demo.jsonl");
 
     /// <summary>Loading the transpiler is most of a hello's cost; anything near this is wrong.</summary>
     private const long HELLO_FUEL_CEILING = 1_000_000_000;
@@ -169,6 +172,25 @@ public sealed class VerifyTypeScriptRuntimeTests : VerifySandboxTestBase
             Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Pass), result.Stderr);
             Assert.That(result.Stdout, Is.EqualTo("caught RangeError\n"));
         });
+    }
+
+    [Test]
+    public void TheDemoTasksetGivesTheVerdictsItNamesTest()
+    {
+        // The taskset the fleet proof runs (verify-live run ts-demo.jsonl): ten programs that
+        // pass, a wrong answer, an uncaught exception, a source that does not parse and a loop
+        // that never ends.
+        var path = Path.GetFullPath(Path.Combine(RuntimesRoot, "..", "..", "..", DEMO_TASKSET));
+        var parsed = VerifyTasksetParser.Parse(File.ReadAllText(path));
+        Assert.That(parsed.Errors, Is.Empty);
+
+        var results = parsed.Tasks.Select(task => Run(TypeScript, task)).ToList();
+        foreach (var result in results.Where(result => result.Verdict != VerifyVerdict.Pass))
+            TestContext.Out.WriteLine($"task {result.TaskIndex}: {result.Verdict} {result.Stderr}");
+
+        var expected = Enumerable.Repeat(VerifyVerdict.Pass, 10)
+            .Concat([VerifyVerdict.Fail, VerifyVerdict.RuntimeError, VerifyVerdict.RuntimeError, VerifyVerdict.Timeout]);
+        Assert.That(results.Select(result => result.Verdict), Is.EqualTo(expected));
     }
 
     #endregion
