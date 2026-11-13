@@ -73,6 +73,36 @@ public sealed class VerifySandboxHygieneTests : VerifySandboxTestBase
     }
 
     [Test]
+    public void AFolderSweptBetweenRunsIsMadeAgainTest()
+    {
+        // A cloud client sweeps its temp storage whenever it reloads its controllers on an idle
+        // node; the process-wide sandbox outlives that, so its folder can vanish between runs.
+        var given = Path.Combine(Path.GetTempPath(), $"witai_host_scope_{Guid.NewGuid():N}", "verify");
+        var task = PythonTask("print(input())", suite: new VerifySuiteData { Cases = [new VerifySuiteCaseData { Stdin = "7\n", ExpectedStdout = "7\n" }] });
+
+        var sandbox = new VerifyWasmSandbox(given);
+        try
+        {
+            var before = sandbox.Execute(Python, task, VerifySandboxDefaults.Resolve(null, null));
+            Directory.Delete(Path.GetDirectoryName(given)!, recursive: true);
+            var after = sandbox.Execute(Python, task, VerifySandboxDefaults.Resolve(null, null));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(before.Verdict, Is.EqualTo(VerifyVerdict.Pass), before.Stderr);
+                Assert.That(after.Verdict, Is.EqualTo(VerifyVerdict.Pass), after.Stderr);
+                Assert.That(after.Stdout, Is.EqualTo("7\n"));
+            });
+        }
+        finally
+        {
+            sandbox.Dispose();
+            if (Directory.Exists(Path.GetDirectoryName(given)!))
+                Directory.Delete(Path.GetDirectoryName(given)!, recursive: true);
+        }
+    }
+
+    [Test]
     public void GuestSeesOnlyThePinnedEnvironmentTest()
     {
         var result = Run(Python, PythonTask("import os; print(sorted(os.environ))"));

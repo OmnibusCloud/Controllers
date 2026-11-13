@@ -269,6 +269,11 @@ public sealed class VerifyWasmSandbox : IDisposable
     private VerifyRunOutcome RunProgram(VerifyResolvedRuntime runtime, WasmModule module, VerifyTaskData task,
         string? sourceRoot, IReadOnlyList<string> args, string? stdin, VerifyLimitsData limits)
     {
+        // The sandbox lives as long as the process, its folder in the host's temp storage. A
+        // cloud client sweeps that storage whenever it reloads its controllers on an idle node
+        // (every controller check, every reconnect), so the folder may be gone between two runs.
+        Directory.CreateDirectory(m_ioDir);
+
         var stdoutPath = Path.Combine(m_ioDir, $"{Guid.NewGuid():N}.out");
         var stderrPath = stdoutPath + ".err";
         var stdinPath = stdin == null ? null : stdoutPath + ".in";
