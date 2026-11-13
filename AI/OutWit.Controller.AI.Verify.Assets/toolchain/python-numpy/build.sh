@@ -113,14 +113,13 @@ tar -xJf "$WORK/Python-$CPYTHON_VERSION.tar.xz" -C "$WORK"
 mkdir -p "$WORK/logs/cpython"
 # CPython's own driver: a native build-Python, then the WASI interpreter under cross-build/.
 # --disable-test-modules: the _test* and xx* modules are not part of the product.
-# --with-hash-algorithm=siphash13: CPython's default, which a cross build would otherwise trade
-# for 32-bit FNV (configure cannot run its aligned-access probe); wasm reads unaligned words,
-# and with the sandbox's PYTHONHASHSEED=0 the order of a set of strings is then the one native
-# CPython prints.
+# The string hash stays the one configure picks in a cross build (32-bit FNV), the hash of the
+# catalog's python-3.14.6 (brettcannon's build): with the sandbox's PYTHONHASHSEED=0 a program
+# that prints a set of strings prints it in the same order on both runtimes.
 (
   cd "$CP"
   WASI_SDK_PATH="$SDK" python3 Tools/wasm/wasi build --quiet --logdir "$WORK/logs/cpython" -- \
-    --disable-test-modules --with-hash-algorithm=siphash13
+    --disable-test-modules
 ) > "$WORK/logs/cpython/driver.log" 2>&1 || { cat "$WORK/logs/cpython/driver.log"; for log in "$WORK"/logs/cpython/*.log; do echo "--- $log"; tail -n 30 "$log"; done; exit 1; }
 [ -f "$W/python.wasm" ] || fail "$WORK/logs/cpython/driver.log" "no python.wasm in $W"
 BUILD_PYTHON="$(find "$CP/cross-build" -mindepth 2 -maxdepth 2 -name python -type f ! -path '*/wasm32-wasip1/*' | head -n 1)"
