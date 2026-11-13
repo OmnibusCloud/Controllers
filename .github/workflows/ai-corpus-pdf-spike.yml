@@ -42,8 +42,12 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # The stable PdfPig, and the nightly of 2026-11-10 that carries the stack-overflow fixes
+      # merged after 0.1.16.
       - name: Build
-        run: dotnet build "$SPIKE/OutWit.Controller.AI.Corpus.PdfSpike.csproj" -c Release -o "$RUNNER_TEMP/tool"
+        run: |
+          dotnet build "$SPIKE/OutWit.Controller.AI.Corpus.PdfSpike.csproj" -c Release -o "$RUNNER_TEMP/tool"
+          dotnet build "$SPIKE/OutWit.Controller.AI.Corpus.PdfSpike.csproj" -c Release -o "$RUNNER_TEMP/tool-nightly" -p:PdfPigVersion=0.1.17-alpha-202611100027-21de1
 
       - name: Cache the Common Crawl PDFs
         uses: actions/cache@v4
@@ -64,10 +68,13 @@ jobs:
         run: |
           tool="dotnet $RUNNER_TEMP/tool/pdf-spike.dll"
           out="$RUNNER_TEMP/out"; mkdir -p "$out"
+          nightly="dotnet $RUNNER_TEMP/tool-nightly/pdf-spike.dll"
           for engine in pdfpig pdfpig-budget pdflibrary; do
-            $tool batch $engine "$RUNNER_TEMP/cc" "$out/cc-$engine.jsonl" --timeout-s 120 --mem-mb 4096 2> "$out/cc-$engine.log"
+            $tool batch $engine "$RUNNER_TEMP/cc" "$out/cc-$engine.jsonl" --timeout-s 120 --mem-mb 4096 --texts "$out/texts-cc-$engine" 2> "$out/cc-$engine.log"
             $tool batch $engine "$RUNNER_TEMP/salvaged" "$out/salvaged-$engine.jsonl" --timeout-s 120 --mem-mb 4096 2> "$out/salvaged-$engine.log"
           done
+          $nightly batch pdfpig "$RUNNER_TEMP/cc" "$out/cc-pdfpig-nightly.jsonl" --timeout-s 120 --mem-mb 4096 2> "$out/cc-pdfpig-nightly.log"
+          $nightly batch pdfpig "$RUNNER_TEMP/salvaged" "$out/salvaged-pdfpig-nightly.jsonl" --timeout-s 120 --mem-mb 4096 2> "$out/salvaged-pdfpig-nightly.log"
           for engine in pdfpig pdflibrary; do
             $tool batch $engine "$RUNNER_TEMP/cc" "$out/cc-$engine-tr-TR.jsonl" --timeout-s 120 --mem-mb 4096 --culture tr-TR 2> "$out/cc-$engine-tr-TR.log"
           done
@@ -79,6 +86,11 @@ jobs:
           for engine in pdfpig pdfpig-budget pdflibrary; do
             $tool batch $engine "$RUNNER_TEMP/hostile" "$out/hostile-$engine.jsonl" --timeout-s 60 --mem-mb 3072 2> "$out/hostile-$engine.log"
             cat "$out/hostile-$engine.log"
+          done
+          nightly="dotnet $RUNNER_TEMP/tool-nightly/pdf-spike.dll"
+          for engine in pdfpig pdfpig-budget; do
+            $nightly batch $engine "$RUNNER_TEMP/hostile" "$out/hostile-$engine-nightly.jsonl" --timeout-s 60 --mem-mb 3072 2> "$out/hostile-$engine-nightly.log"
+            cat "$out/hostile-$engine-nightly.log"
           done
 
       - name: Throughput in one process

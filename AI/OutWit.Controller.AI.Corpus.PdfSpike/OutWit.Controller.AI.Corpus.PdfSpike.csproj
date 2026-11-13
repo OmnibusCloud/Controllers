@@ -15,10 +15,12 @@
     <RootNamespace>OutWit.Controller.AI.Corpus.PdfSpike</RootNamespace>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <!-- The stable release by default; a nightly can be measured with -p:PdfPigVersion=... -->
+    <PdfPigVersion Condition="'$(PdfPigVersion)' == ''">0.1.16</PdfPigVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="PdfPig" Version="0.1.16" />
+    <PackageReference Include="PdfPig" Version="$(PdfPigVersion)" />
     <PackageReference Include="Lxman.PdfLibrary" Version="2.6.6" />
   </ItemGroup>
 
