@@ -51,6 +51,35 @@ public sealed class VerifyDemoKitTests : VerifySandboxTestBase
     }
 
     [Test]
+    public void TheRawWasmKitGivesEveryModuleItsVerdictTest()
+    {
+        var kit = Path.Combine(DemoRoot(), "03-wasm");
+        var parsed = VerifyTasksetParser.Parse(File.ReadAllText(Path.Combine(kit, "taskset.jsonl")));
+        Assert.That(parsed.Errors, Is.Empty);
+
+        var expected = File.ReadAllLines(Path.Combine(kit, "candidates.csv"))
+            .Skip(1)
+            .Select(line => line.Split(','))
+            .ToDictionary(fields => int.Parse(fields[0]), fields => (Name: $"{fields[1]}/{fields[2]}", Verdict: Enum.Parse<VerifyVerdict>(fields[4])));
+
+        var wrong = new List<string>();
+        foreach (var task in parsed.Tasks)
+        {
+            var result = Run(RuntimeOf(task), task);
+            var (name, verdict) = expected[task.TaskIndex];
+            TestContext.Out.WriteLine($"{task.TaskIndex,2} {name,-20} {result.Verdict,-13} {result.Stderr.Split('\n')[0]}");
+            if (result.Verdict != verdict)
+                wrong.Add($"{task.TaskIndex} {name}: {result.Verdict}, expected {verdict}; {result.Stderr.Split('\n')[0]}");
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(parsed.Tasks, Has.Count.EqualTo(expected.Count));
+            Assert.That(wrong, Is.Empty, string.Join("\n", wrong));
+        });
+    }
+
+    [Test]
     public void TheMathKitGeneratesAndChecksAsItsTableSaysTest()
     {
         // The fleet's path: the generators run, every candidate with output becomes a run of the
