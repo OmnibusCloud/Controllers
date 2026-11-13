@@ -23,6 +23,7 @@ public abstract class VerifySandboxTestBase
     protected string RuntimesRoot { get; private set; } = null!;
     protected VerifyResolvedRuntime Python { get; private set; } = null!;
     protected VerifyResolvedRuntime PythonSympy { get; private set; } = null!;
+    protected VerifyResolvedRuntime PythonNumpy { get; private set; } = null!;
     protected VerifyResolvedRuntime QuickJs { get; private set; } = null!;
     protected VerifyResolvedRuntime Ruby { get; private set; } = null!;
     protected VerifyResolvedRuntime Lua { get; private set; } = null!;
@@ -45,15 +46,16 @@ public abstract class VerifySandboxTestBase
 
         var python = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.PYTHON_3_14_6, out var pyReason);
         var sympy = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.PYTHON_3_14_6_SYMPY_1_14_0, out var sympyReason);
+        var numpy = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.PYTHON_3_14_6_NUMPY_2_5_4, out var numpyReason);
         var quickJs = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.QUICKJS_0_15_1, out var jsReason);
         var ruby = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.RUBY_3_4_1, out var rubyReason);
         var lua = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.LUA_5_4_8, out var luaReason);
         var typeScript = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.TYPESCRIPT_SUCRASE_3_35_1, out var tsReason);
         var clang = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.CLANG_22_1_0, out var clangReason);
-        if (python == null || sympy == null || quickJs == null || ruby == null || lua == null || typeScript == null || clang == null)
+        if (python == null || sympy == null || numpy == null || quickJs == null || ruby == null || lua == null || typeScript == null || clang == null)
         {
             var reason = $"Pinned runtimes not resolvable under '{RuntimesRoot}' " +
-                         $"(python: {pyReason ?? "ok"}; sympy: {sympyReason ?? "ok"}; quickjs: {jsReason ?? "ok"}; ruby: {rubyReason ?? "ok"}; lua: {luaReason ?? "ok"}; typescript: {tsReason ?? "ok"}; clang: {clangReason ?? "ok"}) — " +
+                         $"(python: {pyReason ?? "ok"}; sympy: {sympyReason ?? "ok"}; numpy: {numpyReason ?? "ok"}; quickjs: {jsReason ?? "ok"}; ruby: {rubyReason ?? "ok"}; lua: {luaReason ?? "ok"}; typescript: {tsReason ?? "ok"}; clang: {clangReason ?? "ok"}) — " +
                          "run verify-assets build @Data/runtimes to opt in.";
 
             // The build server builds the set from its pins before the tests: a runtime that
@@ -67,6 +69,7 @@ public abstract class VerifySandboxTestBase
 
         Python = python!;
         PythonSympy = sympy!;
+        PythonNumpy = numpy!;
         QuickJs = quickJs!;
         Ruby = ruby!;
         Lua = lua!;
@@ -99,6 +102,15 @@ public abstract class VerifySandboxTestBase
             Suite = suite,
             Limits = limits
         };
+    }
+
+    protected static VerifyTaskData NumpyTask(string code, int index = 0, VerifySuiteData? suite = null,
+        List<string>? args = null, string? stdin = null, VerifyLimitsData? limits = null, long seed = 0)
+    {
+        var task = PythonTask(code, index, suite, args, stdin, limits);
+        task.RuntimeId = VerifyRuntimeCatalog.PYTHON_3_14_6_NUMPY_2_5_4;
+        task.RandomSeed = seed;
+        return task;
     }
 
     protected static VerifyTaskData JsTask(string code, int index = 0, VerifyLimitsData? limits = null)

@@ -6,9 +6,19 @@ namespace OutWit.Controller.AI.Verify.Assets;
 /// Fetches a pinned download into the cache and verifies it: a cached file that matches its
 /// pin is reused, anything that does not match is deleted and refetched once, and a fetch
 /// that still does not match is an error. Nothing unverified ever reaches a layer.
+/// A local folder (<see cref="LocalDir"/>) may stand in for the network: a file of the pin's
+/// name there that matches the pin is taken instead of the download (a release asset before
+/// its release exists).
 /// </summary>
 internal static class AssetDownloader
 {
+    #region Constants
+
+    /// <summary>The environment variable that names the local folder when --local does not.</summary>
+    public const string LOCAL_DIR_ENV = "VERIFY_ASSETS_LOCAL";
+
+    #endregion
+
     #region Fields
 
     private static readonly HttpClient s_http = new() { Timeout = TimeSpan.FromMinutes(10) };
@@ -42,6 +52,18 @@ internal static class AssetDownloader
             File.Delete(path);
         }
 
+        var local = LocalDir == null ? null : Path.Combine(LocalDir, pin.FileName);
+        if (local != null && File.Exists(local))
+        {
+            var hash = Sha256Hex(local);
+            if (hash != pin.Sha256)
+                throw new InvalidOperationException($"{local} hashes to {hash}, pinned {pin.Sha256}");
+
+            File.Copy(local, path, overwrite: true);
+            Console.WriteLine($"  {pin.FileName}: taken from {LocalDir}, hash ok");
+            return path;
+        }
+
         if (offline)
             throw new InvalidOperationException($"{pin.FileName} is not in the cache and the build is offline");
 
@@ -65,12 +87,23 @@ internal static class AssetDownloader
         return path;
     }
 
+    #endregion
+
+    #region Tools
+
     /// <summary>Lower-case hex SHA-256 of a file.</summary>
     public static string Sha256Hex(string path)
     {
         using var stream = File.OpenRead(path);
         return Convert.ToHexStringLower(SHA256.HashData(stream));
     }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>A folder whose files stand in for downloads of the same name, or null.</summary>
+    public static string? LocalDir { get; set; }
 
     #endregion
 }

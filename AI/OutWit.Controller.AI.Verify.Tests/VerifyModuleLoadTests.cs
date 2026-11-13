@@ -42,6 +42,7 @@ public class VerifyModuleLoadTests
     private const string NATIVE_PATH_PREFIX = "wasmtime-native-path: ";
     private const string PYTHON_PASS = "python-3.14.6: Pass exit=0 stdout=42";
     private const string SYMPY_PASS = "python-3.14.6-sympy-1.14.0: Pass exit=0 stdout=1.14.0";
+    private const string NUMPY_PASS = "python-3.14.6-numpy-2.5.4: Pass exit=0 stdout=2.5.4 42";
     private const string QUICKJS_PASS = "quickjs-0.15.1: Pass exit=0 stdout=42";
     private const string RUBY_PASS = "ruby-3.4.1: Pass exit=0 stdout=42";
     private const string LUA_PASS = "lua-5.4.8: Pass exit=0 stdout=42";
@@ -96,7 +97,8 @@ public class VerifyModuleLoadTests
         if (!Directory.Exists(Path.Combine(fixtureRuntimes, "python-3.14.6")) ||
             !File.Exists(Path.Combine(fixtureRuntimes, "qjs-wasi.wasm")) ||
             !Directory.Exists(Path.Combine(fixtureRuntimes, "ruby-3.4.1")) ||
-            !Directory.Exists(Path.Combine(fixtureRuntimes, "lua-5.4.8")))
+            !Directory.Exists(Path.Combine(fixtureRuntimes, "lua-5.4.8")) ||
+            !Directory.Exists(Path.Combine(fixtureRuntimes, "python-3.14.6-numpy-2.5.4")))
             Assert.Ignore($"Pinned runtimes not found under '{fixtureRuntimes}' — run verify-assets build @Data/runtimes to opt in.");
 
         // The configuration this test assembly was built with (Release in CI) names the staging folder.
@@ -175,6 +177,7 @@ public class VerifyModuleLoadTests
             Assert.That(report, Does.Contain(NATIVE_LOADED), report);
             Assert.That(report, Does.Contain(PYTHON_PASS), report);
             Assert.That(report, Does.Contain(SYMPY_PASS), report);
+            Assert.That(report, Does.Contain(NUMPY_PASS), report);
             Assert.That(report, Does.Contain(QUICKJS_PASS), report);
             Assert.That(report, Does.Contain(RUBY_PASS), report);
             Assert.That(report, Does.Contain(LUA_PASS), report);

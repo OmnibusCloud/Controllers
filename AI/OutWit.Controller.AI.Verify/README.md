@@ -243,6 +243,7 @@ one compiled module.
 |---|---|---|
 | `python-3.14.6` | CPython 3.14.6 (WASI build), pure Python with the standard library | the source, inline |
 | `python-3.14.6-sympy-1.14.0` | the same interpreter with sympy 1.14.0 and mpmath 1.4.1 on `PYTHONPATH` | the source, inline |
+| `python-3.14.6-numpy-2.5.4` | CPython 3.14.6 with numpy 2.5.4 built in, both built for WASI by this repository's toolchain and started from a snapshot with numpy imported; numpy's default integer is 32-bit (`dtype=np.int64` for 64-bit sums), no BLAS, threads or SIMD | the source, inline |
 | `quickjs-0.15.1` | QuickJS-NG 0.15.1, JavaScript, built for WASI by this repository's toolchain | the source, inline |
 | `typescript-sucrase-3.35.1` | TypeScript on the same QuickJS: sucrase 3.35.1 strips the types, the JavaScript runs as a module; no type check | the source, inline |
 | `ruby-3.4.1` | Ruby 3.4.1 (the ruby.wasm 2.10.1 build) with the standard library and the bundled gems base64, csv, matrix and prime | the source, inline |
@@ -262,6 +263,38 @@ Library frames show no source line in tracebacks; the sandbox compares
 outputs, not tracebacks. sympy's `external/gmpy.py` is patched before
 compiling (the C long size comes from a constant: the WASI build has no
 `_ctypes`); the patch is declared in the layer's NOTICE.
+
+numpy (since 0.11.0) is a runtime of its own, `python-3.14.6-numpy-2.5.4`: the same CPython
+3.14.6 and numpy 2.5.4, both built from pinned sources by the asset tool's toolchain
+(`toolchain/python-numpy`: CPython's own WASI driver with wasi-sdk 24; numpy's extension
+modules linked into the interpreter as builtins, since WASI loads no shared library; the
+standard library and numpy's Python package as bytecode layers compiled by the module itself;
+two builds give the same bytes). The module is a start-up snapshot: the interpreter initialized
+and numpy imported, written into the module by wizer of the pinned wasmtime 48.0.8 at build
+time, so a task starts where a plain start would be after its imports. The sandbox runs it as
+any module (`_start`). What a task sees is its own: `sys.argv`, the clock at the sandbox's
+pinned start, and every source of randomness that drew entropy while the snapshot was made
+(Python's `random`, numpy's legacy global `RandomState`, `tempfile`'s names) seeded again from
+the task's stream, so unseeded random numbers follow the task's seed as in `python-3.14.6` (the
+numbers differ from a plain start's, the rule does not). The snapshot holds `os.environ`,
+`sys.path` and the directories of its two layers, so the module and the layers are pinned and
+delivered together (their own data asset, `verify-python-numpy.zip`, next to `wasm/`), and a
+run under another environment or file system is refused (exit 2, the reason on stderr). The
+module before its snapshot travels beside it as `python-plain.wasm`, for debugging; the catalog
+names the snapshot. A hello costs 37 M fuel (`python-3.14.6`: 124 M), `import numpy` nothing more
+(a plain start: 0.8 G), a 300×300 `linalg.solve` 0.25 G, a sort of a million integers 0.57 G.
+
+What a numpy author should know about the target, also in the capabilities document's `notes`.
+It is 32-bit: numpy's default integer is `int32`, so `np.arange(1_000_000).sum()` wraps to
+1783293664; pass `dtype=np.int64` where a total can pass 2^31. There is no BLAS (numpy's own
+`lapack_lite`, correct and slower), no threads (`threading` cannot start one) and no SIMD.
+`np.longdouble` is IEEE binary128 in software, not x86's 80-bit extended, so long-double
+results differ from a desktop's. Floating-point arithmetic sets no flags in WebAssembly: `1.0 /
+0` is `inf` without a warning, while numpy's own errors (a singular matrix's `LinAlgError`, an
+integer division by zero under `errstate`) are raised. A C++ exception inside numpy would stop the
+program (`RuntimeError`); numpy checks its arguments before its C++ code could throw. Nothing is
+writable: `np.save` and `np.load` work on `io.BytesIO`. `numpy.testing` is there, numpy's own test
+suite is not.
 
 `OutWit.Controller.AI.Verify.Assets` (`verify-assets build <dir>`) rebuilds
 the whole set from pinned downloads, byte for byte, and prints the hashes the
@@ -373,10 +406,10 @@ sandbox does not provide) is a `CompileError`, one without `_start` a
 {"runtime":"wasi","entry":"hello.wasm","sources":{"hello.wasm":"AGFzbQEAAAABEANgBH9/f38Bf2ABfwBgAAACZwMWd2FzaV9zbmFwc2hvdF9wcmV2aWV3MQhmZF93cml0ZQAAFndhc2lfc25hcHNob3RfcHJldmlldzEHZmRfcmVhZAAAFndhc2lfc25hcHNob3RfcHJldmlldzEJcHJvY19leGl0AAEDAgECBQMBAAEHEwIGbWVtb3J5AgAGX3N0YXJ0AAMKDwENAEEBQQBBAUEIEAAaCwssAQBBAAsmIAAAAAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABoZWxsbwo="},"suite":[{"expected_stdout":"hello\n"}]}
 ```
 
-Honest scope: pure Python with the standard library, JavaScript, TypeScript
+Honest scope: pure Python with the standard library, Python with numpy, JavaScript, TypeScript
 (types stripped), Ruby with its standard library, Lua, C and C++ (no exceptions) built on the
-node, and compiled WASI modules. No C extensions inside CPython-WASI yet, no gems beyond the
-four named.
+node, and compiled WASI modules. No C extension inside CPython-WASI but numpy's, built in; no
+gems beyond the four named.
 
 ## What the module carries
 
@@ -391,6 +424,7 @@ verify.module/
   Wasmtime.Dotnet.dll                      staged by the build
   runtimes/<rid>/native/                   wasmtime, one data asset per RID
   wasm/                                    the language runtime modules, one data asset
+  wasm/python-3.14.6-numpy-2.5.4/          the numpy runtime, a data asset of its own
 ```
 
 Two load modes meet this layout. An isolated plugin load context (the server,
@@ -416,7 +450,9 @@ Ruby and its bundled gems: Ruby's own terms or BSD-2-Clause; the ruby.wasm
 port: MIT; Lua: MIT; sucrase and the six packages bundled with it: MIT, Apache-2.0 and
 others, each named in the licence file beside the bundle; LLVM, clang, lld, libc++ and YoWASP's build: Apache-2.0, LLVM's WITH LLVM-exception;
 wasi-libc: Apache-2.0 WITH LLVM-exception, Apache-2.0 or MIT, with cloudlibc's BSD-2-Clause
-and musl's MIT inside).
+and musl's MIT inside; numpy: BSD-3-Clause with 0BSD, MIT, Zlib and CC0-1.0 parts, each named in
+`LICENSE-numpy.txt`; the numpy build's recipes and two numpy patches adapted from wasi-python:
+Apache-2.0, `LICENSE-wasi-python.txt`).
 
 `VerifySelfCheck.Run()` reports, from inside a loaded module, where the binding
 and the runtimes resolved from and whether one task per runtime ran — the
@@ -427,7 +463,7 @@ can call it as a doctor-style check.
 
 `OutWit.Controller.AI.Verify.Tests`: wire-layout guards, the schema guards,
 the parser at its edges, the sandbox verdict, adversarial, hygiene, raw-WASI,
-Python-layer, Ruby, Lua, QuickJS, TypeScript and C/C++ suites, the tree hash, the worker pool (cancellation
+Python-layer, numpy, Ruby, Lua, QuickJS, TypeScript and C/C++ suites, the tree hash, the worker pool (cancellation
 included) and the
 benchmark, the taskset, sampling and integrity pipelines, the package format,
 plan, transfer (a link that drops and comes back included) and the share's

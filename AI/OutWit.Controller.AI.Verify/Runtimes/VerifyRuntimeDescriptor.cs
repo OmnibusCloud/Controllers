@@ -62,4 +62,11 @@ public sealed record VerifyRuntimeDescriptor
     /// order (Ruby's -I). Empty when the defaults are enough.
     /// </summary>
     public IReadOnlyList<string> LoadPaths { get; init; } = [];
+
+    /// <summary>
+    /// What an author should know about the runtime before writing for it (a platform fact
+    /// that changes an answer, a feature that is absent), one sentence each. The capabilities
+    /// document carries them; empty when there is nothing beyond the language itself.
+    /// </summary>
+    public IReadOnlyList<string> Notes { get; init; } = [];
 }
