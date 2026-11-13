@@ -227,6 +227,16 @@ manifest's `size` values.
   (`receiving shards: 3/12, 512.3/1888.0 MB; 1/12 processed`), then the work
   (`7/12 shards processed`). Delivery stands for a fifth of the share's
   progress, processing for the rest.
+- **The last share.** A run is split once and sent once: each node gets
+  its shards by its benchmark rate, a sampled shard's copy goes to another
+  machine, and nothing is handed out again while the run goes well. So a run
+  ends when its slowest share ends. A node slower than its benchmark said, or
+  busy with its owner's work, holds the run until it finishes; a node that
+  goes silent loses its share after the silence window (90 s by default), and
+  the whole share is sent to another node and processed again from the start.
+  With a benchmark that represents the work and machines that are really free
+  the difference is small; on a fleet of desktops it is the price of sending
+  everything once.
 - **Benchmark.** `Corpus.ProcessShard` measures a node on a synthetic
   reference shard (400 documents generated from a fixed seed, menus and
   short pages among them), one copy per slot of the node's degree at once;

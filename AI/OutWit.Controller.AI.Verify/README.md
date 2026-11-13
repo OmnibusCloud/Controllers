@@ -206,6 +206,16 @@ goes alone and the rest wait for it (the channel is connected by its first
 user), and retries are spread at random so that transfers that failed together
 do not come back together.
 
+A run is split once and sent once: each node gets a share by its benchmark
+rate, a copy of a sampled package goes to another machine, and nothing is
+handed out again while the run goes well. So a run ends when its slowest share
+ends. A node that is slower than its benchmark said, or busy with its owner's
+work, holds the run until it finishes; a node that goes silent loses its share
+after the silence window (90 s by default), and the whole share is sent to
+another node and done again from the start. With a benchmark that represents
+the work and machines that are really free, the difference is small; on a
+fleet of desktops it is the price of sending everything once.
+
 The node reports its share, not one batch: first the delivery (`receiving
 tasks: 12/215 packages, 3.1/14.8 MB; 0/220160 tasks done`), then the work
 (`51200/220160 tasks`), about twice a second through the host's activity
