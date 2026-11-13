@@ -1,0 +1,110 @@
+name: AI Corpus PDF spike
+run-name: "AI Corpus PDF spike: ${{ github.ref_name }}"
+
+# Two managed PDF text extractors (PdfPig, PdfLibrary) on the three node platforms: the PDF
+# responses of one Common Crawl WARC file (fetched by range requests from data.commoncrawl.org,
+# never committed), the truncated ones after salvage, and a generated hostile set. Every
+# document runs in a child process with a deadline and a memory ceiling; the compare job puts
+# the text hashes of the three systems side by side.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['spike/corpus-pdf']
+    paths:
+      - 'AI/OutWit.Controller.AI.Corpus.PdfSpike/**'
+      - '.github/workflows/ai-corpus-pdf-spike.yml'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+
+jobs:
+  measure:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      SPIKE: AI/OutWit.Controller.AI.Corpus.PdfSpike
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        run: dotnet build "$SPIKE/OutWit.Controller.AI.Corpus.PdfSpike.csproj" -c Release -o "$RUNNER_TEMP/tool"
+
+      - name: Cache the Common Crawl PDFs
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/cc
+          key: pdf-spike-cc-${{ hashFiles('AI/OutWit.Controller.AI.Corpus.PdfSpike/cc-pdfs.json') }}
+
+      - name: Inputs
+        run: |
+          tool="dotnet $RUNNER_TEMP/tool/pdf-spike.dll"
+          $tool fetch-cc "$SPIKE/cc-pdfs.json" "$RUNNER_TEMP/cc"
+          $tool salvage "$SPIKE/cc-pdfs.json" "$RUNNER_TEMP/cc" "$RUNNER_TEMP/salvaged"
+          $tool gen-hostile "$RUNNER_TEMP/hostile"
+          ls "$RUNNER_TEMP/cc" | wc -l
+          dotnet --info | head -20
+
+      - name: Common Crawl PDFs and their salvaged truncated ones
+        run: |
+          tool="dotnet $RUNNER_TEMP/tool/pdf-spike.dll"
+          out="$RUNNER_TEMP/out"; mkdir -p "$out"
+          for engine in pdfpig pdfpig-budget pdflibrary; do
+            $tool batch $engine "$RUNNER_TEMP/cc" "$out/cc-$engine.jsonl" --timeout-s 120 --mem-mb 4096 2> "$out/cc-$engine.log"
+            $tool batch $engine "$RUNNER_TEMP/salvaged" "$out/salvaged-$engine.jsonl" --timeout-s 120 --mem-mb 4096 2> "$out/salvaged-$engine.log"
+          done
+          for engine in pdfpig pdflibrary; do
+            $tool batch $engine "$RUNNER_TEMP/cc" "$out/cc-$engine-tr-TR.jsonl" --timeout-s 120 --mem-mb 4096 --culture tr-TR 2> "$out/cc-$engine-tr-TR.log"
+          done
+
+      - name: Hostile set
+        run: |
+          tool="dotnet $RUNNER_TEMP/tool/pdf-spike.dll"
+          out="$RUNNER_TEMP/out"
+          for engine in pdfpig pdfpig-budget pdflibrary; do
+            $tool batch $engine "$RUNNER_TEMP/hostile" "$out/hostile-$engine.jsonl" --timeout-s 60 --mem-mb 3072 2> "$out/hostile-$engine.log"
+            cat "$out/hostile-$engine.log"
+          done
+
+      - name: Throughput in one process
+        run: |
+          tool="dotnet $RUNNER_TEMP/tool/pdf-spike.dll"
+          out="$RUNNER_TEMP/out"
+          for engine in pdfpig pdflibrary; do
+            $tool inproc $engine "$RUNNER_TEMP/cc" "$out/inproc-$engine.jsonl.txt" >> "$out/throughput.txt"
+          done
+          cat "$out/throughput.txt"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pdf-spike-${{ matrix.os }}
+          path: ${{ runner.temp }}/out
+
+  compare:
+    needs: measure
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Compare
+        run: |
+          python3 -I AI/OutWit.Controller.AI.Corpus.PdfSpike/compare.py artifacts | tee -a "$GITHUB_STEP_SUMMARY"
