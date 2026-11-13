@@ -50,6 +50,7 @@ public static class VerifySelfCheck
         (VerifyRuntimeCatalog.RUBY_3_4_1, "m.rb", "require 'prime'; puts 6*7 if 7.prime?"),
         (VerifyRuntimeCatalog.LUA_5_4_8, "m.lua", "print(select(2, pcall(error, 6*7)))"),
         (VerifyRuntimeCatalog.TYPESCRIPT_SUCRASE_3_35_1, "m.ts", "const x: number = 6 * 7;\nconsole.log(x);"),
+        (VerifyRuntimeCatalog.CLANG_22_1_0, "m.cpp", "#include <cstdio>\nint main() { std::printf(\"%d\\n\", 6 * 7); }\n"),
         (VerifyRuntimeCatalog.WASI, "hello.wasm", HELLO_WASM_BASE64)
     ];
 

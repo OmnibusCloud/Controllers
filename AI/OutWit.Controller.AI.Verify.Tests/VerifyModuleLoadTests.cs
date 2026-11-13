@@ -46,6 +46,7 @@ public class VerifyModuleLoadTests
     private const string RUBY_PASS = "ruby-3.4.1: Pass exit=0 stdout=42";
     private const string LUA_PASS = "lua-5.4.8: Pass exit=0 stdout=42";
     private const string TYPESCRIPT_PASS = "typescript-sucrase-3.35.1: Pass exit=0 stdout=42";
+    private const string CLANG_PASS = "clang-22.1.0: Pass exit=0 stdout=42";
     private const string WASI_PASS = "wasi: Pass exit=0 stdout=hello";
 
     #endregion
@@ -178,6 +179,7 @@ public class VerifyModuleLoadTests
             Assert.That(report, Does.Contain(RUBY_PASS), report);
             Assert.That(report, Does.Contain(LUA_PASS), report);
             Assert.That(report, Does.Contain(TYPESCRIPT_PASS), report);
+            Assert.That(report, Does.Contain(CLANG_PASS), report);
             Assert.That(report, Does.Contain(WASI_PASS), report);
             Assert.That(ReportValue(report, MANAGED_PREFIX), Does.StartWith(m_moduleDir).IgnoreCase,
                 "Wasmtime.Dotnet must resolve from the module, not from the test bin");

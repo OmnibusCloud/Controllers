@@ -34,5 +34,12 @@ public enum VerifyRuntimeLanguage
     /// root) strips the types of the inline source, and the result runs as a JavaScript module.
     /// No type check; a runtime namespace is not supported.
     /// </summary>
-    TypeScript = 5
+    TypeScript = 5,
+
+    /// <summary>
+    /// C and C++ compiled on the node: the module is LLVM for WASI; the task's sources (.c as C17,
+    /// .cc/.cpp/.cxx as C++20 without exceptions) are compiled and linked inside the sandbox under
+    /// a compile budget, and the program built runs as a raw WASI module.
+    /// </summary>
+    C = 6
 }

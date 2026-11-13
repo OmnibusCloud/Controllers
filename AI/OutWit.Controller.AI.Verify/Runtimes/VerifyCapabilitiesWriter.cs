@@ -102,6 +102,7 @@ public static class VerifyCapabilitiesWriter
             VerifyRuntimeLanguage.Ruby => "ruby",
             VerifyRuntimeLanguage.Lua => "lua",
             VerifyRuntimeLanguage.TypeScript => "typescript",
+            VerifyRuntimeLanguage.C => "c",
             _ => "unknown"
         };
     }

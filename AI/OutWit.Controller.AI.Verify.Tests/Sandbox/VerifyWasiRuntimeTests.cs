@@ -129,11 +129,29 @@ public sealed class VerifyWasiRuntimeTests
     }
 
     [Test]
-    public void OutOfBoundsAccessIsMemoryExceededTest()
+    public void OutOfBoundsAccessIsARuntimeErrorNamedOnStderrTest()
     {
+        // A wild pointer is the program's fault, not a refusal of memory.
         var result = Run(Task(WasiModules.OutOfBounds()));
 
-        Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.MemoryExceeded));
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.RuntimeError));
+            Assert.That(result.Stderr, Does.StartWith("wasm trap: out of bounds memory access"));
+        });
+    }
+
+    [Test]
+    public void ABudgetStopNamesNothingTest()
+    {
+        // One node may stop on fuel where another stops on the clock: the outputs must agree.
+        var result = Run(Task(WasiModules.Spin()), new VerifyLimitsData { FuelBudget = 1_000_000, WallTimeMs = 30_000 });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Timeout));
+            Assert.That(result.Stderr, Is.Empty);
+        });
     }
 
     [Test]

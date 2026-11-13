@@ -45,6 +45,10 @@ internal static class AssetPins
     /// <summary>sucrase.js as the toolchain bundles it (modules/typescript-sucrase-3.35.1), pinned like a download.</summary>
     public const string TYPESCRIPT_BUNDLE_SHA256 = "3390a6c1f791844cb001ec1686ae712e7b29e5d8283b7a18f688a1bc03e4b506";
 
+    public const string CLANG_VERSION = "22.1.0";
+    public const string CLANG_RUNTIME_DIR = "clang-22.1.0";
+    public const string CLANG_PACKAGE_VERSION = "22.0.0-git20542-10";
+
     public const string LUA_VERSION = "5.4.8";
     public const string LUA_RUNTIME_DIR = "lua-5.4.8";
     public const string LUA_MODULE = "lua.wasm";
@@ -64,6 +68,36 @@ internal static class AssetPins
         "python-3.14.6-wasi_sdk-24.zip",
         "https://github.com/brettcannon/cpython-wasi-build/releases/download/v3.14.6/python-3.14.6-wasi_sdk-24.zip",
         "73bf2e9774c4d8820d0877ec5db0b963df3a9611fc2a63838aeaee29dfd034e6");
+
+    /// <summary>
+    /// YoWASP's clang for WASI from npm: LLVM 22.1.0 (codeberg.org/YoWASP/llvm-project 9560ae0f) as one
+    /// WASI preview 1 module, and the sysroot (wasi-libc, libc++, libc++abi, compiler-rt) it expects at /usr.
+    /// </summary>
+    public static readonly AssetPin YOWASP_CLANG = new(
+        "clang-22.0.0-git20542-10.tgz",
+        "https://registry.npmjs.org/@yowasp/clang/-/clang-22.0.0-git20542-10.tgz",
+        "6230ea1afa9691fa065935cf68c01642ff9b31c183fe8ac64cdfda025df06009");
+
+    /// <summary>The licence texts of the C/C++ runtime (the package carries none), each at a pinned commit.</summary>
+    public static readonly AssetPin[] CLANG_LICENCES =
+    [
+        new("LICENSE-llvm.txt", "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-22.1.0/LICENSE.TXT",
+            "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"),
+        new("LICENSE-yowasp-clang.txt", "https://raw.githubusercontent.com/YoWASP/clang/944dd7c774954180e621cc8e12984023a7f8bcbe/LICENSE.txt",
+            "65c6633c2c9effa87f95bfe794d5da07bd3faab2814e4a0a15883e28ec4e543f"),
+        new("LICENSE-wasi-libc.txt", "https://raw.githubusercontent.com/WebAssembly/wasi-libc/ac020b86fd44bafe60aa4fa12f407d16e3731329/LICENSE",
+            "2711a8b5a5cdfef0e639f96c1aca12ae23d7d64a02d0507f1bdf14d2b27bbc3a"),
+        new("LICENSE-wasi-libc-MIT.txt", "https://raw.githubusercontent.com/WebAssembly/wasi-libc/ac020b86fd44bafe60aa4fa12f407d16e3731329/LICENSE-MIT",
+            "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"),
+        new("LICENSE-wasi-libc-APACHE-LLVM.txt", "https://raw.githubusercontent.com/WebAssembly/wasi-libc/ac020b86fd44bafe60aa4fa12f407d16e3731329/LICENSE-APACHE-LLVM",
+            "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5"),
+        new("LICENSE-cloudlibc.txt", "https://raw.githubusercontent.com/WebAssembly/wasi-libc/ac020b86fd44bafe60aa4fa12f407d16e3731329/libc-bottom-half/cloudlibc/LICENSE",
+            "c8b789cf5a746611e6300a0cc7750dbf92b61912a709d04e639245f7290656d0"),
+        new("COPYRIGHT-musl.txt", "https://raw.githubusercontent.com/WebAssembly/wasi-libc/ac020b86fd44bafe60aa4fa12f407d16e3731329/libc-top-half/musl/COPYRIGHT",
+            "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af"),
+        new("COPYING-musl-fts.txt", "https://raw.githubusercontent.com/WebAssembly/wasi-libc/ac020b86fd44bafe60aa4fa12f407d16e3731329/fts/musl-fts/COPYING",
+            "55af87e4017668f54467a3380e7ebbac5e672d8c763bfe95e6fc882a6fdc4046")
+    ];
 
     public static readonly AssetPin SYMPY = new(
         "sympy-1.14.0-py3-none-any.whl",

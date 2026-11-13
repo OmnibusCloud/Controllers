@@ -135,6 +135,12 @@ internal static class VerifyGuestWiring
                 // (arg and ...), even one that starts with a dash. Its name was checked not to.
                 argv.Add(entry?.Name ?? "");
                 break;
+            case VerifyRuntimeLanguage.C:
+                // The program built from the sources: argv[0] is the entry's name without its extension.
+                var builtFrom = entry?.Name ?? "main";
+                var file = builtFrom[(builtFrom.LastIndexOf('/') + 1)..];
+                argv[0] = file.Contains('.') ? file[..file.LastIndexOf('.')] : file;
+                break;
             case VerifyRuntimeLanguage.Wasi:
                 // The module is the program: argv[0] is its name, the rest the task's args.
                 argv[0] = entry?.Name is { Length: > 0 } name ? name : runtime.Descriptor.Argv0;

@@ -35,13 +35,13 @@ public sealed class VerifyWasmSandbox : IDisposable
     public const uint MAX_TABLE_ELEMENTS = 1_048_576;
 
     /// <summary>Tables one guest may declare (a runtime module declares one).</summary>
-    private const long MAX_TABLES = 8;
+    internal const long MAX_TABLES = 8;
 
     /// <summary>One linear memory per guest: the memory cap is per memory, a second one would double it.</summary>
-    private const long MAX_MEMORIES = 1;
+    internal const long MAX_MEMORIES = 1;
 
     /// <summary>Instances one store may hold: the guest's own, with room for none of its making.</summary>
-    private const long MAX_INSTANCES = 4;
+    internal const long MAX_INSTANCES = 4;
 
     #endregion
 
@@ -53,6 +53,7 @@ public sealed class VerifyWasmSandbox : IDisposable
     private readonly object m_modulesLock = new();
     private readonly Dictionary<string, WasmModule> m_modules = new();
     private readonly VerifyTaskModuleCache m_taskModules;
+    private readonly VerifyToolRunner m_tools;
     private bool m_disposed;
 
     #endregion
@@ -93,6 +94,7 @@ public sealed class VerifyWasmSandbox : IDisposable
         m_epochTimer = new Timer(_ => m_engine.IncrementEpoch(), null, EPOCH_TICK_MS, EPOCH_TICK_MS);
 
         m_taskModules = new VerifyTaskModuleCache(m_engine);
+        m_tools = new VerifyToolRunner(m_engine, EPOCH_TICK_MS);
 
         m_ioDir = ioDirectory ?? Path.Combine(Path.GetTempPath(), $"witai_verify_{Guid.NewGuid():N}");
         Directory.CreateDirectory(m_ioDir);
@@ -107,11 +109,13 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// no shared memory, no GC heap, no exceptions (on by default since wasmtime 47, the
     /// subject of four advisories since; no runtime of the catalog uses them), no components;
     /// relaxed SIMD in its deterministic mode, so a module that uses it computes the same
-    /// bits on every CPU.
+    /// bits on every CPU. A guest may use 2 MiB of the native call stack, four times the
+    /// engine's default; every run is on a thread that holds it (<see cref="VerifyGuestThread"/>).
     /// </summary>
     private static Config CreateConfig()
     {
         return new Config()
+            .WithMaximumStackSize(VerifyGuestThread.ENGINE_STACK_BYTES)
             .WithFuelConsumption(true)
             .WithEpochInterruption(true)
             .WithCraneliftNaNCanonicalization(true)
@@ -135,9 +139,9 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// <param name="runtime">The resolved runtime.</param>
     /// <param name="task">The task.</param>
     /// <param name="limits">The task's effective limits.</param>
-    /// <param name="cancellationToken">Checked between a suite's cases; a run already started ends within its wall limit.</param>
+    /// <param name="cancellationToken">Checked between a suite's cases and between the steps of a C/C++ build; a run already started ends within its wall limit.</param>
     /// <returns>The task's result.</returns>
-    /// <exception cref="OperationCanceledException">The token was cancelled between two cases of a suite.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled between two cases of a suite or two steps of a build.</exception>
     public VerifyResultData Execute(VerifyResolvedRuntime runtime, VerifyTaskData task, VerifyLimitsData limits, CancellationToken cancellationToken = default)
     {
         if (runtime.Descriptor.TaskSupplied)
@@ -192,11 +196,51 @@ public sealed class VerifyWasmSandbox : IDisposable
         try
         {
             VerifyTaskSources.Write(task, sourceRoot);
+
+            // C and C++: the module is the compiler; the task runs the program it builds.
+            if (runtime.Descriptor.Language == VerifyRuntimeLanguage.C)
+                return RunBuilt(runtime, module, task, sourceRoot, limits, cancellationToken);
+
             return Run(runtime, module, task, sourceRoot, limits, cancellationToken);
         }
         finally
         {
             TryDeleteDirectory(sourceRoot);
+        }
+    }
+
+    /// <summary>
+    /// Builds a C/C++ task's program with the runtime's compiler under the compile budget, then
+    /// runs it as a raw WASI program under the task's own limits. A build that fails is the task's
+    /// CompileError with the compiler's diagnostics; the program sees no file system.
+    /// </summary>
+    private VerifyResultData RunBuilt(VerifyResolvedRuntime runtime, WasmModule compiler, VerifyTaskData task, string sourceRoot, VerifyLimitsData limits, CancellationToken cancellationToken)
+    {
+        var workDir = Path.Combine(m_ioDir, $"{Guid.NewGuid():N}.build");
+        try
+        {
+            var (program, failure) = VerifyClangBuild.Build(m_tools, compiler, runtime.RootPath!, task, sourceRoot, workDir, cancellationToken);
+            if (program == null)
+                return Verdict(task.TaskIndex, VerifyVerdict.CompileError, failure ?? "the build failed");
+
+            WasmModule built;
+            try
+            {
+                built = WasmModule.FromBytes(m_engine, "program", program);
+            }
+            catch (WasmtimeException exception)
+            {
+                return Verdict(task.TaskIndex, VerifyVerdict.CompileError, $"the built program failed to compile: {exception.Message}");
+            }
+
+            using (built)
+            {
+                return Run(runtime, built, task, null, limits, cancellationToken);
+            }
+        }
+        finally
+        {
+            TryDeleteDirectory(workDir);
         }
     }
 
@@ -250,7 +294,7 @@ public sealed class VerifyWasmSandbox : IDisposable
             using var linker = VerifyDeterministicLinker.Create(m_engine, task.RandomSeed);
 
             var start = DateTime.UtcNow;
-            var (verdict, exitCode, trapMemoryFault, peakMemory, fault) = Invoke(linker, store, module);
+            var (verdict, exitCode, trapMemoryFault, peakMemory, fault) = VerifyGuestThread.Run(() => Invoke(linker, store, module));
             var wallMs = (int)(DateTime.UtcNow - start).TotalMilliseconds;
 
             var fuelConsumed = trapMemoryFault ? limits.FuelBudget : (long)((ulong)limits.FuelBudget - store.Fuel);
@@ -263,7 +307,8 @@ public sealed class VerifyWasmSandbox : IDisposable
             var (stdout, stdoutTruncated) = ReadCapped(stdoutPath, limits.StdoutLimitBytes);
             var (stderr, stderrTruncated) = ReadCapped(stderrPath, limits.StderrLimitBytes);
 
-            // A module that could not be instantiated never ran: the host's reason is its stderr.
+            // A module that could not be instantiated never ran, and a trap ends a run without a
+            // word from the program: when it said nothing, the host's reason is its stderr.
             if (fault != null && stderr.Length == 0)
                 stderr = fault;
 
@@ -343,11 +388,34 @@ public sealed class VerifyWasmSandbox : IDisposable
             // Both fuel exhaustion and epoch interruption mean "did not finish in budget".
             TrapCode.OutOfFuel => VerifyVerdict.Timeout,
             TrapCode.Interrupt => VerifyVerdict.Timeout,
-            // A hard out-of-bounds under the memory cap; in-guest OOM usually exits cleanly instead.
-            TrapCode.MemoryOutOfBounds => VerifyVerdict.MemoryExceeded,
+            // Anything else is a crash, an access outside the memory included: a wild pointer or
+            // a stack that overflowed is a fault of the program, not a refusal of memory. Memory
+            // refused to an allocator surfaces as the program's own message (LooksLikeOutOfMemory).
             _ => VerifyVerdict.RuntimeError
         };
-        return new(verdict, -1, true, 0);
+
+        // A crash is named in fixed words. A budget stop is not: one node may stop on fuel where
+        // another stops on the clock, and the outputs must not tell them apart.
+        var fault = verdict == VerifyVerdict.Timeout ? null : $"wasm trap: {TrapText(trap.Type)}";
+        return new(verdict, -1, true, 0, fault);
+    }
+
+    private static string TrapText(TrapCode code)
+    {
+        return code switch
+        {
+            TrapCode.MemoryOutOfBounds => "out of bounds memory access (a pointer outside the memory, or a stack that overflowed)",
+            TrapCode.StackOverflow => "call stack exhausted",
+            TrapCode.Unreachable => "unreachable code reached (abort, a failed assertion, a trap instruction)",
+            TrapCode.IntegerDivisionByZero => "integer division by zero",
+            TrapCode.IntegerOverflow => "integer overflow",
+            TrapCode.BadConversionToInteger => "invalid conversion to integer",
+            TrapCode.IndirectCallToNull => "call through a null function pointer",
+            TrapCode.BadSignature => "call through a function pointer of the wrong type",
+            TrapCode.TableOutOfBounds => "out of bounds table access",
+            TrapCode.HeapMisaligned => "misaligned memory access",
+            _ => code.ToString()
+        };
     }
 
     private static long PeakMemory(Instance instance)
@@ -414,10 +482,12 @@ public sealed class VerifyWasmSandbox : IDisposable
     private static bool LooksLikeOutOfMemory(string stderr)
     {
         // Python raises MemoryError and Ruby NoMemoryError (the same marker is in its name);
-        // QuickJS-NG prints "out of memory" on allocation failure, Lua "not enough memory".
+        // QuickJS-NG prints "out of memory" on allocation failure, Lua "not enough memory", and
+        // C++'s operator new without exceptions "bad_alloc was thrown in -fno-exceptions mode".
         return stderr.Contains("MemoryError", StringComparison.Ordinal)
                || stderr.Contains("out of memory", StringComparison.OrdinalIgnoreCase)
-               || stderr.Contains("not enough memory", StringComparison.Ordinal);
+               || stderr.Contains("not enough memory", StringComparison.Ordinal)
+               || stderr.Contains("bad_alloc was thrown", StringComparison.Ordinal);
     }
 
     private static (string Text, bool Truncated) ReadCapped(string path, int capBytes)

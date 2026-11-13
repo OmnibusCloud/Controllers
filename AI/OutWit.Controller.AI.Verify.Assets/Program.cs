@@ -22,6 +22,9 @@ namespace OutWit.Controller.AI.Verify.Assets;
 ///   lua-5.4.8/LICENSE-lua.txt
 ///   typescript-sucrase-3.35.1/sucrase.js      sucrase 3.35.1's transform, bundled by the toolchain (toolchain/typescript)
 ///   typescript-sucrase-3.35.1/LICENSE-sucrase.txt
+///   clang-22.1.0/llvm.wasm                    LLVM 22.1.0 for WASI (YoWASP's clang), unchanged
+///   clang-22.1.0/usr/...                      its sysroot (wasi-libc, libc++, compiler-rt), as files
+///   clang-22.1.0/LICENSE-*.txt, COPY*-*.txt
 ///   NOTICE.txt                                what, from where, patched how, hashed to what
 ///
 /// The build is reproducible: run it twice and the hashes it prints are the ones the
@@ -79,6 +82,10 @@ internal static class Program
         var rubyLicense = await AssetDownloader.FetchAsync(AssetPins.RUBY_LICENSE, cacheDir, offline);
         var rubyBsdl = await AssetDownloader.FetchAsync(AssetPins.RUBY_BSDL, cacheDir, offline);
         var rubyWasmLicense = await AssetDownloader.FetchAsync(AssetPins.RUBY_WASM_LICENSE, cacheDir, offline);
+        var clangPackage = await AssetDownloader.FetchAsync(AssetPins.YOWASP_CLANG, cacheDir, offline);
+        var clangLicences = new List<(string Path, string FileName)>();
+        foreach (var licence in AssetPins.CLANG_LICENCES)
+            clangLicences.Add((await AssetDownloader.FetchAsync(licence, cacheDir, offline), licence.FileName));
 
         Directory.CreateDirectory(workDir);
         var cpythonDir = Path.Combine(workDir, "cpython");
@@ -130,6 +137,14 @@ internal static class Program
         CopyBuiltModule(AssetPins.TYPESCRIPT_RUNTIME_DIR, AssetPins.TYPESCRIPT_BUNDLE, AssetPins.TYPESCRIPT_BUNDLE_SHA256, Path.Combine(typeScriptDir, AssetPins.TYPESCRIPT_BUNDLE));
         File.Copy(Path.Combine(AppContext.BaseDirectory, "modules", AssetPins.TYPESCRIPT_RUNTIME_DIR, AssetPins.TYPESCRIPT_LICENSE), Path.Combine(typeScriptDir, AssetPins.TYPESCRIPT_LICENSE), overwrite: true);
 
+        Console.WriteLine($"{AssetPins.CLANG_RUNTIME_DIR} (clang {AssetPins.CLANG_VERSION}, YoWASP {AssetPins.CLANG_PACKAGE_VERSION})");
+        var clangDir = Path.Combine(outDir, AssetPins.CLANG_RUNTIME_DIR);
+        var sysrootFiles = ClangRuntimeBuilder.Build(clangPackage, clangDir);
+        foreach (var (path, fileName) in clangLicences)
+            File.Copy(path, Path.Combine(clangDir, fileName), overwrite: true);
+        var clangTree = TreeHash.Compute(Path.Combine(clangDir, ClangRuntimeBuilder.TREE_DIR));
+        Console.WriteLine($"  {sysrootFiles} sysroot files, {clangTree.Bytes:N0} bytes in the tree");
+
         var hashes = new (string Name, string Path)[]
         {
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/python.wasm", Path.Combine(pythonDir, "python.wasm")),
@@ -138,11 +153,13 @@ internal static class Program
             (AssetPins.QUICKJS_FILE, Path.Combine(outDir, AssetPins.QUICKJS_FILE)),
             ($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.MODULE_FILE}", Path.Combine(rubyDir, RubyRuntimeBuilder.MODULE_FILE)),
             ($"{AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_MODULE}", Path.Combine(luaDir, AssetPins.LUA_MODULE)),
-            ($"{AssetPins.TYPESCRIPT_RUNTIME_DIR}/{AssetPins.TYPESCRIPT_BUNDLE}", Path.Combine(typeScriptDir, AssetPins.TYPESCRIPT_BUNDLE))
+            ($"{AssetPins.TYPESCRIPT_RUNTIME_DIR}/{AssetPins.TYPESCRIPT_BUNDLE}", Path.Combine(typeScriptDir, AssetPins.TYPESCRIPT_BUNDLE)),
+            ($"{AssetPins.CLANG_RUNTIME_DIR}/{ClangRuntimeBuilder.MODULE_FILE}", Path.Combine(clangDir, ClangRuntimeBuilder.MODULE_FILE))
         }.Select(file => (file.Name, Sha256: AssetDownloader.Sha256Hex(file.Path), Bytes: new FileInfo(file.Path).Length)).ToList();
 
         // A folder pinned as a whole: the tree hash, the files' bytes.
         hashes.Add(($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.TREE_DIR}/ (tree of {rubyTree.Files} files)", rubyTree.Sha256, rubyTree.Bytes));
+        hashes.Add(($"{AssetPins.CLANG_RUNTIME_DIR}/{ClangRuntimeBuilder.TREE_DIR}/ (tree of {clangTree.Files} files)", clangTree.Sha256, clangTree.Bytes));
 
         File.WriteAllText(Path.Combine(outDir, NOTICE), Notice(hashes, ruby), new UTF8Encoding(false));
 
@@ -212,6 +229,15 @@ internal static class Program
         text.Append("    for WASI by the controller's toolchain (wasi-sdk 34, Binaryen 133): Lua's files unchanged, an\n");
         text.Append("    error unwinds to its protected call by asyncify instead of WebAssembly's exception handling.\n");
         text.Append($"    Licence: {AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_LICENSE} (MIT).\n");
+        text.Append($"{AssetPins.CLANG_RUNTIME_DIR}/{ClangRuntimeBuilder.MODULE_FILE} and {AssetPins.CLANG_RUNTIME_DIR}/{ClangRuntimeBuilder.TREE_DIR}/\n");
+        text.Append($"    LLVM {AssetPins.CLANG_VERSION} for WASI (clang, wasm-ld) and its sysroot (wasi-libc, libc++, libc++abi,\n");
+        text.Append($"    compiler-rt builtins, clang's headers) from YoWASP's npm package @yowasp/clang {AssetPins.CLANG_PACKAGE_VERSION}:\n");
+        text.Append($"    {AssetPins.YOWASP_CLANG.Url}\n");
+        text.Append("    gen/llvm.core.wasm unchanged as llvm.wasm, gen/llvm-resources.tar unpacked unchanged as usr/ (pinned as a tree).\n");
+        text.Append("    Licences (the package carries none; each text at a pinned commit): LICENSE-llvm.txt (Apache-2.0 WITH\n");
+        text.Append("    LLVM-exception, also libc++, libc++abi, compiler-rt), LICENSE-yowasp-clang.txt (the packaging, Apache-2.0),\n");
+        text.Append("    LICENSE-wasi-libc*.txt (Apache-2.0 WITH LLVM-exception, Apache-2.0 or MIT), LICENSE-cloudlibc.txt\n");
+        text.Append("    (BSD-2-Clause), COPYRIGHT-musl.txt (MIT), COPYING-musl-fts.txt (BSD-3-Clause); dlmalloc is CC0.\n");
         text.Append($"{AssetPins.TYPESCRIPT_RUNTIME_DIR}/{AssetPins.TYPESCRIPT_BUNDLE}\n");
         text.Append("    sucrase 3.35.1's transform with what it needs (lines-and-columns, ts-interface-checker,\n");
         text.Append("    @jridgewell/*), from npm by the integrity hashes of toolchain/typescript/package-lock.json,\n");

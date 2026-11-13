@@ -44,6 +44,12 @@ public static class VerifyRuntimeCatalog
     /// </summary>
     public const string TYPESCRIPT_SUCRASE_3_35_1 = "typescript-sucrase-3.35.1";
 
+    /// <summary>
+    /// C17 and C++20 (no exceptions) compiled on the node by clang 22.1.0 for WASI (YoWASP's build)
+    /// with wasi-libc and libc++; the program runs as a raw WASI module.
+    /// </summary>
+    public const string CLANG_22_1_0 = "clang-22.1.0";
+
     /// <summary>The raw WASI runtime: the task's entry source is the command module itself.</summary>
     public const string WASI = "wasi";
 
@@ -58,6 +64,8 @@ public static class VerifyRuntimeCatalog
     private const string QUICKJS_MODULE = "qjs-wasi.wasm";
     private const string QUICKJS_SHA256 = "3629434c55636670bad9df38c7979e24213559261497c846c0aa11e1c9d39bef";
     private const string TYPESCRIPT_DIR = "typescript-sucrase-3.35.1";
+
+    private const string CLANG_DIR = "clang-22.1.0";
 
     #endregion
 
@@ -88,6 +96,12 @@ public static class VerifyRuntimeCatalog
         Path.Combine(TYPESCRIPT_DIR, "sucrase.js"),
         "3390a6c1f791844cb001ec1686ae712e7b29e5d8283b7a18f688a1bc03e4b506",
         null);
+
+    // The sysroot the compiler reads at /usr (wasi-libc, libc++, libc++abi, compiler-rt, clang's
+    // headers), cut unchanged from YoWASP's package and pinned as a tree.
+    private static readonly VerifyRuntimeTree CLANG_SYSROOT = new(
+        Path.Combine(CLANG_DIR, "usr"),
+        "ce89a7facc82bc2249bb9ed3fac69f1bccbe43c47ec026e40ebe46a8b21f65a5");
 
     private static readonly IReadOnlyDictionary<string, VerifyRuntimeDescriptor> s_known =
         new Dictionary<string, VerifyRuntimeDescriptor>(StringComparer.OrdinalIgnoreCase)
@@ -161,6 +175,18 @@ public static class VerifyRuntimeCatalog
                 SourcesAsRoot = true,
                 Sha256 = "5b953864a7d270d34c2c7360f90bd5e5d9c2196776d6af185dfb12fd29558baf",
                 Argv0 = "lua"
+            },
+            [CLANG_22_1_0] = new()
+            {
+                Id = CLANG_22_1_0,
+                Language = VerifyRuntimeLanguage.C,
+                ModulePath = Path.Combine(CLANG_DIR, "llvm.wasm"),
+                // The sysroot: the compiler's /usr. The sources are the compiler's "/", written per task.
+                RootDir = CLANG_SYSROOT.Path,
+                SourcesAsRoot = true,
+                Sha256 = "24fbed474c7b5b4968fd73fc4827440b93fb351c1b6264516130300eff3e7bf5",
+                Argv0 = "llvm",
+                Trees = [CLANG_SYSROOT]
             },
             [WASI] = new()
             {

@@ -45,7 +45,8 @@ public static class VerifyWorkerPool
         var threads = new Thread[workers];
         for (var worker = 0; worker < workers; worker++)
         {
-            threads[worker] = new Thread(() =>
+            // A worker runs guests: its stack holds the engine's share (VerifyGuestThread).
+            var thread = VerifyGuestThread.Create(() =>
             {
                 while (true)
                 {
@@ -64,13 +65,12 @@ public static class VerifyWorkerPool
                         return;
                     }
                 }
-            })
-            {
-                IsBackground = true,
-                Name = $"{WORKER_NAME}-{worker}",
-                Priority = WORKER_PRIORITY
-            };
-            threads[worker].Start();
+            });
+            thread.IsBackground = true;
+            thread.Name = $"{WORKER_NAME}-{worker}";
+            thread.Priority = WORKER_PRIORITY;
+            threads[worker] = thread;
+            thread.Start();
         }
 
         foreach (var thread in threads)

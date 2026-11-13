@@ -14,7 +14,7 @@
     },
     "runtime": {
       "type": "string",
-      "description": "A runtime id from the controller's catalog: python-3.14.6, python-3.14.6-sympy-1.14.0, quickjs-0.15.1, typescript-sucrase-3.35.1 (TypeScript, the types stripped by sucrase, no type check), ruby-3.4.1, lua-5.4.8 (the sources are files in a read-only folder that is the guest's whole file system: the entry is Lua's script, require finds a neighbour; names use '/' and must be the same file on Windows, Linux and macOS), or wasi (the entry is itself a WASI command module, compiled from Rust, C/C++, Zig, TinyGo or anything else that targets wasm32-wasi). An unknown id yields RuntimeUnavailable for the task."
+      "description": "A runtime id from the controller's catalog: python-3.14.6, python-3.14.6-sympy-1.14.0, quickjs-0.15.1, typescript-sucrase-3.35.1 (TypeScript, the types stripped by sucrase, no type check), ruby-3.4.1, lua-5.4.8, clang-22.1.0 (C17 and C++20 without exceptions, compiled on the node under its own budget: .c, .cc, .cpp, .cxx sources are compiled and linked, headers sit beside them; the program runs as a raw WASI module) (the sources are files in a read-only folder that is the guest's whole file system: the entry is Lua's script, require finds a neighbour; names use '/' and must be the same file on Windows, Linux and macOS), or wasi (the entry is itself a WASI command module, compiled from Rust, C/C++, Zig, TinyGo or anything else that targets wasm32-wasi). An unknown id yields RuntimeUnavailable for the task."
     },
     "entry": {
       "type": "string",

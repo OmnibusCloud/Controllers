@@ -103,8 +103,11 @@ A minimal taskset — one code-vs-tests task and one plain run:
 ```
 
 Verdicts: `Pass`, `Fail` (ran, wrong answer or missing signal), `CompileError`,
-`RuntimeError` (crashed, or exited non-zero where 0 was expected), `Timeout`
-(fuel or wall clock), `MemoryExceeded`, `OutputExceeded`, `RuntimeUnavailable`.
+`RuntimeError` (crashed, or exited non-zero where 0 was expected; a crash the program did
+not explain is named on stderr in fixed words, `wasm trap: …`), `Timeout` (fuel or wall
+clock; nothing is written, since one node may stop on fuel where another stops on the
+clock), `MemoryExceeded` (the program's allocator was refused), `OutputExceeded`,
+`RuntimeUnavailable`.
 A suite case passes when the run completes with its `expected_exit` (whatever
 it is) and, if given, its exact `expected_stdout`.
 
@@ -161,10 +164,11 @@ each edge:
 |---|---|---|
 | Processor | fuel, one unit an instruction: 50e9 by default, 2e12 at most | `Timeout` |
 | Wall time | 10 s by default, 120 s at most | `Timeout` |
-| Memory | one linear memory of 32-bit addresses: 256 MiB by default, 2 GiB at most | the allocator refuses inside the program: `MemoryExceeded` |
+| Memory | one linear memory of 32-bit addresses: 256 MiB by default, 2 GiB at most | the allocator refuses inside the program: `MemoryExceeded`; an access outside the memory is a crash: `RuntimeError` |
+| Call stack | 2 MiB of the engine's native stack (the default is 512 KiB), on threads made to hold it | `RuntimeError`, `wasm trap: call stack exhausted`; the interpreters stop a deep recursion themselves before that |
 | Tables | 1,048,576 elements a table, eight tables | growth is refused |
 | Output | 256 KiB of stdout and 64 KiB of stderr by default | `OutputExceeded` |
-| Files | the runtime's own library, read-only; for Lua the task's own sources, read-only; a raw `wasi` module has none | writing, truncating, removing and renaming are refused |
+| Files | the runtime's own library, read-only; for Lua the task's own sources, read-only; a raw `wasi` module and a C/C++ program have none | writing, truncating, removing and renaming are refused |
 | Folder listing | none | "permission denied" |
 | Network, processes, threads | none | the calls do not exist or fail |
 | Clock | the run's own: it starts at one pinned instant and moves only when the program waits | nothing of the host's time is visible |
@@ -243,6 +247,7 @@ one compiled module.
 | `typescript-sucrase-3.35.1` | TypeScript on the same QuickJS: sucrase 3.35.1 strips the types, the JavaScript runs as a module; no type check | the source, inline |
 | `ruby-3.4.1` | Ruby 3.4.1 (the ruby.wasm 2.10.1 build) with the standard library and the bundled gems base64, csv, matrix and prime | the source, inline |
 | `lua-5.4.8` | Lua 5.4.8, the stock interpreter with its standard library, built for WASI by this repository's toolchain | the sources as files; the entry is the script |
+| `clang-22.1.0` | C17 and C++20 without exceptions, compiled and linked on the node by clang 22.1.0 for WASI with wasi-libc and libc++; the program runs as a raw WASI module | the sources as files; every `.c`, `.cc`, `.cpp`, `.cxx` is compiled, headers sit beside them; the entry names the program |
 | `wasi` | the task's own WASI command module: Rust, C/C++, Zig, TinyGo, anything that targets wasm32-wasi (`_start`, WASI preview 1) | the module's bytes, base64; its name is `argv[0]` |
 
 The Python library code is bytecode layers, one zip each, that CPython's
@@ -322,6 +327,41 @@ work. A name must be the same file on every node: `/` between folders, no `.` or
 of the characters or names Windows refuses, no two names that differ only in case; anything
 else is the task's `CompileError`.
 
+C and C++ are compiled on the node (since 0.10.0) by clang 22.1.0 for WASI: LLVM as one
+WebAssembly module (YoWASP's build, 75 MB) and the sysroot it reads at `/usr` (wasi-libc,
+libc++, libc++abi, the compiler-rt builtins, clang's headers; 2,345 files pinned as a tree,
+like Ruby's library), both cut unchanged from the pinned npm package. WASI starts no
+processes, so the build is the clang driver's plan run step by step, each step its own
+instance of the module: `clang -cc1` for every `.c` (C17) and every `.cc`, `.cpp`, `.cxx`
+(C++20), then `wasm-ld`. Nothing is writable: a step writes its product to stdout (the
+object, then the program module), the sandbox puts each object into a fresh read-only
+folder, and the next step reads it there. The command lines are fixed in the controller
+(`-O2`), the sources are written as files as for Lua (the same name rules; headers sit
+beside the sources), and all the steps of a task share one budget of their own, apart from
+the program's limits: 100 G fuel (fuel binds, so the same sources build the same way on
+every node; a 600 s wall backstop and 1 GiB of memory a step). A C hello builds in 0.2 G
+fuel; a C++ program of a couple of hundred lines with the standard library in 10–20 G, about
+5 s. The program then runs as a raw WASI module under the task's limits, `argv[0]` the
+entry's name without its extension, with no file system at all. A compile or link error is
+the task's `CompileError` with clang's diagnostics on stderr. C++ is C++ without exceptions:
+the shipped libc++abi has no unwinder and the sandbox keeps exception handling off, so `try`
+and `throw` are a compile error. The compiler's module is compiled once per process (about
+15 s); the builds and the programs are reproducible to the byte.
+
+What a C or C++ author should know about the target. It is 32-bit: `int`, `long` and
+pointers are 32 bits, `long long` is 64, so `long` arithmetic that fits on a desktop may
+overflow here. The program's stack is 8 MiB, as on Linux (a local array of a million ints
+fits), placed below the data, so an overflow leaves the memory and traps instead of writing
+over the globals. A recursion also uses the engine's call stack, 2 MiB: a small recursive
+function reaches about 25,000 to 40,000 levels (the frame decides, and a little the
+platform), so a depth-first walk of a 100,000-node chain must be written with an explicit
+stack. Crashes are `RuntimeError` with the trap named on stderr when the program said nothing
+(`wasm trap: out of bounds memory access` for a wild pointer or an overflowed stack,
+`wasm trap: unreachable code reached` for `abort` and a failed `assert`), and `new` past the
+memory cap is `MemoryExceeded` (libc++ says `bad_alloc` and aborts). A write through a null
+pointer does not crash: address 0 is memory like any other. `-O2` removes what it can prove
+unused, an allocation included.
+
 The raw `wasi` runtime has no module of its own: each task carries one,
 compiled by the lab offline, and the sandbox compiles it on the node (cached by
 content hash within a batch). args, stdin, suite and limits work as for any
@@ -334,8 +374,9 @@ sandbox does not provide) is a `CompileError`, one without `_start` a
 ```
 
 Honest scope: pure Python with the standard library, JavaScript, TypeScript
-(types stripped), Ruby with its standard library, Lua, and compiled WASI modules. No C extensions inside
-CPython-WASI yet, no gems beyond the four named.
+(types stripped), Ruby with its standard library, Lua, C and C++ (no exceptions) built on the
+node, and compiled WASI modules. No C extensions inside CPython-WASI yet, no gems beyond the
+four named.
 
 ## What the module carries
 
@@ -372,7 +413,10 @@ A patch of the line changes neither an output nor a unit of fuel; a major releas
 change fuel, so the fleet stays on one line. Licences travel inside the asset archives
 (wasmtime: Apache-2.0 WITH LLVM-exception; CPython: PSF; QuickJS-NG: MIT;
 Ruby and its bundled gems: Ruby's own terms or BSD-2-Clause; the ruby.wasm
-port: MIT; Lua: MIT).
+port: MIT; Lua: MIT; sucrase and the six packages bundled with it: MIT, Apache-2.0 and
+others, each named in the licence file beside the bundle; LLVM, clang, lld, libc++ and YoWASP's build: Apache-2.0, LLVM's WITH LLVM-exception;
+wasi-libc: Apache-2.0 WITH LLVM-exception, Apache-2.0 or MIT, with cloudlibc's BSD-2-Clause
+and musl's MIT inside).
 
 `VerifySelfCheck.Run()` reports, from inside a loaded module, where the binding
 and the runtimes resolved from and whether one task per runtime ran — the
@@ -383,7 +427,7 @@ can call it as a doctor-style check.
 
 `OutWit.Controller.AI.Verify.Tests`: wire-layout guards, the schema guards,
 the parser at its edges, the sandbox verdict, adversarial, hygiene, raw-WASI,
-Python-layer, Ruby, Lua, QuickJS and TypeScript suites, the tree hash, the worker pool (cancellation
+Python-layer, Ruby, Lua, QuickJS, TypeScript and C/C++ suites, the tree hash, the worker pool (cancellation
 included) and the
 benchmark, the taskset, sampling and integrity pipelines, the package format,
 plan, transfer (a link that drops and comes back included) and the share's
