@@ -134,6 +134,7 @@ QJS="$WORK/quickjs-$QUICKJS_VERSION"
 rm -rf "$QJS"
 tar -xzf "$WORK/quickjs.tar.gz" -C "$WORK"
 ( cd "$QJS" && patch -p1 --no-backup-if-mismatch -s < "$HERE/quickjs-wasi.patch" )
+mkdir -p "$WORK/linked"
 (
   cd "$QJS"
   "$SDK/bin/clang" --target=wasm32-wasip1 --sysroot="$SDK/share/wasi-sysroot" \
@@ -143,11 +144,12 @@ tar -xzf "$WORK/quickjs.tar.gz" -C "$WORK"
     dtoa.c libregexp.c libunicode.c quickjs.c quickjs-libc.c qjs.c gen/repl.c gen/standalone.c \
     -lwasi-emulated-process-clocks -lwasi-emulated-signal -lm \
     -Wl,--stack-first -Wl,-z,stack-size=1048576 -Wl,--strip-debug \
-    -o "$WORK/qjs.raw.wasm"
+    -o "$WORK/linked/qjs.wasm"
 )
 # The producers section names the compiler's own build ("23.1.0-wasi-sdk" here, "23.1.0-rc3"
 # in wasi-sdk's Windows build); without it the module is the same bytes wherever it is built.
-"$SDK/bin/llvm-objcopy" --remove-section=producers "$WORK/qjs.raw.wasm" "$OUT/qjs.wasm"
+# (The linked file keeps the final name: the linker writes it into the module's name section.)
+"$SDK/bin/llvm-objcopy" --remove-section=producers "$WORK/linked/qjs.wasm" "$OUT/qjs.wasm"
 cp "$QJS/LICENSE" "$OUT/LICENSE-quickjs-ng.txt"
 
 echo "== sum.wasm (C)"
