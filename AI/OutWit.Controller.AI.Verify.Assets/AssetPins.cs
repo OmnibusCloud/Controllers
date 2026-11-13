@@ -17,6 +17,12 @@ internal static class AssetPins
     public const string MPMATH_VERSION = "1.4.1";
     public const string SYMPY_ZIP = "sympy-1.14.0.zip";
 
+    public const string NUMPY_VERSION = "2.5.4";
+    public const string NUMPY_RUNTIME_DIR = "python-3.14.6-numpy-2.5.4";
+    public const string NUMPY_MODULE = "python.wasm";
+    public const string NUMPY_PLAIN_MODULE = "python-plain.wasm";
+    public const string NUMPY_ZIP = "numpy-2.5.4.zip";
+
     public const string QUICKJS_VERSION = "0.15.1";
     public const string QUICKJS_SOURCE_DIR = "quickjs-0.15.1";
     public const string QUICKJS_MODULE = "qjs.wasm";
@@ -98,6 +104,18 @@ internal static class AssetPins
         new("COPYING-musl-fts.txt", "https://raw.githubusercontent.com/WebAssembly/wasi-libc/ac020b86fd44bafe60aa4fa12f407d16e3731329/fts/musl-fts/COPYING",
             "55af87e4017668f54467a3380e7ebbac5e672d8c763bfe95e6fc882a6fdc4046")
     ];
+
+    /// <summary>
+    /// The numpy runtime's folder as toolchain/python-numpy builds it (the AI Verify python-numpy
+    /// workflow, two builds compared byte for byte): the start-up snapshot, the plain module, the
+    /// two layers the snapshot was made with, the licences. The controller's data asset of the
+    /// same name; until its release exists, --local or VERIFY_ASSETS_LOCAL names a folder that
+    /// holds the workflow's copy.
+    /// </summary>
+    public static readonly AssetPin PYTHON_NUMPY = new(
+        "verify-python-numpy.zip",
+        "https://github.com/OmnibusCloud/Controllers/releases/download/verify-v0.11.0/verify-python-numpy.zip",
+        "6b70674b209288f3fad36d7448e84ab9ff1903b61352c9903ea7e82504f15b0e");
 
     public static readonly AssetPin SYMPY = new(
         "sympy-1.14.0-py3-none-any.whl",

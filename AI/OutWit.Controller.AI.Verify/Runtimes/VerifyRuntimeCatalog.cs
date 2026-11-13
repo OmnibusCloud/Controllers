@@ -21,6 +21,13 @@ public static class VerifyRuntimeCatalog
     public const string PYTHON_3_14_6_SYMPY_1_14_0 = "python-3.14.6-sympy-1.14.0";
 
     /// <summary>
+    /// CPython 3.14.6 with numpy 2.5.4 built in, both built for WASI by the controller's
+    /// toolchain (toolchain/python-numpy): a start-up snapshot with numpy imported, its own
+    /// standard library layer and numpy's Python package as a layer on PYTHONPATH.
+    /// </summary>
+    public const string PYTHON_3_14_6_NUMPY_2_5_4 = "python-3.14.6-numpy-2.5.4";
+
+    /// <summary>
     /// QuickJS-NG 0.15.1, JavaScript, built for WASI by the controller's toolchain: its C stack
     /// below the data and its stack limit on, so a recursion too deep is a RangeError.
     /// </summary>
@@ -56,6 +63,11 @@ public static class VerifyRuntimeCatalog
     private const string PYTHON_DIR = "python-3.14.6";
     private const string PYTHON_SHA256 = "cd71a34d8467882a4ad0e6a5e64509d68975ed6bd6831ca549bcd0517ac14655";
 
+    // The numpy runtime is its own folder (its own data asset): the snapshot is bound to the bytes
+    // of the two layers it was made with, so they travel and are pinned together.
+    private const string NUMPY_DIR = "python-3.14.6-numpy-2.5.4";
+    private const string NUMPY_SHA256 = "3cfedd8bb07f24e04dd9783e86985b236fd06955d2d938541045564467d05a1e";
+
     private const string RUBY_DIR = "ruby-3.4.1";
     private const string RUBY_GEMS = "/usr/local/lib/ruby/gems/3.4.0/gems/";
 
@@ -82,6 +94,16 @@ public static class VerifyRuntimeCatalog
         Path.Combine(PYTHON_DIR, "lib", "sympy-1.14.0.zip"),
         "d15dce77126085b9e7c327474e0574975d62515a28ea1551bec2cc90079a2b2a",
         "/lib/sympy-1.14.0.zip");
+
+    private static readonly VerifyRuntimeLayer NUMPY_STDLIB = new(
+        Path.Combine(NUMPY_DIR, "lib", "python314.zip"),
+        "5d02f04016569aeba0f6ae96130728fa875abb438ba72d4014132e2a542f64a4",
+        null);
+
+    private static readonly VerifyRuntimeLayer NUMPY_PACKAGE = new(
+        Path.Combine(NUMPY_DIR, "lib", "numpy-2.5.4.zip"),
+        "bb3425211b21ac282c3b2602711568cb30b7c173cc67032f17b270fed0acaf35",
+        "/lib/numpy-2.5.4.zip");
 
     // Ruby loads its library from files, so the library is a tree verify-assets cuts out of
     // the release archive unchanged. The tree is the guest's whole file system: a program
@@ -126,6 +148,23 @@ public static class VerifyRuntimeCatalog
                 Argv0 = "python.wasm",
                 Layers = [PYTHON_STDLIB, PYTHON_SYMPY]
             },
+            [PYTHON_3_14_6_NUMPY_2_5_4] = new()
+            {
+                Id = PYTHON_3_14_6_NUMPY_2_5_4,
+                Language = VerifyRuntimeLanguage.Python,
+                ModulePath = Path.Combine(NUMPY_DIR, "python.wasm"),
+                RootDir = NUMPY_DIR,
+                Sha256 = NUMPY_SHA256,
+                Argv0 = "python.wasm",
+                Layers = [NUMPY_STDLIB, NUMPY_PACKAGE],
+                Notes =
+                [
+                    "numpy's default integer is 32-bit (wasm32): np.arange(1_000_000).sum() wraps to 1783293664; pass dtype=np.int64 for 64-bit integers.",
+                    "No BLAS (numpy's own lapack_lite), no threads, no SIMD.",
+                    "np.longdouble is IEEE binary128 in software, not x86's 80-bit extended.",
+                    "Floating-point arithmetic raises no warnings (1.0 / 0 is inf silently); numpy's own errors (a singular matrix, integer division by zero) are raised."
+                ]
+            },
             [QUICKJS_0_15_1] = new()
             {
                 Id = QUICKJS_0_15_1,
@@ -144,7 +183,8 @@ public static class VerifyRuntimeCatalog
                 RootDir = TYPESCRIPT_DIR,
                 Sha256 = QUICKJS_SHA256,
                 Argv0 = "qjs",
-                Layers = [TYPESCRIPT_SUCRASE]
+                Layers = [TYPESCRIPT_SUCRASE],
+                Notes = ["The types are stripped by sucrase, not checked: a program with type errors runs."]
             },
             [RUBY_3_4_1] = new()
             {
@@ -186,7 +226,13 @@ public static class VerifyRuntimeCatalog
                 SourcesAsRoot = true,
                 Sha256 = "24fbed474c7b5b4968fd73fc4827440b93fb351c1b6264516130300eff3e7bf5",
                 Argv0 = "llvm",
-                Trees = [CLANG_SYSROOT]
+                Trees = [CLANG_SYSROOT],
+                Notes =
+                [
+                    "C++ without exceptions: try and throw are a compile error.",
+                    "A 32-bit target: int, long and pointers are 32 bits, long long is 64.",
+                    "A recursion reaches about 25,000 to 40,000 levels (the engine's 2 MiB stack)."
+                ]
             },
             [WASI] = new()
             {

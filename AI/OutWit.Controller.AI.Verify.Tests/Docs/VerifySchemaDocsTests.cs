@@ -111,10 +111,11 @@ public sealed class VerifySchemaDocsTests
         using var schema = Load("verify-capabilities.schema.json");
         var properties = schema.RootElement.GetProperty("properties");
 
-        // What the writer produces, with a pool, against what the schema allows.
+        // What the writer produces, with a pool and a runtime that has notes, against what the
+        // schema allows.
         var diagnostics = new OutWit.Controller.AI.Verify.Model.VerifyRuntimeDiagnosticsData
         {
-            Runtimes = [new OutWit.Controller.AI.Verify.Model.VerifyRuntimeInfoData { RuntimeId = "python-3.14.6" }]
+            Runtimes = [new OutWit.Controller.AI.Verify.Model.VerifyRuntimeInfoData { RuntimeId = "python-3.14.6-numpy-2.5.4" }]
         };
         using var written = JsonDocument.Parse(OutWit.Controller.AI.Verify.Runtimes.VerifyCapabilitiesWriter.Write(
             diagnostics, new OutWit.Controller.AI.Verify.Runtimes.VerifyPoolSummary(1, 1, 1, 1)));

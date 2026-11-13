@@ -21,7 +21,8 @@
           "id": { "type": "string", "description": "The runtime id a task names." },
           "language": { "type": "string", "enum": ["python", "javascript", "wasi", "ruby", "lua", "typescript", "c", "unknown"] },
           "sha256": { "type": "string", "description": "The pinned hash of the runtime module; empty for the raw wasi runtime, whose module comes with each task." },
-          "available": { "type": "boolean", "description": "The module is present and passed its hash pin in the host's copy of the controller." }
+          "available": { "type": "boolean", "description": "The module is present and passed its hash pin in the host's copy of the controller." },
+          "notes": { "type": "array", "items": { "type": "string" }, "description": "What an author should know about the runtime before writing for it, one sentence each: a platform fact that changes an answer (numpy's 32-bit default integer), a feature that is absent (C++ exceptions, a type check). Absent when there is nothing beyond the language itself." }
         }
       }
     },

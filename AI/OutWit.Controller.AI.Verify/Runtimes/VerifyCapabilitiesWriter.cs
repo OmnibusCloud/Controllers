@@ -47,6 +47,7 @@ public static class VerifyCapabilitiesWriter
                 writer.WriteString("language", Language(runtime.RuntimeId));
                 writer.WriteString("sha256", runtime.Sha256);
                 writer.WriteBoolean("available", runtime.Available);
+                WriteNotes(writer, runtime.RuntimeId);
                 writer.WriteEndObject();
             }
             writer.WriteEndArray();
@@ -90,6 +91,18 @@ public static class VerifyCapabilitiesWriter
         }
 
         return stream.ToArray();
+    }
+
+    private static void WriteNotes(Utf8JsonWriter writer, string runtimeId)
+    {
+        var notes = VerifyRuntimeCatalog.Find(runtimeId)?.Notes ?? [];
+        if (notes.Count == 0)
+            return;
+
+        writer.WriteStartArray("notes");
+        foreach (var note in notes)
+            writer.WriteStringValue(note);
+        writer.WriteEndArray();
     }
 
     private static string Language(string runtimeId)

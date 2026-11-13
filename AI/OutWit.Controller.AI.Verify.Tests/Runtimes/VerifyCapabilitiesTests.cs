@@ -115,6 +115,35 @@ public sealed class VerifyCapabilitiesTests
     }
 
     [Test]
+    public void WhatAnAuthorShouldKnowTravelsWithItsRuntimeTest()
+    {
+        var diagnostics = new VerifyRuntimeDiagnosticsData
+        {
+            Runtimes =
+            [
+                new VerifyRuntimeInfoData { RuntimeId = VerifyRuntimeCatalog.PYTHON_3_14_6, Sha256 = "aa", Available = true },
+                new VerifyRuntimeInfoData { RuntimeId = VerifyRuntimeCatalog.PYTHON_3_14_6_NUMPY_2_5_4, Sha256 = "bb", Available = true },
+                new VerifyRuntimeInfoData { RuntimeId = VerifyRuntimeCatalog.CLANG_22_1_0, Sha256 = "cc", Available = true },
+                new VerifyRuntimeInfoData { RuntimeId = VerifyRuntimeCatalog.TYPESCRIPT_SUCRASE_3_35_1, Sha256 = "dd", Available = true }
+            ]
+        };
+
+        using var document = JsonDocument.Parse(VerifyCapabilitiesWriter.Write(diagnostics, null));
+        var runtimes = document.RootElement.GetProperty("runtimes").EnumerateArray().ToList();
+        string Notes(int index) => runtimes[index].TryGetProperty("notes", out var notes)
+            ? string.Join(" ", notes.EnumerateArray().Select(note => note.GetString()))
+            : "";
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(runtimes[0].TryGetProperty("notes", out _), Is.False, "nothing beyond the language: no notes");
+            Assert.That(Notes(1), Does.Contain("32-bit").And.Contain("dtype=np.int64").And.Contain("No BLAS").And.Contain("binary128"));
+            Assert.That(Notes(2), Does.Contain("without exceptions").And.Contain("long").And.Contain("recursion"));
+            Assert.That(Notes(3), Does.Contain("not checked"));
+        });
+    }
+
+    [Test]
     public void AHostThatCannotSayLeavesThePoolOutTest()
     {
         using var document = JsonDocument.Parse(VerifyCapabilitiesWriter.Write(new VerifyRuntimeDiagnosticsData(), null));

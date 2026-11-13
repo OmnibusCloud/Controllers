@@ -4,7 +4,7 @@ using System.Text;
 namespace OutWit.Controller.AI.Verify.Assets;
 
 /// <summary>
-/// verify-assets build &lt;out-dir&gt; [--cache DIR] [--work DIR] [--offline] [--clean]
+/// verify-assets build &lt;out-dir&gt; [--cache DIR] [--work DIR] [--local DIR] [--offline] [--clean]
 ///
 /// Rebuilds the Verify runtime set from its pins into out-dir (the layout the controller's
 /// data asset extracts to wasm/, and the layout the tests read from @Data/runtimes):
@@ -13,6 +13,10 @@ namespace OutWit.Controller.AI.Verify.Assets;
 ///   python-3.14.6/lib/python314.zip           the standard library, bytecode, one file
 ///   python-3.14.6/lib/sympy-1.14.0.zip        sympy 1.14.0 + mpmath 1.4.1, bytecode, one file
 ///   python-3.14.6/LICENSE, LICENSE-sympy.txt, LICENSE-mpmath.txt
+///   python-3.14.6-numpy-2.5.4/python.wasm     CPython 3.14.6 + numpy 2.5.4, the start-up snapshot (toolchain/python-numpy)
+///   python-3.14.6-numpy-2.5.4/python-plain.wasm  the same without the snapshot, for debugging
+///   python-3.14.6-numpy-2.5.4/lib/python314.zip, lib/numpy-2.5.4.zip  the layers the snapshot was made with
+///   python-3.14.6-numpy-2.5.4/LICENSE-*.txt, BUILD.txt
 ///   qjs-wasi.wasm                             QuickJS-NG 0.15.1 for WASI, built by the toolchain (toolchain/build.sh)
 ///   LICENSE-quickjs-ng.txt
 ///   ruby-3.4.1/ruby.wasm                      Ruby 3.4.1 for WASI (ruby.wasm 2.10.1), unchanged
@@ -29,6 +33,10 @@ namespace OutWit.Controller.AI.Verify.Assets;
 ///
 /// The build is reproducible: run it twice and the hashes it prints are the ones the
 /// runtime catalog pins.
+///
+/// The numpy runtime's folder is the controller's own data asset (verify-python-numpy.zip, built
+/// by the AI Verify python-numpy workflow): it is extracted here unchanged from its pin, and it is
+/// not part of verify-wasm.zip (pack that asset without this folder).
 /// </summary>
 internal static class Program
 {
@@ -50,6 +58,9 @@ internal static class Program
         var cacheDir = Path.GetFullPath(OptionValue(args, "--cache") ?? Path.Combine(Path.GetDirectoryName(outDir)!, DEFAULT_CACHE));
         var workDir = Path.GetFullPath(OptionValue(args, "--work") ?? Path.Combine(Path.GetTempPath(), "verify-assets-work"));
         var offline = args.Contains("--offline");
+        AssetDownloader.LocalDir = OptionValue(args, "--local") is { } local
+            ? Path.GetFullPath(local)
+            : Environment.GetEnvironmentVariable(AssetDownloader.LOCAL_DIR_ENV) is { Length: > 0 } fromEnvironment ? Path.GetFullPath(fromEnvironment) : null;
         var clean = args.Contains("--clean");
 
         try
@@ -83,6 +94,7 @@ internal static class Program
         var rubyBsdl = await AssetDownloader.FetchAsync(AssetPins.RUBY_BSDL, cacheDir, offline);
         var rubyWasmLicense = await AssetDownloader.FetchAsync(AssetPins.RUBY_WASM_LICENSE, cacheDir, offline);
         var clangPackage = await AssetDownloader.FetchAsync(AssetPins.YOWASP_CLANG, cacheDir, offline);
+        var numpyAsset = await AssetDownloader.FetchAsync(AssetPins.PYTHON_NUMPY, cacheDir, offline);
         var clangLicences = new List<(string Path, string FileName)>();
         foreach (var licence in AssetPins.CLANG_LICENCES)
             clangLicences.Add((await AssetDownloader.FetchAsync(licence, cacheDir, offline), licence.FileName));
@@ -115,6 +127,13 @@ internal static class Program
         PythonLayerBuilder.ExtractFile(mpmathWheel, $"mpmath-{AssetPins.MPMATH_VERSION}.dist-info/licenses/LICENSE", Path.Combine(pythonDir, "LICENSE-mpmath.txt"));
         CopyBuiltModule(AssetPins.QUICKJS_SOURCE_DIR, AssetPins.QUICKJS_MODULE, AssetPins.QUICKJS_MODULE_SHA256, Path.Combine(outDir, AssetPins.QUICKJS_FILE));
         File.Copy(Path.Combine(AppContext.BaseDirectory, "modules", AssetPins.QUICKJS_SOURCE_DIR, AssetPins.QUICKJS_LICENSE_FILE), Path.Combine(outDir, AssetPins.QUICKJS_LICENSE_FILE), overwrite: true);
+
+        Console.WriteLine($"{AssetPins.NUMPY_RUNTIME_DIR} (numpy {AssetPins.NUMPY_VERSION}, built by the toolchain)");
+        var numpyDir = Path.Combine(outDir, AssetPins.NUMPY_RUNTIME_DIR);
+        if (Directory.Exists(numpyDir))
+            Directory.Delete(numpyDir, recursive: true);
+        ZipFile.ExtractToDirectory(numpyAsset, numpyDir);
+        var numpyLibDir = Path.Combine(numpyDir, "lib");
 
         Console.WriteLine($"{AssetPins.RUBY_RUNTIME_DIR} (Ruby {AssetPins.RUBY_VERSION})");
         var rubyDir = Path.Combine(outDir, AssetPins.RUBY_RUNTIME_DIR);
@@ -150,6 +169,10 @@ internal static class Program
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/python.wasm", Path.Combine(pythonDir, "python.wasm")),
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.STDLIB_ZIP}", Path.Combine(libDir, AssetPins.STDLIB_ZIP)),
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.SYMPY_ZIP}", Path.Combine(libDir, AssetPins.SYMPY_ZIP)),
+            ($"{AssetPins.NUMPY_RUNTIME_DIR}/{AssetPins.NUMPY_MODULE}", Path.Combine(numpyDir, AssetPins.NUMPY_MODULE)),
+            ($"{AssetPins.NUMPY_RUNTIME_DIR}/{AssetPins.NUMPY_PLAIN_MODULE}", Path.Combine(numpyDir, AssetPins.NUMPY_PLAIN_MODULE)),
+            ($"{AssetPins.NUMPY_RUNTIME_DIR}/lib/{AssetPins.STDLIB_ZIP}", Path.Combine(numpyLibDir, AssetPins.STDLIB_ZIP)),
+            ($"{AssetPins.NUMPY_RUNTIME_DIR}/lib/{AssetPins.NUMPY_ZIP}", Path.Combine(numpyLibDir, AssetPins.NUMPY_ZIP)),
             (AssetPins.QUICKJS_FILE, Path.Combine(outDir, AssetPins.QUICKJS_FILE)),
             ($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.MODULE_FILE}", Path.Combine(rubyDir, RubyRuntimeBuilder.MODULE_FILE)),
             ($"{AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_MODULE}", Path.Combine(luaDir, AssetPins.LUA_MODULE)),
@@ -262,12 +285,14 @@ internal static class Program
 
     private static int Usage()
     {
-        Console.WriteLine("verify-assets build <out-dir> [--cache DIR] [--work DIR] [--offline] [--clean]");
+        Console.WriteLine("verify-assets build <out-dir> [--cache DIR] [--work DIR] [--local DIR] [--offline] [--clean]");
         Console.WriteLine();
         Console.WriteLine("  out-dir   the runtime set to write: @Prerequisites/wasm for a release,");
         Console.WriteLine("            OutWit.Controller.AI.Verify.Tests/@Data/runtimes for the tests");
         Console.WriteLine("  --cache   pinned downloads (default: <out-dir>/../@Downloads)");
         Console.WriteLine("  --work    scratch folder (default: the temp folder)");
+        Console.WriteLine("  --local   a folder whose files stand in for downloads of the same name when they");
+        Console.WriteLine($"            match their pins (default: ${AssetDownloader.LOCAL_DIR_ENV}); a release asset before its release");
         Console.WriteLine("  --offline never download; the cache must hold every pin");
         Console.WriteLine("  --clean   wipe out-dir first");
         return 2;
