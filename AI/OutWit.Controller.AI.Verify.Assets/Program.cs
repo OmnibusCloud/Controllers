@@ -13,7 +13,7 @@ namespace OutWit.Controller.AI.Verify.Assets;
 ///   python-3.14.6/lib/python314.zip           the standard library, bytecode, one file
 ///   python-3.14.6/lib/sympy-1.14.0.zip        sympy 1.14.0 + mpmath 1.4.1, bytecode, one file
 ///   python-3.14.6/LICENSE, LICENSE-sympy.txt, LICENSE-mpmath.txt
-///   qjs-wasi.wasm                             QuickJS-NG 0.15.1 for WASI, unchanged
+///   qjs-wasi.wasm                             QuickJS-NG 0.15.1 for WASI, built by the toolchain (toolchain/build.sh)
 ///   LICENSE-quickjs-ng.txt
 ///   ruby-3.4.1/ruby.wasm                      Ruby 3.4.1 for WASI (ruby.wasm 2.10.1), unchanged
 ///   ruby-3.4.1/root/usr/local/lib/ruby/...    its standard library and four bundled gems, as files
@@ -71,8 +71,6 @@ internal static class Program
 
         Console.WriteLine("downloads");
         var cpythonZip = await AssetDownloader.FetchAsync(AssetPins.CPYTHON, cacheDir, offline);
-        var quickJs = await AssetDownloader.FetchAsync(AssetPins.QUICKJS, cacheDir, offline);
-        var quickJsLicense = await AssetDownloader.FetchAsync(AssetPins.QUICKJS_LICENSE, cacheDir, offline);
         var sympyWheel = await AssetDownloader.FetchAsync(AssetPins.SYMPY, cacheDir, offline);
         var mpmathWheel = await AssetDownloader.FetchAsync(AssetPins.MPMATH, cacheDir, offline);
         var rubyArchive = await AssetDownloader.FetchAsync(AssetPins.RUBY, cacheDir, offline);
@@ -106,8 +104,8 @@ internal static class Program
         File.Copy(Path.Combine(cpythonDir, "LICENSE"), Path.Combine(pythonDir, "LICENSE"), overwrite: true);
         PythonLayerBuilder.ExtractFile(sympyWheel, $"sympy-{AssetPins.SYMPY_VERSION}.dist-info/licenses/LICENSE", Path.Combine(pythonDir, "LICENSE-sympy.txt"));
         PythonLayerBuilder.ExtractFile(mpmathWheel, $"mpmath-{AssetPins.MPMATH_VERSION}.dist-info/licenses/LICENSE", Path.Combine(pythonDir, "LICENSE-mpmath.txt"));
-        File.Copy(quickJs, Path.Combine(outDir, AssetPins.QUICKJS.FileName), overwrite: true);
-        File.Copy(quickJsLicense, Path.Combine(outDir, AssetPins.QUICKJS_LICENSE.FileName), overwrite: true);
+        CopyBuiltModule(AssetPins.QUICKJS_SOURCE_DIR, AssetPins.QUICKJS_MODULE, AssetPins.QUICKJS_MODULE_SHA256, Path.Combine(outDir, AssetPins.QUICKJS_FILE));
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "modules", AssetPins.QUICKJS_SOURCE_DIR, AssetPins.QUICKJS_LICENSE_FILE), Path.Combine(outDir, AssetPins.QUICKJS_LICENSE_FILE), overwrite: true);
 
         Console.WriteLine($"{AssetPins.RUBY_RUNTIME_DIR} (Ruby {AssetPins.RUBY_VERSION})");
         var rubyDir = Path.Combine(outDir, AssetPins.RUBY_RUNTIME_DIR);
@@ -120,21 +118,16 @@ internal static class Program
 
         Console.WriteLine($"{AssetPins.LUA_RUNTIME_DIR} (Lua {AssetPins.LUA_VERSION}, built by the toolchain)");
         var luaDir = Path.Combine(outDir, AssetPins.LUA_RUNTIME_DIR);
-        var luaSource = Path.Combine(AppContext.BaseDirectory, "modules", AssetPins.LUA_RUNTIME_DIR);
-        var luaModule = Path.Combine(luaSource, AssetPins.LUA_MODULE);
-        var luaHash = AssetDownloader.Sha256Hex(luaModule);
-        if (!string.Equals(luaHash, AssetPins.LUA_MODULE_SHA256, StringComparison.Ordinal))
-            throw new InvalidOperationException($"{luaModule} is {luaHash}, the pin is {AssetPins.LUA_MODULE_SHA256}");
         Directory.CreateDirectory(luaDir);
-        File.Copy(luaModule, Path.Combine(luaDir, AssetPins.LUA_MODULE), overwrite: true);
-        File.Copy(Path.Combine(luaSource, AssetPins.LUA_LICENSE), Path.Combine(luaDir, AssetPins.LUA_LICENSE), overwrite: true);
+        CopyBuiltModule(AssetPins.LUA_RUNTIME_DIR, AssetPins.LUA_MODULE, AssetPins.LUA_MODULE_SHA256, Path.Combine(luaDir, AssetPins.LUA_MODULE));
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "modules", AssetPins.LUA_RUNTIME_DIR, AssetPins.LUA_LICENSE), Path.Combine(luaDir, AssetPins.LUA_LICENSE), overwrite: true);
 
         var hashes = new (string Name, string Path)[]
         {
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/python.wasm", Path.Combine(pythonDir, "python.wasm")),
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.STDLIB_ZIP}", Path.Combine(libDir, AssetPins.STDLIB_ZIP)),
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.SYMPY_ZIP}", Path.Combine(libDir, AssetPins.SYMPY_ZIP)),
-            (AssetPins.QUICKJS.FileName, Path.Combine(outDir, AssetPins.QUICKJS.FileName)),
+            (AssetPins.QUICKJS_FILE, Path.Combine(outDir, AssetPins.QUICKJS_FILE)),
             ($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.MODULE_FILE}", Path.Combine(rubyDir, RubyRuntimeBuilder.MODULE_FILE)),
             ($"{AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_MODULE}", Path.Combine(luaDir, AssetPins.LUA_MODULE))
         }.Select(file => (file.Name, Sha256: AssetDownloader.Sha256Hex(file.Path), Bytes: new FileInfo(file.Path).Length)).ToList();
@@ -148,6 +141,20 @@ internal static class Program
         Console.WriteLine("the catalog pins (SHA-256):");
         foreach (var (name, sha256, bytes) in hashes)
             Console.WriteLine($"  {sha256}  {name}  ({bytes:N0} bytes)");
+    }
+
+    /// <summary>
+    /// Copies a module the toolchain built (modules/, next to this tool) into the set after
+    /// checking it against its pin, so a changed module cannot slip in.
+    /// </summary>
+    private static void CopyBuiltModule(string sourceDir, string module, string sha256, string destination)
+    {
+        var source = Path.Combine(AppContext.BaseDirectory, "modules", sourceDir, module);
+        var hash = AssetDownloader.Sha256Hex(source);
+        if (!string.Equals(hash, sha256, StringComparison.Ordinal))
+            throw new InvalidOperationException($"{source} is {hash}, the pin is {sha256}");
+
+        File.Copy(source, destination, overwrite: true);
     }
 
     private static string Notice(IReadOnlyList<(string Name, string Sha256, long Bytes)> hashes, RubyRuntimeSummary ruby)
@@ -170,10 +177,13 @@ internal static class Program
         text.Append("    Patched before compiling:\n");
         foreach (var patch in LayerPatches.SYMPY)
             text.Append($"      {patch.Path}: {patch.Note}\n");
-        text.Append($"{AssetPins.QUICKJS.FileName}\n");
-        text.Append($"    QuickJS-NG {AssetPins.QUICKJS_VERSION} for WASI, taken unchanged from\n");
-        text.Append($"    {AssetPins.QUICKJS.Url}\n");
-        text.Append($"    Licence: {AssetPins.QUICKJS_LICENSE.FileName} (MIT).\n");
+        text.Append($"{AssetPins.QUICKJS_FILE}\n");
+        text.Append($"    QuickJS-NG {AssetPins.QUICKJS_VERSION} (https://github.com/quickjs-ng/quickjs, tag v{AssetPins.QUICKJS_VERSION}), built for\n");
+        text.Append("    WASI by the controller's toolchain (wasi-sdk 34): the C stack (1 MiB) below the data, and one\n");
+        text.Append("    patch, toolchain/quickjs-wasi.patch, that turns the engine's stack limit back on (128 KiB),\n");
+        text.Append("    so a recursion too deep is a RangeError. The project's own WASI build placed a 64 KiB stack\n");
+        text.Append("    after its data with the limit off.\n");
+        text.Append($"    Licence: {AssetPins.QUICKJS_LICENSE_FILE} (MIT).\n");
         text.Append($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.MODULE_FILE}\n");
         text.Append($"    Ruby {AssetPins.RUBY_VERSION} built for WASI by the ruby.wasm project (release {AssetPins.RUBY_WASM_RELEASE}, the\n");
         text.Append("    'full' profile), taken unchanged (usr/local/bin/ruby) from\n");

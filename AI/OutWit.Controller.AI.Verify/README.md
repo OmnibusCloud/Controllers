@@ -7,7 +7,7 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking, and formal proof checking — generation
 and verification are the same activity with different programs.
 
-**Status: 0.7.0 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.8.0 — proven on the test fleet, not yet released to nuget.org.**
 `VerifyRun` returns a byte-identical verdict report for a taskset across runs,
 placements and fleets: a million small tasks gave the same report on six nodes
 (22m41s) and on four (41m35s). Every node executes batches at a bounded degree
@@ -239,7 +239,7 @@ one compiled module.
 |---|---|---|
 | `python-3.14.6` | CPython 3.14.6 (WASI build), pure Python with the standard library | the source, inline |
 | `python-3.14.6-sympy-1.14.0` | the same interpreter with sympy 1.14.0 and mpmath 1.4.1 on `PYTHONPATH` | the source, inline |
-| `quickjs-0.15.1` | QuickJS-NG 0.15.1, JavaScript | the source, inline |
+| `quickjs-0.15.1` | QuickJS-NG 0.15.1, JavaScript, built for WASI by this repository's toolchain | the source, inline |
 | `ruby-3.4.1` | Ruby 3.4.1 (the ruby.wasm 2.10.1 build) with the standard library and the bundled gems base64, csv, matrix and prime | the source, inline |
 | `lua-5.4.8` | Lua 5.4.8, the stock interpreter with its standard library, built for WASI by this repository's toolchain | the sources as files; the entry is the script |
 | `wasi` | the task's own WASI command module: Rust, C/C++, Zig, TinyGo, anything that targets wasm32-wasi (`_start`, WASI preview 1) | the module's bytes, base64; its name is `argv[0]` |
@@ -275,6 +275,20 @@ there is nothing to install); the four gems' folders are on the load path, so
 sockets, processes (`system` and backticks do nothing). It is a 32-bit build:
 an Integer above 2^30 is a bignum, so arithmetic on large totals costs several
 times more than on a desktop Ruby. A hello costs 154 M fuel and takes 55 MiB.
+
+QuickJS-NG is built here too (since 0.8.0), from its pinned sources with one patch
+(`toolchain/quickjs-wasi.patch`). The project's own WASI build places a 64 KiB C stack right
+after its data and switches the engine's stack limit off on WASI, so a deep recursion wrote
+over the interpreter's data: a correct program 162 levels deep ended with exit 0 and no output,
+and an endless one got a verdict that depended on what the sandbox had run before it. Our build
+puts the C stack (1 MiB) below the data, where an overflow traps at address 0, and turns the
+limit back on at 128 KiB: a recursion too deep is JavaScript's `RangeError`, which a program can
+catch, at about 300 levels of plain recursion and about 100 through callbacks such as `map`,
+before the engine's own native stack runs out, on every platform the build server runs. A
+structure nested far deeper than that in native code (`JSON.stringify` of 2,000 levels) still
+reaches the native stack: the run traps, `RuntimeError`. QuickJS's own tests are a gate of the
+toolchain job (the five that fail are about Atomics without threads, os functions, workers and
+the `qjs` global, as with the project's build), and the build is the same bytes on any host.
 
 Lua is built here from lua.org's sources, unchanged, by the asset tool's toolchain
 (`toolchain/build.sh`: wasi-sdk 34 and Binaryen 133, every download pinned, two builds

@@ -18,6 +18,17 @@ internal static class AssetPins
     public const string SYMPY_ZIP = "sympy-1.14.0.zip";
 
     public const string QUICKJS_VERSION = "0.15.1";
+    public const string QUICKJS_SOURCE_DIR = "quickjs-0.15.1";
+    public const string QUICKJS_MODULE = "qjs.wasm";
+    public const string QUICKJS_FILE = "qjs-wasi.wasm";
+    public const string QUICKJS_LICENSE_FILE = "LICENSE-quickjs-ng.txt";
+
+    /// <summary>
+    /// qjs.wasm as the toolchain builds it (modules/quickjs-0.15.1: QuickJS-NG's sources, its
+    /// stack below the data, the stack limit on), in the set under its old name qjs-wasi.wasm.
+    /// The release's own WASI build placed its stack after the data with the limit off.
+    /// </summary>
+    public const string QUICKJS_MODULE_SHA256 = "3629434c55636670bad9df38c7979e24213559261497c846c0aa11e1c9d39bef";
 
     public const string RUBY_VERSION = "3.4.1";
     public const string RUBY_RUNTIME_DIR = "ruby-3.4.1";
@@ -46,16 +57,6 @@ internal static class AssetPins
         "python-3.14.6-wasi_sdk-24.zip",
         "https://github.com/brettcannon/cpython-wasi-build/releases/download/v3.14.6/python-3.14.6-wasi_sdk-24.zip",
         "73bf2e9774c4d8820d0877ec5db0b963df3a9611fc2a63838aeaee29dfd034e6");
-
-    public static readonly AssetPin QUICKJS = new(
-        "qjs-wasi.wasm",
-        "https://github.com/quickjs-ng/quickjs/releases/download/v0.15.1/qjs-wasi.wasm",
-        "b4071ef2fbb2bb693c0bbcfc07cb9d28639fd9cea2fd986824a57aeac929817b");
-
-    public static readonly AssetPin QUICKJS_LICENSE = new(
-        "LICENSE-quickjs-ng.txt",
-        "https://raw.githubusercontent.com/quickjs-ng/quickjs/v0.15.1/LICENSE",
-        "96f73f9d2a16c21a36b418f06073be26e7d6d5e7c1bc99756b21a4f2c74ef171");
 
     public static readonly AssetPin SYMPY = new(
         "sympy-1.14.0-py3-none-any.whl",

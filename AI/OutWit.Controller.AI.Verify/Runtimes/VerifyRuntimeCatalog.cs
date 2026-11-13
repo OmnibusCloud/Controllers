@@ -20,7 +20,10 @@ public static class VerifyRuntimeCatalog
     /// <summary>CPython 3.14.6 with the sympy 1.14.0 + mpmath 1.4.1 layer on PYTHONPATH.</summary>
     public const string PYTHON_3_14_6_SYMPY_1_14_0 = "python-3.14.6-sympy-1.14.0";
 
-    /// <summary>QuickJS-NG 0.15.1 (WASI), JavaScript.</summary>
+    /// <summary>
+    /// QuickJS-NG 0.15.1, JavaScript, built for WASI by the controller's toolchain: its C stack
+    /// below the data and its stack limit on, so a recursion too deep is a RangeError.
+    /// </summary>
     public const string QUICKJS_0_15_1 = "quickjs-0.15.1";
 
     /// <summary>
@@ -98,7 +101,7 @@ public static class VerifyRuntimeCatalog
                 Language = VerifyRuntimeLanguage.JavaScript,
                 ModulePath = "qjs-wasi.wasm",
                 RootDir = null,
-                Sha256 = "b4071ef2fbb2bb693c0bbcfc07cb9d28639fd9cea2fd986824a57aeac929817b",
+                Sha256 = "3629434c55636670bad9df38c7979e24213559261497c846c0aa11e1c9d39bef",
                 Argv0 = "qjs"
             },
             [RUBY_3_4_1] = new()
