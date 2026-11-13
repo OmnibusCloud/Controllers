@@ -179,10 +179,33 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     private VerifyResultData Run(VerifyResolvedRuntime runtime, WasmModule module, VerifyTaskData task, VerifyLimitsData limits, CancellationToken cancellationToken)
     {
-        if (task.Suite is { Cases.Count: > 0 })
-            return VerifySuiteEvaluator.Evaluate(task, (args, stdin) => RunProgram(runtime, module, task, args, stdin, limits), cancellationToken);
+        if (!runtime.Descriptor.SourcesAsRoot)
+            return Run(runtime, module, task, null, limits, cancellationToken);
 
-        var run = RunProgram(runtime, module, task, task.Args, task.Stdin, limits);
+        // The guest's file system is the task's sources (Lua): written once for the task, every
+        // case of a suite reads the same files, removed when the task is done.
+        var problem = VerifyTaskSources.Problem(task);
+        if (problem != null)
+            return Verdict(task.TaskIndex, VerifyVerdict.CompileError, problem);
+
+        var sourceRoot = Path.Combine(m_ioDir, $"{Guid.NewGuid():N}.src");
+        try
+        {
+            VerifyTaskSources.Write(task, sourceRoot);
+            return Run(runtime, module, task, sourceRoot, limits, cancellationToken);
+        }
+        finally
+        {
+            TryDeleteDirectory(sourceRoot);
+        }
+    }
+
+    private VerifyResultData Run(VerifyResolvedRuntime runtime, WasmModule module, VerifyTaskData task, string? sourceRoot, VerifyLimitsData limits, CancellationToken cancellationToken)
+    {
+        if (task.Suite is { Cases.Count: > 0 })
+            return VerifySuiteEvaluator.Evaluate(task, (args, stdin) => RunProgram(runtime, module, task, sourceRoot, args, stdin, limits), cancellationToken);
+
+        var run = RunProgram(runtime, module, task, sourceRoot, task.Args, task.Stdin, limits);
         return new VerifyResultData
         {
             TaskIndex = task.TaskIndex,
@@ -200,7 +223,7 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     /// <summary>One guest invocation in its own store. The heart of the sandbox.</summary>
     private VerifyRunOutcome RunProgram(VerifyResolvedRuntime runtime, WasmModule module, VerifyTaskData task,
-        IReadOnlyList<string> args, string? stdin, VerifyLimitsData limits)
+        string? sourceRoot, IReadOnlyList<string> args, string? stdin, VerifyLimitsData limits)
     {
         var stdoutPath = Path.Combine(m_ioDir, $"{Guid.NewGuid():N}.out");
         var stderrPath = stdoutPath + ".err";
@@ -212,7 +235,7 @@ public sealed class VerifyWasmSandbox : IDisposable
         var storeDisposed = false;
         try
         {
-            store.SetWasiConfiguration(VerifyGuestWiring.Build(runtime, task, args, stdinPath, stdoutPath, stderrPath));
+            store.SetWasiConfiguration(VerifyGuestWiring.Build(runtime, task, args, sourceRoot, stdinPath, stdoutPath, stderrPath));
             store.Fuel = (ulong)Math.Max(1, limits.FuelBudget);
             // The memory cap is per linear memory, so the guest gets one; tables are host
             // memory outside that cap, so their size and number are capped as well.
@@ -391,9 +414,10 @@ public sealed class VerifyWasmSandbox : IDisposable
     private static bool LooksLikeOutOfMemory(string stderr)
     {
         // Python raises MemoryError and Ruby NoMemoryError (the same marker is in its name);
-        // QuickJS-NG prints "out of memory" on allocation failure.
+        // QuickJS-NG prints "out of memory" on allocation failure, Lua "not enough memory".
         return stderr.Contains("MemoryError", StringComparison.Ordinal)
-               || stderr.Contains("out of memory", StringComparison.OrdinalIgnoreCase);
+               || stderr.Contains("out of memory", StringComparison.OrdinalIgnoreCase)
+               || stderr.Contains("not enough memory", StringComparison.Ordinal);
     }
 
     private static (string Text, bool Truncated) ReadCapped(string path, int capBytes)
@@ -429,6 +453,19 @@ public sealed class VerifyWasmSandbox : IDisposable
         catch
         {
             // temp file; best-effort
+        }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+            // a task's sources in the working folder; best-effort, the folder goes on Dispose
         }
     }
 

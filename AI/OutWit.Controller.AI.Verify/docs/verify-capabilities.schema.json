@@ -19,7 +19,7 @@
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string", "description": "The runtime id a task names." },
-          "language": { "type": "string", "enum": ["python", "javascript", "wasi", "ruby", "unknown"] },
+          "language": { "type": "string", "enum": ["python", "javascript", "wasi", "ruby", "lua", "unknown"] },
           "sha256": { "type": "string", "description": "The pinned hash of the runtime module; empty for the raw wasi runtime, whose module comes with each task." },
           "available": { "type": "boolean", "description": "The module is present and passed its hash pin in the host's copy of the controller." }
         }

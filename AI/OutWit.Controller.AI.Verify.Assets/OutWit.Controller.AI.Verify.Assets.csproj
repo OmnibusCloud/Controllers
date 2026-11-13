@@ -23,4 +23,10 @@
     <PackageReference Include="Wasmtime" Version="48.0.2" />
   </ItemGroup>
 
+  <!-- The modules the controller's toolchain builds (toolchain/build.sh; the toolchain job
+       checks the committed copies are what the sources build to), shipped as they are. -->
+  <ItemGroup>
+    <None Include="modules\**" CopyToOutputDirectory="PreserveNewest" LinkBase="modules" />
+  </ItemGroup>
+
 </Project>

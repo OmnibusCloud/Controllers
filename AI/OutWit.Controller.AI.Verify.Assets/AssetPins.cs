@@ -27,6 +27,17 @@ internal static class AssetPins
     /// <summary>The bundled gems a program is given without RubyGems: pure Ruby, their library folders only.</summary>
     public static readonly string[] RUBY_BUNDLED_GEMS = ["base64-0.2.0", "csv-3.3.2", "matrix-0.4.2", "prime-0.1.3"];
 
+    public const string LUA_VERSION = "5.4.8";
+    public const string LUA_RUNTIME_DIR = "lua-5.4.8";
+    public const string LUA_MODULE = "lua.wasm";
+    public const string LUA_LICENSE = "LICENSE-lua.txt";
+
+    /// <summary>
+    /// lua.wasm as the toolchain builds it (modules/lua-5.4.8, next to this tool): not a
+    /// download, but pinned the same way, so a changed module cannot slip into the set.
+    /// </summary>
+    public const string LUA_MODULE_SHA256 = "5b953864a7d270d34c2c7360f90bd5e5d9c2196776d6af185dfb12fd29558baf";
+
     #endregion
 
     #region Pins

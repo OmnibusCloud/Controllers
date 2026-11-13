@@ -23,7 +23,7 @@ What a program has inside the box:
 |---|---|
 | Processor | a fixed budget of instructions, and a time limit of 10 seconds by default (never more than 2 minutes). When either runs out the program is stopped |
 | Memory | 256 MB by default (never more than 2 GB), one block of it. Asking for more fails inside the program |
-| Files | only the language's own library, read-only. It cannot write, change, delete or rename a file, and cannot list a folder |
+| Files | only the language's own library, or the task's own files, read-only. It cannot write, change, delete or rename a file, and cannot list a folder |
 | Your files | none. Your disk does not exist for it |
 | Network | none |
 | Other programs | it cannot start any |

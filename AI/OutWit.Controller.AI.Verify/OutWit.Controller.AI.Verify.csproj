@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Verify</ControllerName>
-    <Version>0.6.1</Version>
+    <Version>0.7.0</Version>
     <Description>Sandboxed, deterministic, resource-metered execution of untrusted programs against specifications (WASM/wasmtime): code-vs-tests verification, code and math corpus generation, formal proof checking — verification by construction on anonymous nodes.</Description>
     <PackageTags>verify;sandbox;wasm;wasmtime;rlvr;code-execution;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>verify-execute</ControllerFeatures>
@@ -77,9 +77,9 @@
       <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="verify-wasm">
-      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.6.0/verify-wasm.zip</Uri>
-      <Sha256>c412f1eba032e2b51bcf51fa5f0748c1781ad12cb2ca5263199bb5208a38afbd</Sha256>
-      <Size>39881979</Size>
+      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.7.0/verify-wasm.zip</Uri>
+      <Sha256>d769d9b3f276e4eb7fdf61cac0079691a8b9ac999781790085848d5ec4aeb4bd</Sha256>
+      <Size>40054884</Size>
       <ExtractTo>wasm/</ExtractTo>
       <PackSource>wasm</PackSource>
       <PackKind>zip-folder</PackKind>

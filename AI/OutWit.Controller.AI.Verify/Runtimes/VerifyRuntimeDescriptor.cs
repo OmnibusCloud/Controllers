@@ -30,6 +30,13 @@ public sealed record VerifyRuntimeDescriptor
     /// </summary>
     public string? RootDir { get; init; }
 
+    /// <summary>
+    /// True when the guest's "/" is the task's own sources: the sandbox writes them as files
+    /// into a fresh folder for the task, preopens it read-only and removes it afterwards, and
+    /// argv names the entry file (Lua). Such a runtime has no <see cref="RootDir"/>.
+    /// </summary>
+    public bool SourcesAsRoot { get; init; }
+
     /// <summary>Lower-case hex SHA-256 of the .wasm module file.</summary>
     public required string Sha256 { get; init; }
 

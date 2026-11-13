@@ -25,6 +25,7 @@ public abstract class VerifySandboxTestBase
     protected VerifyResolvedRuntime PythonSympy { get; private set; } = null!;
     protected VerifyResolvedRuntime QuickJs { get; private set; } = null!;
     protected VerifyResolvedRuntime Ruby { get; private set; } = null!;
+    protected VerifyResolvedRuntime Lua { get; private set; } = null!;
     protected VerifyWasmSandbox Sandbox { get; private set; } = null!;
 
     #endregion
@@ -44,10 +45,11 @@ public abstract class VerifySandboxTestBase
         var sympy = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.PYTHON_3_14_6_SYMPY_1_14_0, out var sympyReason);
         var quickJs = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.QUICKJS_0_15_1, out var jsReason);
         var ruby = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.RUBY_3_4_1, out var rubyReason);
-        if (python == null || sympy == null || quickJs == null || ruby == null)
+        var lua = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.LUA_5_4_8, out var luaReason);
+        if (python == null || sympy == null || quickJs == null || ruby == null || lua == null)
         {
             var reason = $"Pinned runtimes not resolvable under '{RuntimesRoot}' " +
-                         $"(python: {pyReason ?? "ok"}; sympy: {sympyReason ?? "ok"}; quickjs: {jsReason ?? "ok"}; ruby: {rubyReason ?? "ok"}) — " +
+                         $"(python: {pyReason ?? "ok"}; sympy: {sympyReason ?? "ok"}; quickjs: {jsReason ?? "ok"}; ruby: {rubyReason ?? "ok"}; lua: {luaReason ?? "ok"}) — " +
                          "run verify-assets build @Data/runtimes to opt in.";
 
             // The build server builds the set from its pins before the tests: a runtime that
@@ -63,6 +65,7 @@ public abstract class VerifySandboxTestBase
         PythonSympy = sympy!;
         QuickJs = quickJs!;
         Ruby = ruby!;
+        Lua = lua!;
         Sandbox = new VerifyWasmSandbox();
     }
 
@@ -113,6 +116,22 @@ public abstract class VerifySandboxTestBase
             RuntimeId = VerifyRuntimeCatalog.RUBY_3_4_1,
             Sources = [new VerifySourceFileData { Name = "main.rb", Content = code }],
             EntryPoint = "main.rb",
+            Args = args ?? [],
+            Stdin = stdin,
+            Suite = suite,
+            Limits = limits
+        };
+    }
+
+    protected static VerifyTaskData LuaTask(string code, int index = 0, VerifySuiteData? suite = null,
+        List<string>? args = null, string? stdin = null, VerifyLimitsData? limits = null, params VerifySourceFileData[] more)
+    {
+        return new VerifyTaskData
+        {
+            TaskIndex = index,
+            RuntimeId = VerifyRuntimeCatalog.LUA_5_4_8,
+            Sources = [new VerifySourceFileData { Name = "main.lua", Content = code }, .. more],
+            EntryPoint = "main.lua",
             Args = args ?? [],
             Stdin = stdin,
             Suite = suite,

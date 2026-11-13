@@ -5,11 +5,11 @@ using Wasmtime;
 namespace OutWit.Controller.AI.Verify.Sandbox;
 
 /// <summary>
-/// What a guest sees of the world: argv, environment, the read-only runtime root and the
-/// stdio redirects — the WASI configuration of one invocation, built the same way for every
-/// node so a program sees the same world everywhere. The task's own sources travel inline
-/// (or are the module), so no guest file system is writable: the strongest containment
-/// posture, and no state survives a run.
+/// What a guest sees of the world: argv, environment, the read-only root and the stdio
+/// redirects — the WASI configuration of one invocation, built the same way for every node so
+/// a program sees the same world everywhere. The root is the runtime's library, or for Lua the
+/// task's own sources as files; elsewhere the sources travel inline (or are the module). No
+/// guest file system is writable: the strongest containment posture, and no state survives a run.
 /// </summary>
 internal static class VerifyGuestWiring
 {
@@ -27,12 +27,13 @@ internal static class VerifyGuestWiring
     /// <param name="runtime">The resolved runtime.</param>
     /// <param name="task">The task (its entry source and runtime drive argv).</param>
     /// <param name="args">The arguments of this run (the task's, plus the case's for a suite).</param>
+    /// <param name="sourceRoot">The folder holding the task's sources as files when the runtime takes them so (Lua), else null.</param>
     /// <param name="stdinPath">The host file to feed as stdin, or null for none.</param>
     /// <param name="stdoutPath">The host file capturing stdout.</param>
     /// <param name="stderrPath">The host file capturing stderr.</param>
     /// <returns>The configuration to give the store.</returns>
     public static WasiConfiguration Build(VerifyResolvedRuntime runtime, VerifyTaskData task,
-        IReadOnlyList<string> args, string? stdinPath, string stdoutPath, string stderrPath)
+        IReadOnlyList<string> args, string? sourceRoot, string? stdinPath, string stdoutPath, string stderrPath)
     {
         var wasi = new WasiConfiguration().WithArgs(BuildArgv(runtime, task, args));
 
@@ -53,9 +54,17 @@ internal static class VerifyGuestWiring
                 wasi = wasi.WithEnvironmentVariable("PYTHONPATH", pythonPath);
         }
 
-        // The runtime root (the interpreter's library layers), read-only as "/".
-        if (runtime.RootPath != null)
+        // The runtime root (the interpreter's library layers), read-only as "/"; for a runtime
+        // whose file system is the task (Lua), the folder of its sources instead.
+        if (runtime.Descriptor.SourcesAsRoot)
+        {
+            if (sourceRoot != null)
+                wasi = wasi.WithPreopenedDirectory(sourceRoot, GUEST_ROOT, false);
+        }
+        else if (runtime.RootPath != null)
+        {
             wasi = wasi.WithPreopenedDirectory(runtime.RootPath, GUEST_ROOT, false);
+        }
 
         if (stdinPath != null)
             wasi = wasi.WithStandardInput(stdinPath);
@@ -65,7 +74,8 @@ internal static class VerifyGuestWiring
 
     /// <summary>
     /// The guest's argv: the interpreter's inline-source form for Python, JavaScript and
-    /// Ruby, the module's own name for a raw WASI task, then the run's arguments.
+    /// Ruby, the entry file's name for Lua (its sources are files), the module's own name for
+    /// a raw WASI task, then the run's arguments.
     /// </summary>
     /// <param name="runtime">The resolved runtime.</param>
     /// <param name="task">The task.</param>
@@ -107,6 +117,11 @@ internal static class VerifyGuestWiring
                 argv.Add(code);
                 // Everything after "--" is the program's (ARGV), even when it starts with a dash.
                 argv.Add("--");
+                break;
+            case VerifyRuntimeLanguage.Lua:
+                // The entry file is Lua's script: every argument after it is the program's
+                // (arg and ...), even one that starts with a dash. Its name was checked not to.
+                argv.Add(entry?.Name ?? "");
                 break;
             case VerifyRuntimeLanguage.Wasi:
                 // The module is the program: argv[0] is its name, the rest the task's args.

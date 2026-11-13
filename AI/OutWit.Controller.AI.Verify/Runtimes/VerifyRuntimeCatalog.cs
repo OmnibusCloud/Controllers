@@ -29,6 +29,12 @@ public static class VerifyRuntimeCatalog
     /// </summary>
     public const string RUBY_3_4_1 = "ruby-3.4.1";
 
+    /// <summary>
+    /// Lua 5.4.8, the stock interpreter built for WASI by the controller's toolchain (errors
+    /// by an asyncify unwind, no exception handling); the task's sources are its files.
+    /// </summary>
+    public const string LUA_5_4_8 = "lua-5.4.8";
+
     /// <summary>The raw WASI runtime: the task's entry source is the command module itself.</summary>
     public const string WASI = "wasi";
 
@@ -37,6 +43,8 @@ public static class VerifyRuntimeCatalog
 
     private const string RUBY_DIR = "ruby-3.4.1";
     private const string RUBY_GEMS = "/usr/local/lib/ruby/gems/3.4.0/gems/";
+
+    private const string LUA_DIR = "lua-5.4.8";
 
     #endregion
 
@@ -111,6 +119,17 @@ public static class VerifyRuntimeCatalog
                     RUBY_GEMS + "matrix-0.4.2/lib",
                     RUBY_GEMS + "prime-0.1.3/lib"
                 ]
+            },
+            [LUA_5_4_8] = new()
+            {
+                Id = LUA_5_4_8,
+                Language = VerifyRuntimeLanguage.Lua,
+                ModulePath = Path.Combine(LUA_DIR, "lua.wasm"),
+                RootDir = null,
+                // Lua's library is in the module; the guest's file system is the task's sources.
+                SourcesAsRoot = true,
+                Sha256 = "5b953864a7d270d34c2c7360f90bd5e5d9c2196776d6af185dfb12fd29558baf",
+                Argv0 = "lua"
             },
             [WASI] = new()
             {

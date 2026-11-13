@@ -20,5 +20,12 @@ public enum VerifyRuntimeLanguage
     /// Ruby (CRuby for WASI): the entry source runs inline (-e) without RubyGems; the
     /// standard library is a pinned tree of files, the guest's whole read-only file system.
     /// </summary>
-    Ruby = 3
+    Ruby = 3,
+
+    /// <summary>
+    /// Lua (the stock interpreter, built for WASI by the controller's toolchain): the task's
+    /// sources are files in a read-only folder that is the guest's whole file system, and
+    /// the entry file runs as Lua's script, so arg, ... and require of a neighbour work.
+    /// </summary>
+    Lua = 4
 }

@@ -18,6 +18,8 @@ namespace OutWit.Controller.AI.Verify.Assets;
 ///   ruby-3.4.1/ruby.wasm                      Ruby 3.4.1 for WASI (ruby.wasm 2.10.1), unchanged
 ///   ruby-3.4.1/root/usr/local/lib/ruby/...    its standard library and four bundled gems, as files
 ///   ruby-3.4.1/LICENSE-*.txt
+///   lua-5.4.8/lua.wasm                        Lua 5.4.8 for WASI, built by the toolchain (toolchain/build.sh)
+///   lua-5.4.8/LICENSE-lua.txt
 ///   NOTICE.txt                                what, from where, patched how, hashed to what
 ///
 /// The build is reproducible: run it twice and the hashes it prints are the ones the
@@ -116,13 +118,25 @@ internal static class Program
         var rubyTree = TreeHash.Compute(Path.Combine(rubyDir, RubyRuntimeBuilder.TREE_DIR));
         Console.WriteLine($"  {ruby.LibraryFiles} library files, {ruby.GemFiles} files of {AssetPins.RUBY_BUNDLED_GEMS.Length} bundled gems, {rubyTree.Bytes:N0} bytes in the tree");
 
+        Console.WriteLine($"{AssetPins.LUA_RUNTIME_DIR} (Lua {AssetPins.LUA_VERSION}, built by the toolchain)");
+        var luaDir = Path.Combine(outDir, AssetPins.LUA_RUNTIME_DIR);
+        var luaSource = Path.Combine(AppContext.BaseDirectory, "modules", AssetPins.LUA_RUNTIME_DIR);
+        var luaModule = Path.Combine(luaSource, AssetPins.LUA_MODULE);
+        var luaHash = AssetDownloader.Sha256Hex(luaModule);
+        if (!string.Equals(luaHash, AssetPins.LUA_MODULE_SHA256, StringComparison.Ordinal))
+            throw new InvalidOperationException($"{luaModule} is {luaHash}, the pin is {AssetPins.LUA_MODULE_SHA256}");
+        Directory.CreateDirectory(luaDir);
+        File.Copy(luaModule, Path.Combine(luaDir, AssetPins.LUA_MODULE), overwrite: true);
+        File.Copy(Path.Combine(luaSource, AssetPins.LUA_LICENSE), Path.Combine(luaDir, AssetPins.LUA_LICENSE), overwrite: true);
+
         var hashes = new (string Name, string Path)[]
         {
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/python.wasm", Path.Combine(pythonDir, "python.wasm")),
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.STDLIB_ZIP}", Path.Combine(libDir, AssetPins.STDLIB_ZIP)),
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.SYMPY_ZIP}", Path.Combine(libDir, AssetPins.SYMPY_ZIP)),
             (AssetPins.QUICKJS.FileName, Path.Combine(outDir, AssetPins.QUICKJS.FileName)),
-            ($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.MODULE_FILE}", Path.Combine(rubyDir, RubyRuntimeBuilder.MODULE_FILE))
+            ($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.MODULE_FILE}", Path.Combine(rubyDir, RubyRuntimeBuilder.MODULE_FILE)),
+            ($"{AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_MODULE}", Path.Combine(luaDir, AssetPins.LUA_MODULE))
         }.Select(file => (file.Name, Sha256: AssetDownloader.Sha256Hex(file.Path), Bytes: new FileInfo(file.Path).Length)).ToList();
 
         // A folder pinned as a whole: the tree hash, the files' bytes.
@@ -174,6 +188,11 @@ internal static class Program
         text.Append("    over the relative paths and the contents of every file.\n");
         if (ruby.Licences.Count > 0)
             text.Append($"    Licences of the gems: {string.Join(", ", ruby.Licences)}.\n");
+        text.Append($"{AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_MODULE}\n");
+        text.Append($"    Lua {AssetPins.LUA_VERSION} (https://www.lua.org/ftp/lua-{AssetPins.LUA_VERSION}.tar.gz), the stock interpreter built\n");
+        text.Append("    for WASI by the controller's toolchain (wasi-sdk 34, Binaryen 133): Lua's files unchanged, an\n");
+        text.Append("    error unwinds to its protected call by asyncify instead of WebAssembly's exception handling.\n");
+        text.Append($"    Licence: {AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_LICENSE} (MIT).\n");
         text.Append('\n');
         text.Append("SHA-256:\n");
         foreach (var (name, sha256, bytes) in hashes)

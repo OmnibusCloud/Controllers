@@ -7,7 +7,7 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking, and formal proof checking — generation
 and verification are the same activity with different programs.
 
-**Status: 0.6.1 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.7.0 — proven on the test fleet, not yet released to nuget.org.**
 `VerifyRun` returns a byte-identical verdict report for a taskset across runs,
 placements and fleets: a million small tasks gave the same report on six nodes
 (22m41s) and on four (41m35s). Every node executes batches at a bounded degree
@@ -162,7 +162,7 @@ each edge:
 | Memory | one linear memory of 32-bit addresses: 256 MiB by default, 2 GiB at most | the allocator refuses inside the program: `MemoryExceeded` |
 | Tables | 1,048,576 elements a table, eight tables | growth is refused |
 | Output | 256 KiB of stdout and 64 KiB of stderr by default | `OutputExceeded` |
-| Files | the runtime's own library, read-only; a raw `wasi` module has none | writing, truncating, removing and renaming are refused |
+| Files | the runtime's own library, read-only; for Lua the task's own sources, read-only; a raw `wasi` module has none | writing, truncating, removing and renaming are refused |
 | Folder listing | none | "permission denied" |
 | Network, processes, threads | none | the calls do not exist or fail |
 | Clock | the run's own: it starts at one pinned instant and moves only when the program waits | nothing of the host's time is visible |
@@ -229,6 +229,7 @@ one compiled module.
 | `python-3.14.6-sympy-1.14.0` | the same interpreter with sympy 1.14.0 and mpmath 1.4.1 on `PYTHONPATH` | the source, inline |
 | `quickjs-0.15.1` | QuickJS-NG 0.15.1, JavaScript | the source, inline |
 | `ruby-3.4.1` | Ruby 3.4.1 (the ruby.wasm 2.10.1 build) with the standard library and the bundled gems base64, csv, matrix and prime | the source, inline |
+| `lua-5.4.8` | Lua 5.4.8, the stock interpreter with its standard library, built for WASI by this repository's toolchain | the sources as files; the entry is the script |
 | `wasi` | the task's own WASI command module: Rust, C/C++, Zig, TinyGo, anything that targets wasm32-wasi (`_start`, WASI preview 1) | the module's bytes, base64; its name is `argv[0]` |
 
 The Python library code is bytecode layers, one zip each, that CPython's
@@ -263,6 +264,25 @@ sockets, processes (`system` and backticks do nothing). It is a 32-bit build:
 an Integer above 2^30 is a bignum, so arithmetic on large totals costs several
 times more than on a desktop Ruby. A hello costs 154 M fuel and takes 55 MiB.
 
+Lua is built here from lua.org's sources, unchanged, by the asset tool's toolchain
+(`toolchain/build.sh`: wasi-sdk 34 and Binaryen 133, every download pinned, two builds
+give the same bytes; the build server checks that the committed `modules/lua-5.4.8/lua.wasm`
+is what the sources build to). Lua raises an error by a jump to the nearest protected call,
+which WebAssembly can only do with its exception handling, and the sandbox keeps that off
+for every module. So the jump is an asyncify unwind that stops at the protected call and
+is never rewound (`toolchain/lua-asyncify.h`): the module imports WASI alone and holds no
+exception instruction. Lua's own test suite passes as it does with exceptions (27 files of
+30; three fail for reasons of WASI: no locale data, no temporary files, no `PATH`), and the
+deepest unwind stays under half its 256 KiB buffer; both are gates of the toolchain job.
+The cost is about 1.4 times the fuel of a build with exceptions (coroutines are faster);
+a hello costs 0.6 M fuel and takes 1.3 MiB.
+A Lua task's sources are written as files into a fresh folder in the node's working folder,
+which is the guest's whole file system, read-only, and is removed when the task ends; the
+entry runs as Lua's script, so `arg`, `...` and `require` of a neighbour or of `lib/x.lua`
+work. A name must be the same file on every node: `/` between folders, no `.` or `..`, none
+of the characters or names Windows refuses, no two names that differ only in case; anything
+else is the task's `CompileError`.
+
 The raw `wasi` runtime has no module of its own: each task carries one,
 compiled by the lab offline, and the sandbox compiles it on the node (cached by
 content hash within a batch). args, stdin, suite and limits work as for any
@@ -275,7 +295,7 @@ sandbox does not provide) is a `CompileError`, one without `_start` a
 ```
 
 Honest v1 scope: pure Python with the standard library, JavaScript, Ruby
-with its standard library, and compiled WASI modules. No C extensions inside
+with its standard library, Lua, and compiled WASI modules. No C extensions inside
 CPython-WASI yet, no gems beyond the four named.
 
 ## What the module carries
@@ -313,7 +333,7 @@ A patch of the line changes neither an output nor a unit of fuel; a major releas
 change fuel, so the fleet stays on one line. Licences travel inside the asset archives
 (wasmtime: Apache-2.0 WITH LLVM-exception; CPython: PSF; QuickJS-NG: MIT;
 Ruby and its bundled gems: Ruby's own terms or BSD-2-Clause; the ruby.wasm
-port: MIT).
+port: MIT; Lua: MIT).
 
 `VerifySelfCheck.Run()` reports, from inside a loaded module, where the binding
 and the runtimes resolved from and whether one task per runtime ran — the
@@ -324,7 +344,7 @@ can call it as a doctor-style check.
 
 `OutWit.Controller.AI.Verify.Tests`: wire-layout guards, the schema guards,
 the parser at its edges, the sandbox verdict, adversarial, hygiene, raw-WASI,
-Python-layer and Ruby suites, the tree hash, the worker pool (cancellation
+Python-layer, Ruby and Lua suites, the tree hash, the worker pool (cancellation
 included) and the
 benchmark, the taskset, sampling and integrity pipelines, the package format,
 plan, transfer (a link that drops and comes back included) and the share's
