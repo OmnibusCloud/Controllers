@@ -49,6 +49,7 @@ public static class VerifySelfCheck
         (VerifyRuntimeCatalog.QUICKJS_0_15_1, "m.js", "console.log(6*7)"),
         (VerifyRuntimeCatalog.RUBY_3_4_1, "m.rb", "require 'prime'; puts 6*7 if 7.prime?"),
         (VerifyRuntimeCatalog.LUA_5_4_8, "m.lua", "print(select(2, pcall(error, 6*7)))"),
+        (VerifyRuntimeCatalog.TYPESCRIPT_SUCRASE_3_35_1, "m.ts", "const x: number = 6 * 7;\nconsole.log(x);"),
         (VerifyRuntimeCatalog.WASI, "hello.wasm", HELLO_WASM_BASE64)
     ];
 

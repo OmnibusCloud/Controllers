@@ -26,6 +26,7 @@ public abstract class VerifySandboxTestBase
     protected VerifyResolvedRuntime QuickJs { get; private set; } = null!;
     protected VerifyResolvedRuntime Ruby { get; private set; } = null!;
     protected VerifyResolvedRuntime Lua { get; private set; } = null!;
+    protected VerifyResolvedRuntime TypeScript { get; private set; } = null!;
     protected VerifyWasmSandbox Sandbox { get; private set; } = null!;
 
     #endregion
@@ -46,10 +47,11 @@ public abstract class VerifySandboxTestBase
         var quickJs = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.QUICKJS_0_15_1, out var jsReason);
         var ruby = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.RUBY_3_4_1, out var rubyReason);
         var lua = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.LUA_5_4_8, out var luaReason);
-        if (python == null || sympy == null || quickJs == null || ruby == null || lua == null)
+        var typeScript = VerifyRuntimeCatalog.Resolve(RuntimesRoot, VerifyRuntimeCatalog.TYPESCRIPT_SUCRASE_3_35_1, out var tsReason);
+        if (python == null || sympy == null || quickJs == null || ruby == null || lua == null || typeScript == null)
         {
             var reason = $"Pinned runtimes not resolvable under '{RuntimesRoot}' " +
-                         $"(python: {pyReason ?? "ok"}; sympy: {sympyReason ?? "ok"}; quickjs: {jsReason ?? "ok"}; ruby: {rubyReason ?? "ok"}; lua: {luaReason ?? "ok"}) — " +
+                         $"(python: {pyReason ?? "ok"}; sympy: {sympyReason ?? "ok"}; quickjs: {jsReason ?? "ok"}; ruby: {rubyReason ?? "ok"}; lua: {luaReason ?? "ok"}; typescript: {tsReason ?? "ok"}) — " +
                          "run verify-assets build @Data/runtimes to opt in.";
 
             // The build server builds the set from its pins before the tests: a runtime that
@@ -66,6 +68,7 @@ public abstract class VerifySandboxTestBase
         QuickJs = quickJs!;
         Ruby = ruby!;
         Lua = lua!;
+        TypeScript = typeScript!;
         Sandbox = new VerifyWasmSandbox();
     }
 
@@ -116,6 +119,22 @@ public abstract class VerifySandboxTestBase
             RuntimeId = VerifyRuntimeCatalog.RUBY_3_4_1,
             Sources = [new VerifySourceFileData { Name = "main.rb", Content = code }],
             EntryPoint = "main.rb",
+            Args = args ?? [],
+            Stdin = stdin,
+            Suite = suite,
+            Limits = limits
+        };
+    }
+
+    protected static VerifyTaskData TsTask(string code, int index = 0, VerifySuiteData? suite = null,
+        List<string>? args = null, string? stdin = null, VerifyLimitsData? limits = null)
+    {
+        return new VerifyTaskData
+        {
+            TaskIndex = index,
+            RuntimeId = VerifyRuntimeCatalog.TYPESCRIPT_SUCRASE_3_35_1,
+            Sources = [new VerifySourceFileData { Name = "main.ts", Content = code }],
+            EntryPoint = "main.ts",
             Args = args ?? [],
             Stdin = stdin,
             Suite = suite,

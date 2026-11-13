@@ -59,6 +59,22 @@ public sealed class VerifyQuickJsRuntimeTests : VerifySandboxTestBase
     }
 
     [Test]
+    public void ArgumentsReachTheProgramEvenWithALeadingDashTest()
+    {
+        // qjs reads options until "--"; an argument such as "-x" used to end the run with qjs's usage.
+        var task = JsTask("console.log(scriptArgs.length, scriptArgs.join('|'));");
+        task.Args = ["-x", "two words", "--version"];
+
+        var result = Run(QuickJs, task);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Pass), result.Stderr);
+            Assert.That(result.Stdout, Is.EqualTo("3 -x|two words|--version\n"));
+        });
+    }
+
+    [Test]
     public void AnUncaughtEndlessRecursionIsARuntimeErrorTest()
     {
         var result = Run(QuickJs, JsTask("function f(n){ return 1 + f(n + 1); }\nconsole.log('before');\nf(0);\n"));

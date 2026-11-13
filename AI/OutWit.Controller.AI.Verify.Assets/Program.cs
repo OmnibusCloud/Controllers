@@ -20,6 +20,8 @@ namespace OutWit.Controller.AI.Verify.Assets;
 ///   ruby-3.4.1/LICENSE-*.txt
 ///   lua-5.4.8/lua.wasm                        Lua 5.4.8 for WASI, built by the toolchain (toolchain/build.sh)
 ///   lua-5.4.8/LICENSE-lua.txt
+///   typescript-sucrase-3.35.1/sucrase.js      sucrase 3.35.1's transform, bundled by the toolchain (toolchain/typescript)
+///   typescript-sucrase-3.35.1/LICENSE-sucrase.txt
 ///   NOTICE.txt                                what, from where, patched how, hashed to what
 ///
 /// The build is reproducible: run it twice and the hashes it prints are the ones the
@@ -122,6 +124,12 @@ internal static class Program
         CopyBuiltModule(AssetPins.LUA_RUNTIME_DIR, AssetPins.LUA_MODULE, AssetPins.LUA_MODULE_SHA256, Path.Combine(luaDir, AssetPins.LUA_MODULE));
         File.Copy(Path.Combine(AppContext.BaseDirectory, "modules", AssetPins.LUA_RUNTIME_DIR, AssetPins.LUA_LICENSE), Path.Combine(luaDir, AssetPins.LUA_LICENSE), overwrite: true);
 
+        Console.WriteLine($"{AssetPins.TYPESCRIPT_RUNTIME_DIR} (sucrase, bundled by the toolchain)");
+        var typeScriptDir = Path.Combine(outDir, AssetPins.TYPESCRIPT_RUNTIME_DIR);
+        Directory.CreateDirectory(typeScriptDir);
+        CopyBuiltModule(AssetPins.TYPESCRIPT_RUNTIME_DIR, AssetPins.TYPESCRIPT_BUNDLE, AssetPins.TYPESCRIPT_BUNDLE_SHA256, Path.Combine(typeScriptDir, AssetPins.TYPESCRIPT_BUNDLE));
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "modules", AssetPins.TYPESCRIPT_RUNTIME_DIR, AssetPins.TYPESCRIPT_LICENSE), Path.Combine(typeScriptDir, AssetPins.TYPESCRIPT_LICENSE), overwrite: true);
+
         var hashes = new (string Name, string Path)[]
         {
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/python.wasm", Path.Combine(pythonDir, "python.wasm")),
@@ -129,7 +137,8 @@ internal static class Program
             ($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.SYMPY_ZIP}", Path.Combine(libDir, AssetPins.SYMPY_ZIP)),
             (AssetPins.QUICKJS_FILE, Path.Combine(outDir, AssetPins.QUICKJS_FILE)),
             ($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.MODULE_FILE}", Path.Combine(rubyDir, RubyRuntimeBuilder.MODULE_FILE)),
-            ($"{AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_MODULE}", Path.Combine(luaDir, AssetPins.LUA_MODULE))
+            ($"{AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_MODULE}", Path.Combine(luaDir, AssetPins.LUA_MODULE)),
+            ($"{AssetPins.TYPESCRIPT_RUNTIME_DIR}/{AssetPins.TYPESCRIPT_BUNDLE}", Path.Combine(typeScriptDir, AssetPins.TYPESCRIPT_BUNDLE))
         }.Select(file => (file.Name, Sha256: AssetDownloader.Sha256Hex(file.Path), Bytes: new FileInfo(file.Path).Length)).ToList();
 
         // A folder pinned as a whole: the tree hash, the files' bytes.
@@ -203,6 +212,11 @@ internal static class Program
         text.Append("    for WASI by the controller's toolchain (wasi-sdk 34, Binaryen 133): Lua's files unchanged, an\n");
         text.Append("    error unwinds to its protected call by asyncify instead of WebAssembly's exception handling.\n");
         text.Append($"    Licence: {AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_LICENSE} (MIT).\n");
+        text.Append($"{AssetPins.TYPESCRIPT_RUNTIME_DIR}/{AssetPins.TYPESCRIPT_BUNDLE}\n");
+        text.Append("    sucrase 3.35.1's transform with what it needs (lines-and-columns, ts-interface-checker,\n");
+        text.Append("    @jridgewell/*), from npm by the integrity hashes of toolchain/typescript/package-lock.json,\n");
+        text.Append("    bundled for QuickJS by esbuild 0.25.10 (toolchain/typescript/bundle.sh), unchanged otherwise.\n");
+        text.Append($"    Licences: {AssetPins.TYPESCRIPT_RUNTIME_DIR}/{AssetPins.TYPESCRIPT_LICENSE} (MIT; ts-interface-checker Apache-2.0).\n");
         text.Append('\n');
         text.Append("SHA-256:\n");
         foreach (var (name, sha256, bytes) in hashes)

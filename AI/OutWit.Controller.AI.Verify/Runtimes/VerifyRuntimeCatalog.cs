@@ -38,6 +38,12 @@ public static class VerifyRuntimeCatalog
     /// </summary>
     public const string LUA_5_4_8 = "lua-5.4.8";
 
+    /// <summary>
+    /// TypeScript: the JavaScript runtime's QuickJS with sucrase 3.35.1 stripping the types
+    /// (bundled by the controller's toolchain); no type check.
+    /// </summary>
+    public const string TYPESCRIPT_SUCRASE_3_35_1 = "typescript-sucrase-3.35.1";
+
     /// <summary>The raw WASI runtime: the task's entry source is the command module itself.</summary>
     public const string WASI = "wasi";
 
@@ -48,6 +54,10 @@ public static class VerifyRuntimeCatalog
     private const string RUBY_GEMS = "/usr/local/lib/ruby/gems/3.4.0/gems/";
 
     private const string LUA_DIR = "lua-5.4.8";
+
+    private const string QUICKJS_MODULE = "qjs-wasi.wasm";
+    private const string QUICKJS_SHA256 = "3629434c55636670bad9df38c7979e24213559261497c846c0aa11e1c9d39bef";
+    private const string TYPESCRIPT_DIR = "typescript-sucrase-3.35.1";
 
     #endregion
 
@@ -71,6 +81,13 @@ public static class VerifyRuntimeCatalog
     private static readonly VerifyRuntimeTree RUBY_ROOT = new(
         Path.Combine(RUBY_DIR, "root"),
         "8d91587b3961fc4e96bdad55c9d8309ae1b9434551dc1e5f3e885e7ee9b358c7");
+
+    // sucrase's transform bundled by the toolchain (toolchain/typescript), the script QuickJS
+    // loads before a TypeScript task's bootstrap.
+    private static readonly VerifyRuntimeLayer TYPESCRIPT_SUCRASE = new(
+        Path.Combine(TYPESCRIPT_DIR, "sucrase.js"),
+        "3390a6c1f791844cb001ec1686ae712e7b29e5d8283b7a18f688a1bc03e4b506",
+        null);
 
     private static readonly IReadOnlyDictionary<string, VerifyRuntimeDescriptor> s_known =
         new Dictionary<string, VerifyRuntimeDescriptor>(StringComparer.OrdinalIgnoreCase)
@@ -99,10 +116,21 @@ public static class VerifyRuntimeCatalog
             {
                 Id = QUICKJS_0_15_1,
                 Language = VerifyRuntimeLanguage.JavaScript,
-                ModulePath = "qjs-wasi.wasm",
+                ModulePath = QUICKJS_MODULE,
                 RootDir = null,
-                Sha256 = "3629434c55636670bad9df38c7979e24213559261497c846c0aa11e1c9d39bef",
+                Sha256 = QUICKJS_SHA256,
                 Argv0 = "qjs"
+            },
+            [TYPESCRIPT_SUCRASE_3_35_1] = new()
+            {
+                Id = TYPESCRIPT_SUCRASE_3_35_1,
+                Language = VerifyRuntimeLanguage.TypeScript,
+                // The JavaScript runtime's module; the transpiler is a script in the read-only root.
+                ModulePath = QUICKJS_MODULE,
+                RootDir = TYPESCRIPT_DIR,
+                Sha256 = QUICKJS_SHA256,
+                Argv0 = "qjs",
+                Layers = [TYPESCRIPT_SUCRASE]
             },
             [RUBY_3_4_1] = new()
             {

@@ -74,7 +74,8 @@ internal static class VerifyGuestWiring
 
     /// <summary>
     /// The guest's argv: the interpreter's inline-source form for Python, JavaScript and
-    /// Ruby, the entry file's name for Lua (its sources are files), the module's own name for
+    /// Ruby, the transpiler and a bootstrap holding the source for TypeScript, the entry
+    /// file's name for Lua (its sources are files), the module's own name for
     /// a raw WASI task, then the run's arguments.
     /// </summary>
     /// <param name="runtime">The resolved runtime.</param>
@@ -101,6 +102,9 @@ internal static class VerifyGuestWiring
             case VerifyRuntimeLanguage.JavaScript:
                 argv.Add("-e");
                 argv.Add(code);
+                // qjs reads options until "--": without it an argument such as "-x" was taken
+                // for one of its own and the program never ran.
+                argv.Add("--");
                 break;
             case VerifyRuntimeLanguage.Ruby:
                 // No RubyGems: it would scan the guest file system at every start, and a
@@ -116,6 +120,14 @@ internal static class VerifyGuestWiring
                 argv.Add("-e");
                 argv.Add(code);
                 // Everything after "--" is the program's (ARGV), even when it starts with a dash.
+                argv.Add("--");
+                break;
+            case VerifyRuntimeLanguage.TypeScript:
+                // sucrase first, then the bootstrap module that strips the types and runs the source.
+                argv.Add("-I");
+                argv.Add("/sucrase.js");
+                argv.Add("-e");
+                argv.Add(VerifyTypeScriptBootstrap.Build(code, entry?.Name is { Length: > 0 } entryName ? entryName : "main.ts"));
                 argv.Add("--");
                 break;
             case VerifyRuntimeLanguage.Lua:

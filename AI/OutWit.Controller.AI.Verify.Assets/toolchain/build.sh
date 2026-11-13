@@ -7,7 +7,9 @@
 #                 LICENSE-lua.txt beside it
 #   qjs.wasm      QuickJS-NG (its sources, quickjs-wasi.patch, the C stack below the data),
 #                 with LICENSE-quickjs-ng.txt beside it
-#   sum.wasm      the C fixture of the raw-WASI runtime tests
+#   sucrase.js    sucrase's TypeScript transform bundled for QuickJS (typescript/bundle.sh),
+#                 with LICENSE-sucrase.txt beside it
+#   sum.wasm     the C fixture of the raw-WASI runtime tests
 #   words.wasm    the Rust fixture of the raw-WASI runtime tests
 #
 # Usage: build.sh <out-dir> [<work-dir>]
@@ -151,6 +153,13 @@ mkdir -p "$WORK/linked"
 # (The linked file keeps the final name: the linker writes it into the module's name section.)
 "$SDK/bin/llvm-objcopy" --remove-section=producers "$WORK/linked/qjs.wasm" "$OUT/qjs.wasm"
 cp "$QJS/LICENSE" "$OUT/LICENSE-quickjs-ng.txt"
+
+echo "== sucrase.js (the TypeScript runtime's transpiler)"
+# Not a module: a script QuickJS loads before a TypeScript task's bootstrap (-I). sucrase's
+# transform and what it needs, from the packages typescript/package-lock.json pins by their
+# integrity hashes, bundled by esbuild; LICENSE-sucrase.txt carries every bundled package's licence.
+command -v node > /dev/null 2>&1 || { echo "node not found: the TypeScript bundle needs Node.js and npm"; exit 1; }
+bash "$HERE/typescript/bundle.sh" "$OUT" "$WORK"
 
 echo "== sum.wasm (C)"
 "$SDK/bin/clang" --target=wasm32-wasip1 --sysroot="$SDK/share/wasi-sysroot" \

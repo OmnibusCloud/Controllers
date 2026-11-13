@@ -50,7 +50,7 @@ jobs:
           code=$?
           [ "$code" -eq 0 ] || [ "$code" -eq 3 ] || { cat "$RUNNER_TEMP/build2.log"; exit "$code"; }
           set -e
-          for module in "$RUNNER_TEMP"/out/*.wasm "$RUNNER_TEMP"/out/LICENSE-*.txt; do
+          for module in "$RUNNER_TEMP"/out/*.wasm "$RUNNER_TEMP"/out/*.js "$RUNNER_TEMP"/out/LICENSE-*.txt; do
             name="$(basename "$module")"
             if cmp -s "$module" "$RUNNER_TEMP/out2/$name"; then
               echo "same bytes: $name"
@@ -195,6 +195,7 @@ jobs:
           name: verify-toolchain-modules
           path: |
             ${{ runner.temp }}/out/*.wasm
+            ${{ runner.temp }}/out/*.js
             ${{ runner.temp }}/out/LICENSE-*.txt
           if-no-files-found: error
 
@@ -214,13 +215,13 @@ jobs:
             fi
           done
 
-      # lua.wasm and qjs.wasm ship in the runtime set as built here; the asset tool takes them
+      # lua.wasm, qjs.wasm and sucrase.js ship in the runtime set as built here; the asset tool takes them
       # from the repository, so the committed copies must be exactly what these sources build to.
       - name: The committed interpreters are what the toolchain builds
         shell: bash
         run: |
           MODULES=AI/OutWit.Controller.AI.Verify.Assets/modules
-          for item in lua-5.4.8/lua.wasm lua-5.4.8/LICENSE-lua.txt quickjs-0.15.1/qjs.wasm quickjs-0.15.1/LICENSE-quickjs-ng.txt; do
+          for item in lua-5.4.8/lua.wasm lua-5.4.8/LICENSE-lua.txt quickjs-0.15.1/qjs.wasm quickjs-0.15.1/LICENSE-quickjs-ng.txt typescript-sucrase-3.35.1/sucrase.js typescript-sucrase-3.35.1/LICENSE-sucrase.txt; do
             name="$(basename "$item")"
             if cmp -s "$RUNNER_TEMP/out/$name" "$MODULES/$item"; then
               echo "same bytes: $item  $(sha256sum "$MODULES/$item" | cut -d' ' -f1)"

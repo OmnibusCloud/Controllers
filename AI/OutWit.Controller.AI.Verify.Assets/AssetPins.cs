@@ -38,6 +38,13 @@ internal static class AssetPins
     /// <summary>The bundled gems a program is given without RubyGems: pure Ruby, their library folders only.</summary>
     public static readonly string[] RUBY_BUNDLED_GEMS = ["base64-0.2.0", "csv-3.3.2", "matrix-0.4.2", "prime-0.1.3"];
 
+    public const string TYPESCRIPT_RUNTIME_DIR = "typescript-sucrase-3.35.1";
+    public const string TYPESCRIPT_BUNDLE = "sucrase.js";
+    public const string TYPESCRIPT_LICENSE = "LICENSE-sucrase.txt";
+
+    /// <summary>sucrase.js as the toolchain bundles it (modules/typescript-sucrase-3.35.1), pinned like a download.</summary>
+    public const string TYPESCRIPT_BUNDLE_SHA256 = "3390a6c1f791844cb001ec1686ae712e7b29e5d8283b7a18f688a1bc03e4b506";
+
     public const string LUA_VERSION = "5.4.8";
     public const string LUA_RUNTIME_DIR = "lua-5.4.8";
     public const string LUA_MODULE = "lua.wasm";

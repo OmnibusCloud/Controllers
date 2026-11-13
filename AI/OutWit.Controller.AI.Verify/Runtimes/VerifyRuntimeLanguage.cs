@@ -27,5 +27,12 @@ public enum VerifyRuntimeLanguage
     /// sources are files in a read-only folder that is the guest's whole file system, and
     /// the entry file runs as Lua's script, so arg, ... and require of a neighbour work.
     /// </summary>
-    Lua = 4
+    Lua = 4,
+
+    /// <summary>
+    /// TypeScript on the JavaScript runtime's QuickJS: sucrase (loaded first from the read-only
+    /// root) strips the types of the inline source, and the result runs as a JavaScript module.
+    /// No type check; a runtime namespace is not supported.
+    /// </summary>
+    TypeScript = 5
 }

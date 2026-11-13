@@ -7,7 +7,7 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking, and formal proof checking — generation
 and verification are the same activity with different programs.
 
-**Status: 0.8.0 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.9.0 — proven on the test fleet, not yet released to nuget.org.**
 `VerifyRun` returns a byte-identical verdict report for a taskset across runs,
 placements and fleets: a million small tasks gave the same report on six nodes
 (22m41s) and on four (41m35s). Every node executes batches at a bounded degree
@@ -240,6 +240,7 @@ one compiled module.
 | `python-3.14.6` | CPython 3.14.6 (WASI build), pure Python with the standard library | the source, inline |
 | `python-3.14.6-sympy-1.14.0` | the same interpreter with sympy 1.14.0 and mpmath 1.4.1 on `PYTHONPATH` | the source, inline |
 | `quickjs-0.15.1` | QuickJS-NG 0.15.1, JavaScript, built for WASI by this repository's toolchain | the source, inline |
+| `typescript-sucrase-3.35.1` | TypeScript on the same QuickJS: sucrase 3.35.1 strips the types, the JavaScript runs as a module; no type check | the source, inline |
 | `ruby-3.4.1` | Ruby 3.4.1 (the ruby.wasm 2.10.1 build) with the standard library and the bundled gems base64, csv, matrix and prime | the source, inline |
 | `lua-5.4.8` | Lua 5.4.8, the stock interpreter with its standard library, built for WASI by this repository's toolchain | the sources as files; the entry is the script |
 | `wasi` | the task's own WASI command module: Rust, C/C++, Zig, TinyGo, anything that targets wasm32-wasi (`_start`, WASI preview 1) | the module's bytes, base64; its name is `argv[0]` |
@@ -290,6 +291,18 @@ reaches the native stack: the run traps, `RuntimeError`. QuickJS's own tests are
 toolchain job (the five that fail are about Atomics without threads, os functions, workers and
 the `qjs` global, as with the project's build), and the build is the same bytes on any host.
 
+TypeScript runs on the JavaScript runtime's module (one compile serves both) with a read-only
+root that holds sucrase's transform, bundled by the toolchain from the npm packages its lock
+file pins (`toolchain/typescript`: esbuild 0.25.10, 206 KB, the licences of the seven bundled
+packages beside it; the build server rebuilds it and compares the bytes). QuickJS loads it
+first (`-I /sucrase.js`); a small bootstrap module holding the task's source as a JSON string
+strips the types and evaluates the JavaScript as a module, so `import * as std from 'qjs:std'`,
+top-level `await`, `scriptArgs`, stdin and the exit code behave as in a JavaScript task. Enums,
+`const enum`, parameter properties, abstract classes, `#private` fields, `satisfies`, `as
+const` and generics work; a runtime `namespace` does not (sucrase does not emit one) and there
+is no type check. A source that does not parse is a `RuntimeError` whose stderr names the line
+and column. A hello costs 0.33 G fuel, most of it loading the transpiler.
+
 Lua is built here from lua.org's sources, unchanged, by the asset tool's toolchain
 (`toolchain/build.sh`: wasi-sdk 34 and Binaryen 133, every download pinned, two builds
 give the same bytes; the build server checks that the committed `modules/lua-5.4.8/lua.wasm`
@@ -320,8 +333,8 @@ sandbox does not provide) is a `CompileError`, one without `_start` a
 {"runtime":"wasi","entry":"hello.wasm","sources":{"hello.wasm":"AGFzbQEAAAABEANgBH9/f38Bf2ABfwBgAAACZwMWd2FzaV9zbmFwc2hvdF9wcmV2aWV3MQhmZF93cml0ZQAAFndhc2lfc25hcHNob3RfcHJldmlldzEHZmRfcmVhZAAAFndhc2lfc25hcHNob3RfcHJldmlldzEJcHJvY19leGl0AAEDAgECBQMBAAEHEwIGbWVtb3J5AgAGX3N0YXJ0AAMKDwENAEEBQQBBAUEIEAAaCwssAQBBAAsmIAAAAAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABoZWxsbwo="},"suite":[{"expected_stdout":"hello\n"}]}
 ```
 
-Honest v1 scope: pure Python with the standard library, JavaScript, Ruby
-with its standard library, Lua, and compiled WASI modules. No C extensions inside
+Honest scope: pure Python with the standard library, JavaScript, TypeScript
+(types stripped), Ruby with its standard library, Lua, and compiled WASI modules. No C extensions inside
 CPython-WASI yet, no gems beyond the four named.
 
 ## What the module carries
@@ -370,7 +383,7 @@ can call it as a doctor-style check.
 
 `OutWit.Controller.AI.Verify.Tests`: wire-layout guards, the schema guards,
 the parser at its edges, the sandbox verdict, adversarial, hygiene, raw-WASI,
-Python-layer, Ruby and Lua suites, the tree hash, the worker pool (cancellation
+Python-layer, Ruby, Lua, QuickJS and TypeScript suites, the tree hash, the worker pool (cancellation
 included) and the
 benchmark, the taskset, sampling and integrity pipelines, the package format,
 plan, transfer (a link that drops and comes back included) and the share's
