@@ -96,6 +96,72 @@ jobs:
           name: pdf-spike-${{ matrix.os }}
           path: ${{ runner.temp }}/out
 
+  # The wasm route for comparison: pdf-extract (MIT, pure Rust) built for wasm32-wasip1 and run
+  # by the wasmtime command line of the line the Verify sandbox ships (48.0.8, pinned), one
+  # instance per document with fuel and a linear-memory ceiling.
+  wasm:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      SPIKE: AI/OutWit.Controller.AI.Corpus.PdfSpike
+      WASMTIME_URL: https://github.com/bytecodealliance/wasmtime/releases/download/v48.0.8/wasmtime-v48.0.8-x86_64-linux.tar.xz
+      WASMTIME_SHA256: 8716ce7bffa19d893b5b6dc01d8e298b1a81ab75a0455b5a2933156ea34a456e
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build the tool
+        run: dotnet build "$SPIKE/OutWit.Controller.AI.Corpus.PdfSpike.csproj" -c Release -o "$RUNNER_TEMP/tool"
+
+      - name: Build the extractor for wasm32-wasip1
+        run: |
+          rustup toolchain install stable --profile minimal --target wasm32-wasip1
+          rustc +stable -V
+          cargo +stable build --release --target wasm32-wasip1 --manifest-path "$SPIKE/wasm/pdftext/Cargo.toml"
+          mkdir -p "$RUNNER_TEMP/out"
+          cp "$SPIKE/wasm/pdftext/target/wasm32-wasip1/release/pdftext.wasm" "$SPIKE/wasm/pdftext/Cargo.lock" "$RUNNER_TEMP/out/"
+          sha256sum "$RUNNER_TEMP/out/pdftext.wasm"
+          ls -l "$RUNNER_TEMP/out/pdftext.wasm"
+          grep -A2 '^name = ' "$SPIKE/wasm/pdftext/Cargo.lock" | grep -E '^(name|version)' | paste - - | sed 's/name = //;s/version = //'
+
+      - name: wasmtime
+        run: |
+          curl -sSL -o "$RUNNER_TEMP/wasmtime.tar.xz" "$WASMTIME_URL"
+          echo "$WASMTIME_SHA256  $RUNNER_TEMP/wasmtime.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/wasmtime.tar.xz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/wasmtime-v48.0.8-x86_64-linux/wasmtime" compile -W nan-canonicalization=y "$RUNNER_TEMP/out/pdftext.wasm" -o "$RUNNER_TEMP/pdftext.cwasm"
+
+      - name: Cache the Common Crawl PDFs
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/cc
+          key: pdf-spike-cc-${{ hashFiles('AI/OutWit.Controller.AI.Corpus.PdfSpike/cc-pdfs.json') }}
+
+      - name: Run
+        run: |
+          tool="dotnet $RUNNER_TEMP/tool/pdf-spike.dll"
+          wt="$RUNNER_TEMP/wasmtime-v48.0.8-x86_64-linux/wasmtime"
+          out="$RUNNER_TEMP/out"
+          $tool fetch-cc "$SPIKE/cc-pdfs.json" "$RUNNER_TEMP/cc"
+          $tool salvage "$SPIKE/cc-pdfs.json" "$RUNNER_TEMP/cc" "$RUNNER_TEMP/salvaged"
+          $tool gen-hostile "$RUNNER_TEMP/hostile"
+          for set in cc salvaged hostile; do
+            $tool batch-wasm "$wt" "$RUNNER_TEMP/pdftext.cwasm" "$RUNNER_TEMP/$set" "$out/$set-wasm.jsonl" --fuel 20000000000 --wasm-mem-mb 1024 --timeout-s 120 --mem-mb 3072 --texts "$out/texts-$set" 2> "$out/$set-wasm.log"
+            tail -45 "$out/$set-wasm.log"
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wasm-route
+          path: ${{ runner.temp }}/out
+
   compare:
     needs: measure
     if: always()
@@ -105,6 +171,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+          pattern: pdf-spike-*
       - name: Compare
         run: |
           python3 -I AI/OutWit.Controller.AI.Corpus.PdfSpike/compare.py artifacts | tee -a "$GITHUB_STEP_SUMMARY"
