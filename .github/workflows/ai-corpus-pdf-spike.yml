@@ -119,23 +119,30 @@ jobs:
       - name: Build the tool
         run: dotnet build "$SPIKE/OutWit.Controller.AI.Corpus.PdfSpike.csproj" -c Release -o "$RUNNER_TEMP/tool"
 
-      - name: Build the extractor for wasm32-wasip1
+      - name: Build the extractors for wasm32-wasip1
         run: |
           rustup toolchain install stable --profile minimal --target wasm32-wasip1
           rustc +stable -V
-          cargo +stable build --release --target wasm32-wasip1 --manifest-path "$SPIKE/wasm/pdftext/Cargo.toml"
           mkdir -p "$RUNNER_TEMP/out"
-          cp "$SPIKE/wasm/pdftext/target/wasm32-wasip1/release/pdftext.wasm" "$SPIKE/wasm/pdftext/Cargo.lock" "$RUNNER_TEMP/out/"
-          sha256sum "$RUNNER_TEMP/out/pdftext.wasm"
-          ls -l "$RUNNER_TEMP/out/pdftext.wasm"
-          grep -A2 '^name = ' "$SPIKE/wasm/pdftext/Cargo.lock" | grep -E '^(name|version)' | paste - - | sed 's/name = //;s/version = //'
+          for crate in pdftext pdftext-oxide; do
+            if cargo +stable build --release --target wasm32-wasip1 --manifest-path "$SPIKE/wasm/$crate/Cargo.toml"; then
+              cp "$SPIKE/wasm/$crate/target/wasm32-wasip1/release/$crate.wasm" "$RUNNER_TEMP/out/"
+              cp "$SPIKE/wasm/$crate/Cargo.lock" "$RUNNER_TEMP/out/$crate.Cargo.lock"
+              sha256sum "$RUNNER_TEMP/out/$crate.wasm"
+              ls -l "$RUNNER_TEMP/out/$crate.wasm"
+            else
+              echo "::warning::$crate did not build for wasm32-wasip1"
+            fi
+          done
 
       - name: wasmtime
         run: |
           curl -sSL -o "$RUNNER_TEMP/wasmtime.tar.xz" "$WASMTIME_URL"
           echo "$WASMTIME_SHA256  $RUNNER_TEMP/wasmtime.tar.xz" | sha256sum -c -
           tar -xJf "$RUNNER_TEMP/wasmtime.tar.xz" -C "$RUNNER_TEMP"
-          "$RUNNER_TEMP/wasmtime-v48.0.8-x86_64-linux/wasmtime" compile -W fuel=1 -W nan-canonicalization=y "$RUNNER_TEMP/out/pdftext.wasm" -o "$RUNNER_TEMP/pdftext.cwasm"
+          for module in "$RUNNER_TEMP"/out/*.wasm; do
+            "$RUNNER_TEMP/wasmtime-v48.0.8-x86_64-linux/wasmtime" compile -W fuel=1 -W nan-canonicalization=y "$module" -o "$RUNNER_TEMP/$(basename "$module" .wasm).cwasm"
+          done
 
       - name: Cache the Common Crawl PDFs
         uses: actions/cache@v4
@@ -151,9 +158,12 @@ jobs:
           $tool fetch-cc "$SPIKE/cc-pdfs.json" "$RUNNER_TEMP/cc"
           $tool salvage "$SPIKE/cc-pdfs.json" "$RUNNER_TEMP/cc" "$RUNNER_TEMP/salvaged"
           $tool gen-hostile "$RUNNER_TEMP/hostile"
-          for set in cc salvaged hostile; do
-            $tool batch-wasm "$wt" "$RUNNER_TEMP/pdftext.cwasm" "$RUNNER_TEMP/$set" "$out/$set-wasm.jsonl" --fuel 20000000000 --wasm-mem-mb 1024 --timeout-s 120 --mem-mb 3072 --texts "$out/texts-$set" 2> "$out/$set-wasm.log"
-            tail -45 "$out/$set-wasm.log"
+          for module in "$RUNNER_TEMP"/*.cwasm; do
+            name="wasm-$(basename "$module" .cwasm)"
+            for set in cc salvaged hostile; do
+              $tool batch-wasm "$wt" "$module" "$RUNNER_TEMP/$set" "$out/$set-$name.jsonl" --name "$name" --fuel 20000000000 --wasm-mem-mb 1024 --timeout-s 120 --mem-mb 3072 --texts "$out/texts-$set-$name" 2> "$out/$set-$name.log"
+              tail -45 "$out/$set-$name.log"
+            done
           done
 
       - uses: actions/upload-artifact@v4

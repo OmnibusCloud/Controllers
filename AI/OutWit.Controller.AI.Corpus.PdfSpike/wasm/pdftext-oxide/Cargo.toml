@@ -1,0 +1,16 @@
+[package]
+name = "pdftext-oxide"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "The PDF spike's wasm32-wasip1 extractor: pdf_oxide over one file, text out."
+license = "MIT"
+
+[dependencies]
+pdf_oxide = { version = "=0.3.78", default-features = false }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

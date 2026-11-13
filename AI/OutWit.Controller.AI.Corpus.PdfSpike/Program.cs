@@ -13,7 +13,7 @@ namespace OutWit.Controller.AI.Corpus.PdfSpike;
 /// pdf-spike fetch-cc &lt;cc-pdfs.json&gt; &lt;dir&gt;
 /// pdf-spike salvage &lt;cc-pdfs.json&gt; &lt;dir&gt; &lt;out-dir&gt;   (the documents the list marks truncated)
 /// pdf-spike batch &lt;engine&gt; &lt;dir&gt; &lt;out.jsonl&gt; [--timeout-s N] [--mem-mb N] [--max-pages N] [--stack BYTES] [--texts DIR] [--culture NAME]
-/// pdf-spike batch-wasm &lt;wasmtime&gt; &lt;pdftext.cwasm&gt; &lt;dir&gt; &lt;out.jsonl&gt; [--fuel N] [--wasm-mem-mb N] [--timeout-s N] [--mem-mb N] [--texts DIR]
+/// pdf-spike batch-wasm &lt;wasmtime&gt; &lt;pdftext.cwasm&gt; &lt;dir&gt; &lt;out.jsonl&gt; [--fuel N] [--wasm-mem-mb N] [--timeout-s N] [--mem-mb N] [--texts DIR] [--name NAME]
 /// pdf-spike inproc &lt;engine&gt; &lt;dir&gt; &lt;out.jsonl&gt; [--max-pages N]
 /// pdf-spike run-one &lt;engine&gt; &lt;file&gt; [--max-pages N] [--stack BYTES] [--text PATH] [--culture NAME]
 /// Engines: pdfpig, pdfpig-budget, pdflibrary.
@@ -60,7 +60,7 @@ public static class Program
             {
                 var route = new PdfWasmRoute(args[1], args[2], long.Parse(OptionText(args, "--fuel") ?? "200000000000", CultureInfo.InvariantCulture), (long)Option(args, "--wasm-mem-mb", 1024) << 20);
                 var runner = new PdfBatchRunner(
-                    "wasm",
+                    OptionText(args, "--name") ?? "wasm",
                     TimeSpan.FromSeconds(Option(args, "--timeout-s", 60)),
                     (long)Option(args, "--mem-mb", 4096) << 20,
                     0,
