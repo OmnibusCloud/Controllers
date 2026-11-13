@@ -9,7 +9,7 @@ ranlib = '@SDK@/bin/llvm-ranlib'
 strip = '@SDK@/bin/llvm-strip'
 nm = '@SDK@/bin/llvm-nm'
 python = '@HERE@/python-wasi-cross'
-cython = '@TOOLS@/cython'
+cython = '@TOOLS@/bin/cython'
 # No BLAS from the build host: numpy's own lapack_lite is the linear algebra.
 pkg-config = '/bin/false'
 cmake = '/bin/false'

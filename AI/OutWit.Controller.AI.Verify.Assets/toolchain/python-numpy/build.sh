@@ -89,7 +89,8 @@ if [ ! -x "$WASMTIME_DIR/wasmtime" ]; then
 fi
 WASMTIME="$WASMTIME_DIR/wasmtime"
 "$WASMTIME" --version
-# Cython and ninja from their wheels, unpacked (no installer): Cython is pure Python, run by the
+# Cython and ninja from their wheels, unpacked (no installer), on PATH (meson looks Cython up there
+# whatever the cross file says): Cython is pure Python, run by the
 # build host's Python; ninja is one binary.
 TOOLS="$WORK/tools"
 rm -rf "$TOOLS"
@@ -98,10 +99,10 @@ python3 -I -m zipfile -e "$WORK/$(basename "$CYTHON_URL")" "$TOOLS/cython-pkg"
 python3 -I -m zipfile -e "$WORK/$(basename "$NINJA_URL")" "$TOOLS/ninja-pkg"
 chmod +x "$TOOLS/ninja-pkg/ninja-1.13.2.data/scripts/ninja"
 ln -s "$TOOLS/ninja-pkg/ninja-1.13.2.data/scripts/ninja" "$TOOLS/bin/ninja"
-printf '#!/bin/sh\nexec python3 -s "%s/cython-pkg/cython.py" "$@"\n' "$TOOLS" > "$TOOLS/cython"
-chmod +x "$TOOLS/cython"
+printf '#!/bin/sh\nexec python3 -s "%s/cython-pkg/cython.py" "$@"\n' "$TOOLS" > "$TOOLS/bin/cython"
+chmod +x "$TOOLS/bin/cython"
 export PATH="$TOOLS/bin:$WASMTIME_DIR:$PATH"
-"$TOOLS/cython" --version
+cython --version
 ninja --version
 python3 --version
 
