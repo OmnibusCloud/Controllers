@@ -45,12 +45,12 @@ jobs:
         run: |
           set +e
           mkdir -p "$RUNNER_TEMP/work2"
-          cp "$RUNNER_TEMP/work/wasi-sdk.tar.gz" "$RUNNER_TEMP/work/lua.tar.gz" "$RUNNER_TEMP/work/binaryen.tar.gz" "$RUNNER_TEMP/work2/"
+          cp "$RUNNER_TEMP/work/wasi-sdk.tar.gz" "$RUNNER_TEMP/work/lua.tar.gz" "$RUNNER_TEMP/work/binaryen.tar.gz" "$RUNNER_TEMP/work/quickjs.tar.gz" "$RUNNER_TEMP/work2/"
           bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out2" "$RUNNER_TEMP/work2" > "$RUNNER_TEMP/build2.log" 2>&1
           code=$?
           [ "$code" -eq 0 ] || [ "$code" -eq 3 ] || { cat "$RUNNER_TEMP/build2.log"; exit "$code"; }
           set -e
-          for module in "$RUNNER_TEMP"/out/*.wasm "$RUNNER_TEMP"/out/LICENSE-lua.txt; do
+          for module in "$RUNNER_TEMP"/out/*.wasm "$RUNNER_TEMP"/out/LICENSE-*.txt; do
             name="$(basename "$module")"
             if cmp -s "$module" "$RUNNER_TEMP/out2/$name"; then
               echo "same bytes: $name"
@@ -120,12 +120,13 @@ jobs:
               print(path.split("/")[-1], len(data), "bytes; sections", sections)
               print("  imports:", ", ".join(imports))
               print("  exception tag section (13):", 13 in sections)
-              # lua.wasm raises its errors by an asyncify unwind: WASI imports only (Binaryen
-              # connects the asyncify ones inside), and nothing of exception handling.
-              if path.endswith("/lua.wasm"):
+              # The interpreters the runtime set ships run in the sandbox as they are: WASI
+              # imports only (lua.wasm's asyncify ones are connected inside by Binaryen), and
+              # nothing of exception handling.
+              if path.endswith("/lua.wasm") or path.endswith("/qjs.wasm"):
                   foreign = [name for name in imports if not name.startswith("wasi_snapshot_preview1.")]
                   if foreign or 13 in sections:
-                      print("::error::lua.wasm imports", foreign, "or has an exception tag section")
+                      print("::error::" + path.split("/")[-1], "imports", foreign, "or has an exception tag section")
                       sys.exit(1)
           EOF
 
@@ -184,7 +185,7 @@ jobs:
           fi
           exit 0
 
-      - name: Lua's own test suite and the depth of an unwind
+      - name: The test suites of Lua and QuickJS, the depth of an unwind, recursion
         shell: bash
         run: bash "$TOOLCHAIN/gates.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/work" "$RUNNER_TEMP/wasmtime/wasmtime"
 
@@ -194,7 +195,7 @@ jobs:
           name: verify-toolchain-modules
           path: |
             ${{ runner.temp }}/out/*.wasm
-            ${{ runner.temp }}/out/LICENSE-lua.txt
+            ${{ runner.temp }}/out/LICENSE-*.txt
           if-no-files-found: error
 
       # The C and Rust fixtures live in the repository as files (the sandbox tests read them
@@ -213,17 +214,18 @@ jobs:
             fi
           done
 
-      # lua.wasm ships in the runtime set as built here; the asset tool takes it from the
-      # repository, so the committed copy must be exactly what these sources build to.
-      - name: The committed Lua module is what the toolchain builds
+      # lua.wasm and qjs.wasm ship in the runtime set as built here; the asset tool takes them
+      # from the repository, so the committed copies must be exactly what these sources build to.
+      - name: The committed interpreters are what the toolchain builds
         shell: bash
         run: |
-          MODULES=AI/OutWit.Controller.AI.Verify.Assets/modules/lua-5.4.8
-          for name in lua.wasm LICENSE-lua.txt; do
-            if cmp -s "$RUNNER_TEMP/out/$name" "$MODULES/$name"; then
-              echo "same bytes: $name  $(sha256sum "$MODULES/$name" | cut -d' ' -f1)"
+          MODULES=AI/OutWit.Controller.AI.Verify.Assets/modules
+          for item in lua-5.4.8/lua.wasm lua-5.4.8/LICENSE-lua.txt quickjs-0.15.1/qjs.wasm quickjs-0.15.1/LICENSE-quickjs-ng.txt; do
+            name="$(basename "$item")"
+            if cmp -s "$RUNNER_TEMP/out/$name" "$MODULES/$item"; then
+              echo "same bytes: $item  $(sha256sum "$MODULES/$item" | cut -d' ' -f1)"
             else
-              echo "::error::$MODULES/$name is not what the toolchain builds ($(sha256sum "$RUNNER_TEMP/out/$name" | cut -d' ' -f1))"
+              echo "::error::$MODULES/$item is not what the toolchain builds ($(sha256sum "$RUNNER_TEMP/out/$name" | cut -d' ' -f1))"
               exit 1
             fi
           done

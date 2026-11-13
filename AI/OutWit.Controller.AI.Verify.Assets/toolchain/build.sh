@@ -5,6 +5,8 @@
 #   lua.wasm      the stock Lua interpreter (lua.org sources unchanged, lua-wasi.h and
 #                 lua-asyncify.h in front of each file, errors by an asyncify unwind), with
 #                 LICENSE-lua.txt beside it
+#   qjs.wasm      QuickJS-NG (its sources, quickjs-wasi.patch, the C stack below the data),
+#                 with LICENSE-quickjs-ng.txt beside it
 #   sum.wasm      the C fixture of the raw-WASI runtime tests
 #   words.wasm    the Rust fixture of the raw-WASI runtime tests
 #
@@ -49,6 +51,7 @@ echo "== downloads"
 fetch "$WASI_SDK_URL" "$WASI_SDK_SHA256" "$WORK/wasi-sdk.tar.gz"
 fetch "$LUA_URL" "$LUA_SHA256" "$WORK/lua.tar.gz" "$LUA_MIRROR_URL"
 fetch "$BINARYEN_URL" "$BINARYEN_SHA256" "$WORK/binaryen.tar.gz"
+fetch "$QUICKJS_URL" "$QUICKJS_SHA256" "$WORK/quickjs.tar.gz"
 
 SDK="$WORK/wasi-sdk"
 if [ ! -x "$SDK/bin/clang" ]; then
@@ -119,6 +122,30 @@ sed -n '/^\* Copyright (C) 1994/,/SOFTWARE OR THE USE OR OTHER DEALINGS/p' "$LUA
 mkdir -p "$WORK/gates"
 lua_raw "$WORK/gates/lua-stats.raw.wasm" -DLUA_ASYNCIFY_STATS
 "$BINARYEN/bin/wasm-opt" "$WORK/gates/lua-stats.raw.wasm" "${ASYNCIFY[@]}" -o "$WORK/gates/lua-stats.wasm"
+
+echo "== qjs.wasm (QuickJS-NG $QUICKJS_VERSION)"
+# The command line and the engine, QuickJS-NG's files with one patch (quickjs-wasi.patch: the
+# stack limit back on, at 128 KiB). The C stack is 1 MiB below the data (--stack-first), so an
+# overflow traps at address 0 instead of writing over the data. With 128 KiB a recursion too
+# deep is JavaScript's RangeError before the engine's own native stack (512 KiB) runs out, for
+# plain recursion (about 300 levels) and through native callbacks (map: about 100); measured on
+# x86-64 and checked on every platform by the Verify tests.
+QJS="$WORK/quickjs-$QUICKJS_VERSION"
+rm -rf "$QJS"
+tar -xzf "$WORK/quickjs.tar.gz" -C "$WORK"
+( cd "$QJS" && patch -p1 --no-backup-if-mismatch -s < "$HERE/quickjs-wasi.patch" )
+(
+  cd "$QJS"
+  "$SDK/bin/clang" --target=wasm32-wasip1 --sysroot="$SDK/share/wasi-sysroot" \
+    -O2 -D_GNU_SOURCE -D_WASI_EMULATED_PROCESS_CLOCKS -D_WASI_EMULATED_SIGNAL \
+    -DJS_WASI_STACK_SIZE=131072 -Wno-unknown-pragmas \
+    -ffile-prefix-map="$WORK"=. \
+    dtoa.c libregexp.c libunicode.c quickjs.c quickjs-libc.c qjs.c gen/repl.c gen/standalone.c \
+    -lwasi-emulated-process-clocks -lwasi-emulated-signal -lm \
+    -Wl,--stack-first -Wl,-z,stack-size=1048576 -Wl,--strip-debug \
+    -o "$OUT/qjs.wasm"
+)
+cp "$QJS/LICENSE" "$OUT/LICENSE-quickjs-ng.txt"
 
 echo "== sum.wasm (C)"
 "$SDK/bin/clang" --target=wasm32-wasip1 --sysroot="$SDK/share/wasi-sysroot" \

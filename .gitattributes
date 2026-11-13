@@ -14,3 +14,5 @@ OpenFOAM/**/Fixtures/** text eol=lf
 *.wasm binary
 # Modules the Verify runtime set ships as built (lua.wasm and its licence): bytes, pinned by hash
 AI/OutWit.Controller.AI.Verify.Assets/modules/** -text
+# Patches the toolchain applies to pinned sources: LF, whatever the checkout OS
+*.patch text eol=lf
