@@ -13,6 +13,8 @@ on:
   push:
     paths:
       - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/**'
+      # The numpy runtime has a workflow of its own (ai-verify-python-numpy.yml).
+      - '!AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/**'
       - 'AI/OutWit.Controller.AI.Verify.Assets/modules/**'
       - 'AI/OutWit.Controller.AI.Verify.Tests/Sandbox/Fixtures/**'
       - '.github/workflows/ai-verify-toolchain.yml'
