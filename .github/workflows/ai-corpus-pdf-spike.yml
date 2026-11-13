@@ -135,7 +135,7 @@ jobs:
           curl -sSL -o "$RUNNER_TEMP/wasmtime.tar.xz" "$WASMTIME_URL"
           echo "$WASMTIME_SHA256  $RUNNER_TEMP/wasmtime.tar.xz" | sha256sum -c -
           tar -xJf "$RUNNER_TEMP/wasmtime.tar.xz" -C "$RUNNER_TEMP"
-          "$RUNNER_TEMP/wasmtime-v48.0.8-x86_64-linux/wasmtime" compile -W nan-canonicalization=y "$RUNNER_TEMP/out/pdftext.wasm" -o "$RUNNER_TEMP/pdftext.cwasm"
+          "$RUNNER_TEMP/wasmtime-v48.0.8-x86_64-linux/wasmtime" compile -W fuel=1 -W nan-canonicalization=y "$RUNNER_TEMP/out/pdftext.wasm" -o "$RUNNER_TEMP/pdftext.cwasm"
 
       - name: Cache the Common Crawl PDFs
         uses: actions/cache@v4
