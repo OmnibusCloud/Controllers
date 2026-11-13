@@ -165,7 +165,8 @@ each edge:
 | Processor | fuel, one unit an instruction: 50e9 by default, 2e12 at most | `Timeout` |
 | Wall time | 10 s by default, 120 s at most | `Timeout` |
 | Memory | one linear memory of 32-bit addresses: 256 MiB by default, 2 GiB at most | the allocator refuses inside the program: `MemoryExceeded`; an access outside the memory is a crash: `RuntimeError` |
-| Call stack | 2 MiB of the engine's native stack (the default is 512 KiB), on threads made to hold it | `RuntimeError`, `wasm trap: call stack exhausted`; the interpreters stop a deep recursion themselves before that |
+| Call stack | 8 MiB of the engine's native stack, as on Linux (the engine's default is 512 KiB), on threads made to hold it | `RuntimeError`, `wasm trap: call stack exhausted`; the interpreters stop a deep recursion themselves before that |
+| Traps | every trap (an unreachable, an access outside the memory, a division by zero, a stack overflow) is an explicit check, not a hardware fault | the host stays up: a process with hardware-enforced stack protection (CET, on by default for .NET 9+ executables on Windows) is not killed by a guest's trap |
 | Tables | 1,048,576 elements a table, eight tables | growth is refused |
 | Output | 256 KiB of stdout and 64 KiB of stderr by default | `OutputExceeded` |
 | Files | the runtime's own library, read-only; for Lua the task's own sources, read-only; a raw `wasi` module and a C/C++ program have none | writing, truncating, removing and renaming are refused |
@@ -385,10 +386,10 @@ What a C or C++ author should know about the target. It is 32-bit: `int`, `long`
 pointers are 32 bits, `long long` is 64, so `long` arithmetic that fits on a desktop may
 overflow here. The program's stack is 8 MiB, as on Linux (a local array of a million ints
 fits), placed below the data, so an overflow leaves the memory and traps instead of writing
-over the globals. A recursion also uses the engine's call stack, 2 MiB: a small recursive
-function reaches about 25,000 to 40,000 levels (the frame decides, and a little the
-platform), so a depth-first walk of a 100,000-node chain must be written with an explicit
-stack. Crashes are `RuntimeError` with the trap named on stderr when the program said nothing
+over the globals. A recursion also uses the engine's call stack, 8 MiB as well: a small
+recursive function reaches about 100,000 to 160,000 levels (the frame decides, and a little
+the platform), so a depth-first walk of a 100,000-node chain runs, and one of a million must
+be written with an explicit stack. Crashes are `RuntimeError` with the trap named on stderr when the program said nothing
 (`wasm trap: out of bounds memory access` for a wild pointer or an overflowed stack,
 `wasm trap: unreachable code reached` for `abort` and a failed `assert`), and `new` past the
 memory cap is `MemoryExceeded` (libc++ says `bad_alloc` and aborts). A write through a null

@@ -18,6 +18,9 @@
                       ReferenceOutputAssembly="false" Private="false" />
     <ProjectReference Include="..\..\Special\OutWit.Controller.Special\OutWit.Controller.Special.csproj"
                       ReferenceOutputAssembly="false" Private="false" />
+    <!-- A host executable built as host applications are (VerifyHostProtectionTests). -->
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify.Tests.TrapHost\OutWit.Controller.AI.Verify.Tests.TrapHost.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
   <ItemGroup>

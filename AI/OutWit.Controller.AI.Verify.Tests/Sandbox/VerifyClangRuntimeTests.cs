@@ -238,17 +238,18 @@ public sealed class VerifyClangRuntimeTests : VerifySandboxTestBase
     }
 
     [Test]
-    public void ARecursionTenThousandDeepRunsTest()
+    public void ARecursionFiftyThousandDeepRunsTest()
     {
         // A depth-first walk down a chain: work after the call keeps it a recursion at -O2. The
-        // engine's 512 KiB default ended it near ten thousand levels; the sandbox gives 2 MiB.
+        // engine's 512 KiB default ended it near ten thousand levels; the sandbox gives 8 MiB, as
+        // Linux does (a hundred thousand levels on Windows x64; fifty leaves room for other CPUs).
         const string program =
             "#include <stdio.h>\n#include <stdlib.h>\n" +
             "static int next[100000]; static volatile long long order;\n" +
             "static void dfs(int v, int d) { if (next[v] >= 0) dfs(next[v], d + 1); order = order * 7 + d; }\n" +
             "int main(int argc, char** argv) { int n = atoi(argv[1]); for (int i = 0; i < n; i++) next[i] = i + 1 < n ? i + 1 : -1; dfs(0, 0); printf(\"%lld\\n\", order); return 0; }\n";
         var task = CTask(program);
-        task.Args = ["10000"];
+        task.Args = ["50000"];
 
         var result = Run(Clang, task);
 

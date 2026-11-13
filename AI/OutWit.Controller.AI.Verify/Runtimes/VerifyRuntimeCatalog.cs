@@ -231,7 +231,7 @@ public static class VerifyRuntimeCatalog
                 [
                     "C++ without exceptions: try and throw are a compile error.",
                     "A 32-bit target: int, long and pointers are 32 bits, long long is 64.",
-                    "A recursion reaches about 25,000 to 40,000 levels (the engine's 2 MiB stack)."
+                    "A recursion reaches about 100,000 to 160,000 levels (the engine's 8 MiB stack, as on Linux)."
                 ]
             },
             [WASI] = new()

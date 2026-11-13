@@ -50,6 +50,7 @@ public sealed class VerifyWasmSandbox : IDisposable
     private readonly WasmEngine m_engine;
     private readonly Timer m_epochTimer;
     private readonly string m_ioDir;
+    private readonly bool m_explicitTraps;
     private readonly object m_modulesLock = new();
     private readonly Dictionary<string, WasmModule> m_modules = new();
     private readonly VerifyTaskModuleCache m_taskModules;
@@ -87,7 +88,7 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// </param>
     public VerifyWasmSandbox(string? ioDirectory)
     {
-        m_engine = new WasmEngine(CreateConfig());
+        m_engine = new WasmEngine(CreateConfig(out m_explicitTraps));
 
         // One timer thread advances the epoch for every store; per-store deadlines
         // (SetEpochDeadline) convert a wall-time budget into a tick count.
@@ -109,12 +110,14 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// no shared memory, no GC heap, no exceptions (on by default since wasmtime 47, the
     /// subject of four advisories since; no runtime of the catalog uses them), no components;
     /// relaxed SIMD in its deterministic mode, so a module that uses it computes the same
-    /// bits on every CPU. A guest may use 2 MiB of the native call stack, four times the
-    /// engine's default; every run is on a thread that holds it (<see cref="VerifyGuestThread"/>).
+    /// bits on every CPU. A guest may use 8 MiB of the native call stack, as a program does on
+    /// Linux; every run is on a thread that holds it (<see cref="VerifyGuestThread"/>). Traps are
+    /// explicit checks, not hardware faults, so a host process with hardware-enforced stack
+    /// protection survives a guest's trap (<see cref="VerifyEngineNative"/>).
     /// </summary>
-    private static Config CreateConfig()
+    private static Config CreateConfig(out bool explicitTraps)
     {
-        return new Config()
+        var config = new Config()
             .WithMaximumStackSize(VerifyGuestThread.ENGINE_STACK_BYTES)
             .WithFuelConsumption(true)
             .WithEpochInterruption(true)
@@ -126,6 +129,9 @@ public sealed class VerifyWasmSandbox : IDisposable
             .WithExceptions(false)
             .WithComponentModel(false)
             .WithRelaxedSIMD(true, true);
+
+        explicitTraps = VerifyEngineNative.Apply(config);
+        return config;
     }
 
     #endregion
@@ -584,6 +590,12 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     /// <summary>The folder the stdio redirects of running tasks live in; empty between runs, gone after Dispose.</summary>
     public string IoDirectory => m_ioDir;
+
+    /// <summary>
+    /// Whether a guest's traps are explicit checks in this process: true where the host enforces
+    /// hardware stack protection (a hardware trap could not be resumed from), false elsewhere.
+    /// </summary>
+    public bool ExplicitTraps => m_explicitTraps;
 
     /// <summary>Compiled task-supplied modules held right now (bounded by <see cref="TaskModuleCacheCapacity"/>).</summary>
     public int TaskModuleCacheCount => m_taskModules.Count;

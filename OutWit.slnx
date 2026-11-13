@@ -68,6 +68,7 @@
     <Project Path="AI/OutWit.Controller.AI.Verify.Model/OutWit.Controller.AI.Verify.Model.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Verify.Scripts/OutWit.Controller.AI.Verify.Scripts.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj" />
+    <Project Path="AI/OutWit.Controller.AI.Verify.Tests.TrapHost/OutWit.Controller.AI.Verify.Tests.TrapHost.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Verify.Live/OutWit.Controller.AI.Verify.Live.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Verify.Assets/OutWit.Controller.AI.Verify.Assets.csproj" />
     <Project Path="AI/OutWit.Controller.AI.Vision/OutWit.Controller.AI.Vision.csproj" />
