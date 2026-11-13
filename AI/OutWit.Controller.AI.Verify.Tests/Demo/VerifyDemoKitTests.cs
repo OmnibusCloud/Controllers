@@ -50,6 +50,45 @@ public sealed class VerifyDemoKitTests : VerifySandboxTestBase
         });
     }
 
+    [Test]
+    public void TheMathKitGeneratesAndChecksAsItsTableSaysTest()
+    {
+        // The fleet's path: the generators run, every candidate with output becomes a run of the
+        // checker with that output on stdin (VerifyCheckTaskBuilder, as Verify.MakeCheckTasks does).
+        var kit = Path.Combine(DemoRoot(), "02-math");
+        var parsed = VerifyTasksetParser.Parse(File.ReadAllText(Path.Combine(kit, "generators.jsonl")));
+        Assert.That(parsed.Errors, Is.Empty);
+        var checker = VerifyCheckerSpec.Parse(File.ReadAllText(Path.Combine(kit, "checker.json")));
+
+        var expected = File.ReadAllLines(Path.Combine(kit, "candidates.csv"))
+            .Skip(1)
+            .Select(line => line.Split(','))
+            .ToDictionary(fields => int.Parse(fields[0]), fields => (Name: $"{fields[1]}/{fields[2]}/{fields[3]}", Generation: fields[4], Check: fields[5]));
+
+        var generated = parsed.Tasks.Select(task => Run(RuntimeOf(task), task)).ToList();
+        var plan = VerifyCheckTaskBuilder.Build(generated, checker);
+        var checks = plan.Tasks.ToDictionary(task => task.TaskIndex, task => Run(RuntimeOf(task), task));
+
+        var wrong = new List<string>();
+        foreach (var result in generated)
+        {
+            var (name, generation, check) = expected[result.TaskIndex];
+            if (result.Verdict.ToString() != generation)
+                wrong.Add($"{result.TaskIndex} {name}: generated {result.Verdict}, expected {generation}; {result.Stderr.Split('\n')[0]}");
+
+            var checkVerdict = checks.TryGetValue(result.TaskIndex, out var checkResult) ? checkResult.Verdict.ToString() : "-";
+            TestContext.Out.WriteLine($"{result.TaskIndex,2} {name,-24} {result.Stdout.Trim()} -> {checkResult?.Stdout.Trim() ?? result.Verdict.ToString()}");
+            if (checkVerdict != check)
+                wrong.Add($"{result.TaskIndex} {name}: checked {checkVerdict}, expected {check}; {checkResult?.Stdout.Trim()} {checkResult?.Stderr.Split('\n')[0]}");
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(parsed.Tasks, Has.Count.EqualTo(expected.Count));
+            Assert.That(wrong, Is.Empty, string.Join("\n", wrong));
+        });
+    }
+
     #endregion
 
     #region Tools

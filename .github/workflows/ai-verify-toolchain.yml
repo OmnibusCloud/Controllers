@@ -17,6 +17,7 @@ on:
       - '!AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/**'
       - 'AI/OutWit.Controller.AI.Verify.Assets/modules/**'
       - 'AI/OutWit.Controller.AI.Verify.Tests/Sandbox/Fixtures/**'
+      - 'AI/OutWit.Controller.AI.Verify.Live/demo/03-wasm/**'
       - '.github/workflows/ai-verify-toolchain.yml'
 
 permissions:
@@ -216,6 +217,35 @@ jobs:
               exit 1
             fi
           done
+
+      # The raw-wasm demo kit (demo/03-wasm) carries its modules inside its taskset: the taskset
+      # must be exactly what this build's modules make it.
+      - name: The raw-wasm demo kit is what the toolchain builds
+        shell: bash
+        run: |
+          KIT=AI/OutWit.Controller.AI.Verify.Live/demo/03-wasm
+          mkdir -p "$RUNNER_TEMP/kit-committed"
+          cp "$KIT/taskset.jsonl" "$KIT/candidates.csv" "$RUNNER_TEMP/kit-committed/" 2>/dev/null || true
+          python3 "$KIT/make_taskset.py" "$RUNNER_TEMP/out"
+          mkdir -p "$RUNNER_TEMP/kit-built"
+          cp "$KIT/taskset.jsonl" "$KIT/candidates.csv" "$RUNNER_TEMP/kit-built/"
+          for name in taskset.jsonl candidates.csv; do
+            if cmp -s "$RUNNER_TEMP/kit-built/$name" "$RUNNER_TEMP/kit-committed/$name"; then
+              echo "same bytes: $KIT/$name  $(sha256sum "$RUNNER_TEMP/kit-built/$name" | cut -d' ' -f1)"
+            else
+              echo "::error::$KIT/$name is not what the toolchain's modules make ($(sha256sum "$RUNNER_TEMP/kit-built/$name" | cut -d' ' -f1)); the artifact verify-raw-wasm-kit has the built one"
+              FAILED=1
+            fi
+          done
+          [ -z "${FAILED:-}" ]
+
+      - name: Publish the raw-wasm demo kit as built
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-raw-wasm-kit
+          path: ${{ runner.temp }}/kit-built/
+          if-no-files-found: ignore
 
       # lua.wasm, qjs.wasm and sucrase.js ship in the runtime set as built here; the asset tool takes them
       # from the repository, so the committed copies must be exactly what these sources build to.

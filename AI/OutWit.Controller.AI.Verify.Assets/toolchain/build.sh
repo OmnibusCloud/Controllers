@@ -178,6 +178,32 @@ else
   echo "rustup not found: words.wasm skipped"
 fi
 
+# The raw-wasm demo kit of the live tool (demo/03-wasm): programs a lab compiles itself, built
+# here with the same pinned compilers so the kit's taskset carries known bytes. kit-*.wasm.
+KIT="$(cd "$HERE/../../OutWit.Controller.AI.Verify.Live/demo/03-wasm" && pwd)"
+echo "== the raw-wasm demo kit (C)"
+for name in sum sum_int primes primes_naive words words_case net; do
+  "$SDK/bin/clang" --target=wasm32-wasip1 --sysroot="$SDK/share/wasi-sysroot" \
+    -O2 -ffile-prefix-map="$KIT"=. \
+    "$KIT/src/$name.c" -Wl,--strip-debug -o "$OUT/kit-$name-c.wasm"
+done
+# A thread needs wasm32-wasip1-threads: a shared, imported memory, which the sandbox refuses.
+"$SDK/bin/clang" --target=wasm32-wasip1-threads --sysroot="$SDK/share/wasi-sysroot" \
+  -O2 -pthread -ffile-prefix-map="$KIT"=. \
+  "$KIT/src/threads.c" -Wl,--strip-debug,--import-memory,--export-memory,--max-memory=67108864 -o "$OUT/kit-threads-c.wasm"
+
+echo "== the raw-wasm demo kit (Rust $RUST_VERSION)"
+if command -v rustup > /dev/null 2>&1; then
+  for name in sum sum_unwrap primes primes_below words; do
+    rustup run "$RUST_VERSION" rustc --target wasm32-wasip1 --edition 2021 \
+      -C opt-level=s -C strip=symbols -C codegen-units=1 -C panic=abort \
+      --remap-path-prefix "$KIT"=. \
+      "$KIT/src/$name.rs" -o "$OUT/kit-$name-rust.wasm"
+  done
+else
+  echo "rustup not found: the kit's Rust modules skipped"
+fi
+
 echo "== built"
 ( cd "$OUT" && sha256sum *.wasm && ls -l *.wasm | awk '{ print $5, $9 }' )
 
