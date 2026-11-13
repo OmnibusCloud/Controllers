@@ -65,7 +65,7 @@ NUMPY_ZIP="$(cd "$OUT" && ls numpy-*.zip)"
 cp "$OUT/python314.zip" "$OUT/$NUMPY_ZIP" "$ROOT/lib/"
 touch -d "@$SOURCE_DATE_EPOCH" "$ROOT/lib"/* "$ROOT/lib" "$ROOT"
 start=$(date +%s%N)
-"$WASMTIME" wizer -W exceptions=n --init-func wizer-initialize --dir "$ROOT::/" \
+"$WASMTIME" wizer -W exceptions=n -S cli=y --init-func wizer-initialize --dir "$ROOT::/" \
   --env PYTHONHOME=/ --env PYTHONHASHSEED=0 --env PYTHONDONTWRITEBYTECODE=1 --env PYTHONUNBUFFERED=1 \
   --env "PYTHONPATH=/lib/$NUMPY_ZIP" \
   -o "$S/python-snapshot.wasm" "$OUT/python-numpy-reactor.wasm" > "$S/wizer.log" 2>&1 || fail "$S/wizer.log" "wizer failed"
