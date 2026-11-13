@@ -136,10 +136,12 @@ The verdict report is the run's identity: it carries verdicts, exit codes and
 per-case outcomes — the fields two honest executions agree on wherever they
 ran — and is byte-identical for a taskset regardless of which nodes ran which
 packages (proven on the test fleet across three placements). Fuel is
-reproducible per host but drifts between hosts for CPython tasks — by
-0.0002–0.06 % with the bytecode layers (the remaining difference is in how
-each host's WASI answers the interpreter's stat and descriptor queries), while
-QuickJS tasks and raw WASI modules are byte-equal everywhere — and the peak
+reproducible per host but drifts between hosts for the interpreters that read
+files: CPython tasks by 0.0002–0.06 % with the bytecode layers, Ruby and Lua by
+a fixed step between Linux and the other two systems (a Lua hello costs 569,680
+units on Linux and 602,449 on Windows and macOS) — the difference is in how
+each host's WASI answers the interpreter's file and descriptor queries — while
+QuickJS tasks and raw WASI modules are byte-equal everywhere; and the peak
 linear memory of a CPython task can differ by one 64 KiB page with it; wall
 time is hardware. All three are metrics and live per task in the provenance
 document. The clock is the run's own (it starts at a pinned instant and moves
