@@ -1,8 +1,9 @@
 """The Python layers of the numpy runtime's build, made as the asset tool makes its layers.
 
   layers.py stage-stdlib <cpython-Lib> <sysconfigdata-dir> <dest>
-      the standard library's sources as `make install` lays them out with
-      --disable-test-modules (no Lib/test, no idlelib/idle_test), with the WASI build's
+      the standard library's sources, the same set as the catalog's python314.zip (the WASI
+      build's install without tests and without the packages a WASI guest cannot use: idlelib,
+      tkinter, turtledemo, curses, multiprocessing, venv, ensurepip), with the WASI build's
       _sysconfigdata module, ready for compileall
   layers.py stage-package <installed-package-dir> <dest>
       a package's Python sources without its test suites (numpy's tests are a third of its
@@ -18,7 +19,8 @@ import shutil
 import sys
 import zipfile
 
-SKIPPED_STDLIB = {"test", "idlelib/idle_test", "site-packages"}
+SKIPPED_STDLIB = {"test", "site-packages", "idlelib", "tkinter", "turtledemo", "curses", "multiprocessing",
+                  "venv", "ensurepip"}
 
 
 def walk(root):
@@ -36,9 +38,9 @@ def stage_stdlib(lib, sysconfig_dir, dest):
             continue
         copy(path, os.path.join(dest, relative))
         count += 1
-    data = [n for n in sorted(os.listdir(sysconfig_dir)) if n.startswith("_sysconfig")]
-    if not any(n.startswith("_sysconfigdata_") and n.endswith(".py") for n in data):
-        sys.exit(f"no _sysconfigdata module in {sysconfig_dir}")
+    data = [n for n in sorted(os.listdir(sysconfig_dir)) if n.startswith("_sysconfigdata_") and n.endswith(".py")]
+    if len(data) != 1:
+        sys.exit(f"no single _sysconfigdata module in {sysconfig_dir}: {data}")
     for name in data:
         copy(os.path.join(sysconfig_dir, name), os.path.join(dest, name))
     print(f"stdlib: {count} files and {', '.join(data)}")

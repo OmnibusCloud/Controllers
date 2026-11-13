@@ -215,7 +215,7 @@ python3 -I "$HERE/layers.py" stage-package "$SITE" "$NPL/numpy"
 # Three generated files name the folders the build ran in (the build's configuration as numpy's
 # __config__ and CPython's sysconfig report it); the folders get fixed names, so the layers are
 # the same bytes wherever the build ran.
-for generated in "$NPL/numpy/__config__.py" "$STD"/lib/python3.14/_sysconfig*; do
+for generated in "$NPL/numpy/__config__.py" "$STD"/lib/python3.14/_sysconfigdata_*.py; do
   sed -i -e "s#$WORK#/build#g" -e "s#$HERE#/toolchain#g" "$generated"
 done
 # compileall inside the interpreter itself, as the asset tool does: legacy .pyc next to each .py,

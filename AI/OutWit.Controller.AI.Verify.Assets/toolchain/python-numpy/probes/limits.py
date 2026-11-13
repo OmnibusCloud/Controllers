@@ -20,8 +20,9 @@ def builtins():
 
 
 def config():
-    deps = np.show_config(mode="dicts")["Build Dependencies"]
-    return f"blas {deps['blas'].get('name')!r}, lapack {deps['lapack'].get('name')!r}; simd {np.show_config(mode='dicts')['SIMD Extensions']}"
+    config = np.show_config(mode="dicts")
+    deps = config["Build Dependencies"]
+    return f"blas {deps['blas'].get('name')!r}, lapack {deps['lapack'].get('name')!r}, host {config['Machine Information']['host']}"
 
 
 def integers():
@@ -30,7 +31,7 @@ def integers():
 
 
 def longdouble():
-    return f"{np.finfo(np.longdouble).bits} bits, 1/3 = {np.longdouble(1) / 3}"
+    return f"{np.finfo(np.longdouble).bits} bits, eps {np.finfo(np.longdouble).eps}, 1/3 = {np.longdouble(1) / 3!r}"
 
 
 def fft():
