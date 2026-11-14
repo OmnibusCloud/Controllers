@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A host that loads controllers the way the cloud client does: a staged module folder, the
+       plugin loader with one shared load context, and no reference to the controller or to
+       wasmtime, so its dependency file names no native library. VerifyModuleLoadTests runs it
+       to prove the module brings everything native itself. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OutWit.Engine.Sdk" Version="1.1.6" />
+    <PackageReference Include="OutWit.Engine.Data" Version="1.1.5" />
+    <PackageReference Include="OutWit.Engine.Interfaces" Version="1.1.6" />
+  </ItemGroup>
+
+</Project>

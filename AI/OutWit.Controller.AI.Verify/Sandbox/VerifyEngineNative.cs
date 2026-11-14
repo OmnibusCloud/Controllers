@@ -64,7 +64,7 @@ internal static class VerifyEngineNative
     public static bool Apply(Config config)
     {
         var handle = NativeHandleOf(config);
-        var library = NativeLibrary.Load(VerifyNativeLibrary.LIBRARY_NAME, typeof(Wasmtime.Engine).Assembly, null);
+        var library = TheBindingsLibrary();
 
         Export<SetSize>(library, ASYNC_STACK_SIZE)(handle, ASYNC_STACK_BYTES);
 
@@ -95,6 +95,19 @@ internal static class VerifyEngineNative
         {
             return true;
         }
+    }
+
+    private static IntPtr TheBindingsLibrary()
+    {
+        // The library the binding's own calls loaded: through VerifyNativeLibrary's resolver in a
+        // cloud client's shared load context, through the module's dependency file in an isolated
+        // plugin context. A load by name runs neither the resolver nor a plugin context's lookup
+        // (it found nothing on a Linux client), so load by the path the resolver used or would
+        // use; the operating system hands back the library already loaded.
+        var path = VerifyNativeLibrary.ResolvedPath ?? VerifyNativeLibrary.Locate();
+        return path != null
+            ? NativeLibrary.Load(path)
+            : NativeLibrary.Load(VerifyNativeLibrary.LIBRARY_NAME, typeof(Wasmtime.Engine).Assembly, null);
     }
 
     private static IntPtr NativeHandleOf(Config config)

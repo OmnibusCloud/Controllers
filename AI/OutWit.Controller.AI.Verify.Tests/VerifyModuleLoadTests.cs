@@ -202,9 +202,61 @@ public class VerifyModuleLoadTests
         });
     }
 
+    [Test]
+    public void StagedModuleRunsSandboxInAClientLikeHostTest()
+    {
+        // The cloud client loads controllers into one shared load context, and its dependency
+        // file names no wasmtime: every native call must find the module's library through the
+        // module itself. A host built that way (OutWit.Controller.AI.Verify.Tests.ClientHost)
+        // runs the self-check. A load by library name found nothing there on Linux (0.11.2).
+        var (exitCode, report) = RunClientHost(m_controllersPath);
+        TestContext.Out.WriteLine(report);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exitCode, Is.EqualTo(0), report);
+            Assert.That(report, Does.Contain(NATIVE_LOADED), report);
+            Assert.That(report, Does.Contain(PYTHON_PASS), report);
+            Assert.That(report, Does.Contain(QUICKJS_PASS), report);
+            Assert.That(report, Does.Contain(LUA_PASS), report);
+            Assert.That(report, Does.Contain(CLANG_PASS), report);
+            Assert.That(report, Does.Contain(WASI_PASS), report);
+            Assert.That(ReportValue(report, NATIVE_PATH_PREFIX), Does.StartWith(m_moduleDir).IgnoreCase,
+                "the native library must be the module's copy");
+        });
+    }
+
     #endregion
 
     #region Tools
+
+    private static (int ExitCode, string Output) RunClientHost(string controllersPath)
+    {
+        const string host = "OutWit.Controller.AI.Verify.Tests.ClientHost";
+        var testDirectory = TestContext.CurrentContext.TestDirectory;
+        var framework = Path.GetFileName(testDirectory);
+        var configuration = Path.GetFileName(Path.GetDirectoryName(testDirectory)!);
+        var aiRoot = Path.GetFullPath(Path.Combine(testDirectory, "..", "..", "..", ".."));
+        var bin = Path.Combine(aiRoot, host, "bin", configuration, framework);
+        var start = new ProcessStartInfo(OperatingSystem.IsWindows() ? Path.Combine(bin, $"{host}.exe") : "dotnet");
+        if (!OperatingSystem.IsWindows())
+            start.ArgumentList.Add(Path.Combine(bin, $"{host}.dll"));
+        start.ArgumentList.Add(controllersPath);
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = true;
+        start.UseShellExecute = false;
+
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("the client-like host did not start");
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(600_000))
+        {
+            process.Kill(entireProcessTree: true);
+            Assert.Fail("the client-like host did not finish");
+        }
+
+        return (process.ExitCode, output.Result + error.Result);
+    }
 
     private static string ReportValue(string report, string prefix)
     {
