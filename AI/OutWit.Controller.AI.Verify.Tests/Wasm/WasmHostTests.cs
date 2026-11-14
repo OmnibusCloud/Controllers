@@ -156,29 +156,32 @@ public sealed class WasmHostTests
     }
 
     [Test]
-    public void AnExitStatusWasiDoesNotHaveIsAnEngineErrorTest()
+    public void AnExitStatusWasiDoesNotHaveIsAnExitTest()
     {
-        // WASI preview 1 has exit statuses below 126; wasmtime 48 fails a proc_exit above that
-        // with an error that is neither a trap nor an exit.
+        // WASI preview 1 has exit statuses below 126, and wasmtime 48's own proc_exit fails the
+        // others with an error that is neither a trap nor an exit; the host's own proc_exit
+        // (WasmHostExit) makes every status the guest's exit code.
         var outcome = Run(WasiModules.Exit(200));
 
         Assert.Multiple(() =>
         {
-            Assert.That(outcome.Verdict, Is.EqualTo(WasmHostVerdict.EngineError));
-            Assert.That(outcome.ExitCode, Is.EqualTo(-1));
+            Assert.That(outcome.Verdict, Is.EqualTo(WasmHostVerdict.Exited));
+            Assert.That(outcome.ExitCode, Is.EqualTo(200));
             Assert.That(outcome.Trap, Is.Null);
-            Assert.That(outcome.Fault, Is.EqualTo(WasmHost.ENGINE_ERROR_FAULT));
-            Assert.That(outcome.Stderr, Is.EqualTo(WasmHost.ENGINE_ERROR_FAULT));
-            Assert.That(outcome.EngineError?.Message, Does.Contain("invalid exit status"));
+            Assert.That(outcome.Fault, Is.Null);
+            Assert.That(outcome.Stderr, Is.Empty);
+            Assert.That(outcome.EngineError, Is.Null);
+            Assert.That(outcome.FuelConsumed, Is.EqualTo(Run(WasiModules.Exit(7)).FuelConsumed), "an exit costs the same whatever its status");
             Assert.That(Run(WasiModules.Exit(125)).ExitCode, Is.EqualTo(125), "the highest status WASI has");
+            Assert.That(Run(WasiModules.Exit(-1)).ExitCode, Is.EqualTo(-1), "WASI's status is unsigned: 4294967295 reads as -1");
         });
     }
 
     [Test]
-    public void VerifyKeepsLettingAnEngineErrorThroughTest()
+    public void VerifyGivesAnExitStatusAbove125ItsNonzeroExitVerdictTest()
     {
-        // Verify's sandbox has always failed the batch on such an end (the engine's exception);
-        // the shared host keeps that for it until a release makes it a verdict.
+        // Until 0.12.0 Verify let the engine's error of such an end through, and it failed the
+        // whole batch; now it is a nonzero exit like any other.
         var wasi = VerifyRuntimeCatalog.Resolve(null, VerifyRuntimeCatalog.WASI, out var reason);
         Assert.That(wasi, Is.Not.Null, reason);
 
@@ -190,8 +193,14 @@ public sealed class WasmHostTests
             Sources = [new VerifySourceFileData { Name = "main.wasm", Content = Convert.ToBase64String(WasiModules.Exit(200)) }]
         };
 
-        var exception = Assert.Throws<WasmtimeException>(() => sandbox.Execute(wasi!, task, VerifySandboxDefaults.Resolve(null, null)));
-        Assert.That(exception!.Message, Does.Contain("invalid exit status"));
+        var result = sandbox.Execute(wasi!, task, VerifySandboxDefaults.Resolve(null, null));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.RuntimeError));
+            Assert.That(result.ExitCode, Is.EqualTo(200));
+            Assert.That(result.Stderr, Is.Empty);
+        });
     }
 
     [Test]

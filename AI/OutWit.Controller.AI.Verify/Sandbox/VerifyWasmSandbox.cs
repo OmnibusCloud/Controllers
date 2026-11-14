@@ -233,9 +233,10 @@ public sealed class VerifyWasmSandbox : IDisposable
             OutOfMemory = LooksLikeOutOfMemory
         });
 
-        // Kept as Verify has always had it: a run the engine ended without a trap or an exit code
-        // (a proc_exit with a status of 126 or more) is no verdict here but the engine's own
-        // exception, which fails the batch. Making it a verdict changes results: a release's call.
+        // A run the engine ended without a trap or an exit code is no verdict here but the engine's
+        // own exception, which fails the batch: a fault of the node, not of the program. None is
+        // known since 0.12.0, where an exit status of 126 or more (which wasmtime's own proc_exit
+        // refused this way) became an exit like any other (WasmHostExit).
         if (outcome.EngineError != null)
             ExceptionDispatchInfo.Capture(outcome.EngineError).Throw();
 

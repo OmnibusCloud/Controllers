@@ -6,7 +6,7 @@ namespace OutWit.Controller.AI.Wasm;
 /// </summary>
 internal enum WasmHostVerdict
 {
-    /// <summary>The guest ended by itself (returned from <c>_start</c> or called <c>proc_exit</c>); the exit code says how, 0 for success.</summary>
+    /// <summary>The guest ended by itself (returned from <c>_start</c> or called <c>proc_exit</c>, with any status: <see cref="WasmHostExit"/>); the exit code says how, 0 for success.</summary>
     Exited,
 
     /// <summary>A trap other than a budget stop ended the run (a crash): the trap code names it, the fault holds the fixed words.</summary>
@@ -28,9 +28,9 @@ internal enum WasmHostVerdict
     NoStart,
 
     /// <summary>
-    /// The engine failed one of the guest's calls without a trap or an exit code: in wasmtime 48, a
-    /// <c>proc_exit</c> with a status of 126 or more (WASI preview 1 has none). The engine's own
-    /// exception travels with the outcome.
+    /// The engine failed one of the guest's calls without a trap or an exit code. None is known:
+    /// wasmtime 48's own <c>proc_exit</c> failed a status of 126 or more this way, and the host's
+    /// (<see cref="WasmHostExit"/>) takes its place. The engine's own exception travels with the outcome.
     /// </summary>
     EngineError
 }

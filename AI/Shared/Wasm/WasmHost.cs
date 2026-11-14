@@ -26,7 +26,7 @@ internal sealed class WasmHost : IDisposable
     private const string START_EXPORT = "_start";
 
     /// <summary>The fault of a run the engine ended without a trap or an exit code.</summary>
-    public const string ENGINE_ERROR_FAULT = "wasm error: the engine refused a call of the guest (an exit status of 126 or more, which WASI does not have, is one)";
+    public const string ENGINE_ERROR_FAULT = "wasm error: the engine refused a call of the guest";
 
     #endregion
 
@@ -112,10 +112,11 @@ internal sealed class WasmHost : IDisposable
                 store.Fuel = (ulong)WasmHostLimits.InstantiationFuel(request.Fuel, request.MemoryBytes);
 
             using var linker = WasmHostLinker.Create(m_engine, request.RandomSeed);
+            var exit = WasmHostExit.Define(linker);
 
             var start = DateTime.UtcNow;
             var refuel = request.FuelAfterInstantiation ? request.Fuel : (long?)null;
-            var invocation = WasmHostGuestThread.Run(() => Invoke(linker, store, module, refuel));
+            var invocation = WasmHostGuestThread.Run(() => Invoke(linker, store, module, exit, refuel));
             var wallMs = (int)(DateTime.UtcNow - start).TotalMilliseconds;
 
             var fuelConsumed = request.FuelAfterInstantiation
@@ -172,17 +173,17 @@ internal sealed class WasmHost : IDisposable
         return wasi.WithStandardOutput(stdoutPath).WithStandardError(stderrPath);
     }
 
-    private static Invocation Invoke(Linker linker, Store store, WasmModule module, long? refuel)
+    private static Invocation Invoke(Linker linker, Store store, WasmModule module, WasmHostExit exit, long? refuel)
     {
         Instance instance;
         try
         {
             instance = linker.Instantiate(store, module);
         }
-        catch (WasmtimeException exception) when (exception.ExitCode is { } code)
+        catch (WasmtimeException) when (exit.Status is { } status)
         {
-            // A guest that proc_exits during module init (before _start) still lands here.
-            return new(WasmHostVerdict.Exited, code, null, 0);
+            // A guest that exits during module init (a start function, before _start) lands here.
+            return new(WasmHostVerdict.Exited, status, null, 0);
         }
         catch (TrapException trap)
         {
@@ -210,10 +211,11 @@ internal sealed class WasmHost : IDisposable
             startAction();
             return new(WasmHostVerdict.Exited, 0, null, PeakMemory(instance));
         }
-        catch (WasmtimeException exception) when (exception.ExitCode is { } code)
+        catch (WasmtimeException) when (exit.Status is { } status)
         {
-            // WASI proc_exit — a clean guest exit with a code (0 = success).
-            return new(WasmHostVerdict.Exited, code, null, PeakMemory(instance));
+            // proc_exit, the host's own (WasmHostExit): a clean guest exit with its status (0 =
+            // success), 126 and more included.
+            return new(WasmHostVerdict.Exited, status, null, PeakMemory(instance));
         }
         catch (TrapException trap)
         {
@@ -221,9 +223,8 @@ internal sealed class WasmHost : IDisposable
         }
         catch (WasmtimeException exception)
         {
-            // Neither an exit nor a trap: the engine failed one of the guest's calls. In wasmtime
-            // 48 that is a proc_exit with a status of 126 or more, which WASI preview 1 does not
-            // have ("exit with invalid exit status outside of [0..126)").
+            // Neither an exit nor a trap: the engine failed one of the guest's calls. None is known
+            // since proc_exit is the host's own (wasmtime 48's refused a status of 126 or more).
             return new(WasmHostVerdict.EngineError, -1, null, PeakMemory(instance), ENGINE_ERROR_FAULT, exception);
         }
     }
