@@ -3,6 +3,7 @@ using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Benchmark;
 using OutWit.Controller.AI.Corpus.Diagnostics;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Quality;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Storage;
@@ -118,11 +119,34 @@ public sealed class CorpusCapabilitiesTests
         Assert.Multiple(() =>
         {
             Assert.That(pipeline.GetProperty("switches").GetProperty("clean_lines").GetBoolean(), Is.EqualTo(new CorpusPipelineData().CleanLines));
+            Assert.That(pipeline.GetProperty("switches").GetProperty("extract_pdf").GetBoolean(), Is.True, "the PDF stage is on unless a manifest turns it off");
             Assert.That(quality.GetProperty("min_words").GetProperty("spaced").GetDouble(), Is.EqualTo(QualityRules.Spaced.MinWords));
             Assert.That(quality.GetProperty("min_words").GetProperty("unspaced").GetDouble(), Is.EqualTo(QualityRules.Unspaced.MinWords));
             Assert.That(quality.GetProperty("max_duplicate_line_ratio").GetProperty("spaced").GetDouble(), Is.EqualTo(QualityRules.Spaced.MaxDuplicateLineRatio));
             Assert.That(quality.GetProperty("max_mean_word_length").GetProperty("unspaced").ValueKind, Is.EqualTo(JsonValueKind.Null), "a rule a script's base turns off has no number");
             Assert.That(pipeline.GetProperty("quality_fixed").GetProperty("duplicate_ngram_chars").GetArrayLength(), Is.EqualTo(QualityRules.Spaced.MaxDuplicateNgramCharRatio.Count));
+        });
+    }
+
+    [Test]
+    public void TheDocumentNamesThePdfStageItsModuleAndItsLimitsTest()
+    {
+        using var document = JsonDocument.Parse(CorpusCapabilitiesWriter.Write(m_diagnostics, null, CorpusStorageLimit.NONE));
+        var pdf = document.RootElement.GetProperty("pdf");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(pdf.GetProperty("stage").GetString(), Is.EqualTo("extract_pdf"));
+            Assert.That(pdf.GetProperty("module_sha256").GetString(), Is.EqualTo(PdfStageLimits.MODULE_SHA256));
+            Assert.That(pdf.GetProperty("fuel").GetInt64(), Is.EqualTo(PdfStageLimits.FUEL));
+            Assert.That(pdf.GetProperty("fuel_after_instantiation").GetBoolean(), Is.True);
+            Assert.That(pdf.GetProperty("memory_bytes").GetInt64(), Is.EqualTo(1L << 30));
+            Assert.That(pdf.GetProperty("input_bytes").GetInt64(), Is.EqualTo(64L << 20));
+            Assert.That(pdf.GetProperty("text_bytes").GetInt64(), Is.EqualTo(16L << 20));
+            Assert.That(pdf.GetProperty("document_words").GetInt32(), Is.EqualTo(5000));
+            Assert.That(pdf.GetProperty("running_lines").GetProperty("min_pages").GetInt32(), Is.EqualTo(PdfStageLimits.RUNNING_LINE_MIN_PAGES));
+            Assert.That(pdf.GetProperty("drops").EnumerateArray().Select(drop => drop.GetString()), Is.EquivalentTo(ShardPdfStage.DROPS));
+            Assert.That(pdf.GetProperty("available").GetBoolean(), Is.EqualTo(m_diagnostics.PdfStageProblem.Length == 0));
         });
     }
 

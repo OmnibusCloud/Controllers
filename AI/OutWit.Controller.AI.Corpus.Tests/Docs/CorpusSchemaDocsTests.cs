@@ -121,11 +121,23 @@ public sealed class CorpusSchemaDocsTests
                 ContentSha256 = "aa", ControllerVersion = "0.1.13", SourceUrl = "https://data.commoncrawl.org/a.warc.wet.gz", RuntimeTarget = "linux-x64", Degree = 4,
                 Stats = new CorpusShardStatsData { RecordsIn = 10, DocumentsExtracted = 9, DocumentsOut = 5, Drops = [new CorpusCountData { Name = "min_words", Count = 4 }], Languages = [new CorpusCountData { Name = "eng", Count = 5 }] }
             },
+            new()
+            {
+                TaskIndex = 2, Verdict = CorpusShardVerdict.Completed, TextBlobId = Guid.NewGuid(), SignaturesBlobId = Guid.NewGuid(),
+                ContentSha256 = "bb", ControllerVersion = "0.2.0", SourceUrl = "https://data.commoncrawl.org/a.warc.gz", RuntimeTarget = "windows-x64", Degree = 8,
+                Stats = new CorpusShardStatsData
+                {
+                    RecordsIn = 30, DocumentsExtracted = 12, DocumentsOut = 6, Drops = [new CorpusCountData { Name = "pdf_encrypted", Count = 1 }], Languages = [new CorpusCountData { Name = "eng", Count = 6 }],
+                    Pdf = new CorpusPdfStatsData { In = 3, Truncated = 1, Extracted = 2, Pages = 14, Documents = 3, PagesCut = 0, RunningLines = 20, Fuel = 123_456_789 }
+                }
+            },
             new() { TaskIndex = 1, Verdict = CorpusShardVerdict.OriginRefused, Error = "not a public origin", SourceUrl = "https://evil.example/x.warc.gz" }
         };
 
         using var report = JsonDocument.Parse(CorpusReportWriter.Write(results));
         var shard = report.RootElement.GetProperty("shards")[0];
+        var withPdfs = report.RootElement.GetProperty("shards")[2];
+        var shardStats = schema.RootElement.GetProperty("properties").GetProperty("shards").GetProperty("items").GetProperty("properties").GetProperty("stats").GetProperty("oneOf")[1].GetProperty("properties");
 
         Assert.Multiple(() =>
         {
@@ -133,6 +145,8 @@ public sealed class CorpusSchemaDocsTests
             Assert.That(shard.GetProperty("runtime_target").GetString(), Is.EqualTo("linux-x64"));
             Assert.That(shard.GetProperty("degree").GetInt32(), Is.EqualTo(4));
             Assert.That(PropertyNames(shard), Is.SubsetOf(PropertyNames(schema.RootElement.GetProperty("properties").GetProperty("shards").GetProperty("items").GetProperty("properties"))));
+            Assert.That(PropertyNames(withPdfs.GetProperty("stats")), Is.EquivalentTo(PropertyNames(shardStats)), "every stats property the schema names is written for a shard with PDFs");
+            Assert.That(PropertyNames(report.RootElement.GetProperty("summary")), Is.EquivalentTo(PropertyNames(schema.RootElement.GetProperty("properties").GetProperty("summary").GetProperty("properties"))));
         });
     }
 

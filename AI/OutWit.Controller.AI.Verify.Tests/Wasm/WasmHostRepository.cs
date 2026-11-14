@@ -76,6 +76,17 @@ internal static class WasmHostRepository
             .ToList();
     }
 
+    /// <summary>The project's <c>wasmtime-*</c> data assets: runtime identifier, SHA-256 and size of each.</summary>
+    /// <param name="project">The project file.</param>
+    /// <returns>The assets, in project order.</returns>
+    public static IReadOnlyList<(string Rid, string Sha256, string Size)> ShippedNatives(XDocument project)
+    {
+        return project.Descendants("ControllerDataAsset")
+            .Where(item => ((string?)item.Attribute("Include") ?? "").StartsWith("wasmtime-", StringComparison.Ordinal))
+            .Select(item => (item.Element("RuntimeIdentifier")?.Value ?? "", item.Element("Sha256")?.Value ?? "", item.Element("Size")?.Value ?? ""))
+            .ToList();
+    }
+
     /// <summary>A value of the asset tool's toolchain pins (<c>toolchain/pins.env</c>).</summary>
     /// <param name="name">The variable.</param>
     /// <returns>Its value.</returns>

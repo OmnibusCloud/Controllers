@@ -37,8 +37,37 @@ public static class WarcSynth
         return Record("response", uri, "application/http; msgtype=response", [.. head, .. body]);
     }
 
+    /// <summary>
+    /// A WARC response record carrying an HTTP 200 response with a PDF body, the way Common Crawl
+    /// stores one: the server's Content-Type, Common Crawl's identified payload type, and
+    /// <c>WARC-Truncated: length</c> when the body was cut at the crawler's limit.
+    /// </summary>
+    /// <param name="uri">The target URI.</param>
+    /// <param name="body">The body as stored (cut short already when truncated).</param>
+    /// <param name="truncated">Whether the record says the crawler cut it.</param>
+    /// <param name="contentType">The server's Content-Type.</param>
+    /// <param name="identifiedType">Common Crawl's identified payload type, or null for none.</param>
+    /// <returns>The record.</returns>
+    public static byte[] PdfResponseRecord(string uri, byte[] body, bool truncated = false, string contentType = "application/pdf", string? identifiedType = "application/pdf")
+    {
+        var head = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: {contentType}\r\nContent-Length: {body.Length}\r\n\r\n");
+        var extra = new List<string>();
+        if (identifiedType != null)
+            extra.Add($"WARC-Identified-Payload-Type: {identifiedType}");
+        if (truncated)
+            extra.Add("WARC-Truncated: length");
+
+        return Record("response", uri, "application/http; msgtype=response", [.. head, .. body], extra);
+    }
+
     /// <summary>A record of any type with a raw payload.</summary>
     public static byte[] Record(string type, string uri, string contentType, byte[] payload)
+    {
+        return Record(type, uri, contentType, payload, []);
+    }
+
+    /// <summary>A record of any type with a raw payload and further header lines.</summary>
+    public static byte[] Record(string type, string uri, string contentType, byte[] payload, IReadOnlyList<string> extraHeaders)
     {
         var header = Encoding.ASCII.GetBytes(
             "WARC/1.0\r\n" +
@@ -48,6 +77,7 @@ public static class WarcSynth
             $"WARC-Record-ID: <urn:uuid:{Guid.NewGuid():D}>\r\n" +
             $"Content-Type: {contentType}\r\n" +
             $"Content-Length: {payload.Length}\r\n" +
+            string.Concat(extraHeaders.Select(line => line + "\r\n")) +
             "\r\n");
 
         return [.. header, .. payload, .. Encoding.ASCII.GetBytes("\r\n\r\n")];

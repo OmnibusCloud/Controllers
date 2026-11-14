@@ -287,6 +287,32 @@ public sealed class ShardTaskRunnerTests
     }
 
     [Test]
+    public async Task APdfRunsInTheTasksOwnScopeTest()
+    {
+        PdfTestModule.Require();
+        var shards = Path.Combine(m_root, "pdf-shards");
+        Directory.CreateDirectory(shards);
+        await File.WriteAllBytesAsync(Path.Combine(shards, "pdf.warc.gz"), PdfWarcFixture.Shard());
+        using var origin = new CorpusTestOrigin(shards);
+
+        var task = Task("pdf.warc.gz", CorpusSourceFormat.Warc);
+        task.Source!.Url = origin.ShardUrl("pdf.warc.gz");
+        var work = Work();
+
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, work, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.Completed), result.Error);
+            Assert.That(result.Stats!.Pdf!.In, Is.EqualTo(PdfWarcFixture.PDF_CANDIDATES));
+            Assert.That(result.Stats.Pdf.Extracted, Is.GreaterThan(0));
+            Assert.That(Directory.GetDirectories(work).Select(Path.GetFileName), Is.SupersetOf(new[] { "pdf-in", "pdf-out", "pdf-io" }), "the PDFs' folders are the task's own");
+            Assert.That(Directory.EnumerateFiles(Path.Combine(work, "pdf-out"), "*", SearchOption.AllDirectories), Is.Empty, "each run's output is gone after it");
+            Assert.That(Directory.EnumerateFiles(Path.Combine(work, "pdf-in")), Is.Empty);
+        });
+    }
+
+    [Test]
     public void CancellationPropagatesTest()
     {
         var task = Task(WET_FIXTURE, CorpusSourceFormat.Wet);

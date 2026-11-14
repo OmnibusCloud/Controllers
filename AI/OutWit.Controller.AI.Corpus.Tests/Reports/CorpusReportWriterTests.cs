@@ -44,6 +44,43 @@ public sealed class CorpusReportWriterTests
     }
 
     [Test]
+    public void ThePdfCountsAreWrittenWhereAShardMetAPdfAndSummedTest()
+    {
+        var first = Completed(0, documentsOut: 5, languages: [("eng", 5)], drops: [("pdf_encrypted", 1)]);
+        first.Stats!.Pdf = new CorpusPdfStatsData { In = 4, Truncated = 1, Extracted = 3, Pages = 30, Documents = 5, PagesCut = 1, RunningLines = 60, Fuel = 1_000_000 };
+        var second = Completed(1, documentsOut: 2, languages: [("eng", 2)], drops: []);
+        second.Stats!.Pdf = new CorpusPdfStatsData { In = 1, Extracted = 1, Pages = 2, Documents = 1, Fuel = 500 };
+        var without = Completed(2, documentsOut: 9, languages: [("eng", 9)], drops: []);
+
+        using var report = JsonDocument.Parse(CorpusReportWriter.Write([first, second, without]));
+        var summary = report.RootElement.GetProperty("summary");
+        var shards = report.RootElement.GetProperty("shards").EnumerateArray().ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.GetProperty("pdf_in").GetInt64(), Is.EqualTo(5));
+            Assert.That(summary.GetProperty("pdf_truncated").GetInt64(), Is.EqualTo(1));
+            Assert.That(summary.GetProperty("pdf_extracted").GetInt64(), Is.EqualTo(4));
+            Assert.That(summary.GetProperty("pdf_pages").GetInt64(), Is.EqualTo(32));
+            Assert.That(summary.GetProperty("pdf_documents").GetInt64(), Is.EqualTo(6));
+            Assert.That(summary.GetProperty("pdf_pages_cut").GetInt64(), Is.EqualTo(1));
+            Assert.That(summary.GetProperty("pdf_running_lines").GetInt64(), Is.EqualTo(60));
+            Assert.That(summary.GetProperty("pdf_fuel").GetInt64(), Is.EqualTo(1_000_500));
+            Assert.That(summary.GetProperty("drops").GetProperty("pdf_encrypted").GetInt64(), Is.EqualTo(1));
+            Assert.That(shards[0].GetProperty("stats").GetProperty("pdf_in").GetInt32(), Is.EqualTo(4));
+            Assert.That(shards[2].GetProperty("stats").TryGetProperty("pdf_in", out _), Is.False, "a shard that met no PDF says nothing of them");
+        });
+    }
+
+    [Test]
+    public void AReportWithoutPdfsHasNoPdfCountsTest()
+    {
+        using var report = JsonDocument.Parse(CorpusReportWriter.Write([Completed(0, documentsOut: 1, languages: [("eng", 1)], drops: [])]));
+
+        Assert.That(report.RootElement.GetProperty("summary").TryGetProperty("pdf_in", out _), Is.False);
+    }
+
+    [Test]
     public void EmptyRunIsAValidReportTest()
     {
         using var report = JsonDocument.Parse(CorpusReportWriter.Write([]));

@@ -5,14 +5,17 @@ using OutWit.Controller.AI.Corpus.Benchmark;
 using OutWit.Controller.AI.Corpus.Diagnostics;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Diagnostics;
 
 /// <summary>
 /// What the module of a process says about itself: the version, the stage set reproducing its
-/// pinned fingerprint, the parser and compressor versions, the language-model facts held to
-/// the reference model's file, the origin rule of the machine, the caps.
+/// pinned fingerprint (the PDF stage's contract in it), the parser and compressor versions, the
+/// language-model facts held to the reference model's file, the origin rule of the machine, the
+/// caps, the PDF extractor's pin and whether the process can run it.
 /// </summary>
 [TestFixture]
 public sealed class CorpusRuntimeDiagnosticsTests
@@ -35,7 +38,7 @@ public sealed class CorpusRuntimeDiagnosticsTests
             Assert.That(diagnostics.ControllerVersion, Does.Match("^[0-9]+[.][0-9]+[.][0-9]+"));
             Assert.That(diagnostics.RuntimeTarget, Does.Match("^(windows|linux|macos)-(x64|arm64)$"));
             Assert.That(diagnostics.Stages, Is.EqualTo(CorpusStageSet.STAGES));
-            Assert.That(diagnostics.StageSetSha256, Is.EqualTo(CorpusBenchmark.EXPECTED_CONTENT_SHA256));
+            Assert.That(diagnostics.StageSetSha256, Is.EqualTo(CorpusStageSet.PINNED_SHA256));
             Assert.That(diagnostics.StagesVerified, Is.True);
             Assert.That(diagnostics.HtmlParser, Does.Match("^AngleSharp [0-9]+[.][0-9]+[.][0-9]+$"));
             Assert.That(diagnostics.Compressor, Does.Match("^ZstdSharp [0-9]+[.][0-9]+[.][0-9]+, level 9$"));
@@ -46,7 +49,20 @@ public sealed class CorpusRuntimeDiagnosticsTests
             Assert.That(diagnostics.MaxShardBytes, Is.EqualTo(1L << 30));
             Assert.That(diagnostics.DownloadsPerNode, Is.EqualTo(2));
             Assert.That(diagnostics.MemoryPerShardBytes, Is.EqualTo(256L * 1024 * 1024));
+            Assert.That(diagnostics.PdfModuleSha256, Is.EqualTo(PdfStageLimits.MODULE_SHA256));
         });
+    }
+
+    [Test]
+    public void TheDiagnosticsSayWhetherThePdfStageCanRunHereTest()
+    {
+        var diagnostics = CorpusRuntimeDiagnosticsBuilder.Build(ShardOriginPolicy.Parse(null));
+
+        // The tests' process finds the module in @Data when it is there (CorpusTestEnvironment).
+        if (PdfTestModule.Path != null)
+            Assert.That(diagnostics.PdfStageProblem, Is.Empty);
+        else
+            Assert.That(diagnostics.PdfStageProblem, Does.Contain(PdfModuleLocator.RelativePath).And.Not.Contain(Environment.MachineName));
     }
 
     [Test]
@@ -64,15 +80,30 @@ public sealed class CorpusRuntimeDiagnosticsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(verified, Is.True, $"the reference shard hashes to {sha256}: a stage changed its product; move the benchmark's pin (and its unit) with it");
-            Assert.That(CorpusStageSet.PINNED_SHA256, Is.EqualTo(CorpusBenchmark.EXPECTED_CONTENT_SHA256));
+            Assert.That(verified, Is.True, $"the stage set composes to {sha256}: a stage changed its product (move the benchmark's pin and its unit with it) or the PDF stage's contract changed (a new limit: move the stage set's pin with it)");
+            Assert.That(CorpusStageSet.PINNED_SHA256, Is.EqualTo(CorpusStageSet.Compose(CorpusBenchmark.EXPECTED_CONTENT_SHA256)), "the pin is the benchmark's reference product with this PDF stage");
+        });
+    }
+
+    [Test]
+    public void EveryLimitOfThePdfStageIsInTheFingerprintTest()
+    {
+        // The descriptor names the module and every limit; a changed value is a changed fingerprint.
+        var descriptor = PdfStageLimits.DESCRIPTOR;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(descriptor, Does.Contain(PdfStageLimits.MODULE_SHA256));
+            foreach (var value in new long[] { PdfStageLimits.FUEL, PdfStageLimits.MEMORY_BYTES, PdfStageLimits.MAX_INPUT_BYTES, PdfStageLimits.MAX_TEXT_BYTES, PdfStageLimits.DOCUMENT_WORDS, PdfStageLimits.RUNNING_LINE_MIN_PAGES })
+                Assert.That(descriptor, Does.Contain(value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            Assert.That(CorpusStageSet.Compose(CorpusBenchmark.EXPECTED_CONTENT_SHA256), Is.Not.EqualTo(CorpusBenchmark.EXPECTED_CONTENT_SHA256));
         });
     }
 
     [Test]
     public void TheStageOrderNamesEverySwitchTest()
     {
-        Assert.That(CorpusStageSet.STAGES, Is.SupersetOf(new[] { "identify_language", "clean_lines", "filter_quality", "sign" }), "the manifest's switches are stage names");
+        Assert.That(CorpusStageSet.STAGES, Is.SupersetOf(new[] { "extract_pdf", "identify_language", "clean_lines", "filter_quality", "sign" }), "the manifest's switches are stage names");
     }
 
     [Test]

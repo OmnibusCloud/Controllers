@@ -7,6 +7,7 @@ using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Quality;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Signatures;
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using OutWit.Controller.AI.Corpus.Warc;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Shards;
@@ -135,15 +136,36 @@ public sealed class ShardProcessorTests
     /// The products of the golden shards under the default pipeline, pinned: produced on win-x64,
     /// re-checked on every platform the workflow runs, so a stage that read a platform (a Unicode
     /// table, a culture, a hash seed) would show here. A change to any stage moves them; pin the
-    /// new values with the change that moved them.
+    /// new values with the change that moved them. The WARC shard's product with the PDF stage
+    /// off is the one of 0.1.14, before the stage existed.
     /// </summary>
     [TestCase(WET_FIXTURE, CorpusSourceFormat.Wet, "61ac69cf399a57c75a127b86dc85c02534fc51de4e0e82a896b3de647f735620")]
     [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc, "f0bedbac8df708e48cae4e181f4b8beeef07ea083ac9cc9babd1e3423f1b6690")]
     public void GoldenShardProductIsPinnedTest(string fixture, CorpusSourceFormat format, string expected)
     {
-        var product = Run(fixture, format, DefaultPipeline()).Product;
+        var product = Run(fixture, format, new CorpusPipelineData { Version = "test-v1", ExtractPdf = false }).Product;
 
         Assert.That(product.ContentSha256, Is.EqualTo(expected), $"{fixture}: the product hashes to {product.ContentSha256}");
+    }
+
+    /// <summary>
+    /// The golden WARC shard holds one PDF response (a one-page dance sheet): with the PDF stage on,
+    /// its document passes every stage and joins the product. Needs the extractor module.
+    /// </summary>
+    [Test]
+    public void GoldenWarcProductWithThePdfStageIsPinnedTest()
+    {
+        PdfTestModule.Require();
+        var run = Run(WARC_FIXTURE, CorpusSourceFormat.Warc, DefaultPipeline());
+        var stats = run.Product.Stats.Build(0, 0, 0, 0);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(run.Product.ContentSha256, Is.EqualTo("d4f7f075894df9b856e4702bf0eedf0698bb664c97db35613839500c41421fee"), $"the product hashes to {run.Product.ContentSha256}");
+            Assert.That(stats.Pdf!.In, Is.EqualTo(1));
+            Assert.That(stats.Pdf.Extracted, Is.EqualTo(1));
+            Assert.That(Lines(CorpusCompressor.Decompress(run.Text)).Count(line => line.Contains(".pdf#page=1-1\"", StringComparison.Ordinal)), Is.EqualTo(1));
+        });
     }
 
     #endregion

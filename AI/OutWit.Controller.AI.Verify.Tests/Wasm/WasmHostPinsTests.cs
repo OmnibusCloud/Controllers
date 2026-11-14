@@ -17,6 +17,7 @@ public sealed class WasmHostPinsTests
     #region Constants
 
     private const string VERIFY_PROJECT = "OutWit.Controller.AI.Verify.csproj";
+    private const string CORPUS_PROJECT = "OutWit.Controller.AI.Corpus.csproj";
     private const string NATIVE_VERSION_PIN = "WASMTIME_NATIVE_VERSION";
 
     #endregion
@@ -33,7 +34,7 @@ public sealed class WasmHostPinsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(references.Select(reference => reference.Name), Does.Contain(VERIFY_PROJECT));
+            Assert.That(references.Select(reference => reference.Name), Does.Contain(VERIFY_PROJECT).And.Contain(CORPUS_PROJECT));
             Assert.That(references.Select(reference => reference.Version).Distinct(), Has.Exactly(1).Items,
                 string.Join("\n", references.Select(reference => $"{reference.Name}: {reference.Version}")));
         });
@@ -49,7 +50,7 @@ public sealed class WasmHostPinsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(carriers.Select(carrier => carrier.Name), Does.Contain(VERIFY_PROJECT));
+            Assert.That(carriers.Select(carrier => carrier.Name), Does.Contain(VERIFY_PROJECT).And.Contain(CORPUS_PROJECT), "Verify and Corpus each carry their own copy of the host");
             foreach (var (name, version) in carriers)
                 Assert.That(version, Is.EqualTo(WasmHostBinding.BUILT_AGAINST), $"{name} compiles the shared host, whose guard names {WasmHostBinding.BUILT_AGAINST}");
         });
@@ -94,6 +95,26 @@ public sealed class WasmHostPinsTests
                 if (rids.Count > 0)
                     Assert.That(rids, Is.EquivalentTo(built), Path.GetFileName(path));
             }
+        });
+    }
+
+    [Test]
+    public void EveryControllerShipsTheSameNativeBytesTest()
+    {
+        // The binding loads once per process in the client's shared context, and the natives with
+        // it: the controllers that carry the host ship the same files, whatever release their
+        // URIs name, so whichever loads first, the engine is the same.
+        var verify = WasmHostRepository.ShippedNatives(WasmHostRepository.AiProjects().Single(project => Path.GetFileName(project.Path) == VERIFY_PROJECT).Project);
+        var shippers = WasmHostRepository.AiProjects()
+            .Select(project => (Name: Path.GetFileName(project.Path), Natives: WasmHostRepository.ShippedNatives(project.Project)))
+            .Where(shipper => shipper.Natives.Count > 0)
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(shippers.Select(shipper => shipper.Name), Does.Contain(CORPUS_PROJECT), "Corpus ships natives of its own");
+            foreach (var (name, natives) in shippers)
+                Assert.That(natives, Is.EquivalentTo(verify), $"{name}: the same platforms, hashes and sizes as Verify's");
         });
     }
 

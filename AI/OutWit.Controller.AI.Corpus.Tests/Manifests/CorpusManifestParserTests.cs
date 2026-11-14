@@ -61,8 +61,23 @@ public sealed class CorpusManifestParserTests
             Assert.That(manifest.Pipeline.FilterQuality, Is.True);
             Assert.That(manifest.Pipeline.Sign, Is.True);
             Assert.That(manifest.Pipeline.CleanLines, Is.True, "the line stage is on unless the manifest turns it off");
+            Assert.That(manifest.Pipeline.ExtractPdf, Is.True, "the PDF stage is on unless the manifest turns it off");
             Assert.That(manifest.Pipeline.Quality, Is.Null);
             Assert.That(manifest.Pipeline.TargetLanguages, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void ThePdfStageCanBeTurnedOffTest()
+    {
+        var manifest = CorpusManifestParser.Parse("""{"pipeline":{"version":"v","extract_pdf":false},"allowed_origins":["h"],"sources":["https://h/a.warc.gz"]}""");
+        var wrong = CorpusManifestParser.Parse("""{"pipeline":{"version":"v","extract_pdf":"no"},"allowed_origins":["h"],"sources":["https://h/a.warc.gz"]}""");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(manifest.Errors, Is.Empty);
+            Assert.That(manifest.Pipeline.ExtractPdf, Is.False);
+            Assert.That(wrong.Errors, Has.Some.Contains("'extract_pdf' must be true or false"));
         });
     }
 

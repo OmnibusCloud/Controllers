@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Reports;
+using OutWit.Controller.AI.Corpus.Shards;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Reports;
 
@@ -192,8 +193,50 @@ public sealed class CorpusIntegrityWriterTests
         replica.Stats!.Drops = [new CorpusCountData { Name = "min_words", Count = 4 }];
         replica.Stats.Languages = [new CorpusCountData { Name = "deu", Count = 9 }];
 
-        Assert.That(CorpusIntegrityWriter.Differences(primary, replica), Is.EqualTo(new[] { "verdict", "content", "documents", "drops", "languages" }));
+        primary.Stats.Pdf = new CorpusPdfStatsData { In = 3, Extracted = 2, Pages = 20, Documents = 4, Fuel = 1000 };
+        replica.Stats.Pdf = new CorpusPdfStatsData { In = 3, Extracted = 2, Pages = 20, Documents = 5, Fuel = 1000 };
+
+        Assert.That(CorpusIntegrityWriter.Differences(primary, replica), Is.EqualTo(new[] { "verdict", "content", "documents", "drops", "languages", "pdf" }));
         Assert.That(CorpusIntegrityWriter.Differences(primary, primary.Clone()), Is.Empty);
+    }
+
+    [Test]
+    public void ThePdfCountsAreComparedAndTheFuelIsNotTest()
+    {
+        var primary = Result(0, "aaa", 10);
+        var replica = Result(0, "aaa", 10);
+        primary.Stats!.Pdf = new CorpusPdfStatsData { In = 3, Extracted = 2, Pages = 20, Documents = 4, Fuel = 1000 };
+        replica.Stats!.Pdf = new CorpusPdfStatsData { In = 3, Extracted = 2, Pages = 20, Documents = 4, Fuel = 2000 };
+        var without = Result(0, "aaa", 10);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(CorpusIntegrityWriter.Differences(primary, replica), Is.Empty, "the fuel is a cost, its documents are compared");
+            Assert.That(CorpusIntegrityWriter.Differences(primary, without), Is.EqualTo(new[] { "pdf" }));
+        });
+    }
+
+    [Test]
+    public void ASideThatCouldNotRunThePdfSandboxIsIncompleteTest()
+    {
+        // A node without the sandbox drops the shard's PDFs and completes the HTML: its product
+        // differs from an equipped node's for a reason of its machine, not of the shard.
+        var equipped = Result(7, "with-pdfs", 12);
+        var lacking = Result(7, "without-pdfs", 10);
+        lacking.Stats!.Drops = [new CorpusCountData { Name = ShardPdfStage.DROP_PDF_SANDBOX_UNAVAILABLE, Count = 2 }];
+
+        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write([equipped, lacking]));
+        var summary = document.RootElement.GetProperty("summary");
+        var pair = document.RootElement.GetProperty("pairs")[0];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(CorpusIntegrityWriter.LackedThePdfSandbox(lacking), Is.True);
+            Assert.That(CorpusIntegrityWriter.LackedThePdfSandbox(equipped), Is.False);
+            Assert.That(summary.GetProperty("incomplete").GetInt32(), Is.EqualTo(1));
+            Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.Zero);
+            Assert.That(pair.GetProperty("incomplete").GetBoolean(), Is.True);
+        });
     }
 
     [Test]
