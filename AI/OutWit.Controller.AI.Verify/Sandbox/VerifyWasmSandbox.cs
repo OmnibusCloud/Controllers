@@ -225,6 +225,10 @@ public sealed class VerifyWasmSandbox : IDisposable
             Stdin = stdin,
             CaptureDirectory = m_ioDir,
             Fuel = limits.FuelBudget,
+            // The budget is the program's own: what instantiation costs (a unit a byte of data
+            // segments where the platform copies them, nothing where it maps an image) is in
+            // neither the budget nor the fuel reported, so both are the same on every platform.
+            FuelAfterInstantiation = true,
             MemoryBytes = limits.MemoryBytes,
             WallMs = limits.WallTimeMs,
             RandomSeed = task.RandomSeed,

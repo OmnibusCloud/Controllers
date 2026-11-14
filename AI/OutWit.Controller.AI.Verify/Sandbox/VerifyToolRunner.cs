@@ -9,7 +9,9 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// C/C++ runtime) in a store of its own, under the same envelope as a program: fuel, an epoch
 /// deadline, the memory and table caps (<see cref="WasmHostLimits"/>), the deterministic linker,
 /// read-only folders only. Its stdout is its product (an object, a module), written straight to
-/// a file; its stderr is the diagnostics a task's author reads.
+/// a file; its stderr is the diagnostics a task's author reads. As for a program, the budget is
+/// given once the tool is instantiated: the copy of its data segments, which only some platforms
+/// pay fuel for, is not in it, so a build at the edge of its budget ends the same way everywhere.
 /// </summary>
 internal sealed class VerifyToolRunner
 {
@@ -63,21 +65,26 @@ internal sealed class VerifyToolRunner
         using var store = new Store(m_host.Engine);
         store.SetWasiConfiguration(wasi);
         WasmHostLimits.Apply(store, fuel, memoryBytes, wallMs);
+        store.Fuel = (ulong)WasmHostLimits.InstantiationFuel(fuel, memoryBytes);
 
         // A tool takes no randomness; the seed only keeps the linker's stream fixed.
         using var linker = WasmHostLinker.Create(m_host.Engine, 0);
 
-        var (exitCode, trap) = WasmHostGuestThread.Run(() => Invoke(linker, store, module));
+        var (exitCode, trap) = WasmHostGuestThread.Run(() => Invoke(linker, store, module, fuel));
 
-        var used = trap is TrapCode.OutOfFuel ? fuel : fuel - (long)store.Fuel;
+        var used = trap is TrapCode.OutOfFuel ? fuel : Math.Max(0, Math.Max(1, fuel) - (long)Math.Min(store.Fuel, long.MaxValue));
         return new VerifyToolOutcome(exitCode, trap, used, (int)(DateTime.UtcNow - started).TotalMilliseconds);
     }
 
-    private static (int ExitCode, TrapCode? Trap) Invoke(Linker linker, Store store, WasmModule module)
+    private static (int ExitCode, TrapCode? Trap) Invoke(Linker linker, Store store, WasmModule module, long fuel)
     {
         try
         {
             var instance = linker.Instantiate(store, module);
+
+            // The budget again, now that the data segments are in place.
+            store.Fuel = (ulong)Math.Max(1, fuel);
+
             var start = instance.GetAction(START_EXPORT) ?? throw new InvalidOperationException($"the tool exports no {START_EXPORT}");
             start();
             return (0, null);
