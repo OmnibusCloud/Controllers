@@ -22,14 +22,14 @@ public static class CorpusBenchmark
     #region Constants
 
     /// <summary>Bumped with every change to the reference workload or its calibration.</summary>
-    public const string UNIT = "corpus-wet-mb@synthetic-v1";
+    public const string UNIT = "corpus-wet-mb@synthetic-v2";
 
     /// <summary>
     /// SHA-256 of the reference product (the uncompressed JSON lines of the documents that pass).
     /// Pinned by a test; a change to the generator or to any stage moves it, and then
     /// <see cref="UNIT"/> moves too.
     /// </summary>
-    public const string EXPECTED_CONTENT_SHA256 = "63e868cac3b633c130a9175f75bc57203dca1b60ae870c734bb1bd4c46b398aa";
+    public const string EXPECTED_CONTENT_SHA256 = "8850676454decb1bc8bea8fd4a4c64c1afeb609ff972795178aeb6347f1d54ee";
 
     /// <summary>
     /// Megabytes of real Common Crawl WET (gzip, full pipeline with the language stage) that cost

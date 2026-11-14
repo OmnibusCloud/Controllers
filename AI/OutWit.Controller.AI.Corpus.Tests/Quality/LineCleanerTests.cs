@@ -5,8 +5,9 @@ namespace OutWit.Controller.AI.Corpus.Tests.Quality;
 
 /// <summary>
 /// The boilerplate-line stage on the shapes a WET page has: menus, prices and footers go,
-/// sentences and long lines stay, for spaced and unspaced scripts; and a WET document keeps
-/// its lines on the way in.
+/// sentences and long lines stay, for spaced and unspaced scripts; JavaScript notices, cookie
+/// banners and policy lines go whatever their shape; and a WET document keeps its lines on
+/// the way in.
 /// </summary>
 [TestFixture]
 public sealed class LineCleanerTests
@@ -18,14 +19,43 @@ public sealed class LineCleanerTests
     [TestCase("Read the full story…", false)]
     [TestCase("The water was cold that morning.", true)]
     [TestCase("\"Is this the right way?\" she asked.", true)]
-    [TestCase("He said: «this is it.»", true)]
-    [TestCase("Three words here.", true)]
+    [TestCase("He said: «this is the place.»", true)]
+    [TestCase("Five words make a sentence.", true)]
+    [TestCase("Four words only here.", false)]
+    [TestCase("Comments are closed.", false)]
     [TestCase("Two words.", false)]
     [TestCase("A long heading without a final mark that still runs past a dozen words in all", true)]
     [TestCase("Home About Products Contact Blog", false)]
     public void SpacedLinesTest(string line, bool kept)
     {
         Assert.That(LineCleaner.Keep(line, QualityRules.Spaced), Is.EqualTo(kept));
+    }
+
+    [TestCase("Please enable JavaScript in your browser to complete this form.")]
+    [TestCase("This website uses cookies to enhance your browsing experience and to analyse our traffic.")]
+    [TestCase("We are using cookies to give you the best experience on our website.")]
+    [TestCase("Diese Website verwendet Cookies, um Ihre Erfahrung zu verbessern, während Sie navigieren.")]
+    [TestCase("By submitting this form, I agree to the Terms of Use and the Privacy Policy of this website.")]
+    public void JavaScriptCookieAndPolicyLinesGoTest(string line)
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(LineCleaner.IsProseShaped(line, QualityRules.Spaced), Is.True, "the line has the shape of prose");
+            Assert.That(LineCleaner.Keep(line, QualityRules.Spaced), Is.False);
+        });
+    }
+
+    [Test]
+    public void ALineWithAThousandCharacterWordGoesTest()
+    {
+        var blob = "data:image/png;base64," + new string('A', LineCleaner.MAX_WORD_LENGTH);
+        var line = $"The picture below shows the result of the first experiment {blob} in the lab.";
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(LineCleaner.Keep(line, QualityRules.Spaced), Is.False);
+            Assert.That(LineCleaner.Keep(line.Replace(blob, "image", StringComparison.Ordinal), QualityRules.Spaced), Is.True);
+        });
     }
 
     [TestCase("コンテンツへスキップ", false)]
@@ -47,7 +77,9 @@ public sealed class LineCleanerTests
             "How to choose a swimming cap for a child",
             "A swimming cap protects the hair from chlorinated water and keeps it out of the eyes.",
             "Silicone caps last longer than fabric ones, but they are harder to put on for small children.",
-            "Price: 12.99 EUR", "Add to cart", "© 2026 Example Shop. All rights reserved.");
+            "Price: 12.99 EUR", "Add to cart", "Comments are closed.",
+            "This shop uses cookies to remember your basket and to measure how the site is used.",
+            "© 2026 Example Shop. All rights reserved.");
 
         var cleaned = LineCleaner.Clean(page, QualityRules.Spaced, out var removed);
 
@@ -59,7 +91,7 @@ public sealed class LineCleanerTests
                 "Silicone caps last longer than fabric ones, but they are harder to put on for small children.",
                 "© 2026 Example Shop. All rights reserved."
             }));
-            Assert.That(removed, Is.EqualTo(8));
+            Assert.That(removed, Is.EqualTo(10));
         });
     }
 

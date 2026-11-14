@@ -6,9 +6,10 @@ using OutWit.Controller.AI.Corpus.Warc;
 namespace OutWit.Controller.AI.Corpus.Tests.Quality;
 
 /// <summary>
-/// The quality filter: a plain article passes, each rule fails on the shape it names, an
-/// unspaced script is judged by its letters, the verdict is the same every time, and on the
-/// golden shard a plausible share of raw pages survives with the drops accounted for by rule.
+/// The quality filter: a plain article passes, each rule fails on the shape it names, every
+/// measure is the number DataTrove's code gives on the same text, the verdict is the same every
+/// time, and on the golden shard a plausible share of raw pages survives with the drops
+/// accounted for by rule. The rules of each language: <see cref="QualityRulesTests"/>.
 /// </summary>
 [TestFixture]
 public sealed class QualityFilterTests
@@ -89,24 +90,11 @@ public sealed class QualityFilterTests
     }
 
     [Test]
-    public void UnspacedScriptsAreJudgedByTheirLettersTest()
+    public void LoremIpsumDropsThePageTest()
     {
-        const string chinese =
-            "委员会详细审查了年度报告并批准了明年的预算。成员们就维护计划、人员配置和储备基金提出了问题。" +
-            "主席感谢志愿者在夏季活动和秋季集市中的工作。关于修订章程的表决推迟到每位成员收到最终草案之后。" +
-            "下次会议将于下月第一个星期二在社区礼堂举行。上次会议纪要经简短讨论后获得通过，没有修改。";
+        var page = ARTICLE + "\nLorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.";
 
-        var asSpaced = QualityFilter.Judge(chinese, QualityRules.Spaced);
-        var asUnspaced = QualityFilter.Judge(chinese, QualityRules.ForLanguage("zho"));
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(asSpaced.Passed, Is.False, "a space-split sees three giant words");
-            Assert.That(asUnspaced.Passed, Is.True, string.Join(", ", asUnspaced.FailedRules));
-            Assert.That(asUnspaced.Measures["words"], Is.GreaterThan(100));
-            Assert.That(QualityRules.ForLanguage("eng"), Is.SameAs(QualityRules.Spaced));
-            Assert.That(QualityRules.ForLanguage("jpn"), Is.SameAs(QualityRules.Unspaced));
-        });
+        Assert.That(QualityFilter.Judge(page, QualityRules.Spaced).FailedRules, Is.EqualTo(new[] { "lorem_ipsum" }));
     }
 
     [Test]
@@ -117,6 +105,106 @@ public sealed class QualityFilterTests
 
         Assert.That(second.Measures, Is.EqualTo(first.Measures));
         Assert.That(second.FailedRules, Is.EqualTo(first.FailedRules));
+    }
+
+    #endregion
+
+    #region Reference Definition Tests
+
+    // The expected values below are what DataTrove's own functions (find_all_duplicate,
+    // find_top_duplicate over get_n_grams, find_duplicates; gopher_repetition_filter.py) return
+    // on the same texts split into whitespace words, over len(text).
+
+    [Test]
+    public void APhraseSaidTwiceCountsOnlyItsRepeatTest()
+    {
+        // Twenty words, then the first ten again: the repeat is "alpha ... kappa" (47 letters) of
+        // a 162-character text. Counting both occurrences would make it 94 of 133 word letters.
+        const string text =
+            "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon\n" +
+            "alpha beta gamma delta epsilon zeta eta theta iota kappa";
+
+        var measures = QualityFilter.Judge(text, QualityRules.Spaced).Measures;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(text, Has.Length.EqualTo(162));
+            Assert.That(measures["duplicate_ngram_chars_5"], Is.EqualTo(47.0 / 162).Within(1e-12));
+            Assert.That(measures["duplicate_ngram_chars_10"], Is.EqualTo(47.0 / 162).Within(1e-12));
+            Assert.That(measures["duplicate_ngram_chars_6"], Is.EqualTo(30.0 / 162).Within(1e-12), "one 6-word repeat, then a 4-word tail too short for another");
+        });
+    }
+
+    [Test]
+    public void RepeatsAreCountedOnceAndSkippedPastTest()
+    {
+        // Positions 0..4 are new; at 5 the first 5-gram repeats (5 letters, skip to 10), at 10 again.
+        const string text = "a b c d e a b c d e a b c d e";
+
+        var measures = QualityFilter.Judge(text, QualityRules.Spaced).Measures;
+
+        Assert.That(measures["duplicate_ngram_chars_5"], Is.EqualTo(10.0 / 29).Within(1e-12));
+    }
+
+    [Test]
+    public void TheMostFrequentNgramIsChosenByCountTest()
+    {
+        // "a b" occurs three times (3 characters each, the space included); the long pair occurs
+        // twice and covers more characters, but it is not the most frequent.
+        const string text = "a b a b a b xxxxxxxxxx yyyyyyyyyy xxxxxxxxxx yyyyyyyyyy";
+
+        var measures = QualityFilter.Judge(text, QualityRules.Spaced).Measures;
+
+        Assert.That(measures["top_ngram_chars_2"], Is.EqualTo(9.0 / 55).Within(1e-12));
+    }
+
+    [Test]
+    public void TopNgramTiesGoToTheFirstTest()
+    {
+        // "aa bb" and "cc dd" both occur twice; "aa bb" comes first. Every trigram occurs once.
+        const string text = "aa bb cc dd aa bb ee ff cc dd gg hh";
+
+        var measures = QualityFilter.Judge(text, QualityRules.Spaced).Measures;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(measures["top_ngram_chars_2"], Is.EqualTo(10.0 / 35).Within(1e-12));
+            Assert.That(measures["top_ngram_chars_3"], Is.EqualTo(8.0 / 35).Within(1e-12));
+        });
+    }
+
+    [Test]
+    public void DuplicateLineCharactersAreCountedAgainstTheWholeTextTest()
+    {
+        const string text = "first line here\nsecond line here\nfirst line here";
+
+        var measures = QualityFilter.Judge(text, QualityRules.Spaced).Measures;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(measures["duplicate_lines"], Is.EqualTo(1.0 / 3).Within(1e-12));
+            Assert.That(measures["duplicate_line_chars"], Is.EqualTo(15.0 / 48).Within(1e-12));
+        });
+    }
+
+    [Test]
+    public void HashesAndEllipsesAreJudgedSeparatelyTest()
+    {
+        // 100 words with 6 hash marks and 6 ellipses: each ratio is 0.06, under Gopher's 0.1 for
+        // "either the hash symbol or the ellipsis" (summed they would be 0.12); 12 hash marks fail.
+        var mixed = string.Join(' ', Enumerable.Range(0, 100).Select(i => i < 6 ? "#tag" : i < 12 ? "wait..." : "word"));
+        var hashes = string.Join(' ', Enumerable.Range(0, 100).Select(i => i < 12 ? "#tag" : "word"));
+
+        var mixedVerdict = QualityFilter.Judge(mixed, QualityRules.Spaced);
+        var hashesVerdict = QualityFilter.Judge(hashes, QualityRules.Spaced);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(mixedVerdict.Measures["symbol_to_word_ratio"], Is.EqualTo(0.06).Within(1e-12));
+            Assert.That(mixedVerdict.FailedRules, Does.Not.Contain("symbol_to_word_ratio"));
+            Assert.That(hashesVerdict.Measures["symbol_to_word_ratio"], Is.EqualTo(0.12).Within(1e-12));
+            Assert.That(hashesVerdict.FailedRules, Does.Contain("symbol_to_word_ratio"));
+        });
     }
 
     #endregion

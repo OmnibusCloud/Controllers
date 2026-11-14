@@ -52,6 +52,60 @@ internal sealed class NgramIndex
         return counts;
     }
 
+    /// <summary>
+    /// The most frequent n-gram: the one with the most occurrences, overlapping ones included; on
+    /// a tie, the one that occurs first (DataTrove's <c>find_top_duplicate</c>, a
+    /// <c>Counter.most_common(1)</c> over the n-grams in text order).
+    /// </summary>
+    /// <param name="n">The n-gram length.</param>
+    /// <returns>The position it first occurs at and its occurrence count; (-1, 0) when the document has fewer than n words.</returns>
+    public (int Start, int Count) MostFrequent(int n)
+    {
+        var start = -1;
+        var top = 0;
+        foreach (var (first, count) in Occurrences(n))
+        {
+            if (count > top || (count == top && first < start))
+            {
+                start = first;
+                top = count;
+            }
+        }
+
+        return (start, top);
+    }
+
+    /// <summary>
+    /// Characters of the words of every n-gram occurrence that repeats an n-gram seen earlier,
+    /// scanning the words in order: a repeat is counted and the scan moves past its n words, any
+    /// other n-gram is remembered and the scan moves one word (DataTrove's
+    /// <c>find_all_duplicate</c>). No word is counted twice, and the first occurrence of an
+    /// n-gram is never counted.
+    /// </summary>
+    /// <param name="n">The n-gram length.</param>
+    /// <returns>The characters of the repeats' words (separators not included).</returns>
+    public long RepeatedChars(int n)
+    {
+        var seen = new HashSet<int>(Math.Max(0, m_ids.Length - n + 1), new SequenceComparer(m_ids, n));
+        long chars = 0;
+        var index = 0;
+        while (index + n <= m_ids.Length)
+        {
+            if (seen.Contains(index))
+            {
+                chars += Chars(index, n);
+                index += n;
+            }
+            else
+            {
+                seen.Add(index);
+                index++;
+            }
+        }
+
+        return chars;
+    }
+
     /// <summary>Characters of the words of the n-gram at a position.</summary>
     /// <param name="start">The position.</param>
     /// <param name="n">The n-gram length.</param>
@@ -62,14 +116,6 @@ internal sealed class NgramIndex
         for (var i = start; i < start + n; i++)
             chars += m_lengths[i];
         return chars;
-    }
-
-    /// <summary>The length of the word at a position.</summary>
-    /// <param name="index">The position.</param>
-    /// <returns>Its character count.</returns>
-    public int Length(int index)
-    {
-        return m_lengths[index];
     }
 
     #endregion

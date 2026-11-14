@@ -131,6 +131,21 @@ public sealed class ShardProcessorTests
         Assert.That(hashes, Is.All.EqualTo(single));
     }
 
+    /// <summary>
+    /// The products of the golden shards under the default pipeline, pinned: produced on win-x64,
+    /// re-checked on every platform the workflow runs, so a stage that read a platform (a Unicode
+    /// table, a culture, a hash seed) would show here. A change to any stage moves them; pin the
+    /// new values with the change that moved them.
+    /// </summary>
+    [TestCase(WET_FIXTURE, CorpusSourceFormat.Wet, "61ac69cf399a57c75a127b86dc85c02534fc51de4e0e82a896b3de647f735620")]
+    [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc, "f0bedbac8df708e48cae4e181f4b8beeef07ea083ac9cc9babd1e3423f1b6690")]
+    public void GoldenShardProductIsPinnedTest(string fixture, CorpusSourceFormat format, string expected)
+    {
+        var product = Run(fixture, format, DefaultPipeline()).Product;
+
+        Assert.That(product.ContentSha256, Is.EqualTo(expected), $"{fixture}: the product hashes to {product.ContentSha256}");
+    }
+
     #endregion
 
     #region Stage Tests
