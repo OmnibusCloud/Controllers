@@ -9,7 +9,8 @@ namespace OutWit.Controller.AI.Corpus.Activities;
 
 /// <summary>
 /// Host-side: everything Corpus.Split would check, reported instead of thrown — shard count,
-/// refused origins, oversized sources, the traffic estimate, every manifest problem.
+/// refused origins, oversized sources, the traffic estimate, the server storage estimate
+/// against the deployment's headroom, every manifest problem.
 /// </summary>
 [Activity("Corpus.Preflight")]
 [MemoryPackable]

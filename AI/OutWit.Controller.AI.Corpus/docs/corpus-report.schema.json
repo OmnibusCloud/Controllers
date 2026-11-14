@@ -37,6 +37,8 @@
           "content_sha256": { "type": "string", "description": "SHA-256 of the uncompressed JSON lines: the identity a re-execution must reproduce." },
           "error": { "type": "string" },
           "controller": { "type": "string" },
+          "runtime_target": { "type": "string", "description": "The operating system and architecture the shard ran on, e.g. \"linux-x64\" (\"\" from a controller before it was reported). A platform, never a machine." },
+          "degree": { "type": "integer", "description": "Shards the node processed at once (its cores, bounded by memory): the context of process_ms (0 when not reported)." },
           "stats": {
             "oneOf": [
               { "type": "null" },

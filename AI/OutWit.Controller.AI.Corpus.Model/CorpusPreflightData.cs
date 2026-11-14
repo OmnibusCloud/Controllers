@@ -8,7 +8,8 @@ namespace OutWit.Controller.AI.Corpus.Model;
 
 /// <summary>
 /// What a lab learns before anything runs: how many shards, whether every origin is allowed,
-/// which sources exceed the cap, how much traffic the contributors will carry, and every
+/// which sources exceed the cap, how much traffic the contributors will carry, how much the
+/// job will leave on the server and how much room the deployment gives one job, and every
 /// problem with the manifest by line.
 /// </summary>
 [MemoryPackable]
@@ -31,7 +32,10 @@ public sealed partial class CorpusPreflightData : ModelBase
                && RefusedOrigins.Is(other.RefusedOrigins)
                && OversizedSources.Is(other.OversizedSources)
                && EstimatedTrafficBytes.Is(other.EstimatedTrafficBytes)
-               && Messages.Is(other.Messages);
+               && Messages.Is(other.Messages)
+               && EstimatedStorageBytes.Is(other.EstimatedStorageBytes)
+               && StorageHeadroomBytes.Is(other.StorageHeadroomBytes)
+               && StorageRetentionDays.Is(other.StorageRetentionDays);
     }
 
     /// <summary>Deep copy.</summary>
@@ -45,7 +49,10 @@ public sealed partial class CorpusPreflightData : ModelBase
             RefusedOrigins = [.. RefusedOrigins],
             OversizedSources = OversizedSources,
             EstimatedTrafficBytes = EstimatedTrafficBytes,
-            Messages = [.. Messages]
+            Messages = [.. Messages],
+            EstimatedStorageBytes = EstimatedStorageBytes,
+            StorageHeadroomBytes = StorageHeadroomBytes,
+            StorageRetentionDays = StorageRetentionDays
         };
     }
 
@@ -80,6 +87,24 @@ public sealed partial class CorpusPreflightData : ModelBase
     /// <summary>Every problem, by manifest line.</summary>
     [MemoryPackOrder(5)]
     public List<string> Messages { get; set; } = [];
+
+    /// <summary>
+    /// What the job will leave on the server for the retention window: the products of every
+    /// execution (a sampled shard runs twice), the job's documents and its inputs. An estimate
+    /// from measured ratios of product to shard bytes, on the side of too much.
+    /// </summary>
+    [ToString]
+    [MemoryPackOrder(6)]
+    public long EstimatedStorageBytes { get; set; }
+
+    /// <summary>The most one job may leave on the server, as the deployment states it; 0 = not stated (no refusal on storage).</summary>
+    [ToString]
+    [MemoryPackOrder(7)]
+    public long StorageHeadroomBytes { get; set; }
+
+    /// <summary>Days the server keeps a job's products after they are made, as the deployment states it; 0 = not stated.</summary>
+    [MemoryPackOrder(8)]
+    public int StorageRetentionDays { get; set; }
 
     #endregion
 }

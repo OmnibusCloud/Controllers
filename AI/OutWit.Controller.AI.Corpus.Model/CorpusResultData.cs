@@ -35,7 +35,9 @@ public sealed partial class CorpusResultData : ModelBase
                && NodeId.Is(other.NodeId)
                && NodeName.Is(other.NodeName)
                && ControllerVersion.Is(other.ControllerVersion)
-               && SourceUrl.Is(other.SourceUrl);
+               && SourceUrl.Is(other.SourceUrl)
+               && RuntimeTarget.Is(other.RuntimeTarget)
+               && Degree.Is(other.Degree);
     }
 
     /// <summary>Deep copy.</summary>
@@ -54,7 +56,9 @@ public sealed partial class CorpusResultData : ModelBase
             NodeId = NodeId,
             NodeName = NodeName,
             ControllerVersion = ControllerVersion,
-            SourceUrl = SourceUrl
+            SourceUrl = SourceUrl,
+            RuntimeTarget = RuntimeTarget,
+            Degree = Degree
         };
     }
 
@@ -107,6 +111,14 @@ public sealed partial class CorpusResultData : ModelBase
     /// <summary>The shard's URL, repeated from the task so the report stands on its own.</summary>
     [MemoryPackOrder(10)]
     public string SourceUrl { get; set; } = "";
+
+    /// <summary>The operating system and architecture the shard ran on, e.g. <c>linux-x64</c>: what tells two executions of a pair apart by platform, never by machine.</summary>
+    [MemoryPackOrder(11)]
+    public string RuntimeTarget { get; set; } = "";
+
+    /// <summary>Shards the node processes at once (its cores, bounded by memory): the context of the processing time. 0 = not reported.</summary>
+    [MemoryPackOrder(12)]
+    public int Degree { get; set; }
 
     #endregion
 }

@@ -94,6 +94,8 @@ public static class CorpusReportWriter
         writer.WriteString("content_sha256", result.ContentSha256);
         writer.WriteString("error", result.Error);
         writer.WriteString("controller", result.ControllerVersion);
+        writer.WriteString("runtime_target", result.RuntimeTarget);
+        writer.WriteNumber("degree", result.Degree);
 
         if (result.Stats is { } stats)
         {

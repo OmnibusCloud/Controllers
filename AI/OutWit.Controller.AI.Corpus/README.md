@@ -15,7 +15,7 @@ opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
 **Status: 0.1.13 — proven on the test fleet, not yet released to nuget.org.**
-The stage libraries are wired into seven activities and three bundled scripts; the
+The stage libraries are wired into nine activities and four bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
 server the controller processed real Common Crawl WET shards on Windows and
@@ -28,13 +28,15 @@ crawl text, and the dedup merge measured at the scale of a crawl segment.
 
 | Activity | Runs on | Signature | What it does |
 |---|---|---|---|
-| `Corpus.Split` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusTaskCollection` | parses the manifest, checks every source against the allowlist and the byte cap, hashes the language model blob and pins it into the pipeline, emits one task per shard. Any problem fails the job here — a bad manifest never reaches a node |
-| `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate (sources without a size are asked at the origin with HEAD, up to 64 of them, the rest extrapolated at the mean), every message by manifest line |
+| `Corpus.Split` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusTaskCollection` | parses the manifest, checks every source against the allowlist and the byte cap, hashes the language model blob and pins it into the pipeline, holds the server storage estimate to the deployment's headroom, emits one task per shard. Any problem fails the job here — a bad manifest never reaches a node |
+| `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate (sources without a size are asked at the origin with HEAD, up to 64 of them, the rest extrapolated at the mean), the server storage estimate and the headroom it is held to (see *Server storage*), every message by manifest line |
 | `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline, the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception; several shards may run on one client at once |
 | `Corpus.Collect` | host | `(CorpusResultCollection, CorpusOptions) → Blob report` | the job report: every shard's verdict, blobs and content hash in task order, the aggregate counters over the fleet |
 | `Corpus.SamplingRate` | host | `(CorpusOptions) → Double` | `SamplingRate` clamped to 0..1, the share of the shards `Grid.Replicas` runs twice |
 | `Corpus.Dedup` | host | `(Blob report, CorpusOptions) → Blob dedup` | the near-duplicate merge over the signature blobs a report names: LSH over the MinHash signatures (16 bands of 8), a candidate pair joins a cluster at a Jaccard estimate of `DedupThreshold` (0.8 by default), the lowest document of a cluster is kept; per shard a keep mask, plus the clusters |
 | `Corpus.Integrity` | host | `(CorpusResultCollection executions) → Blob integrity` | the two executions of every shard that ran twice compared on verdict, content hash, document counts and histograms |
+| `Corpus.RuntimeDiagnostics` | host | `() → CorpusRuntimeDiagnostics` | what the module of the answering process carries (see *Diagnostics and capabilities*) |
+| `Corpus.Capabilities` | host | `() → Blob capabilities` | what an application can know before a run, as a JSON document (`docs/corpus-capabilities.schema.json`) |
 
 ## Scripts
 
@@ -55,7 +57,9 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
 ```
 
 `CorpusPreflight.wit` runs `Corpus.Preflight` alone; `CorpusDedup.wit` runs
-`Corpus.Dedup` over a finished run's report (`Job:CorpusDedup(Blob:report, CorpusOptions:opts)`). `languageModel` is the
+`Corpus.Dedup` over a finished run's report (`Job:CorpusDedup(Blob:report, CorpusOptions:opts)`);
+`CorpusRuntimeDiagnostics.wit` takes nothing and returns `result` (the diagnostics) and
+`capabilities` (the document). `languageModel` is the
 blob of a model trained by `corpus-assets` (see below); pass an empty blob when
 the pipeline's `identify_language` is `false`. `CorpusOptions`: `MaxShardBytes`
 (0 = the controller's cap of 1 GiB; a smaller value lowers it), `SamplingRate`
@@ -129,8 +133,9 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   and skipping the lines whose bit is 0.
 - **Report** (`corpus-report.json`, `docs/corpus-report.schema.json`): per
   shard the verdict, blob ids, content hash, error and statistics (records in,
-  documents extracted and out, drops by rule, languages, bytes, times); the
-  summary sums them over the fleet.
+  documents extracted and out, drops by rule, languages, bytes, times), and the
+  platform (`runtime_target`, e.g. `linux-x64`) and degree it ran at — a
+  platform, never a machine; the summary sums them over the fleet.
 
 ## Integrity
 
@@ -189,6 +194,80 @@ processes the shard; any other answers `OriginRefused` without sending a
 request. The server does not ask such a host for sizes unless its own
 operator listed it, so the traffic estimate for those shards comes from the
 manifest's `size` values.
+
+## Server storage
+
+The input does not touch the server; the products do. Every execution of a
+shard uploads its text blob and its signatures blob, the job writes its report
+and its integrity document, a dedup run writes its own, and the server keeps
+all of it for the retention window (a product from its shard's completion, the
+documents from the job's). For a job of terabytes that is the real ceiling of a
+deployment, so the preflight estimates it and a deployment can set a limit.
+
+**The estimate** (`EstimatedStorageBytes` in the preflight) is built from each
+shard's size — the manifest's, or the origin's answer to HEAD — and ratios
+measured on real runs, per format and per setting of `clean_lines` and
+`filter_quality`; each is the largest value measured, raised by a fifth:
+
+| Format | `clean_lines` | `filter_quality` | Text per byte fetched | Documents per MiB |
+|---|---|---|---|---|
+| WET | on | on | 0.35 | 210 |
+| WET | on | off | 0.64 | 350 |
+| WET | off | on | 0.45 | 160 |
+| WET | off | off | 0.98 | 370 |
+| WARC | on | on | 0.08 | 40 |
+| WARC | on | off | 0.11 | 80 |
+| WARC | off | on | 0.10 | 40 |
+| WARC | off | off | 0.18 | 100 |
+
+A document is 1,024 bytes of signatures (none when `sign` is off). The sampled
+shards count twice — the largest ones, so the estimate does not depend on which
+the platform picks — and the documents and the inputs (manifest, model) are
+added. Twenty Common Crawl WET shards with every stage on (1,265 MiB fetched,
+sampling 0.25) left 653 MiB on the test server; the estimate for them is 888 MiB.
+A source whose size is unknown is not in the estimate, and the message says so.
+The guard test over the golden shards fails when a stage makes products larger
+than the table allows.
+
+**The limit.** The engine says nothing about storage to a controller, so the
+host asks two places and the smaller stated value holds:
+
+- the server's blob service, by reflection: a public
+  `Task<long> GetJobStorageHeadroomBytesAsync()` (meant to be backed by a server
+  setting `BlobStorage:JobStorageHeadroomBytes`) and `int JobBlobRetentionDays`
+  on it. A server without these members — every server so far — states nothing;
+- the environment variable `OMNIBUSCLOUD_CORPUS_STORAGE_HEADROOM_BYTES` of the
+  server process, in bytes: the operator's own word.
+
+When the estimate exceeds the headroom, `Corpus.Preflight` answers
+`WellFormed = false` with a message that names both numbers, and
+`Corpus.Split` fails the job before a node is asked. A deployment that states
+no headroom refuses nothing on storage; the preflight still reports the
+estimate.
+
+## Diagnostics and capabilities
+
+`CorpusRuntimeDiagnostics.wit` answers for the server's module (a plain
+script function runs on the host; the nodes run the same version, the platform
+admits no other to the work):
+
+- `result` (`CorpusRuntimeDiagnosticsData`): the controller version and
+  platform; the stages in order and the stage set's fingerprint — the content
+  hash of the benchmark's reference shard through the stages, computed there,
+  with `StagesVerified` when it is the pinned one; the HTML parser and the
+  compressor with their versions; the language-model format (`WITLID1`) and the
+  hash of the reference model the tests and fleet proofs use; the public
+  origins and the hosts the server's operator lists; the shard cap, the
+  downloads per node and the memory per shard.
+- `capabilities` (`corpus-capabilities.json`,
+  `docs/corpus-capabilities.schema.json`): the same plus what an application
+  shows before a run — the formats, the defaults and the ceilings, every
+  pipeline switch and quality threshold a manifest may set with its default
+  (for scripts with and without word spacing), the thresholds it cannot set,
+  the signatures and dedup parameters, the products with their schemas, the
+  storage ratios with the deployment's headroom and retention window, and the
+  pool as totals: nodes, measured nodes, MB of WET per second (and shards at
+  once when the host carries every node's degree). No node is named.
 
 ## Node behaviour
 
@@ -260,7 +339,9 @@ manifest's `size` values.
 | `ShardProcessor` and friends | `Shards/` | the pipeline over one shard (`ShardProcessor`), the allowlist gate (`ShardOrigin`), the capped retrying fetch (`ShardFetcher`), the pinned model cache (`ShardLanguageModels`), the signatures layout (`ShardSignatureWriter`), the canonical counters (`ShardStatsBuilder`) and the node-side task start to finish (`ShardTaskRunner`) |
 | `CorpusManifestParser` / `CorpusTaskPlanner` | `Manifests/` | the manifest document and the host-side plan |
 | `CorpusReportWriter` | `Reports/` | the job report |
-| `OutWit.Controller.AI.Corpus.Model` | | the wire types: source, pipeline, quality thresholds, task, result, statistics, options, preflight — MemoryPack with pinned member order |
+| `CorpusStorageEstimator` and friends | `Storage/` | the server storage estimate (`CorpusStorageEstimator` over the measured `CorpusStorageRatios`), the deployment's limit behind `ICorpusStorageHeadroom` (`CorpusStorageHeadroomHost`: the server's blob service, the operator's variable) and the refusal (`CorpusStorageCheck`) |
+| `CorpusRuntimeDiagnosticsBuilder` / `CorpusCapabilitiesWriter` | `Diagnostics/` | the module's diagnostics, the stage set and its fingerprint (`CorpusStageSet`), the reference language model's facts, the pool as totals (`CorpusPoolProbe`) and the capabilities document |
+| `OutWit.Controller.AI.Corpus.Model` | | the wire types: source, pipeline, quality thresholds, task, result, statistics, options, preflight, runtime diagnostics — MemoryPack with pinned member order |
 
 `OutWit.Controller.AI.Corpus.Assets` (`corpus-assets`) trains and evaluates
 the language model from WET files:
@@ -300,6 +381,9 @@ the trained language model, committed under `Fixtures/`) and on hostile input
 pipeline's determinism and counters; the fetcher against a loopback origin
 (retries, caps, final refusals, stalls); the node-side task's verdicts; the
 manifest parser and planner; the report; the wire layout of every model type;
+the storage estimate against a measured run and the golden shards, the
+headroom sources and the refusal; the diagnostics and the capabilities
+document, with every published schema checked against what the writers write;
 the hostile-input suite over synthetic shards (`WarcSynth` writes WARC/WET the
 way Common Crawl does: truncation mid-record, invalid UTF-8, hostile HTML,
 non-WARC records, corrupt gzip members); and the distributed gate — the bundled

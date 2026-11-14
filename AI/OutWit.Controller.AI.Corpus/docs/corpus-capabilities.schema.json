@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-capabilities.schema.json",
+  "title": "Corpus capabilities",
+  "description": "The capabilities blob of CorpusRuntimeDiagnostics (Corpus.Capabilities): what an application can know before a run. It takes no manifest. Nodes run the same controller version as the host (the platform admits no other version to the work), so the stages, parsers and limits listed are the pool's. No node is named.",
+  "type": "object",
+  "required": ["schema", "controller", "benchmark_unit", "stages", "parsers", "language_model", "formats", "origins", "defaults", "ceilings", "pipeline", "signatures", "products", "storage"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "string", "const": "corpus-capabilities/1" },
+    "controller": { "type": "string", "description": "The controller's version. The stages are built into the controller: one version, one stage set." },
+    "benchmark_unit": { "type": "string", "description": "The unit of the pool's rate: megabytes of Common Crawl WET per second." },
+    "stages": {
+      "type": "object",
+      "required": ["order", "sha256", "verified"],
+      "additionalProperties": false,
+      "properties": {
+        "order": { "type": "array", "items": { "type": "string" }, "description": "The stages in the order a document meets them. A manifest's pipeline switches turn identify_language, clean_lines, filter_quality and sign on and off." },
+        "sha256": { "type": "string", "description": "The stage set's fingerprint: the content hash the host computed for the controller's reference shard through the stages." },
+        "verified": { "type": "boolean", "description": "The fingerprint is the one the controller pins: the stages compute on the host what they compute everywhere." }
+      }
+    },
+    "parsers": {
+      "type": "object",
+      "required": ["warc", "html", "compressor"],
+      "additionalProperties": false,
+      "properties": {
+        "warc": { "type": "string", "description": "The WARC/WET reader." },
+        "html": { "type": "string", "description": "The HTML parser behind the WARC text extraction, name and version." },
+        "compressor": { "type": "string", "description": "The compressor of the text product, name, version and level." }
+      }
+    },
+    "language_model": {
+      "type": "object",
+      "description": "A language model is a job's input (a blob, pinned by hash in the manifest), not part of the controller. The reference model is the one the controller's tests and fleet proofs use.",
+      "required": ["format", "method", "reference_sha256", "reference_trained_from", "reference_languages"],
+      "additionalProperties": false,
+      "properties": {
+        "format": { "type": "string", "description": "The model file format the controller reads." },
+        "method": { "type": "string" },
+        "reference_sha256": { "type": "string", "description": "What a manifest's pipeline.language_model_sha256 names to pin the reference model." },
+        "reference_trained_from": { "type": "string", "description": "The crawl the reference model was trained from." },
+        "reference_languages": { "type": "array", "items": { "type": "string" }, "description": "ISO 639-3 codes the reference model identifies: what pipeline.target_languages may name with it." }
+      }
+    },
+    "formats": { "type": "array", "items": { "type": "string", "enum": ["wet", "warc"] }, "description": "The source formats a manifest may name." },
+    "origins": {
+      "type": "object",
+      "description": "Where a machine fetches from. A manifest's allowed_origins narrows this rule; it cannot widen it.",
+      "required": ["public", "machine_variable", "max_redirects"],
+      "additionalProperties": false,
+      "properties": {
+        "public": { "type": "array", "items": { "type": "string" }, "description": "The public origins every machine fetches from: HTTPS, the default port, public addresses only." },
+        "machine_variable": { "type": "string", "description": "The environment variable in which a machine's owner lists further hosts; only that machine fetches from them." },
+        "max_redirects": { "type": "integer", "description": "Redirect hops followed, each put to the same rule." }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "description": "What applies when the options leave a value unset (0).",
+      "required": ["max_shard_bytes", "sampling_rate", "dedup_threshold", "downloads_per_node", "memory_per_shard_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "max_shard_bytes": { "type": "integer" },
+        "sampling_rate": { "type": "number" },
+        "dedup_threshold": { "type": "number" },
+        "downloads_per_node": { "type": "integer", "description": "Shards a node downloads at once, whatever its degree." },
+        "memory_per_shard_bytes": { "type": "integer", "description": "Memory a node budgets per shard in flight; with its cores it bounds the node's degree." }
+      }
+    },
+    "ceilings": {
+      "type": "object",
+      "description": "The most a job may ask for, and the limits a hostile input meets.",
+      "required": ["max_shard_bytes", "sampling_rate", "record_bytes", "html_chars", "html_nesting", "html_tags", "size_probes", "dedup_documents", "dedup_clusters_listed"],
+      "additionalProperties": false,
+      "properties": {
+        "max_shard_bytes": { "type": "integer", "description": "A shard on the wire; the options can only lower it." },
+        "sampling_rate": { "type": "number" },
+        "record_bytes": { "type": "integer", "description": "A larger WARC record is skipped and counted." },
+        "html_chars": { "type": "integer" },
+        "html_nesting": { "type": "integer" },
+        "html_tags": { "type": "integer" },
+        "size_probes": { "type": "integer", "description": "Sources the server asks the origin for a size per preflight; the rest are estimated at the mean." },
+        "dedup_documents": { "type": "integer", "description": "Documents one Corpus.Dedup holds in memory." },
+        "dedup_clusters_listed": { "type": "integer" }
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "description": "The stage parameters a manifest's pipeline may set, with the defaults that apply when it does not.",
+      "required": ["switches", "quality", "quality_fixed"],
+      "additionalProperties": false,
+      "properties": {
+        "switches": {
+          "type": "object",
+          "required": ["identify_language", "clean_lines", "filter_quality", "sign"],
+          "additionalProperties": false,
+          "properties": {
+            "identify_language": { "type": "boolean" },
+            "clean_lines": { "type": "boolean" },
+            "filter_quality": { "type": "boolean" },
+            "sign": { "type": "boolean" }
+          }
+        },
+        "quality": {
+          "type": "object",
+          "description": "pipeline.quality keys and their defaults: for scripts with word spacing and for those without (where a word is a letter). null: the rule does not apply to that kind of script.",
+          "additionalProperties": { "$ref": "#/$defs/limit" }
+        },
+        "quality_fixed": {
+          "type": "object",
+          "description": "Thresholds of the quality filter that a manifest cannot set (yet).",
+          "required": ["top_ngram_chars", "duplicate_ngram_chars"],
+          "additionalProperties": false,
+          "properties": {
+            "top_ngram_chars": { "type": "array", "items": { "type": "number" }, "description": "The most characters the single most frequent word n-gram may cover, n = 2, 3, 4." },
+            "duplicate_ngram_chars": { "type": "array", "items": { "type": "number" }, "description": "The most characters repeated word n-grams may cover, n = 5 to 10." }
+          }
+        }
+      }
+    },
+    "signatures": {
+      "type": "object",
+      "required": ["hashes", "shingle_words", "bytes_per_document", "bands", "rows_per_band"],
+      "additionalProperties": false,
+      "properties": {
+        "hashes": { "type": "integer" },
+        "shingle_words": { "type": "integer" },
+        "bytes_per_document": { "type": "integer" },
+        "bands": { "type": "integer", "description": "LSH bands of the dedup merge." },
+        "rows_per_band": { "type": "integer" }
+      }
+    },
+    "products": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "file", "per", "schema"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "file": { "type": "string", "description": "The blob's file name." },
+          "per": { "type": "string", "enum": ["shard", "job", "dedup"], "description": "One per shard execution, one per CorpusProcess job, or one per CorpusDedup run." },
+          "schema": { "type": "string", "description": "The schema tag of a JSON document; \"\" for a product with a fixed binary or JSON-lines layout (the README)." }
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "description": "What the preflight's storage estimate is built on, and the room the deployment gives one job.",
+      "required": ["ratios", "margin"],
+      "additionalProperties": false,
+      "properties": {
+        "ratios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["format", "clean_lines", "filter_quality", "text_per_byte", "documents_per_mib"],
+            "additionalProperties": false,
+            "properties": {
+              "format": { "type": "string", "enum": ["wet", "warc"] },
+              "clean_lines": { "type": "boolean" },
+              "filter_quality": { "type": "boolean" },
+              "text_per_byte": { "type": "number", "description": "Bytes of compressed text product per byte of shard fetched." },
+              "documents_per_mib": { "type": "number", "description": "Documents in the product per MiB of shard fetched; each is one signature of signatures.bytes_per_document." }
+            }
+          }
+        },
+        "margin": { "type": "number", "description": "What the largest measured value was raised by." },
+        "headroom_bytes": { "type": "integer", "description": "The most one job may leave on the server, as the deployment states it. Absent when it states none: storage then refuses nothing." },
+        "retention_days": { "type": "integer", "description": "Days the server keeps a job's products after they are made. Absent when the deployment does not say." }
+      }
+    },
+    "pool": {
+      "type": "object",
+      "description": "The nodes that can take Corpus shards for this submitter now, as totals; absent when the host cannot say. No node is named.",
+      "required": ["nodes", "measured", "rate"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes": { "type": "integer" },
+        "measured": { "type": "integer", "description": "Nodes that have measured themselves on the reference shard; the next two numbers are theirs." },
+        "workers": { "type": "integer", "description": "Shards the measured nodes process at once, added up. Absent when the host does not carry the degree of every measured node." },
+        "rate": { "type": "number", "description": "Megabytes of Common Crawl WET per second, added up." }
+      }
+    }
+  },
+  "$defs": {
+    "limit": {
+      "type": "object",
+      "required": ["spaced", "unspaced"],
+      "additionalProperties": false,
+      "properties": {
+        "spaced": { "type": ["number", "null"] },
+        "unspaced": { "type": ["number", "null"] }
+      }
+    }
+  }
+}

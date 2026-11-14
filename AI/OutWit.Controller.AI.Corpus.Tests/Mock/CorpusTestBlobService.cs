@@ -54,4 +54,28 @@ public sealed class CorpusTestBlobService : IWitBlobService
     }
 
     #endregion
+
+    #region Storage
+
+    /// <summary>
+    /// The member the server's blob service is proposed to carry (BlobStorage:JobStorageHeadroomBytes),
+    /// read by the controller by reflection: the e2e rig states a headroom through it.
+    /// </summary>
+    /// <returns>The headroom of one job in bytes; 0 = not stated.</returns>
+    public Task<long> GetJobStorageHeadroomBytesAsync()
+    {
+        return Task.FromResult(JobStorageHeadroomBytes);
+    }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>The headroom the rig states (0 = none, the default).</summary>
+    public long JobStorageHeadroomBytes { get; set; }
+
+    /// <summary>The retention window the rig states, as the server's Nodes:JobBlobRetentionDays (0 = not stated).</summary>
+    public int JobBlobRetentionDays { get; set; }
+
+    #endregion
 }

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
+using OutWit.Controller.AI.Corpus.Diagnostics;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Warc;
@@ -26,8 +27,11 @@ public static class ShardTaskRunner
 
     #region Fields
 
-    /// <summary>Shards processing at once in this process: the node's degree (cores, memory). The client starts every task of a parallel batch together; the rest wait here, fetched and ready.</summary>
-    private static readonly SemaphoreSlim PROCESSING = new(ShardDegree.ForCurrentMachine());
+    /// <summary>The node's degree (cores, memory), reported with every result.</summary>
+    private static readonly int DEGREE = ShardDegree.ForCurrentMachine();
+
+    /// <summary>Shards processing at once in this process: the node's degree. The client starts every task of a parallel batch together; the rest wait here, fetched and ready.</summary>
+    private static readonly SemaphoreSlim PROCESSING = new(DEGREE);
 
     #endregion
 
@@ -60,7 +64,9 @@ public static class ShardTaskRunner
         {
             TaskIndex = task.TaskIndex,
             SourceUrl = task.Source?.Url ?? "",
-            ControllerVersion = ControllerBuildInfo.VERSION
+            ControllerVersion = ControllerBuildInfo.VERSION,
+            RuntimeTarget = CorpusRuntimeDiagnosticsBuilder.RuntimeTarget(),
+            Degree = DEGREE
         };
 
         if (task.Source == null || task.Pipeline == null)
