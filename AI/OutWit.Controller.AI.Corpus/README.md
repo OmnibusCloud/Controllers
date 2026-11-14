@@ -15,9 +15,10 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.2.0 — 0.1.14 proven on the test fleet; 0.2.0 (the PDF stage; language packs with the
+**Status: 0.2.1 — 0.1.14 proven on the test fleet; 0.2.x (the PDF stage; language packs with the
 unsupported-language test, C4's curly-bracket rule as a switch) proven in CI, not yet on the
-fleet; not yet released to nuget.org.**
+fleet (0.2.0's package did not resolve its data assets at the consumer: 0.2.1 does); not yet
+released to nuget.org.**
 The stage libraries are wired into nine activities and four bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test

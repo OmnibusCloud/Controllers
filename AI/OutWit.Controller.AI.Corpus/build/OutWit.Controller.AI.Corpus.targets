@@ -5,8 +5,10 @@
       Auto-imported into any csproj that PackageReferences this controller.
       Copies the package's content/module/* into the consumer's
       $(OutputPath)@Controllers\corpus.module\ so the controller runtime can
-      find the controller DLL and the manifest.
-      Tier-1: no external data assets, so no ResolveControllerAssetsTask step.
+      find the controller DLL and the manifest, then resolves the module's
+      Tier-2 data assets (the native wasmtime library per platform and the PDF
+      extractor module) from the manifest into the same folder, the way
+      Verify's targets do.
   -->
 
   <PropertyGroup>
@@ -28,6 +30,15 @@
         OverwriteReadOnlyFiles="true" />
     <Message Importance="Normal"
              Text="OutWit.Controller.AI.Corpus: staged module to '$(_OutWitCorpusModuleOutputDir)'." />
+  </Target>
+
+  <Target Name="OutWitResolveCorpusAssets"
+          AfterTargets="OutWitCopyCorpusModule"
+          Condition="Exists('$(_OutWitCorpusModuleOutputDir)controller.json')">
+    <ResolveControllerAssetsTask
+        ManifestPath="$(_OutWitCorpusModuleOutputDir)controller.json"
+        OutputPath="$(OutputPath)@Controllers\"
+        ResolveForAllPlatforms="true" />
   </Target>
 
 </Project>

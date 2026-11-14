@@ -6,7 +6,8 @@
       Copies the package's content/module/* into the consumer's
       $(OutputPath)@Controllers\verify.module\ so the controller runtime can
       find the controller DLL, the Verify.Model DLL, and the manifest.
-      Tier-1: no external data assets, so no ResolveControllerAssetsTask step.
+      Then resolves the module's Tier-2 data assets (the native wasmtime library per
+      platform and the language runtime modules) from the manifest into the same folder.
   -->
 
   <PropertyGroup>
