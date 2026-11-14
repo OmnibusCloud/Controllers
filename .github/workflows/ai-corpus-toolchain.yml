@@ -1,0 +1,202 @@
+name: AI Corpus toolchain
+run-name: "AI Corpus toolchain: ${{ github.ref_name }}"
+
+# The PDF extractor of the Corpus controller (toolchain/pdftext: pdf_oxide 0.3.78 for
+# wasm32-wasip1) built by the pinned Rust of toolchain/pins.env. Two jobs build it, on two
+# runner images, from two different folders, and the bytes are compared. The module is then
+# tested under the pinned wasmtime command line: the generated contract set, the generated
+# hostile set, and the PDF responses of one Common Crawl WARC file, fetched by range from
+# data.commoncrawl.org (never committed). The data asset goes out as a workflow artifact
+# with its SHA-256.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'AI/OutWit.Controller.AI.Corpus.Assets/toolchain/**'
+      - '.github/workflows/ai-corpus-toolchain.yml'
+
+permissions:
+  contents: read
+
+env:
+  TOOLCHAIN: AI/OutWit.Controller.AI.Corpus.Assets/toolchain
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: build ${{ matrix.name }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: a
+            os: ubuntu-24.04
+          - name: b
+            os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build b runs the scripts from a copy in another folder, with its work folder at
+      # another depth: if any path reached the module, the two builds would differ.
+      - name: Build
+        id: build
+        env:
+          BUILD: ${{ matrix.name }}
+        run: |
+          set +e
+          if [ "$BUILD" = a ]; then
+            bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/work"
+          else
+            mkdir -p "$RUNNER_TEMP/elsewhere/copy"
+            cp -R "$TOOLCHAIN" "$RUNNER_TEMP/elsewhere/copy/toolchain"
+            bash "$RUNNER_TEMP/elsewhere/copy/toolchain/build.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/b/second/work"
+          fi
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          # 3 = built, but a download has no pin yet: the module is still published.
+          [ "$code" -eq 0 ] || [ "$code" -eq 3 ] || exit "$code"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdftext-build-${{ matrix.name }}
+          path: ${{ runner.temp }}/out
+          if-no-files-found: error
+
+      - name: Every download is pinned
+        if: steps.build.outputs.code != '0'
+        run: |
+          echo "::error::a download has no pin yet (UNPINNED lines in the build step)"
+          exit 1
+
+  compare:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pdftext-build-*
+          path: builds
+
+      - name: The two builds are the same bytes
+        run: |
+          {
+            echo "### pdftext: two builds"
+            echo
+            echo "| file | build a | build b |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for name in pdftext.wasm LICENSE-pdftext.txt corpus-pdftext-wasm.zip; do
+            a="$(sha256sum "builds/pdftext-build-a/$name" | cut -d' ' -f1)"
+            b="$(sha256sum "builds/pdftext-build-b/$name" | cut -d' ' -f1)"
+            echo "| $name | \`$a\` | \`$b\` |" >> "$GITHUB_STEP_SUMMARY"
+            if cmp -s "builds/pdftext-build-a/$name" "builds/pdftext-build-b/$name"; then
+              echo "same bytes: $name  $a"
+            else
+              echo "::error::$name differs between the two builds: $a and $b"
+              exit 1
+            fi
+          done
+
+      - name: Publish the data asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-pdftext-wasm
+          path: |
+            builds/pdftext-build-a/corpus-pdftext-wasm.zip
+            builds/pdftext-build-a/SHA256SUMS
+          if-no-files-found: error
+
+  test:
+    needs: compare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      TESTS: AI/OutWit.Controller.AI.Corpus.Assets/toolchain/tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: pdftext-build-a
+          path: ${{ runner.temp }}/module
+
+      - name: What the module imports
+        run: python3 -I "$TESTS/imports.py" "$RUNNER_TEMP/module/pdftext.wasm"
+
+      - name: wasmtime, and the module compiled for it
+        run: |
+          . "$TOOLCHAIN/pins.env"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/wasmtime.tar.xz" "$WASMTIME_URL"
+          echo "$WASMTIME_SHA256  $RUNNER_TEMP/wasmtime.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/wasmtime"
+          tar -xJf "$RUNNER_TEMP/wasmtime.tar.xz" -C "$RUNNER_TEMP/wasmtime" --strip-components=1
+          "$RUNNER_TEMP/wasmtime/wasmtime" --version
+          python3 -I "$TESTS/run.py" compile "$RUNNER_TEMP/wasmtime/wasmtime" "$RUNNER_TEMP/module/pdftext.wasm" "$RUNNER_TEMP/pdftext.cwasm"
+          nproc
+          free -m
+
+      # Information: the fuel the command line takes before the guest runs (on Windows, one
+      # unit per byte of the data segments it copies into memory).
+      - name: Fuel at instantiation
+        run: python3 -I "$TESTS/instantiation_fuel.py" "$RUNNER_TEMP/wasmtime/wasmtime" "$RUNNER_TEMP/module/pdftext.wasm" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: The contract set
+        run: |
+          python3 -I "$TESTS/pdfs.py" contract "$RUNNER_TEMP/contract"
+          set +e
+          python3 -I "$TESTS/run.py" "$RUNNER_TEMP/wasmtime/wasmtime" "$RUNNER_TEMP/pdftext.cwasm" "$RUNNER_TEMP/contract" "$RUNNER_TEMP/results" \
+            --set contract --expect "$RUNNER_TEMP/contract/expect.json" --measure-fuel > "$RUNNER_TEMP/results-contract.md"
+          code=$?
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/results-contract.md"
+          exit $code
+
+      # Each file ends in a bounded way (a text, a refusal, a trap or out of fuel) under the
+      # limits, and none outlives the wall-clock backstop. A file out of fuel runs once more
+      # with ten times as much, to show whether it would finish at all (information only).
+      - name: The hostile set
+        run: |
+          python3 -I "$TESTS/pdfs.py" hostile "$RUNNER_TEMP/hostile"
+          set +e
+          python3 -I "$TESTS/run.py" "$RUNNER_TEMP/wasmtime/wasmtime" "$RUNNER_TEMP/pdftext.cwasm" "$RUNNER_TEMP/hostile" "$RUNNER_TEMP/results" \
+            --set hostile --jobs 4 --measure-fuel --fuel-tail 2000000000000 > "$RUNNER_TEMP/results-hostile.md"
+          code=$?
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/results-hostile.md"
+          exit $code
+
+      - name: Cache the Common Crawl PDFs
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/cc
+          key: corpus-cc-pdfs-${{ hashFiles('AI/OutWit.Controller.AI.Corpus.Assets/toolchain/tests/cc-pdfs.json') }}
+
+      - name: The Common Crawl PDFs
+        run: |
+          set +e
+          python3 -I "$TESTS/fetch_cc.py" "$TESTS/cc-pdfs.json" "$RUNNER_TEMP/cc"
+          missing=$?
+          if [ "$missing" -ne 0 ]; then
+            echo "::warning::$missing of the Common Crawl PDFs could not be fetched; the others are measured"
+          fi
+          python3 -I "$TESTS/run.py" "$RUNNER_TEMP/wasmtime/wasmtime" "$RUNNER_TEMP/pdftext.cwasm" "$RUNNER_TEMP/cc" "$RUNNER_TEMP/results" \
+            --set cc --jobs 4 --measure-fuel --fuel-tail 2000000000000 > "$RUNNER_TEMP/results-cc.md"
+          code=$?
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/results-cc.md"
+          exit $code
+
+      # Verdicts, page counts, text hashes and fuel per document; no text of a third-party
+      # document leaves the runner.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pdftext-contract-tests
+          path: |
+            ${{ runner.temp }}/results/*.jsonl
+            ${{ runner.temp }}/results-*.md
+          if-no-files-found: warn

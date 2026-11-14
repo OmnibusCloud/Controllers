@@ -16,3 +16,6 @@ OpenFOAM/**/Fixtures/** text eol=lf
 AI/OutWit.Controller.AI.Verify.Assets/modules/** -text
 # Patches the toolchain applies to pinned sources: LF, whatever the checkout OS
 *.patch text eol=lf
+# The Corpus toolchain (the PDF extractor's crate, its lock file, the build and test scripts): LF on
+# every checkout, so a build from a Windows checkout reads the same sources
+AI/OutWit.Controller.AI.Corpus.Assets/toolchain/** text eol=lf
