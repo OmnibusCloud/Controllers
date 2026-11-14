@@ -6,7 +6,8 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// <summary>
 /// The job report: every shard's verdict, blobs and content hash in task order, and the
 /// aggregate — documents in and out, bytes moved, the drop and language histograms summed
-/// over the fleet. No document says which machine ran what. Schema <c>corpus-report/2</c>.
+/// over the fleet, and what the PDF stage did (the <c>pdf_*</c> counts, present only where a
+/// shard met a PDF). No document says which machine ran what. Schema <c>corpus-report/2</c>.
 /// </summary>
 public static class CorpusReportWriter
 {
@@ -33,6 +34,7 @@ public static class CorpusReportWriter
         var verdicts = new SortedDictionary<string, int>(StringComparer.Ordinal);
 
         long recordsIn = 0, extracted = 0, documentsOut = 0, fetched = 0, produced = 0;
+        CorpusPdfStatsData? pdf = null;
         foreach (var result in ordered)
         {
             verdicts[result.Verdict.ToString()] = verdicts.GetValueOrDefault(result.Verdict.ToString()) + 1;
@@ -48,6 +50,8 @@ public static class CorpusReportWriter
                 drops[drop.Name] = drops.GetValueOrDefault(drop.Name) + drop.Count;
             foreach (var language in result.Stats.Languages)
                 languages[language.Name] = languages.GetValueOrDefault(language.Name) + language.Count;
+            if (result.Stats.Pdf is { } shardPdf)
+                pdf = Add(pdf ?? new CorpusPdfStatsData(), shardPdf);
         }
 
         using var buffer = new MemoryStream();
@@ -70,6 +74,7 @@ public static class CorpusReportWriter
             writer.WriteNumber("bytes_produced", produced);
             WriteCounts(writer, "drops", drops);
             WriteCounts(writer, "languages", languages);
+            WritePdf(writer, pdf);
             writer.WriteEndObject();
 
             writer.WriteStartArray("shards");
@@ -110,12 +115,42 @@ public static class CorpusReportWriter
             writer.WriteNumber("wait_ms", stats.WaitMs);
             WriteCounts(writer, "drops", stats.Drops.ToDictionary(count => count.Name, count => (long)count.Count, StringComparer.Ordinal));
             WriteCounts(writer, "languages", stats.Languages.ToDictionary(count => count.Name, count => (long)count.Count, StringComparer.Ordinal));
+            WritePdf(writer, stats.Pdf);
             writer.WriteEndObject();
         }
         else
             writer.WriteNull("stats");
 
         writer.WriteEndObject();
+    }
+
+    /// <summary>The PDF stage's counts, flat beside the others; nothing when the stage met no PDF.</summary>
+    private static void WritePdf(Utf8JsonWriter writer, CorpusPdfStatsData? pdf)
+    {
+        if (pdf == null)
+            return;
+
+        writer.WriteNumber("pdf_in", pdf.In);
+        writer.WriteNumber("pdf_truncated", pdf.Truncated);
+        writer.WriteNumber("pdf_extracted", pdf.Extracted);
+        writer.WriteNumber("pdf_pages", pdf.Pages);
+        writer.WriteNumber("pdf_documents", pdf.Documents);
+        writer.WriteNumber("pdf_pages_cut", pdf.PagesCut);
+        writer.WriteNumber("pdf_running_lines", pdf.RunningLines);
+        writer.WriteNumber("pdf_fuel", pdf.Fuel);
+    }
+
+    private static CorpusPdfStatsData Add(CorpusPdfStatsData sum, CorpusPdfStatsData shard)
+    {
+        sum.In += shard.In;
+        sum.Truncated += shard.Truncated;
+        sum.Extracted += shard.Extracted;
+        sum.Pages += shard.Pages;
+        sum.Documents += shard.Documents;
+        sum.PagesCut += shard.PagesCut;
+        sum.RunningLines += shard.RunningLines;
+        sum.Fuel += shard.Fuel;
+        return sum;
     }
 
     private static void WriteCounts(Utf8JsonWriter writer, string name, IReadOnlyDictionary<string, long> counts)

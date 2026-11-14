@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Shards;
 
 namespace OutWit.Controller.AI.Corpus.Reports;
 
@@ -7,12 +8,14 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// Writes the integrity document of a run: every shard executed more than once, its executions
 /// paired, and whether they agree on everything an honest node cannot
 /// vary — the verdict, the content hash of the product, the document count, the drop and
-/// language histograms. The platform keeps the executions of one shard on different machines,
-/// and the document does not say which. Two kinds of pair are counted, not compared: one whose
-/// sides ran different controller versions (a rollout in progress: a stage may have changed
-/// between them), and one whose side did not finish for a reason of its machine or its link (a
-/// fetch that failed, a model that did not arrive, an error on the node) — a mismatch says two
-/// finished executions disagree, never that one of them stopped.
+/// language histograms, the PDF stage's counts. The platform keeps the executions of one shard
+/// on different machines, and the document does not say which. Two kinds of pair are counted,
+/// not compared: one whose sides ran different controller versions (a rollout in progress: a
+/// stage may have changed between them), and one whose side did not finish for a reason of its
+/// machine or its link (a fetch that failed, a model that did not arrive, an error on the node,
+/// a node that could not run the PDF sandbox and dropped its PDFs as
+/// <c>pdf_sandbox_unavailable</c>) — a mismatch says two finished executions disagree, never
+/// that one of them stopped.
 /// Schema <c>corpus-integrity/3</c>.
 /// </summary>
 public static class CorpusIntegrityWriter
@@ -81,7 +84,7 @@ public static class CorpusIntegrityWriter
     /// <summary>The fields two results of one shard disagree on; empty when they agree.</summary>
     /// <param name="primary">The primary result.</param>
     /// <param name="replica">The replica result.</param>
-    /// <returns>Field names: verdict, content, documents, drops, languages.</returns>
+    /// <returns>Field names: verdict, content, documents, drops, languages, pdf.</returns>
     public static List<string> Differences(CorpusResultData primary, CorpusResultData replica)
     {
         var fields = new List<string>();
@@ -98,8 +101,30 @@ public static class CorpusIntegrityWriter
             fields.Add("drops");
         if (!SameCounts(primaryStats.Languages, replicaStats.Languages))
             fields.Add("languages");
+        if (!SamePdf(primaryStats.Pdf, replicaStats.Pdf))
+            fields.Add("pdf");
 
         return fields;
+    }
+
+    /// <summary>Whether a result's node could not run the PDF stage for some of the shard's PDFs (its machine, not the shard).</summary>
+    /// <param name="result">The result.</param>
+    /// <returns>True when its drops count <c>pdf_sandbox_unavailable</c>.</returns>
+    public static bool LackedThePdfSandbox(CorpusResultData result)
+    {
+        return result.Stats?.Drops.Any(drop => drop.Name == ShardPdfStage.DROP_PDF_SANDBOX_UNAVAILABLE && drop.Count > 0) == true;
+    }
+
+    private static bool SamePdf(CorpusPdfStatsData? first, CorpusPdfStatsData? second)
+    {
+        // The counts an honest node cannot vary; the fuel is a cost (and a function of the same
+        // inputs), compared through the documents it produced.
+        if (first == null || second == null)
+            return first == null && second == null;
+
+        return first.In == second.In && first.Truncated == second.Truncated && first.Extracted == second.Extracted
+               && first.Pages == second.Pages && first.Documents == second.Documents
+               && first.PagesCut == second.PagesCut && first.RunningLines == second.RunningLines;
     }
 
     private static bool SameCounts(IReadOnlyList<CorpusCountData> first, IReadOnlyList<CorpusCountData> second)
@@ -121,7 +146,8 @@ public static class CorpusIntegrityWriter
     {
         var versionSkew = primary.ControllerVersion.Length > 0 && replica.ControllerVersion.Length > 0
                           && !string.Equals(primary.ControllerVersion, replica.ControllerVersion, StringComparison.Ordinal);
-        var incomplete = !versionSkew && (UNFINISHED.Contains(primary.Verdict) || UNFINISHED.Contains(replica.Verdict));
+        var incomplete = !versionSkew && (UNFINISHED.Contains(primary.Verdict) || UNFINISHED.Contains(replica.Verdict)
+                                          || LackedThePdfSandbox(primary) || LackedThePdfSandbox(replica));
         var differing = Differences(primary, replica);
         return new PairRecord(index, primary, replica, versionSkew, incomplete, differing.Count == 0, differing);
     }

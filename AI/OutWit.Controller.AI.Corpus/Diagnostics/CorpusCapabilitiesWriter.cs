@@ -3,6 +3,7 @@ using OutWit.Controller.AI.Corpus.Benchmark;
 using OutWit.Controller.AI.Corpus.Dedup;
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Quality;
 using OutWit.Controller.AI.Corpus.Reports;
 using OutWit.Controller.AI.Corpus.Shards;
@@ -17,8 +18,8 @@ namespace OutWit.Controller.AI.Corpus.Diagnostics;
 /// The capabilities document: what an application can know before a run. The controller's
 /// version and stage set, the parsers, the language-model format and the reference model,
 /// where a machine fetches from, the defaults and the ceilings, the stage parameters a job may
-/// set with their defaults, the products, the measured storage ratios with the deployment's
-/// headroom, and the pool as totals. A JSON document like every other output, so an
+/// set with their defaults, the PDF stage's module and limits, the products, the measured storage
+/// ratios with the deployment's headroom, and the pool as totals. A JSON document like every other output, so an
 /// application reads it without the controller's types. Schema <c>corpus-capabilities/1</c>.
 /// </summary>
 public static class CorpusCapabilitiesWriter
@@ -55,6 +56,7 @@ public static class CorpusCapabilitiesWriter
             WriteDefaults(writer);
             WriteCeilings(writer);
             WritePipeline(writer);
+            WritePdf(writer, diagnostics);
             WriteSignatures(writer);
             WriteProducts(writer);
             WriteStorage(writer, limit);
@@ -160,6 +162,7 @@ public static class CorpusCapabilitiesWriter
         writer.WriteBoolean("clean_lines", defaults.CleanLines);
         writer.WriteBoolean("filter_quality", defaults.FilterQuality);
         writer.WriteBoolean("sign", defaults.Sign);
+        writer.WriteBoolean("extract_pdf", defaults.ExtractPdf);
         writer.WriteEndObject();
 
         writer.WriteStartObject("quality");
@@ -177,6 +180,31 @@ public static class CorpusCapabilitiesWriter
         WriteNumbers(writer, "duplicate_ngram_chars", QualityRules.Spaced.MaxDuplicateNgramCharRatio);
         writer.WriteEndObject();
 
+        writer.WriteEndObject();
+    }
+
+    private static void WritePdf(Utf8JsonWriter writer, CorpusRuntimeDiagnosticsData diagnostics)
+    {
+        writer.WriteStartObject("pdf");
+        writer.WriteString("stage", "extract_pdf");
+        WriteStrings(writer, "formats", ["warc"]);
+        writer.WriteString("extractor", PdfStageLimits.EXTRACTOR);
+        writer.WriteString("module_sha256", diagnostics.PdfModuleSha256);
+        writer.WriteString("engine", PdfStageLimits.ENGINE);
+        writer.WriteBoolean("available", diagnostics.PdfStageProblem.Length == 0);
+        writer.WriteNumber("fuel", PdfStageLimits.FUEL);
+        writer.WriteBoolean("fuel_after_instantiation", true);
+        writer.WriteNumber("memory_bytes", PdfStageLimits.MEMORY_BYTES);
+        writer.WriteNumber("input_bytes", PdfStageLimits.MAX_INPUT_BYTES);
+        writer.WriteNumber("text_bytes", PdfStageLimits.MAX_TEXT_BYTES);
+        writer.WriteNumber("document_words", PdfStageLimits.DOCUMENT_WORDS);
+        writer.WriteString("document_id", "url#page=a-b");
+        writer.WriteStartObject("running_lines");
+        writer.WriteNumber("min_pages", PdfStageLimits.RUNNING_LINE_MIN_PAGES);
+        writer.WriteNumber("share", 0.5);
+        writer.WriteBoolean("digits_folded", true);
+        writer.WriteEndObject();
+        WriteStrings(writer, "drops", ShardPdfStage.DROPS);
         writer.WriteEndObject();
     }
 

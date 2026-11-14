@@ -4,7 +4,7 @@
   "title": "Corpus capabilities",
   "description": "The capabilities blob of CorpusRuntimeDiagnostics (Corpus.Capabilities): what an application can know before a run. It takes no manifest. Nodes run the same controller version as the host (the platform admits no other version to the work), so the stages, parsers and limits listed are the pool's. No node is named.",
   "type": "object",
-  "required": ["schema", "controller", "benchmark_unit", "stages", "parsers", "language_model", "formats", "origins", "defaults", "ceilings", "pipeline", "signatures", "products", "storage"],
+  "required": ["schema", "controller", "benchmark_unit", "stages", "parsers", "language_model", "formats", "origins", "defaults", "ceilings", "pipeline", "pdf", "signatures", "products", "storage"],
   "additionalProperties": false,
   "properties": {
     "schema": { "type": "string", "const": "corpus-capabilities/1" },
@@ -15,8 +15,8 @@
       "required": ["order", "sha256", "verified"],
       "additionalProperties": false,
       "properties": {
-        "order": { "type": "array", "items": { "type": "string" }, "description": "The stages in the order a document meets them. A manifest's pipeline switches turn identify_language, clean_lines, filter_quality and sign on and off." },
-        "sha256": { "type": "string", "description": "The stage set's fingerprint: the content hash the host computed for the controller's reference shard through the stages." },
+        "order": { "type": "array", "items": { "type": "string" }, "description": "The stages in the order a document meets them. A manifest's pipeline switches turn extract_pdf, identify_language, clean_lines, filter_quality and sign on and off." },
+        "sha256": { "type": "string", "description": "The stage set's fingerprint: the SHA-256 of the content hash the host computed for the controller's reference shard through the stages and of the PDF stage's contract (its module's pin, every limit and shaping rule), so a changed limit is a changed stage set." },
         "verified": { "type": "boolean", "description": "The fingerprint is the one the controller pins: the stages compute on the host what they compute everywhere." }
       }
     },
@@ -93,13 +93,14 @@
       "properties": {
         "switches": {
           "type": "object",
-          "required": ["identify_language", "clean_lines", "filter_quality", "sign"],
+          "required": ["identify_language", "clean_lines", "filter_quality", "sign", "extract_pdf"],
           "additionalProperties": false,
           "properties": {
             "identify_language": { "type": "boolean" },
             "clean_lines": { "type": "boolean" },
             "filter_quality": { "type": "boolean" },
-            "sign": { "type": "boolean" }
+            "sign": { "type": "boolean" },
+            "extract_pdf": { "type": "boolean", "description": "The PDF stage on WARC shards (see pdf)." }
           }
         },
         "quality": {
@@ -117,6 +118,39 @@
             "duplicate_ngram_chars": { "type": "array", "items": { "type": "number" }, "description": "The most characters repeated word n-grams may cover, n = 5 to 10." }
           }
         }
+      }
+    },
+    "pdf": {
+      "type": "object",
+      "description": "The PDF stage (pipeline switch extract_pdf, WARC shards only): a response that is a PDF becomes text in the controller's own wasm sandbox, then page-range documents that go through the stages after it like a page of HTML. Every value here is part of the stage set's fingerprint.",
+      "required": ["stage", "formats", "extractor", "module_sha256", "engine", "available", "fuel", "fuel_after_instantiation", "memory_bytes", "input_bytes", "text_bytes", "document_words", "document_id", "running_lines", "drops"],
+      "additionalProperties": false,
+      "properties": {
+        "stage": { "type": "string", "const": "extract_pdf" },
+        "formats": { "type": "array", "items": { "type": "string" }, "description": "The shard formats that carry PDFs." },
+        "extractor": { "type": "string", "description": "The extractor module: what it is built from." },
+        "module_sha256": { "type": "string", "description": "SHA-256 of the extractor module; a module with other bytes is not run." },
+        "engine": { "type": "string", "description": "The sandbox: the wasmtime binding the controller is built against." },
+        "available": { "type": "boolean", "description": "Whether the host's process can run the stage (a process that cannot drops its PDFs as pdf_sandbox_unavailable and goes on with the HTML)." },
+        "fuel": { "type": "integer", "description": "The fuel one PDF may burn, counted from the guest's _start." },
+        "fuel_after_instantiation": { "type": "boolean", "description": "The budget is given after the module is instantiated, so it does not depend on the platform." },
+        "memory_bytes": { "type": "integer", "description": "The cap of the module's linear memory." },
+        "input_bytes": { "type": "integer", "description": "The largest PDF the stage runs." },
+        "text_bytes": { "type": "integer", "description": "The most text one PDF may give (more: pdf_oversized)." },
+        "document_words": { "type": "integer", "description": "The most words of one page-range document; pages are put together while they fit, a longer page is a document of its own cut after the last line that fits." },
+        "document_id": { "type": "string", "description": "How a page-range document is named in the product's url field." },
+        "running_lines": {
+          "type": "object",
+          "description": "Running headers and footers: a line that, with each run of digits folded, appears on half the pages or more of a PDF of min_pages pages or more is removed from every page.",
+          "required": ["min_pages", "share", "digits_folded"],
+          "additionalProperties": false,
+          "properties": {
+            "min_pages": { "type": "integer" },
+            "share": { "type": "number" },
+            "digits_folded": { "type": "boolean" }
+          }
+        },
+        "drops": { "type": "array", "items": { "type": "string" }, "description": "The drop rules a PDF that gives no document is counted under." }
       }
     },
     "signatures": {

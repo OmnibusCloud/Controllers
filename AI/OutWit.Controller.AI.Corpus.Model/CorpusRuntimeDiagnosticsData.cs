@@ -42,7 +42,9 @@ public sealed partial class CorpusRuntimeDiagnosticsData : ModelBase
                && MachineOrigins.Is(other.MachineOrigins)
                && MaxShardBytes.Is(other.MaxShardBytes)
                && DownloadsPerNode.Is(other.DownloadsPerNode)
-               && MemoryPerShardBytes.Is(other.MemoryPerShardBytes);
+               && MemoryPerShardBytes.Is(other.MemoryPerShardBytes)
+               && PdfModuleSha256.Is(other.PdfModuleSha256)
+               && PdfStageProblem.Is(other.PdfStageProblem);
     }
 
     /// <summary>Deep copy.</summary>
@@ -64,7 +66,9 @@ public sealed partial class CorpusRuntimeDiagnosticsData : ModelBase
             MachineOrigins = [.. MachineOrigins],
             MaxShardBytes = MaxShardBytes,
             DownloadsPerNode = DownloadsPerNode,
-            MemoryPerShardBytes = MemoryPerShardBytes
+            MemoryPerShardBytes = MemoryPerShardBytes,
+            PdfModuleSha256 = PdfModuleSha256,
+            PdfStageProblem = PdfStageProblem
         };
     }
 
@@ -132,6 +136,14 @@ public sealed partial class CorpusRuntimeDiagnosticsData : ModelBase
     /// <summary>Memory a node budgets per shard in flight; with the cores it bounds the node's degree.</summary>
     [MemoryPackOrder(13)]
     public long MemoryPerShardBytes { get; set; }
+
+    /// <summary>SHA-256 of the PDF extractor module the controller pins (the PDF stage runs no other bytes).</summary>
+    [MemoryPackOrder(14)]
+    public string PdfModuleSha256 { get; set; } = "";
+
+    /// <summary>Why the answering process cannot run the PDF stage (no module, another binding, no native library); "" when it can.</summary>
+    [MemoryPackOrder(15)]
+    public string PdfStageProblem { get; set; } = "";
 
     #endregion
 }

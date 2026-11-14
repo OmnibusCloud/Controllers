@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using OutWit.Controller.AI.Corpus.Compression;
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Shards;
 
 namespace OutWit.Controller.AI.Corpus.Diagnostics;
@@ -42,7 +43,9 @@ public static class CorpusRuntimeDiagnosticsBuilder
             MachineOrigins = policy.ExtraOrigins.Order(StringComparer.Ordinal).ToList(),
             MaxShardBytes = CorpusTaskPlanner.MAX_SHARD_BYTES,
             DownloadsPerNode = ShardFetchPolicy.Default.MaxConcurrent,
-            MemoryPerShardBytes = ShardDegree.MEMORY_PER_SHARD
+            MemoryPerShardBytes = ShardDegree.MEMORY_PER_SHARD,
+            PdfModuleSha256 = PdfStageLimits.MODULE_SHA256,
+            PdfStageProblem = PdfSandboxHost.Diagnose() ?? ""
         };
     }
 

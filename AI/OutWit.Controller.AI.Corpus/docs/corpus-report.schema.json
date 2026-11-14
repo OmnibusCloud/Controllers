@@ -20,7 +20,15 @@
         "bytes_fetched": { "type": "integer" },
         "bytes_produced": { "type": "integer" },
         "drops": { "$ref": "#/$defs/counts", "description": "Documents dropped per rule, summed over the completed shards." },
-        "languages": { "$ref": "#/$defs/counts", "description": "Documents out per ISO 639-3 code, summed over the completed shards." }
+        "languages": { "$ref": "#/$defs/counts", "description": "Documents out per ISO 639-3 code, summed over the completed shards." },
+        "pdf_in": { "type": "integer", "description": "PDF responses the PDF stage took (WARC; present only where a shard met a PDF, like every pdf_* count)." },
+        "pdf_truncated": { "type": "integer", "description": "Of those, the ones the crawler cut short (WARC-Truncated); read all the same." },
+        "pdf_extracted": { "type": "integer", "description": "PDFs that gave at least one page-range document." },
+        "pdf_pages": { "type": "integer", "description": "The pages of those PDFs." },
+        "pdf_documents": { "type": "integer", "description": "The page-range documents made (url#page=a-b); each also counts in documents_extracted." },
+        "pdf_pages_cut": { "type": "integer", "description": "Pages longer than a document may be (5,000 words), cut after the last line that fits." },
+        "pdf_running_lines": { "type": "integer", "description": "Lines removed as running headers and footers." },
+        "pdf_fuel": { "type": "integer", "description": "Fuel the PDF sandbox burned, counted from each run's _start: the same on every node." }
       }
     },
     "shards": {
@@ -54,8 +62,16 @@
                   "fetch_ms": { "type": "integer" },
                   "process_ms": { "type": "integer" },
                   "wait_ms": { "type": "integer", "description": "Time the shard waited on the node for a download slot and a processing slot." },
-                  "drops": { "$ref": "#/$defs/counts" },
-                  "languages": { "$ref": "#/$defs/counts" }
+                  "drops": { "$ref": "#/$defs/counts", "description": "Documents dropped per rule; the PDF stage's are pdf_encrypted, pdf_unreadable, pdf_no_pages, pdf_fuel, pdf_memory, pdf_trap, pdf_error, pdf_oversized, pdf_sandbox_unavailable and pdf_empty." },
+                  "languages": { "$ref": "#/$defs/counts" },
+                  "pdf_in": { "type": "integer", "description": "PDF responses the PDF stage took (WARC; present only where a shard met a PDF, like every pdf_* count)." },
+                  "pdf_truncated": { "type": "integer", "description": "Of those, the ones the crawler cut short (WARC-Truncated); read all the same." },
+                  "pdf_extracted": { "type": "integer", "description": "PDFs that gave at least one page-range document." },
+                  "pdf_pages": { "type": "integer", "description": "The pages of those PDFs." },
+                  "pdf_documents": { "type": "integer", "description": "The page-range documents made (url#page=a-b); each also counts in documents_extracted." },
+                  "pdf_pages_cut": { "type": "integer", "description": "Pages longer than a document may be (5,000 words), cut after the last line that fits." },
+                  "pdf_running_lines": { "type": "integer", "description": "Lines removed as running headers and footers." },
+                  "pdf_fuel": { "type": "integer", "description": "Fuel the PDF sandbox burned, counted from each run's _start: the same on every node." }
                 }
               }
             ]

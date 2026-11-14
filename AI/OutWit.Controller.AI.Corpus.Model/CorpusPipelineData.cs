@@ -34,7 +34,8 @@ public sealed partial class CorpusPipelineData : ModelBase
                && Sign.Is(other.Sign)
                && Quality.Check(other.Quality)
                && LanguageModelBlobId.Is(other.LanguageModelBlobId)
-               && CleanLines.Is(other.CleanLines);
+               && CleanLines.Is(other.CleanLines)
+               && ExtractPdf.Is(other.ExtractPdf);
     }
 
     /// <summary>Deep copy.</summary>
@@ -51,7 +52,8 @@ public sealed partial class CorpusPipelineData : ModelBase
             Sign = Sign,
             Quality = Quality?.Clone(),
             LanguageModelBlobId = LanguageModelBlobId,
-            CleanLines = CleanLines
+            CleanLines = CleanLines,
+            ExtractPdf = ExtractPdf
         };
     }
 
@@ -99,6 +101,16 @@ public sealed partial class CorpusPipelineData : ModelBase
     [ToString]
     [MemoryPackOrder(8)]
     public bool CleanLines { get; set; } = true;
+
+    /// <summary>
+    /// Whether the PDF stage runs on WARC shards: a response that is a PDF becomes text in the
+    /// controller's wasm sandbox and then page-range documents that go through the stages after
+    /// it like a page of HTML. Off, a PDF drops as <c>not_html</c> as before the stage existed.
+    /// WET shards carry no PDFs.
+    /// </summary>
+    [ToString]
+    [MemoryPackOrder(9)]
+    public bool ExtractPdf { get; set; } = true;
 
     #endregion
 }

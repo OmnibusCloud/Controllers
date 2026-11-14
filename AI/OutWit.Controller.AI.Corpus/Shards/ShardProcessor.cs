@@ -5,6 +5,7 @@ using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Compression;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Quality;
 using OutWit.Controller.AI.Corpus.Signatures;
 using OutWit.Controller.AI.Corpus.Text;
@@ -14,7 +15,8 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 
 /// <summary>
 /// The pipeline over one shard: records stream in, each becomes text (WET as is, WARC through
-/// the HTML extractor), passes or fails the language and quality stages, and the survivors
+/// the HTML extractor, a WARC response that is a PDF through the PDF stage's sandbox into one
+/// document per page range), passes or fails the language and quality stages, and the survivors
 /// leave as one JSON line each — <c>{"url","lang","text"}</c> — hashed uncompressed, written
 /// zstd-compressed, with a MinHash signature per document in a side blob. A pure function of
 /// the shard bytes and the pipeline: two nodes produce the same hash or one of them is wrong.
@@ -45,18 +47,30 @@ public sealed class ShardProcessor
     private readonly CorpusPipelineData m_pipeline;
     private readonly LanguageIdentifier? m_identifier;
     private readonly HashSet<string>? m_targets;
+    private ShardPdfStage? m_pdf;
 
     #endregion
 
     #region Constructors
 
-    /// <summary>Creates a processor for one pipeline.</summary>
+    /// <summary>Creates a processor for one pipeline; its PDFs (when the stage is on) run in the process-wide sandbox, their files in a fresh temp folder each.</summary>
     /// <param name="pipeline">The pipeline contract.</param>
     /// <param name="languageModel">The pinned language model; required when the language stage is on.</param>
     /// <exception cref="ArgumentException">The language stage is on and no model was given.</exception>
     public ShardProcessor(CorpusPipelineData pipeline, LanguageModel? languageModel)
+        : this(pipeline, languageModel, null)
+    {
+    }
+
+    /// <summary>Creates a processor for one pipeline with the PDF stage it uses.</summary>
+    /// <param name="pipeline">The pipeline contract.</param>
+    /// <param name="languageModel">The pinned language model; required when the language stage is on.</param>
+    /// <param name="pdfStage">The PDF stage (on a node, with the task's temp scope for its files); null for one on the process-wide sandbox, made on the first PDF.</param>
+    /// <exception cref="ArgumentException">The language stage is on and no model was given.</exception>
+    public ShardProcessor(CorpusPipelineData pipeline, LanguageModel? languageModel, ShardPdfStage? pdfStage)
     {
         m_pipeline = pipeline;
+        m_pdf = pdfStage;
 
         if (pipeline.IdentifyLanguage)
         {
@@ -80,6 +94,7 @@ public sealed class ShardProcessor
     /// <param name="cancellationToken">Stops between records.</param>
     /// <returns>The product's identity and counters.</returns>
     /// <exception cref="WarcFormatException">The bytes are not a WARC file.</exception>
+    /// <exception cref="PdfSandboxException">The PDF sandbox failed on the host's side (its wall-clock backstop): the shard fails, no document gets a verdict from it.</exception>
     public ShardProduct Process(Stream shard, CorpusSourceFormat format, Stream text, Stream signatures, CancellationToken cancellationToken = default)
     {
         var stats = new ShardStatsBuilder();
@@ -97,62 +112,11 @@ public sealed class ShardProcessor
                 cancellationToken.ThrowIfCancellationRequested();
                 stats.Record();
 
-                var document = Extract(record, format, stats);
-                if (document == null)
-                    continue;
-
-                stats.Extracted();
-
-                var language = "";
-                if (m_identifier != null)
+                foreach (var (url, document) in Extract(record, format, stats, cancellationToken))
                 {
-                    var guess = m_identifier.Identify(document.Value.Text);
-                    if (!guess.IsKnown)
-                    {
-                        stats.Drop(DROP_LANGUAGE_UNKNOWN);
-                        continue;
-                    }
-
-                    if (m_targets != null && !m_targets.Contains(guess.Code))
-                    {
-                        stats.Drop(DROP_LANGUAGE_NOT_TARGET);
-                        continue;
-                    }
-
-                    language = guess.Code;
+                    stats.Extracted();
+                    Judge(url, document, stats, buffer, hash, compressor, signatures);
                 }
-
-                var content = document.Value.Text;
-                var rules = ShardQualityRules.Resolve(language, m_pipeline.Quality);
-                if (m_pipeline.CleanLines)
-                {
-                    content = LineCleaner.Clean(content, rules, out _);
-                    if (content.Length == 0)
-                    {
-                        stats.Drop(DROP_NO_PROSE_LINES);
-                        continue;
-                    }
-                }
-
-                if (m_pipeline.FilterQuality)
-                {
-                    var verdict = QualityFilter.Judge(content, rules);
-                    if (!verdict.Passed)
-                    {
-                        stats.Drop(verdict.FailedRules[0]);
-                        continue;
-                    }
-                }
-
-                WriteLine(buffer, document.Value.Url, language, content);
-                var line = buffer.GetBuffer().AsSpan(0, (int)buffer.Length);
-                hash.AppendData(line);
-                compressor.Write(line);
-
-                if (m_pipeline.Sign)
-                    ShardSignatureWriter.Write(signatures, MinHashSigner.Sign(content));
-
-                stats.Out(language);
             }
         }
 
@@ -162,60 +126,108 @@ public sealed class ShardProcessor
         return new ShardProduct(Convert.ToHexStringLower(hash.GetHashAndReset()), stats, reader.SkippedOversized, reader.Truncated);
     }
 
-    private static (string Url, string Text)? Extract(WarcRecord record, CorpusSourceFormat format, ShardStatsBuilder stats)
+    /// <summary>One extracted document through the language, line and quality stages; a survivor is written, hashed and signed.</summary>
+    private void Judge(string url, string text, ShardStatsBuilder stats, MemoryStream buffer, IncrementalHash hash, Stream compressor, Stream signatures)
+    {
+        var language = "";
+        if (m_identifier != null)
+        {
+            var guess = m_identifier.Identify(text);
+            if (!guess.IsKnown)
+            {
+                stats.Drop(DROP_LANGUAGE_UNKNOWN);
+                return;
+            }
+
+            if (m_targets != null && !m_targets.Contains(guess.Code))
+            {
+                stats.Drop(DROP_LANGUAGE_NOT_TARGET);
+                return;
+            }
+
+            language = guess.Code;
+        }
+
+        var content = text;
+        var rules = ShardQualityRules.Resolve(language, m_pipeline.Quality);
+        if (m_pipeline.CleanLines)
+        {
+            content = LineCleaner.Clean(content, rules, out _);
+            if (content.Length == 0)
+            {
+                stats.Drop(DROP_NO_PROSE_LINES);
+                return;
+            }
+        }
+
+        if (m_pipeline.FilterQuality)
+        {
+            var verdict = QualityFilter.Judge(content, rules);
+            if (!verdict.Passed)
+            {
+                stats.Drop(verdict.FailedRules[0]);
+                return;
+            }
+        }
+
+        WriteLine(buffer, url, language, content);
+        var line = buffer.GetBuffer().AsSpan(0, (int)buffer.Length);
+        hash.AppendData(line);
+        compressor.Write(line);
+
+        if (m_pipeline.Sign)
+            ShardSignatureWriter.Write(signatures, MinHashSigner.Sign(content));
+
+        stats.Out(language);
+    }
+
+    /// <summary>The documents of one record: none, one (a WET conversion, an HTML page) or one per page range (a PDF).</summary>
+    private IReadOnlyList<(string Url, string Text)> Extract(WarcRecord record, CorpusSourceFormat format, ShardStatsBuilder stats, CancellationToken cancellationToken)
     {
         var url = record.TargetUri ?? "";
 
         if (format == CorpusSourceFormat.Wet)
         {
             if (record.Type != RECORD_CONVERSION)
-                return null;
+                return [];
 
             var wet = HtmlTextExtractor.CollapseLines(Encoding.UTF8.GetString(record.Payload.Span));
             if (wet.Length == 0)
-            {
-                stats.Drop(DROP_EMPTY_TEXT);
-                return null;
-            }
+                return Drop(stats, DROP_EMPTY_TEXT);
 
-            return (url, wet);
+            return [(url, wet)];
         }
 
         if (record.Type != RECORD_RESPONSE)
-            return null;
+            return [];
 
         var payload = HttpResponsePayload.Parse(record.Payload);
         if (payload == null)
-        {
-            stats.Drop(DROP_HTTP_UNPARSABLE);
-            return null;
-        }
+            return Drop(stats, DROP_HTTP_UNPARSABLE);
 
         if (payload.StatusCode != 200)
-        {
-            stats.Drop(DROP_HTTP_STATUS);
-            return null;
-        }
+            return Drop(stats, DROP_HTTP_STATUS);
+
+        // With the stage off, a PDF is what it was before the stage existed: not HTML.
+        if (m_pipeline.ExtractPdf && ShardPdfStage.IsCandidate(record, payload))
+            return (m_pdf ??= new ShardPdfStage(null)).Extract(record, payload, stats, cancellationToken);
 
         if (!payload.IsHtml)
-        {
-            stats.Drop(DROP_NOT_HTML);
-            return null;
-        }
+            return Drop(stats, DROP_NOT_HTML);
 
         if (!HtmlTextExtractor.TryExtract(payload.DecodeBody(), out var text, out _))
-        {
-            stats.Drop(DROP_HTML_REFUSED);
-            return null;
-        }
+            return Drop(stats, DROP_HTML_REFUSED);
 
         if (text.Length == 0)
-        {
-            stats.Drop(DROP_EMPTY_TEXT);
-            return null;
-        }
+            return Drop(stats, DROP_EMPTY_TEXT);
 
-        return (url, text);
+        return [(url, text)];
+    }
+
+    private static IReadOnlyList<(string Url, string Text)> Drop(ShardStatsBuilder stats, string rule)
+    {
+        stats.Drop(rule);
+        return [];
     }
 
     private static void WriteLine(MemoryStream buffer, string url, string language, string text)

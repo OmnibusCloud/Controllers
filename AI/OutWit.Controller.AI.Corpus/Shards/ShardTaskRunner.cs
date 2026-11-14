@@ -138,7 +138,7 @@ public static class ShardTaskRunner
         ShardProduct product;
         try
         {
-            product = await Task.Run(() => Process(task, model, shardPath, textPath, signaturesPath, cancellationToken), cancellationToken);
+            product = await Task.Run(() => Process(task, model, workDirectory, shardPath, textPath, signaturesPath, cancellationToken), cancellationToken);
         }
         catch (Exception exception) when (exception is WarcFormatException or InvalidDataException)
         {
@@ -174,9 +174,11 @@ public static class ShardTaskRunner
         return result;
     }
 
-    private static ShardProduct Process(CorpusTaskData task, LanguageModel? model, string shardPath, string textPath, string signaturesPath, CancellationToken cancellationToken)
+    private static ShardProduct Process(CorpusTaskData task, LanguageModel? model, string workDirectory, string shardPath, string textPath, string signaturesPath, CancellationToken cancellationToken)
     {
-        var processor = new ShardProcessor(task.Pipeline!, model);
+        // A PDF's files live in the task's own scope (the client's temp storage), never elsewhere;
+        // a fault of the PDF sandbox's host (its wall-clock backstop) fails the shard below.
+        var processor = new ShardProcessor(task.Pipeline!, model, new ShardPdfStage(workDirectory));
 
         using var shard = new FileStream(shardPath, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
         using var text = new FileStream(textPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 1 << 20);

@@ -15,7 +15,7 @@ public static class CorpusManifestParser
     #region Constants
 
     private static readonly HashSet<string> ROOT_KEYS = new(StringComparer.Ordinal) { "pipeline", "allowed_origins", "sources" };
-    private static readonly HashSet<string> PIPELINE_KEYS = new(StringComparer.Ordinal) { "version", "language_model_sha256", "target_languages", "identify_language", "clean_lines", "filter_quality", "sign", "quality" };
+    private static readonly HashSet<string> PIPELINE_KEYS = new(StringComparer.Ordinal) { "version", "language_model_sha256", "target_languages", "identify_language", "clean_lines", "filter_quality", "sign", "extract_pdf", "quality" };
     private static readonly HashSet<string> SOURCE_KEYS = new(StringComparer.Ordinal) { "url", "format", "size", "sha256" };
     private static readonly HashSet<string> QUALITY_KEYS = new(StringComparer.Ordinal)
     {
@@ -131,6 +131,9 @@ public static class CorpusManifestParser
                     break;
                 case "sign":
                     pipeline.Sign = Bool(property, "pipeline", errors);
+                    break;
+                case "extract_pdf":
+                    pipeline.ExtractPdf = Bool(property, "pipeline", errors);
                     break;
                 case "quality":
                     pipeline.Quality = ParseQuality(property.Value, errors);

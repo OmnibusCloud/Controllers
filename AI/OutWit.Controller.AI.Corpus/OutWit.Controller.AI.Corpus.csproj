@@ -4,9 +4,9 @@
 
   <PropertyGroup>
     <ControllerName>Corpus</ControllerName>
-    <Version>0.1.14</Version>
-    <Description>Public-corpus processing at CPU scale on anonymous nodes: streamed WARC/WET reading, HTML to text, language identification, quality filtering and MinHash deduplication signatures - deterministic by requirement, the node fetching its shard straight from the public origin (Common Crawl first).</Description>
-    <PackageTags>corpus;common-crawl;warc;wet;text-extraction;language-id;dedup;minhash;witengine;witcloud;controller</PackageTags>
+    <Version>0.2.0</Version>
+    <Description>Public-corpus processing at CPU scale on anonymous nodes: streamed WARC/WET reading, HTML to text, PDF to text in a wasm sandbox, language identification, quality filtering and MinHash deduplication signatures - deterministic by requirement, the node fetching its shard straight from the public origin (Common Crawl first).</Description>
+    <PackageTags>corpus;common-crawl;warc;wet;pdf;text-extraction;language-id;dedup;minhash;wasm;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>corpus-process-shard</ControllerFeatures>
     <ControllerUseCases>Cleaning, language-tagging and deduplicating public web text for training corpora</ControllerUseCases>
   </PropertyGroup>
@@ -26,6 +26,22 @@
     <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
   </ItemGroup>
 
+  <!-- The PDF stage's sandbox: the Wasmtime.Dotnet managed binding over the native wasmtime
+       library, the same version Verify references (one binding per process in the client's shared
+       load context; WasmHostBinding.BUILT_AGAINST and the repository pins test hold them together).
+       A package stages nothing into the module by itself, so the binding is declared below and
+       copied next to the controller; the natives and the extractor module are data assets. -->
+  <ItemGroup>
+    <PackageReference Include="Wasmtime" Version="48.0.2" />
+  </ItemGroup>
+
+  <!-- The wasm sandbox host, shared with the other AI controllers as source, not as an assembly:
+       compiled in here, its types (internal, namespace OutWit.Controller.AI.Wasm) are this
+       controller's own copy, and Corpus works with or without any other controller. -->
+  <ItemGroup>
+    <Compile Include="..\Shared\Wasm\**\*.cs" Link="Wasm\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <PropertyGroup>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
@@ -33,6 +49,45 @@
   <ItemGroup>
     <ControllerModuleAssembly Include="AngleSharp" />
     <ControllerModuleAssembly Include="ZstdSharp" />
+    <ControllerModuleAssembly Include="Wasmtime.Dotnet" />
+  </ItemGroup>
+
+  <!-- Tier-2 data assets, fetched by consumers at build time from the neutral asset releases of
+       this repository, one asset referenced by every consumer by URI and SHA-256. The three native
+       wasmtime libraries (wasmtime-v48.0.8) are the very bytes Verify ships, extracted to the
+       folder the module's deps.json names. The PDF extractor (pdftext-v1.0.0: pdf_oxide built for
+       wasm32-wasip1 by the toolchain workflow of OutWit.Controller.AI.Corpus.Assets, two builds
+       compared byte for byte) arrives as one platform-independent zip whose entries live under
+       wasm/; its module's SHA-256 is pinned in the code as well (PdfStageLimits.MODULE_SHA256). -->
+  <ItemGroup>
+    <ControllerDataAsset Include="wasmtime-win-x64">
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8/wasmtime-win-x64.zip</Uri>
+      <Sha256>c4e799ba8b7f625a8e5aee1f6c43d0a57b2ce6ce0824e7a13ca62144c94bfdc5</Sha256>
+      <Size>8284072</Size>
+      <ExtractTo>runtimes/win-x64/native/</ExtractTo>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="wasmtime-linux-x64">
+      <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8/wasmtime-linux-x64.zip</Uri>
+      <Sha256>9ea38410c9e9ac0e6a2983dbcca5b324cf0c8a12159ed9ec186cd195f987c4a8</Sha256>
+      <Size>9963229</Size>
+      <ExtractTo>runtimes/linux-x64/native/</ExtractTo>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="wasmtime-osx-arm64">
+      <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8/wasmtime-osx-arm64.zip</Uri>
+      <Sha256>252af1df65b0fa10fa67d0dece7713d6e5e61bde438ae9083993a75c5ef5a3d9</Sha256>
+      <Size>8563340</Size>
+      <ExtractTo>runtimes/osx-arm64/native/</ExtractTo>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="corpus-pdftext-wasm">
+      <RuntimeIdentifier>any</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/pdftext-v1.0.0/corpus-pdftext-wasm.zip</Uri>
+      <Sha256>02e7d700cc43eaff8c5b882321cf008edf1020cb7f5283f19562e05917448200</Sha256>
+      <Size>5932476</Size>
+      <ExtractTo>.</ExtractTo>
+    </ControllerDataAsset>
   </ItemGroup>
 
   <ItemGroup>

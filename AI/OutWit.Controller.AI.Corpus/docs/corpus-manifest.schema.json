@@ -19,6 +19,7 @@
         "clean_lines": { "type": "boolean", "default": true, "description": "Whether the lines that do not read like prose (menus, prices, footers) leave each document before it is judged." },
         "filter_quality": { "type": "boolean", "default": true },
         "sign": { "type": "boolean", "default": true, "description": "Whether a MinHash signature is produced per document." },
+        "extract_pdf": { "type": "boolean", "default": true, "description": "Whether the PDF stage runs on WARC shards: a response that is a PDF (Content-Type or WARC-Identified-Payload-Type application/pdf, the body starting with %PDF-) becomes text in the controller's wasm sandbox and then page-range documents of at most 5,000 words (url#page=a-b) that go through the stages after it like a page of HTML. Off, a PDF drops as not_html. WET shards carry no PDFs." },
         "quality": {
           "type": "object",
           "additionalProperties": false,

@@ -13,6 +13,7 @@ public sealed class ShardStatsBuilder
 
     private readonly Dictionary<string, int> m_drops = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> m_languages = new(StringComparer.Ordinal);
+    private readonly CorpusPdfStatsData m_pdf = new();
 
     #endregion
 
@@ -45,6 +46,36 @@ public sealed class ShardStatsBuilder
         m_languages[languageCode] = m_languages.GetValueOrDefault(languageCode) + 1;
     }
 
+    /// <summary>Counts one PDF the PDF stage took.</summary>
+    /// <param name="truncated">Whether the crawler cut it short.</param>
+    public void PdfIn(bool truncated)
+    {
+        m_pdf.In++;
+        if (truncated)
+            m_pdf.Truncated++;
+    }
+
+    /// <summary>Adds the fuel one PDF's run burned.</summary>
+    /// <param name="fuel">The fuel.</param>
+    public void PdfFuel(long fuel)
+    {
+        m_pdf.Fuel += Math.Max(0, fuel);
+    }
+
+    /// <summary>Counts one PDF that gave documents.</summary>
+    /// <param name="pages">Its pages.</param>
+    /// <param name="documents">The page-range documents it gave.</param>
+    /// <param name="pagesCut">Its pages cut at the document cap.</param>
+    /// <param name="runningLines">The lines removed from it as running headers and footers.</param>
+    public void PdfExtracted(int pages, int documents, int pagesCut, int runningLines)
+    {
+        m_pdf.Extracted++;
+        m_pdf.Pages += pages;
+        m_pdf.Documents += documents;
+        m_pdf.PagesCut += pagesCut;
+        m_pdf.RunningLines += runningLines;
+    }
+
     /// <summary>The statistics, counts in canonical order, byte and time fields as given.</summary>
     /// <param name="bytesFetched">Bytes fetched from the origin.</param>
     /// <param name="bytesProduced">Bytes of the compressed product.</param>
@@ -65,7 +96,8 @@ public sealed class ShardStatsBuilder
             BytesProduced = bytesProduced,
             FetchMs = fetchMs,
             ProcessMs = processMs,
-            WaitMs = waitMs
+            WaitMs = waitMs,
+            Pdf = m_pdf.In > 0 ? m_pdf.Clone() : null
         };
     }
 

@@ -29,6 +29,9 @@ public sealed partial class CorpusShardStatsData : ModelBase
         if (Drops.Count != other.Drops.Count || Languages.Count != other.Languages.Count)
             return false;
 
+        if ((Pdf == null) != (other.Pdf == null) || (Pdf != null && !Pdf.Is(other.Pdf!, tolerance)))
+            return false;
+
         for (var i = 0; i < Drops.Count; i++)
         {
             if (!Drops[i].Is(other.Drops[i], tolerance))
@@ -66,7 +69,8 @@ public sealed partial class CorpusShardStatsData : ModelBase
             BytesProduced = BytesProduced,
             FetchMs = FetchMs,
             ProcessMs = ProcessMs,
-            WaitMs = WaitMs
+            WaitMs = WaitMs,
+            Pdf = Pdf?.Clone()
         };
     }
 
@@ -118,6 +122,10 @@ public sealed partial class CorpusShardStatsData : ModelBase
     /// <summary>Wall time the shard waited on the node for a download slot and a processing slot (the node's own queue; not part of the fetch or the processing times).</summary>
     [MemoryPackOrder(9)]
     public int WaitMs { get; set; }
+
+    /// <summary>What the PDF stage did with the shard's PDFs; null when it met none (a WET shard, a WARC shard without a PDF, the stage off).</summary>
+    [MemoryPackOrder(10)]
+    public CorpusPdfStatsData? Pdf { get; set; }
 
     #endregion
 }
