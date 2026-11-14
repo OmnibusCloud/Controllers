@@ -1,15 +1,16 @@
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
-using Wasmtime;
+using OutWit.Controller.AI.Wasm;
 
 namespace OutWit.Controller.AI.Verify.Sandbox;
 
 /// <summary>
-/// What a guest sees of the world: argv, environment, the read-only root and the stdio
-/// redirects — the WASI configuration of one invocation, built the same way for every node so
-/// a program sees the same world everywhere. The root is the runtime's library, or for Lua the
-/// task's own sources as files; elsewhere the sources travel inline (or are the module). No
-/// guest file system is writable: the strongest containment posture, and no state survives a run.
+/// What a guest sees of the world: argv, environment and the read-only root — the parts of one
+/// invocation's WASI configuration that are the task's (the host adds the stdio redirects),
+/// built the same way for every node so a program sees the same world everywhere. The root is
+/// the runtime's library, or for Lua the task's own sources as files; elsewhere the sources
+/// travel inline (or are the module). No guest file system is writable: the strongest
+/// containment posture, and no state survives a run.
 /// </summary>
 internal static class VerifyGuestWiring
 {
@@ -22,20 +23,13 @@ internal static class VerifyGuestWiring
     #region Functions
 
     /// <summary>
-    /// Builds the WASI configuration of one run.
+    /// The guest's environment: empty, but for what pins the interpreter.
     /// </summary>
     /// <param name="runtime">The resolved runtime.</param>
-    /// <param name="task">The task (its entry source and runtime drive argv).</param>
-    /// <param name="args">The arguments of this run (the task's, plus the case's for a suite).</param>
-    /// <param name="sourceRoot">The folder holding the task's sources as files when the runtime takes them so (Lua), else null.</param>
-    /// <param name="stdinPath">The host file to feed as stdin, or null for none.</param>
-    /// <param name="stdoutPath">The host file capturing stdout.</param>
-    /// <param name="stderrPath">The host file capturing stderr.</param>
-    /// <returns>The configuration to give the store.</returns>
-    public static WasiConfiguration Build(VerifyResolvedRuntime runtime, VerifyTaskData task,
-        IReadOnlyList<string> args, string? sourceRoot, string? stdinPath, string stdoutPath, string stderrPath)
+    /// <returns>The variables, in order.</returns>
+    public static IReadOnlyList<(string Name, string Value)> Environment(VerifyResolvedRuntime runtime)
     {
-        var wasi = new WasiConfiguration().WithArgs(BuildArgv(runtime, task, args));
+        var environment = new List<(string Name, string Value)>();
 
         // Pin the interpreter's environment for reproducibility: the prefix is "/" (no
         // landmark search, no directory scans, no "platform dependent libraries" warning),
@@ -43,33 +37,33 @@ internal static class VerifyGuestWiring
         // on PYTHONPATH (the standard library zip is on sys.path by itself).
         if (runtime.Descriptor.Language == VerifyRuntimeLanguage.Python)
         {
-            wasi = wasi
-                .WithEnvironmentVariable("PYTHONHOME", GUEST_ROOT)
-                .WithEnvironmentVariable("PYTHONHASHSEED", "0")
-                .WithEnvironmentVariable("PYTHONDONTWRITEBYTECODE", "1")
-                .WithEnvironmentVariable("PYTHONUNBUFFERED", "1");
+            environment.Add(("PYTHONHOME", GUEST_ROOT));
+            environment.Add(("PYTHONHASHSEED", "0"));
+            environment.Add(("PYTHONDONTWRITEBYTECODE", "1"));
+            environment.Add(("PYTHONUNBUFFERED", "1"));
 
             var pythonPath = string.Join(':', runtime.Descriptor.Layers.Where(layer => layer.PythonPath != null).Select(layer => layer.PythonPath));
             if (pythonPath.Length > 0)
-                wasi = wasi.WithEnvironmentVariable("PYTHONPATH", pythonPath);
+                environment.Add(("PYTHONPATH", pythonPath));
         }
 
+        return environment;
+    }
+
+    /// <summary>
+    /// The folders the guest sees: at most one, read-only, as "/".
+    /// </summary>
+    /// <param name="runtime">The resolved runtime.</param>
+    /// <param name="sourceRoot">The folder holding the task's sources as files when the runtime takes them so (Lua), else null.</param>
+    /// <returns>The preopened folders, in order.</returns>
+    public static IReadOnlyList<WasmHostPreopen> Preopens(VerifyResolvedRuntime runtime, string? sourceRoot)
+    {
         // The runtime root (the interpreter's library layers), read-only as "/"; for a runtime
         // whose file system is the task (Lua), the folder of its sources instead.
         if (runtime.Descriptor.SourcesAsRoot)
-        {
-            if (sourceRoot != null)
-                wasi = wasi.WithPreopenedDirectory(sourceRoot, GUEST_ROOT, false);
-        }
-        else if (runtime.RootPath != null)
-        {
-            wasi = wasi.WithPreopenedDirectory(runtime.RootPath, GUEST_ROOT, false);
-        }
+            return sourceRoot != null ? [new WasmHostPreopen(sourceRoot, GUEST_ROOT)] : [];
 
-        if (stdinPath != null)
-            wasi = wasi.WithStandardInput(stdinPath);
-
-        return wasi.WithStandardOutput(stdoutPath).WithStandardError(stderrPath);
+        return runtime.RootPath != null ? [new WasmHostPreopen(runtime.RootPath, GUEST_ROOT)] : [];
     }
 
     /// <summary>

@@ -1,7 +1,8 @@
+using System.Runtime.ExceptionServices;
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
+using OutWit.Controller.AI.Wasm;
 using Wasmtime;
-using WasmEngine = Wasmtime.Engine;
 using WasmModule = Wasmtime.Module;
 
 namespace OutWit.Controller.AI.Verify.Sandbox;
@@ -9,48 +10,32 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// <summary>
 /// The execution core: runs one task under a pinned WASI runtime in a fresh, isolated
 /// store within a fuel / memory / wall-clock envelope, and maps the outcome to a verdict.
-/// One sandbox instance owns one wasmtime engine and compiles each runtime module once
-/// (the persistent-batch economy); tasks are otherwise independent, so callers run many
-/// <see cref="Execute"/> calls concurrently across a node's cores.
+/// One sandbox instance owns one wasm host (<see cref="WasmHost"/>: one wasmtime engine and its
+/// epoch timer) and compiles each runtime module once (the persistent-batch economy); tasks are
+/// otherwise independent, so callers run many <see cref="Execute"/> calls concurrently across a
+/// node's cores.
 ///
-/// The guest's world is <see cref="VerifyGuestWiring"/> (argv, environment, read-only root,
-/// stdio), its clock and randomness <see cref="VerifyDeterministicLinker"/>'s, a suite's
+/// The guest's world is <see cref="VerifyGuestWiring"/> (argv, environment, read-only root),
+/// its clock and randomness <see cref="WasmHostLinker"/>'s, the run itself the host's, a suite's
 /// verdict <see cref="VerifySuiteEvaluator"/>'s.
 /// </summary>
 public sealed class VerifyWasmSandbox : IDisposable
 {
     #region Constants
 
-    /// <summary>Epoch tick granularity — the wall-clock interrupt resolution.</summary>
-    private const int EPOCH_TICK_MS = 10;
-
-    private const string GUEST_MEMORY = "memory";
-    private const string START_EXPORT = "_start";
-
     /// <summary>
     /// The most elements one table of a guest may hold. A table is host memory the linear
     /// memory cap does not count (eight bytes an element or more), so it has a cap of its
     /// own: over a hundred times the largest table of the bundled runtimes.
     /// </summary>
-    public const uint MAX_TABLE_ELEMENTS = 1_048_576;
-
-    /// <summary>Tables one guest may declare (a runtime module declares one).</summary>
-    internal const long MAX_TABLES = 8;
-
-    /// <summary>One linear memory per guest: the memory cap is per memory, a second one would double it.</summary>
-    internal const long MAX_MEMORIES = 1;
-
-    /// <summary>Instances one store may hold: the guest's own, with room for none of its making.</summary>
-    internal const long MAX_INSTANCES = 4;
+    public const uint MAX_TABLE_ELEMENTS = WasmHostLimits.MAX_TABLE_ELEMENTS;
 
     #endregion
 
     #region Fields
 
-    private readonly WasmEngine m_engine;
-    private readonly Timer m_epochTimer;
+    private readonly WasmHost m_host;
     private readonly string m_ioDir;
-    private readonly bool m_explicitTraps;
     private readonly object m_modulesLock = new();
     private readonly Dictionary<string, WasmModule> m_modules = new();
     private readonly VerifyTaskModuleCache m_taskModules;
@@ -60,13 +45,6 @@ public sealed class VerifyWasmSandbox : IDisposable
     #endregion
 
     #region Constructors
-
-    static VerifyWasmSandbox()
-    {
-        // Before the first wasmtime P/Invoke: in the shared load context the cloud client uses,
-        // the native library is found only through the module-aware resolver.
-        VerifyNativeLibrary.EnsureRegistered();
-    }
 
     /// <summary>
     /// Creates a sandbox whose working folder is a new one in the operating system's temp
@@ -86,52 +64,16 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// operating system's temp path. On a node it is a scope of the client's temp storage, so
     /// nothing of a task leaves the client's own folders. Created when missing, deleted on Dispose.
     /// </param>
+    /// <exception cref="InvalidOperationException">The loaded wasmtime binding is not the one this controller was built against (the message names both), or it cannot configure the engine.</exception>
     public VerifyWasmSandbox(string? ioDirectory)
     {
-        m_engine = new WasmEngine(CreateConfig(out m_explicitTraps));
+        m_host = new WasmHost();
 
-        // One timer thread advances the epoch for every store; per-store deadlines
-        // (SetEpochDeadline) convert a wall-time budget into a tick count.
-        m_epochTimer = new Timer(_ => m_engine.IncrementEpoch(), null, EPOCH_TICK_MS, EPOCH_TICK_MS);
-
-        m_taskModules = new VerifyTaskModuleCache(m_engine);
-        m_tools = new VerifyToolRunner(m_engine, EPOCH_TICK_MS);
+        m_taskModules = new VerifyTaskModuleCache(m_host.Engine);
+        m_tools = new VerifyToolRunner(m_host);
 
         m_ioDir = ioDirectory ?? Path.Combine(Path.GetTempPath(), $"witai_verify_{Guid.NewGuid():N}");
         Directory.CreateDirectory(m_ioDir);
-    }
-
-    /// <summary>
-    /// The engine every store shares. NaN canonicalization pins float bit patterns across
-    /// platforms; fuel and epoch give the CPU and wall-clock envelopes. Beyond that the
-    /// engine runs what a guest built for wasm32-wasi needs and nothing more:
-    /// one linear memory with 32-bit addresses (the store's cap is per memory, and 64-bit
-    /// tables are what the table-size panic GHSA-p8xm-42r7-89xg of wasmtime 44.0.0 needed),
-    /// no shared memory, no GC heap, no exceptions (on by default since wasmtime 47, the
-    /// subject of four advisories since; no runtime of the catalog uses them), no components;
-    /// relaxed SIMD in its deterministic mode, so a module that uses it computes the same
-    /// bits on every CPU. A guest may use 8 MiB of the native call stack, as a program does on
-    /// Linux; every run is on a thread that holds it (<see cref="VerifyGuestThread"/>). Traps are
-    /// explicit checks, not hardware faults, so a host process with hardware-enforced stack
-    /// protection survives a guest's trap (<see cref="VerifyEngineNative"/>).
-    /// </summary>
-    private static Config CreateConfig(out bool explicitTraps)
-    {
-        var config = new Config()
-            .WithMaximumStackSize(VerifyGuestThread.ENGINE_STACK_BYTES)
-            .WithFuelConsumption(true)
-            .WithEpochInterruption(true)
-            .WithCraneliftNaNCanonicalization(true)
-            .WithMemory64(false)
-            .WithMultiMemory(false)
-            .WithWasmThreads(false)
-            .WithGc(false)
-            .WithExceptions(false)
-            .WithComponentModel(false)
-            .WithRelaxedSIMD(true, true);
-
-        explicitTraps = VerifyEngineNative.Apply(config);
-        return config;
     }
 
     #endregion
@@ -232,7 +174,7 @@ public sealed class VerifyWasmSandbox : IDisposable
             WasmModule built;
             try
             {
-                built = WasmModule.FromBytes(m_engine, "program", program);
+                built = WasmModule.FromBytes(m_host.Engine, "program", program);
             }
             catch (WasmtimeException exception)
             {
@@ -271,175 +213,63 @@ public sealed class VerifyWasmSandbox : IDisposable
         };
     }
 
-    /// <summary>One guest invocation in its own store. The heart of the sandbox.</summary>
+    /// <summary>One guest invocation in its own store (the host's run), mapped to Verify's verdicts.</summary>
     private VerifyRunOutcome RunProgram(VerifyResolvedRuntime runtime, WasmModule module, VerifyTaskData task,
         string? sourceRoot, IReadOnlyList<string> args, string? stdin, VerifyLimitsData limits)
     {
-        // The sandbox lives as long as the process, its folder in the host's temp storage. A
-        // cloud client sweeps that storage whenever it reloads its controllers on an idle node
-        // (every controller check, every reconnect), so the folder may be gone between two runs.
-        Directory.CreateDirectory(m_ioDir);
-
-        var stdoutPath = Path.Combine(m_ioDir, $"{Guid.NewGuid():N}.out");
-        var stderrPath = stdoutPath + ".err";
-        var stdinPath = stdin == null ? null : stdoutPath + ".in";
-        if (stdinPath != null)
-            File.WriteAllText(stdinPath, stdin);
-
-        var store = new Store(m_engine);
-        var storeDisposed = false;
-        try
+        var outcome = m_host.Run(module, new WasmHostRunRequest
         {
-            store.SetWasiConfiguration(VerifyGuestWiring.Build(runtime, task, args, sourceRoot, stdinPath, stdoutPath, stderrPath));
-            store.Fuel = (ulong)Math.Max(1, limits.FuelBudget);
-            // The memory cap is per linear memory, so the guest gets one; tables are host
-            // memory outside that cap, so their size and number are capped as well.
-            store.SetLimits(
-                memorySize: Math.Max(1, limits.MemoryBytes),
-                tableElements: MAX_TABLE_ELEMENTS,
-                instances: MAX_INSTANCES,
-                tables: MAX_TABLES,
-                memories: MAX_MEMORIES);
-            store.SetEpochDeadline(WallToTicks(limits.WallTimeMs));
+            Argv = VerifyGuestWiring.BuildArgv(runtime, task, args),
+            Environment = VerifyGuestWiring.Environment(runtime),
+            Preopens = VerifyGuestWiring.Preopens(runtime, sourceRoot),
+            Stdin = stdin,
+            CaptureDirectory = m_ioDir,
+            Fuel = limits.FuelBudget,
+            MemoryBytes = limits.MemoryBytes,
+            WallMs = limits.WallTimeMs,
+            RandomSeed = task.RandomSeed,
+            StdoutLimitBytes = limits.StdoutLimitBytes,
+            StderrLimitBytes = limits.StderrLimitBytes,
+            OutOfMemory = LooksLikeOutOfMemory
+        });
 
-            using var linker = VerifyDeterministicLinker.Create(m_engine, task.RandomSeed);
+        // Kept as Verify has always had it: a run the engine ended without a trap or an exit code
+        // (a proc_exit with a status of 126 or more) is no verdict here but the engine's own
+        // exception, which fails the batch. Making it a verdict changes results: a release's call.
+        if (outcome.EngineError != null)
+            ExceptionDispatchInfo.Capture(outcome.EngineError).Throw();
 
-            var start = DateTime.UtcNow;
-            var (verdict, exitCode, trapMemoryFault, peakMemory, fault) = VerifyGuestThread.Run(() => Invoke(linker, store, module));
-            var wallMs = (int)(DateTime.UtcNow - start).TotalMilliseconds;
+        var verdict = VerdictOf(outcome);
 
-            var fuelConsumed = trapMemoryFault ? limits.FuelBudget : (long)((ulong)limits.FuelBudget - store.Fuel);
+        // A program that floods stdout violates the small-output contract regardless
+        // of whether its bytes matched — surface it distinctly.
+        if (outcome.StdoutTruncated && verdict is VerifyVerdict.Pass)
+            verdict = VerifyVerdict.OutputExceeded;
 
-            // Dispose the store BEFORE reading — wasmtime holds OS handles on the stdio
-            // redirect files until then.
-            store.Dispose();
-            storeDisposed = true;
-
-            var (stdout, stdoutTruncated) = ReadCapped(stdoutPath, limits.StdoutLimitBytes);
-            var (stderr, stderrTruncated) = ReadCapped(stderrPath, limits.StderrLimitBytes);
-
-            // A module that could not be instantiated never ran, and a trap ends a run without a
-            // word from the program: when it said nothing, the host's reason is its stderr.
-            if (fault != null && stderr.Length == 0)
-                stderr = fault;
-
-            // An allocation past the store cap usually surfaces as a graceful in-guest OOM
-            // (a clean nonzero exit), not a hard trap. Reclassify it to MemoryExceeded so the
-            // verdict stays useful — best-effort, by the runtime's OOM marker.
-            if (verdict is VerifyVerdict.RuntimeError && LooksLikeOutOfMemory(stderr))
-                verdict = VerifyVerdict.MemoryExceeded;
-
-            // A program that floods stdout violates the small-output contract regardless
-            // of whether its bytes matched — surface it distinctly.
-            if (stdoutTruncated && verdict is VerifyVerdict.Pass)
-                verdict = VerifyVerdict.OutputExceeded;
-
-            return new VerifyRunOutcome(verdict, exitCode, stdout, stdoutTruncated, stderr, stderrTruncated,
-                fuelConsumed, peakMemory, wallMs);
-        }
-        finally
-        {
-            if (!storeDisposed)
-                store.Dispose(); // releases wasmtime's handles on the stdio files
-            TryDelete(stdoutPath);
-            TryDelete(stderrPath);
-            if (stdinPath != null)
-                TryDelete(stdinPath);
-        }
+        // A run a trap ended (a crash or a budget stop) reports its whole budget and no peak: a
+        // budget stop must read the same whether fuel or the clock ended it.
+        var trapped = outcome.Trap != null;
+        return new VerifyRunOutcome(verdict, outcome.ExitCode, outcome.Stdout, outcome.StdoutTruncated, outcome.Stderr, outcome.StderrTruncated,
+            trapped ? limits.FuelBudget : outcome.FuelConsumed, trapped ? 0 : outcome.PeakMemoryBytes, outcome.WallMs);
     }
 
-    private static InvokeOutcome Invoke(Linker linker, Store store, WasmModule module)
+    private static VerifyVerdict VerdictOf(WasmHostRunOutcome outcome)
     {
-        Instance instance;
-        try
+        return outcome.Verdict switch
         {
-            instance = linker.Instantiate(store, module);
-        }
-        catch (WasmtimeException exception) when (exception.ExitCode is { } code)
-        {
-            // A guest that proc_exits during module init (before _start) still lands here.
-            return code == 0 ? new(VerifyVerdict.Pass, 0, false, 0) : new(VerifyVerdict.RuntimeError, code, false, 0);
-        }
-        catch (TrapException trap)
-        {
-            return MapTrap(trap);
-        }
-        catch (WasmtimeException exception)
-        {
+            WasmHostVerdict.Exited => outcome.ExitCode == 0 ? VerifyVerdict.Pass : VerifyVerdict.RuntimeError,
+            // Both fuel exhaustion and epoch interruption mean "did not finish in budget".
+            WasmHostVerdict.OutOfFuel or WasmHostVerdict.Interrupted => VerifyVerdict.Timeout,
+            // An allocation past the store cap usually surfaces as a graceful in-guest OOM
+            // (a clean nonzero exit), not a hard trap; recognised by the runtime's OOM marker.
+            WasmHostVerdict.OutOfMemory => VerifyVerdict.MemoryExceeded,
             // Unresolved imports, a type mismatch against WASI, a memory the store cannot
             // grant: the module never ran. A task-supplied module owns this verdict.
-            return new(VerifyVerdict.CompileError, -1, false, 0, $"module failed to instantiate: {exception.Message}");
-        }
-
-        try
-        {
-            var startAction = instance.GetAction(START_EXPORT);
-            if (startAction == null)
-                return new(VerifyVerdict.RuntimeError, -1, false, PeakMemory(instance), $"module exports no {START_EXPORT}");
-
-            startAction();
-            return new(VerifyVerdict.Pass, 0, false, PeakMemory(instance));
-        }
-        catch (WasmtimeException exception) when (exception.ExitCode is { } code)
-        {
-            // WASI proc_exit — a clean guest exit with a code (0 = success).
-            var peak = PeakMemory(instance);
-            return code == 0 ? new(VerifyVerdict.Pass, 0, false, peak) : new(VerifyVerdict.RuntimeError, code, false, peak);
-        }
-        catch (TrapException trap)
-        {
-            return MapTrap(trap);
-        }
-    }
-
-    private static InvokeOutcome MapTrap(TrapException trap)
-    {
-        var verdict = trap.Type switch
-        {
-            // Both fuel exhaustion and epoch interruption mean "did not finish in budget".
-            TrapCode.OutOfFuel => VerifyVerdict.Timeout,
-            TrapCode.Interrupt => VerifyVerdict.Timeout,
-            // Anything else is a crash, an access outside the memory included: a wild pointer or
-            // a stack that overflowed is a fault of the program, not a refusal of memory. Memory
-            // refused to an allocator surfaces as the program's own message (LooksLikeOutOfMemory).
+            WasmHostVerdict.NotInstantiated => VerifyVerdict.CompileError,
+            // A crash (an access outside the memory included: a wild pointer or a stack that
+            // overflowed is a fault of the program, not a refusal of memory), or no _start.
             _ => VerifyVerdict.RuntimeError
         };
-
-        // A crash is named in fixed words. A budget stop is not: one node may stop on fuel where
-        // another stops on the clock, and the outputs must not tell them apart.
-        var fault = verdict == VerifyVerdict.Timeout ? null : $"wasm trap: {TrapText(trap.Type)}";
-        return new(verdict, -1, true, 0, fault);
-    }
-
-    private static string TrapText(TrapCode code)
-    {
-        return code switch
-        {
-            TrapCode.MemoryOutOfBounds => "out of bounds memory access (a pointer outside the memory, or a stack that overflowed)",
-            TrapCode.StackOverflow => "call stack exhausted",
-            TrapCode.Unreachable => "unreachable code reached (abort, a failed assertion, a trap instruction)",
-            TrapCode.IntegerDivisionByZero => "integer division by zero",
-            TrapCode.IntegerOverflow => "integer overflow",
-            TrapCode.BadConversionToInteger => "invalid conversion to integer",
-            TrapCode.IndirectCallToNull => "call through a null function pointer",
-            TrapCode.BadSignature => "call through a function pointer of the wrong type",
-            TrapCode.TableOutOfBounds => "out of bounds table access",
-            TrapCode.HeapMisaligned => "misaligned memory access",
-            _ => code.ToString()
-        };
-    }
-
-    private static long PeakMemory(Instance instance)
-    {
-        // WASM linear memory only grows, so its current length is the peak.
-        try
-        {
-            return instance.GetMemory(GUEST_MEMORY)?.GetLength() ?? 0;
-        }
-        catch
-        {
-            return 0;
-        }
     }
 
     #endregion
@@ -454,7 +284,7 @@ public sealed class VerifyWasmSandbox : IDisposable
             if (m_modules.TryGetValue(runtime.ModulePath, out var cached))
                 return cached;
 
-            var module = WasmModule.FromFile(m_engine, runtime.ModulePath);
+            var module = WasmModule.FromFile(m_host.Engine, runtime.ModulePath);
             m_modules[runtime.ModulePath] = module;
             return module;
         }
@@ -484,12 +314,6 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     #region Helpers
 
-    private static ulong WallToTicks(int wallMs)
-    {
-        var ticks = (wallMs + EPOCH_TICK_MS - 1) / EPOCH_TICK_MS;
-        return (ulong)Math.Max(1, ticks);
-    }
-
     private static bool LooksLikeOutOfMemory(string stderr)
     {
         // Python raises MemoryError and Ruby NoMemoryError (the same marker is in its name);
@@ -501,18 +325,6 @@ public sealed class VerifyWasmSandbox : IDisposable
                || stderr.Contains("bad_alloc was thrown", StringComparison.Ordinal);
     }
 
-    private static (string Text, bool Truncated) ReadCapped(string path, int capBytes)
-    {
-        if (!File.Exists(path))
-            return ("", false);
-
-        var bytes = File.ReadAllBytes(path);
-        if (capBytes > 0 && bytes.Length > capBytes)
-            return (System.Text.Encoding.UTF8.GetString(bytes, 0, capBytes), true);
-
-        return (System.Text.Encoding.UTF8.GetString(bytes), false);
-    }
-
     private static VerifyResultData Verdict(int taskIndex, VerifyVerdict verdict, string reason)
     {
         return new VerifyResultData
@@ -522,19 +334,6 @@ public sealed class VerifyWasmSandbox : IDisposable
             ExitCode = -1,
             Stderr = reason
         };
-    }
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch
-        {
-            // temp file; best-effort
-        }
     }
 
     private static void TryDeleteDirectory(string path)
@@ -561,7 +360,6 @@ public sealed class VerifyWasmSandbox : IDisposable
             return;
 
         m_disposed = true;
-        m_epochTimer.Dispose();
 
         lock (m_modulesLock)
         {
@@ -571,7 +369,7 @@ public sealed class VerifyWasmSandbox : IDisposable
         }
 
         m_taskModules.Dispose();
-        m_engine.Dispose();
+        m_host.Dispose();
 
         try
         {
@@ -595,20 +393,13 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// Whether a guest's traps are explicit checks in this process: true where the host enforces
     /// hardware stack protection (a hardware trap could not be resumed from), false elsewhere.
     /// </summary>
-    public bool ExplicitTraps => m_explicitTraps;
+    public bool ExplicitTraps => m_host.ExplicitTraps;
 
     /// <summary>Compiled task-supplied modules held right now (bounded by <see cref="TaskModuleCacheCapacity"/>).</summary>
     public int TaskModuleCacheCount => m_taskModules.Count;
 
     /// <summary>The most task-supplied modules the sandbox keeps compiled at once.</summary>
     public static int TaskModuleCacheCapacity => VerifyTaskModuleCache.DEFAULT_CAPACITY;
-
-    #endregion
-
-    #region Nested Types
-
-    /// <summary>What one instantiate-and-start attempt came to; Fault is the host's reason when the guest never ran.</summary>
-    private sealed record InvokeOutcome(VerifyVerdict Verdict, int ExitCode, bool MemoryFault, long PeakMemory, string? Fault = null);
 
     #endregion
 }

@@ -182,7 +182,7 @@ A module is refused before it runs (`CompileError`) when it asks for what the
 sandbox does not offer: a second linear memory, 64-bit memories or tables,
 shared memory, the GC heap, stack switching, exception handling, an import
 the sandbox does not provide. Four system calls answer with an error and do
-nothing, each for a stated reason (the comments in `VerifyDeterministicLinker`
+nothing, each for a stated reason (the comments in the wasm host's `WasmHostLinker`
 name the engine advisories): renumbering a descriptor, listing a folder, and
 setting a file's times by descriptor or by path.
 
@@ -438,6 +438,17 @@ binding's DllImport resolver before its first wasmtime call, and it loads
 `runtimes/<rid>/native/` from the module itself (the host's runtime
 identifier first, then the portable one).
 
+The sandbox host itself (the resolver, the engine and its settings, the guest
+threads, the deterministic linker and the run of one WASI command module) is
+shared by the AI controllers as source, not as an assembly: `AI/Shared/Wasm/`,
+compiled into each controller as its own internal copy (`OutWit.Controller.AI.Wasm`).
+In the shared load context an assembly name loads once and the first controller to
+load it wins, so a shared assembly would tie the controllers' versions together; the
+one assembly they do share is the binding, pinned to the same version in each. A
+startup guard compares the loaded binding with the version the controller was built
+against: on a mismatch the sandbox does not start, and the self-check's
+`wasmtime-native: FAILED` line names both versions.
+
 The natives and the runtime modules are Tier-2 data assets (`ControllerDataAsset`),
 fetched by consumers at build time from the `verify-v<version>` release of this
 repository and verified by hash; the nupkg itself stays small. The engine is the
@@ -470,8 +481,10 @@ included) and the
 benchmark, the taskset, sampling and integrity pipelines, the package format,
 plan, transfer (a link that drops and comes back included) and the share's
 progress, the end-to-end runs
-of every bundled script through the engine on in-process nodes, and the
-module self-containment proof. The sandbox suites need the pinned runtime set
+of every bundled script through the engine on in-process nodes, the
+module self-containment proof, and the shared wasm host on its own (its
+verdicts and folders, the binding guard in a client-like host, and the
+repository pins of the binding and the natives). The sandbox suites need the pinned runtime set
 (`verify-assets build OutWit.Controller.AI.Verify.Tests/@Data/runtimes`;
 `@Data/` is gitignored) and Assert.Ignore without it; the `AI Verify` workflow
 builds the set and runs everything on Linux, macOS and Windows, where a runtime

@@ -2,24 +2,24 @@ using System.Buffers.Binary;
 using Wasmtime;
 using WasmEngine = Wasmtime.Engine;
 
-namespace OutWit.Controller.AI.Verify.Sandbox;
+namespace OutWit.Controller.AI.Wasm;
 
 /// <summary>
 /// A WASI linker whose time and randomness are the run's own, so a program's execution —
-/// output and fuel — is reproducible on any node: the integrity foundation the controller
+/// output and fuel — is reproducible on any node: the integrity foundation a controller
 /// compares against.
 ///
 /// The clock starts at a pinned instant and moves only when the program waits: a sleep
 /// (poll_oneoff) returns at once and the clock reads that much later; a wait of no length
 /// still takes a nanosecond, as every real one takes some time. Nothing of the host's time
 /// reaches the program, and no wait holds a worker. random_get draws from a PRNG seeded by
-/// the task.
+/// the run.
 ///
 /// Four calls are taken away, each for a stated reason: renumbering a descriptor, listing a
 /// folder, and setting a file's times (by descriptor and by path) answer with an error and
 /// do nothing.
 /// </summary>
-internal static class VerifyDeterministicLinker
+internal static class WasmHostLinker
 {
     #region Constants
 
@@ -63,8 +63,8 @@ internal static class VerifyDeterministicLinker
     /// <summary>
     /// Creates the linker for one run.
     /// </summary>
-    /// <param name="engine">The sandbox's engine.</param>
-    /// <param name="randomSeed">The task's seed for random_get.</param>
+    /// <param name="engine">The host's engine.</param>
+    /// <param name="randomSeed">The run's seed for random_get.</param>
     /// <returns>A linker with WASI defined and the run's own time and randomness in it; the caller disposes it.</returns>
     public static Linker Create(WasmEngine engine, long randomSeed)
     {
@@ -89,7 +89,7 @@ internal static class VerifyDeterministicLinker
             (Caller caller, int subscriptionsPtr, int eventsPtr, int count, int storedPtr) =>
                 Poll(caller.GetMemory(GUEST_MEMORY), clock, subscriptionsPtr, eventsPtr, count, storedPtr));
 
-        // Seeded PRNG: deterministic bytes from the task seed (xorshift64*), so any
+        // Seeded PRNG: deterministic bytes from the run's seed (xorshift64*), so any
         // randomness the guest draws is identical on every node.
         var state = new RandomState(unchecked((ulong)randomSeed) | 1UL);
         linker.DefineFunction(WASI_MODULE, "random_get",
@@ -106,21 +106,21 @@ internal static class VerifyDeterministicLinker
                 return ERRNO_SUCCESS;
             });
 
-        // No descriptor juggling. Nothing a task does needs fd_renumber (the C library's dup2),
+        // No descriptor juggling. Nothing a guest does needs fd_renumber (the C library's dup2),
         // and it is where wasmtime up to 44.0.2 leaked host descriptors (GHSA-3p27-qvp9-27qf):
         // it answers "not implemented".
         linker.DefineFunction(WASI_MODULE, "fd_renumber", (Caller caller, int from, int to) => ERRNO_NOSYS);
 
-        // No directory listing. The only folder a guest has is its runtime's library, which a
-        // program has no need to list; the order of a listing is the host file system's (two
-        // nodes would print it differently), and before wasmtime 48.0.4 every entry carried
-        // three bytes of uninitialized host memory to the guest (GHSA-96f6-r43r-8c24).
-        // "Permission denied" is what the interpreters' own importers take for an empty folder.
+        // No directory listing. The order of a listing is the host file system's (two nodes
+        // would print it differently), and before wasmtime 48.0.4 every entry carried three
+        // bytes of uninitialized host memory to the guest (GHSA-96f6-r43r-8c24). "Permission
+        // denied" is what the interpreters' own importers take for an empty folder.
         linker.DefineFunction(WASI_MODULE, "fd_readdir",
             (Caller caller, int fd, int buffer, int bufferLength, long cookie, int usedPtr) => ERRNO_ACCES);
 
-        // No file times to set: everything a guest can reach is read-only, and before wasmtime
-        // 48.0.3 an out-of-range time panicked the host (GHSA-j2g9-4prp-pf6h).
+        // No file times to set: the times of a file are the host's clock, which no run may see
+        // or leave behind, and before wasmtime 48.0.3 an out-of-range time panicked the host
+        // (GHSA-j2g9-4prp-pf6h).
         linker.DefineFunction(WASI_MODULE, "fd_filestat_set_times",
             (Caller caller, int fd, long accessed, long modified, int flags) => ERRNO_ROFS);
         linker.DefineFunction(WASI_MODULE, "path_filestat_set_times",

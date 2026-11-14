@@ -63,7 +63,9 @@ public static class VerifySelfCheck
     /// Runs the self-check and returns a line-per-fact report: the controller and binding
     /// locations, the RID, the native library the module-aware resolver would load, the
     /// language-runtime root, whether the native library loaded (and through which path),
-    /// and one verdict line per known runtime.
+    /// and one verdict line per known runtime. A sandbox that cannot start is the
+    /// <see cref="NATIVE_FAILED"/> line with the reason: a wasmtime binding other than the one
+    /// this controller was built against names both versions there (the host's binding guard).
     /// </summary>
     /// <returns>The report text; never throws for a missing or broken sandbox.</returns>
     public static string Run()

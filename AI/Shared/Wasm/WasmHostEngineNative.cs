@@ -1,9 +1,8 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
-using OutWit.Controller.AI.Verify.Runtimes;
 using Wasmtime;
 
-namespace OutWit.Controller.AI.Verify.Sandbox;
+namespace OutWit.Controller.AI.Wasm;
 
 /// <summary>
 /// The two engine settings the .NET binding does not expose, set through the wasmtime C API on
@@ -20,12 +19,13 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// the same either way (fuel counts wasm operators, not machine instructions).</item>
 /// <item>The async stack size. The engine refuses a guest stack larger than its async stack,
 /// whose default (2 MiB) the binding cannot change: setting it lets a guest have the stack a
-/// program has on Linux (<see cref="VerifyGuestThread.ENGINE_STACK_BYTES"/>).</item>
+/// program has on Linux (<see cref="WasmHostGuestThread.ENGINE_STACK_BYTES"/>).</item>
 /// </list>
-/// The binding is pinned (48.0.2), and these are the only calls made past it; a binding that no
-/// longer has the native handle makes the sandbox refuse to start, not run unprotected.
+/// The binding is pinned (<see cref="WasmHostBinding.BUILT_AGAINST"/>), and these are the only calls
+/// made past it; a binding that no longer has the native handle makes the host refuse to start, not
+/// run unprotected.
 /// </summary>
-internal static class VerifyEngineNative
+internal static class WasmHostEngineNative
 {
     #region Constants
 
@@ -34,7 +34,7 @@ internal static class VerifyEngineNative
     private const string ASYNC_STACK_SIZE = "wasmtime_config_async_stack_size_set";
 
     /// <summary>The async stack: the guest's share and a margin the engine keeps above it.</summary>
-    public const ulong ASYNC_STACK_BYTES = (ulong)VerifyGuestThread.ENGINE_STACK_BYTES + (1UL << 20);
+    public const ulong ASYNC_STACK_BYTES = (ulong)WasmHostGuestThread.ENGINE_STACK_BYTES + (1UL << 20);
 
     // PROCESS_MITIGATION_POLICY.ProcessUserShadowStackPolicy and its EnableUserShadowStack bit.
     private const int PROCESS_USER_SHADOW_STACK_POLICY = 15;
@@ -99,15 +99,15 @@ internal static class VerifyEngineNative
 
     private static IntPtr TheBindingsLibrary()
     {
-        // The library the binding's own calls loaded: through VerifyNativeLibrary's resolver in a
-        // cloud client's shared load context, through the module's dependency file in an isolated
+        // The library the binding's own calls loaded: through WasmHostNativeLibrary's resolver in
+        // a cloud client's shared load context, through the module's dependency file in an isolated
         // plugin context. A load by name runs neither the resolver nor a plugin context's lookup
         // (it found nothing on a Linux client), so load by the path the resolver used or would
         // use; the operating system hands back the library already loaded.
-        var path = VerifyNativeLibrary.ResolvedPath ?? VerifyNativeLibrary.Locate();
+        var path = WasmHostNativeLibrary.ResolvedPath ?? WasmHostNativeLibrary.Locate();
         return path != null
             ? NativeLibrary.Load(path)
-            : NativeLibrary.Load(VerifyNativeLibrary.LIBRARY_NAME, typeof(Wasmtime.Engine).Assembly, null);
+            : NativeLibrary.Load(WasmHostNativeLibrary.LIBRARY_NAME, typeof(Wasmtime.Engine).Assembly, null);
     }
 
     private static IntPtr NativeHandleOf(Config config)

@@ -1,5 +1,7 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Wasm;
 
 namespace OutWit.Controller.AI.Verify.Runtimes;
 
@@ -13,15 +15,16 @@ public static class VerifyRuntimeDiagnosticsBuilder
 {
     /// <summary>Builds the inventory of this process: wasmtime version, runtime target, every known runtime with its availability and pin.</summary>
     /// <returns>The diagnostics record.</returns>
+    /// <exception cref="InvalidOperationException">The loaded wasmtime binding is not the one this controller was built against (the message names both).</exception>
     public static VerifyRuntimeDiagnosticsData Build()
     {
-        // The version below is a managed fact; the engine makes the native library a proven one.
-        // A module whose wasmtime cannot load fails the diagnostic with the loader's message
-        // instead of reporting a version it cannot run.
+        // The version below is a managed fact; the binding guard makes it the one this controller
+        // was built against, and the engine makes the native library a proven one. A module whose
+        // wasmtime is another or cannot load fails the diagnostic with the reason instead of
+        // reporting a version it cannot run.
+        WasmHostBinding.ThrowIfUnavailable();
         VerifyNativeLibrary.EnsureRegistered();
-        using (new Wasmtime.Engine())
-        {
-        }
+        ProveTheEngineLoads();
 
         var root = VerifyRuntimeLocator.Locate();
 
@@ -55,5 +58,17 @@ public static class VerifyRuntimeDiagnosticsBuilder
             : OperatingSystem.IsMacOS() ? "macos"
             : "unknown";
         return $"{os}-{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}";
+    }
+
+    /// <summary>
+    /// Makes and drops one engine. Kept out of line, so that the binding's members are looked up
+    /// after the guard has passed, not when the caller is compiled.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProveTheEngineLoads()
+    {
+        using (new Wasmtime.Engine())
+        {
+        }
     }
 }
