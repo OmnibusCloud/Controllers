@@ -12,8 +12,10 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// <summary>
 /// One task on a node, start to finish: the allowlist re-check against the task and the
 /// machine's own policy, the pinned model, the capped fetch, the pipeline, the uploads. Every way a shard can fail is a verdict in the result,
-/// not an exception — the job completes and the report says what happened to each shard;
-/// only cancellation propagates.
+/// not an exception — the job completes and the report says what happened to each shard —
+/// except a fault of this node that another node would not have: a PDF the node cannot run
+/// (<see cref="Pdf.PdfSandboxException"/>) and a product it cannot upload. Those propagate, with
+/// cancellation: the node's batch fails and <c>Grid.ForEach</c> runs its tasks on another node.
 /// </summary>
 public static class ShardTaskRunner
 {
@@ -58,7 +60,23 @@ public static class ShardTaskRunner
     /// <param name="logger">Receives a warning per failed blob transfer attempt; null for none.</param>
     /// <param name="cancellationToken">Cancels the task.</param>
     /// <returns>The result, verdict included.</returns>
-    public static async Task<CorpusResultData> RunAsync(CorpusTaskData task, ShardFetcher fetcher, IWitBlobService blobs, string workDirectory, ShardShareTicket? ticket, ILogger? logger, CancellationToken cancellationToken)
+    /// <exception cref="Pdf.PdfSandboxException">The shard holds a PDF this node cannot run (no sandbox here, the wall-clock backstop): another node must make the product.</exception>
+    public static Task<CorpusResultData> RunAsync(CorpusTaskData task, ShardFetcher fetcher, IWitBlobService blobs, string workDirectory, ShardShareTicket? ticket, ILogger? logger, CancellationToken cancellationToken)
+    {
+        return RunAsync(task, fetcher, blobs, workDirectory, ticket, logger, null, cancellationToken);
+    }
+
+    /// <summary>Runs one task with a PDF stage of the caller's (tests of a node without a sandbox).</summary>
+    /// <param name="task">The task.</param>
+    /// <param name="fetcher">Fetches the shard.</param>
+    /// <param name="blobs">Resolves the model blob and receives the products.</param>
+    /// <param name="workDirectory">A directory of this task's own; the caller deletes it.</param>
+    /// <param name="ticket">The shard's place in the share's progress, or null.</param>
+    /// <param name="logger">Receives a warning per failed blob transfer attempt; null for none.</param>
+    /// <param name="pdfStage">The PDF stage; null for the process-wide sandbox with the work directory.</param>
+    /// <param name="cancellationToken">Cancels the task.</param>
+    /// <returns>The result, verdict included.</returns>
+    internal static async Task<CorpusResultData> RunAsync(CorpusTaskData task, ShardFetcher fetcher, IWitBlobService blobs, string workDirectory, ShardShareTicket? ticket, ILogger? logger, ShardPdfStage? pdfStage, CancellationToken cancellationToken)
     {
         var result = new CorpusResultData
         {
@@ -138,11 +156,16 @@ public static class ShardTaskRunner
         ShardProduct product;
         try
         {
-            product = await Task.Run(() => Process(task, model, workDirectory, shardPath, textPath, signaturesPath, cancellationToken), cancellationToken);
+            product = await Task.Run(() => Process(task, model, pdfStage ?? new ShardPdfStage(workDirectory), shardPath, textPath, signaturesPath, cancellationToken), cancellationToken);
         }
         catch (Exception exception) when (exception is WarcFormatException or InvalidDataException)
         {
             return Fail(result, CorpusShardVerdict.Malformed, exception.Message);
+        }
+        catch (Pdf.PdfSandboxException)
+        {
+            // Not a verdict: another node makes this shard's product (see the class remarks).
+            throw;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -174,11 +197,10 @@ public static class ShardTaskRunner
         return result;
     }
 
-    private static ShardProduct Process(CorpusTaskData task, LanguageModel? model, string workDirectory, string shardPath, string textPath, string signaturesPath, CancellationToken cancellationToken)
+    private static ShardProduct Process(CorpusTaskData task, LanguageModel? model, ShardPdfStage pdfStage, string shardPath, string textPath, string signaturesPath, CancellationToken cancellationToken)
     {
-        // A PDF's files live in the task's own scope (the client's temp storage), never elsewhere;
-        // a fault of the PDF sandbox's host (its wall-clock backstop) fails the shard below.
-        var processor = new ShardProcessor(task.Pipeline!, model, new ShardPdfStage(workDirectory));
+        // A PDF's files live in the task's own scope (the client's temp storage), never elsewhere.
+        var processor = new ShardProcessor(task.Pipeline!, model, pdfStage);
 
         using var shard = new FileStream(shardPath, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
         using var text = new FileStream(textPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 1 << 20);

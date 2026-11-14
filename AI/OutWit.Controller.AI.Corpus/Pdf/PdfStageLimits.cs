@@ -87,7 +87,8 @@ public static class PdfStageLimits
     public static readonly string DESCRIPTOR = string.Create(CultureInfo.InvariantCulture,
         $"pdftext sha256={MODULE_SHA256}; engine=wasmtime {WasmHostBinding.BUILT_AGAINST}; fuel={FUEL} after instantiation; memory={MEMORY_BYTES}; " +
         $"seed={RANDOM_SEED}; input={MAX_INPUT_BYTES}; text={MAX_TEXT_BYTES}; document_words={DOCUMENT_WORDS} at page boundaries, a longer page cut at a line; " +
-        $"running_lines=on {RUNNING_LINE_MIN_PAGES}+ pages, on half the pages or more, digits folded");
+        $"running_lines=on {RUNNING_LINE_MIN_PAGES}+ pages, on half the pages or more, digits folded; " +
+        $"hyphens=a lower-case Cyrillic or Greek word broken at a line end rejoined (Latin is pdf_oxide's)");
 
     #endregion
 }

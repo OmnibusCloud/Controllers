@@ -11,9 +11,11 @@ namespace OutWit.Controller.AI.Corpus.Pdf;
 /// one, appears on half the pages or more of a PDF of <see cref="PdfStageLimits.RUNNING_LINE_MIN_PAGES"/>
 /// pages or more (a page number, "Page 3 of 12", a title or a disclaimer repeated on every
 /// page): left in, it is the repetition the quality filter's duplicate rules drop a document for.
+/// Then, within each page, a Cyrillic or Greek word broken at a line end is rejoined
+/// (<see cref="PdfTextHyphens"/>).
 /// <para>
-/// Nothing is reflowed and no hyphen is removed here: pdf_oxide already joins a paragraph's lines
-/// and removes a hyphen between two lower-case parts; a hyphen it kept is the text's.
+/// Nothing is reflowed and no Latin hyphen is removed here: pdf_oxide already joins a paragraph's
+/// lines and removes a hyphen between two lower-case Latin parts; a hyphen it kept is the text's.
 /// </para>
 /// </summary>
 public static class PdfTextShaper
@@ -29,9 +31,9 @@ public static class PdfTextShaper
 
     #region Functions
 
-    /// <summary>The pages of a text, collapsed, running lines removed.</summary>
+    /// <summary>The pages of a text, collapsed, running lines removed, broken Cyrillic and Greek words rejoined.</summary>
     /// <param name="text">The module's text.</param>
-    /// <returns>The pages (an empty page has no line) and the number of lines removed as running lines.</returns>
+    /// <returns>The pages (an empty page has no line), the lines removed as running lines and the line breaks removed inside words.</returns>
     public static PdfShapedText Shape(string text)
     {
         var pages = text.Split(PAGE_BREAK)
@@ -39,23 +41,29 @@ public static class PdfTextShaper
             .Select(page => page.Length == 0 ? Array.Empty<string>() : page.Split('\n'))
             .ToList();
 
-        if (pages.Count < PdfStageLimits.RUNNING_LINE_MIN_PAGES)
-            return new PdfShapedText(pages, 0);
-
-        var running = RunningLines(pages);
-        if (running.Count == 0)
-            return new PdfShapedText(pages, 0);
-
         var removed = 0;
-        var kept = new List<string[]>(pages.Count);
-        foreach (var page in pages)
+        if (pages.Count >= PdfStageLimits.RUNNING_LINE_MIN_PAGES)
         {
-            var lines = page.Where(line => !running.Contains(Fold(line))).ToArray();
-            removed += page.Length - lines.Length;
-            kept.Add(lines);
+            var running = RunningLines(pages);
+            if (running.Count > 0)
+            {
+                for (var index = 0; index < pages.Count; index++)
+                {
+                    var lines = pages[index].Where(line => !running.Contains(Fold(line))).ToArray();
+                    removed += pages[index].Length - lines.Length;
+                    pages[index] = lines;
+                }
+            }
         }
 
-        return new PdfShapedText(kept, removed);
+        var joined = 0;
+        for (var index = 0; index < pages.Count; index++)
+        {
+            pages[index] = PdfTextHyphens.Join(pages[index], out var pageJoined);
+            joined += pageJoined;
+        }
+
+        return new PdfShapedText(pages, removed, joined);
     }
 
     /// <summary>A line with every run of decimal digits folded to one <c>0</c>: "Page 12 of 30" and "Page 3 of 30" are one line.</summary>

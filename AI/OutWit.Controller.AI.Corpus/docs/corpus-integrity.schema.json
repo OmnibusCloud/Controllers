@@ -16,7 +16,7 @@
         "sampled": { "type": "integer", "description": "Pairs of executions of one shard." },
         "compared": { "type": "integer", "description": "Pairs whose two sides ran the same controller version and both finished." },
         "version_skew": { "type": "integer", "description": "Pairs whose sides ran different controller versions - a rollout in progress (not compared)." },
-        "incomplete": { "type": "integer", "description": "Pairs with a side that did not finish for a reason of its machine or its link: FetchFailed, PipelineUnavailable or Failed, or a node that could not run the PDF sandbox (drops pdf_sandbox_unavailable); not compared: a mismatch is two finished sides that disagree." },
+        "incomplete": { "type": "integer", "description": "Pairs with a side that did not finish for a reason of its machine or its link: FetchFailed, PipelineUnavailable or Failed (not compared; a mismatch is two finished sides that disagree)." },
         "mismatches": { "type": "integer", "description": "Compared pairs that disagree." },
         "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." }
       }
@@ -33,7 +33,7 @@
           "primary": { "$ref": "#/$defs/side" },
           "replica": { "$ref": "#/$defs/side" },
           "compared": { "type": "boolean" },
-          "incomplete": { "type": "boolean", "description": "Present and true when a side did not finish (FetchFailed, PipelineUnavailable, Failed) or could not run the PDF sandbox." },
+          "incomplete": { "type": "boolean", "description": "Present and true when a side did not finish (FetchFailed, PipelineUnavailable, Failed)." },
           "match": { "type": "boolean", "description": "Present when compared." },
           "differs": { "type": "array", "items": { "type": "string", "enum": ["verdict", "content", "documents", "drops", "languages", "pdf"] }, "description": "Present on a mismatch: the fields that differ." }
         }

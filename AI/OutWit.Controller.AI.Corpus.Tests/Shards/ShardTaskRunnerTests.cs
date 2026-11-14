@@ -1,6 +1,7 @@
 using OutWit.Controller.AI.Corpus.Compression;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Tests.Mock;
 
@@ -27,6 +28,7 @@ public sealed class ShardTaskRunnerTests
     #region Fields
 
     private CorpusTestOrigin m_origin = null!;
+    private readonly List<CorpusTestOrigin> m_servedOrigins = [];
     private CorpusTestBlobService m_blobs = null!;
     private ShardFetcher m_fetcher = null!;
     private string m_root = null!;
@@ -52,6 +54,7 @@ public sealed class ShardTaskRunnerTests
     public void TearDown()
     {
         m_origin.Dispose();
+        m_servedOrigins.ForEach(origin => origin.Dispose());
         if (Directory.Exists(m_root))
             Directory.Delete(m_root, recursive: true);
     }
@@ -313,6 +316,38 @@ public sealed class ShardTaskRunnerTests
     }
 
     [Test]
+    public async Task ANodeWithoutTheSandboxDoesNotMakeAShardWithAPdfTest()
+    {
+        // Not a verdict in a result (it would be a product, or a failure, of this node alone): the
+        // fault leaves the task, the node's batch fails, and Grid.ForEach runs it elsewhere.
+        var task = await ServedTask("with-pdfs.warc.gz", PdfWarcFixture.Shard());
+
+        var exception = Assert.ThrowsAsync<PdfSandboxException>(() =>
+            ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), null, null, new ShardPdfStage(null, "no sandbox in this test", null), CancellationToken.None));
+
+        Assert.That(exception!.Message, Does.Contain("no sandbox in this test"));
+    }
+
+    [Test]
+    public async Task ANodeWithoutTheSandboxMakesAShardWithoutAPdfTest()
+    {
+        var bytes = PdfWarcFixture.ShardWithoutPdfs();
+        var task = await ServedTask("without-pdfs.warc.gz", bytes);
+
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), null, null, new ShardPdfStage(null, "no sandbox in this test", null), CancellationToken.None);
+
+        var direct = new ShardProcessor(task.Pipeline!, LanguageModel.Load(Path.Combine(Fixtures(), MODEL_FIXTURE)));
+        var expected = direct.Process(new MemoryStream(bytes), CorpusSourceFormat.Warc, new MemoryStream(), new MemoryStream());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.Completed), result.Error);
+            Assert.That(result.ContentSha256, Is.EqualTo(expected.ContentSha256), "the product a node with the sandbox makes");
+            Assert.That(result.Stats!.Pdf, Is.Null);
+        });
+    }
+
+    [Test]
     public void CancellationPropagatesTest()
     {
         var task = Task(WET_FIXTURE, CorpusSourceFormat.Wet);
@@ -336,6 +371,20 @@ public sealed class ShardTaskRunnerTests
             AllowedOrigins = [m_origin.Host],
             MaxShardBytes = 1L << 30
         };
+    }
+
+    /// <summary>A WARC task over bytes served by a loopback origin of their own.</summary>
+    private async Task<CorpusTaskData> ServedTask(string name, byte[] bytes)
+    {
+        var shards = Path.Combine(m_root, "served", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(shards);
+        await File.WriteAllBytesAsync(Path.Combine(shards, name), bytes);
+        var origin = new CorpusTestOrigin(shards);
+        m_servedOrigins.Add(origin);
+
+        var task = Task(name, CorpusSourceFormat.Warc);
+        task.Source!.Url = origin.ShardUrl(name);
+        return task;
     }
 
     private string Work()

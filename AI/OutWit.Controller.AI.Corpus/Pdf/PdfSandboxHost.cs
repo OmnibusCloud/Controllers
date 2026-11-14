@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using OutWit.Controller.AI.Wasm;
 
 namespace OutWit.Controller.AI.Corpus.Pdf;
@@ -7,8 +8,9 @@ namespace OutWit.Controller.AI.Corpus.Pdf;
 /// compiled once per process — or the reason this process cannot have one: the binding guard
 /// (another wasmtime binding loaded first in the client's shared context), no module beside the
 /// controller, a module with other bytes, a native library that does not load. Without a
-/// sandbox the PDF stage refuses each PDF as <c>pdf_sandbox_unavailable</c> and the shard's HTML
-/// goes on. The reason names no machine path.
+/// sandbox, a shard that holds a PDF fails on this node as a fault of the node and runs elsewhere
+/// (<see cref="PdfSandboxException"/>); a shard without one runs here as anywhere. The reason names
+/// no machine path.
 /// </summary>
 public static class PdfSandboxHost
 {
@@ -17,6 +19,8 @@ public static class PdfSandboxHost
     private static readonly Lazy<(PdfSandbox? Sandbox, string? Problem)> INSTANCE = new(Create, LazyThreadSafetyMode.ExecutionAndPublication);
 
     private static readonly Lazy<string?> DIAGNOSIS = new(Probe, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static volatile StrongBox<(PdfSandbox? Sandbox, string? Problem)>? m_override;
 
     #endregion
 
@@ -31,6 +35,20 @@ public static class PdfSandboxHost
     public static string? Diagnose()
     {
         return INSTANCE.IsValueCreated ? INSTANCE.Value.Problem : DIAGNOSIS.Value;
+    }
+
+    /// <summary>Makes the process answer as if it had this sandbox or none (tests of a node without one); <see cref="ClearOverride"/> undoes it.</summary>
+    /// <param name="sandbox">The sandbox, or null for none.</param>
+    /// <param name="problem">Why there is none.</param>
+    internal static void Override(PdfSandbox? sandbox, string? problem)
+    {
+        m_override = new StrongBox<(PdfSandbox?, string?)>((sandbox, sandbox == null ? problem ?? "no PDF sandbox" : null));
+    }
+
+    /// <summary>Undoes <see cref="Override"/>.</summary>
+    internal static void ClearOverride()
+    {
+        m_override = null;
     }
 
     private static string? Probe()
@@ -70,10 +88,10 @@ public static class PdfSandboxHost
     #region Properties
 
     /// <summary>The process-wide sandbox, or null when this process cannot have one (see <see cref="Problem"/>).</summary>
-    public static PdfSandbox? Instance => INSTANCE.Value.Sandbox;
+    public static PdfSandbox? Instance => m_override is { } forced ? forced.Value.Sandbox : INSTANCE.Value.Sandbox;
 
     /// <summary>Why this process has no sandbox; null when it has one.</summary>
-    public static string? Problem => INSTANCE.Value.Problem;
+    public static string? Problem => m_override is { } forced ? forced.Value.Problem : INSTANCE.Value.Problem;
 
     #endregion
 }

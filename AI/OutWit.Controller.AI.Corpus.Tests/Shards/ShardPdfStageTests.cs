@@ -15,11 +15,12 @@ namespace OutWit.Controller.AI.Corpus.Tests.Shards;
 /// <summary>
 /// The PDF stage inside the pipeline, on a WARC shard of HTML and PDFs of our own making
 /// (<see cref="PdfWarcFixture"/>): which responses are PDFs; with the stage off they are what they
-/// were (<c>not_html</c>); without a sandbox they drop as <c>pdf_sandbox_unavailable</c> and the
-/// HTML's product is untouched; with it each PDF ends in its verdict, a long one becomes
-/// page-range documents named <c>url#page=a-b</c>, running headers and footers are gone, the
-/// documents go through the language, line and quality stages like a page, and the product and
-/// its counters are pinned — the PDF stage's cross-platform proof.
+/// were (<c>not_html</c>); without a sandbox a shard with a PDF is not made at all (a fault of the
+/// node) while a shard without one is made as anywhere; with it each PDF ends in its verdict, a long
+/// one becomes page-range documents named <c>url#page=a-b</c>, running headers and footers are gone,
+/// Cyrillic and Greek words broken at a line end are whole again, the documents go through the
+/// language, line and quality stages like a page, and the product and its counters are pinned — the
+/// PDF stage's cross-platform proof.
 /// </summary>
 [TestFixture]
 public sealed class ShardPdfStageTests
@@ -29,10 +30,10 @@ public sealed class ShardPdfStageTests
     private const string MODEL_FIXTURE = "language-model-cc-2026-43-16.bin";
 
     /// <summary>The product of the fixture through the default pipeline with the stage on (produced on win-x64, re-checked on every platform the workflow runs).</summary>
-    private const string GOLDEN_SHA256 = "f0130fa9e18a5b262db1e2ee6f2cdf0dc7db3468f330142e7f56f6e81b3f8930";
+    private const string GOLDEN_SHA256 = "e907a225c20a98aad47b2d321deb68fcbb62df434b7f69097cd76137470bb123";
 
     /// <summary>The counters of that run.</summary>
-    private const string GOLDEN_STATS = "records=14 extracted=8 out=8 drops=[http_status:1,not_html:2,pdf_empty:1,pdf_encrypted:1,pdf_no_pages:1,pdf_unreadable:1] languages=[eng:8] pdf=[in:10,truncated:1,extracted:6,pages:29,documents:7,cut:1,running:38,fuel:656779560]";
+    private const string GOLDEN_STATS = "records=16 extracted=10 out=9 drops=[http_status:1,not_html:2,pdf_empty:1,pdf_encrypted:1,pdf_no_pages:1,pdf_unreadable:1,stop_words:1] languages=[eng:8,rus:1] pdf=[in:12,truncated:1,extracted:8,pages:32,documents:9,cut:1,running:38,fuel:705671179]";
 
     #endregion
 
@@ -85,6 +86,7 @@ public sealed class ShardPdfStageTests
         Assert.Multiple(() =>
         {
             Assert.That(Drops(stats)[ShardProcessor.DROP_NOT_HTML], Is.EqualTo(PdfWarcFixture.PDF_CANDIDATES + 2), "the PDFs, the untyped one and the fake one");
+            Assert.That(stats.Drops.Select(drop => drop.Name), Has.None.EqualTo("pdf_sandbox_unavailable"));
             Assert.That(stats.Drops.Select(drop => drop.Name), Has.None.StartsWith("pdf_"));
             Assert.That(stats.Pdf, Is.Null);
             Assert.That(Ids(off.Text), Is.EqualTo(new[] { PdfWarcFixture.HOST + "page.html" }));
@@ -92,21 +94,45 @@ public sealed class ShardPdfStageTests
     }
 
     [Test]
-    public void WithoutASandboxThePdfsDropAndTheHtmlGoesOnTest()
+    public void WithoutASandboxAShardWithAPdfIsNotMadeTest()
     {
-        var off = Run(Pipeline(extractPdf: false));
-        var unavailable = Run(Pipeline(extractPdf: true), new ShardPdfStage(null, "no sandbox in this test", null));
+        // The node that cannot run the stage makes no product of the shard: a fault of the node,
+        // never a document's verdict, so no two honest nodes can make different products of it.
+        var processor = new ShardProcessor(Pipeline(extractPdf: true), m_model, new ShardPdfStage(null, "no sandbox in this test", null));
+        using var shard = new MemoryStream(m_shard, writable: false);
+
+        var exception = Assert.Throws<PdfSandboxException>(() => processor.Process(shard, CorpusSourceFormat.Warc, new MemoryStream(), new MemoryStream()));
+
+        Assert.That(exception!.Message, Does.Contain("no sandbox in this test").And.Contain("another node"));
+    }
+
+    [Test]
+    public void WithoutASandboxAShardWithoutAPdfIsMadeAsAnywhereTest()
+    {
+        // No candidate, no sandbox asked for: the node makes the product a node with a sandbox makes.
+        var withoutPdfs = PdfWarcFixture.ShardWithoutPdfs();
+        var unavailable = Run(Pipeline(extractPdf: true), new ShardPdfStage(null, "no sandbox in this test", null), withoutPdfs);
+        var processHost = Run(Pipeline(extractPdf: true), null, withoutPdfs);
         var stats = unavailable.Product.Stats.Build(0, 0, 0, 0);
 
         Assert.Multiple(() =>
         {
-            Assert.That(Drops(stats)[ShardPdfStage.DROP_PDF_SANDBOX_UNAVAILABLE], Is.EqualTo(PdfWarcFixture.PDF_CANDIDATES));
-            Assert.That(Drops(stats)[ShardProcessor.DROP_NOT_HTML], Is.EqualTo(2));
-            Assert.That(stats.Pdf!.In, Is.EqualTo(PdfWarcFixture.PDF_CANDIDATES));
-            Assert.That(stats.Pdf.Truncated, Is.EqualTo(1));
-            Assert.That(stats.Pdf.Extracted, Is.Zero);
-            Assert.That(unavailable.Product.ContentSha256, Is.EqualTo(off.Product.ContentSha256), "the HTML's product is the same");
+            Assert.That(unavailable.Product.ContentSha256, Is.EqualTo(processHost.Product.ContentSha256));
+            Assert.That(stats.Is(processHost.Product.Stats.Build(0, 0, 0, 0)), Is.True);
+            Assert.That(stats.Pdf, Is.Null, "nothing there for the stage");
+            Assert.That(stats.DocumentsOut, Is.EqualTo(1), "the page of HTML");
         });
+    }
+
+    [Test]
+    public void WithoutASandboxAWetShardIsMadeAsAnywhereTest()
+    {
+        var processor = new ShardProcessor(new CorpusPipelineData { Version = "pdf-test-v1" }, m_model, new ShardPdfStage(null, "no sandbox in this test", null));
+        using var shard = File.OpenRead(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "cc-main-2026-43-00000-head.warc.wet.gz"));
+
+        var product = processor.Process(shard, CorpusSourceFormat.Wet, new MemoryStream(), new MemoryStream());
+
+        Assert.That(product.ContentSha256, Is.EqualTo("61ac69cf399a57c75a127b86dc85c02534fc51de4e0e82a896b3de647f735620"), "the golden WET product");
     }
 
     #endregion
@@ -129,7 +155,7 @@ public sealed class ShardPdfStageTests
             Assert.That(drops.GetValueOrDefault(ShardPdfStage.DROP_PDF_UNREADABLE), Is.EqualTo(1), "broken.pdf");
             Assert.That(drops.GetValueOrDefault(ShardProcessor.DROP_NOT_HTML), Is.EqualTo(2), "untyped.pdf and fake.pdf");
             Assert.That(drops.GetValueOrDefault(ShardProcessor.DROP_HTTP_STATUS), Is.EqualTo(1), "gone.pdf");
-            Assert.That(stats.Pdf.Extracted, Is.EqualTo(6), "chronicle, chronicle-cut, open, dense, report, notes");
+            Assert.That(stats.Pdf.Extracted, Is.EqualTo(8), "chronicle, chronicle-cut, open, dense, report, notes, letopis, chroniko");
             Assert.That(stats.Pdf.PagesCut, Is.EqualTo(1), "dense.pdf");
             Assert.That(stats.Pdf.RunningLines, Is.GreaterThanOrEqualTo(24), "the header and the footer of the book's twelve pages at least");
             Assert.That(stats.Pdf.Fuel, Is.GreaterThan(0));
@@ -166,10 +192,30 @@ public sealed class ShardPdfStageTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(documents.Select(document => document.Lang), Is.All.EqualTo("eng"));
+            Assert.That(documents.Select(document => document.Lang).Distinct(), Is.EquivalentTo(new[] { "eng", "rus" }), "the Greek PDF does not pass: the model knows no Greek");
+            Assert.That(documents.Select(document => document.Url), Has.Some.StartsWith(PdfWarcFixture.HOST + "letopis.pdf#page="));
             Assert.That(documents.Count(document => document.Url.Contains("#page=", StringComparison.Ordinal)), Is.GreaterThanOrEqualTo(4));
             Assert.That(stats.DocumentsOut, Is.EqualTo(documents.Count));
             Assert.That(ShardSignatureWriter.Read(run.Signatures), Has.Count.EqualTo(documents.Count));
+        });
+    }
+
+    [TestCase("letopis.pdf", TestName = "CyrillicWordsBrokenAtALineEndAreWholeTest")]
+    [TestCase("chroniko.pdf", TestName = "GreekWordsBrokenAtALineEndAreWholeTest")]
+    public void WordsBrokenAtALineEndAreWholeTest(string name)
+    {
+        // The module leaves a non-Latin word broken at a line end as two lines; the stage joins them.
+        var broken = name == "letopis.pdf" ? PdfWarcFixture.Russian().Broken : PdfWarcFixture.Greek().Broken;
+        var run = Run(new CorpusPipelineData { Version = "pdf-test-v1", ExtractPdf = true, IdentifyLanguage = false, CleanLines = false, FilterQuality = false }, RequireStage());
+        var text = string.Join('\n', Documents(run.Text).Where(document => document.Url.StartsWith(PdfWarcFixture.HOST + name + "#", StringComparison.Ordinal)).Select(document => document.Text));
+        var words = text.Split([' ', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(word => word.TrimEnd('.')).ToHashSet(StringComparer.Ordinal);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(text, Is.Not.Empty);
+            Assert.That(broken, Is.Not.Empty);
+            Assert.That(broken.Where(word => !words.Contains(word)), Is.Empty, "every broken word is whole");
+            Assert.That(text.Split('\n').Where(line => line.EndsWith('-')), Is.Empty, "no line ends in a hyphen");
         });
     }
 
@@ -212,10 +258,10 @@ public sealed class ShardPdfStageTests
         return stage;
     }
 
-    private (ShardProduct Product, byte[] Text, byte[] Signatures) Run(CorpusPipelineData pipeline, ShardPdfStage? stage = null)
+    private (ShardProduct Product, byte[] Text, byte[] Signatures) Run(CorpusPipelineData pipeline, ShardPdfStage? stage = null, byte[]? shardBytes = null)
     {
         var processor = new ShardProcessor(pipeline, pipeline.IdentifyLanguage ? m_model : null, stage);
-        using var shard = new MemoryStream(m_shard, writable: false);
+        using var shard = new MemoryStream(shardBytes ?? m_shard, writable: false);
         using var text = new MemoryStream();
         using var signatures = new MemoryStream();
 

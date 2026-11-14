@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Benchmark;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Benchmark;
@@ -59,6 +60,12 @@ internal sealed class WitActivityAdapterCorpusProcessShard : WitActivityAdapterF
 
             if (!pool.TrySetValue(activity.ReturnReference, result))
                 throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+        }
+        catch (PdfSandboxException exception)
+        {
+            // The node's batch fails and Grid.ForEach gives its tasks to another node.
+            Logger.LogWarning("Corpus.ProcessShard {Index}: {Reason}", task.TaskIndex, exception.Message);
+            throw;
         }
         finally
         {

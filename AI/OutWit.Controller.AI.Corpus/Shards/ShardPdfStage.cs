@@ -10,8 +10,10 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// extractor (<see cref="PdfSandbox"/>), its text shaped (<see cref="PdfTextShaper"/>) and cut into
 /// page-range documents (<see cref="PdfTextChunker"/>) with ids <c>url#page=a-b</c>; each document
 /// then goes through the stages after extraction like a page of HTML. A PDF that gives nothing
-/// drops under a <c>pdf_*</c> rule. Without a sandbox in the process, every PDF drops as
-/// <c>pdf_sandbox_unavailable</c> and the shard's HTML goes on.
+/// drops under a <c>pdf_*</c> rule. Without a sandbox in the process, the shard's first PDF throws
+/// <see cref="PdfSandboxException"/>: a shard's product never depends on the node that made it, so a
+/// node that cannot run the stage does not make it, and the platform runs the shard elsewhere. The
+/// sandbox is asked for only when a PDF comes, so a shard without one runs on any node.
 /// </summary>
 public sealed class ShardPdfStage
 {
@@ -30,13 +32,12 @@ public sealed class ShardPdfStage
     public const string DROP_PDF_ERROR = "pdf_error";
     public const string DROP_PDF_EMPTY = "pdf_empty";
     public const string DROP_PDF_OVERSIZED = "pdf_oversized";
-    public const string DROP_PDF_SANDBOX_UNAVAILABLE = "pdf_sandbox_unavailable";
 
     /// <summary>Every drop rule of the stage, in the order of <see cref="PdfVerdict"/> (and <c>pdf_empty</c>).</summary>
     public static readonly IReadOnlyList<string> DROPS =
     [
         DROP_PDF_ENCRYPTED, DROP_PDF_UNREADABLE, DROP_PDF_NO_PAGES, DROP_PDF_FUEL, DROP_PDF_MEMORY,
-        DROP_PDF_TRAP, DROP_PDF_ERROR, DROP_PDF_OVERSIZED, DROP_PDF_SANDBOX_UNAVAILABLE, DROP_PDF_EMPTY
+        DROP_PDF_TRAP, DROP_PDF_ERROR, DROP_PDF_OVERSIZED, DROP_PDF_EMPTY
     ];
 
     private const string IDENTIFIED_PAYLOAD_TYPE = "WARC-Identified-Payload-Type";
@@ -66,7 +67,7 @@ public sealed class ShardPdfStage
         m_resolveHost = true;
     }
 
-    /// <summary>A stage on a given sandbox, or on none.</summary>
+    /// <summary>A stage on a given sandbox, or on none (a shard with a PDF then fails as a fault of the node).</summary>
     /// <param name="sandbox">The sandbox; null when the process has none.</param>
     /// <param name="problem">Why there is none (ignored when there is one).</param>
     /// <param name="workDirectory">The folder the PDFs' files live in while they run; null for a fresh folder in the system temp path per PDF.</param>
@@ -97,14 +98,13 @@ public sealed class ShardPdfStage
     /// <param name="stats">The shard's counters.</param>
     /// <param name="cancellationToken">Cancels the wait for a sandbox slot.</param>
     /// <returns>The page-range documents (id, text) in page order; none when the PDF dropped.</returns>
-    /// <exception cref="PdfSandboxException">A fault of the host (the wall-clock backstop, a module that cannot run): the shard fails.</exception>
+    /// <exception cref="PdfSandboxException">A fault of the node, not of the PDF (no sandbox in this process, the wall-clock backstop, a module that cannot run): the shard is not this node's to make.</exception>
     public IReadOnlyList<(string Url, string Text)> Extract(WarcRecord record, HttpResponsePayload payload, ShardStatsBuilder stats, CancellationToken cancellationToken)
     {
         stats.PdfIn(record.Header(TRUNCATED) != null);
 
-        var sandbox = Sandbox();
-        if (sandbox == null)
-            return Drop(stats, DROP_PDF_SANDBOX_UNAVAILABLE);
+        var sandbox = Sandbox()
+                      ?? throw new PdfSandboxException($"this node cannot run the PDF stage ({m_problem}); the shard holds a PDF, so another node must make its product");
 
         var extraction = Run(sandbox, payload.Body.Span, cancellationToken);
         stats.PdfFuel(extraction.Fuel);
@@ -141,7 +141,6 @@ public sealed class ShardPdfStage
             PdfVerdict.Memory => DROP_PDF_MEMORY,
             PdfVerdict.Trap => DROP_PDF_TRAP,
             PdfVerdict.Oversized => DROP_PDF_OVERSIZED,
-            PdfVerdict.SandboxUnavailable => DROP_PDF_SANDBOX_UNAVAILABLE,
             _ => DROP_PDF_ERROR
         };
     }

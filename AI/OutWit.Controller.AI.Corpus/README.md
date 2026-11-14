@@ -34,7 +34,7 @@ and the PDF stage proven on the fleet.
 |---|---|---|---|
 | `Corpus.Split` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusTaskCollection` | parses the manifest, checks every source against the allowlist and the byte cap, hashes the language model blob and pins it into the pipeline, holds the server storage estimate to the deployment's headroom, emits one task per shard. Any problem fails the job here — a bad manifest never reaches a node |
 | `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate (sources without a size are asked at the origin with HEAD, up to 64 of them, the rest extrapolated at the mean), the server storage estimate and the headroom it is held to (see *Server storage*), every message by manifest line |
-| `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline (a WARC shard's PDFs through the sandboxed extractor), the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception; several shards may run on one client at once |
+| `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline (a WARC shard's PDFs through the sandboxed extractor), the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception — except a fault of the node that another node would not have (a PDF the node cannot run, a product it cannot upload): that fails the node's batch, and `Grid.ForEach` runs the node's tasks on another node; several shards may run on one client at once |
 | `Corpus.Collect` | host | `(CorpusResultCollection, CorpusOptions) → Blob report` | the job report: every shard's verdict, blobs and content hash in task order, the aggregate counters over the fleet |
 | `Corpus.SamplingRate` | host | `(CorpusOptions) → Double` | `SamplingRate` clamped to 0..1, the share of the shards `Grid.Replicas` runs twice |
 | `Corpus.Dedup` | host | `(Blob report, CorpusOptions) → Blob dedup` | the near-duplicate merge over the signature blobs a report names: LSH over the MinHash signatures (16 bands of 8), a candidate pair joins a cluster at a Jaccard estimate of `DedupThreshold` (0.8 by default), the lowest document of a cluster is kept; per shard a keep mask, plus the clusters |
@@ -204,7 +204,7 @@ and is compiled once per process. Per PDF:
 | linear memory | 1 GiB | a grow past it is refused; the module then ends with Rust's allocation-failure message |
 | input | 64 MiB | the WARC reader's record cap |
 | text | 16 MiB of UTF-8 | a PDF with more drops as `pdf_oversized`; the module's whole output folder is held to it |
-| wall clock | 10 minutes | a backstop only: fuel binds first on any machine; a run that reaches it fails the shard (which then runs elsewhere), never a document |
+| wall clock | 10 minutes | a backstop only: fuel binds first on any machine; a run that reaches it is a fault of the node (below), never a document's verdict |
 
 Every limit, the module's pin and the shaping rules below are part of the stage
 set's fingerprint: a changed limit is a changed pipeline.
@@ -215,22 +215,38 @@ is needed; a PDF encrypted with the empty password is read), `pdf_unreadable`,
 `pdf_no_pages`, `pdf_fuel` (out of fuel), `pdf_memory` (a refused allocation),
 `pdf_trap` (the module crashed: a stack too deep, an abort), `pdf_error` (any
 other failure, or output that breaks the module's contract), `pdf_oversized`,
-`pdf_empty` (text, but no line once shaped). A node that cannot run the sandbox
-at all — no module beside the controller, another wasmtime binding loaded first
-in the client's shared load context, a native library that does not load — drops
-each PDF as `pdf_sandbox_unavailable` and goes on with the HTML; the integrity
-document does not compare such an execution (see *Integrity*).
+`pdf_empty` (text, but no line once shaped).
+
+**A node that cannot run the sandbox** — no module beside the controller, another
+wasmtime binding loaded first in the client's shared load context, a native
+library that does not load — makes no product of a shard that holds a PDF: a
+shard's product never depends on the node that made it. The shard's first PDF
+throws, the node's batch fails, and `Grid.ForEach` gives the node's tasks to
+another node and keeps this one out of the job (a fleet where no node can run
+the stage fails the job rather than report products without their PDFs). The
+sandbox is asked for only when a PDF comes, so a WARC shard without one, and
+every WET shard, runs on such a node as on any other. A PDF run that reaches the
+wall-clock backstop is the same kind of fault.
 
 **Shaping.** The module writes UTF-8 with LF line ends and U+000C between pages.
 pdf_oxide already joins the lines of a paragraph and removes a hyphen between two
-lower-case Latin parts, so the stage does neither again. It splits the pages,
-collapses whitespace as for a WET or HTML document, and removes running headers
-and footers: a line that, with every run of digits folded to one, appears on half
-the pages or more of a PDF of five pages or more ("Page 3 of 12", a journal's
-name, a bare page number) leaves every page. Five pages: "half or more" is then
-three pages or more — a line on two pages can be a heading and its entry in the
-contents. Left in, such a line is the repetition the quality filter drops a
-document for.
+lower-case Latin parts, so the stage does neither again for Latin. It splits the
+pages, collapses whitespace as for a WET or HTML document, and removes running
+headers and footers: a line that, with every run of digits folded to one, appears
+on half the pages or more of a PDF of five pages or more ("Page 3 of 12", a
+journal's name, a bare page number) leaves every page. Five pages: "half or more"
+is then three pages or more — a line on two pages can be a heading and its entry
+in the contents. Left in, such a line is the repetition the quality filter drops
+a document for. Then, within a page, a Cyrillic or Greek word broken at a line
+end is joined again, which pdf_oxide does not do: a line that ends in a hyphen
+(or U+2010, or a soft hyphen) right after a lower-case letter, followed by a line
+that starts with a lower-case letter of the same script, becomes one line without
+the hyphen (lower case by Unicode category, the script by its Unicode blocks;
+never Latin, never across scripts). On Common Crawl's WARC file 00000 it joins 100
+breaks: 66 words made whole, 20 single-letter fragments the extractor had already
+split, 4 pairs from interleaved columns, and 10 compounds broken at their own
+hyphen (предметно-пространственной) joined as one word — the text cannot tell
+a compound's hyphen from a hyphenation.
 
 **What a document is.** A PDF becomes one or more **page-range documents** of at
 most 5,000 words. Pages are taken in order and put together while the document
@@ -254,16 +270,17 @@ fuel the sandbox burned, the same on every node). They appear in the report only
 where a shard met a PDF.
 
 **What it costs.** On one core of a desktop CPU (Ryzen 9 5950X, every stage
-on), Common Crawl's WARC file 00000 of CC-MAIN-2026-43 (923.8 MB, 221 PDFs) takes
-187 s with the PDF stage and 104 s without it. Its PDFs, a fifth of the file's
-bytes, give 314 page-range documents from 195 PDFs (2,881 pages; 23 empty, 2 out
-of fuel, 1 without a page); the product holds 11,160 documents instead of 10,946,
-and 6 % more text. The sandbox's 6.0·10¹¹ fuel is most of the 83 s;
-the median PDF takes 3·10⁸ fuel (well under a second), the two that run out of
-fuel are truncated files that would give 3 and 19 characters. The process's
-peak working set is 841 MiB instead of 292 MiB: a PDF's linear memory comes on
-top of the shard's budget, which is why a process runs no more PDFs at once
-than fit their ceilings into half its memory.
+on), Common Crawl's WARC file 00000 of CC-MAIN-2026-43 (923.8 MB, 221 PDFs)
+takes 154 to 187 s with the PDF stage (two runs on a machine that is also a
+node) and 104 s without it. Its PDFs, a fifth of the file's bytes, give 314
+page-range documents from 195 PDFs (2,881 pages; 23 empty, 2 out of fuel, 1
+without a page); the product holds 11,160 documents instead of 10,946, and 6 %
+more text. The sandbox's 6.0·10¹¹ fuel is most of the time the PDFs add; the
+median PDF takes 3·10⁸ fuel (well under a second), the two that run out of fuel
+are truncated files that would give 3 and 19 characters. The process's peak
+working set is 841 to 890 MiB instead of 292 MiB: a PDF's linear memory comes on
+top of the shard's budget, which is why a process runs no more PDFs at once than
+fit their ceilings into half its memory.
 
 ## Integrity
 
@@ -280,8 +297,7 @@ With a single machine available there is nothing to compare and no shard runs
 twice. A pair whose sides ran different controller versions (a rollout in
 progress) is counted as `version_skew`, not compared. A pair with a side that
 did not finish for a reason of its machine or its link — `FetchFailed`,
-`PipelineUnavailable`, `Failed`, or a node that could not run the PDF sandbox and
-dropped PDFs as `pdf_sandbox_unavailable` — is counted as `incomplete`, not compared: a
+`PipelineUnavailable`, `Failed` — is counted as `incomplete`, not compared: a
 mismatch says that two finished executions disagree, never that one of them
 stopped. The mismatch rate is over the compared pairs. The report has one entry per shard: a completed execution,
 then the lowest content hash.
@@ -531,11 +547,14 @@ estimate, which counts a WARC megabyte as a WET one, still errs high.
 the extractor's contract set, the 41-file hostile set (bombs, nesting, cycles,
 broken cross references, fonts) every file of which ends bounded in its verdict,
 and a WARC shard of HTML and PDFs (a book with running headers that splits, a
-truncated one, encrypted ones, a page too dense for one document) — with their
-products pinned (text hash and fuel per file, the shard's content hash and
-counters), the module needed (in the test project's gitignored `@Data/wasm/`,
-where the asset extracts; the tests are ignored without it, and fail on the
-build server, which fetches it); every stage on the golden shards (the
+truncated one, encrypted ones, a page too dense for one document, a Russian and
+a Greek one with words broken at every line end) — with their products pinned
+(text hash and fuel per file, the shard's content hash and counters), the module
+needed (in the test project's gitignored `@Data/wasm/`, where the asset
+extracts; the tests are ignored without it, and fail on the build server, which
+fetches it); a node without the sandbox, which does not make a shard with a PDF
+(the fault leaves the task, and through the engine rig every node's batch fails)
+and makes a shard without one as any node does; every stage on the golden shards (the
 first complete members of a real WET and a real WARC file, 1.5 MB each, and
 the trained language model, committed under `Fixtures/`) and on hostile input
 (truncation, oversized records, garbage, hostile nesting, repetition); the

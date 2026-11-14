@@ -39,7 +39,7 @@ public static class CorpusStageSet
     public const string FINGERPRINT_SCHEMA = "corpus-stage-set/2";
 
     /// <summary>The pinned fingerprint: <see cref="Compose"/> of the benchmark's reference product and this controller's PDF stage.</summary>
-    public const string PINNED_SHA256 = "3859868aa7e9e218dd4da5c168d7dfd212e7945bf47df8bf0ea1f1efc44e4a74";
+    public const string PINNED_SHA256 = "48be081f37c3a060936f6d5f80df736f3191bcf22936aa1d4da9d83950d8a682";
 
     #endregion
 

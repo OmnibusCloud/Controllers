@@ -120,7 +120,6 @@ public sealed class PdfSandboxHostileTests
         Assert.Multiple(() =>
         {
             Assert.That(m_results, Has.Count.EqualTo(41));
-            Assert.That(m_results.Values.Select(value => value.Result.Verdict), Has.None.EqualTo(PdfVerdict.SandboxUnavailable));
             Assert.That(m_results.Values.Select(value => value.Result.Fuel), Is.All.LessThanOrEqualTo(PdfStageLimits.FUEL), "nothing burns past its budget");
         });
     }

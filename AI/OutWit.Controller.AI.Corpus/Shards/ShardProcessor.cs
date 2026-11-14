@@ -94,7 +94,7 @@ public sealed class ShardProcessor
     /// <param name="cancellationToken">Stops between records.</param>
     /// <returns>The product's identity and counters.</returns>
     /// <exception cref="WarcFormatException">The bytes are not a WARC file.</exception>
-    /// <exception cref="PdfSandboxException">The PDF sandbox failed on the host's side (its wall-clock backstop): the shard fails, no document gets a verdict from it.</exception>
+    /// <exception cref="PdfSandboxException">The shard holds a PDF this node cannot run (no sandbox in the process, the wall-clock backstop): no document gets a verdict, another node makes the product.</exception>
     public ShardProduct Process(Stream shard, CorpusSourceFormat format, Stream text, Stream signatures, CancellationToken cancellationToken = default)
     {
         var stats = new ShardStatsBuilder();

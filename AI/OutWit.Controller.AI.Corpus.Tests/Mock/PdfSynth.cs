@@ -48,6 +48,22 @@ public static class PdfSynth
     private static readonly byte[] PASSWORD_PADDING = Convert.FromHexString("28BF4E5E4E758A4164004E56FFFA01082E2E00B6D0683E802F0CA9FE6453697A");
     private static readonly byte[] FILE_ID = Enumerable.Range(0x30, 16).Select(value => (byte)value).ToArray();
 
+    private static readonly string[] RUSSIAN =
+    [
+        "летопись", "долины", "рассказывает", "о", "крестьянах", "которые", "каждую", "весну", "сеяли", "пшеницу", "и",
+        "ячмень", "а", "их", "дети", "учились", "читать", "старые", "письма", "погоде", "рынках", "дорогах", "мостах",
+        "построенных", "терпеливыми", "работниками", "в", "школе", "деревни", "хранились", "записи", "урожаях",
+        "наводнениях", "путешествиях", "не", "на", "многие", "годы", "библиотека", "собирала", "свидетельства"
+    ];
+
+    private static readonly string[] GREEK =
+    [
+        "το", "χρονικό", "της", "κοιλάδας", "διηγείται", "για", "τους", "αγρότες", "που", "κάθε", "άνοιξη", "έσπερναν",
+        "σιτάρι", "και", "κριθάρι", "ενώ", "τα", "παιδιά", "μάθαιναν", "να", "διαβάζουν", "παλιά", "γράμματα", "καιρό",
+        "αγορές", "δρόμους", "γέφυρες", "χτισμένες", "από", "υπομονετικούς", "εργάτες", "στο", "σχολείο", "χωριού",
+        "φυλάσσονταν", "αρχεία", "σοδειές", "πλημμύρες", "ταξίδια", "πολλά", "χρόνια"
+    ];
+
     private static readonly string[] WORDS =
     [
         "the", "river", "valley", "farmers", "planted", "wheat", "and", "barley", "every", "spring", "while", "their",
@@ -225,9 +241,125 @@ public static class PdfSynth
         return result;
     }
 
+    /// <summary>
+    /// A document in a script Helvetica's WinAnsi codes cannot show (Cyrillic, Greek): each character
+    /// gets a one-byte code and the font a <c>/ToUnicode</c> CMap from those codes to the text, so the
+    /// extractor reads the text back. Each page's lines one under the other.
+    /// </summary>
+    /// <param name="pages">The lines of each page.</param>
+    /// <returns>The PDF.</returns>
+    public static byte[] UnicodeDocument(IReadOnlyList<IReadOnlyList<string>> pages)
+    {
+        // Codes from '!' up, past the three a PDF string must escape; the space keeps its own.
+        var codes = new SortedDictionary<int, byte> { [' '] = (byte)' ' };
+        var next = 0x21;
+        foreach (var rune in pages.SelectMany(lines => lines).SelectMany(line => line.EnumerateRunes()))
+        {
+            if (codes.ContainsKey(rune.Value))
+                continue;
+
+            while (next is '(' or ')' or '\\')
+                next++;
+            codes[rune.Value] = (byte)next++;
+        }
+
+        if (next > 0xFF)
+            throw new ArgumentException("more distinct characters than one-byte codes", nameof(pages));
+
+        var writer = new PdfRawWriter();
+        var catalog = writer.Reserve();
+        var tree = writer.Reserve();
+        var cmap = writer.AddStream("", Latin1(ToUnicode(codes)));
+        var font = writer.Add(Invariant($"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode {cmap} 0 R >>"));
+        var kids = new StringBuilder();
+        foreach (var lines in pages)
+        {
+            var content = new StringBuilder("BT /F1 12 Tf 72 720 Td");
+            for (var index = 0; index < lines.Count; index++)
+            {
+                if (index > 0)
+                    content.Append(" 0 -16 Td");
+                var bytes = lines[index].EnumerateRunes().Select(rune => codes[rune.Value]).ToArray();
+                content.Append(" (").Append(Encoding.Latin1.GetString(bytes)).Append(") Tj");
+            }
+
+            var stream = writer.AddStream("", Latin1(content.Append(" ET").ToString()));
+            kids.Append(Invariant($"{writer.Add(Page(tree, font, stream))} 0 R "));
+        }
+
+        writer.Set(catalog, Invariant($"<< /Type /Catalog /Pages {tree} 0 R >>"));
+        writer.Set(tree, Invariant($"<< /Type /Pages /Kids [{kids.ToString().TrimEnd()}] /Count {pages.Count} >>"));
+        return writer.Build(catalog);
+    }
+
+    /// <summary>
+    /// Prose lines of a cased script that is not Latin, every line but the last ending in a word broken
+    /// with a hyphen at the line end and finished at the start of the next (the typesetting the
+    /// extractor leaves alone outside Latin).
+    /// </summary>
+    /// <param name="script">"Cyrillic" or "Greek".</param>
+    /// <param name="random">The seeded source.</param>
+    /// <param name="lines">How many lines.</param>
+    /// <param name="wordsPerLine">Whole words on a line.</param>
+    /// <returns>The lines, and the broken words as they read joined.</returns>
+    public static (IReadOnlyList<string> Lines, IReadOnlyList<string> Broken) HyphenatedProse(string script, Random random, int lines, int wordsPerLine)
+    {
+        var words = script == "Greek" ? GREEK : RUSSIAN;
+        var result = new List<string>(lines);
+        var broken = new List<string>();
+        var carried = "";
+        for (var line = 0; line < lines; line++)
+        {
+            var builder = new StringBuilder(carried);
+            for (var word = 0; word < wordsPerLine; word++)
+            {
+                if (builder.Length > 0)
+                    builder.Append(' ');
+                builder.Append(words[random.Next(words.Length)]);
+            }
+
+            carried = "";
+            if (line < lines - 1)
+            {
+                // A long word broken in two, its second half the next line's start.
+                var longWords = words.Where(candidate => candidate.Length >= 6).ToArray();
+                var split = longWords[random.Next(longWords.Length)];
+                var at = split.Length / 2;
+                builder.Append(' ').Append(split[..at]).Append('-');
+                carried = split[at..];
+                broken.Add(split);
+            }
+            else
+                builder.Append('.');
+
+            result.Add(builder.ToString());
+        }
+
+        return (result, broken);
+    }
+
     #endregion
 
     #region Tools
+
+    private static string ToUnicode(SortedDictionary<int, byte> codes)
+    {
+        var builder = new StringBuilder();
+        builder.Append("/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n");
+        builder.Append("/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n");
+        builder.Append("/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n");
+        builder.Append("1 begincodespacerange\n<00> <FF>\nendcodespacerange\n");
+        foreach (var chunk in codes.OrderBy(pair => pair.Value).Chunk(100))
+        {
+            builder.Append(Invariant($"{chunk.Length} beginbfchar\n"));
+            foreach (var (value, code) in chunk)
+                builder.Append(Invariant($"<{code:X2}> <{new Rune(value).ToString().Select(c => ((int)c).ToString("X4", CultureInfo.InvariantCulture)).Aggregate(string.Concat)}>\n"));
+            builder.Append("endbfchar\n");
+        }
+
+        builder.Append("endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend");
+        return builder.ToString();
+    }
 
     private static byte[] Pages(IReadOnlyList<string> contents)
     {

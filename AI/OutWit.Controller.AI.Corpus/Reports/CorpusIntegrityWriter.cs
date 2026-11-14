@@ -1,6 +1,5 @@
 using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Model;
-using OutWit.Controller.AI.Corpus.Shards;
 
 namespace OutWit.Controller.AI.Corpus.Reports;
 
@@ -12,10 +11,10 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// on different machines, and the document does not say which. Two kinds of pair are counted,
 /// not compared: one whose sides ran different controller versions (a rollout in progress: a
 /// stage may have changed between them), and one whose side did not finish for a reason of its
-/// machine or its link (a fetch that failed, a model that did not arrive, an error on the node,
-/// a node that could not run the PDF sandbox and dropped its PDFs as
-/// <c>pdf_sandbox_unavailable</c>) — a mismatch says two finished executions disagree, never
-/// that one of them stopped.
+/// machine or its link (a fetch that failed, a model that did not arrive, an error on the node)
+/// — a mismatch says two finished executions disagree, never that one of them stopped. A node
+/// that cannot run the PDF sandbox makes no product of a shard with a PDF (the shard runs
+/// elsewhere), so no side differs for that reason.
 /// Schema <c>corpus-integrity/3</c>.
 /// </summary>
 public static class CorpusIntegrityWriter
@@ -107,13 +106,6 @@ public static class CorpusIntegrityWriter
         return fields;
     }
 
-    /// <summary>Whether a result's node could not run the PDF stage for some of the shard's PDFs (its machine, not the shard).</summary>
-    /// <param name="result">The result.</param>
-    /// <returns>True when its drops count <c>pdf_sandbox_unavailable</c>.</returns>
-    public static bool LackedThePdfSandbox(CorpusResultData result)
-    {
-        return result.Stats?.Drops.Any(drop => drop.Name == ShardPdfStage.DROP_PDF_SANDBOX_UNAVAILABLE && drop.Count > 0) == true;
-    }
 
     private static bool SamePdf(CorpusPdfStatsData? first, CorpusPdfStatsData? second)
     {
@@ -146,8 +138,7 @@ public static class CorpusIntegrityWriter
     {
         var versionSkew = primary.ControllerVersion.Length > 0 && replica.ControllerVersion.Length > 0
                           && !string.Equals(primary.ControllerVersion, replica.ControllerVersion, StringComparison.Ordinal);
-        var incomplete = !versionSkew && (UNFINISHED.Contains(primary.Verdict) || UNFINISHED.Contains(replica.Verdict)
-                                          || LackedThePdfSandbox(primary) || LackedThePdfSandbox(replica));
+        var incomplete = !versionSkew && (UNFINISHED.Contains(primary.Verdict) || UNFINISHED.Contains(replica.Verdict));
         var differing = Differences(primary, replica);
         return new PairRecord(index, primary, replica, versionSkew, incomplete, differing.Count == 0, differing);
     }

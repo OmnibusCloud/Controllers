@@ -9,8 +9,9 @@ namespace OutWit.Controller.AI.Corpus.Tests.Mock;
 /// book cut short by the crawler (<c>WARC-Truncated</c>); a PDF that needs a password and one
 /// encrypted with the empty password; a page denser than a document may be; a PDF known only by
 /// Common Crawl's identification; a PDF with no page, one with only empty pages, one that is not
-/// readable; a "PDF" that is HTML; a PDF behind a 404. Every byte of the shard but the record ids
-/// is a function of this code; the product does not read the ids.
+/// readable; a "PDF" that is HTML; a PDF behind a 404; a Russian and a Greek PDF whose words are
+/// broken at every line end. Every byte of the shard but the record ids is a function of this
+/// code; the product does not read the ids.
 /// </summary>
 public static class PdfWarcFixture
 {
@@ -23,7 +24,7 @@ public static class PdfWarcFixture
     public const string HEADER = "The River Valley Chronicle";
 
     /// <summary>The PDF responses with status 200 whose body starts as a PDF does: what the stage takes.</summary>
-    public const int PDF_CANDIDATES = 10;
+    public const int PDF_CANDIDATES = 12;
 
     #endregion
 
@@ -34,6 +35,32 @@ public static class PdfWarcFixture
     public static byte[] Shard()
     {
         return WarcSynth.Shard(Records());
+    }
+
+    /// <summary>The shard's records that are not PDFs the stage takes: the page of HTML, the untyped PDF, the fake one, the 404.</summary>
+    /// <returns>The shard's bytes.</returns>
+    public static byte[] ShardWithoutPdfs()
+    {
+        var records = Records();
+        return WarcSynth.Shard([records[0], records[10], records[11], records[12]]);
+    }
+
+    /// <summary>The Russian PDF: two pages of prose, a word broken at every line end.</summary>
+    /// <returns>The PDF and the broken words as they read joined.</returns>
+    public static (byte[] Pdf, IReadOnlyList<string> Broken) Russian()
+    {
+        var random = new Random(31);
+        var first = PdfSynth.HyphenatedProse("Cyrillic", random, 24, 9);
+        var second = PdfSynth.HyphenatedProse("Cyrillic", random, 24, 9);
+        return (PdfSynth.UnicodeDocument([first.Lines, second.Lines]), [.. first.Broken, .. second.Broken]);
+    }
+
+    /// <summary>The Greek PDF: one page of prose, a word broken at every line end.</summary>
+    /// <returns>The PDF and the broken words as they read joined.</returns>
+    public static (byte[] Pdf, IReadOnlyList<string> Broken) Greek()
+    {
+        var prose = PdfSynth.HyphenatedProse("Greek", new Random(32), 20, 9);
+        return (PdfSynth.UnicodeDocument([prose.Lines]), prose.Broken);
     }
 
     /// <summary>The records in shard order.</summary>
@@ -59,8 +86,10 @@ public static class PdfWarcFixture
             WarcSynth.PdfResponseRecord(HOST + "untyped.pdf", PdfSynth.Document([["A PDF whose server says nothing about its type and Common Crawl did not identify it."]]), contentType: "application/octet-stream", identifiedType: null),
             WarcSynth.PdfResponseRecord(HOST + "fake.pdf", Encoding.UTF8.GetBytes("<html><body><p>Not a PDF at all.</p></body></html>")),
             NotFound(HOST + "gone.pdf"),
-            // The last candidate: a PDF typed by its server alone, after the ones that drop.
-            WarcSynth.PdfResponseRecord(HOST + "notes.pdf", PdfSynth.Document([PdfSynth.Prose(new Random(27), 20, 12)]), identifiedType: null)
+            // A PDF typed by its server alone, after the ones that drop.
+            WarcSynth.PdfResponseRecord(HOST + "notes.pdf", PdfSynth.Document([PdfSynth.Prose(new Random(27), 20, 12)]), identifiedType: null),
+            WarcSynth.PdfResponseRecord(HOST + "letopis.pdf", Russian().Pdf),
+            WarcSynth.PdfResponseRecord(HOST + "chroniko.pdf", Greek().Pdf)
         ];
     }
 

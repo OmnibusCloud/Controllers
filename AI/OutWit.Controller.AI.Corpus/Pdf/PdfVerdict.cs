@@ -2,8 +2,8 @@ namespace OutWit.Controller.AI.Corpus.Pdf;
 
 /// <summary>
 /// What one PDF came to in the sandbox. Every verdict is a function of the PDF's bytes and the
-/// stage's contract (<see cref="PdfStageLimits"/>), the same on every node — except
-/// <see cref="SandboxUnavailable"/>, which says the node could not run the stage at all.
+/// stage's contract (<see cref="PdfStageLimits"/>), the same on every node; a node that cannot run
+/// the sandbox gives no verdict at all (<see cref="PdfSandboxException"/>).
 /// </summary>
 public enum PdfVerdict
 {
@@ -32,8 +32,5 @@ public enum PdfVerdict
     Error,
 
     /// <summary>The PDF, or the text the module wrote for it, is larger than the stage takes.</summary>
-    Oversized,
-
-    /// <summary>This process cannot run the sandbox (no module, another binding version, no native library).</summary>
-    SandboxUnavailable
+    Oversized
 }

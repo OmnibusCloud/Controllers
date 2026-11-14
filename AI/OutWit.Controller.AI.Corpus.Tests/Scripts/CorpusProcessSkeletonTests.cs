@@ -2,6 +2,7 @@ using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Compression;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Reports;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Engine.Interfaces;
@@ -207,6 +208,39 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
         var status = await Engine.ScheduleAndWaitAsync(dedup, previousBlob, new CorpusOptionsData());
 
         Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+    }
+
+    [Test]
+    public async Task AShardWithAPdfFailsTheBatchOfANodeWithoutTheSandboxTest()
+    {
+        // Every mock node of this process answers as a node without the sandbox: the golden WARC
+        // shard (one PDF) fails each node's batch, Grid.ForEach hands it on until no node is left,
+        // and the job fails rather than report a product without its PDF. A WET shard is made.
+        var warc = await UploadAsync(Manifest(WARC_FIXTURE), "warc.json");
+        var wet = await UploadAsync(Manifest(WET_FIXTURE), "wet.json");
+
+        PdfSandboxHost.Override(null, "no sandbox in this test");
+        try
+        {
+            var before = Origin.Requests;
+            var warcJob = Engine.Compile(m_processScript);
+            var warcStatus = await Engine.ScheduleAndWaitAsync(warcJob, warc, m_modelBlob, new CorpusOptionsData());
+            var fetches = Origin.Requests - before;
+
+            var wetJob = Engine.Compile(m_processScript);
+            var wetStatus = await Engine.ScheduleAndWaitAsync(wetJob, wet, m_modelBlob, new CorpusOptionsData());
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(warcStatus.Result, Is.EqualTo(WitProcessingResult.Failed), warcStatus.ToString());
+                Assert.That(fetches, Is.GreaterThanOrEqualTo(2), "the shard reached the nodes and was handed on (the size probe aside)");
+                Assert.That(wetStatus.Result, Is.EqualTo(WitProcessingResult.Completed), wetStatus.ToString());
+            });
+        }
+        finally
+        {
+            PdfSandboxHost.ClearOverride();
+        }
     }
 
     [Test]

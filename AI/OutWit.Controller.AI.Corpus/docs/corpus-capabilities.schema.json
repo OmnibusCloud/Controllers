@@ -131,7 +131,7 @@
         "extractor": { "type": "string", "description": "The extractor module: what it is built from." },
         "module_sha256": { "type": "string", "description": "SHA-256 of the extractor module; a module with other bytes is not run." },
         "engine": { "type": "string", "description": "The sandbox: the wasmtime binding the controller is built against." },
-        "available": { "type": "boolean", "description": "Whether the host's process can run the stage (a process that cannot drops its PDFs as pdf_sandbox_unavailable and goes on with the HTML)." },
+        "available": { "type": "boolean", "description": "Whether the host's process can run the stage. A node that cannot does not make the product of a shard that holds a PDF: the shard fails there as a fault of the node and runs on another; a shard without a PDF runs on it." },
         "fuel": { "type": "integer", "description": "The fuel one PDF may burn, counted from the guest's _start." },
         "fuel_after_instantiation": { "type": "boolean", "description": "The budget is given after the module is instantiated, so it does not depend on the platform." },
         "memory_bytes": { "type": "integer", "description": "The cap of the module's linear memory." },

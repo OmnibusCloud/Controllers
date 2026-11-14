@@ -62,7 +62,7 @@
                   "fetch_ms": { "type": "integer" },
                   "process_ms": { "type": "integer" },
                   "wait_ms": { "type": "integer", "description": "Time the shard waited on the node for a download slot and a processing slot." },
-                  "drops": { "$ref": "#/$defs/counts", "description": "Documents dropped per rule; the PDF stage's are pdf_encrypted, pdf_unreadable, pdf_no_pages, pdf_fuel, pdf_memory, pdf_trap, pdf_error, pdf_oversized, pdf_sandbox_unavailable and pdf_empty." },
+                  "drops": { "$ref": "#/$defs/counts", "description": "Documents dropped per rule; the PDF stage's are pdf_encrypted, pdf_unreadable, pdf_no_pages, pdf_fuel, pdf_memory, pdf_trap, pdf_error, pdf_oversized and pdf_empty." },
                   "languages": { "$ref": "#/$defs/counts" },
                   "pdf_in": { "type": "integer", "description": "PDF responses the PDF stage took (WARC; present only where a shard met a PDF, like every pdf_* count)." },
                   "pdf_truncated": { "type": "integer", "description": "Of those, the ones the crawler cut short (WARC-Truncated); read all the same." },

@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Reports;
-using OutWit.Controller.AI.Corpus.Shards;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Reports;
 
@@ -216,28 +215,6 @@ public sealed class CorpusIntegrityWriterTests
         });
     }
 
-    [Test]
-    public void ASideThatCouldNotRunThePdfSandboxIsIncompleteTest()
-    {
-        // A node without the sandbox drops the shard's PDFs and completes the HTML: its product
-        // differs from an equipped node's for a reason of its machine, not of the shard.
-        var equipped = Result(7, "with-pdfs", 12);
-        var lacking = Result(7, "without-pdfs", 10);
-        lacking.Stats!.Drops = [new CorpusCountData { Name = ShardPdfStage.DROP_PDF_SANDBOX_UNAVAILABLE, Count = 2 }];
-
-        using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write([equipped, lacking]));
-        var summary = document.RootElement.GetProperty("summary");
-        var pair = document.RootElement.GetProperty("pairs")[0];
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(CorpusIntegrityWriter.LackedThePdfSandbox(lacking), Is.True);
-            Assert.That(CorpusIntegrityWriter.LackedThePdfSandbox(equipped), Is.False);
-            Assert.That(summary.GetProperty("incomplete").GetInt32(), Is.EqualTo(1));
-            Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.Zero);
-            Assert.That(pair.GetProperty("incomplete").GetBoolean(), Is.True);
-        });
-    }
 
     [Test]
     public void ShardsExecutedOnceAreAnEmptyDocumentTest()
