@@ -101,14 +101,38 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   traffic line and the cap check, and the origin's published `sha256`, which
   the node verifies after the fetch.
 - `clean_lines` (on unless the manifest turns it off) removes, before a
-  document is judged, the lines that do not read like prose: a line stays
-  when it ends a sentence and has three words (six letters in a script
-  without word spacing), or when it is long (twelve words, forty letters);
-  menus, prices, counters and footers go. The judged text is the product, so
-  a page whose article outlives its navigation is kept, clean. A document
-  with no such line drops as `no_prose_lines`. WET documents keep their line
+  document is judged, the lines that do not read like prose — the C4 line
+  rules (Raffel et al. 2020), made script-aware: a line stays when it ends a
+  sentence and has five words (six letters in a script without word
+  spacing), or when it is long (twelve words, forty letters; C4 drops every
+  line without a final mark, and about half of the long ones are prose);
+  menus, prices, counters and footers go. A line that mentions JavaScript or
+  the site's terms of use or privacy policy goes whatever its shape (C4), and
+  so does a line that mentions cookies (ours: C4's phrases catch about half
+  of the consent banners, and only in English) and a line with a word longer
+  than 1,000 characters (C4). The judged text is the product, so a page
+  whose article outlives its navigation is kept, clean. A document with no
+  such line drops as `no_prose_lines`. WET documents keep their line
   structure on the way in (one block per line), which the line stage and the
   quality filter's line rules both rely on.
+- The quality filter (`filter_quality`) is the Gopher rule set (Rae et al.
+  2021) with every measure defined as DataTrove — the code behind FineWeb —
+  defines it: a repeated n-gram counts from its second occurrence on, the
+  most frequent n-gram is the one with the most occurrences, character
+  shares are of the whole text, hash marks and ellipses are judged
+  separately. A word is a whitespace-separated token; in a script without
+  word spacing it is a letter (a Latin word inside such text stays one
+  word), and Japanese and Chinese take FineWeb-2's repetition thresholds. A
+  document needs two distinct stop words of its language (Gopher's eight
+  for English, FineWeb-2's lists for the other languages of the committed
+  model), which on Common Crawl mostly removes pages in a language the
+  identifier does not know; a page with "lorem ipsum" goes (C4). The drop
+  names are the rules': `min_words`, `max_words`, `mean_word_length`,
+  `symbol_to_word_ratio`, `alphabetic_words`, `bullet_lines`,
+  `ellipsis_lines`, `duplicate_lines`, `duplicate_line_chars`,
+  `top_ngram_chars_2..4`, `duplicate_ngram_chars_5..10`, `stop_words`,
+  `lorem_ipsum` — a document is counted under the first it fails, in that
+  order.
 - Unknown keys are errors, so a typo cannot silently turn a stage off.
 
 ## The products
@@ -254,7 +278,7 @@ manifest's `size` values.
 | `WarcReader` / `WarcRecord` | `Warc/` | streams the records of a gzip (one member per record, as Common Crawl writes them) or plain WARC/WET file, one record in memory at a time; oversized records skipped and counted; a truncated tail ends the file with the complete records; malformed input is an error at an offset |
 | `HttpResponsePayload` / `HtmlTextExtractor` | `Text/` | a WARC response's HTTP headers and body, decoded by header charset → meta charset → UTF-8; HTML to text on AngleSharp with a scoped rule set (scripts, styles, navigation, forms and hidden content dropped; blocks become lines; title first); a linear pre-scan refuses pages nested deeper than 512 or past 60k tags. Agrees with Common Crawl's own WET text at a median Jaccard of 0.85 on the golden shard |
 | `LanguageIdentifier` / `LanguageModel` / `LanguageModelTrainer` | `Language/` | character n-gram profiles (Cavnar–Trenkle, integer rank distance, ordinal ties); the model is trained by `corpus-assets` from WET files' own language labels and pinned by hash; the committed 16-language model agrees with the crawl's labels at 98.8 % on the shard |
-| `QualityFilter` / `QualityRules` | `Quality/` | the Gopher-style shape and repetition rules, every threshold a parameter, every failed rule named with its measurement; scripts without word spacing are judged by their letters |
+| `LineCleaner` / `QualityFilter` / `QualityRules` / `QualityStopWords` | `Quality/` | the line stage (C4's line rules, script-aware) and the Gopher quality and repetition rules with DataTrove's definitions of every measure, each threshold with its source in the code (Gopher, C4, FineWeb-2), every failed rule named with its measurement; scripts without word spacing are judged by their letters |
 | `MinHashSigner` | `Signatures/` | 128 MinHash values over 5-word shingles (FNV-1a + a seeded universal hash family), LSH band keys, estimated Jaccard between signatures |
 | `CorpusCompressor` | `Compression/` | zstd through the managed ZstdSharp port at one pinned level, buffer and stream forms; the frame is a function of the content |
 | `ShardProcessor` and friends | `Shards/` | the pipeline over one shard (`ShardProcessor`), the allowlist gate (`ShardOrigin`), the capped retrying fetch (`ShardFetcher`), the pinned model cache (`ShardLanguageModels`), the signatures layout (`ShardSignatureWriter`), the canonical counters (`ShardStatsBuilder`) and the node-side task start to finish (`ShardTaskRunner`) |
