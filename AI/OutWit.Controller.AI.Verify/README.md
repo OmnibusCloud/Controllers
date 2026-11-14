@@ -152,10 +152,14 @@ data segments, which wasmtime charges a unit a byte for where it copies them and
 not where it maps a copy-on-write image (Linux). That copy was the fixed step
 between Linux and the other two systems that earlier versions showed for Ruby and
 Lua (a Lua hello cost 569,680 units on Linux and 602,449 on Windows and macOS;
-32,769 of that was the copy): the hello of every runtime is now pinned to one
-number on Windows, Linux and macOS by the tests. Fuel is reproducible per host;
-the peak linear memory of a CPython task can differ by one 64 KiB page between
-hosts; wall time is hardware. All three are metrics and live per task in the provenance
+32,769 of that was the copy): the hello of every runtime is now one number on
+Windows, Linux and macOS, pinned by the tests, but for the CPython tasks that
+read their library from files (`python-3.14.6` and its sympy flavour), which
+still drift between hosts by up to 0.06 % in how each host's WASI answers the
+interpreter's file queries (a hello: 40 units between two Windows hosts, 1,113
+on Linux; the numpy runtime starts from a snapshot and does not drift). Fuel is
+reproducible per host; the peak linear memory of a CPython task can differ by
+one 64 KiB page between hosts; wall time is hardware. All three are metrics and live per task in the provenance
 document. The clock is the run's own (it starts at a pinned instant and moves
 only when the program sleeps) and the random source is seeded from the task,
 so a program sees the same world on every node; a folder cannot be

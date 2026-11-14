@@ -351,7 +351,7 @@ What is guaranteed:
 What is a metric, not identity (it lives in the provenance):
 - **Fuel** is the program's own and reproducible on one host.
   - Since 0.12.0 the budget is given once the module is instantiated, so the copy of its data segments (a unit a byte where wasmtime copies them, nothing where Linux maps an image) is in neither the budget nor the fuel reported. That copy was the fixed step earlier versions showed for Ruby and Lua between Linux and the other systems (a Lua hello: 569,680 on Linux, 602,449 on Windows and macOS).
-  - The hello of every runtime costs one pinned number on Windows, Linux and macOS (the controller's tests).
+  - The hello of every runtime costs one pinned number on Windows, Linux and macOS (the controller's tests), but for CPython reading its library from files (`python-3.14.6` and the sympy runtime): it drifts between hosts by up to 0.06 % in how each host answers its file queries (a hello: 40 units between two Windows hosts, 1,113 on Linux). The numpy runtime starts from a snapshot and does not drift.
 - **Peak memory** of a CPython task can differ by one 64 KiB page.
 - **Wall time** depends on the hardware.
 
@@ -426,6 +426,6 @@ How a deployment uses them:
   - in Python by its recursion limit;
   - in JavaScript by a `RangeError` (about 300 levels);
   - in C/C++ by the 8 MiB stack (100,000 to 160,000 levels for a small function).
-- The peak memory of a CPython task can differ by a page between platforms (section 10). Verdicts and outputs do not.
+- The fuel of a CPython task (not numpy) can differ by up to 0.06 % between hosts, and its peak memory by a page (section 10). Verdicts and outputs do not.
 - A run waits for its slowest share (section 11).
 - The controller is proven on the test fleet. Its release to nuget.org and to the live network is the owner's decision.
