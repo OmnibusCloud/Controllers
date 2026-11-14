@@ -21,7 +21,7 @@ public sealed class CorpusModelWireLayoutTests
         {
             typeof(CorpusCountData), typeof(CorpusSourceData), typeof(CorpusQualityData), typeof(CorpusPipelineData),
             typeof(CorpusTaskData), typeof(CorpusShardStatsData), typeof(CorpusResultData), typeof(CorpusOptionsData),
-            typeof(CorpusPreflightData), typeof(CorpusRuntimeDiagnosticsData), typeof(CorpusPdfStatsData)
+            typeof(CorpusPreflightData), typeof(CorpusRuntimeDiagnosticsData), typeof(CorpusPdfStatsData), typeof(CorpusMinHashData)
         };
 
         var actual = typeof(CorpusTaskData).Assembly
@@ -35,14 +35,15 @@ public sealed class CorpusModelWireLayoutTests
     [TestCase(typeof(CorpusCountData), 2)]
     [TestCase(typeof(CorpusSourceData), 4)]
     [TestCase(typeof(CorpusQualityData), 11)]
-    [TestCase(typeof(CorpusPipelineData), 10)]
+    [TestCase(typeof(CorpusPipelineData), 12)]
     [TestCase(typeof(CorpusTaskData), 5)]
     [TestCase(typeof(CorpusShardStatsData), 12)]
-    [TestCase(typeof(CorpusResultData), 13)]
+    [TestCase(typeof(CorpusResultData), 15)]
     [TestCase(typeof(CorpusOptionsData), 4)]
-    [TestCase(typeof(CorpusPreflightData), 9)]
+    [TestCase(typeof(CorpusPreflightData), 11)]
     [TestCase(typeof(CorpusRuntimeDiagnosticsData), 16)]
     [TestCase(typeof(CorpusPdfStatsData), 8)]
+    [TestCase(typeof(CorpusMinHashData), 3)]
     public void WireLayoutIsPinnedTest(Type type, int expectedMemberCount)
     {
         var ordered = type

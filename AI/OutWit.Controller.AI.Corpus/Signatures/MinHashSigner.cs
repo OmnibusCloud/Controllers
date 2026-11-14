@@ -4,21 +4,32 @@ namespace OutWit.Controller.AI.Corpus.Signatures;
 
 /// <summary>
 /// MinHash signatures for near-duplicate detection: a document becomes the set of its
-/// word shingles (normalized tokens, <see cref="SHINGLE_WORDS"/> in a row), each shingle is
-/// hashed once (64-bit FNV-1a), and <see cref="HASHES"/> universal hash functions
-/// (multiply-add-shift with seeds derived from one constant) each keep their minimum. Two
-/// signatures agree on about the Jaccard share of their positions. Everything is integer
-/// arithmetic over bytes of UTF-8 — the same signature on every node.
+/// word shingles (normalized tokens, a pipeline's shingle size in a row, <see cref="SHINGLE_WORDS"/>
+/// by default), each shingle is hashed once (64-bit FNV-1a), and a pipeline's number of universal
+/// hash functions (<see cref="HASHES"/> by default; multiply-add-shift with seeds derived from one
+/// constant) each keep their minimum. Two signatures agree on about the Jaccard share of their
+/// positions. Everything is integer arithmetic over bytes of UTF-8: the same signature on every
+/// node. The hash family is one sequence: a signature of n hashes uses its first n functions, so
+/// the default signature is the one this signer always made.
 /// </summary>
 public static class MinHashSigner
 {
     #region Constants
 
-    /// <summary>Hash functions per signature.</summary>
+    /// <summary>Hash functions per signature by default.</summary>
     public const int HASHES = 128;
 
-    /// <summary>Words per shingle.</summary>
+    /// <summary>Words per shingle by default.</summary>
     public const int SHINGLE_WORDS = 5;
+
+    /// <summary>LSH bands of the near-duplicate merge by default: 16 bands of 8 rows over 128 hashes.</summary>
+    public const int BANDS = 16;
+
+    /// <summary>The most hash functions a pipeline may ask for: a signature of 8 KiB per document.</summary>
+    public const int MAX_HASHES = 1024;
+
+    /// <summary>The most words a shingle may have.</summary>
+    public const int MAX_SHINGLE_WORDS = 32;
 
     /// <summary>The signature of a text with fewer words than a shingle: all slots at the maximum.</summary>
     public const ulong EMPTY_SLOT = ulong.MaxValue;
@@ -27,34 +38,49 @@ public static class MinHashSigner
     private const ulong FNV_OFFSET = 14695981039346656037UL;
     private const ulong FNV_PRIME = 1099511628211UL;
 
-    #endregion
-
-    #region Fields
-
-    private static readonly (ulong A, ulong B)[] s_coefficients = Coefficients();
+    /// <summary>The hash family, <see cref="MAX_HASHES"/> functions long; a signature takes its first ones.</summary>
+    private static readonly (ulong A, ulong B)[] COEFFICIENTS = Coefficients(MAX_HASHES);
 
     #endregion
 
     #region Functions
 
     /// <summary>
-    /// Computes the signature of a text.
+    /// Computes the signature of a text with the default parameters.
     /// </summary>
     /// <param name="text">The text.</param>
     /// <returns>The signature: <see cref="HASHES"/> minima.</returns>
     public static ulong[] Sign(string text)
     {
-        var signature = new ulong[HASHES];
+        return Sign(text, HASHES, SHINGLE_WORDS);
+    }
+
+    /// <summary>
+    /// Computes the signature of a text.
+    /// </summary>
+    /// <param name="text">The text.</param>
+    /// <param name="hashes">Hash functions, 1 to <see cref="MAX_HASHES"/>.</param>
+    /// <param name="shingleWords">Words per shingle, 1 to <see cref="MAX_SHINGLE_WORDS"/>.</param>
+    /// <returns>The signature: <paramref name="hashes"/> minima.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A parameter is out of its range.</exception>
+    public static ulong[] Sign(string text, int hashes, int shingleWords)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(hashes, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(hashes, MAX_HASHES);
+        ArgumentOutOfRangeException.ThrowIfLessThan(shingleWords, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(shingleWords, MAX_SHINGLE_WORDS);
+
+        var signature = new ulong[hashes];
         Array.Fill(signature, EMPTY_SLOT);
 
         // The shingle hash is FNV-1a over the UTF-8 bytes of the words joined by a space, so it
         // runs over each word's bytes with a 0x20 between them: no shingle string is built. A
         // repeated shingle yields the same hash and cannot move a minimum, so no set is kept.
         var words = Utf8Words(text);
-        for (var start = 0; start + SHINGLE_WORDS <= words.Count; start++)
+        for (var start = 0; start + shingleWords <= words.Count; start++)
         {
             var h = FNV_OFFSET;
-            for (var w = start; w < start + SHINGLE_WORDS; w++)
+            for (var w = start; w < start + shingleWords; w++)
             {
                 if (w > start)
                 {
@@ -69,9 +95,9 @@ public static class MinHashSigner
                 }
             }
 
-            for (var i = 0; i < HASHES; i++)
+            for (var i = 0; i < hashes; i++)
             {
-                var (a, b) = s_coefficients[i];
+                var (a, b) = COEFFICIENTS[i];
                 var value = unchecked(a * h + b);
                 if (value < signature[i])
                     signature[i] = value;
@@ -145,20 +171,35 @@ public static class MinHashSigner
     }
 
     /// <summary>
-    /// The word shingles of a text: tokens lower-cased by the invariant culture with punctuation
-    /// stripped, <see cref="SHINGLE_WORDS"/> consecutive ones joined by a space; duplicates removed.
+    /// The word shingles of a text with the default shingle size: tokens lower-cased by the
+    /// invariant culture with punctuation stripped, <see cref="SHINGLE_WORDS"/> consecutive ones
+    /// joined by a space; duplicates removed.
     /// </summary>
     /// <param name="text">The text.</param>
     /// <returns>The distinct shingles, in first-occurrence order.</returns>
     public static IReadOnlyList<string> Shingles(string text)
     {
+        return Shingles(text, SHINGLE_WORDS);
+    }
+
+    /// <summary>
+    /// The word shingles of a text: tokens lower-cased by the invariant culture with punctuation
+    /// stripped, <paramref name="shingleWords"/> consecutive ones joined by a space; duplicates removed.
+    /// </summary>
+    /// <param name="text">The text.</param>
+    /// <param name="shingleWords">Words per shingle, at least 1.</param>
+    /// <returns>The distinct shingles, in first-occurrence order.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The shingle size is below 1.</exception>
+    public static IReadOnlyList<string> Shingles(string text, int shingleWords)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(shingleWords, 1);
         var words = Words(text);
 
         var shingles = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        for (var i = 0; i + SHINGLE_WORDS <= words.Count; i++)
+        for (var i = 0; i + shingleWords <= words.Count; i++)
         {
-            var shingle = string.Join(' ', words.GetRange(i, SHINGLE_WORDS));
+            var shingle = string.Join(' ', words.GetRange(i, shingleWords));
             if (seen.Add(shingle))
                 shingles.Add(shingle);
         }
@@ -209,12 +250,13 @@ public static class MinHashSigner
         return words;
     }
 
-    private static (ulong, ulong)[] Coefficients()
+    private static (ulong, ulong)[] Coefficients(int count)
     {
         // splitmix64 over one constant seed: the hash family is part of the pipeline contract.
+        // One sequence: the first 128 functions are the ones the signer always had.
         var state = SEED;
-        var coefficients = new (ulong, ulong)[HASHES];
-        for (var i = 0; i < HASHES; i++)
+        var coefficients = new (ulong, ulong)[count];
+        for (var i = 0; i < count; i++)
         {
             var a = Next(ref state) | 1UL; // odd, so the multiply is a bijection
             var b = Next(ref state);

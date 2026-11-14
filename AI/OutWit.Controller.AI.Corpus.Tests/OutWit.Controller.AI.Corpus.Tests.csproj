@@ -6,6 +6,13 @@
     <ProjectReference Include="..\OutWit.Controller.AI.Corpus\OutWit.Controller.AI.Corpus.csproj" />
   </ItemGroup>
 
+  <!-- The Grid controller's allocator, compiled against by the tests only: the preflight's share
+       plan follows its rule (CorpusSharePlanner) and CorpusSharePlannerTests holds the two together.
+       The controller itself does not depend on Grid. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid.Model\OutWit.Controller.Grid.Model.csproj" />
+  </ItemGroup>
+
   <!-- Build-only references: these projects must be built (so their PostBuild
        populates @Controllers/<Cfg>/<name>.module/) but their DLLs are not pulled
        into the test compile output. Variables is the Corpus module dependency;

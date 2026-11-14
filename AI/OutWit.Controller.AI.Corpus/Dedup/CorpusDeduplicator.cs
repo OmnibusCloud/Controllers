@@ -19,10 +19,13 @@ public sealed class CorpusDeduplicator
     public const double DEFAULT_THRESHOLD = 0.8;
 
     /// <summary>LSH bands over the 128-hash signature: 16 bands of 8 rows catch a 0.8-similar pair with probability 0.97 and a 0.5-similar one with 0.06 (the comparison then rejects it).</summary>
-    public const int DEFAULT_BANDS = 16;
+    public const int DEFAULT_BANDS = MinHashSigner.BANDS;
 
-    /// <summary>Most documents one merge holds in memory (about 1 KB each).</summary>
+    /// <summary>Most documents one merge holds in memory with 128-hash signatures (about 1 KB each); with another hash count, as many as fit <see cref="MAX_SIGNATURE_VALUES"/>.</summary>
     public const int MAX_DOCUMENTS = 4_000_000;
+
+    /// <summary>Most signature values one merge holds in memory (8 bytes each): 4 GiB.</summary>
+    public const long MAX_SIGNATURE_VALUES = (long)MAX_DOCUMENTS * MinHashSigner.HASHES;
 
     #endregion
 
@@ -57,8 +60,9 @@ public sealed class CorpusDeduplicator
     {
         var ordered = shards.OrderBy(shard => shard.ShardIndex).ToList();
         var total = ordered.Sum(shard => (long)shard.Signatures.Count);
-        if (total > MAX_DOCUMENTS)
-            throw new InvalidOperationException($"{total} documents exceed the merge's capacity of {MAX_DOCUMENTS}.");
+        var capacity = Capacity(ordered.SelectMany(shard => shard.Signatures).Select(signature => signature.Length).DefaultIfEmpty(MinHashSigner.HASHES).Max());
+        if (total > capacity)
+            throw new InvalidOperationException($"{total} documents exceed the merge's capacity of {capacity}.");
 
         var signatures = new ulong[total][];
         var refs = new CorpusDocumentRef[total];
@@ -135,6 +139,14 @@ public sealed class CorpusDeduplicator
         }
 
         return new CorpusDedupResult(m_threshold, m_bands, (int)total, shardResults, clusters);
+    }
+
+    /// <summary>The most documents one merge holds with signatures of the given length.</summary>
+    /// <param name="hashes">Hashes per signature.</param>
+    /// <returns><see cref="MAX_DOCUMENTS"/> at 128 hashes; as many as fit <see cref="MAX_SIGNATURE_VALUES"/> at another count.</returns>
+    public static long Capacity(int hashes)
+    {
+        return MAX_SIGNATURE_VALUES / Math.Max(1, hashes);
     }
 
     private static int Find(int[] parent, int x)

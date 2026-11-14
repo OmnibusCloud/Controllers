@@ -40,10 +40,10 @@ public static class CorpusStorageRatios
     /// <summary>What the largest measured value is raised by.</summary>
     public const double MARGIN = 1.2;
 
-    /// <summary>The signatures blob's header: the magic and the hash count.</summary>
+    /// <summary>The signatures blob's header with the default MinHash parameters: the magic and the hash count (16 bytes with others: the shingle size follows).</summary>
     public const int SIGNATURE_HEADER_BYTES = 12;
 
-    /// <summary>One document's signature: 128 MinHash values of 8 bytes.</summary>
+    /// <summary>One document's signature with the default MinHash parameters: 128 values of 8 bytes (a pipeline's hash count times 8 with others).</summary>
     public const int SIGNATURE_BYTES_PER_DOCUMENT = MinHashSigner.HASHES * sizeof(ulong);
 
     /// <summary>The report's fixed part (schema, summary, histograms).</summary>

@@ -37,7 +37,9 @@ public sealed partial class CorpusResultData : ModelBase
                && ControllerVersion.Is(other.ControllerVersion)
                && SourceUrl.Is(other.SourceUrl)
                && RuntimeTarget.Is(other.RuntimeTarget)
-               && Degree.Is(other.Degree);
+               && Degree.Is(other.Degree)
+               && Output.Is(other.Output)
+               && MinHash.Check(other.MinHash);
     }
 
     /// <summary>Deep copy.</summary>
@@ -58,7 +60,9 @@ public sealed partial class CorpusResultData : ModelBase
             ControllerVersion = ControllerVersion,
             SourceUrl = SourceUrl,
             RuntimeTarget = RuntimeTarget,
-            Degree = Degree
+            Degree = Degree,
+            Output = Output,
+            MinHash = MinHash?.Clone()
         };
     }
 
@@ -119,6 +123,14 @@ public sealed partial class CorpusResultData : ModelBase
     /// <summary>Shards the node processes at once (its cores, bounded by memory): the context of the processing time. 0 = not reported.</summary>
     [MemoryPackOrder(12)]
     public int Degree { get; set; }
+
+    /// <summary>What the run keeps on the server, repeated from the task's pipeline so the report and Corpus.Dedup can tell a run that kept no text and no signatures (<see cref="CorpusOutputMode.StatsAndHashes"/>) from one that did.</summary>
+    [MemoryPackOrder(13)]
+    public CorpusOutputMode Output { get; set; }
+
+    /// <summary>The MinHash parameters the node signed with, resolved (no 0 left); null when the shard has no signatures (the pipeline does not sign, keeps statistics and hashes only, or the task did not complete).</summary>
+    [MemoryPackOrder(14)]
+    public CorpusMinHashData? MinHash { get; set; }
 
     #endregion
 }

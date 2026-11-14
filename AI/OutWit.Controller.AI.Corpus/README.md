@@ -15,10 +15,11 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.2.1 — 0.1.14 proven on the test fleet; 0.2.x (the PDF stage; language packs with the
-unsupported-language test, C4's curly-bracket rule as a switch) proven in CI, not yet on the
-fleet (0.2.0's package did not resolve its data assets at the consumer: 0.2.1 does); not yet
-released to nuget.org.**
+**Status: 0.3.0 — 0.2.1 proven on the test fleet (the PDF stage, language packs); 0.3.0 (what the
+studio needs: the output mode "statistics and hashes only", the MinHash parameters as pipeline
+settings, the busiest node's share in the preflight, the report's funnel) proven in CI, not yet on
+the fleet; not yet released to nuget.org.** The full reference for lab engineers and application
+developers is [docs/capabilities.md](docs/capabilities.md).
 The stage libraries are wired into nine activities and four bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
@@ -36,11 +37,11 @@ and the PDF stage proven on the fleet.
 | Activity | Runs on | Signature | What it does |
 |---|---|---|---|
 | `Corpus.Split` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusTaskCollection` | parses the manifest, checks every source against the allowlist and the byte cap, hashes the language model blob and pins it into the pipeline, reads it and refuses one this controller cannot use (a format it does not read, a truncated or non-canonical pack, a threshold it does not have) by name, holds the server storage estimate to the deployment's headroom, emits one task per shard. Any problem fails the job here — a bad manifest never reaches a node |
-| `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate (sources without a size are asked at the origin with HEAD, up to 64 of them, the rest extrapolated at the mean), the server storage estimate and the headroom it is held to (see *Server storage*), every message by manifest line |
+| `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate (sources without a size are asked at the origin with HEAD, up to 64 of them, the rest extrapolated at the mean), the server storage estimate and the headroom it is held to (see *Server storage*), the busiest node's share of the work and how many nodes the plan uses (see *The busiest share*), what the run keeps and whether its signatures can be merged, every message by manifest line |
 | `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline (a WARC shard's PDFs through the sandboxed extractor), the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception — except a fault of the node that another node would not have (a PDF the node cannot run, a product it cannot upload): that fails the node's batch, and `Grid.ForEach` runs the node's tasks on another node; several shards may run on one client at once |
-| `Corpus.Collect` | host | `(CorpusResultCollection, CorpusOptions) → Blob report` | the job report: every shard's verdict, blobs and content hash in task order, the aggregate counters over the fleet |
+| `Corpus.Collect` | host | `(CorpusResultCollection, CorpusOptions) → Blob report` | the job report: every shard's verdict, blobs and content hash in task order, the aggregate counters over the fleet and the run's funnel, what the run kept and the MinHash parameters of its signatures |
 | `Corpus.SamplingRate` | host | `(CorpusOptions) → Double` | `SamplingRate` clamped to 0..1, the share of the shards `Grid.Replicas` runs twice |
-| `Corpus.Dedup` | host | `(Blob report, CorpusOptions) → Blob dedup` | the near-duplicate merge over the signature blobs a report names: LSH over the MinHash signatures (16 bands of 8), a candidate pair joins a cluster at a Jaccard estimate of `DedupThreshold` (0.8 by default), the lowest document of a cluster is kept; per shard a keep mask, plus the clusters |
+| `Corpus.Dedup` | host | `(Blob report, CorpusOptions) → Blob dedup` | the near-duplicate merge over the signature blobs a report names: LSH over the MinHash signatures (the run's band layout, 16 bands of 8 by default), a candidate pair joins a cluster at a Jaccard estimate of `DedupThreshold` (0.8 by default), the lowest document of a cluster is kept; per shard a keep mask, plus the clusters. A run without signatures (statistics and hashes only, or `sign` off) and a run whose signatures were made with different MinHash parameters are refused by name |
 | `Corpus.Integrity` | host | `(CorpusResultCollection executions) → Blob integrity` | the two executions of every shard that ran twice compared on verdict, content hash, document counts and histograms |
 | `Corpus.RuntimeDiagnostics` | host | `() → CorpusRuntimeDiagnostics` | what the module of the answering process carries (see *Diagnostics and capabilities*) |
 | `Corpus.Capabilities` | host | `() → Blob capabilities` | what an application can know before a run, as a JSON document (`docs/corpus-capabilities.schema.json`) |
@@ -90,7 +91,9 @@ One JSON document (`docs/corpus-manifest.schema.json`):
     "sign": true,
     "extract_pdf": true,
     "filter_curly_bracket": false,
-    "quality": { "min_words": 50, "max_duplicate_line_ratio": 0.3 }
+    "quality": { "min_words": 50, "max_duplicate_line_ratio": 0.3 },
+    "minhash": { "hashes": 128, "shingle_words": 5, "bands": 16 },
+    "output": "full"
   },
   "allowed_origins": ["data.commoncrawl.org"],
   "sources": [
@@ -100,8 +103,9 @@ One JSON document (`docs/corpus-manifest.schema.json`):
 }
 ```
 
-- `pipeline.version` is the lab's name for the contract and travels into every
-  product; change a threshold, change the version. Thresholds left out (or 0)
+- `pipeline.version` is the lab's name for the contract and travels with every
+  task (a label: it does not enter the products' bytes); change a threshold,
+  change the version. Thresholds left out (or 0)
   are the stage defaults; `language_model_sha256` is optional and, when given,
   must match the model blob or the job does not start. A language pack carries
   its languages' rule data and acceptance limits, so the pin covers them too.
@@ -169,6 +173,23 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   Crawl WET file (00035, see *Language packs*) it drops 254 documents, and
   the documents out fall by 1.4 % (11,151 to 10,996), the text by 2.1 %.
   Whether a lab wants code-bearing pages is the lab's decision.
+- `output` says what the run keeps on the server: `"full"` (the default) keeps
+  every shard's text and signatures; `"stats_and_hashes"` keeps the statistics,
+  the content hashes, the report and the integrity document only. Every shard
+  is processed and hashed exactly as under `"full"` — the same content hashes,
+  the same counters, the same `bytes_produced` — but its text and signatures
+  stay on the node and are deleted with the task's folder (no signature is
+  even made). For demonstrations and licensing, where a lab must not hold
+  third-party text. The sampled shards still run twice and their hashes are
+  still compared across machines. The storage estimate drops the products, and
+  the preflight says so; `Corpus.Dedup` refuses such a run (no signatures).
+- `minhash` sets the signatures and the near-duplicate merge: `hashes`
+  (1 to 1,024; 128 by default), `shingle_words` (1 to 32; 5) and `bands` (a
+  divisor of `hashes`; 16). A key left out, or 0, is the default, and the
+  defaults sign byte for byte as before they were settings. A value out of its
+  range, or bands that do not divide the hashes, is refused by name. Signatures
+  made with different parameters cannot be compared: the blob, the result and
+  the report say how they were made, and `Corpus.Dedup` refuses to mix them.
 - Unknown keys are errors, so a typo cannot silently turn a stage off.
 
 ## Language packs
@@ -352,7 +373,10 @@ stay.
 - **Signatures blob** (`signatures.bin`): the magic `WITSIG1\n`, the hashes
   per signature (int32 LE, 128), then one MinHash signature per document in
   product order (128 × uint64 LE) — a fixed layout, document *i* at
-  `12 + i × 1024`. Absent when `sign` is `false`.
+  `12 + i × 1024`. With another hash count or shingle size (`minhash`) the
+  magic is `WITSIG2\n` and the shingle size (int32 LE) follows the hash count:
+  document *i* at `16 + i × 8 × hashes`. Absent when `sign` is `false` or the
+  run keeps statistics and hashes only.
 - **Dedup** (`corpus-dedup.json`, `docs/corpus-dedup.schema.json`): per shard
   a keep mask over the product (a base64 bitset, bit *i* = the *i*-th JSON line,
   1 = keep) and the clusters of two or more as (shard, ordinal) pairs with the
@@ -363,8 +387,13 @@ stay.
   documents extracted and out, drops by rule, languages, the languages of the
   `language_unsupported` drops, bytes, times, and the PDF stage's `pdf_*` counts
   where a shard met a PDF), and the platform (`runtime_target`, e.g.
-  `linux-x64`) and degree it ran at — a platform, never a machine; the summary
-  sums them over the fleet.
+  `linux-x64`) and degree it ran at — a platform, never a machine, and the
+  MinHash parameters of its signatures; the summary sums them over the fleet,
+  says what the run kept (`output`) and gives the run's **funnel**: the records
+  read, the documents extracted, the documents left after the language stage,
+  the line stage and the quality filter, the documents out, and the drops of
+  each stage (`extract` counts records and PDFs that gave no document; every
+  drop rule's stage is in the capabilities document).
 
 ## PDFs
 
@@ -575,7 +604,26 @@ sampling 0.25) leave about 772 MiB under 0.1.14 (its products measured on one
 machine; 653 MiB on the test server under 0.1.13); the estimate for them is 983 MiB.
 A source whose size is unknown is not in the estimate, and the message says so.
 The guard test over the golden shards fails when a stage makes products larger
-than the table allows.
+than the table allows. A run that keeps statistics and hashes only leaves no
+text, no signatures and no dedup document: its estimate is the report, the
+integrity document and the inputs, and the preflight line says the products stay
+on the nodes. A signature costs 8 bytes per hash and document (`minhash`).
+
+## The busiest share
+
+The preflight states what the contributor with the most work carries:
+`BusiestNodeShare`, the busiest node's share of the run's work (0 to 1), and
+`PlannedNodes`, how many nodes would take shards — as the platform's allocator
+would split the shards over the pool now. The host asks for the nodes that can
+take Corpus shards for the submitter (as the capabilities' pool) and plans as
+the Grid controller's allocator does: nodes by benchmark rate (one that has not
+measured itself after every one that has, at the slowest measured rate), the
+shards largest first, each to the node that finishes it earliest, the two
+executions of a sampled shard on different nodes, then one node fewer while the
+longest share grows by no more than 2 %. A shard's work is its size in
+megabytes. The platform samples shards at random; the plan takes the largest.
+The answer is a share and counts: no node is named. A host without a pool to
+ask leaves both at 0 and says so.
 
 **The limit.** The engine says nothing about storage to a controller, so the
 host asks two places and the smaller stated value holds:
@@ -620,7 +668,9 @@ admits no other to the work):
   PDF stage (`pdf`: the module's hash, the engine, the fuel, memory, input, text
   and document limits, the running-line rule, the drop rules, whether the host
   can run it),
-  the signatures and dedup parameters, the products with their schemas, the
+  the signatures and dedup parameters (the output modes and the MinHash parameters'
+  defaults and ranges), every drop rule with the stage that applies it, the
+  products with their schemas and the output modes that keep them, the
   storage ratios with the deployment's headroom and retention window, and the
   pool as totals: nodes, measured nodes, MB of WET per second (and shards at
   once when the host carries every node's degree). No node is named.
@@ -695,13 +745,13 @@ admits no other to the work):
 | `LanguageIdentifier` / `LanguageModel` / `LanguageModelFormat` / `LanguageAcceptance` / `LanguageRules` / `LanguageRuleSet` | `Language/` | character n-gram profiles (Cavnar–Trenkle, integer rank distance, ordinal ties) and the unsupported-language test; the two model formats (`WITLID1` profiles only, `WITLID2` language packs) with one canonical serialization each; each language's rule data (script, stop words, thresholds) as data, and the frozen rule data of `WITLID1` models (`Resources/witlid1-rules.json`); `LanguageScripts`, the scripts written without spaces — the one piece of language knowledge in code |
 | `LanguageModelTrainer` / `LanguagePackBuilder` / `LanguagePackCalibrator` / `LanguagePackEvaluator` / `LanguagePackSource` | `Language/` | what `corpus-assets` runs: profiles trained from WET files' own language labels, the per-language source folders read, the limits calibrated, a pack measured against the crawl's labels |
 | `LineCleaner` / `QualityFilter` / `QualityRules` / `QualityRuleOverrides` | `Quality/` | the line stage (C4's line rules, script-aware; C4's curly-bracket rule) and the Gopher quality and repetition rules with DataTrove's definitions of every measure, each threshold with its source in the code (Gopher, C4, FineWeb-2), every failed rule named with its measurement; scripts without word spacing are judged by their letters; the thresholds a language's rule data may set, by name |
-| `MinHashSigner` | `Signatures/` | 128 MinHash values over 5-word shingles (FNV-1a + a seeded universal hash family), LSH band keys, estimated Jaccard between signatures |
+| `MinHashSigner` / `MinHashParameters` | `Signatures/` | MinHash values over word shingles (FNV-1a + a seeded universal hash family; 128 over 5 words by default, a pipeline's own up to 1,024 and 32), LSH band keys, estimated Jaccard between signatures; the parameters resolved and checked |
 | `CorpusCompressor` | `Compression/` | zstd through the managed ZstdSharp port at one pinned level, buffer and stream forms; the frame is a function of the content |
 | `ShardProcessor` and friends | `Shards/` | the pipeline over one shard (`ShardProcessor`), the allowlist gate (`ShardOrigin`), the capped retrying fetch (`ShardFetcher`), the pinned model cache (`ShardLanguageModels`), the signatures layout (`ShardSignatureWriter`), the canonical counters (`ShardStatsBuilder`) and the node-side task start to finish (`ShardTaskRunner`) |
 | `CorpusManifestParser` / `CorpusTaskPlanner` | `Manifests/` | the manifest document and the host-side plan |
-| `CorpusReportWriter` | `Reports/` | the job report |
+| `CorpusReportWriter` | `Reports/` | the job report, its funnel by the stages of the drop rules (`ShardDropRules`) |
 | `CorpusStorageEstimator` and friends | `Storage/` | the server storage estimate (`CorpusStorageEstimator` over the measured `CorpusStorageRatios`), the deployment's limit behind `ICorpusStorageHeadroom` (`CorpusStorageHeadroomHost`: the server's blob service, the operator's variable) and the refusal (`CorpusStorageCheck`) |
-| `CorpusRuntimeDiagnosticsBuilder` / `CorpusCapabilitiesWriter` | `Diagnostics/` | the module's diagnostics, the stage set and its fingerprint (`CorpusStageSet`), the reference language pack's facts, the pool as totals (`CorpusPoolProbe`) and the capabilities document |
+| `CorpusRuntimeDiagnosticsBuilder` / `CorpusCapabilitiesWriter` | `Diagnostics/` | the module's diagnostics, the stage set and its fingerprint (`CorpusStageSet`), the reference language pack's facts, the pool as totals (`CorpusPoolProbe`), the busiest share (`CorpusSharePlanner`) and the capabilities document |
 | `OutWit.Controller.AI.Corpus.Model` | | the wire types: source, pipeline, quality thresholds, task, result, statistics, options, preflight, runtime diagnostics — MemoryPack with pinned member order |
 
 `OutWit.Controller.AI.Corpus.Assets` (`corpus-assets`) builds and evaluates
@@ -775,6 +825,11 @@ manifest parser and planner; the report; the wire layout of every model type;
 the storage estimate against a measured run and the golden shards, the
 headroom sources and the refusal; the diagnostics and the capabilities
 document, with every published schema checked against what the writers write;
+the output modes (a run that keeps statistics and hashes only uploads nothing
+and hashes as the full output does) and the MinHash parameters (the golden shards'
+signatures blobs pinned to 0.2.1's bytes under the defaults, other parameters,
+the refusals, the merge's refusals); the busiest share against the Grid
+controller's allocator itself; the funnel over the golden shards;
 the hostile-input suite over synthetic shards (`WarcSynth` writes WARC/WET the
 way Common Crawl does: truncation mid-record, invalid UTF-8, hostile HTML,
 non-WARC records, corrupt gzip members); and the distributed gate — the bundled

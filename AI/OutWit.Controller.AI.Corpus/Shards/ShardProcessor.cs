@@ -18,8 +18,10 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// the HTML extractor, a WARC response that is a PDF through the PDF stage's sandbox into one
 /// document per page range), passes or fails the language and quality stages, and the survivors
 /// leave as one JSON line each — <c>{"url","lang","text"}</c> — hashed uncompressed, written
-/// zstd-compressed, with a MinHash signature per document in a side blob. A pure function of
-/// the shard bytes and the pipeline: two nodes produce the same hash or one of them is wrong.
+/// zstd-compressed, with a MinHash signature per document in a side blob (with the pipeline's
+/// MinHash parameters; none when the pipeline does not sign or keeps statistics and hashes only:
+/// there is then no signature product). A pure function of the shard bytes and the pipeline: two
+/// nodes produce the same hash or one of them is wrong; the output mode does not change it.
 /// </summary>
 public sealed class ShardProcessor
 {
@@ -50,6 +52,8 @@ public sealed class ShardProcessor
     private readonly LanguageIdentifier? m_identifier;
     private readonly HashSet<string>? m_targets;
     private readonly LanguageRuleSet m_rules;
+    private readonly MinHashParameters m_minHash;
+    private readonly bool m_sign;
     private ShardPdfStage? m_pdf;
 
     #endregion
@@ -69,12 +73,17 @@ public sealed class ShardProcessor
     /// <param name="pipeline">The pipeline contract.</param>
     /// <param name="languageModel">The pinned language model; required when the language stage is on.</param>
     /// <param name="pdfStage">The PDF stage (on a node, with the task's temp scope for its files); null for one on the process-wide sandbox, made on the first PDF.</param>
-    /// <exception cref="ArgumentException">The language stage is on and no model was given.</exception>
+    /// <exception cref="ArgumentException">The language stage is on and no model was given, or the MinHash parameters cannot be used.</exception>
     public ShardProcessor(CorpusPipelineData pipeline, LanguageModel? languageModel, ShardPdfStage? pdfStage)
     {
         m_pipeline = pipeline;
         m_pdf = pdfStage;
         m_rules = languageModel?.Rules ?? LanguageRuleSet.Witlid1;
+        m_sign = Signs(pipeline);
+        m_minHash = MinHashParameters.Resolve(pipeline.MinHash);
+
+        if (m_sign && MinHashParameters.Problem(pipeline.MinHash) is { } problem)
+            throw new ArgumentException($"The pipeline's MinHash parameters cannot be used: {problem}", nameof(pipeline));
 
         if (pipeline.IdentifyLanguage)
         {
@@ -90,11 +99,19 @@ public sealed class ShardProcessor
 
     #region Functions
 
+    /// <summary>Whether a pipeline makes signatures: it signs and keeps its products (statistics and hashes only keeps no signature, so none is made).</summary>
+    /// <param name="pipeline">The pipeline.</param>
+    /// <returns>True when the processor writes a signatures blob.</returns>
+    public static bool Signs(CorpusPipelineData pipeline)
+    {
+        return pipeline.Sign && pipeline.Output == CorpusOutputMode.Full;
+    }
+
     /// <summary>Runs the shard through the pipeline.</summary>
     /// <param name="shard">The shard bytes (gzip WARC/WET), read once, forward only.</param>
     /// <param name="format">What the shard holds.</param>
     /// <param name="text">Receives the zstd-compressed JSON lines.</param>
-    /// <param name="signatures">Receives the signatures blob (left empty when the pipeline does not sign).</param>
+    /// <param name="signatures">Receives the signatures blob (left empty when the pipeline makes none: see <see cref="Signs"/>).</param>
     /// <param name="cancellationToken">Stops between records.</param>
     /// <returns>The product's identity and counters.</returns>
     /// <exception cref="WarcFormatException">The bytes are not a WARC file.</exception>
@@ -105,8 +122,8 @@ public sealed class ShardProcessor
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         using var reader = new WarcReader(shard, ownsStream: false);
 
-        if (m_pipeline.Sign)
-            ShardSignatureWriter.WriteHeader(signatures);
+        if (m_sign)
+            ShardSignatureWriter.WriteHeader(signatures, m_minHash);
 
         using (var compressor = CorpusCompressor.CompressTo(text))
         {
@@ -188,8 +205,8 @@ public sealed class ShardProcessor
         hash.AppendData(line);
         compressor.Write(line);
 
-        if (m_pipeline.Sign)
-            ShardSignatureWriter.Write(signatures, MinHashSigner.Sign(content));
+        if (m_sign)
+            ShardSignatureWriter.Write(signatures, MinHashSigner.Sign(content, m_minHash.Hashes, m_minHash.ShingleWords));
 
         stats.Out(language);
     }

@@ -35,7 +35,9 @@ public sealed partial class CorpusPipelineData : ModelBase
                && Quality.Check(other.Quality)
                && LanguageModelBlobId.Is(other.LanguageModelBlobId)
                && CleanLines.Is(other.CleanLines)
-               && ExtractPdf.Is(other.ExtractPdf);
+               && ExtractPdf.Is(other.ExtractPdf)
+               && MinHash.Check(other.MinHash)
+               && Output.Is(other.Output);
     }
 
     /// <summary>Deep copy.</summary>
@@ -53,7 +55,9 @@ public sealed partial class CorpusPipelineData : ModelBase
             Quality = Quality?.Clone(),
             LanguageModelBlobId = LanguageModelBlobId,
             CleanLines = CleanLines,
-            ExtractPdf = ExtractPdf
+            ExtractPdf = ExtractPdf,
+            MinHash = MinHash?.Clone(),
+            Output = Output
         };
     }
 
@@ -111,6 +115,19 @@ public sealed partial class CorpusPipelineData : ModelBase
     [ToString]
     [MemoryPackOrder(9)]
     public bool ExtractPdf { get; set; } = true;
+
+    /// <summary>The MinHash parameters of the signatures and the near-duplicate merge; null (or 0 in a field) = the controller's defaults, which sign exactly as before they were settings.</summary>
+    [MemoryPackOrder(10)]
+    public CorpusMinHashData? MinHash { get; set; }
+
+    /// <summary>
+    /// What the run keeps on the server: everything (<see cref="CorpusOutputMode.Full"/>, the
+    /// default) or the statistics and the content hashes only (<see cref="CorpusOutputMode.StatsAndHashes"/>:
+    /// the text and the signatures stay on the node and are deleted with the task).
+    /// </summary>
+    [ToString]
+    [MemoryPackOrder(11)]
+    public CorpusOutputMode Output { get; set; }
 
     #endregion
 }

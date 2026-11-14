@@ -29,7 +29,32 @@
         "pdf_documents": { "type": "integer", "description": "The page-range documents made (url#page=a-b); each also counts in documents_extracted." },
         "pdf_pages_cut": { "type": "integer", "description": "Pages longer than a document may be (5,000 words), cut after the last line that fits." },
         "pdf_running_lines": { "type": "integer", "description": "Lines removed as running headers and footers." },
-        "pdf_fuel": { "type": "integer", "description": "Fuel the PDF sandbox burned, counted from each run's _start: the same on every node." }
+        "pdf_fuel": { "type": "integer", "description": "Fuel the PDF sandbox burned, counted from each run's _start: the same on every node." },
+        "funnel": {
+          "type": "object",
+          "description": "The run's funnel over the completed shards: the records read, the documents extracted, the documents left after the language stage, the line stage and the quality filter, and the documents out (equal to quality); dropped sums the drops by the stage that applies them (extract counts records and PDFs that gave no document, beside the funnel; the others count documents). Absent from reports of controllers before 0.3.0.",
+          "required": ["records", "extracted", "language", "lines", "quality", "out", "dropped"],
+          "properties": {
+            "records": { "type": "integer" },
+            "extracted": { "type": "integer" },
+            "language": { "type": "integer" },
+            "lines": { "type": "integer" },
+            "quality": { "type": "integer" },
+            "out": { "type": "integer" },
+            "dropped": {
+              "type": "object",
+              "required": ["extract", "language", "lines", "quality"],
+              "properties": {
+                "extract": { "type": "integer" },
+                "language": { "type": "integer" },
+                "lines": { "type": "integer" },
+                "quality": { "type": "integer" }
+              }
+            }
+          }
+        },
+        "output": { "type": "string", "enum": ["full", "stats_and_hashes"], "description": "What the run kept on the server: full, or stats_and_hashes (no text, no signatures: text_blob and signatures_blob are \"\", and Corpus.Dedup refuses the run). Absent from reports of controllers before 0.3.0 (they kept everything)." },
+        "minhash": { "$ref": "#/$defs/minhash", "description": "The MinHash parameters every shard's signatures were made with; absent when no shard has signatures or the shards differ (each shard then says its own), and from reports of controllers before 0.3.0 (the defaults)." }
       }
     },
     "shards": {
@@ -48,6 +73,7 @@
           "controller": { "type": "string" },
           "runtime_target": { "type": "string", "description": "The operating system and architecture the shard ran on, e.g. \"linux-x64\" (\"\" from a controller before it was reported). A platform, never a machine." },
           "degree": { "type": "integer", "description": "Shards the node processed at once (its cores, bounded by memory): the context of process_ms (0 when not reported)." },
+          "minhash": { "$ref": "#/$defs/minhash", "description": "The MinHash parameters the shard's signatures were made with; present when the shard has signatures (absent from reports of controllers before 0.3.0, whose signatures carry the defaults)." },
           "stats": {
             "oneOf": [
               { "type": "null" },
@@ -59,7 +85,7 @@
                   "documents_extracted": { "type": "integer" },
                   "documents_out": { "type": "integer" },
                   "bytes_fetched": { "type": "integer" },
-                  "bytes_produced": { "type": "integer" },
+                  "bytes_produced": { "type": "integer", "description": "Bytes of the compressed text product; under output stats_and_hashes the size the product had on the node before it was deleted." },
                   "fetch_ms": { "type": "integer" },
                   "process_ms": { "type": "integer" },
                   "wait_ms": { "type": "integer", "description": "Time the shard waited on the node for a download slot and a processing slot." },
@@ -83,6 +109,15 @@
     }
   },
   "$defs": {
+    "minhash": {
+      "type": "object",
+      "required": ["hashes", "shingle_words", "bands"],
+      "properties": {
+        "hashes": { "type": "integer" },
+        "shingle_words": { "type": "integer" },
+        "bands": { "type": "integer" }
+      }
+    },
     "counts": {
       "type": "object",
       "additionalProperties": { "type": "integer" },

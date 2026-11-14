@@ -1,5 +1,6 @@
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Controller.AI.Corpus.Signatures;
 
 namespace OutWit.Controller.AI.Corpus.Manifests;
 
@@ -68,6 +69,8 @@ public static class CorpusTaskPlanner
                 notes.Add("target_languages are ignored while identify_language is false.");
         }
 
+        DescribeProducts(pipeline, notes);
+
         var tasks = new List<CorpusTaskData>(manifest.Sources.Count);
         for (var index = 0; index < manifest.Sources.Count; index++)
         {
@@ -118,6 +121,31 @@ public static class CorpusTaskPlanner
                       $"Shards from there run only on machines whose owner lists the host in {ShardOriginPolicy.EXTRA_ORIGINS_VARIABLE}; every other machine answers OriginRefused.");
 
         return new CorpusPlan(errors.Count == 0 ? tasks : [], errors, notes, refused, outside, oversized, traffic);
+    }
+
+    /// <summary>
+    /// What the run keeps on the server and whether its signatures can be merged: a run that keeps
+    /// statistics and hashes only, or does not sign, has no signatures for Corpus.Dedup; MinHash
+    /// parameters other than the defaults are named, since signatures made otherwise do not merge with them.
+    /// </summary>
+    /// <param name="pipeline">The pipeline.</param>
+    /// <param name="notes">Receives the lines.</param>
+    private static void DescribeProducts(CorpusPipelineData pipeline, List<string> notes)
+    {
+        var minHash = MinHashParameters.Resolve(pipeline.MinHash);
+        if (pipeline.Output == CorpusOutputMode.StatsAndHashes)
+        {
+            notes.Add($"output {CorpusOutputModeNames.STATS_AND_HASHES}: each shard is processed and hashed in full, but its text and signatures stay on its node and are deleted with the task; " +
+                      "the server keeps the statistics, the content hashes, the report and the integrity document. " +
+                      "Corpus.Dedup cannot run over this run: the near-duplicate merge needs the signatures.");
+        }
+        else if (!pipeline.Sign)
+            notes.Add("sign is false: no signatures; Corpus.Dedup cannot run over this run: the near-duplicate merge needs the signatures.");
+        else if (!minHash.IsDefault)
+            notes.Add($"signatures: {minHash.Describe()} (the defaults: {MinHashParameters.DEFAULT.Describe()}); Corpus.Dedup merges them only with signatures made the same way.");
+
+        if (pipeline.MinHash != null && !ShardProcessor.Signs(pipeline))
+            notes.Add("pipeline.minhash is ignored: the run makes no signatures.");
     }
 
     /// <summary>The language model as the host read it: refused by name when this controller cannot use it, described when it can.</summary>

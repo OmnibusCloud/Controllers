@@ -34,6 +34,17 @@ public static class QualityFilter
 
     private const string LOREM_IPSUM = "lorem ipsum";
 
+    /// <summary>Every rule of the filter, in the order it judges them: a document that fails several is counted under the first.</summary>
+    public static readonly IReadOnlyList<string> RULES =
+    [
+        RULE_MIN_WORDS, RULE_MAX_WORDS, RULE_MEAN_WORD_LENGTH, RULE_SYMBOL_RATIO, RULE_ALPHABETIC,
+        RULE_BULLETS, RULE_ELLIPSES, RULE_DUPLICATE_LINES, RULE_DUPLICATE_LINE_CHARS,
+        RULE_TOP_NGRAM + 2, RULE_TOP_NGRAM + 3, RULE_TOP_NGRAM + 4,
+        RULE_DUPLICATE_NGRAM + 5, RULE_DUPLICATE_NGRAM + 6, RULE_DUPLICATE_NGRAM + 7,
+        RULE_DUPLICATE_NGRAM + 8, RULE_DUPLICATE_NGRAM + 9, RULE_DUPLICATE_NGRAM + 10,
+        RULE_STOP_WORDS, RULE_LOREM_IPSUM
+    ];
+
     private static readonly char[] BULLETS = ['•', '-', '*', '·', '●', '▪', '○'];
 
     #endregion

@@ -30,7 +30,8 @@ public sealed class CorpusStorageEstimate : ModelBase
                && InputBytes.Is(other.InputBytes)
                && Documents.Is(other.Documents)
                && SampledShards.Is(other.SampledShards)
-               && UnsizedSources.Is(other.UnsizedSources);
+               && UnsizedSources.Is(other.UnsizedSources)
+               && ProductsKept.Is(other.ProductsKept);
     }
 
     /// <summary>Deep copy.</summary>
@@ -46,7 +47,8 @@ public sealed class CorpusStorageEstimate : ModelBase
             InputBytes = InputBytes,
             Documents = Documents,
             SampledShards = SampledShards,
-            UnsizedSources = UnsizedSources
+            UnsizedSources = UnsizedSources,
+            ProductsKept = ProductsKept
         };
     }
 
@@ -82,6 +84,10 @@ public sealed class CorpusStorageEstimate : ModelBase
 
     /// <summary>Sources with no size known: they are not in the estimate.</summary>
     public int UnsizedSources { get; init; }
+
+    /// <summary>Whether the run keeps its text and signatures on the server; false for statistics and hashes only.</summary>
+    [ToString]
+    public bool ProductsKept { get; init; } = true;
 
     /// <summary>Everything together.</summary>
     [ToString]

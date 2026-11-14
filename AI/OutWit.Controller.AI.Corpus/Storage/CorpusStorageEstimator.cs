@@ -1,4 +1,6 @@
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Controller.AI.Corpus.Signatures;
 
 namespace OutWit.Controller.AI.Corpus.Storage;
 
@@ -7,8 +9,10 @@ namespace OutWit.Controller.AI.Corpus.Storage;
 /// measured ratios (<see cref="CorpusStorageRatios"/>): per shard its text product and its
 /// signatures; the sampled shards twice, since each execution uploads its own products (the
 /// largest shards are taken as the sampled ones, so the estimate does not depend on which the
-/// platform picks); the report, the integrity and the dedup documents; the inputs. Nothing is
-/// fetched: the sizes are the manifest's, or what the origin answered.
+/// platform picks); the report, the integrity and the dedup documents; the inputs. A pipeline that
+/// keeps statistics and hashes only leaves no text and no signatures, and no dedup document, so its
+/// estimate is the report, the integrity document and the inputs. Nothing is fetched: the sizes are
+/// the manifest's, or what the origin answered.
 /// </summary>
 public static class CorpusStorageEstimator
 {
@@ -34,6 +38,9 @@ public static class CorpusStorageEstimator
         var products = new List<long>(sources.Count);
         long text = 0, signatures = 0, documents = 0;
         var unsized = 0;
+        var keeps = pipeline.Output == CorpusOutputMode.Full;
+        var signs = ShardProcessor.Signs(pipeline);
+        var minHash = MinHashParameters.Resolve(pipeline.MinHash);
 
         foreach (var source in sources)
         {
@@ -45,9 +52,9 @@ public static class CorpusStorageEstimator
             }
 
             var ratio = CorpusStorageRatios.For(source.Format, pipeline);
-            var shardText = (long)Math.Ceiling(source.SizeBytes * ratio.TextPerByte);
+            var shardText = keeps ? (long)Math.Ceiling(source.SizeBytes * ratio.TextPerByte) : 0;
             var shardDocuments = (long)Math.Ceiling(source.SizeBytes / BYTES_PER_MIB * ratio.DocumentsPerMib);
-            var shardSignatures = pipeline.Sign ? CorpusStorageRatios.SIGNATURE_HEADER_BYTES + shardDocuments * CorpusStorageRatios.SIGNATURE_BYTES_PER_DOCUMENT : 0;
+            var shardSignatures = signs ? ShardSignatureWriter.HeaderSize(minHash) + shardDocuments * minHash.SignatureBytes : 0;
 
             text += shardText;
             signatures += shardSignatures;
@@ -63,11 +70,12 @@ public static class CorpusStorageEstimator
             TextBytes = text,
             SignatureBytes = signatures,
             ReplicaBytes = replicas,
-            DocumentBytes = DocumentBytes(sources.Count, sampled, documents, pipeline.Sign),
+            DocumentBytes = DocumentBytes(sources.Count, sampled, documents, signs),
             InputBytes = Math.Max(0, inputBytes),
             Documents = documents,
             SampledShards = sampled,
-            UnsizedSources = unsized
+            UnsizedSources = unsized,
+            ProductsKept = keeps
         };
     }
 

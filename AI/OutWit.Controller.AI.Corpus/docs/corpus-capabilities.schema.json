@@ -4,7 +4,7 @@
   "title": "Corpus capabilities",
   "description": "The capabilities blob of CorpusRuntimeDiagnostics (Corpus.Capabilities): what an application can know before a run. It takes no manifest. Nodes run the same controller version as the host (the platform admits no other version to the work), so the stages, parsers and limits listed are the pool's. No node is named.",
   "type": "object",
-  "required": ["schema", "controller", "benchmark_unit", "stages", "parsers", "language_model", "formats", "origins", "defaults", "ceilings", "pipeline", "pdf", "signatures", "products", "storage"],
+  "required": ["schema", "controller", "benchmark_unit", "stages", "parsers", "language_model", "formats", "origins", "defaults", "ceilings", "pipeline", "pdf", "signatures", "drop_rules", "products", "storage"],
   "additionalProperties": false,
   "properties": {
     "schema": { "type": "string", "const": "corpus-capabilities/1" },
@@ -95,7 +95,7 @@
     "pipeline": {
       "type": "object",
       "description": "The stage parameters a manifest's pipeline may set, with the defaults that apply when it does not.",
-      "required": ["switches", "quality", "quality_fixed"],
+      "required": ["switches", "output", "minhash", "quality", "quality_fixed"],
       "additionalProperties": false,
       "properties": {
         "switches": {
@@ -109,6 +109,37 @@
             "sign": { "type": "boolean" },
             "extract_pdf": { "type": "boolean", "description": "The PDF stage on WARC shards (see pdf)." },
             "filter_curly_bracket": { "type": "boolean", "description": "C4's curly-bracket rule, off unless the manifest turns it on." }
+          }
+        },
+        "output": {
+          "type": "object",
+          "description": "pipeline.output: what a run keeps on the server. \"full\" keeps every shard's text and signatures; \"stats_and_hashes\" keeps the statistics, the content hashes, the report and the integrity document only (the text and the signatures stay on the node and are deleted with the task; no near-duplicate merge).",
+          "required": ["default", "values"],
+          "additionalProperties": false,
+          "properties": {
+            "default": { "type": "string" },
+            "values": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "minhash": {
+          "type": "object",
+          "description": "pipeline.minhash: the MinHash parameters of the signatures and the near-duplicate merge, with their defaults and ranges (0 or absent: the default). A signatures blob made with another hash count or shingle size than the defaults starts with WITSIG2 and states its shingle size; Corpus.Dedup refuses to merge signatures made with different parameters.",
+          "required": ["hashes", "shingle_words", "bands"],
+          "additionalProperties": false,
+          "properties": {
+            "hashes": { "$ref": "#/$defs/range", "description": "Hash functions per signature (8 bytes each, per document)." },
+            "shingle_words": { "$ref": "#/$defs/range", "description": "Words per shingle." },
+            "bands": {
+              "type": "object",
+              "description": "LSH bands of the merge; must divide the hash count.",
+              "required": ["default", "min", "divides"],
+              "additionalProperties": false,
+              "properties": {
+                "default": { "type": "integer" },
+                "min": { "type": "integer" },
+                "divides": { "type": "string", "const": "hashes" }
+              }
+            }
           }
         },
         "quality": {
@@ -163,6 +194,7 @@
     },
     "signatures": {
       "type": "object",
+      "description": "The default MinHash parameters (pipeline.minhash sets others): the hashes, the shingle size, one document's signature in bytes, the merge's bands and rows per band.",
       "required": ["hashes", "shingle_words", "bytes_per_document", "bands", "rows_per_band"],
       "additionalProperties": false,
       "properties": {
@@ -173,17 +205,31 @@
         "rows_per_band": { "type": "integer" }
       }
     },
+    "drop_rules": {
+      "type": "array",
+      "description": "Every rule a shard's statistics can count a drop under, with the stage that applies it, in the order a document meets them: extract (records and PDFs that give no document), language, lines, quality. The report's funnel sums the drops by these stages.",
+      "items": {
+        "type": "object",
+        "required": ["name", "stage"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "stage": { "type": "string", "enum": ["extract", "language", "lines", "quality"] }
+        }
+      }
+    },
     "products": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "file", "per", "schema"],
+        "required": ["name", "file", "per", "schema", "outputs"],
         "additionalProperties": false,
         "properties": {
           "name": { "type": "string" },
           "file": { "type": "string", "description": "The blob's file name." },
           "per": { "type": "string", "enum": ["shard", "job", "dedup"], "description": "One per shard execution, one per CorpusProcess job, or one per CorpusDedup run." },
-          "schema": { "type": "string", "description": "The schema tag of a JSON document; \"\" for a product with a fixed binary or JSON-lines layout (the README)." }
+          "schema": { "type": "string", "description": "The schema tag of a JSON document; \"\" for a product with a fixed binary or JSON-lines layout (the README)." },
+          "outputs": { "type": "array", "items": { "type": "string", "enum": ["full", "stats_and_hashes"] }, "description": "The output modes that keep the product on the server." }
         }
       }
     },
@@ -227,6 +273,16 @@
     }
   },
   "$defs": {
+    "range": {
+      "type": "object",
+      "required": ["default", "min", "max"],
+      "additionalProperties": false,
+      "properties": {
+        "default": { "type": "integer" },
+        "min": { "type": "integer" },
+        "max": { "type": "integer" }
+      }
+    },
     "limit": {
       "type": "object",
       "required": ["spaced", "unspaced"],

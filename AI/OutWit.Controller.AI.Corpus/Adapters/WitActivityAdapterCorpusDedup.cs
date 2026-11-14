@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Dedup;
@@ -40,18 +39,26 @@ internal sealed class WitActivityAdapterCorpusDedup : WitActivityAdapterFunction
         pool.TryGetValue(activity.Options, out CorpusOptionsData? options);
         var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
 
+        // A run without signatures, or with signatures made in different ways, is refused by name.
+        var input = CorpusDedupInput.Read(await File.ReadAllBytesAsync(await BlobService.GetLocalPathAsync(reportBlobId), cancellationToken));
+        if (input.Refusal != null)
+            throw new InvalidOperationException($"Corpus.Dedup: {input.Refusal}");
+
         var shards = new List<CorpusDedupShard>();
-        foreach (var (index, signaturesBlobId) in ReadSignatureBlobs(await File.ReadAllBytesAsync(await BlobService.GetLocalPathAsync(reportBlobId), cancellationToken)))
+        foreach (var source in input.Shards)
         {
-            var bytes = await File.ReadAllBytesAsync(await BlobService.GetLocalPathAsync(signaturesBlobId), cancellationToken);
-            shards.Add(new CorpusDedupShard(index, signaturesBlobId, ShardSignatureWriter.Read(bytes)));
+            var bytes = await File.ReadAllBytesAsync(await BlobService.GetLocalPathAsync(source.SignaturesBlobId), cancellationToken);
+            if (CorpusDedupInput.Check(source, bytes) is { } mismatch)
+                throw new InvalidOperationException($"Corpus.Dedup: {mismatch}");
+
+            shards.Add(new CorpusDedupShard(source.Index, source.SignaturesBlobId, ShardSignatureWriter.Read(bytes)));
         }
 
-        var result = await Task.Run(() => new CorpusDeduplicator(options?.DedupThreshold ?? 0).Run(shards, cancellationToken), cancellationToken);
-        Logger.LogInformation("Corpus.Dedup: {Documents} document(s) in {Shards} shard(s), {Duplicates} near-duplicate(s) in {Clusters} cluster(s) at threshold {Threshold}",
-            result.Documents, result.Shards.Count, result.Duplicates, result.Clusters.Count, result.Threshold);
+        var result = await Task.Run(() => new CorpusDeduplicator(options?.DedupThreshold ?? 0, input.Parameters.Bands).Run(shards, cancellationToken), cancellationToken);
+        Logger.LogInformation("Corpus.Dedup: {Documents} document(s) in {Shards} shard(s), {Duplicates} near-duplicate(s) in {Clusters} cluster(s) at threshold {Threshold}, {Parameters}",
+            result.Documents, result.Shards.Count, result.Duplicates, result.Clusters.Count, result.Threshold, input.Parameters.Describe());
 
-        var blobId = await BlobService.UploadBytesAsync(CorpusDedupWriter.Write(result), BLOB_NAME);
+        var blobId = await BlobService.UploadBytesAsync(CorpusDedupWriter.Write(result, input.Parameters), BLOB_NAME);
 
         if (!pool.TrySetValue(activity.ReturnReference, blobId))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
@@ -60,25 +67,14 @@ internal sealed class WitActivityAdapterCorpusDedup : WitActivityAdapterFunction
     /// <summary>The completed shards' signature blobs from a corpus report.</summary>
     /// <param name="report">The report bytes.</param>
     /// <returns>Shard index and blob id, in report order.</returns>
-    /// <exception cref="InvalidOperationException">Not a corpus report.</exception>
+    /// <exception cref="InvalidOperationException">Not a corpus report, or a run the merge refuses (see <see cref="CorpusDedupInput"/>).</exception>
     public static List<(int Index, Guid SignaturesBlobId)> ReadSignatureBlobs(byte[] report)
     {
-        using var document = JsonDocument.Parse(report);
-        var root = document.RootElement;
-        if (root.ValueKind != JsonValueKind.Object || root.GetProperty("schema").GetString() is not (CorpusReportWriter.SCHEMA or CorpusReportWriter.PREVIOUS_SCHEMA))
-            throw new InvalidOperationException($"The report is not a {CorpusReportWriter.SCHEMA} document.");
+        var input = CorpusDedupInput.Read(report);
+        if (input.Refusal != null)
+            throw new InvalidOperationException(input.Refusal);
 
-        var blobs = new List<(int, Guid)>();
-        foreach (var shard in root.GetProperty("shards").EnumerateArray())
-        {
-            if (shard.GetProperty("verdict").GetString() != CorpusShardVerdict.Completed.ToString())
-                continue;
-
-            if (Guid.TryParse(shard.GetProperty("signatures_blob").GetString(), out var blobId) && blobId != Guid.Empty)
-                blobs.Add((shard.GetProperty("index").GetInt32(), blobId));
-        }
-
-        return blobs;
+        return input.Shards.Select(shard => (shard.Index, shard.SignaturesBlobId)).ToList();
     }
 
     #endregion

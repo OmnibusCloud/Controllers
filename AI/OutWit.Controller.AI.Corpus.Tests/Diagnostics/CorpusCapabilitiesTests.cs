@@ -174,6 +174,37 @@ public sealed class CorpusCapabilitiesTests
     }
 
     [Test]
+    public void TheDocumentNamesTheOutputModesTheMinHashRangesAndTheDropStagesTest()
+    {
+        using var document = JsonDocument.Parse(CorpusCapabilitiesWriter.Write(m_diagnostics, null, CorpusStorageLimit.NONE));
+        var pipeline = document.RootElement.GetProperty("pipeline");
+        var minHash = pipeline.GetProperty("minhash");
+        var rules = document.RootElement.GetProperty("drop_rules").EnumerateArray().ToList();
+        var products = document.RootElement.GetProperty("products").EnumerateArray().ToDictionary(
+            product => product.GetProperty("name").GetString()!,
+            product => product.GetProperty("outputs").EnumerateArray().Select(output => output.GetString()).ToList());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(pipeline.GetProperty("output").GetProperty("default").GetString(), Is.EqualTo("full"));
+            Assert.That(pipeline.GetProperty("output").GetProperty("values").EnumerateArray().Select(value => value.GetString()), Is.EqualTo(new[] { "full", "stats_and_hashes" }));
+            Assert.That(minHash.GetProperty("hashes").GetProperty("default").GetInt32(), Is.EqualTo(128));
+            Assert.That(minHash.GetProperty("hashes").GetProperty("max").GetInt32(), Is.EqualTo(1024));
+            Assert.That(minHash.GetProperty("shingle_words").GetProperty("default").GetInt32(), Is.EqualTo(5));
+            Assert.That(minHash.GetProperty("shingle_words").GetProperty("max").GetInt32(), Is.EqualTo(32));
+            Assert.That(minHash.GetProperty("bands").GetProperty("default").GetInt32(), Is.EqualTo(16));
+            Assert.That(rules.Select(rule => rule.GetProperty("name").GetString()), Is.EqualTo(ShardDropRules.ALL.Select(rule => rule.Rule)));
+            Assert.That(rules.Single(rule => rule.GetProperty("name").GetString() == "no_prose_lines").GetProperty("stage").GetString(), Is.EqualTo("lines"));
+            Assert.That(rules.Select(rule => rule.GetProperty("name").GetString()), Is.SupersetOf(QualityFilter.RULES).And.SupersetOf(ShardPdfStage.DROPS));
+            Assert.That(products["text"], Is.EqualTo(new[] { "full" }));
+            Assert.That(products["signatures"], Is.EqualTo(new[] { "full" }));
+            Assert.That(products["dedup"], Is.EqualTo(new[] { "full" }));
+            Assert.That(products["report"], Is.EqualTo(new[] { "full", "stats_and_hashes" }));
+            Assert.That(products["integrity"], Is.EqualTo(new[] { "full", "stats_and_hashes" }));
+        });
+    }
+
+    [Test]
     public void AHostThatCannotSayLeavesThePoolOutTest()
     {
         using var document = JsonDocument.Parse(CorpusCapabilitiesWriter.Write(m_diagnostics, null, CorpusStorageLimit.NONE));

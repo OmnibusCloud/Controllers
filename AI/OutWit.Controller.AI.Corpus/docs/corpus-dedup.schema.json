@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-dedup.schema.json",
   "title": "Corpus dedup",
-  "description": "The output of Corpus.Dedup over a corpus-report/1 document: the near-duplicate merge across every completed shard of a run. Per shard a keep mask over the product's documents; the clusters of two or more as (shard, ordinal) pairs, listed up to a cap — the masks carry the complete decision.",
+  "description": "The output of Corpus.Dedup over a corpus-report/2 (or /1) document: the near-duplicate merge across every completed shard of a run. Per shard a keep mask over the product's documents; the clusters of two or more as (shard, ordinal) pairs, listed up to a cap — the masks carry the complete decision. A run without signatures (output stats_and_hashes, or sign false) and a run whose shards' signatures were made with different MinHash parameters are refused, by name.",
   "type": "object",
   "required": ["schema", "controller", "summary", "shards", "clusters"],
   "properties": {
@@ -13,7 +13,9 @@
       "required": ["threshold", "bands", "shards", "documents", "duplicates", "kept", "clusters", "clusters_listed"],
       "properties": {
         "threshold": { "type": "number", "description": "The Jaccard estimate a pair needed to be one cluster." },
-        "bands": { "type": "integer", "description": "LSH bands over the 128-hash signature." },
+        "bands": { "type": "integer", "description": "LSH bands over the signature (16 by default; pipeline.minhash.bands)." },
+        "hashes": { "type": "integer", "description": "Hashes per signature of the signatures merged (128 by default). Absent from documents of controllers before 0.3.0." },
+        "shingle_words": { "type": "integer", "description": "Words per shingle of the signatures merged (5 by default). Absent from documents of controllers before 0.3.0." },
         "shards": { "type": "integer" },
         "documents": { "type": "integer" },
         "duplicates": { "type": "integer", "description": "Documents that are near-duplicates of an earlier one (the mask drops them)." },

@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Corpus</ControllerName>
-    <Version>0.2.1</Version>
+    <Version>0.3.0</Version>
     <Description>Public-corpus processing at CPU scale on anonymous nodes: streamed WARC/WET reading, HTML to text, PDF to text in a wasm sandbox, language identification, quality filtering and MinHash deduplication signatures - deterministic by requirement, the node fetching its shard straight from the public origin (Common Crawl first).</Description>
     <PackageTags>corpus;common-crawl;warc;wet;pdf;text-extraction;language-id;dedup;minhash;wasm;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>corpus-process-shard</ControllerFeatures>

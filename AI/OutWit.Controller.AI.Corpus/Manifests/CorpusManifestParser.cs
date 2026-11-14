@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Signatures;
 
 namespace OutWit.Controller.AI.Corpus.Manifests;
 
@@ -15,7 +16,8 @@ public static class CorpusManifestParser
     #region Constants
 
     private static readonly HashSet<string> ROOT_KEYS = new(StringComparer.Ordinal) { "pipeline", "allowed_origins", "sources" };
-    private static readonly HashSet<string> PIPELINE_KEYS = new(StringComparer.Ordinal) { "version", "language_model_sha256", "target_languages", "identify_language", "clean_lines", "filter_quality", "sign", "extract_pdf", "quality", "filter_curly_bracket" };
+    private static readonly HashSet<string> PIPELINE_KEYS = new(StringComparer.Ordinal) { "version", "language_model_sha256", "target_languages", "identify_language", "clean_lines", "filter_quality", "sign", "extract_pdf", "quality", "filter_curly_bracket", "minhash", "output" };
+    private static readonly HashSet<string> MINHASH_KEYS = new(StringComparer.Ordinal) { "hashes", "shingle_words", "bands" };
     private static readonly HashSet<string> SOURCE_KEYS = new(StringComparer.Ordinal) { "url", "format", "size", "sha256" };
     private static readonly HashSet<string> QUALITY_KEYS = new(StringComparer.Ordinal)
     {
@@ -142,6 +144,12 @@ public static class CorpusManifestParser
                 case "filter_curly_bracket":
                     curlyBracket = Bool(property, "pipeline", errors);
                     break;
+                case "minhash":
+                    pipeline.MinHash = ParseMinHash(property.Value, errors);
+                    break;
+                case "output":
+                    pipeline.Output = ParseOutput(property, errors);
+                    break;
                 default:
                     errors.Add($"pipeline: unknown key '{property.Name}'.");
                     break;
@@ -160,6 +168,55 @@ public static class CorpusManifestParser
             errors.Add("pipeline: 'language_model_sha256' must be 64 hex digits.");
 
         return pipeline;
+    }
+
+    private static CorpusMinHashData ParseMinHash(JsonElement element, List<string> errors)
+    {
+        var minHash = new CorpusMinHashData();
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            errors.Add("pipeline.minhash: must be an object.");
+            return minHash;
+        }
+
+        var wellTyped = true;
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!MINHASH_KEYS.Contains(property.Name))
+            {
+                errors.Add($"pipeline.minhash: unknown key '{property.Name}'.");
+                wellTyped = false;
+                continue;
+            }
+
+            if (property.Value.ValueKind != JsonValueKind.Number || !property.Value.TryGetInt32(out var value))
+            {
+                errors.Add($"pipeline.minhash: '{property.Name}' must be an integer.");
+                wellTyped = false;
+                continue;
+            }
+
+            switch (property.Name)
+            {
+                case "hashes": minHash.Hashes = value; break;
+                case "shingle_words": minHash.ShingleWords = value; break;
+                case "bands": minHash.Bands = value; break;
+            }
+        }
+
+        if (wellTyped && MinHashParameters.Problem(minHash) is { } problem)
+            errors.Add($"pipeline.minhash: {problem}");
+
+        return minHash;
+    }
+
+    private static CorpusOutputMode ParseOutput(JsonProperty property, List<string> errors)
+    {
+        if (property.Value.ValueKind == JsonValueKind.String && CorpusOutputModeNames.TryParse(property.Value.GetString(), out var mode))
+            return mode;
+
+        errors.Add($"pipeline: 'output' must be \"{CorpusOutputModeNames.FULL}\" or \"{CorpusOutputModeNames.STATS_AND_HASHES}\", not {property.Value.GetRawText()}.");
+        return CorpusOutputMode.Full;
     }
 
     private static CorpusQualityData ParseQuality(JsonElement element, List<string> errors)

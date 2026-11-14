@@ -19,8 +19,10 @@ namespace OutWit.Controller.AI.Corpus.Diagnostics;
 /// The capabilities document: what an application can know before a run. The controller's
 /// version and stage set, the parsers, the language-pack formats and the reference pack,
 /// where a machine fetches from, the defaults and the ceilings, the stage parameters a job may
-/// set with their defaults, the PDF stage's module and limits, the products, the measured storage
-/// ratios with the deployment's headroom, and the pool as totals. A JSON document like every other output, so an
+/// set with their defaults (the output mode and the MinHash parameters among them), the PDF stage's
+/// module and limits, every drop rule with the stage that applies it, the products and the output
+/// modes that keep them, the measured storage ratios with the deployment's headroom, and the pool as
+/// totals. A JSON document like every other output, so an
 /// application reads it without the controller's types. Schema <c>corpus-capabilities/1</c>.
 /// </summary>
 public static class CorpusCapabilitiesWriter
@@ -59,6 +61,7 @@ public static class CorpusCapabilitiesWriter
             WritePipeline(writer);
             WritePdf(writer, diagnostics);
             WriteSignatures(writer);
+            WriteDropRules(writer);
             WriteProducts(writer);
             WriteStorage(writer, limit);
             WritePool(writer, pool);
@@ -174,6 +177,21 @@ public static class CorpusCapabilitiesWriter
         writer.WriteBoolean("filter_curly_bracket", new CorpusQualityData().FilterCurlyBracket);
         writer.WriteEndObject();
 
+        writer.WriteStartObject("output");
+        writer.WriteString("default", CorpusOutputModeNames.Name(defaults.Output));
+        WriteStrings(writer, "values", CorpusOutputModeNames.ALL);
+        writer.WriteEndObject();
+
+        writer.WriteStartObject("minhash");
+        WriteRange(writer, "hashes", MinHashParameters.DEFAULT.Hashes, 1, MinHashSigner.MAX_HASHES);
+        WriteRange(writer, "shingle_words", MinHashParameters.DEFAULT.ShingleWords, 1, MinHashSigner.MAX_SHINGLE_WORDS);
+        writer.WriteStartObject("bands");
+        writer.WriteNumber("default", MinHashParameters.DEFAULT.Bands);
+        writer.WriteNumber("min", 1);
+        writer.WriteString("divides", "hashes");
+        writer.WriteEndObject();
+        writer.WriteEndObject();
+
         writer.WriteStartObject("quality");
         foreach (var (key, read) in QualityKeys())
         {
@@ -228,24 +246,49 @@ public static class CorpusCapabilitiesWriter
         writer.WriteEndObject();
     }
 
-    private static void WriteProducts(Utf8JsonWriter writer)
+    private static void WriteDropRules(Utf8JsonWriter writer)
     {
-        writer.WriteStartArray("products");
-        WriteProduct(writer, "text", "text.jsonl.zst", "shard", "");
-        WriteProduct(writer, "signatures", "signatures.bin", "shard", "");
-        WriteProduct(writer, "report", "corpus-report.json", "job", CorpusReportWriter.SCHEMA);
-        WriteProduct(writer, "integrity", "corpus-integrity.json", "job", CorpusIntegrityWriter.SCHEMA);
-        WriteProduct(writer, "dedup", "corpus-dedup.json", "dedup", CorpusDedupWriter.SCHEMA);
+        writer.WriteStartArray("drop_rules");
+        foreach (var (rule, stage) in ShardDropRules.ALL)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("name", rule);
+            writer.WriteString("stage", stage);
+            writer.WriteEndObject();
+        }
         writer.WriteEndArray();
     }
 
-    private static void WriteProduct(Utf8JsonWriter writer, string name, string file, string per, string schema)
+    private static void WriteProducts(Utf8JsonWriter writer)
+    {
+        string[] full = [CorpusOutputModeNames.FULL];
+
+        writer.WriteStartArray("products");
+        WriteProduct(writer, "text", "text.jsonl.zst", "shard", "", full);
+        WriteProduct(writer, "signatures", "signatures.bin", "shard", "", full);
+        WriteProduct(writer, "report", "corpus-report.json", "job", CorpusReportWriter.SCHEMA, CorpusOutputModeNames.ALL);
+        WriteProduct(writer, "integrity", "corpus-integrity.json", "job", CorpusIntegrityWriter.SCHEMA, CorpusOutputModeNames.ALL);
+        WriteProduct(writer, "dedup", "corpus-dedup.json", "dedup", CorpusDedupWriter.SCHEMA, full);
+        writer.WriteEndArray();
+    }
+
+    private static void WriteProduct(Utf8JsonWriter writer, string name, string file, string per, string schema, IEnumerable<string> outputs)
     {
         writer.WriteStartObject();
         writer.WriteString("name", name);
         writer.WriteString("file", file);
         writer.WriteString("per", per);
         writer.WriteString("schema", schema);
+        WriteStrings(writer, "outputs", outputs);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteRange(Utf8JsonWriter writer, string name, int defaultValue, int min, int max)
+    {
+        writer.WriteStartObject(name);
+        writer.WriteNumber("default", defaultValue);
+        writer.WriteNumber("min", min);
+        writer.WriteNumber("max", max);
         writer.WriteEndObject();
     }
 

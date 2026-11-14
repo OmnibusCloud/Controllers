@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Diagnostics;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Signatures;
 using OutWit.Controller.AI.Corpus.Warc;
 using OutWit.Engine.Interfaces;
 
@@ -11,7 +12,9 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 
 /// <summary>
 /// One task on a node, start to finish: the allowlist re-check against the task and the
-/// machine's own policy, the pinned model, the capped fetch, the pipeline, the uploads. Every way a shard can fail is a verdict in the result,
+/// machine's own policy, the pinned model, the capped fetch, the pipeline, the uploads (none
+/// when the pipeline keeps statistics and hashes only: the text and the signatures are deleted
+/// with the task's folder, the result carries the hash and the counters). Every way a shard can fail is a verdict in the result,
 /// not an exception — the job completes and the report says what happened to each shard —
 /// except a fault of this node that another node would not have: a PDF the node cannot run
 /// (<see cref="Pdf.PdfSandboxException"/>) and a product it cannot upload. Those propagate, with
@@ -84,7 +87,8 @@ public static class ShardTaskRunner
             SourceUrl = task.Source?.Url ?? "",
             ControllerVersion = ControllerBuildInfo.VERSION,
             RuntimeTarget = CorpusRuntimeDiagnosticsBuilder.RuntimeTarget(),
-            Degree = DEGREE
+            Degree = DEGREE,
+            Output = task.Pipeline?.Output ?? CorpusOutputMode.Full
         };
 
         if (task.Source == null || task.Pipeline == null)
@@ -178,9 +182,15 @@ public static class ShardTaskRunner
 
         processClock.Stop();
 
-        result.TextBlobId = await ShardBlobTransfer.UploadAsync(blobs, textPath, logger, cancellationToken);
-        if (task.Pipeline.Sign)
+        // Statistics and hashes only: the products stay in the task's folder and go with it.
+        if (task.Pipeline.Output == CorpusOutputMode.Full)
+            result.TextBlobId = await ShardBlobTransfer.UploadAsync(blobs, textPath, logger, cancellationToken);
+
+        if (ShardProcessor.Signs(task.Pipeline))
+        {
             result.SignaturesBlobId = await ShardBlobTransfer.UploadAsync(blobs, signaturesPath, logger, cancellationToken);
+            result.MinHash = MinHashParameters.Resolve(task.Pipeline.MinHash).ToData();
+        }
 
         result.Verdict = CorpusShardVerdict.Completed;
         result.ContentSha256 = product.ContentSha256;

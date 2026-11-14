@@ -94,6 +94,8 @@ public sealed class CorpusSchemaDocsTests
         var pipeline = manifest.RootElement.GetProperty("properties").GetProperty("pipeline").GetProperty("properties");
         var switches = pipeline.EnumerateObject().Where(property => property.Value.TryGetProperty("type", out var type) && type.GetString() == "boolean").Select(property => property.Name);
         var quality = PropertyNames(pipeline.GetProperty("quality").GetProperty("properties"));
+        var minHash = PropertyNames(pipeline.GetProperty("minhash").GetProperty("properties"));
+        var outputs = pipeline.GetProperty("output").GetProperty("enum").EnumerateArray().Select(value => value.GetString());
 
         using var capabilities = JsonDocument.Parse(CorpusCapabilitiesWriter.Write(CorpusRuntimeDiagnosticsBuilder.Build(ShardOriginPolicy.Parse(null)), null, CorpusStorageLimit.NONE));
         var written = capabilities.RootElement.GetProperty("pipeline");
@@ -102,6 +104,9 @@ public sealed class CorpusSchemaDocsTests
         {
             Assert.That(PropertyNames(written.GetProperty("switches")), Is.EquivalentTo(switches), "a manifest switch the capabilities do not list, or the reverse");
             Assert.That(PropertyNames(written.GetProperty("quality")), Is.EquivalentTo(quality), "a manifest quality key the capabilities do not list, or the reverse");
+            Assert.That(PropertyNames(written.GetProperty("minhash")), Is.EquivalentTo(minHash), "a manifest MinHash key the capabilities do not list, or the reverse");
+            Assert.That(written.GetProperty("output").GetProperty("values").EnumerateArray().Select(value => value.GetString()), Is.EqualTo(outputs), "the output modes of the manifest and the capabilities");
+            Assert.That(written.GetProperty("output").GetProperty("default").GetString(), Is.EqualTo(pipeline.GetProperty("output").GetProperty("default").GetString()));
         });
     }
 
@@ -119,12 +124,14 @@ public sealed class CorpusSchemaDocsTests
             {
                 TaskIndex = 0, Verdict = CorpusShardVerdict.Completed, TextBlobId = Guid.NewGuid(), SignaturesBlobId = Guid.NewGuid(),
                 ContentSha256 = "aa", ControllerVersion = "0.1.13", SourceUrl = "https://data.commoncrawl.org/a.warc.wet.gz", RuntimeTarget = "linux-x64", Degree = 4,
+                MinHash = new CorpusMinHashData { Hashes = 128, ShingleWords = 5, Bands = 16 },
                 Stats = new CorpusShardStatsData { RecordsIn = 10, DocumentsExtracted = 9, DocumentsOut = 5, Drops = [new CorpusCountData { Name = "min_words", Count = 4 }], Languages = [new CorpusCountData { Name = "eng", Count = 5 }] }
             },
             new()
             {
                 TaskIndex = 2, Verdict = CorpusShardVerdict.Completed, TextBlobId = Guid.NewGuid(), SignaturesBlobId = Guid.NewGuid(),
                 ContentSha256 = "bb", ControllerVersion = "0.2.0", SourceUrl = "https://data.commoncrawl.org/a.warc.gz", RuntimeTarget = "windows-x64", Degree = 8,
+                MinHash = new CorpusMinHashData { Hashes = 128, ShingleWords = 5, Bands = 16 },
                 Stats = new CorpusShardStatsData
                 {
                     RecordsIn = 30, DocumentsExtracted = 12, DocumentsOut = 6, Drops = [new CorpusCountData { Name = "pdf_encrypted", Count = 1 }], Languages = [new CorpusCountData { Name = "eng", Count = 6 }],

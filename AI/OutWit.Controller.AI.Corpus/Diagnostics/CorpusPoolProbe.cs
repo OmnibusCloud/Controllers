@@ -34,6 +34,19 @@ public static class CorpusPoolProbe
         return Summarize(compatible.Select(node => node.BenchmarkResult));
     }
 
+    /// <summary>The pool's nodes as the share plan sees them: a rate and whether it was measured, nothing that names a node.</summary>
+    /// <param name="nodes">The host's nodes manager, or null when the process has none (a node, a test host).</param>
+    /// <returns>One entry per node, or null when the host cannot say.</returns>
+    public static async Task<IReadOnlyList<CorpusShareNode>?> RatesAsync(IWitNodesManager? nodes)
+    {
+        if (nodes == null)
+            return null;
+
+        var compatible = await nodes.GetCompatibleNodes<WitActivityCorpusProcessShard>(WitProcessingOptions.Default);
+
+        return compatible.Select(node => new CorpusShareNode(node.BenchmarkResult.Rate, node.BenchmarkResult.Iterations > 0)).ToList();
+    }
+
     /// <summary>Adds up the benchmark results of the pool's nodes.</summary>
     /// <param name="benchmarks">One result per node; a node that has not measured itself carries another unit or none.</param>
     /// <returns>The totals.</returns>

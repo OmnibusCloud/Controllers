@@ -134,6 +134,7 @@ public static class Program
         Console.WriteLine($"  storage     : {report.EstimatedStorageBytes / BYTES_PER_MIB:F1} MB estimated on the server" +
                           (report.StorageHeadroomBytes > 0 ? $", headroom {report.StorageHeadroomBytes / BYTES_PER_MIB:F1} MB" : ", no headroom stated") +
                           (report.StorageRetentionDays > 0 ? $", kept {report.StorageRetentionDays} day(s)" : ""));
+        Console.WriteLine($"  busiest     : {(report.PlannedNodes > 0 ? $"{report.BusiestNodeShare * 100:F1} % of the work, {report.PlannedNodes} node(s) planned" : "not known")}");
         Console.WriteLine($"  refused     : {(report.RefusedOrigins.Count == 0 ? "-" : string.Join(", ", report.RefusedOrigins))}");
         Console.WriteLine($"  oversized   : {report.OversizedSources}");
         foreach (var message in report.Messages)
@@ -284,6 +285,10 @@ public static class Program
                           $"fetched {summary.GetProperty("bytes_fetched").GetInt64() / (1024.0 * 1024.0):F1} MB, produced {summary.GetProperty("bytes_produced").GetInt64() / (1024.0 * 1024.0):F1} MB");
         Console.WriteLine($"             languages: {string.Join(", ", summary.GetProperty("languages").EnumerateObject().OrderByDescending(l => l.Value.GetInt64()).Take(8).Select(l => $"{l.Name} {l.Value.GetInt64()}"))}");
         Console.WriteLine($"             drops: {string.Join(", ", summary.GetProperty("drops").EnumerateObject().OrderByDescending(d => d.Value.GetInt64()).Take(6).Select(d => $"{d.Name} {d.Value.GetInt64()}"))}");
+        if (summary.TryGetProperty("funnel", out var funnel))
+            Console.WriteLine($"             funnel: records {funnel.GetProperty("records").GetInt64()} > extracted {funnel.GetProperty("extracted").GetInt64()} > language {funnel.GetProperty("language").GetInt64()} > lines {funnel.GetProperty("lines").GetInt64()} > quality {funnel.GetProperty("quality").GetInt64()} = out {funnel.GetProperty("out").GetInt64()}");
+        if (summary.TryGetProperty("output", out var output))
+            Console.WriteLine($"             output: {output.GetString()}");
 
         var hashes = new List<string>();
         foreach (var shard in root.GetProperty("shards").EnumerateArray())

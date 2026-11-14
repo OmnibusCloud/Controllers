@@ -1,13 +1,18 @@
 using System.Text.Json;
+using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Shards;
 
 namespace OutWit.Controller.AI.Corpus.Reports;
 
 /// <summary>
 /// The job report: every shard's verdict, blobs and content hash in task order, and the
-/// aggregate — documents in and out, bytes moved, the drop and language histograms summed
-/// over the fleet, and what the PDF stage did (the <c>pdf_*</c> counts, present only where a
-/// shard met a PDF). No document says which machine ran what. Schema <c>corpus-report/2</c>.
+/// aggregate — documents in and out, bytes moved, the funnel (records, documents extracted, and
+/// what is left after the language, line and quality stages), the drop and language histograms
+/// summed over the fleet, what the PDF stage did (the <c>pdf_*</c> counts, present only where a
+/// shard met a PDF), what the run kept on the server (<c>output</c>) and the MinHash parameters of
+/// its signatures. No document says which machine ran what. Schema <c>corpus-report/2</c>: every
+/// field added since its first version is optional to a reader.
 /// </summary>
 public static class CorpusReportWriter
 {
@@ -36,6 +41,8 @@ public static class CorpusReportWriter
 
         long recordsIn = 0, extracted = 0, documentsOut = 0, fetched = 0, produced = 0;
         CorpusPdfStatsData? pdf = null;
+        var output = ordered.Any(result => result.Output == CorpusOutputMode.StatsAndHashes) ? CorpusOutputMode.StatsAndHashes : CorpusOutputMode.Full;
+        var minHashes = ordered.Where(result => result.MinHash != null).Select(result => result.MinHash!).ToList();
         foreach (var result in ordered)
         {
             verdicts[result.Verdict.ToString()] = verdicts.GetValueOrDefault(result.Verdict.ToString()) + 1;
@@ -79,6 +86,10 @@ public static class CorpusReportWriter
             WriteCounts(writer, "languages", languages);
             WriteCounts(writer, "unsupported_languages", unsupported);
             WritePdf(writer, pdf);
+            WriteFunnel(writer, recordsIn, extracted, documentsOut, drops);
+            writer.WriteString("output", CorpusOutputModeNames.Name(output));
+            if (minHashes.Count > 0 && minHashes.All(minHash => minHash.Is(minHashes[0])))
+                WriteMinHash(writer, minHashes[0]);
             writer.WriteEndObject();
 
             writer.WriteStartArray("shards");
@@ -105,6 +116,8 @@ public static class CorpusReportWriter
         writer.WriteString("controller", result.ControllerVersion);
         writer.WriteString("runtime_target", result.RuntimeTarget);
         writer.WriteNumber("degree", result.Degree);
+        if (result.MinHash != null)
+            WriteMinHash(writer, result.MinHash);
 
         if (result.Stats is { } stats)
         {
@@ -143,6 +156,46 @@ public static class CorpusReportWriter
         writer.WriteNumber("pdf_pages_cut", pdf.PagesCut);
         writer.WriteNumber("pdf_running_lines", pdf.RunningLines);
         writer.WriteNumber("pdf_fuel", pdf.Fuel);
+    }
+
+    /// <summary>
+    /// The run's funnel: the records read, the documents extracted, and what is left after the
+    /// language stage, the line stage and the quality filter (the documents out), with the drops
+    /// of each stage. The extraction drops count records and PDFs that gave no document, so they
+    /// are beside the funnel, not inside it: a WARC shard's requests and metadata records are read
+    /// and are no documents.
+    /// </summary>
+    private static void WriteFunnel(Utf8JsonWriter writer, long records, long extracted, long documentsOut, IReadOnlyDictionary<string, long> drops)
+    {
+        var dropped = ShardDropRules.STAGES.ToDictionary(stage => stage, _ => 0L, StringComparer.Ordinal);
+        foreach (var (rule, count) in drops)
+            dropped[ShardDropRules.StageOf(rule)] += count;
+
+        var language = extracted - dropped[ShardDropRules.STAGE_LANGUAGE];
+        var lines = language - dropped[ShardDropRules.STAGE_LINES];
+        var quality = lines - dropped[ShardDropRules.STAGE_QUALITY];
+
+        writer.WriteStartObject("funnel");
+        writer.WriteNumber("records", records);
+        writer.WriteNumber("extracted", extracted);
+        writer.WriteNumber("language", language);
+        writer.WriteNumber("lines", lines);
+        writer.WriteNumber("quality", quality);
+        writer.WriteNumber("out", documentsOut);
+        writer.WriteStartObject("dropped");
+        foreach (var stage in ShardDropRules.STAGES)
+            writer.WriteNumber(stage, dropped[stage]);
+        writer.WriteEndObject();
+        writer.WriteEndObject();
+    }
+
+    private static void WriteMinHash(Utf8JsonWriter writer, CorpusMinHashData minHash)
+    {
+        writer.WriteStartObject("minhash");
+        writer.WriteNumber("hashes", minHash.Hashes);
+        writer.WriteNumber("shingle_words", minHash.ShingleWords);
+        writer.WriteNumber("bands", minHash.Bands);
+        writer.WriteEndObject();
     }
 
     private static CorpusPdfStatsData Add(CorpusPdfStatsData sum, CorpusPdfStatsData shard)

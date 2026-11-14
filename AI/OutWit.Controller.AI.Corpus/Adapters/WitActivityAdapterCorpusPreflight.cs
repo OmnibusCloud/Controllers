@@ -1,5 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
+using OutWit.Controller.AI.Corpus.Diagnostics;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Storage;
@@ -20,10 +22,11 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
 
     #region Constructors
 
-    public WitActivityAdapterCorpusPreflight(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
+    public WitActivityAdapterCorpusPreflight(IWitProcessingManager processingManager, IWitBlobService blobService, IServiceProvider services, ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        Services = services;
     }
 
     #endregion
@@ -78,10 +81,38 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
                 report.WellFormed = false;
                 report.Messages.Add(refusal);
             }
+
+            // The busiest contributor's share at this fleet: a share and counts, never a node.
+            var share = await PlanSharesAsync(sizes, options?.SamplingRate ?? 0);
+            if (share != null)
+            {
+                report.BusiestNodeShare = share.BusiestShare;
+                report.PlannedNodes = share.PlannedNodes;
+                report.Messages.Add(share.Describe());
+            }
         }
 
         if (!pool.TrySetValue(activity.ReturnReference, report))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+    }
+
+    #endregion
+
+    #region Tools
+
+    private async Task<CorpusSharePlan?> PlanSharesAsync(IReadOnlyList<long> sizes, double samplingRate)
+    {
+        // The nodes manager exists on a host only; a host that cannot answer leaves the share out.
+        try
+        {
+            var nodes = await CorpusPoolProbe.RatesAsync(Services.GetService<IWitNodesManager>());
+            return nodes == null ? null : CorpusSharePlanner.Plan(nodes, sizes, samplingRate);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Corpus.Preflight: the pool could not be asked; the busiest node's share is left out.");
+            return null;
+        }
     }
 
     #endregion
@@ -123,6 +154,8 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IServiceProvider Services { get; }
 
     #endregion
 }

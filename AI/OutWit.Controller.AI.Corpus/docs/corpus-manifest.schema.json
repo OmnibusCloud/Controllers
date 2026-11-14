@@ -12,7 +12,7 @@
       "required": ["version"],
       "additionalProperties": false,
       "properties": {
-        "version": { "type": "string", "minLength": 1, "description": "The lab's name for the contract; travels into every product." },
+        "version": { "type": "string", "minLength": 1, "description": "The lab's name for the contract; travels with every task (it is a label: it does not enter the products' bytes)." },
         "language_model_sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$", "description": "Pin of the language model blob's bytes; the job does not start when the blob differs. A language pack (WITLID2) carries its languages' rule data and acceptance limits, so the pin covers them: a document in a language the pack does not support drops as language_unsupported, one with too little text as language_unknown. A WITLID1 model gives the products it gave under Corpus 0.1.x." },
         "target_languages": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "ISO 639-3 codes to keep (languages the model supports); empty keeps every identified language. Another supported language drops as language_not_target." },
         "identify_language": { "type": "boolean", "default": true },
@@ -21,6 +21,17 @@
         "sign": { "type": "boolean", "default": true, "description": "Whether a MinHash signature is produced per document." },
         "extract_pdf": { "type": "boolean", "default": true, "description": "Whether the PDF stage runs on WARC shards: a response that is a PDF (Content-Type or WARC-Identified-Payload-Type application/pdf, the body starting with %PDF-) becomes text in the controller's wasm sandbox and then page-range documents of at most 5,000 words (url#page=a-b) that go through the stages after it like a page of HTML. Off, a PDF drops as not_html. WET shards carry no PDFs." },
         "filter_curly_bracket": { "type": "boolean", "default": false, "description": "C4's curly-bracket rule (Raffel et al. 2020; DataTrove's filter_curly_bracket): a document goes, as curly_bracket, when a line C4 would test holds '{' - a line without a word over 1,000 characters, with the shape of prose, that does not mention JavaScript. Catches code and template leftovers; off by default." },
+        "output": { "type": "string", "enum": ["full", "stats_and_hashes"], "default": "full", "description": "What the run keeps on the server. full: every shard's text product and signatures, the statistics, the content hashes, the report and the integrity document. stats_and_hashes: every shard is processed and hashed exactly as under full (the same content hashes and statistics), but its text and signatures stay on the node and are deleted with the task; the server keeps the statistics, the content hashes, the report and the integrity document. For demonstrations and licensing, where a lab must not hold third-party text. No signatures, so Corpus.Dedup refuses such a run." },
+        "minhash": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The MinHash parameters of the signatures and the near-duplicate merge; a key left out (or 0) is the default, and the defaults sign byte for byte as before they were settings. Signatures made with different parameters cannot be compared: Corpus.Dedup refuses to merge them.",
+          "properties": {
+            "hashes": { "type": "integer", "minimum": 0, "maximum": 1024, "default": 128, "description": "Hash functions per signature: 8 bytes per document each." },
+            "shingle_words": { "type": "integer", "minimum": 0, "maximum": 32, "default": 5, "description": "Words per shingle." },
+            "bands": { "type": "integer", "minimum": 0, "default": 16, "description": "LSH bands of the merge; must divide hashes (a band is hashes / bands rows)." }
+          }
+        },
         "quality": {
           "type": "object",
           "additionalProperties": false,

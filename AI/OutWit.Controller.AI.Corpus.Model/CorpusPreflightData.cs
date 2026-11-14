@@ -35,7 +35,9 @@ public sealed partial class CorpusPreflightData : ModelBase
                && Messages.Is(other.Messages)
                && EstimatedStorageBytes.Is(other.EstimatedStorageBytes)
                && StorageHeadroomBytes.Is(other.StorageHeadroomBytes)
-               && StorageRetentionDays.Is(other.StorageRetentionDays);
+               && StorageRetentionDays.Is(other.StorageRetentionDays)
+               && BusiestNodeShare.Is(other.BusiestNodeShare, tolerance)
+               && PlannedNodes.Is(other.PlannedNodes);
     }
 
     /// <summary>Deep copy.</summary>
@@ -52,7 +54,9 @@ public sealed partial class CorpusPreflightData : ModelBase
             Messages = [.. Messages],
             EstimatedStorageBytes = EstimatedStorageBytes,
             StorageHeadroomBytes = StorageHeadroomBytes,
-            StorageRetentionDays = StorageRetentionDays
+            StorageRetentionDays = StorageRetentionDays,
+            BusiestNodeShare = BusiestNodeShare,
+            PlannedNodes = PlannedNodes
         };
     }
 
@@ -105,6 +109,21 @@ public sealed partial class CorpusPreflightData : ModelBase
     /// <summary>Days the server keeps a job's products after they are made, as the deployment states it; 0 = not stated.</summary>
     [MemoryPackOrder(8)]
     public int StorageRetentionDays { get; set; }
+
+    /// <summary>
+    /// The busiest node's share of the work, 0 to 1, as the platform's allocator would split the
+    /// shards over the pool now (by the nodes' benchmark rates, the sampled shards' second copies
+    /// on other nodes): what the contributor with the most work fetches, as a share of the run's
+    /// traffic. Anonymous: a share, never a node. 0 = not known (no pool the host can ask).
+    /// </summary>
+    [ToString]
+    [MemoryPackOrder(9)]
+    public double BusiestNodeShare { get; set; }
+
+    /// <summary>The nodes that plan would give shards to (a count, never a node); 0 = not known.</summary>
+    [ToString]
+    [MemoryPackOrder(10)]
+    public int PlannedNodes { get; set; }
 
     #endregion
 }
