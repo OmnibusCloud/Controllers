@@ -19,3 +19,5 @@ AI/OutWit.Controller.AI.Verify.Assets/modules/** -text
 # The Corpus toolchain (the PDF extractor's crate, its lock file, the build and test scripts): LF on
 # every checkout, so a build from a Windows checkout reads the same sources
 AI/OutWit.Controller.AI.Corpus.Assets/toolchain/** text eol=lf
+# The chess spike (pins, scripts, the golden set): read byte-exact on every runner, always LF
+AI/OutWit.Controller.Chess.Spike/** text eol=lf

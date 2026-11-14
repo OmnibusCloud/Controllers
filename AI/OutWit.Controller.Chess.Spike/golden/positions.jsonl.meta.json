@@ -1,0 +1,28 @@
+{
+ "categories": {
+  "castling": 45,
+  "check": 35,
+  "checkmate": 6,
+  "draw-rule": 2,
+  "endgame": 81,
+  "ep": 30,
+  "mate": 50,
+  "middlegame": 125,
+  "opening": 80,
+  "promotion": 30,
+  "stalemate": 6,
+  "terminal": 10
+ },
+ "clean_games": 40,
+ "count": 500,
+ "engine": "Stockfish 19",
+ "engine_sha256": "45bc8e4969147db9c2eb533810637994619bff0eacc81ccfd9854394901bcbd0",
+ "generator": "golden.py",
+ "legal_moves_total": 11910,
+ "mate_nodes": 10000,
+ "move_nodes": 400,
+ "noisy_games": 70,
+ "seed": 20261114,
+ "sha256": "01933e20b3a9f1a29235f5f5c3051100ad66ac18eaf9c92794c3d88f1b844803",
+ "unique_selfplay_positions": 12966
+}

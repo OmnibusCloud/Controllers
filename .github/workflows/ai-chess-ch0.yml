@@ -1,0 +1,334 @@
+name: AI Chess CH-0
+run-name: "AI Chess CH-0: ${{ github.ref_name }}"
+
+# The go/no-go spike of the planned chess controller: is a single-threaded, node-limited
+# Stockfish search byte-reproducible across the platforms of the fleet? Every cell builds
+# Stockfish from the pinned upstream tag (AI/OutWit.Controller.Chess.Spike/pins.env), checks
+# the bench signature, runs the committed golden set and writes canonical records. The compare
+# job checks the records byte for byte across cells, ISA paths (Intel SDE, qemu, Rosetta),
+# session reuse against a fresh process per search, and 1 against N parallel processes.
+#
+# Stockfish is GPL-3.0: no Stockfish source is committed here and no binary leaves a runner.
+# The artifacts hold results only (records, measurements, hashes and sizes of the binaries).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [spike/chess-ch0]
+    paths:
+      - 'AI/OutWit.Controller.Chess.Spike/**'
+      - '.github/workflows/ai-chess-ch0.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-chess-ch0-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SPIKE: AI/OutWit.Controller.Chess.Spike
+  JOBS: '4'
+  PYTHONUNBUFFERED: '1'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  linux-x64:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pins
+        run: grep -E '^[A-Z0-9_]+=' "$SPIKE/pins.env" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install GCC 15
+        uses: egor-tensin/setup-gcc@a2861a8b8538f49cf2850980acccf6b05a1b2ae4 # v2.0
+        with:
+          version: 15
+      - name: Intel SDE
+        uses: petarpetrovt/setup-sde@31aa4a8e85e109bef00f1d838613fcc6ec421271 # v5.0
+        with:
+          environmentVariableName: SDE_DIR
+          sdeVersion: ${{ env.SDE_VERSION }}
+      - name: Build (x86-64-universal, PGO under SDE)
+        run: bash "$SPIKE/build/build.sh" linux-x64 "$RUNNER_TEMP/work" "$RUNNER_TEMP/bin"
+      - name: Cell linux-x64 (native)
+        run: |
+          python -I "$SPIKE/harness/cell.py" --engine "$RUNNER_TEMP/bin/stockfish" --cell linux-x64 \
+            --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan native \
+            --build-json "$RUNNER_TEMP/bin/build.json" | grep -v '^ '
+      - name: Cells linux-x64 under SDE (every ISA slice forced)
+        run: |
+          rc=0
+          cpus="p4p nhm hsw skx clx icl adl"
+          for cpu in $cpus; do
+            python -I "$SPIKE/harness/cell.py" --engine "$RUNNER_TEMP/bin/stockfish" \
+              --cell "linux-x64.sde-$cpu" --out "$RUNNER_TEMP/results" \
+              --positions "$SPIKE/golden/positions.jsonl" \
+              --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan emu --procs 1 \
+              --prefix "$SDE_DIR/sde|-$cpu|--" > "$RUNNER_TEMP/sde-$cpu.log" 2>&1 &
+          done
+          for job in $(jobs -p); do wait "$job" || rc=1; done
+          for cpu in $cpus; do
+            echo "::group::SDE $cpu"; grep -v '^ ' "$RUNNER_TEMP/sde-$cpu.log"; echo "::endgroup::"
+          done
+          exit $rc
+      - name: Cell linux-x64.official (upstream's release binary, reference)
+        run: |
+          bin=$(bash "$SPIKE/build/official.sh" OFFICIAL_LINUX_X64 "$RUNNER_TEMP/official")
+          python -I "$SPIKE/harness/cell.py" --engine "$bin" --cell linux-x64.official \
+            --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan official | grep -v '^ '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ch0-linux-x64
+          path: ${{ runner.temp }}/results
+          retention-days: 30
+
+  win-x64:
+    runs-on: windows-2025
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pins
+        run: grep -E '^[A-Z0-9_]+=' "$SPIKE/pins.env" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc make git curl
+      - name: Intel SDE
+        uses: petarpetrovt/setup-sde@31aa4a8e85e109bef00f1d838613fcc6ec421271 # v5.0
+        with:
+          environmentVariableName: SDE_DIR
+          sdeVersion: ${{ env.SDE_VERSION }}
+      - name: Build (x86-64-universal, PGO under SDE)
+        shell: msys2 {0}
+        run: |
+          t=$(cygpath -u "$RUNNER_TEMP")
+          bash "$SPIKE/build/build.sh" win-x64 "$t/work" "$t/bin"
+      - name: Cell win-x64 (native)
+        run: |
+          python -I "$SPIKE/harness/cell.py" --engine "$RUNNER_TEMP/bin/stockfish.exe" --cell win-x64 \
+            --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan native \
+            --build-json "$RUNNER_TEMP/bin/build.json" | grep -v '^ '
+      - name: Cells win-x64 under SDE
+        run: |
+          rc=0
+          cpus="hsw skx icl adl"
+          for cpu in $cpus; do
+            python -I "$SPIKE/harness/cell.py" --engine "$RUNNER_TEMP/bin/stockfish.exe" \
+              --cell "win-x64.sde-$cpu" --out "$RUNNER_TEMP/results" \
+              --positions "$SPIKE/golden/positions.jsonl" --plan emu --procs 1 \
+              --only "main:an-10k-pv1,main:av-10k" \
+              --prefix "$SDE_DIR/sde.exe|-$cpu|--" > "$RUNNER_TEMP/sde-$cpu.log" 2>&1 &
+          done
+          for job in $(jobs -p); do wait "$job" || rc=1; done
+          for cpu in $cpus; do
+            echo "::group::SDE $cpu"; grep -v '^ ' "$RUNNER_TEMP/sde-$cpu.log"; echo "::endgroup::"
+          done
+          exit $rc
+      - name: Cell win-x64.official (upstream's release binary, reference)
+        run: |
+          bin=$(bash "$SPIKE/build/official.sh" OFFICIAL_WIN_X64 "$RUNNER_TEMP/official")
+          python -I "$SPIKE/harness/cell.py" --engine "$bin" --cell win-x64.official \
+            --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan official | grep -v '^ '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ch0-win-x64
+          path: ${{ runner.temp }}/results
+          retention-days: 30
+
+  linux-arm64:
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pins
+        run: grep -E '^[A-Z0-9_]+=' "$SPIKE/pins.env" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install GCC 15
+        uses: egor-tensin/setup-gcc@a2861a8b8538f49cf2850980acccf6b05a1b2ae4 # v2.0
+        with:
+          version: 15
+      - name: Install qemu-user
+        run: sudo apt-get update && sudo apt-get install -y qemu-user
+      - name: Build (arm64-universal, PGO)
+        run: bash "$SPIKE/build/build.sh" linux-arm64 "$RUNNER_TEMP/work" "$RUNNER_TEMP/bin"
+      - name: Cell linux-arm64 (native)
+        run: |
+          python -I "$SPIKE/harness/cell.py" --engine "$RUNNER_TEMP/bin/stockfish" --cell linux-arm64 \
+            --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan native \
+            --build-json "$RUNNER_TEMP/bin/build.json" | grep -v '^ '
+      - name: Cell linux-arm64 under qemu (armv8 slice forced, no dotprod)
+        run: |
+          python -I "$SPIKE/harness/cell.py" --engine "$RUNNER_TEMP/bin/stockfish" \
+            --cell linux-arm64.qemu-cortex-a53 --out "$RUNNER_TEMP/results" \
+            --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan emu \
+            --prefix "qemu-aarch64|-cpu|cortex-a53|--" | grep -v '^ '
+      - name: Cell linux-arm64.official (upstream's release binary, reference)
+        run: |
+          bin=$(bash "$SPIKE/build/official.sh" OFFICIAL_LINUX_ARM64 "$RUNNER_TEMP/official")
+          python -I "$SPIKE/harness/cell.py" --engine "$bin" --cell linux-arm64.official \
+            --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan official | grep -v '^ '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ch0-linux-arm64
+          path: ${{ runner.temp }}/results
+          retention-days: 30
+
+  win-arm64:
+    runs-on: windows-11-arm
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pins
+        run: grep -E '^[A-Z0-9_]+=' "$SPIKE/pins.env" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANGARM64
+          install: mingw-w64-clang-aarch64-clang make git curl
+      - name: Build (arm64-universal, clang, PGO)
+        shell: msys2 {0}
+        run: |
+          t=$(cygpath -u "$RUNNER_TEMP")
+          bash "$SPIKE/build/build.sh" win-arm64 "$t/work" "$t/bin"
+      - name: Cell win-arm64 (native)
+        run: |
+          python -I "$SPIKE/harness/cell.py" --engine "$RUNNER_TEMP/bin/stockfish.exe" --cell win-arm64 \
+            --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan native \
+            --build-json "$RUNNER_TEMP/bin/build.json" | grep -v '^ '
+      - name: Cell win-arm64.official (upstream's release binary, reference)
+        run: |
+          bin=$(bash "$SPIKE/build/official.sh" OFFICIAL_WIN_ARM64 "$RUNNER_TEMP/official")
+          python -I "$SPIKE/harness/cell.py" --engine "$bin" --cell win-arm64.official \
+            --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan official | grep -v '^ '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ch0-win-arm64
+          path: ${{ runner.temp }}/results
+          retention-days: 30
+
+  osx-arm64:
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pins
+        run: grep -E '^[A-Z0-9_]+=' "$SPIKE/pins.env" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Rosetta 2 (runs the x86-64 slice)
+        run: softwareupdate --install-rosetta --agree-to-license
+      - name: Build (macos-lipo fat binary)
+        run: bash "$SPIKE/build/build.sh" osx-fat "$RUNNER_TEMP/work" "$RUNNER_TEMP/bin"
+      - name: Cell osx-arm64 (native, apple-silicon slice)
+        run: |
+          python -I "$SPIKE/harness/cell.py" --engine "$RUNNER_TEMP/bin/stockfish" --cell osx-arm64 \
+            --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan native \
+            --build-json "$RUNNER_TEMP/bin/build.json" | grep -v '^ '
+      - name: Cell osx-arm64.rosetta (the fat binary's x86-64 slice under Rosetta 2)
+        run: |
+          python -I "$SPIKE/harness/cell.py" --engine "$RUNNER_TEMP/bin/stockfish" \
+            --cell osx-arm64.rosetta --out "$RUNNER_TEMP/results" \
+            --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan lite \
+            --prefix "arch|-x86_64" | grep -v '^ '
+      - name: Cell osx-arm64.official (upstream's release binary, reference)
+        run: |
+          bin=$(bash "$SPIKE/build/official.sh" OFFICIAL_MACOS "$RUNNER_TEMP/official")
+          python -I "$SPIKE/harness/cell.py" --engine "$bin" --cell osx-arm64.official \
+            --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan official | grep -v '^ '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ch0-osx-arm64
+          path: ${{ runner.temp }}/results
+          retention-days: 30
+
+  osx-x64:
+    runs-on: macos-15-intel
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pins
+        run: grep -E '^[A-Z0-9_]+=' "$SPIKE/pins.env" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build (the macos-lipo x86-64 slice recipe, native)
+        run: bash "$SPIKE/build/build.sh" osx-x64 "$RUNNER_TEMP/work" "$RUNNER_TEMP/bin"
+      - name: Cell osx-x64 (native)
+        run: |
+          python -I "$SPIKE/harness/cell.py" --engine "$RUNNER_TEMP/bin/stockfish" --cell osx-x64 \
+            --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan native \
+            --build-json "$RUNNER_TEMP/bin/build.json" | grep -v '^ '
+      - name: Cell osx-x64.official (upstream's fat binary, x86-64 slice natively)
+        run: |
+          bin=$(bash "$SPIKE/build/official.sh" OFFICIAL_MACOS "$RUNNER_TEMP/official")
+          python -I "$SPIKE/harness/cell.py" --engine "$bin" --cell osx-x64.official \
+            --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
+            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan official | grep -v '^ '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ch0-osx-x64
+          path: ${{ runner.temp }}/results
+          retention-days: 30
+
+  compare:
+    if: always()
+    needs: [linux-x64, win-x64, linux-arm64, win-arm64, osx-arm64, osx-x64]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pins
+        run: grep -E '^[A-Z0-9_]+=' "$SPIKE/pins.env" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ch0-*
+          path: results
+      - name: Compare the canonical records across every cell
+        run: |
+          set +e
+          python3 -I "$SPIKE/harness/compare.py" --root results --out summary \
+            --bench "$SF_BENCH" --net-sha256 "$SF_NET_SHA256" > summary.log 2>&1
+          rc=$?
+          cat summary.log
+          cat summary/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ch0-summary
+          path: summary
+          retention-days: 30
