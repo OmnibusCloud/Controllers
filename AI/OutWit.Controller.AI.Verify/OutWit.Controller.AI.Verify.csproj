@@ -32,6 +32,16 @@
     <PackageReference Include="Wasmtime" Version="48.0.2" />
   </ItemGroup>
 
+  <!-- The wasm sandbox host, shared with the other AI controllers as source, not as an assembly:
+       the cloud client loads every controller into one shared load context, where an assembly
+       name loads once and the first controller to load it wins. Compiled in here, the host's
+       types (internal, namespace OutWit.Controller.AI.Wasm) are this controller's own copy, and
+       the controller works with or without any other. The one assembly the controllers share is
+       the binding above, pinned to the same version in each (WasmHostBinding.BUILT_AGAINST). -->
+  <ItemGroup>
+    <Compile Include="..\Shared\Wasm\**\*.cs" Link="Wasm\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <PropertyGroup>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>

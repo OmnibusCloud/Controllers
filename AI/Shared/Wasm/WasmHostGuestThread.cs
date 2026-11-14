@@ -1,17 +1,17 @@
 using System.Runtime.ExceptionServices;
 
-namespace OutWit.Controller.AI.Verify.Sandbox;
+namespace OutWit.Controller.AI.Wasm;
 
 /// <summary>
 /// The threads guest code runs on. The engine lets a guest use up to <see cref="ENGINE_STACK_BYTES"/>
 /// of the native call stack: 8 MiB, the stack a program has on Linux, sixteen times the engine's
 /// default of 512 KiB, where a compiled program's recursion ended near ten thousand levels (the
-/// engine's async stack is set to match, <see cref="VerifyEngineNative"/>). A thread that runs a
+/// engine's async stack is set to match, <see cref="WasmHostEngineNative"/>). A thread that runs a
 /// guest must hold that and the host's own frames, which a pool thread or a caller's thread need
-/// not: the sandbox's workers are made here with <see cref="THREAD_STACK_BYTES"/>, and a run from
-/// any other thread moves to one made for it.
+/// not: a host's workers are made here with <see cref="THREAD_STACK_BYTES"/>, and a run from any
+/// other thread moves to one made for it.
 /// </summary>
-internal static class VerifyGuestThread
+internal static class WasmHostGuestThread
 {
     #region Constants
 
@@ -21,7 +21,7 @@ internal static class VerifyGuestThread
     /// <summary>The stack of a thread that runs guests: the guest's share and room for the host.</summary>
     public const int THREAD_STACK_BYTES = 16 << 20;
 
-    private const string THREAD_NAME = "verify-guest";
+    private const string THREAD_NAME = "wasm-guest";
 
     #endregion
 

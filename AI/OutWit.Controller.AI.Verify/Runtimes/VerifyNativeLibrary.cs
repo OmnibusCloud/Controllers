@@ -1,5 +1,4 @@
-using System.Reflection;
-using System.Runtime.InteropServices;
+using OutWit.Controller.AI.Wasm;
 
 namespace OutWit.Controller.AI.Verify.Runtimes;
 
@@ -10,25 +9,15 @@ namespace OutWit.Controller.AI.Verify.Runtimes;
 /// folder and the folder of the calling assembly — neither holds the library. Registered once
 /// per process as the <c>Wasmtime.Dotnet</c> assembly's DllImport resolver; under an isolated
 /// plugin load context the context resolves the same file first and the resolver is never asked.
+/// The resolver is the shared wasm host's (<see cref="WasmHostNativeLibrary"/>, this controller's
+/// own compiled-in copy); this class keeps the controller's public face of it.
 /// </summary>
 public static class VerifyNativeLibrary
 {
     #region Constants
 
     /// <summary>The library name the binding's P/Invokes declare.</summary>
-    public const string LIBRARY_NAME = "wasmtime";
-
-    private const string RUNTIMES_FOLDER = "runtimes";
-    private const string NATIVE_FOLDER = "native";
-    private const string UNIX_PREFIX = "lib";
-
-    #endregion
-
-    #region Fields
-
-    private static readonly object LOCK = new();
-    private static bool m_registered;
-    private static string? m_resolvedPath;
+    public const string LIBRARY_NAME = WasmHostNativeLibrary.LIBRARY_NAME;
 
     #endregion
 
@@ -40,22 +29,7 @@ public static class VerifyNativeLibrary
     /// </summary>
     public static void EnsureRegistered()
     {
-        lock (LOCK)
-        {
-            if (m_registered)
-                return;
-
-            try
-            {
-                NativeLibrary.SetDllImportResolver(BindingAssembly, Resolve);
-            }
-            catch (InvalidOperationException)
-            {
-                // Another component registered a resolver for the binding first; its answer stands.
-            }
-
-            m_registered = true;
-        }
+        WasmHostNativeLibrary.EnsureRegistered();
     }
 
     /// <summary>
@@ -66,7 +40,7 @@ public static class VerifyNativeLibrary
     /// <returns>The full path, or null when the module carries no library for this platform.</returns>
     public static string? Locate()
     {
-        return Locate(ModuleRoot);
+        return WasmHostNativeLibrary.Locate();
     }
 
     /// <summary>
@@ -76,17 +50,7 @@ public static class VerifyNativeLibrary
     /// <returns>The full path, or null when no library exists for this platform under the root.</returns>
     public static string? Locate(string? moduleRoot)
     {
-        if (string.IsNullOrEmpty(moduleRoot))
-            return null;
-
-        foreach (var rid in CandidateRids())
-        {
-            var candidate = Path.Combine(moduleRoot, RUNTIMES_FOLDER, rid, NATIVE_FOLDER, FileName);
-            if (File.Exists(candidate))
-                return candidate;
-        }
-
-        return null;
+        return WasmHostNativeLibrary.Locate(moduleRoot);
     }
 
     /// <summary>
@@ -96,41 +60,7 @@ public static class VerifyNativeLibrary
     /// <returns>One or two identifiers.</returns>
     public static IReadOnlyList<string> CandidateRids()
     {
-        var rids = new List<string>();
-        AddRid(rids, RuntimeInformation.RuntimeIdentifier);
-        AddRid(rids, PortableRid);
-        return rids;
-    }
-
-    private static void AddRid(List<string> rids, string rid)
-    {
-        if (!string.IsNullOrEmpty(rid) && !rids.Contains(rid))
-            rids.Add(rid);
-    }
-
-    private static IntPtr Resolve(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
-    {
-        if (!IsWasmtime(libraryName))
-            return IntPtr.Zero;
-
-        var path = Locate();
-        if (path == null)
-            return IntPtr.Zero;
-
-        // A failure here carries the path in its message, which is the diagnostic that matters;
-        // falling back to the default probing would only hide it behind "not found".
-        var handle = NativeLibrary.Load(path);
-        m_resolvedPath = path;
-        return handle;
-    }
-
-    private static bool IsWasmtime(string libraryName)
-    {
-        var name = Path.GetFileNameWithoutExtension(libraryName);
-        if (name.StartsWith(UNIX_PREFIX, StringComparison.Ordinal))
-            name = name[UNIX_PREFIX.Length..];
-
-        return string.Equals(name, LIBRARY_NAME, StringComparison.OrdinalIgnoreCase);
+        return WasmHostNativeLibrary.CandidateRids();
     }
 
     #endregion
@@ -141,38 +71,13 @@ public static class VerifyNativeLibrary
     /// The path the resolver loaded, or null when it was never asked: the load context resolved
     /// the library itself, or nothing has called into wasmtime yet.
     /// </summary>
-    public static string? ResolvedPath => m_resolvedPath;
+    public static string? ResolvedPath => WasmHostNativeLibrary.ResolvedPath;
 
     /// <summary>The platform's file name for the library.</summary>
-    public static string FileName =>
-        OperatingSystem.IsWindows() ? $"{LIBRARY_NAME}.dll"
-        : OperatingSystem.IsMacOS() ? $"{UNIX_PREFIX}{LIBRARY_NAME}.dylib"
-        : $"{UNIX_PREFIX}{LIBRARY_NAME}.so";
+    public static string FileName => WasmHostNativeLibrary.FileName;
 
     /// <summary>The portable runtime identifier: win, linux or osx plus the process architecture.</summary>
-    public static string PortableRid
-    {
-        get
-        {
-            var os = OperatingSystem.IsWindows() ? "win"
-                : OperatingSystem.IsMacOS() ? "osx"
-                : "linux";
-            return $"{os}-{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}";
-        }
-    }
-
-    private static Assembly BindingAssembly => typeof(Wasmtime.Engine).Assembly;
-
-    /// <summary>The folder of the binding assembly (the module root), else of this controller.</summary>
-    private static string? ModuleRoot
-    {
-        get
-        {
-            var binding = BindingAssembly.Location;
-            var folder = string.IsNullOrEmpty(binding) ? null : Path.GetDirectoryName(binding);
-            return folder ?? Path.GetDirectoryName(typeof(VerifyNativeLibrary).Assembly.Location);
-        }
-    }
+    public static string PortableRid => WasmHostNativeLibrary.PortableRid;
 
     #endregion
 }

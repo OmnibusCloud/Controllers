@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using OutWit.Controller.AI.Wasm;
 
 namespace OutWit.Controller.AI.Verify.Sandbox;
 
@@ -45,8 +46,8 @@ public static class VerifyWorkerPool
         var threads = new Thread[workers];
         for (var worker = 0; worker < workers; worker++)
         {
-            // A worker runs guests: its stack holds the engine's share (VerifyGuestThread).
-            var thread = VerifyGuestThread.Create(() =>
+            // A worker runs guests: its stack holds the engine's share (WasmHostGuestThread).
+            var thread = WasmHostGuestThread.Create(() =>
             {
                 while (true)
                 {

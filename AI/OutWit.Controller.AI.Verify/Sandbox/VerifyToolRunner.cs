@@ -1,5 +1,5 @@
+using OutWit.Controller.AI.Wasm;
 using Wasmtime;
-using WasmEngine = Wasmtime.Engine;
 using WasmModule = Wasmtime.Module;
 
 namespace OutWit.Controller.AI.Verify.Sandbox;
@@ -7,9 +7,9 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// <summary>
 /// Runs a tool module the sandbox uses on a task's behalf (the compiler and the linker of the
 /// C/C++ runtime) in a store of its own, under the same envelope as a program: fuel, an epoch
-/// deadline, the memory and table caps, the deterministic linker, read-only folders only. Its
-/// stdout is its product (an object, a module), written straight to a file; its stderr is the
-/// diagnostics a task's author reads.
+/// deadline, the memory and table caps (<see cref="WasmHostLimits"/>), the deterministic linker,
+/// read-only folders only. Its stdout is its product (an object, a module), written straight to
+/// a file; its stderr is the diagnostics a task's author reads.
 /// </summary>
 internal sealed class VerifyToolRunner
 {
@@ -21,22 +21,19 @@ internal sealed class VerifyToolRunner
 
     #region Fields
 
-    private readonly WasmEngine m_engine;
-    private readonly int m_epochTickMs;
+    private readonly WasmHost m_host;
 
     #endregion
 
     #region Constructors
 
     /// <summary>
-    /// A runner over the sandbox's engine.
+    /// A runner over the sandbox's host.
     /// </summary>
-    /// <param name="engine">The engine every store shares (fuel and epoch on).</param>
-    /// <param name="epochTickMs">How often the sandbox's timer advances the epoch.</param>
-    public VerifyToolRunner(WasmEngine engine, int epochTickMs)
+    /// <param name="host">The host whose engine every store shares (fuel and epoch on).</param>
+    public VerifyToolRunner(WasmHost host)
     {
-        m_engine = engine;
-        m_epochTickMs = epochTickMs;
+        m_host = host;
     }
 
     #endregion
@@ -63,21 +60,14 @@ internal sealed class VerifyToolRunner
             wasi = wasi.WithPreopenedDirectory(host, guest, false);
 
         var started = DateTime.UtcNow;
-        using var store = new Store(m_engine);
+        using var store = new Store(m_host.Engine);
         store.SetWasiConfiguration(wasi);
-        store.Fuel = (ulong)Math.Max(1, fuel);
-        store.SetLimits(
-            memorySize: Math.Max(1, memoryBytes),
-            tableElements: VerifyWasmSandbox.MAX_TABLE_ELEMENTS,
-            instances: VerifyWasmSandbox.MAX_INSTANCES,
-            tables: VerifyWasmSandbox.MAX_TABLES,
-            memories: VerifyWasmSandbox.MAX_MEMORIES);
-        store.SetEpochDeadline((ulong)Math.Max(1, (wallMs + m_epochTickMs - 1) / m_epochTickMs));
+        WasmHostLimits.Apply(store, fuel, memoryBytes, wallMs);
 
         // A tool takes no randomness; the seed only keeps the linker's stream fixed.
-        using var linker = VerifyDeterministicLinker.Create(m_engine, 0);
+        using var linker = WasmHostLinker.Create(m_host.Engine, 0);
 
-        var (exitCode, trap) = VerifyGuestThread.Run(() => Invoke(linker, store, module));
+        var (exitCode, trap) = WasmHostGuestThread.Run(() => Invoke(linker, store, module));
 
         var used = trap is TrapCode.OutOfFuel ? fuel : fuel - (long)store.Fuel;
         return new VerifyToolOutcome(exitCode, trap, used, (int)(DateTime.UtcNow - started).TotalMilliseconds);
@@ -104,4 +94,3 @@ internal sealed class VerifyToolRunner
 
     #endregion
 }
-
