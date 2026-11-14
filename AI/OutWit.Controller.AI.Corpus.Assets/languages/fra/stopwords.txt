@@ -1,0 +1,22 @@
+# French stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/fra_Latn.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 983705f1bf359f3bf8314f59dce7ae36d96465e78cc5f29ae227dfe614e2f6a9.
+# In the order of the source; Corpus 0.1.14 shipped this list.
+de
+la
+le
+et
+à
+en
+l'
+des
+du
+les
+est
+d'
+un
+une
+il
+dans
+par
+au

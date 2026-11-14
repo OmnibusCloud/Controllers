@@ -22,7 +22,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
 
     private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
     private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
-    private const string MODEL_FIXTURE = "language-model-cc-2026-43-16.bin";
+    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
 
     #endregion
 

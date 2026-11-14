@@ -4,26 +4,17 @@ namespace OutWit.Controller.AI.Corpus.Quality;
 
 /// <summary>
 /// The thresholds of the quality filter, each with its source: the Gopher rule set (Rae et al.
-/// 2021, "Scaling Language Models", appendix A.1.1 and table A1) as DataTrove implements it,
-/// with FineWeb-2's per-language values (huggingface/fineweb-2, <c>configs/*.yml</c>) where
-/// Gopher's English thresholds do not carry over: scripts written without word spacing. Every
-/// value is part of the pipeline contract. Three shapes: <see cref="Spaced"/> for scripts that
-/// separate words with spaces, <see cref="Unspaced"/> for scripts that do not (Chinese, Thai,
-/// ...), where a "word" is a letter and the word-shape rules do not apply, and
-/// <see cref="Japanese"/>; <see cref="ForLanguage"/> adds the language's stop words
-/// (<see cref="QualityStopWords"/>).
+/// 2021, "Scaling Language Models", appendix A.1.1 and table A1) as DataTrove implements it.
+/// Every value is part of the pipeline contract. Two shapes, one per kind of script:
+/// <see cref="Spaced"/> for scripts that separate words with spaces, <see cref="Unspaced"/> for
+/// scripts that do not (Chinese, Japanese, Thai, ...), where a "word" is a letter and the
+/// word-shape rules do not apply. What is particular to a language — its stop words, its own
+/// thresholds (FineWeb-2's Japanese and Chinese ones) — is data: a language pack's rule data
+/// (<see cref="Language.LanguageRules"/>), or for a model without it the rule data of
+/// Corpus 0.1.14 (<see cref="Language.LanguageRuleSet.Witlid1"/>).
 /// </summary>
 public sealed record QualityRules
 {
-    #region Constants
-
-    private static readonly HashSet<string> UNSPACED_LANGUAGES = new(StringComparer.Ordinal)
-    {
-        "zho", "cmn", "yue", "jpn", "tha", "khm", "lao", "mya", "bod"
-    };
-
-    #endregion
-
     #region Fields
 
     /// <summary>Rules for space-separated scripts: Gopher's thresholds.</summary>
@@ -33,10 +24,10 @@ public sealed record QualityRules
     /// Rules for scripts without word spacing: a word is a letter (a run of letters of a spaced
     /// script inside such text, a Latin brand name say, is one word); no word-shape rules; the
     /// repetition thresholds of FineWeb-2's Chinese (<c>cmn_Hani.yml</c>), the largest language
-    /// of these scripts. Gopher's thresholds are for English words: over letters, a repetition
-    /// rule failed 47 % of the Japanese and 26 % of the Chinese pages of four Common Crawl WET
-    /// files (18-23 % of the pages elsewhere), most of them prose that names one product or
-    /// place again and again.
+    /// of these scripts, for any language of such a script that brings none of its own. Gopher's
+    /// thresholds are for English words: over letters, a repetition rule failed 47 % of the
+    /// Japanese and 26 % of the Chinese pages of four Common Crawl WET files (18-23 % of the
+    /// pages elsewhere), most of them prose that names one product or place again and again.
     /// </summary>
     public static readonly QualityRules Unspaced = new()
     {
@@ -52,52 +43,6 @@ public sealed record QualityRules
         MaxTopNgramCharRatio = [0.256, 0.201, 0.171],
         MaxDuplicateNgramCharRatio = [0.198, 0.182, 0.167, 0.154, 0.14, 0.127]
     };
-
-    /// <summary>Rules for Japanese: <see cref="Unspaced"/> with FineWeb-2's Japanese repetition thresholds (<c>jpn_Jpan.yml</c>).</summary>
-    public static readonly QualityRules Japanese = Unspaced with
-    {
-        MaxDuplicateLineRatio = 0.328,
-        MaxTopNgramCharRatio = [0.239, 0.196, 0.172],
-        MaxDuplicateNgramCharRatio = [0.243, 0.225, 0.207, 0.19, 0.175, 0.159]
-    };
-
-    // The rules of each language with a stop-word list: its script's rules and the list.
-    private static readonly FrozenDictionary<string, QualityRules> BY_LANGUAGE = QualityStopWords.Languages
-        .ToFrozenDictionary(code => code, code => Base(code) with { StopWords = StopWordsOf(code), MinStopWords = QualityStopWords.MIN_STOP_WORDS }, StringComparer.Ordinal);
-
-    /// <summary>Rules for English: <see cref="Spaced"/> and Gopher's stop-word rule.</summary>
-    public static readonly QualityRules English = BY_LANGUAGE["eng"];
-
-    #endregion
-
-    #region Functions
-
-    /// <summary>
-    /// The rules for a language code: its script's thresholds (<see cref="Japanese"/>,
-    /// <see cref="Unspaced"/> for the other scripts without word spacing, else
-    /// <see cref="Spaced"/>) with the language's stop words when <see cref="QualityStopWords"/>
-    /// has a list for it.
-    /// </summary>
-    /// <param name="languageCode">An ISO 639-3 code, or "" when unknown.</param>
-    /// <returns>The rules (the same instance for the same code).</returns>
-    public static QualityRules ForLanguage(string languageCode)
-    {
-        return BY_LANGUAGE.TryGetValue(languageCode, out var rules) ? rules : Base(languageCode);
-    }
-
-    private static QualityRules Base(string languageCode)
-    {
-        if (languageCode == "jpn")
-            return Japanese;
-
-        return UNSPACED_LANGUAGES.Contains(languageCode) ? Unspaced : Spaced;
-    }
-
-    private static IReadOnlySet<string> StopWordsOf(string languageCode)
-    {
-        QualityStopWords.TryGet(languageCode, out var stopWords);
-        return stopWords;
-    }
 
     #endregion
 
@@ -147,6 +92,13 @@ public sealed record QualityRules
 
     /// <summary>Fewest distinct stop words a document must contain (Gopher: two; 0: the rule is off).</summary>
     public int MinStopWords { get; init; }
+
+    /// <summary>
+    /// Whether a document goes when a line C4 would test holds a curly bracket (C4's
+    /// "squigglybracket" rule, DataTrove's <c>filter_curly_bracket</c>; off unless the manifest
+    /// turns it on). See <see cref="LineCleaner.HoldsCurlyBracket"/>.
+    /// </summary>
+    public bool FilterCurlyBracket { get; init; }
 
     #endregion
 }

@@ -1,0 +1,20 @@
+# Turkish stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/tur_Latn.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 f0ccd5fef17c5978f0c8863809dc6a3ec9bededa772f6d25bfa0a4f7f20d67c1.
+# In the order of the source; Corpus 0.1.14 shipped this list.
+ve
+bir
+olarak
+bu
+ile
+için
+olan
+da
+de
+tarafından
+yılında
+sonra
+en
+daha
+ilk
+the

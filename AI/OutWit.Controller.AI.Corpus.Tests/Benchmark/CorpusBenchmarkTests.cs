@@ -125,7 +125,7 @@ public sealed class CorpusBenchmarkTests
     [Explicit("Calibration: run by hand on an idle machine and copy the constant")]
     public void PrintCalibrationTest()
     {
-        var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-model-cc-2026-43-16.bin"));
+        var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-pack-cc-2026-43-16.bin"));
         var golden = File.ReadAllBytes(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "cc-main-2026-43-00000-head.warc.wet.gz"));
         var reference = CorpusBenchmarkShard.Bytes;
 

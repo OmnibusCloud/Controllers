@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Corpus</ControllerName>
-    <Version>0.1.14</Version>
+    <Version>0.2.0</Version>
     <Description>Public-corpus processing at CPU scale on anonymous nodes: streamed WARC/WET reading, HTML to text, language identification, quality filtering and MinHash deduplication signatures - deterministic by requirement, the node fetching its shard straight from the public origin (Common Crawl first).</Description>
     <PackageTags>corpus;common-crawl;warc;wet;text-extraction;language-id;dedup;minhash;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>corpus-process-shard</ControllerFeatures>
@@ -24,6 +24,12 @@
   <ItemGroup>
     <PackageReference Include="AngleSharp" Version="1.10.0" />
     <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
+  </ItemGroup>
+
+  <!-- The rule data a WITLID1 language model gets (Corpus 0.1.14's per-language tables, frozen):
+       data, not code; a language pack (WITLID2) carries its own. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Language\Resources\witlid1-rules.json" LogicalName="OutWit.Controller.AI.Corpus.Language.witlid1-rules.json" />
   </ItemGroup>
 
   <PropertyGroup>

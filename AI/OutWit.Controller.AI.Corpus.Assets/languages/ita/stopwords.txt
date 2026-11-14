@@ -1,0 +1,22 @@
+# Italian stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/ita_Latn.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 c30105ffbb373f92f25ea22a1fabf4ab48835a681a989a353107378e9cfb488d.
+# In the order of the source; Corpus 0.1.14 shipped this list.
+di
+e
+il
+la
+in
+a
+del
+che
+è
+della
+un
+per
+nel
+l'
+con
+da
+i
+una

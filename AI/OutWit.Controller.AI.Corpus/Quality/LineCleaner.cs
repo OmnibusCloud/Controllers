@@ -85,6 +85,35 @@ public static class LineCleaner
         return builder.ToString();
     }
 
+    /// <summary>
+    /// C4's curly-bracket rule: whether a document holds an opening curly bracket in a line C4
+    /// would test for one. C4 (TFDS <c>c4_utils.clean_page</c>, "squigglybracket") and DataTrove
+    /// (<c>C4QualityFilter</c>, <c>filter_curly_bracket</c>) walk the lines in order — a line with
+    /// a word over <see cref="MAX_WORD_LENGTH"/> characters goes, a line without the shape of
+    /// prose goes, a line that mentions JavaScript goes — and drop the whole page at the first
+    /// line left that holds "{", before the policy lines are looked at. The same walk here, with
+    /// this stage's (script-aware) shape of prose; it does not depend on the line stage being on.
+    /// Code, templates and JSON leftovers are what it catches.
+    /// </summary>
+    /// <param name="text">The document's text, one block per line.</param>
+    /// <param name="rules">The document's quality rules (they say whether words or letters count).</param>
+    /// <returns>True when the document goes under the rule.</returns>
+    public static bool HoldsCurlyBracket(string text, QualityRules rules)
+    {
+        if (!text.Contains('{'))
+            return false;
+
+        foreach (var line in text.Split('\n'))
+        {
+            if (!line.Contains('{') || HasLongWord(line) || !IsProseShaped(line, rules) || line.Contains(JAVASCRIPT, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>Whether a line reads like prose under a document's rules.</summary>
     /// <param name="line">One line, whitespace already collapsed.</param>
     /// <param name="rules">The document's quality rules.</param>
@@ -147,6 +176,11 @@ public static class LineCleaner
                 return true;
         }
 
+        return HasLongWord(line);
+    }
+
+    private static bool HasLongWord(string line)
+    {
         var length = 0;
         foreach (var c in line)
         {

@@ -15,7 +15,7 @@ public static class CorpusManifestParser
     #region Constants
 
     private static readonly HashSet<string> ROOT_KEYS = new(StringComparer.Ordinal) { "pipeline", "allowed_origins", "sources" };
-    private static readonly HashSet<string> PIPELINE_KEYS = new(StringComparer.Ordinal) { "version", "language_model_sha256", "target_languages", "identify_language", "clean_lines", "filter_quality", "sign", "quality" };
+    private static readonly HashSet<string> PIPELINE_KEYS = new(StringComparer.Ordinal) { "version", "language_model_sha256", "target_languages", "identify_language", "clean_lines", "filter_quality", "sign", "quality", "filter_curly_bracket" };
     private static readonly HashSet<string> SOURCE_KEYS = new(StringComparer.Ordinal) { "url", "format", "size", "sha256" };
     private static readonly HashSet<string> QUALITY_KEYS = new(StringComparer.Ordinal)
     {
@@ -101,6 +101,7 @@ public static class CorpusManifestParser
     private static CorpusPipelineData ParsePipeline(JsonElement element, List<string> errors)
     {
         var pipeline = new CorpusPipelineData();
+        var curlyBracket = false;
         if (element.ValueKind != JsonValueKind.Object)
         {
             errors.Add("pipeline: must be an object.");
@@ -135,10 +136,21 @@ public static class CorpusManifestParser
                 case "quality":
                     pipeline.Quality = ParseQuality(property.Value, errors);
                     break;
+                case "filter_curly_bracket":
+                    curlyBracket = Bool(property, "pipeline", errors);
+                    break;
                 default:
                     errors.Add($"pipeline: unknown key '{property.Name}'.");
                     break;
             }
+        }
+
+        // C4's curly-bracket rule is a rule of the quality stages; it travels with their
+        // thresholds (absent, or false, leaves the pipeline exactly as before the switch existed).
+        if (curlyBracket)
+        {
+            pipeline.Quality ??= new CorpusQualityData();
+            pipeline.Quality.FilterCurlyBracket = true;
         }
 
         if (pipeline.LanguageModelSha256.Length > 0 && (pipeline.LanguageModelSha256.Length != 64 || !pipeline.LanguageModelSha256.All(Uri.IsHexDigit)))

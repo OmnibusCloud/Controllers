@@ -1,0 +1,24 @@
+{
+  "name": "Japanese",
+  "script": "Jpan",
+  "quality": {
+    "max_duplicate_line_ratio": 0.328,
+    "top_ngram_chars": [
+      0.239,
+      0.196,
+      0.172
+    ],
+    "duplicate_ngram_chars": [
+      0.243,
+      0.225,
+      0.207,
+      0.19,
+      0.175,
+      0.159
+    ]
+  },
+  "notes": [
+    "quality: FineWeb-2's Japanese repetition thresholds (configs/jpn_Jpan.yml: dup_line_frac, top_n_grams, dup_n_grams), Apache-2.0; Corpus 0.1.14's.",
+    "script: ISO 15924; written without spaces, so the quality stages count letters."
+  ]
+}

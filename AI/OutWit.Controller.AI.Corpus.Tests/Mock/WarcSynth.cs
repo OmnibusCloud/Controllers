@@ -29,6 +29,12 @@ public static class WarcSynth
         return Record("conversion", uri, "text/plain", Encoding.UTF8.GetBytes(text));
     }
 
+    /// <summary>A WET conversion record with the language label Common Crawl's classifier gives (<c>WARC-Identified-Content-Language</c>).</summary>
+    public static byte[] LabelledConversionRecord(string uri, string text, string language)
+    {
+        return Record("conversion", uri, "text/plain", Encoding.UTF8.GetBytes(text), $"WARC-Identified-Content-Language: {language}\r\n");
+    }
+
     /// <summary>A WARC response record carrying an HTTP 200 HTML response.</summary>
     public static byte[] HtmlResponseRecord(string uri, string html)
     {
@@ -38,7 +44,7 @@ public static class WarcSynth
     }
 
     /// <summary>A record of any type with a raw payload.</summary>
-    public static byte[] Record(string type, string uri, string contentType, byte[] payload)
+    public static byte[] Record(string type, string uri, string contentType, byte[] payload, string extraHeaders = "")
     {
         var header = Encoding.ASCII.GetBytes(
             "WARC/1.0\r\n" +
@@ -47,6 +53,7 @@ public static class WarcSynth
             "WARC-Date: 2026-10-05T10:56:23Z\r\n" +
             $"WARC-Record-ID: <urn:uuid:{Guid.NewGuid():D}>\r\n" +
             $"Content-Type: {contentType}\r\n" +
+            extraHeaders +
             $"Content-Length: {payload.Length}\r\n" +
             "\r\n");
 

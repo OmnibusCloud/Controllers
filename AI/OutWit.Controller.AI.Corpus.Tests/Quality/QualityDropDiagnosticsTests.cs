@@ -20,7 +20,7 @@ public sealed class QualityDropDiagnosticsTests
     [TestCase(true)]
     public void PrintDropProfileTest(bool cleanLines)
     {
-        var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-model-cc-2026-43-16.bin"));
+        var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-pack-cc-2026-43-16.bin"));
         var identifier = new LanguageIdentifier(model);
         using var reader = WarcReader.Open(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "cc-main-2026-43-00000-head.warc.wet.gz"));
 
@@ -38,7 +38,7 @@ public sealed class QualityDropDiagnosticsTests
                 continue;
 
             documents++;
-            var rules = QualityRules.ForLanguage(guess.Code);
+            var rules = model.Rules.For(guess.Code);
             if (cleanLines)
             {
                 text = LineCleaner.Clean(text, rules, out _);

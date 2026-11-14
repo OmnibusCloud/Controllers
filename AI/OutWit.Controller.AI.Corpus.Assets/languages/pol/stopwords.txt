@@ -1,0 +1,22 @@
+# Polish stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/pol_Latn.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 0b5150a991a7bb0566e90aafa53b1852f198f325fe1922e2e7e0021c7a9ea1ce.
+# In the order of the source; Corpus 0.1.14 shipped this list.
+w
+i
+na
+z
+do
+się
+roku
+od
+a
+jest
+przez
+po
+jako
+oraz
+o
+został
+był
+nie

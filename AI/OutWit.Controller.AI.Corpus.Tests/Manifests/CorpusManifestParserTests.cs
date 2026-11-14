@@ -66,6 +66,37 @@ public sealed class CorpusManifestParserTests
         });
     }
 
+    [TestCase("""{"pipeline":{"version":"v","filter_curly_bracket":true},"allowed_origins":["h"],"sources":["https://h/a.warc.gz"]}""", true, null)]
+    [TestCase("""{"pipeline":{"version":"v","filter_curly_bracket":true,"quality":{"min_words":80}},"allowed_origins":["h"],"sources":["https://h/a.warc.gz"]}""", true, 80)]
+    [TestCase("""{"pipeline":{"version":"v","quality":{"min_words":80},"filter_curly_bracket":true},"allowed_origins":["h"],"sources":["https://h/a.warc.gz"]}""", true, 80)]
+    [TestCase("""{"pipeline":{"version":"v","quality":{"min_words":80},"filter_curly_bracket":false},"allowed_origins":["h"],"sources":["https://h/a.warc.gz"]}""", false, 80)]
+    public void TheCurlyBracketSwitchTravelsWithTheQualityRulesTest(string json, bool expected, int? minWords)
+    {
+        var manifest = CorpusManifestParser.Parse(json);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(manifest.Errors, Is.Empty);
+            Assert.That(manifest.Pipeline.Quality!.FilterCurlyBracket, Is.EqualTo(expected));
+            Assert.That(manifest.Pipeline.Quality.MinWords, Is.EqualTo(minWords ?? 0), "the switch keeps the thresholds, whatever the key order");
+        });
+    }
+
+    [Test]
+    public void TheCurlyBracketSwitchOffLeavesThePipelineAsBeforeTest()
+    {
+        var absent = CorpusManifestParser.Parse("""{"pipeline":{"version":"v"},"allowed_origins":["h"],"sources":["https://h/a.warc.gz"]}""");
+        var off = CorpusManifestParser.Parse("""{"pipeline":{"version":"v","filter_curly_bracket":false},"allowed_origins":["h"],"sources":["https://h/a.warc.gz"]}""");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(off.Errors, Is.Empty);
+            Assert.That(off.Pipeline.Quality, Is.Null, "no quality object appears");
+            Assert.That(off.Pipeline.Is(absent.Pipeline), Is.True);
+        });
+    }
+
+    [TestCase("""{"pipeline":{"version":"v","filter_curly_bracket":"on"},"allowed_origins":["h"],"sources":["https://h/a.warc.gz"]}""", "'filter_curly_bracket' must be true or false")]
     [TestCase("", "not valid JSON")]
     [TestCase("[]", "must be a JSON object")]
     [TestCase("""{"pipeline":{"version":"v"},"allowed_origins":["h"]}""", "'sources' is required")]

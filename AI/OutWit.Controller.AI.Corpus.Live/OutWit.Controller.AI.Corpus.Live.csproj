@@ -28,4 +28,10 @@
     <None Update="manifests\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- The reference language pack (the tests' fixture): what the bundled manifests pin and what
+       the model option defaults to. -->
+  <ItemGroup>
+    <None Include="..\OutWit.Controller.AI.Corpus.Tests\Fixtures\language-pack-cc-2026-43-16.bin" Link="models\language-pack-cc-2026-43-16.bin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -12,12 +12,13 @@
     "benchmark_unit": { "type": "string", "description": "The unit of the pool's rate: megabytes of Common Crawl WET per second." },
     "stages": {
       "type": "object",
-      "required": ["order", "sha256", "verified"],
+      "required": ["order", "sha256", "verified", "language_format"],
       "additionalProperties": false,
       "properties": {
         "order": { "type": "array", "items": { "type": "string" }, "description": "The stages in the order a document meets them. A manifest's pipeline switches turn identify_language, clean_lines, filter_quality and sign on and off." },
         "sha256": { "type": "string", "description": "The stage set's fingerprint: the content hash the host computed for the controller's reference shard through the stages." },
-        "verified": { "type": "boolean", "description": "The fingerprint is the one the controller pins: the stages compute on the host what they compute everywhere." }
+        "verified": { "type": "boolean", "description": "The fingerprint is the one the controller pins: the stages compute on the host what they compute everywhere." },
+        "language_format": { "type": "string", "description": "The format of the language data the language stage reads (WITLID2, a language pack: profiles, acceptance limits and every language's rule data). It is a job's input pinned by language_model_sha256, so it is not in the fingerprint; WITLID1 models are still read." }
       }
     },
     "parsers": {
@@ -32,15 +33,21 @@
     },
     "language_model": {
       "type": "object",
-      "description": "A language model is a job's input (a blob, pinned by hash in the manifest), not part of the controller. The reference model is the one the controller's tests and fleet proofs use.",
-      "required": ["format", "method", "reference_sha256", "reference_trained_from", "reference_languages"],
+      "description": "A language model is a job's input (a blob, pinned by hash in the manifest), not part of the controller: a language pack (WITLID2) carries every language's profile, acceptance limit and rule data (script, stop words, thresholds), so adding a language is a new pack, not a new controller. The reference pack is the one the controller's tests and fleet proofs use.",
+      "required": ["format", "formats", "method", "reference_name", "reference_sha256", "reference_trained_from", "reference_languages", "reference_known_languages", "witlid1_reference_sha256", "unsupported_drop", "unknown_drop"],
       "additionalProperties": false,
       "properties": {
-        "format": { "type": "string", "description": "The model file format the controller reads." },
+        "format": { "type": "string", "description": "The format of the reference pack (WITLID2, a language pack)." },
+        "formats": { "type": "array", "items": { "type": "string" }, "description": "Every model format the controller reads: WITLID1 (profiles only: the nearest profile always wins, the rule data is Corpus 0.1.14's, products as under 0.1.x) and WITLID2 (a language pack)." },
         "method": { "type": "string" },
-        "reference_sha256": { "type": "string", "description": "What a manifest's pipeline.language_model_sha256 names to pin the reference model." },
-        "reference_trained_from": { "type": "string", "description": "The crawl the reference model was trained from." },
-        "reference_languages": { "type": "array", "items": { "type": "string" }, "description": "ISO 639-3 codes the reference model identifies: what pipeline.target_languages may name with it." }
+        "reference_name": { "type": "string", "description": "The reference pack's name." },
+        "reference_sha256": { "type": "string", "description": "What a manifest's pipeline.language_model_sha256 names to pin the reference pack." },
+        "reference_trained_from": { "type": "string", "description": "The crawl the reference pack was built from." },
+        "reference_languages": { "type": "array", "items": { "type": "string" }, "description": "ISO 639-3 codes of the languages the reference pack supports: what pipeline.target_languages may name with it." },
+        "reference_known_languages": { "type": "array", "items": { "type": "string" }, "description": "ISO 639-3 codes of the languages the reference pack knows and does not support: a document in one of them is unknown and drops as unsupported_drop, not mislabelled." },
+        "witlid1_reference_sha256": { "type": "string", "description": "The 0.1.x reference model (WITLID1), still read; a manifest pinned to it keeps its products." },
+        "unsupported_drop": { "type": "string", "description": "The drop rule of a document in a language the pack does not support (language_unsupported)." },
+        "unknown_drop": { "type": "string", "description": "The drop rule of a document with too little text to tell its language (language_unknown)." }
       }
     },
     "formats": { "type": "array", "items": { "type": "string", "enum": ["wet", "warc"] }, "description": "The source formats a manifest may name." },
@@ -93,13 +100,14 @@
       "properties": {
         "switches": {
           "type": "object",
-          "required": ["identify_language", "clean_lines", "filter_quality", "sign"],
+          "required": ["identify_language", "clean_lines", "filter_quality", "sign", "filter_curly_bracket"],
           "additionalProperties": false,
           "properties": {
             "identify_language": { "type": "boolean" },
             "clean_lines": { "type": "boolean" },
             "filter_quality": { "type": "boolean" },
-            "sign": { "type": "boolean" }
+            "sign": { "type": "boolean" },
+            "filter_curly_bracket": { "type": "boolean", "description": "C4's curly-bracket rule, off unless the manifest turns it on." }
           }
         },
         "quality": {

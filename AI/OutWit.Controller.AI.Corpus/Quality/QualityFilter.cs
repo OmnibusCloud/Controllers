@@ -147,7 +147,7 @@ public static class QualityFilter
 
         // Gopher's stop-word filter, "at least two of the following English words", which "deals
         // with ostensibly English documents that contain no coherent English text"; FineWeb-2
-        // gives each language a list of its own (QualityStopWords). On Common Crawl it mostly
+        // gives each language a list of its own (a language pack's rule data). On Common Crawl it mostly
         // removes pages in a language the identifier does not know, labelled with the nearest
         // one it does. Distinct words, matched exactly (DataTrove: stop_words ∩ set(words)).
         if (rules.MinStopWords > 0)

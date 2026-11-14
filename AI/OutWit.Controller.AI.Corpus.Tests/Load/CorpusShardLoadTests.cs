@@ -45,7 +45,7 @@ public sealed class CorpusShardLoadTests
         WarcSynth.WriteWetShard(m_shardPath, DOCUMENTS, WORDS_PER_DOCUMENT, seed: 42);
         TestContext.Out.WriteLine($"shard: {DOCUMENTS} documents, {new FileInfo(m_shardPath).Length / (1024.0 * 1024.0):F1} MB gzip, written in {clock.Elapsed}");
 
-        m_model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-model-cc-2026-43-16.bin"));
+        m_model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-pack-cc-2026-43-16.bin"));
     }
 
     [OneTimeTearDown]

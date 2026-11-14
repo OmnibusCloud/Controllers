@@ -6,9 +6,9 @@ using OutWit.Common.Values;
 namespace OutWit.Controller.AI.Corpus.Model;
 
 /// <summary>
-/// The quality thresholds of a pipeline (the Gopher-style shape and repetition rules). A value
-/// of 0 means "the stage default". Part of the pipeline contract: change a threshold, change
-/// the pipeline version.
+/// The quality thresholds of a pipeline (the Gopher-style shape and repetition rules) and its
+/// optional quality rules. A threshold of 0 means "the stage default". Part of the pipeline
+/// contract: change a threshold, change the pipeline version.
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only.
@@ -34,7 +34,8 @@ public sealed partial class CorpusQualityData : ModelBase
                && MaxEllipsisLineRatio.Is(other.MaxEllipsisLineRatio, tolerance)
                && MinAlphabeticWordRatio.Is(other.MinAlphabeticWordRatio, tolerance)
                && MaxDuplicateLineRatio.Is(other.MaxDuplicateLineRatio, tolerance)
-               && MaxDuplicateLineCharRatio.Is(other.MaxDuplicateLineCharRatio, tolerance);
+               && MaxDuplicateLineCharRatio.Is(other.MaxDuplicateLineCharRatio, tolerance)
+               && FilterCurlyBracket.Is(other.FilterCurlyBracket);
     }
 
     /// <summary>Deep copy.</summary>
@@ -52,7 +53,8 @@ public sealed partial class CorpusQualityData : ModelBase
             MaxEllipsisLineRatio = MaxEllipsisLineRatio,
             MinAlphabeticWordRatio = MinAlphabeticWordRatio,
             MaxDuplicateLineRatio = MaxDuplicateLineRatio,
-            MaxDuplicateLineCharRatio = MaxDuplicateLineCharRatio
+            MaxDuplicateLineCharRatio = MaxDuplicateLineCharRatio,
+            FilterCurlyBracket = FilterCurlyBracket
         };
     }
 
@@ -101,6 +103,11 @@ public sealed partial class CorpusQualityData : ModelBase
     /// <summary>Most characters in lines that repeat an earlier line.</summary>
     [MemoryPackOrder(9)]
     public double MaxDuplicateLineCharRatio { get; set; }
+
+    /// <summary>Whether a document goes when a line C4 would test holds a curly bracket (C4's rule; the manifest's <c>pipeline.filter_curly_bracket</c>, off by default).</summary>
+    [ToString]
+    [MemoryPackOrder(10)]
+    public bool FilterCurlyBracket { get; set; }
 
     #endregion
 }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Benchmark;
 using OutWit.Controller.AI.Corpus.Dedup;
+using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Quality;
@@ -15,7 +16,7 @@ namespace OutWit.Controller.AI.Corpus.Diagnostics;
 
 /// <summary>
 /// The capabilities document: what an application can know before a run. The controller's
-/// version and stage set, the parsers, the language-model format and the reference model,
+/// version and stage set, the parsers, the language-pack formats and the reference pack,
 /// where a machine fetches from, the defaults and the ceilings, the stage parameters a job may
 /// set with their defaults, the products, the measured storage ratios with the deployment's
 /// headroom, and the pool as totals. A JSON document like every other output, so an
@@ -91,6 +92,7 @@ public static class CorpusCapabilitiesWriter
         WriteStrings(writer, "order", diagnostics.Stages);
         writer.WriteString("sha256", diagnostics.StageSetSha256);
         writer.WriteBoolean("verified", diagnostics.StagesVerified);
+        writer.WriteString("language_format", CorpusStageSet.LANGUAGE_FORMAT);
         writer.WriteEndObject();
     }
 
@@ -107,10 +109,16 @@ public static class CorpusCapabilitiesWriter
     {
         writer.WriteStartObject("language_model");
         writer.WriteString("format", CorpusReferenceLanguageModel.FORMAT);
+        WriteStrings(writer, "formats", LanguageModelFormat.READ);
         writer.WriteString("method", CorpusReferenceLanguageModel.METHOD);
+        writer.WriteString("reference_name", CorpusReferenceLanguageModel.NAME);
         writer.WriteString("reference_sha256", CorpusReferenceLanguageModel.SHA256);
         writer.WriteString("reference_trained_from", CorpusReferenceLanguageModel.TRAINED_FROM);
         WriteStrings(writer, "reference_languages", CorpusReferenceLanguageModel.LANGUAGES);
+        WriteStrings(writer, "reference_known_languages", CorpusReferenceLanguageModel.KNOWN_LANGUAGES);
+        writer.WriteString("witlid1_reference_sha256", CorpusReferenceLanguageModel.WITLID1_SHA256);
+        writer.WriteString("unsupported_drop", ShardProcessor.DROP_LANGUAGE_UNSUPPORTED);
+        writer.WriteString("unknown_drop", ShardProcessor.DROP_LANGUAGE_UNKNOWN);
         writer.WriteEndObject();
     }
 
@@ -160,6 +168,7 @@ public static class CorpusCapabilitiesWriter
         writer.WriteBoolean("clean_lines", defaults.CleanLines);
         writer.WriteBoolean("filter_quality", defaults.FilterQuality);
         writer.WriteBoolean("sign", defaults.Sign);
+        writer.WriteBoolean("filter_curly_bracket", new CorpusQualityData().FilterCurlyBracket);
         writer.WriteEndObject();
 
         writer.WriteStartObject("quality");

@@ -1,0 +1,12 @@
+# English stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: Gopher (Rae et al. 2021, "Scaling Language Models: Methods, Analysis & Insights from Training Gopher",
+# arXiv:2112.11446, appendix A.1.1): "at least two of the following English words: the, be, to, of, and, that, have, with".
+# Eight function words named in the paper (a fact, not a work under copyright). Corpus 0.1.14 shipped this list.
+the
+be
+to
+of
+and
+that
+have
+with

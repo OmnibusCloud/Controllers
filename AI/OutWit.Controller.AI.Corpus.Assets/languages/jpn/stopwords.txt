@@ -1,0 +1,19 @@
+# Japanese stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/jpn_Jpan.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 83d1b7f6674c2cac92a27f7d1603d8eb25b76ba6f3ee99e90c09cf93448de2c8.
+# In the order of the source; Corpus 0.1.14 shipped this list.
+の
+に
+を
+は
+た
+て
+が
+と
+で
+年
+し
+・
+月
+れ
+さ
