@@ -19,7 +19,9 @@ DOWNLOADS="${RUNNER_TEMP:-/tmp}/smt-sm0-downloads"
 mkdir -p "$DOWNLOADS"
 
 sha() {
-  if command -v sha256sum > /dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1
+  # From stdin: GNU sha256sum marks a file name with a backslash (a Windows path) by a
+  # leading backslash on the digest.
+  if command -v sha256sum > /dev/null 2>&1; then sha256sum < "$1"; else shasum -a 256 < "$1"; fi | cut -d' ' -f1
 }
 
 fetch() {
