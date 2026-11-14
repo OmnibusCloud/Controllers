@@ -39,7 +39,7 @@ public static class CorpusStorageEstimator
         long text = 0, signatures = 0, documents = 0;
         var unsized = 0;
         var keeps = pipeline.Output == CorpusOutputMode.Full;
-        var signs = ShardProcessor.Signs(pipeline);
+        var signs = ShardProcessor.KeepsSignatures(pipeline);
         var minHash = MinHashParameters.Resolve(pipeline.MinHash);
 
         foreach (var source in sources)

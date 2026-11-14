@@ -7,11 +7,11 @@ using OutWit.Controller.AI.Corpus.Tests.Mock;
 namespace OutWit.Controller.AI.Corpus.Tests.Shards;
 
 /// <summary>
-/// The output mode "statistics and hashes only" on a node: the shard is processed and hashed as
-/// under the full output (the same content hash, the same counters, the same product size), but
-/// nothing is uploaded — no text, no signatures — and the task's folder, with the products in it, is
-/// the caller's to delete. The full output still uploads both, with the MinHash parameters it signed
-/// with in the result.
+/// The output mode "statistics and hashes only" on a node: the shard is processed, signed and hashed
+/// as under the full output (the same content hash, the same signatures hash, the same counters, the
+/// same product size), but nothing is uploaded — no text, no signatures — and the task's folder, with
+/// the products in it, is the caller's to delete. The full output uploads both. Either way the result
+/// carries the MinHash parameters and the signatures' hash, which integrity compares.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -81,8 +81,10 @@ public sealed class ShardOutputModeTests
             Assert.That(stats.Result.Stats!.BytesProduced, Is.EqualTo(full.Result.Stats!.BytesProduced), "the product's size on the node");
             Assert.That(stats.Result.Output, Is.EqualTo(CorpusOutputMode.StatsAndHashes));
             Assert.That(full.Result.Output, Is.EqualTo(CorpusOutputMode.Full));
-            Assert.That(stats.Result.MinHash, Is.Null, "no signatures, no parameters");
+            Assert.That(stats.Result.MinHash!.Is(MinHashParameters.DEFAULT.ToData()), Is.True, "the signatures are made, so their parameters are said");
             Assert.That(full.Result.MinHash!.Is(MinHashParameters.DEFAULT.ToData()), Is.True, "the full output says what it signed with, resolved");
+            Assert.That(full.Result.SignaturesSha256, Has.Length.EqualTo(64));
+            Assert.That(stats.Result.SignaturesSha256, Is.EqualTo(full.Result.SignaturesSha256), "the signatures' identity does not depend on what is kept");
         });
     }
 
@@ -101,6 +103,7 @@ public sealed class ShardOutputModeTests
             Assert.That(run.Uploaded, Is.EqualTo(1), "the text only");
             Assert.That(run.Result.SignaturesBlobId, Is.EqualTo(Guid.Empty));
             Assert.That(run.Result.MinHash, Is.Null);
+            Assert.That(run.Result.SignaturesSha256, Is.Empty, "no signature made, nothing to compare");
         });
     }
 
@@ -119,6 +122,7 @@ public sealed class ShardOutputModeTests
             Assert.That(run.Result.MinHash!.Is(new CorpusMinHashData { Hashes = 64, ShingleWords = 5, Bands = 8 }), Is.True, $"{run.Result.MinHash}");
             Assert.That(ShardSignatureWriter.ReadHeader(blob), Is.EqualTo((64, 5, ShardSignatureWriter.HEADER_SIZE_PARAMETERS)));
             Assert.That(ShardSignatureWriter.Read(blob), Has.Count.EqualTo(run.Result.Stats!.DocumentsOut));
+            Assert.That(run.Result.SignaturesSha256, Is.EqualTo(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(blob))), "the hash is the uploaded blob's");
         });
     }
 
@@ -127,7 +131,7 @@ public sealed class ShardOutputModeTests
     #region Processor Tests
 
     [Test]
-    public void TheProcessorSignsNothingWhenNothingIsKeptTest()
+    public void TheProcessorSignsAndHashesWhenNothingIsKeptTest()
     {
         var model = LanguageModel.Load(Path.Combine(Fixtures(), MODEL_FIXTURE));
         var pipeline = new CorpusPipelineData { Version = "test-v1", Output = CorpusOutputMode.StatsAndHashes };
@@ -139,8 +143,10 @@ public sealed class ShardOutputModeTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(ShardProcessor.Signs(pipeline), Is.False);
-            Assert.That(signatures.Length, Is.Zero);
+            Assert.That(ShardProcessor.Signs(pipeline), Is.True, "made, to be hashed and compared");
+            Assert.That(ShardProcessor.KeepsSignatures(pipeline), Is.False);
+            Assert.That(product.SignaturesSha256, Is.EqualTo(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(signatures.ToArray()))));
+            Assert.That(product.SignaturesSha256, Is.EqualTo("aa77d782313aba066db3054d44013b5c6d4b8b9a7004a90893acb963f93a1add"), "the golden WET shard's signatures blob, kept or not");
             Assert.That(text.Length, Is.GreaterThan(0), "the text is still made on the node, to be hashed and measured");
             Assert.That(product.ContentSha256, Is.EqualTo("5fd9af0b09764d3b017cf15c1338b56271faf9f0e857efa653c4dc71a2d3e74b"), "the golden WET product, kept or not");
         });

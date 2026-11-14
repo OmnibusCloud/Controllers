@@ -83,7 +83,7 @@ public sealed partial class CorpusPreflightData : ModelBase
     [MemoryPackOrder(3)]
     public int OversizedSources { get; set; }
 
-    /// <summary>Sum of the sources' estimated sizes: what the contributors will fetch.</summary>
+    /// <summary>What the contributors will fetch: every source's estimated size once, and the second fetch of the shards sampled for integrity (the largest ones are taken as the sampled ones).</summary>
     [ToString]
     [MemoryPackOrder(4)]
     public long EstimatedTrafficBytes { get; set; }

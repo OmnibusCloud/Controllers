@@ -54,7 +54,7 @@
           }
         },
         "output": { "type": "string", "enum": ["full", "stats_and_hashes"], "description": "What the run kept on the server: full, or stats_and_hashes (no text, no signatures: text_blob and signatures_blob are \"\", and Corpus.Dedup refuses the run). Absent from reports of controllers before 0.3.0 (they kept everything)." },
-        "minhash": { "$ref": "#/$defs/minhash", "description": "The MinHash parameters every shard's signatures were made with; absent when no shard has signatures or the shards differ (each shard then says its own), and from reports of controllers before 0.3.0 (the defaults)." }
+        "minhash": { "$ref": "#/$defs/minhash", "description": "The MinHash parameters every shard's signatures were made with (kept or not); absent when no shard made signatures or the shards differ (each shard then says its own), and from reports of controllers before 0.3.0 (the defaults)." }
       }
     },
     "shards": {
@@ -73,7 +73,8 @@
           "controller": { "type": "string" },
           "runtime_target": { "type": "string", "description": "The operating system and architecture the shard ran on, e.g. \"linux-x64\" (\"\" from a controller before it was reported). A platform, never a machine." },
           "degree": { "type": "integer", "description": "Shards the node processed at once (its cores, bounded by memory): the context of process_ms (0 when not reported)." },
-          "minhash": { "$ref": "#/$defs/minhash", "description": "The MinHash parameters the shard's signatures were made with; present when the shard has signatures (absent from reports of controllers before 0.3.0, whose signatures carry the defaults)." },
+          "minhash": { "$ref": "#/$defs/minhash", "description": "The MinHash parameters the shard's signatures were made with; present when signatures were made, kept or not (absent from reports of controllers before 0.3.0, whose signatures carry the defaults)." },
+          "signatures_sha256": { "type": "string", "description": "SHA-256 of the shard's signatures blob as the node made it, kept or not (under stats_and_hashes it is made and hashed, not uploaded); empty when no signature was made. Absent from reports of controllers before 0.3.0." },
           "stats": {
             "oneOf": [
               { "type": "null" },

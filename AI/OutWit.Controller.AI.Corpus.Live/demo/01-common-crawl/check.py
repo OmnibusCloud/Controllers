@@ -3,9 +3,10 @@
     python check.py <report.json> [<integrity.json>]
 
 Prints the funnel, the drops by stage, the languages kept and the languages lost, then one line
-per shard that differs from the kit's list (verdict, content hash, document counts), the kit's
-identity (the SHA-256 of the lines "index:content_sha256" in index order) and, with the integrity
-document, the pairs. Exits 1 when a shard differs or the report kept text.
+per shard that differs from the kit's list (verdict, content hash, signatures hash, document
+counts), the kit's identities (the SHA-256 of the lines "index:content_sha256", and of the lines
+"index:signatures_sha256", in index order) and, with the integrity document, the pairs. Exits 1
+when a shard differs or the report kept text.
 """
 
 import hashlib
@@ -24,6 +25,10 @@ def load_expected(path):
             values = dict(zip(header, line.rstrip('\n').split('\t')))
             rows[int(values['index'])] = values
     return rows
+
+
+def digest(lines):
+    return hashlib.sha256(''.join(lines).encode('ascii')).hexdigest()
 
 
 def main(argv):
@@ -56,9 +61,12 @@ def main(argv):
     unexpected = 0
     kept_text = 0
     identity = []
+    signed = []
     for shard in report['shards']:
         index = shard['index']
+        signatures = shard.get('signatures_sha256', '')
         identity.append(f"{index}:{shard['content_sha256']}\n")
+        signed.append(f'{index}:{signatures}\n')
         if shard['text_blob'] or shard['signatures_blob']:
             kept_text += 1
         want = expected.get(index)
@@ -69,8 +77,11 @@ def main(argv):
         else:
             if shard['verdict'] != 'Completed':
                 problems.append(f"verdict {shard['verdict']}: {shard['error']}")
-            elif shard['content_sha256'] != want['content_sha256']:
-                problems.append(f"content {shard['content_sha256'][:12]}… instead of {want['content_sha256'][:12]}…")
+            else:
+                if shard['content_sha256'] != want['content_sha256']:
+                    problems.append(f"content {shard['content_sha256'][:12]}… instead of {want['content_sha256'][:12]}…")
+                if signatures != want['signatures_sha256']:
+                    problems.append(f"signatures {signatures[:12]}… instead of {want['signatures_sha256'][:12]}…")
             for field in ('records_in', 'documents_extracted', 'documents_out'):
                 if stats and str(stats.get(field)) != want[field]:
                     problems.append(f'{field} {stats.get(field)} instead of {want[field]}')
@@ -83,7 +94,8 @@ def main(argv):
         unexpected += 1
         print(f'  [{index:3}] missing from the report')
 
-    print(f"identity   : {hashlib.sha256(''.join(identity).encode('ascii')).hexdigest()}")
+    print(f'identity   : {digest(identity)}')
+    print(f'signatures : {digest(signed)}')
     print(f'shards the kit does not expect: {unexpected}')
     if kept_text:
         print(f'shards that kept text or signatures: {kept_text} (the kit keeps statistics and hashes only)')
@@ -92,8 +104,9 @@ def main(argv):
         with open(argv[2], encoding='utf-8') as handle:
             integrity = json.load(handle)
         totals = integrity['summary']
-        print(f"integrity  : sampled {totals['sampled']}, compared {totals['compared']}, version skew {totals['version_skew']},"
-              f" incomplete {totals['incomplete']}, mismatches {totals['mismatches']}")
+        print(f"integrity  : {integrity['schema']}, sampled {totals['sampled']}, compared {totals['compared']},"
+              f" version skew {totals['version_skew']}, incomplete {totals['incomplete']}, mismatches {totals['mismatches']}"
+              f" (signatures compared {totals.get('signatures_compared', 0)}, signature mismatches {totals.get('signature_mismatches', 0)})")
 
     return 1 if unexpected or kept_text else 0
 

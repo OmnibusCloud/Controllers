@@ -37,7 +37,7 @@ and the PDF stage proven on the fleet.
 | Activity | Runs on | Signature | What it does |
 |---|---|---|---|
 | `Corpus.Split` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusTaskCollection` | parses the manifest, checks every source against the allowlist and the byte cap, hashes the language model blob and pins it into the pipeline, reads it and refuses one this controller cannot use (a format it does not read, a truncated or non-canonical pack, a threshold it does not have) by name, holds the server storage estimate to the deployment's headroom, emits one task per shard. Any problem fails the job here — a bad manifest never reaches a node |
-| `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate (sources without a size are asked at the origin with HEAD, up to 64 of them, the rest extrapolated at the mean), the server storage estimate and the headroom it is held to (see *Server storage*), the busiest node's share of the work and how many nodes the plan uses (see *The busiest share*), what the run keeps and whether its signatures can be merged, every message by manifest line |
+| `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate (every shard once and the shards sampled for integrity a second time, the largest taken as the sampled ones; sources without a size are asked at the origin with HEAD, up to 64 of them, the rest extrapolated at the mean), the server storage estimate and the headroom it is held to (see *Server storage*), the busiest node's share of the work and how many nodes the plan uses (see *The busiest share*), what the run keeps and whether its signatures can be merged, every message by manifest line |
 | `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline (a WARC shard's PDFs through the sandboxed extractor), the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception — except a fault of the node that another node would not have (a PDF the node cannot run, a product it cannot upload): that fails the node's batch, and `Grid.ForEach` runs the node's tasks on another node; several shards may run on one client at once |
 | `Corpus.Collect` | host | `(CorpusResultCollection, CorpusOptions) → Blob report` | the job report: every shard's verdict, blobs and content hash in task order, the aggregate counters over the fleet and the run's funnel, what the run kept and the MinHash parameters of its signatures |
 | `Corpus.SamplingRate` | host | `(CorpusOptions) → Double` | `SamplingRate` clamped to 0..1, the share of the shards `Grid.Replicas` runs twice |
@@ -176,12 +176,12 @@ One JSON document (`docs/corpus-manifest.schema.json`):
 - `output` says what the run keeps on the server: `"full"` (the default) keeps
   every shard's text and signatures; `"stats_and_hashes"` keeps the statistics,
   the content hashes, the report and the integrity document only. Every shard
-  is processed and hashed exactly as under `"full"` — the same content hashes,
-  the same counters, the same `bytes_produced` — but its text and signatures
-  stay on the node and are deleted with the task's folder (no signature is
-  even made). For demonstrations and licensing, where a lab must not hold
-  third-party text. The sampled shards still run twice and their hashes are
-  still compared across machines. The storage estimate drops the products, and
+  is processed, signed and hashed exactly as under `"full"` — the same content
+  hashes, the same signatures hashes, the same counters, the same
+  `bytes_produced` — but its text and signatures stay on the node and are
+  deleted with the task's folder. For demonstrations and licensing, where a lab
+  must not hold third-party text. The sampled shards still run twice and their
+  hashes, of the text and of the signatures, are still compared across machines. The storage estimate drops the products, and
   the preflight says so; `Corpus.Dedup` refuses such a run (no signatures).
 - `minhash` sets the signatures and the near-duplicate merge: `hashes`
   (1 to 1,024; 128 by default), `shingle_words` (1 to 32; 5) and `bands` (a
@@ -375,8 +375,10 @@ stay.
   product order (128 × uint64 LE) — a fixed layout, document *i* at
   `12 + i × 1024`. With another hash count or shingle size (`minhash`) the
   magic is `WITSIG2\n` and the shingle size (int32 LE) follows the hash count:
-  document *i* at `16 + i × 8 × hashes`. Absent when `sign` is `false` or the
-  run keeps statistics and hashes only.
+  document *i* at `16 + i × 8 × hashes`. Absent when `sign` is `false`; under
+  statistics and hashes only it is made and hashed on the node, not uploaded.
+  The result's `SignaturesSha256` (the report's `signatures_sha256`) is the
+  SHA-256 of the blob's bytes, kept or not: the signatures' identity.
 - **Dedup** (`corpus-dedup.json`, `docs/corpus-dedup.schema.json`): per shard
   a keep mask over the product (a base64 bitset, bit *i* = the *i*-th JSON line,
   1 = keep) and the clusters of two or more as (shard, ordinal) pairs with the
@@ -510,11 +512,17 @@ fit their ceilings into half its memory.
 
 `SamplingRate` runs a share of the shards twice, in the same `Grid.ForEach` call
 as the rest, and `Corpus.Integrity` writes `corpus-integrity.json`
-(`docs/corpus-integrity.schema.json`): for every shard that ran twice its two
+(`docs/corpus-integrity.schema.json`, `corpus-integrity/4`): for every shard that ran twice its two
 executions compared on everything an honest node
-cannot vary — the verdict, the content hash of the product, the record and
+cannot vary — the verdict, the content hash of the product, the hash of its
+signatures, the record and
 document counts, the drop and language histograms (the drops with the languages of the
 `language_unsupported` ones), the PDF stage's counts. Times, bytes and fuel are not compared.
+Signatures that differ while the text agrees are a mismatch of their own kind
+(`signatures` among the differences, counted in `signature_mismatches`): a node
+returning the right text with wrong signatures would otherwise poison the
+near-duplicate merge unseen. A pair whose sides made no signature (`sign` off)
+has nothing of the kind to compare and says so (`"signatures": "none"`).
 The platform picks the shards at random and keeps the two executions
 on different machines, so a node cannot tell whether its shard is being checked.
 No document says which machine ran what.

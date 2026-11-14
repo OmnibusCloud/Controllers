@@ -19,9 +19,10 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// document per page range), passes or fails the language and quality stages, and the survivors
 /// leave as one JSON line each — <c>{"url","lang","text"}</c> — hashed uncompressed, written
 /// zstd-compressed, with a MinHash signature per document in a side blob (with the pipeline's
-/// MinHash parameters; none when the pipeline does not sign or keeps statistics and hashes only:
-/// there is then no signature product). A pure function of the shard bytes and the pipeline: two
-/// nodes produce the same hash or one of them is wrong; the output mode does not change it.
+/// MinHash parameters; none when the pipeline does not sign), the blob hashed as it is written. A
+/// pure function of the shard bytes and the pipeline: two nodes produce the same hashes or one of
+/// them is wrong; the output mode changes neither (statistics and hashes only keeps the products on
+/// the node, it makes them all the same).
 /// </summary>
 public sealed class ShardProcessor
 {
@@ -99,10 +100,18 @@ public sealed class ShardProcessor
 
     #region Functions
 
-    /// <summary>Whether a pipeline makes signatures: it signs and keeps its products (statistics and hashes only keeps no signature, so none is made).</summary>
+    /// <summary>Whether a pipeline makes signatures (kept or not: under statistics and hashes only they are made and hashed for integrity, and stay on the node).</summary>
     /// <param name="pipeline">The pipeline.</param>
     /// <returns>True when the processor writes a signatures blob.</returns>
     public static bool Signs(CorpusPipelineData pipeline)
+    {
+        return pipeline.Sign;
+    }
+
+    /// <summary>Whether a run keeps the signatures on the server: it signs and keeps its products.</summary>
+    /// <param name="pipeline">The pipeline.</param>
+    /// <returns>True when the node uploads the signatures blob.</returns>
+    public static bool KeepsSignatures(CorpusPipelineData pipeline)
     {
         return pipeline.Sign && pipeline.Output == CorpusOutputMode.Full;
     }
@@ -121,9 +130,10 @@ public sealed class ShardProcessor
         var stats = new ShardStatsBuilder();
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         using var reader = new WarcReader(shard, ownsStream: false);
+        using var signed = new ShardHashingStream(signatures);
 
         if (m_sign)
-            ShardSignatureWriter.WriteHeader(signatures, m_minHash);
+            ShardSignatureWriter.WriteHeader(signed, m_minHash);
 
         using (var compressor = CorpusCompressor.CompressTo(text))
         {
@@ -136,7 +146,7 @@ public sealed class ShardProcessor
                 foreach (var (url, document) in Extract(record, format, stats, cancellationToken))
                 {
                     stats.Extracted();
-                    Judge(url, document, stats, buffer, hash, compressor, signatures);
+                    Judge(url, document, stats, buffer, hash, compressor, signed);
                 }
             }
         }
@@ -144,7 +154,10 @@ public sealed class ShardProcessor
         text.Flush();
         signatures.Flush();
 
-        return new ShardProduct(Convert.ToHexStringLower(hash.GetHashAndReset()), stats, reader.SkippedOversized, reader.Truncated);
+        return new ShardProduct(Convert.ToHexStringLower(hash.GetHashAndReset()), stats, reader.SkippedOversized, reader.Truncated)
+        {
+            SignaturesSha256 = m_sign ? signed.Sha256() : ""
+        };
     }
 
     /// <summary>One extracted document through the language, line and quality stages; a survivor is written, hashed and signed.</summary>

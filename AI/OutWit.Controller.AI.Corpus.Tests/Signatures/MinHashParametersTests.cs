@@ -60,10 +60,14 @@ public sealed class MinHashParametersTests
     [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc, "e41a88f35141c9840f07f9decfb2f64c6bedf35e31eb09cc7e042d2f8bde998b")]
     public void GoldenSignaturesBlobIsPinnedTest(string fixture, CorpusSourceFormat format, string expected)
     {
-        var (_, signatures) = Run(fixture, format, new CorpusPipelineData { Version = "test-v1" });
+        var (product, signatures) = Run(fixture, format, new CorpusPipelineData { Version = "test-v1" });
         var digest = Digest(signatures);
 
-        Assert.That(digest, Is.EqualTo(expected), $"{fixture}: the signatures blob hashes to {digest} ({signatures.Length} bytes)");
+        Assert.Multiple(() =>
+        {
+            Assert.That(digest, Is.EqualTo(expected), $"{fixture}: the signatures blob hashes to {digest} ({signatures.Length} bytes)");
+            Assert.That(product.SignaturesSha256, Is.EqualTo(digest), "the product carries the blob's hash, computed as it is written");
+        });
     }
 
     /// <summary>The defaults written out, and another band layout (the merge's business, not the blob's), give the bytes of 0.2.1.</summary>

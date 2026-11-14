@@ -7,10 +7,11 @@ namespace OutWit.Controller.AI.Corpus.Tests.Scripts;
 
 /// <summary>
 /// What the studio reads, through the engine: the preflight's busiest share on the rig's pool (a
-/// share and counts, never a node); a run that keeps statistics and hashes only — its report names
-/// no blob and carries the direct run's content hashes, its sampled pairs still compare, and
-/// CorpusDedup refuses it by name; a run with its own MinHash parameters, which the report states
-/// and the merge uses.
+/// share and counts, never a node) and the traffic promise with the sampled copies; a run that keeps
+/// statistics and hashes only — its report names no blob and carries the direct run's content
+/// hashes, its sampled pairs still compare the text and the signatures, and CorpusDedup refuses it
+/// by name; a run with its own MinHash parameters, which the report states and the merge uses; a
+/// node that returns the right text with other signatures, which integrity names.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -84,6 +85,23 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
         });
     }
 
+    [Test]
+    public async Task PreflightCountsTheSampledCopiesInTheTrafficTest()
+    {
+        var manifest = await UploadAsync(Manifest(WET_FIXTURE, WARC_FIXTURE), "traffic.json");
+
+        var job = Engine.Compile(m_preflightScript);
+        await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData { SamplingRate = 0.5 });
+        var report = (CorpusPreflightData)job.Variables["result"].Value!;
+        var largest = Math.Max(Size(WET_FIXTURE), Size(WARC_FIXTURE));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.EstimatedTrafficBytes, Is.EqualTo(Size(WET_FIXTURE) + Size(WARC_FIXTURE) + largest), "the larger shard a second time");
+            Assert.That(report.Messages, Has.Some.EqualTo($"Contributor traffic estimate {report.EstimatedTrafficBytes} bytes: every shard once ({Size(WET_FIXTURE) + Size(WARC_FIXTURE)}) and the second fetch of the 1 largest shard(s), sampled for integrity ({largest})."));
+        });
+    }
+
     #endregion
 
     #region Run Tests
@@ -110,7 +128,9 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
             Assert.That(shards.Select(shard => shard.GetProperty("text_blob").GetString()), Is.All.Empty);
             Assert.That(shards.Select(shard => shard.GetProperty("signatures_blob").GetString()), Is.All.Empty);
             Assert.That(integrity.RootElement.GetProperty("summary").GetProperty("compared").GetInt32(), Is.EqualTo(2), "the hashes are still compared across machines");
+            Assert.That(integrity.RootElement.GetProperty("summary").GetProperty("signatures_compared").GetInt32(), Is.EqualTo(2), "the signatures too: made and hashed, not kept");
             Assert.That(integrity.RootElement.GetProperty("summary").GetProperty("mismatches").GetInt32(), Is.Zero);
+            Assert.That(shards.Select(shard => shard.GetProperty("signatures_sha256").GetString()), Has.All.Length.EqualTo(64));
         });
 
         foreach (var (fixture, format, index) in new[] { (WET_FIXTURE, CorpusSourceFormat.Wet, 0), (WARC_FIXTURE, CorpusSourceFormat.Warc, 1) })
@@ -159,6 +179,47 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
             Assert.That(summary.GetProperty("bands").GetInt32(), Is.EqualTo(8));
             Assert.That(summary.GetProperty("documents").GetInt64(), Is.EqualTo(shard.GetProperty("stats").GetProperty("documents_out").GetInt64()));
         });
+    }
+
+    [Test]
+    public async Task ANodeWhoseSignaturesDifferIsNamedByIntegrityTest()
+    {
+        // One node returns the right text with other signatures: integrity must see it, by name.
+        var dishonest = NodesManager.CompatibleNodes[0].NodeId;
+        NodesManager.Tamper = (nodeId, result) =>
+        {
+            if (nodeId == dishonest && result.SignaturesSha256.Length > 0)
+                result.SignaturesSha256 = new string(result.SignaturesSha256.Reverse().ToArray());
+        };
+
+        try
+        {
+            var manifest = await UploadAsync(Manifest(WET_FIXTURE, WARC_FIXTURE), "dishonest.json");
+
+            var job = Engine.Compile(m_processScript);
+            var status = await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData { SamplingRate = 1.0 });
+            Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+
+            using var integrity = await ReadJsonAsync((Guid)job.Variables["integrity"].Value!);
+            var summary = integrity.RootElement.GetProperty("summary");
+            var mismatched = integrity.RootElement.GetProperty("pairs").EnumerateArray().Where(pair => !pair.GetProperty("match").GetBoolean()).ToList();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/4"));
+                Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));
+                Assert.That(summary.GetProperty("signature_mismatches").GetInt32(), Is.GreaterThanOrEqualTo(1), "the dishonest node held a side of at least one pair");
+                Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.EqualTo(summary.GetProperty("signature_mismatches").GetInt32()), "nothing else differs");
+                Assert.That(mismatched.Select(pair => pair.GetProperty("signatures").GetString()), Is.All.EqualTo("differ"));
+                Assert.That(mismatched.SelectMany(pair => pair.GetProperty("differs").EnumerateArray().Select(field => field.GetString())), Is.All.EqualTo("signatures"), "the text agrees: only the signatures tell");
+                Assert.That(mismatched.Select(pair => pair.GetProperty("primary").GetProperty("content_sha256").GetString()),
+                    Is.EqualTo(mismatched.Select(pair => pair.GetProperty("replica").GetProperty("content_sha256").GetString())));
+            });
+        }
+        finally
+        {
+            NodesManager.Tamper = null;
+        }
     }
 
     #endregion

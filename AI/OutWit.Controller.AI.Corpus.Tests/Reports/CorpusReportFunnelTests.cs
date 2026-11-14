@@ -92,11 +92,12 @@ public sealed class CorpusReportFunnelTests
         Assert.Multiple(() =>
         {
             Assert.That(summary.GetProperty("output").GetString(), Is.EqualTo("stats_and_hashes"));
-            Assert.That(summary.TryGetProperty("minhash", out _), Is.False, "no signatures, no parameters");
+            Assert.That(summary.GetProperty("minhash").GetProperty("hashes").GetInt32(), Is.EqualTo(128), "the signatures are made, not kept");
             Assert.That(shard.GetProperty("text_blob").GetString(), Is.Empty);
             Assert.That(shard.GetProperty("signatures_blob").GetString(), Is.Empty);
+            Assert.That(shard.GetProperty("signatures_sha256").GetString(), Is.EqualTo("aa77d782313aba066db3054d44013b5c6d4b8b9a7004a90893acb963f93a1add"), "the golden WET shard's signatures, hashed though not kept");
             Assert.That(shard.GetProperty("content_sha256").GetString(), Is.EqualTo("5fd9af0b09764d3b017cf15c1338b56271faf9f0e857efa653c4dc71a2d3e74b"), "the golden WET product's hash, though the product is gone");
-            Assert.That(shard.TryGetProperty("minhash", out _), Is.False);
+            Assert.That(shard.GetProperty("minhash").GetProperty("bands").GetInt32(), Is.EqualTo(16));
             Assert.That(summary.GetProperty("funnel").GetProperty("out").GetInt64(), Is.EqualTo(summary.GetProperty("documents_out").GetInt64()));
         });
     }
@@ -139,12 +140,13 @@ public sealed class CorpusReportFunnelTests
             TaskIndex = index,
             Verdict = CorpusShardVerdict.Completed,
             TextBlobId = pipeline.Output == CorpusOutputMode.Full ? Guid.NewGuid() : Guid.Empty,
-            SignaturesBlobId = signs ? Guid.NewGuid() : Guid.Empty,
+            SignaturesBlobId = ShardProcessor.KeepsSignatures(pipeline) ? Guid.NewGuid() : Guid.Empty,
             ContentSha256 = product.ContentSha256,
             Stats = product.Stats.Build(1, text.Length, 0, 0),
             ControllerVersion = "test",
             Output = pipeline.Output,
-            MinHash = signs ? MinHashParameters.Resolve(pipeline.MinHash).ToData() : null
+            MinHash = signs ? MinHashParameters.Resolve(pipeline.MinHash).ToData() : null,
+            SignaturesSha256 = product.SignaturesSha256
         };
     }
 

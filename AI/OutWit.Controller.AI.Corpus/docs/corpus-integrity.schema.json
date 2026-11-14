@@ -2,15 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-integrity.schema.json",
   "title": "Corpus integrity",
-  "description": "The integrity blob of CorpusProcess.wit: the share of shards (CorpusOptions.SamplingRate) that ran twice in one Grid.ForEach call, their two executions compared on everything an honest node cannot vary (verdict, content hash, document counts, drop and language histograms). The platform keeps the two on different machines and the document does not say which. Empty pairs at rate 0.",
+  "description": "The integrity blob of CorpusProcess.wit: the share of shards (CorpusOptions.SamplingRate) that ran twice in one Grid.ForEach call, their two executions compared on everything an honest node cannot vary (verdict, content hash, the hash of the signatures, document counts, drop and language histograms, the PDF counts). Signatures that differ are a mismatch of their own kind, counted in signature_mismatches; a pair whose sides made no signature (sign off) has nothing of the kind to compare (signatures: none). Version 4: version 3 did not compare the signatures. The platform keeps the two on different machines and the document does not say which. Empty pairs at rate 0.",
   "type": "object",
   "required": ["schema", "summary", "pairs"],
   "additionalProperties": false,
   "properties": {
-    "schema": { "const": "corpus-integrity/3" },
+    "schema": { "const": "corpus-integrity/4" },
     "summary": {
       "type": "object",
-      "required": ["sampled", "compared", "version_skew", "incomplete", "mismatches", "mismatch_rate"],
+      "required": ["sampled", "compared", "version_skew", "incomplete", "mismatches", "mismatch_rate", "signatures_compared", "signature_mismatches"],
       "additionalProperties": false,
       "properties": {
         "sampled": { "type": "integer", "description": "Pairs of executions of one shard." },
@@ -18,7 +18,9 @@
         "version_skew": { "type": "integer", "description": "Pairs whose sides ran different controller versions - a rollout in progress (not compared)." },
         "incomplete": { "type": "integer", "description": "Pairs with a side that did not finish for a reason of its machine or its link: FetchFailed, PipelineUnavailable or Failed (not compared; a mismatch is two finished sides that disagree)." },
         "mismatches": { "type": "integer", "description": "Compared pairs that disagree." },
-        "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." }
+        "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." },
+        "signatures_compared": { "type": "integer", "description": "Compared pairs whose sides made signatures, compared by their hashes (0 when the pipeline does not sign)." },
+        "signature_mismatches": { "type": "integer", "description": "Compared pairs whose signatures differ (each also counted in mismatches, with signatures among its differences)." }
       }
     },
     "pairs": {
@@ -35,7 +37,8 @@
           "compared": { "type": "boolean" },
           "incomplete": { "type": "boolean", "description": "Present and true when a side did not finish (FetchFailed, PipelineUnavailable, Failed)." },
           "match": { "type": "boolean", "description": "Present when compared." },
-          "differs": { "type": "array", "items": { "type": "string", "enum": ["verdict", "content", "documents", "drops", "languages", "pdf"] }, "description": "Present on a mismatch: the fields that differ." }
+          "signatures": { "type": "string", "enum": ["match", "differ", "none"], "description": "Present when compared: the sides made the same signatures, different ones, or none (the pipeline does not sign: nothing to compare)." },
+          "differs": { "type": "array", "items": { "type": "string", "enum": ["verdict", "content", "signatures", "documents", "drops", "languages", "pdf"] }, "description": "Present on a mismatch: the fields that differ." }
         }
       }
     }
@@ -43,12 +46,13 @@
   "$defs": {
     "side": {
       "type": ["object", "null"],
-      "required": ["controller", "verdict", "content_sha256", "documents_out"],
+      "required": ["controller", "verdict", "content_sha256", "signatures_sha256", "documents_out"],
       "additionalProperties": false,
       "properties": {
         "controller": { "type": "string", "description": "The controller version that ran this side." },
         "verdict": { "type": "string" },
         "content_sha256": { "type": "string" },
+        "signatures_sha256": { "type": "string", "description": "SHA-256 of the signatures blob as the side made it, kept or not; empty when it made none." },
         "documents_out": { "type": "integer" }
       }
     }

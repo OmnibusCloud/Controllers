@@ -118,6 +118,7 @@ public static class CorpusReportWriter
         writer.WriteNumber("degree", result.Degree);
         if (result.MinHash != null)
             WriteMinHash(writer, result.MinHash);
+        writer.WriteString("signatures_sha256", result.SignaturesSha256);
 
         if (result.Stats is { } stats)
         {

@@ -6,8 +6,12 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// <summary>
 /// Writes the integrity document of a run: every shard executed more than once, its executions
 /// paired, and whether they agree on everything an honest node cannot
-/// vary — the verdict, the content hash of the product, the document count, the drop and
-/// language histograms, the PDF stage's counts. The platform keeps the executions of one shard
+/// vary — the verdict, the content hash of the product, the hash of its signatures, the document
+/// count, the drop and language histograms, the PDF stage's counts. Signatures that differ while the
+/// text agrees are a mismatch of their own kind (<c>signatures</c>, counted apart): a node that
+/// returned the right text with wrong signatures would poison the near-duplicate merge unseen. A
+/// pair whose sides made no signature (the pipeline does not sign) has nothing of the kind to
+/// compare, and says so. The platform keeps the executions of one shard
 /// on different machines, and the document does not say which. Two kinds of pair are counted,
 /// not compared: one whose sides ran different controller versions (a rollout in progress: a
 /// stage may have changed between them), and one whose side did not finish for a reason of its
@@ -15,14 +19,25 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// — a mismatch says two finished executions disagree, never that one of them stopped. A node
 /// that cannot run the PDF sandbox makes no product of a shard with a PDF (the shard runs
 /// elsewhere), so no side differs for that reason.
-/// Schema <c>corpus-integrity/3</c>.
+/// Schema <c>corpus-integrity/4</c> (<c>/3</c> before the signatures were compared).
 /// </summary>
 public static class CorpusIntegrityWriter
 {
     #region Constants
 
     /// <summary>The document schema name.</summary>
-    public const string SCHEMA = "corpus-integrity/3";
+    public const string SCHEMA = "corpus-integrity/4";
+
+    /// <summary>A compared pair's signatures: both sides made the same.</summary>
+    public const string SIGNATURES_MATCH = "match";
+
+    /// <summary>A compared pair's signatures: the sides made different ones (a mismatch, <c>signatures</c> in its differences).</summary>
+    public const string SIGNATURES_DIFFER = "differ";
+
+    /// <summary>A compared pair's signatures: neither side made any (the pipeline does not sign); nothing to compare.</summary>
+    public const string SIGNATURES_NONE = "none";
+
+    private const string FIELD_SIGNATURES = "signatures";
 
     /// <summary>
     /// The verdicts of an execution that did not finish for a reason of its machine or its link.
@@ -53,6 +68,8 @@ public static class CorpusIntegrityWriter
 
         var compared = pairs.Count(pair => pair.Compared);
         var mismatches = pairs.Count(pair => pair.Compared && !pair.Match);
+        var signaturesCompared = pairs.Count(pair => pair.Compared && Signatures(pair) != SIGNATURES_NONE);
+        var signatureMismatches = pairs.Count(pair => pair.Compared && Signatures(pair) == SIGNATURES_DIFFER);
 
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
@@ -67,6 +84,8 @@ public static class CorpusIntegrityWriter
             writer.WriteNumber("incomplete", pairs.Count(pair => pair.Incomplete));
             writer.WriteNumber("mismatches", mismatches);
             writer.WriteNumber("mismatch_rate", compared == 0 ? 0.0 : (double)mismatches / compared);
+            writer.WriteNumber("signatures_compared", signaturesCompared);
+            writer.WriteNumber("signature_mismatches", signatureMismatches);
             writer.WriteEndObject();
 
             writer.WriteStartArray("pairs");
@@ -83,7 +102,7 @@ public static class CorpusIntegrityWriter
     /// <summary>The fields two results of one shard disagree on; empty when they agree.</summary>
     /// <param name="primary">The primary result.</param>
     /// <param name="replica">The replica result.</param>
-    /// <returns>Field names: verdict, content, documents, drops, languages, pdf.</returns>
+    /// <returns>Field names: verdict, content, signatures, documents, drops, languages, pdf.</returns>
     public static List<string> Differences(CorpusResultData primary, CorpusResultData replica)
     {
         var fields = new List<string>();
@@ -91,6 +110,8 @@ public static class CorpusIntegrityWriter
             fields.Add("verdict");
         if (!string.Equals(primary.ContentSha256, replica.ContentSha256, StringComparison.Ordinal))
             fields.Add("content");
+        if (!string.Equals(primary.SignaturesSha256, replica.SignaturesSha256, StringComparison.Ordinal))
+            fields.Add(FIELD_SIGNATURES);
 
         var primaryStats = primary.Stats ?? new CorpusShardStatsData();
         var replicaStats = replica.Stats ?? new CorpusShardStatsData();
@@ -156,6 +177,7 @@ public static class CorpusIntegrityWriter
         if (pair.Compared)
         {
             writer.WriteBoolean("match", pair.Match);
+            writer.WriteString("signatures", Signatures(pair));
             if (!pair.Match)
             {
                 writer.WriteStartArray("differs");
@@ -174,8 +196,18 @@ public static class CorpusIntegrityWriter
         writer.WriteString("controller", result.ControllerVersion);
         writer.WriteString("verdict", result.Verdict.ToString());
         writer.WriteString("content_sha256", result.ContentSha256);
+        writer.WriteString("signatures_sha256", result.SignaturesSha256);
         writer.WriteNumber("documents_out", result.Stats?.DocumentsOut ?? 0);
         writer.WriteEndObject();
+    }
+
+    /// <summary>What a pair's signatures say: the same, different, or none made on either side.</summary>
+    private static string Signatures(PairRecord pair)
+    {
+        if (pair.Primary.SignaturesSha256.Length == 0 && pair.Replica.SignaturesSha256.Length == 0)
+            return SIGNATURES_NONE;
+
+        return pair.Differing.Contains(FIELD_SIGNATURES) ? SIGNATURES_DIFFER : SIGNATURES_MATCH;
     }
 
     #endregion

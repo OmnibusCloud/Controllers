@@ -39,7 +39,6 @@ public static class CorpusTaskPlanner
         var refused = new List<string>();
         var outside = new List<string>();
         var oversized = 0;
-        long traffic = 0;
 
         var cap = ShardCap(options);
         var origins = manifest.AllowedOrigins.Select(ShardOrigin.Normalize).Where(host => host.Length > 0).Distinct(StringComparer.Ordinal).ToList();
@@ -92,7 +91,6 @@ public static class CorpusTaskPlanner
                     outside.Add(uri.IdnHost);
             }
 
-            traffic += source.SizeBytes;
             if (source.SizeBytes > cap)
             {
                 oversized++;
@@ -109,18 +107,22 @@ public static class CorpusTaskPlanner
             });
         }
 
+        // Every shard once, and the shards sampled for integrity a second time (the largest, as the storage estimate takes them).
+        var traffic = CorpusTrafficEstimate.Of(manifest.Sources.Select(source => source.SizeBytes).ToList(), options?.SamplingRate ?? 0);
+
         var duplicates = manifest.Sources.GroupBy(source => source.Url, StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).Select(group => group.Key).ToList();
         foreach (var duplicate in duplicates)
             notes.Add($"'{duplicate}' is listed more than once; each listing is a task of its own.");
 
         if (tasks.Count > 0)
-            notes.Add($"{tasks.Count} shard(s), cap {cap} bytes each, estimated traffic {traffic} bytes.");
+            notes.Add($"{tasks.Count} shard(s), cap {cap} bytes each, estimated traffic {traffic.TotalBytes} bytes" +
+                      (traffic.SampledShards > 0 ? $" ({traffic.CopyBytes} of them the second fetch of the {traffic.SampledShards} largest shard(s), sampled for integrity)." : "."));
 
         if (outside.Count > 0)
             notes.Add($"{string.Join(", ", outside)}: not a public origin ({string.Join(", ", ShardOriginPolicy.PUBLIC_ORIGINS)}). " +
                       $"Shards from there run only on machines whose owner lists the host in {ShardOriginPolicy.EXTRA_ORIGINS_VARIABLE}; every other machine answers OriginRefused.");
 
-        return new CorpusPlan(errors.Count == 0 ? tasks : [], errors, notes, refused, outside, oversized, traffic);
+        return new CorpusPlan(errors.Count == 0 ? tasks : [], errors, notes, refused, outside, oversized, traffic.TotalBytes);
     }
 
     /// <summary>
@@ -136,8 +138,8 @@ public static class CorpusTaskPlanner
         if (pipeline.Output == CorpusOutputMode.StatsAndHashes)
         {
             notes.Add($"output {CorpusOutputModeNames.STATS_AND_HASHES}: each shard is processed and hashed in full, but its text and signatures stay on its node and are deleted with the task; " +
-                      "the server keeps the statistics, the content hashes, the report and the integrity document. " +
-                      "Corpus.Dedup cannot run over this run: the near-duplicate merge needs the signatures.");
+                      "the server keeps the statistics, the hashes of the text and of the signatures, the report and the integrity document. " +
+                      "Corpus.Dedup cannot run over this run: the near-duplicate merge needs the signatures themselves.");
         }
         else if (!pipeline.Sign)
             notes.Add("sign is false: no signatures; Corpus.Dedup cannot run over this run: the near-duplicate merge needs the signatures.");

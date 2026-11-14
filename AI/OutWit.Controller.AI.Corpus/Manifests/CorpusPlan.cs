@@ -13,7 +13,7 @@ namespace OutWit.Controller.AI.Corpus.Manifests;
 /// <param name="RefusedOrigins">Hosts named by sources that the allowlist does not cover.</param>
 /// <param name="OutsideOrigins">Hosts that are neither public origins nor listed by the owner of the machine that planned the job: their shards run only on machines whose owner lists them.</param>
 /// <param name="OversizedSources">Sources whose estimated size exceeds the cap.</param>
-/// <param name="EstimatedTrafficBytes">Sum of the sources' estimated sizes.</param>
+/// <param name="EstimatedTrafficBytes">What the contributors will fetch by the manifest's sizes: every source once and the sampled ones twice (<see cref="CorpusTrafficEstimate"/>).</param>
 public sealed record CorpusPlan(
     List<CorpusTaskData> Tasks,
     List<string> Errors,

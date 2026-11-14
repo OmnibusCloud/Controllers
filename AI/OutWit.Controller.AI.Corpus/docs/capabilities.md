@@ -45,7 +45,7 @@ The server carries descriptors and results only, never the input.
 |---|---|
 | Cleaned text (B1/B4) | per shard, the documents that passed every stage as JSON lines `{"url","lang","text"}`, language-tagged, zstd-compressed |
 | Near-duplicate map (B2) | per shard a MinHash signature per document, and over a run a keep mask per shard and the clusters |
-| Statistics and hashes only | the same run without the text: every shard's counters and the content hash of the product it would have kept, the run's funnel (for demonstrations and licensing) |
+| Statistics and hashes only | the same run without the text: every shard's counters and the hashes of the product and the signatures it would have kept, the run's funnel (for demonstrations and licensing) |
 
 ## 2. At a glance
 
@@ -248,21 +248,22 @@ characters the top word n-gram may cover, n = 2, 3, 4: 0.20, 0.18, 0.16 (unspace
 0.11, 0.10 (unspaced 0.198, 0.182, 0.167, 0.154, 0.14, 0.127); two distinct stop words of the
 document's language, from the pack's rule data.
 
-**Statistics and hashes only.** Every shard is processed and hashed exactly as under `"full"`:
-the same content hashes, the same counters, the same `bytes_produced`. Its text is written and
-measured on the node, no signature is made, and nothing is uploaded; the task's folder, with the
-product in it, is deleted when the task ends. The sampled shards still run twice and their hashes
-are still compared across machines. The storage estimate drops the products (section 8). The
-report names no blob, and `Corpus.Dedup` refuses the run: there are no signatures to merge. A
-lab can therefore show and check what a run would produce without holding any third-party text:
-a later run with `"full"` gives the same content hashes.
+**Statistics and hashes only.** Every shard is processed, signed and hashed exactly as under
+`"full"`: the same content hashes, the same signatures hashes, the same counters, the same
+`bytes_produced`. Its text and signatures are written, hashed and measured on the node, and
+nothing is uploaded; the task's folder, with the products in it, is deleted when the task ends.
+The sampled shards still run twice and both hashes are still compared across machines. The
+storage estimate drops the products (section 8). The report names no blob, and `Corpus.Dedup`
+refuses the run: there are no signatures to merge. A lab can therefore show and check what a run
+would produce without holding any third-party text: a later run with `"full"` gives the same
+hashes.
 
 **MinHash parameters.** The defaults sign byte for byte as Corpus 0.2.x did. The hash family is
 one sequence, so a signature of *n* hashes is the first *n* values of a longer one. A value out of
 its range is refused by name (`pipeline.minhash: 'bands' (12) must divide 'hashes' (128): …`).
 Signatures made with different parameters cannot be compared: the blob, the result and the report
-state how they were made, and `Corpus.Dedup` refuses to mix them. With `sign` off, or under
-statistics and hashes only, the parameters are ignored, with a note.
+state how they were made, and `Corpus.Dedup` refuses to mix them. With `sign` off the parameters
+are ignored, with a note.
 
 ### The origins and the sources
 
@@ -379,7 +380,7 @@ from one constant through splitmix64) each keeping its minimum.
 | `text.jsonl.zst` | shard execution | `full` | JSON lines, below |
 | `signatures.bin` | shard execution | `full` | binary, below |
 | `corpus-report.json` | run | both | [`corpus-report.schema.json`](corpus-report.schema.json), `corpus-report/2` |
-| `corpus-integrity.json` | run | both | [`corpus-integrity.schema.json`](corpus-integrity.schema.json), `corpus-integrity/3` |
+| `corpus-integrity.json` | run | both | [`corpus-integrity.schema.json`](corpus-integrity.schema.json), `corpus-integrity/4` |
 | `corpus-dedup.json` | dedup run | `full` | [`corpus-dedup.schema.json`](corpus-dedup.schema.json), `corpus-dedup/1` |
 | `corpus-capabilities.json` | diagnostics run | — | [`corpus-capabilities.schema.json`](corpus-capabilities.schema.json), `corpus-capabilities/1` |
 
@@ -391,12 +392,14 @@ document carries `#page=a-b` in its `url`. The result's `content_sha256` is the 
 **Signatures.** The magic `WITSIG1\n`, the hash count (int32 LE), then one signature per document
 in product order (uint64 LE each): document *i* at `12 + i × 8 × hashes`. With a hash count or a
 shingle size other than 128 and 5, the magic is `WITSIG2\n` and the shingle size (int32 LE)
-follows the hash count: document *i* at `16 + i × 8 × hashes`.
+follows the hash count: document *i* at `16 + i × 8 × hashes`. The SHA-256 of the blob's bytes,
+kept or not, is the signatures' identity (`signatures_sha256`), which integrity compares.
 
 **The report.** One entry per shard in task order (a shard that ran twice: a completed execution,
 then the lowest content hash) with `index`, `url`, `verdict`, `text_blob`, `signatures_blob`,
 `content_sha256`, `error`, `controller`, `runtime_target` (a platform such as `linux-x64`, never a
-machine), `degree`, `minhash` when the shard has signatures, and `stats`: `records_in`,
+machine), `degree`, `minhash` when signatures were made, `signatures_sha256` ("" when none was
+made), and `stats`: `records_in`,
 `documents_extracted`, `documents_out`, `bytes_fetched`, `bytes_produced` (the compressed product,
 kept or not), `fetch_ms`, `process_ms`, `wait_ms`, `drops`, `languages`, `unsupported_languages`,
 and the PDF counters where the shard met a PDF (`pdf_in`, `pdf_truncated`, `pdf_extracted`,
@@ -471,7 +474,7 @@ shard. `CorpusPreflightData`:
 | `WellFormed` | every line parsed, every source allowed and under the cap, the pack usable, the job inside the deployment's headroom |
 | `TaskCount` | shards that parsed |
 | `RefusedOrigins`, `OversizedSources` | hosts the list does not cover; sources over the cap |
-| `EstimatedTrafficBytes` | what the contributors will fetch: the manifest's sizes, the origin's answer to HEAD for the others (up to 64 sources, four at a time, 15 s each), the rest at the mean. Sampled shards are fetched once more by their second machine |
+| `EstimatedTrafficBytes` | what the contributors will fetch: every shard once, and the shards sampled for integrity a second time by their second machine (the largest taken as the sampled ones, as the storage estimate takes them); the sizes are the manifest's, the origin's answer to HEAD for the others (up to 64 sources, four at a time, 15 s each), the rest at the mean. The preflight's line names both parts |
 | `EstimatedStorageBytes`, `StorageHeadroomBytes`, `StorageRetentionDays` | what the job leaves on the server, and the deployment's limit (below) |
 | `BusiestNodeShare`, `PlannedNodes` | the busiest node's share of the work, 0 to 1, and how many nodes would take shards (below); 0 when the host has no pool to ask |
 | `Messages` | every problem by manifest line, and the notes: the pack described, target languages it lacks, hosts that are not public origins, what the run keeps and whether `CorpusDedup` can run over it, MinHash parameters that are not the defaults, the storage line, the work split |
@@ -541,17 +544,26 @@ Integrity:
 - `SamplingRate` runs that share of the shards twice, in the same fan-out as the rest. The platform
   picks the shards at random and keeps the two executions on different machines, so a node cannot
   tell whether its shard is being checked.
-- `corpus-integrity.json` pairs the executions and compares what an honest node cannot vary: the
-  verdict, the content hash, the record and document counts, the drop histogram with the
-  unsupported breakdown, the language histogram, the PDF counts (not the fuel: a cost, compared
-  through the documents it produced). `differs` names the fields of a mismatch.
+- `corpus-integrity.json` (`corpus-integrity/4`) pairs the executions and compares what an honest
+  node cannot vary: the verdict, the content hash, the signatures hash, the record and document
+  counts, the drop histogram with the unsupported breakdown, the language histogram, the PDF
+  counts (not the fuel: a cost, compared through the documents it produced). `differs` names the
+  fields of a mismatch.
+- Signatures that differ while the text agrees are a mismatch of their own kind: `signatures` in
+  `differs`, the pair's `signatures` is `differ`, and `signature_mismatches` counts them (each is
+  also a mismatch). A node returning the right text with wrong signatures would otherwise poison
+  the near-duplicate merge unseen. A pair whose sides made no signature (`sign` off) has nothing of
+  the kind to compare: its `signatures` is `none`, and `signatures_compared` counts only the pairs
+  that had some.
 - A pair whose sides ran different controller versions (a rollout in progress) is
   `version_skew`; a pair with a side that did not finish (`FetchFailed`, `PipelineUnavailable`,
   `Failed`) is `incomplete`. Neither is compared: a mismatch says two finished executions
   disagree. `mismatch_rate` is over the compared pairs.
-- Under statistics and hashes only the pairs are compared exactly the same way.
+- Under statistics and hashes only the pairs are compared exactly the same way: the signatures are
+  made and hashed on the node, not kept.
+- A side from a controller before 0.3.0 carries no signatures hash; its pair is version skew, never a
+  mismatch.
 - With one machine available nothing runs twice.
-- The signatures are not compared (section 15).
 
 On the test fleet every sampled pair has agreed, Windows against Linux and macOS, the PDF
 stage's included.
@@ -634,8 +646,9 @@ hashes and counts only, no third-party text.
 | Dropped | language 61,827 (58,953 unsupported, 2,874 too short), lines 26,235, quality 153,402 |
 | Languages kept | 16; English 128,566, Russian 20,244, German 18,794, Spanish 17,019, French 16,052 lead |
 | The product that was not kept | 448,706,065 bytes of compressed text (28.3 % of the bytes fetched) |
+| Traffic at sampling 0.25 | 1,993,119,664 bytes: every file once (1,584,054,229) and the six largest a second time (409,065,435) |
 | Server storage | 702,300 bytes at sampling 0.25 (1.15 GiB for the same run in full) |
-| Identity | 24 content hashes, digest `c4b62530…f9eb50d9f4aa72` |
+| Identity | 24 content hashes, digest `c4b62530…f9eb50d9f4aa72`; 24 signatures hashes, digest `f661f7a9…cfd4fbb7` |
 
 The same run in full, merged: 18,610 near-duplicates (6.8 %) in 8,858 clusters. A shard's own
 near-duplicates, the most a node could report without a second pass, are 2,764 of them (15 %),
@@ -656,8 +669,6 @@ One wasmtime binding loads per client process: Corpus and Verify carry the same 
 
 ## 15. Known limits
 
-- The signatures are not part of the content hash, and integrity does not compare them: a node
-  that returned wrong signatures with a right product would not be caught.
 - The near-duplicate merge runs on the server after a run, over at most 4,000,000 documents; there
   is no figure "so far" during a run.
 - A run waits for its slowest share (section 10).

@@ -40,6 +40,7 @@ public abstract class CorpusScriptTestBase
         Origin = new CorpusTestOrigin(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures"));
 
         var tempStorage = new WitTempStorageDefault(Path.Combine(m_blobStoragePath, "temp"));
+        NodesManager = new CorpusTestNodesManager(WitEngineNodeSdk.Instance);
 
         WitEngineNodeSdk.Instance.Reload(
             useIsolatedContext: false,
@@ -59,7 +60,7 @@ public abstract class CorpusScriptTestBase
             {
                 services.AddSingleton<IWitBlobService>(BlobService);
                 services.AddSingleton<IWitTempStorage>(tempStorage);
-                services.AddSingleton<IWitNodesManager>(new CorpusTestNodesManager(WitEngineNodeSdk.Instance));
+                services.AddSingleton<IWitNodesManager>(NodesManager);
             });
     }
 
@@ -157,6 +158,9 @@ public abstract class CorpusScriptTestBase
     protected CorpusTestBlobService BlobService { get; private set; } = null!;
 
     protected CorpusTestOrigin Origin { get; private set; } = null!;
+
+    /// <summary>The rig's three nodes; a test may make one of them dishonest.</summary>
+    internal CorpusTestNodesManager NodesManager { get; private set; } = null!;
 
     #endregion
 }

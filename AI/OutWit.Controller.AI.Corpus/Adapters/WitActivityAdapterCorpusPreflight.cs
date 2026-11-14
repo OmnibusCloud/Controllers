@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Diagnostics;
+using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Storage;
@@ -55,15 +56,19 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
         {
             var origins = manifest.AllowedOrigins.Select(ShardOrigin.Normalize).ToList();
             var probe = await ShardSizeProbe.ProbeAsync(manifest.Sources, origins, ShardOriginPolicy.Machine, CLIENT.Value, cancellationToken);
-            report.EstimatedTrafficBytes += probe.EstimatedBytes;
             report.Messages.Add($"{probe.Probed} source size(s) probed at the origin" +
                                 (probe.Failed > 0 ? $", {probe.Failed} unanswered" : "") +
                                 (probe.Unprobed > 0 ? $", {probe.Unprobed} not asked (beyond the probe budget, or a host this server does not fetch from)" : "") +
-                                (probe.Failed + probe.Unprobed > 0 ? " (estimated at the mean)" : "") +
-                                $"; traffic estimate {report.EstimatedTrafficBytes} bytes.");
+                                (probe.Failed + probe.Unprobed > 0 ? " (estimated at the mean)" : "") + ".");
             if (probe.Sizes.Count == sizes.Count)
                 sizes = [.. probe.Sizes];
         }
+
+        // The traffic promise from the same sizes: every shard once, the sampled ones a second time.
+        var traffic = CorpusTrafficEstimate.Of(sizes, options?.SamplingRate ?? 0);
+        report.EstimatedTrafficBytes = traffic.TotalBytes;
+        if (manifest.Sources.Count > 0)
+            report.Messages.Add(traffic.Describe());
 
         // What the job leaves on the server, from the same sizes, against the deployment's headroom.
         if (manifest.Sources.Count > 0)

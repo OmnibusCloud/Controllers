@@ -39,7 +39,8 @@ public sealed partial class CorpusResultData : ModelBase
                && RuntimeTarget.Is(other.RuntimeTarget)
                && Degree.Is(other.Degree)
                && Output.Is(other.Output)
-               && MinHash.Check(other.MinHash);
+               && MinHash.Check(other.MinHash)
+               && SignaturesSha256.Is(other.SignaturesSha256);
     }
 
     /// <summary>Deep copy.</summary>
@@ -62,7 +63,8 @@ public sealed partial class CorpusResultData : ModelBase
             RuntimeTarget = RuntimeTarget,
             Degree = Degree,
             Output = Output,
-            MinHash = MinHash?.Clone()
+            MinHash = MinHash?.Clone(),
+            SignaturesSha256 = SignaturesSha256
         };
     }
 
@@ -128,9 +130,18 @@ public sealed partial class CorpusResultData : ModelBase
     [MemoryPackOrder(13)]
     public CorpusOutputMode Output { get; set; }
 
-    /// <summary>The MinHash parameters the node signed with, resolved (no 0 left); null when the shard has no signatures (the pipeline does not sign, keeps statistics and hashes only, or the task did not complete).</summary>
+    /// <summary>The MinHash parameters the node signed with, resolved (no 0 left); null when no signature was made (the pipeline does not sign, or the task did not complete). Under statistics and hashes only the signatures are made and hashed, not kept.</summary>
     [MemoryPackOrder(14)]
     public CorpusMinHashData? MinHash { get; set; }
+
+    /// <summary>
+    /// Lower-case hex SHA-256 of the signatures blob's bytes as the node made them, kept or not
+    /// (under statistics and hashes only the blob is made and hashed on the node, not uploaded):
+    /// the signatures' identity, which integrity compares across machines next to the content
+    /// hash. "" when no signature was made (the pipeline does not sign, or the task did not complete).
+    /// </summary>
+    [MemoryPackOrder(15)]
+    public string SignaturesSha256 { get; set; } = "";
 
     #endregion
 }

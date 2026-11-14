@@ -8,7 +8,7 @@
     "CorpusPipelineData": 12,
     "CorpusTaskData": 5,
     "CorpusShardStatsData": 12,
-    "CorpusResultData": 15,
+    "CorpusResultData": 16,
     "CorpusOptionsData": 4,
     "CorpusPreflightData": 11,
     "CorpusRuntimeDiagnosticsData": 16,

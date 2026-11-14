@@ -309,9 +309,12 @@ public static class Program
     {
         using var document = JsonDocument.Parse(bytes);
         var summary = document.RootElement.GetProperty("summary");
-        Console.WriteLine($"  integrity: sampled {summary.GetProperty("sampled").GetInt32()}, compared {summary.GetProperty("compared").GetInt32()}, " +
+        Console.WriteLine($"  integrity: {document.RootElement.GetProperty("schema").GetString()}, sampled {summary.GetProperty("sampled").GetInt32()}, compared {summary.GetProperty("compared").GetInt32()}, " +
                           $"version skew {summary.GetProperty("version_skew").GetInt32()}, " +
-                          $"incomplete {(summary.TryGetProperty("incomplete", out var incomplete) ? incomplete.GetInt32() : 0)}, mismatches {summary.GetProperty("mismatches").GetInt32()}");
+                          $"incomplete {(summary.TryGetProperty("incomplete", out var incomplete) ? incomplete.GetInt32() : 0)}, mismatches {summary.GetProperty("mismatches").GetInt32()}" +
+                          (summary.TryGetProperty("signatures_compared", out var signatures)
+                              ? $"; signatures compared {signatures.GetInt32()}, signature mismatches {summary.GetProperty("signature_mismatches").GetInt32()}"
+                              : ""));
 
         foreach (var pair in document.RootElement.GetProperty("pairs").EnumerateArray())
         {
@@ -319,7 +322,9 @@ public static class Program
                 ? $"incomplete (a side did not finish: {pair.GetProperty("primary").GetProperty("verdict").GetString()} / {pair.GetProperty("replica").GetProperty("verdict").GetString()})"
                 : !pair.GetProperty("compared").GetBoolean()
                     ? "version skew"
-                    : pair.GetProperty("match").GetBoolean() ? "match" : $"MISMATCH ({string.Join(",", pair.GetProperty("differs").EnumerateArray().Select(d => d.GetString()))})";
+                    : pair.GetProperty("match").GetBoolean()
+                        ? "match" + (pair.TryGetProperty("signatures", out var signed) && signed.GetString() == "none" ? " (no signatures made)" : "")
+                        : $"MISMATCH ({string.Join(",", pair.GetProperty("differs").EnumerateArray().Select(d => d.GetString()))})";
             Console.WriteLine($"    [{pair.GetProperty("index").GetInt32(),3}] {outcome}");
         }
     }

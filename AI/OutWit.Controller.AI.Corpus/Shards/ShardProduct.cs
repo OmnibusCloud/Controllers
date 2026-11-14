@@ -8,4 +8,12 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// <param name="Stats">The counters.</param>
 /// <param name="SkippedOversized">Records the reader skipped for exceeding its record cap.</param>
 /// <param name="Truncated">Whether the shard ended mid-record.</param>
-public sealed record ShardProduct(string ContentSha256, ShardStatsBuilder Stats, int SkippedOversized, bool Truncated);
+public sealed record ShardProduct(string ContentSha256, ShardStatsBuilder Stats, int SkippedOversized, bool Truncated)
+{
+    #region Properties
+
+    /// <summary>Lower-case hex SHA-256 of the signatures blob's bytes as written, "" when the pipeline does not sign: the signatures' identity, kept or not.</summary>
+    public string SignaturesSha256 { get; init; } = "";
+
+    #endregion
+}

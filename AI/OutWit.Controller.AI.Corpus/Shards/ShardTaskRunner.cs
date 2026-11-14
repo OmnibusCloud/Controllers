@@ -14,7 +14,7 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// One task on a node, start to finish: the allowlist re-check against the task and the
 /// machine's own policy, the pinned model, the capped fetch, the pipeline, the uploads (none
 /// when the pipeline keeps statistics and hashes only: the text and the signatures are deleted
-/// with the task's folder, the result carries the hash and the counters). Every way a shard can fail is a verdict in the result,
+/// with the task's folder, the result carries their hashes and the counters). Every way a shard can fail is a verdict in the result,
 /// not an exception — the job completes and the report says what happened to each shard —
 /// except a fault of this node that another node would not have: a PDF the node cannot run
 /// (<see cref="Pdf.PdfSandboxException"/>) and a product it cannot upload. Those propagate, with
@@ -186,10 +186,14 @@ public static class ShardTaskRunner
         if (task.Pipeline.Output == CorpusOutputMode.Full)
             result.TextBlobId = await ShardBlobTransfer.UploadAsync(blobs, textPath, logger, cancellationToken);
 
+        if (ShardProcessor.KeepsSignatures(task.Pipeline))
+            result.SignaturesBlobId = await ShardBlobTransfer.UploadAsync(blobs, signaturesPath, logger, cancellationToken);
+
+        // The signatures' identity, kept or not: integrity compares it across machines.
         if (ShardProcessor.Signs(task.Pipeline))
         {
-            result.SignaturesBlobId = await ShardBlobTransfer.UploadAsync(blobs, signaturesPath, logger, cancellationToken);
             result.MinHash = MinHashParameters.Resolve(task.Pipeline.MinHash).ToData();
+            result.SignaturesSha256 = product.SignaturesSha256;
         }
 
         result.Verdict = CorpusShardVerdict.Completed;
