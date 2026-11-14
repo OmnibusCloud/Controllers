@@ -18,9 +18,9 @@ per document, and checks what comes out against the contract.
                         are kept anyway, to be checked)
 
 The module is the precompiled one (wasmtime compile with the same -W options); the engine
-options mirror the controller's sandbox: fuel, the memory ceiling, a trap when memory cannot
-grow, NaN canonicalisation, an 8 MiB wasm stack, no threads, exceptions, GC, memory64,
-multi-memory or components, deterministic relaxed SIMD. The guest sees its document as
+options mirror the controller's sandbox: fuel, the memory ceiling (a grow past it is refused,
+as in the sandbox, not trapped), NaN canonicalisation, an 8 MiB wasm stack, no threads,
+exceptions, GC, memory64, multi-memory or components, deterministic relaxed SIMD. The guest sees its document as
 /in/doc.pdf and an empty /out, nothing else, and runs as "pdftext /in/doc.pdf /out".
 
 Every run ends in one verdict: ok (exit 0), refused:<code> (exit 2), trap, fuel (out of fuel),
@@ -40,8 +40,13 @@ import sys
 import tempfile
 import time
 
+# A grow past the memory ceiling is refused (memory.grow returns -1), not a trap: the
+# sandbox's binding has no trap-on-grow-failure (the C API's store limiter has no such flag),
+# so the command line runs as the sandbox does. The module then sees a failed allocation:
+# where the library asks fallibly it goes on, otherwise the standard library prints
+# "memory allocation of N bytes failed" and aborts (a trap).
 ENGINE_OPTIONS = [
-    "trap-on-grow-failure=y",
+    "trap-on-grow-failure=n",
     "nan-canonicalization=y",
     "max-wasm-stack=8388608",
     "threads=n",
