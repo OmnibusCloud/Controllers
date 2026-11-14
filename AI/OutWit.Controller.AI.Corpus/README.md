@@ -233,9 +233,9 @@ than the table allows.
 host asks two places and the smaller stated value holds:
 
 - the server's blob service, by reflection: a public
-  `Task<long> GetJobStorageHeadroomBytesAsync()` (backed by a server setting
-  `BlobStorage:JobStorageHeadroomBytes`) and `int JobBlobRetentionDays` on it. A
-  server without these members states nothing;
+  `Task<long> GetJobStorageHeadroomBytesAsync()` (meant to be backed by a server
+  setting `BlobStorage:JobStorageHeadroomBytes`) and `int JobBlobRetentionDays`
+  on it. A server without these members — every server so far — states nothing;
 - the environment variable `OMNIBUSCLOUD_CORPUS_STORAGE_HEADROOM_BYTES` of the
   server process, in bytes: the operator's own word.
 
