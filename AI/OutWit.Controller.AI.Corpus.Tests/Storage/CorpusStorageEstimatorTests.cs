@@ -16,23 +16,24 @@ public sealed class CorpusStorageEstimatorTests
     private const long MIB = 1024 * 1024;
 
     /// <summary>
-    /// The test fleet's acceptance run of 2026-11-14 (controller 0.1.13, twenty Common Crawl WET
-    /// shards of CC-MAIN-2026-43, every stage on, sampling 0.25): what its report says it fetched
-    /// and produced, per shard.
+    /// The twenty Common Crawl WET shards of the test fleet's acceptance run of 2026-11-14
+    /// (CC-MAIN-2026-43, every stage on, sampling 0.25), processed by controller 0.1.14 on one
+    /// machine: the bytes fetched and the text and documents produced, per shard. The same run
+    /// under 0.1.13 gave exactly the products the fleet's report holds, shard by shard.
     /// </summary>
     private static readonly (long Fetched, long Text, int Documents)[] LIVE_RUN =
     [
-        (66560928, 17564983, 10251), (64004647, 16769026, 10085), (67231062, 16669007, 10118), (65138541, 16605362, 10147),
-        (69422286, 17753714, 10213), (67997951, 16742186, 10174), (64738679, 16409506, 10126), (66011273, 16804738, 10156),
-        (67401960, 17031525, 10261), (66771602, 16922590, 10230), (63837350, 16748289, 10097), (66509193, 16510776, 10312),
-        (65420431, 16805291, 10209), (69138015, 16522628, 10088), (67094705, 17338649, 10193), (67874161, 17165801, 10016),
-        (66156505, 16855641, 10152), (64774502, 17286797, 10372), (64965241, 16445066, 10074), (65820129, 17228510, 10188)
+        (66560928, 20492511, 12054), (64004647, 19922771, 11980), (67231062, 19903899, 11931), (65138541, 19497488, 11934),
+        (69422286, 20899038, 12174), (67997951, 20048881, 12017), (64738679, 19392524, 11911), (66011273, 19922614, 11998),
+        (67401960, 20330848, 12113), (66771602, 20018955, 11961), (63837350, 19657728, 11933), (66509193, 19867316, 12220),
+        (65420431, 19878214, 12088), (69138015, 19511502, 11906), (67094705, 20485142, 12066), (67874161, 20068382, 11737),
+        (66156505, 19907773, 11967), (64774502, 20466896, 12120), (64965241, 19284010, 11931), (65820129, 20305917, 12124)
     ];
 
-    /// <summary>The shards that run sampled in that run.</summary>
+    /// <summary>The shards the fleet ran sampled in that run.</summary>
     private static readonly int[] LIVE_SAMPLED = [1, 5, 8, 10, 17];
 
-    /// <summary>Its report, integrity and dedup documents, and its inputs (manifest and model).</summary>
+    /// <summary>The fleet run's report, integrity and dedup documents (under 0.1.13), and its inputs (manifest and model).</summary>
     private const long LIVE_DOCUMENTS = 39116 + 2745 + 1129619;
     private const long LIVE_INPUTS = 3314 + 241721;
 

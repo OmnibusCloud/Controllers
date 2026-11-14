@@ -14,7 +14,7 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.1.13 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.1.14 — under its proof on the test fleet, not yet released to nuget.org.**
 The stage libraries are wired into nine activities and four bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
@@ -235,20 +235,21 @@ measured on real runs, per format and per setting of `clean_lines` and
 
 | Format | `clean_lines` | `filter_quality` | Text per byte fetched | Documents per MiB |
 |---|---|---|---|---|
-| WET | on | on | 0.35 | 210 |
+| WET | on | on | 0.38 | 240 |
 | WET | on | off | 0.64 | 350 |
-| WET | off | on | 0.45 | 160 |
+| WET | off | on | 0.55 | 200 |
 | WET | off | off | 0.98 | 370 |
-| WARC | on | on | 0.08 | 40 |
+| WARC | on | on | 0.09 | 50 |
 | WARC | on | off | 0.11 | 80 |
-| WARC | off | on | 0.10 | 40 |
+| WARC | off | on | 0.12 | 60 |
 | WARC | off | off | 0.18 | 100 |
 
 A document is 1,024 bytes of signatures (none when `sign` is off). The sampled
 shards count twice — the largest ones, so the estimate does not depend on which
 the platform picks — and the documents and the inputs (manifest, model) are
 added. Twenty Common Crawl WET shards with every stage on (1,265 MiB fetched,
-sampling 0.25) left 653 MiB on the test server; the estimate for them is 888 MiB.
+sampling 0.25) leave about 772 MiB under 0.1.14 (its products measured on one
+machine; 653 MiB on the test server under 0.1.13); the estimate for them is 983 MiB.
 A source whose size is unknown is not in the estimate, and the message says so.
 The guard test over the golden shards fails when a stage makes products larger
 than the table allows.
@@ -345,7 +346,7 @@ admits no other to the work):
   short pages among them), one copy per slot of the node's degree at once;
   the product's hash is checked, so a node that computes wrong cannot score.
   The rate is megabytes of real Common Crawl WET per second
-  (`corpus-wet-mb@synthetic-v1`), the unit of the work estimate — a task's
+  (`corpus-wet-mb@synthetic-v2`), the unit of the work estimate — a task's
   shard size, which `Corpus.Split` asks the origin for when the manifest does
   not give it — so the allocator gives a 32-thread desktop the share its
   speed earns.
