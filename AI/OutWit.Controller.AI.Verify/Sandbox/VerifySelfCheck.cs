@@ -27,7 +27,7 @@ public static class VerifySelfCheck
     public const string WASM_ROOT_PREFIX = "wasm-root: ";
     /// <summary>Self-check line prefix: the native library the module-aware resolver would load.</summary>
     public const string NATIVE_PATH_PREFIX = "wasmtime-native-path: ";
-    /// <summary>Self-check line prefix: the native library the resolver loaded, or that it was not asked.</summary>
+    /// <summary>Self-check line prefix: the native library this module's resolver loaded, the one another controller's copy of the host loaded, or that the load context resolved it.</summary>
     public const string NATIVE_RESOLVER_PREFIX = "wasmtime-native-resolver: ";
 
     /// <summary>
@@ -65,7 +65,8 @@ public static class VerifySelfCheck
     /// language-runtime root, whether the native library loaded (and through which path),
     /// and one verdict line per known runtime. A sandbox that cannot start is the
     /// <see cref="NATIVE_FAILED"/> line with the reason: a wasmtime binding other than the one
-    /// this controller was built against names both versions there (the host's binding guard).
+    /// this controller was built against names both versions there (the host's binding guard), a
+    /// native library other than the pinned one names both hashes (its natives guard).
     /// </summary>
     /// <returns>The report text; never throws for a missing or broken sandbox.</returns>
     public static string Run()
@@ -83,7 +84,7 @@ public static class VerifySelfCheck
         {
             using var sandbox = new VerifyWasmSandbox();
             report.AppendLine(NATIVE_LOADED);
-            report.AppendLine($"{NATIVE_RESOLVER_PREFIX}{VerifyNativeLibrary.ResolvedPath ?? "not used (the load context resolved the library)"}");
+            report.AppendLine($"{NATIVE_RESOLVER_PREFIX}{ResolverLine()}");
 
             foreach (var (id, entry, source) in PROBES)
                 report.AppendLine(Probe(sandbox, root, id, entry, source));
@@ -94,6 +95,16 @@ public static class VerifySelfCheck
         }
 
         return report.ToString();
+    }
+
+    private static string ResolverLine()
+    {
+        if (VerifyNativeLibrary.ResolvedPath is { } own)
+            return own;
+
+        return VerifyNativeLibrary.LoadedByAnotherController
+            ? $"{VerifyNativeLibrary.LoadedPath} (loaded by another controller's copy of the wasm host)"
+            : "not used (the load context resolved the library)";
     }
 
     private static string Probe(VerifyWasmSandbox sandbox, string? root, string id, string entry, string source)

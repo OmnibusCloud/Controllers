@@ -14,8 +14,14 @@ namespace OutWit.Controller.AI.Wasm;
 /// on <see cref="Engine"/> by the caller and may be run many times, concurrently, from any thread.
 /// <para>
 /// The host refuses to start, with a message naming both versions, when the loaded binding is not
-/// the one the controller was built against (<see cref="WasmHostBinding"/>); nothing of it starts
-/// then, and no run can fail for that reason later.
+/// the one the controller was built against (<see cref="WasmHostBinding"/>), and with a message
+/// naming both hashes when the native library the binding loaded is not the one the controllers
+/// ship (<see cref="WasmHostNatives"/>); nothing of it starts then, and no run can fail for that
+/// reason later.
+/// </para>
+/// <para>
+/// A module compiled on <see cref="Engine"/> is machine code of this library and of this trap mode;
+/// a cache that keeps compiled code past the engine keys it by <see cref="CompiledCodeKey"/>.
 /// </para>
 /// </summary>
 internal sealed class WasmHost : IDisposable
@@ -26,7 +32,10 @@ internal sealed class WasmHost : IDisposable
     private const string START_EXPORT = "_start";
 
     /// <summary>The fault of a run the engine ended without a trap or an exit code.</summary>
-    public const string ENGINE_ERROR_FAULT = "wasm error: the engine refused a call of the guest (an exit status of 126 or more, which WASI does not have, is one)";
+    public const string ENGINE_ERROR_FAULT = "wasm error: the engine refused a call of the guest";
+
+    private const string EXPLICIT_TRAPS = "explicit-traps";
+    private const string SIGNAL_TRAPS = "signal-traps";
 
     #endregion
 
@@ -35,6 +44,7 @@ internal sealed class WasmHost : IDisposable
     private readonly WasmEngine m_engine;
     private readonly Timer m_epochTimer;
     private readonly bool m_explicitTraps;
+    private readonly string m_compiledCodeKey;
     private bool m_disposed;
 
     #endregion
@@ -42,17 +52,19 @@ internal sealed class WasmHost : IDisposable
     #region Constructors
 
     /// <summary>
-    /// Creates a host: the binding guard first, then the module-aware native resolver (before the
-    /// first wasmtime P/Invoke: in the shared load context the cloud client uses, the native library
-    /// is found only through it), then one engine and one epoch timer.
+    /// Creates a host: the binding guard first, then the module-aware native resolution (before
+    /// the first wasmtime P/Invoke: in the shared load context the cloud client uses, the native
+    /// library is found only through it), then the natives guard on the library the binding
+    /// loaded, then one engine and one epoch timer.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The loaded binding is not the one built against, or it lacks what the engine settings need.</exception>
+    /// <exception cref="InvalidOperationException">The loaded binding is not the one built against, the native library is not the pinned one or none was found, or the binding lacks what the engine settings need.</exception>
     public WasmHost()
     {
         WasmHostBinding.ThrowIfUnavailable();
         WasmHostNativeLibrary.EnsureRegistered();
 
         m_engine = CreateEngine(out m_explicitTraps);
+        m_compiledCodeKey = CompiledCodeKeyOf(WasmHostNatives.Sha256Of(WasmHostNativeLibrary.LoadedPath!) ?? "", m_explicitTraps);
 
         // One timer thread advances the epoch for every store; per-store deadlines
         // (SetEpochDeadline) convert a wall-time budget into a tick count.
@@ -72,6 +84,20 @@ internal sealed class WasmHost : IDisposable
     #endregion
 
     #region Functions
+
+    /// <summary>
+    /// The key compiled code of an engine is valid for: the SHA-256 of the native library that
+    /// compiled it and the trap mode it was compiled for. A module compiled by one library and
+    /// loaded by another can deserialize without error and then trap (wasmtime 48.0.8 and 48.0.2),
+    /// and code compiled for hardware traps has no explicit checks.
+    /// </summary>
+    /// <param name="nativesSha256">The native library's SHA-256.</param>
+    /// <param name="explicitTraps">Whether traps are explicit checks.</param>
+    /// <returns>The key, e.g. <c>wasmtime-&lt;sha256&gt;-explicit-traps</c>.</returns>
+    public static string CompiledCodeKeyOf(string nativesSha256, bool explicitTraps)
+    {
+        return $"wasmtime-{nativesSha256}-{(explicitTraps ? EXPLICIT_TRAPS : SIGNAL_TRAPS)}";
+    }
 
     /// <summary>
     /// Runs one WASI command module once, in its own store: the request's argv, environment,
@@ -112,10 +138,11 @@ internal sealed class WasmHost : IDisposable
                 store.Fuel = (ulong)WasmHostLimits.InstantiationFuel(request.Fuel, request.MemoryBytes);
 
             using var linker = WasmHostLinker.Create(m_engine, request.RandomSeed);
+            var exit = WasmHostExit.Define(linker);
 
             var start = DateTime.UtcNow;
             var refuel = request.FuelAfterInstantiation ? request.Fuel : (long?)null;
-            var invocation = WasmHostGuestThread.Run(() => Invoke(linker, store, module, refuel));
+            var invocation = WasmHostGuestThread.Run(() => Invoke(linker, store, module, exit, refuel));
             var wallMs = (int)(DateTime.UtcNow - start).TotalMilliseconds;
 
             var fuelConsumed = request.FuelAfterInstantiation
@@ -172,17 +199,17 @@ internal sealed class WasmHost : IDisposable
         return wasi.WithStandardOutput(stdoutPath).WithStandardError(stderrPath);
     }
 
-    private static Invocation Invoke(Linker linker, Store store, WasmModule module, long? refuel)
+    private static Invocation Invoke(Linker linker, Store store, WasmModule module, WasmHostExit exit, long? refuel)
     {
         Instance instance;
         try
         {
             instance = linker.Instantiate(store, module);
         }
-        catch (WasmtimeException exception) when (exception.ExitCode is { } code)
+        catch (WasmtimeException) when (exit.Status is { } status)
         {
-            // A guest that proc_exits during module init (before _start) still lands here.
-            return new(WasmHostVerdict.Exited, code, null, 0);
+            // A guest that exits during module init (a start function, before _start) lands here.
+            return new(WasmHostVerdict.Exited, status, null, 0);
         }
         catch (TrapException trap)
         {
@@ -210,10 +237,11 @@ internal sealed class WasmHost : IDisposable
             startAction();
             return new(WasmHostVerdict.Exited, 0, null, PeakMemory(instance));
         }
-        catch (WasmtimeException exception) when (exception.ExitCode is { } code)
+        catch (WasmtimeException) when (exit.Status is { } status)
         {
-            // WASI proc_exit — a clean guest exit with a code (0 = success).
-            return new(WasmHostVerdict.Exited, code, null, PeakMemory(instance));
+            // proc_exit, the host's own (WasmHostExit): a clean guest exit with its status (0 =
+            // success), 126 and more included.
+            return new(WasmHostVerdict.Exited, status, null, PeakMemory(instance));
         }
         catch (TrapException trap)
         {
@@ -221,9 +249,8 @@ internal sealed class WasmHost : IDisposable
         }
         catch (WasmtimeException exception)
         {
-            // Neither an exit nor a trap: the engine failed one of the guest's calls. In wasmtime
-            // 48 that is a proc_exit with a status of 126 or more, which WASI preview 1 does not
-            // have ("exit with invalid exit status outside of [0..126)").
+            // Neither an exit nor a trap: the engine failed one of the guest's calls. None is known
+            // since proc_exit is the host's own (wasmtime 48's refused a status of 126 or more).
             return new(WasmHostVerdict.EngineError, -1, null, PeakMemory(instance), ENGINE_ERROR_FAULT, exception);
         }
     }
@@ -322,6 +349,13 @@ internal sealed class WasmHost : IDisposable
     /// hardware stack protection (a hardware trap could not be resumed from), false elsewhere.
     /// </summary>
     public bool ExplicitTraps => m_explicitTraps;
+
+    /// <summary>
+    /// What a module compiled on <see cref="Engine"/> is valid for: this process's native library
+    /// and trap mode (<see cref="CompiledCodeKeyOf"/>). Nothing of the host keeps compiled code past
+    /// its engine; a cache that does keys its entries by this and loads nothing under another key.
+    /// </summary>
+    public string CompiledCodeKey => m_compiledCodeKey;
 
     #endregion
 

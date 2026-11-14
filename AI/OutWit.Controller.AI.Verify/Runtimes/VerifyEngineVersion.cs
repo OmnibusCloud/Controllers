@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using OutWit.Controller.AI.Wasm;
 
 namespace OutWit.Controller.AI.Verify.Runtimes;
 
@@ -6,8 +6,9 @@ namespace OutWit.Controller.AI.Verify.Runtimes;
 /// The engine a node runs, as provenance names it: the .NET binding's version and the version
 /// of the native library under it. The native library carries no version of its own, so it is
 /// recognised by its SHA-256 among the libraries this controller ships (the data assets, built by
-/// the asset tool's natives.sh from the engine's release archives); any other library is named
-/// "unpinned" with the start of its hash. Computed once per process.
+/// the asset tool's natives.sh from the engine's release archives; the wasm host's pin,
+/// <see cref="WasmHostNatives.PINNED"/>, whose guard runs nothing on any other); any other library
+/// is named "unpinned" with the start of its hash. Computed once per process.
 /// </summary>
 public static class VerifyEngineVersion
 {
@@ -18,13 +19,9 @@ public static class VerifyEngineVersion
 
     private const int HASH_PREFIX = 12;
 
-    /// <summary>The native libraries the data assets carry, by SHA-256: wasmtime 48.0.8 for the three platforms.</summary>
-    public static readonly IReadOnlyDictionary<string, string> SHIPPED_NATIVES = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["a12576de5f3a2e5616f18beea2a736f829e26315ba48d4fd420057870cd3ee61"] = "48.0.8", // win-x64/wasmtime.dll
-        ["e637e4f6eccb8d57aca01f5fed8908bd13036ae9270799c1477cb08a83e93de6"] = "48.0.8", // linux-x64/libwasmtime.so
-        ["96a9f7987039b0c667b381c2bff0c891d3650335bce2a06a20ec8c11946fa416"] = "48.0.8"  // osx-arm64/libwasmtime.dylib
-    };
+    /// <summary>The native libraries the data assets carry, by SHA-256: wasmtime 48.0.8 for the three platforms (the wasm host's pin).</summary>
+    public static readonly IReadOnlyDictionary<string, string> SHIPPED_NATIVES =
+        WasmHostNatives.PINNED.Values.ToDictionary(sha256 => sha256, _ => WasmHostNatives.VERSION, StringComparer.Ordinal);
 
     private static readonly Lazy<string> DESCRIPTION = new(Describe);
 
@@ -60,22 +57,11 @@ public static class VerifyEngineVersion
     {
         var binding = typeof(Wasmtime.Engine).Assembly.GetName().Version?.ToString() ?? "unknown";
 
-        string? hash = null;
-        try
-        {
-            // The file the module-aware resolver loads (or would load, in an isolated context
-            // that resolves it through deps.json from the same folder).
-            var path = VerifyNativeLibrary.ResolvedPath ?? VerifyNativeLibrary.Locate();
-            if (path != null && File.Exists(path))
-            {
-                using var stream = File.OpenRead(path);
-                hash = Convert.ToHexStringLower(SHA256.HashData(stream));
-            }
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            hash = null;
-        }
+        // The library the binding uses: the one a copy of the wasm host resolved for it (this
+        // controller's or another's in a shared context), else the one an isolated context
+        // resolves through deps.json from this module's folder.
+        var path = WasmHostNativeLibrary.LoadedPath;
+        var hash = path == null ? null : WasmHostNatives.Sha256Of(path);
 
         return Format(binding, NativeVersionOf(hash));
     }

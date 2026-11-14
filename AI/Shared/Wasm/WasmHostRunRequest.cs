@@ -40,7 +40,8 @@ internal sealed class WasmHostRunRequest
     /// on, instantiation runs under the budget plus the most that copying segments can cost
     /// (<see cref="WasmHostLimits.InstantiationFuel"/>), the store is filled up to the budget again
     /// before <c>_start</c>, and <see cref="WasmHostRunOutcome.FuelConsumed"/> is the guest's alone.
-    /// Off by default: the budget then covers instantiation as well (Verify's behaviour).
+    /// Off by default: the budget then covers instantiation as well. Verify (since 0.12.0) and
+    /// Corpus turn it on.
     /// </summary>
     public bool FuelAfterInstantiation { get; init; }
 

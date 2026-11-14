@@ -16,4 +16,7 @@
     <ProjectReference Include="..\OutWit.Controller.AI.Verify\OutWit.Controller.AI.Verify.csproj" />
   </ItemGroup>
 
+  <!-- The pinned native wasmtime library in place of the package's copy (the wasm host refuses any other). -->
+  <Import Project="..\Shared\WasmHostPinnedNatives.targets" />
+
 </Project>

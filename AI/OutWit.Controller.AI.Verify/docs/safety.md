@@ -75,6 +75,9 @@ change:
   and leaves the host running.
 - `VerifyClangRuntimeTests`: a C or C++ build leaves nothing behind, and the program it
   builds sees no file system.
+- `WasmHostNativeResolutionTests`: in a host loaded like the client, an engine library that is
+  not the pinned one keeps the sandbox off, and another controller without its engine library,
+  or with another one, loaded first, does not stop the sandbox.
 
 `dotnet test AI/OutWit.Controller.AI.Verify.Tests` runs them on your machine.
 
@@ -83,9 +86,11 @@ change:
 - **The sandbox is the wasmtime engine.** A flaw in the engine itself is a flaw here.
   This version stands on the engine's long-term line 48, which its makers support with
   security fixes until August 2028: the native library of wasmtime 48.0.8, its newest
-  patch, under the .NET binding wasmtime 48.0.2. When a new patch of the line comes out,
-  the controller takes it; within the line a patch changes neither what a program prints
-  nor what it costs. The sandbox also leaves out the engine's features no task needs
+  patch, under the .NET binding wasmtime 48.0.2. The controller checks at start that the
+  engine library it runs on is exactly that file (by its SHA-256): with any other, an older
+  patch, a damaged copy, one another controller brought, the sandbox stays off. When a new
+  patch of the line comes out, the controller takes it; within the line a patch changes
+  neither what a program prints nor what it costs. The sandbox also leaves out the engine's features no task needs
   (exceptions, shared memory, the garbage-collected heap, 64-bit memories) and takes away
   the few system calls that were the subject of past advisories, each named in the code
   next to what closes it.

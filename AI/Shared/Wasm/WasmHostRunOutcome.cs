@@ -4,7 +4,7 @@ namespace OutWit.Controller.AI.Wasm;
 
 /// <summary>What one run of a WASI command module came to.</summary>
 /// <param name="Verdict">How the run ended.</param>
-/// <param name="ExitCode">The guest's exit code; -1 when it did not end by itself (a trap, a module that never ran, no <c>_start</c>, an engine error).</param>
+/// <param name="ExitCode">The guest's exit code, any status <c>proc_exit</c> was given (WASI's unsigned status read as a signed number: 4294967295 is -1); -1 when it did not end by itself (a trap, a module that never ran, no <c>_start</c>, an engine error).</param>
 /// <param name="Trap">The trap that ended the run (budget stops included), or null when none did.</param>
 /// <param name="Fault">The host's reason in fixed words when the guest could not say it (a crash trap, a module that never ran, no <c>_start</c>, an engine error), else null; a budget stop has none, so outputs cannot tell fuel from clock.</param>
 /// <param name="Stdout">The guest's stdout, capped, as UTF-8.</param>

@@ -64,12 +64,12 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// operating system's temp path. On a node it is a scope of the client's temp storage, so
     /// nothing of a task leaves the client's own folders. Created when missing, deleted on Dispose.
     /// </param>
-    /// <exception cref="InvalidOperationException">The loaded wasmtime binding is not the one this controller was built against (the message names both), or it cannot configure the engine.</exception>
+    /// <exception cref="InvalidOperationException">The loaded wasmtime binding is not the one this controller was built against (the message names both versions), the native library is not the pinned one or none was found (the message names both hashes), or the binding cannot configure the engine.</exception>
     public VerifyWasmSandbox(string? ioDirectory)
     {
         m_host = new WasmHost();
 
-        m_taskModules = new VerifyTaskModuleCache(m_host.Engine);
+        m_taskModules = new VerifyTaskModuleCache(m_host.Engine, m_host.CompiledCodeKey);
         m_tools = new VerifyToolRunner(m_host);
 
         m_ioDir = ioDirectory ?? Path.Combine(Path.GetTempPath(), $"witai_verify_{Guid.NewGuid():N}");
@@ -225,6 +225,10 @@ public sealed class VerifyWasmSandbox : IDisposable
             Stdin = stdin,
             CaptureDirectory = m_ioDir,
             Fuel = limits.FuelBudget,
+            // The budget is the program's own: what instantiation costs (a unit a byte of data
+            // segments where the platform copies them, nothing where it maps an image) is in
+            // neither the budget nor the fuel reported, so both are the same on every platform.
+            FuelAfterInstantiation = true,
             MemoryBytes = limits.MemoryBytes,
             WallMs = limits.WallTimeMs,
             RandomSeed = task.RandomSeed,
@@ -233,9 +237,10 @@ public sealed class VerifyWasmSandbox : IDisposable
             OutOfMemory = LooksLikeOutOfMemory
         });
 
-        // Kept as Verify has always had it: a run the engine ended without a trap or an exit code
-        // (a proc_exit with a status of 126 or more) is no verdict here but the engine's own
-        // exception, which fails the batch. Making it a verdict changes results: a release's call.
+        // A run the engine ended without a trap or an exit code is no verdict here but the engine's
+        // own exception, which fails the batch: a fault of the node, not of the program. None is
+        // known since 0.12.0, where an exit status of 126 or more (which wasmtime's own proc_exit
+        // refused this way) became an exit like any other (WasmHostExit).
         if (outcome.EngineError != null)
             ExceptionDispatchInfo.Capture(outcome.EngineError).Throw();
 

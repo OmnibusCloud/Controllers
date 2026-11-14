@@ -99,12 +99,13 @@ internal static class WasmHostEngineNative
 
     private static IntPtr TheBindingsLibrary()
     {
-        // The library the binding's own calls loaded: through WasmHostNativeLibrary's resolver in
-        // a cloud client's shared load context, through the module's dependency file in an isolated
-        // plugin context. A load by name runs neither the resolver nor a plugin context's lookup
-        // (it found nothing on a Linux client), so load by the path the resolver used or would
-        // use; the operating system hands back the library already loaded.
-        var path = WasmHostNativeLibrary.ResolvedPath ?? WasmHostNativeLibrary.Locate();
+        // The library the binding's own calls loaded (the natives guard has checked it): the one a
+        // copy of the host loaded for the binding (this controller's or another's, in a cloud
+        // client's shared load context), else this module's own, which an isolated plugin context
+        // resolves through the module's dependency file. A load by name runs neither the resolver
+        // nor a plugin context's lookup (it found nothing on a Linux client), so load by the path;
+        // the operating system hands back the library already loaded.
+        var path = WasmHostNativeLibrary.LoadedPath;
         return path != null
             ? NativeLibrary.Load(path)
             : NativeLibrary.Load(WasmHostNativeLibrary.LIBRARY_NAME, typeof(Wasmtime.Engine).Assembly, null);

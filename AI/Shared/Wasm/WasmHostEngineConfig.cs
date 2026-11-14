@@ -14,6 +14,11 @@ namespace OutWit.Controller.AI.Wasm;
 /// every run is on a thread that holds it (<see cref="WasmHostGuestThread"/>). Traps are explicit
 /// checks, not hardware faults, where the host process enforces hardware stack protection, so such
 /// a process survives a guest's trap (<see cref="WasmHostEngineNative"/>).
+/// <para>
+/// The configuration is the binding's first call into the native library, the call that loads it:
+/// the natives guard (<see cref="WasmHostNatives"/>) asks right after it, before anything else of
+/// the library is used.
+/// </para>
 /// </summary>
 internal static class WasmHostEngineConfig
 {
@@ -25,24 +30,49 @@ internal static class WasmHostEngineConfig
     /// </summary>
     /// <param name="explicitTraps">True when traps are explicit checks in this process.</param>
     /// <returns>A configuration not yet used, to make one engine from.</returns>
-    /// <exception cref="InvalidOperationException">The binding has no native handle or the native library lacks the calls.</exception>
+    /// <exception cref="InvalidOperationException">No native library was found, the one loaded is not the pinned one, or the binding has no native handle or the library lacks the calls.</exception>
     public static Config Create(out bool explicitTraps)
     {
-        var config = new Config()
-            .WithMaximumStackSize(WasmHostGuestThread.ENGINE_STACK_BYTES)
-            .WithFuelConsumption(true)
-            .WithEpochInterruption(true)
-            .WithCraneliftNaNCanonicalization(true)
-            .WithMemory64(false)
-            .WithMultiMemory(false)
-            .WithWasmThreads(false)
-            .WithGc(false)
-            .WithExceptions(false)
-            .WithComponentModel(false)
-            .WithRelaxedSIMD(true, true);
+        var config = NewConfig();
+        try
+        {
+            WasmHostNatives.ThrowIfUnavailable();
 
-        explicitTraps = WasmHostEngineNative.Apply(config);
-        return config;
+            config
+                .WithMaximumStackSize(WasmHostGuestThread.ENGINE_STACK_BYTES)
+                .WithFuelConsumption(true)
+                .WithEpochInterruption(true)
+                .WithCraneliftNaNCanonicalization(true)
+                .WithMemory64(false)
+                .WithMultiMemory(false)
+                .WithWasmThreads(false)
+                .WithGc(false)
+                .WithExceptions(false)
+                .WithComponentModel(false)
+                .WithRelaxedSIMD(true, true);
+
+            explicitTraps = WasmHostEngineNative.Apply(config);
+            return config;
+        }
+        catch
+        {
+            config.Dispose();
+            throw;
+        }
+    }
+
+    private static Config NewConfig()
+    {
+        try
+        {
+            return new Config();
+        }
+        catch (DllNotFoundException exception)
+        {
+            // Every resolver and handler of the process refused or found nothing: this controller's
+            // own library is missing or another one, and no other controller's copy had the pinned one.
+            throw new InvalidOperationException(WasmHostNatives.NotLoaded(exception), exception);
+        }
     }
 
     #endregion

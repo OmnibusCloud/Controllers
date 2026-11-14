@@ -48,4 +48,7 @@
     <None Update="Fixtures\*.bin" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- The pinned native wasmtime library in place of the package's copy (the wasm host refuses any other). -->
+  <Import Project="..\Shared\WasmHostPinnedNatives.targets" />
+
 </Project>

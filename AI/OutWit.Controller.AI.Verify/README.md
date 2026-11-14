@@ -7,8 +7,13 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking, and formal proof checking — generation
 and verification are the same activity with different programs.
 
-**Status: 0.11.3 — proven on the test fleet, not yet released to nuget.org.** What the
-controller can do, for an application built on it: [docs/capabilities.md](docs/capabilities.md).
+**Status: 0.12.0 — for the test server; 0.11.3 is the version proven on the test fleet. Not
+yet released to nuget.org or the live network.** 0.12.0: an exit status of 126 or more is the
+program's exit (it used to fail the batch), fuel is the program's own (the per-platform cost of
+instantiating the runtime is out of it), the sandbox checks the native engine library by its
+SHA-256, and a controller without natives in the client's shared load context no longer takes
+the library away from Verify. What the controller can do, for an application built on it:
+[docs/capabilities.md](docs/capabilities.md).
 `VerifyRun` returns a byte-identical verdict report for a taskset across runs,
 placements and fleets: a million small tasks gave the same report on six nodes
 (22m41s) and on four (41m35s). Every node executes batches at a bounded degree
@@ -104,13 +109,14 @@ A minimal taskset — one code-vs-tests task and one plain run:
 ```
 
 Verdicts: `Pass`, `Fail` (ran, wrong answer or missing signal), `CompileError`,
-`RuntimeError` (crashed, or exited non-zero where 0 was expected; a crash the program did
+`RuntimeError` (crashed, or exited non-zero where 0 was expected — whatever the status,
+126 and more included, as `exit(200)` is on any system; a crash the program did
 not explain is named on stderr in fixed words, `wasm trap: …`), `Timeout` (fuel or wall
 clock; nothing is written, since one node may stop on fuel where another stops on the
 clock), `MemoryExceeded` (the program's allocator was refused), `OutputExceeded`,
 `RuntimeUnavailable`.
 A suite case passes when the run completes with its `expected_exit` (whatever
-it is) and, if given, its exact `expected_stdout`.
+it is, 200 as well as 1) and, if given, its exact `expected_stdout`.
 
 Generate-and-check: the generators are an ordinary taskset whose outputs are
 the candidates; the checker spec is one task line plus `expected_stdout` /
@@ -139,15 +145,21 @@ verdict, exit code, then outputs.
 The verdict report is the run's identity: it carries verdicts, exit codes and
 per-case outcomes — the fields two honest executions agree on wherever they
 ran — and is byte-identical for a taskset regardless of which nodes ran which
-packages (proven on the test fleet across three placements). Fuel is
-reproducible per host but drifts between hosts for the interpreters that read
-files: CPython tasks by 0.0002–0.06 % with the bytecode layers, Ruby and Lua by
-a fixed step between Linux and the other two systems (a Lua hello costs 569,680
-units on Linux and 602,449 on Windows and macOS) — the difference is in how
-each host's WASI answers the interpreter's file and descriptor queries — while
-QuickJS tasks and raw WASI modules are byte-equal everywhere; and the peak
-linear memory of a CPython task can differ by one 64 KiB page with it; wall
-time is hardware. All three are metrics and live per task in the provenance
+packages (proven on the test fleet across three placements). Fuel is the
+program's own since 0.12.0: the budget is given once the module is instantiated,
+so neither the budget nor the fuel reported carries the copy of the module's
+data segments, which wasmtime charges a unit a byte for where it copies them and
+not where it maps a copy-on-write image (Linux). That copy was the fixed step
+between Linux and the other two systems that earlier versions showed for Ruby and
+Lua (a Lua hello cost 569,680 units on Linux and 602,449 on Windows and macOS;
+32,769 of that was the copy): the hello of every runtime is now one number on
+Windows, Linux and macOS, pinned by the tests, but for the CPython tasks that
+read their library from files (`python-3.14.6` and its sympy flavour), which
+still drift between hosts by up to 0.06 % in how each host's WASI answers the
+interpreter's file queries (a hello: 40 units between two Windows hosts, 1,113
+on Linux; the numpy runtime starts from a snapshot and does not drift). Fuel is
+reproducible per host; the peak linear memory of a CPython task can differ by
+one 64 KiB page between hosts; wall time is hardware. All three are metrics and live per task in the provenance
 document. The clock is the run's own (it starts at a pinned instant and moves
 only when the program sleeps) and the random source is seeded from the task,
 so a program sees the same world on every node; a folder cannot be
@@ -283,8 +295,8 @@ numbers differ from a plain start's, the rule does not). The snapshot holds `os.
 delivered together (their own data asset, `verify-python-numpy.zip`, next to `wasm/`), and a
 run under another environment or file system is refused (exit 2, the reason on stderr). The
 module before its snapshot travels beside it as `python-plain.wasm`, for debugging; the catalog
-names the snapshot. A hello costs 37 M fuel (`python-3.14.6`: 124 M), `import numpy` nothing more
-(a plain start: 0.8 G), a 300×300 `linalg.solve` 0.25 G, a sort of a million integers 0.57 G.
+names the snapshot. A hello costs 25 M fuel (`python-3.14.6`: 121 M), `import numpy` nothing more
+(a plain start: 0.8 G), a 300×300 `linalg.solve` about 0.24 G, a sort of a million integers 0.56 G.
 
 What a numpy author should know about the target, also in the capabilities document's `notes`.
 It is 32-bit: numpy's default integer is `int32`, so `np.arange(1_000_000).sum()` wraps to
@@ -433,10 +445,16 @@ Two load modes meet this layout. An isolated plugin load context (the server,
 the module-load test) resolves the library through the module's `deps.json`.
 The cloud client loads controllers into the shared load context, where that
 file is never read and a P/Invoke probes only the application folder and the
-module root — so the controller registers `VerifyNativeLibrary` as the
-binding's DllImport resolver before its first wasmtime call, and it loads
-`runtimes/<rid>/native/` from the module itself (the host's runtime
-identifier first, then the portable one).
+module root, and where the binding loads once, from the folder of whichever
+controller needed it first. So before its first wasmtime call the controller
+registers the binding's DllImport resolver (when no other controller did) and a
+handler of its load context's `ResolvingUnmanagedDll` event, both answering
+with `runtimes/<rid>/native/` of this module (the host's runtime identifier
+first, then the portable one) and only with the pinned library. A resolver that
+finds nothing answers nothing, the runtime goes on to its own probing and then
+to every handler, so another controller that ships no natives, or other ones,
+cannot take the library away from Verify (it did on 2.4.5-test.15, when Corpus
+0.2.0 came without natives and loaded the binding first).
 
 The sandbox host itself (the resolver, the engine and its settings, the guest
 threads, the deterministic linker and the run of one WASI command module) is
@@ -446,12 +464,17 @@ In the shared load context an assembly name loads once and the first controller 
 load it wins, so a shared assembly would tie the controllers' versions together; the
 one assembly they do share is the binding, pinned to the same version in each. A
 startup guard compares the loaded binding with the version the controller was built
-against: on a mismatch the sandbox does not start, and the self-check's
-`wasmtime-native: FAILED` line names both versions.
+against, and the native library the binding loaded with the SHA-256 pinned for the
+platform (`WasmHostNatives`): on a mismatch the sandbox does not start, and the
+self-check's `wasmtime-native: FAILED` line names both versions or both hashes. Code
+the engine compiles is valid for one native library and one trap mode (hardware or
+explicit traps); the host keys compiled code by both (`WasmHost.CompiledCodeKey`), and
+nothing keeps compiled code past its process.
 
 The natives and the runtime modules are Tier-2 data assets (`ControllerDataAsset`),
-fetched by consumers at build time from the `verify-v<version>` release of this
-repository and verified by hash; the nupkg itself stays small. The engine is the
+fetched by consumers at build time from releases of this repository and verified by
+hash: the natives from `wasmtime-v48.0.8` (the asset every controller that carries the
+host references), the runtimes from `verify-v<version>`; the nupkg itself stays small. The engine is the
 long-term line 48 of wasmtime: the .NET binding 48.0.2 (the `Wasmtime` package) over
 the native library of its newest patch, 48.0.8, taken unchanged from the engine's own
 release archives (`toolchain/natives.sh` of the asset tool, pinned by the digests the
@@ -483,8 +506,13 @@ plan, transfer (a link that drops and comes back included) and the share's
 progress, the end-to-end runs
 of every bundled script through the engine on in-process nodes, the
 module self-containment proof, and the shared wasm host on its own (its
-verdicts and folders, the binding guard in a client-like host, and the
-repository pins of the binding and the natives). The sandbox suites need the pinned runtime set
+verdicts and folders, exit statuses of every size on every runtime, the fuel of a
+hello pinned per runtime, the binding and natives guards in a client-like host, the
+native resolution with a second carrier of the host loaded first, and the
+repository pins of the binding and the natives). The sandbox runs only on the
+pinned native library, so the test projects take it from `@Data/natives`
+(`toolchain/natives.sh` of the asset tool) in place of the package's copy after the
+build (`AI/Shared/WasmHostPinnedNatives.targets`). The sandbox suites need the pinned runtime set
 (`verify-assets build OutWit.Controller.AI.Verify.Tests/@Data/runtimes`;
 `@Data/` is gitignored) and Assert.Ignore without it; the `AI Verify` workflow
 builds the set and runs everything on Linux, macOS and Windows, where a runtime
