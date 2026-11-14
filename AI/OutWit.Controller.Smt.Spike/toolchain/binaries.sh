@@ -69,6 +69,10 @@ case "$KIND" in
     [ -n "$z3" ] || { echo "no z3 executable in $(basename "$archive")" >&2; exit 1; }
     chmod +x "$z3" || true
     "$z3" -version >&2
+    # A Windows program (the harness) is handed a Windows path.
+    if command -v cygpath > /dev/null 2>&1; then
+      z3="$(cygpath -w "$z3")"
+    fi
     echo "$z3"
     ;;
   *)
