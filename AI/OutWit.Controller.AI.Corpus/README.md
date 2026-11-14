@@ -30,7 +30,7 @@ crawl text, and the dedup merge measured at the scale of a crawl segment.
 
 | Activity | Runs on | Signature | What it does |
 |---|---|---|---|
-| `Corpus.Split` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusTaskCollection` | parses the manifest, checks every source against the allowlist and the byte cap, hashes the language model blob and pins it into the pipeline, holds the server storage estimate to the deployment's headroom, emits one task per shard. Any problem fails the job here — a bad manifest never reaches a node |
+| `Corpus.Split` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusTaskCollection` | parses the manifest, checks every source against the allowlist and the byte cap, hashes the language model blob and pins it into the pipeline, reads it and refuses one this controller cannot use (a format it does not read, a truncated or non-canonical pack, a threshold it does not have) by name, holds the server storage estimate to the deployment's headroom, emits one task per shard. Any problem fails the job here — a bad manifest never reaches a node |
 | `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate (sources without a size are asked at the origin with HEAD, up to 64 of them, the rest extrapolated at the mean), the server storage estimate and the headroom it is held to (see *Server storage*), every message by manifest line |
 | `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline, the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception; several shards may run on one client at once |
 | `Corpus.Collect` | host | `(CorpusResultCollection, CorpusOptions) → Blob report` | the job report: every shard's verdict, blobs and content hash in task order, the aggregate counters over the fleet |
@@ -187,6 +187,28 @@ finds the Swedish profile instead of the German one; a page in a language
 the pack has no profile for at all is usually too far from every supported
 profile. `language_unknown` keeps its meaning: too little text to tell.
 
+Which languages a lab loses is in the shard statistics and the report, as
+the map `unsupported_languages` next to the drops (the language histogram
+stays the documents out): the code of the known language a document was
+nearest to (`swe`), `past_limit:` and a supported language's code when the
+document lies past that language's limit (`past_limit:spa`: a language the
+pack has no profile for, or text too unlike its own), and `no_profile` for
+text that shares no n-gram with any profile (a script no profile has, where
+"nearest" would be a tie). The counts add up to `language_unsupported`.
+
+The host reads the pack before any task is sent: `Corpus.Split` refuses a
+model this controller cannot use, and `Corpus.Preflight` names the reason
+(a format it does not read, a truncated or non-canonical pack, a threshold
+it does not have); a node never meets it as `PipelineUnavailable`. The
+preflight also describes the model and names `target_languages` it does not
+have.
+
+A document whose crawl label lists several languages is judged by the head
+the identifier reads (its first 4,000 characters): a page whose main language
+is supported but whose head is in another drops as unsupported (4.4 % of such
+pages on the evaluation files, 1.25 % of those the quality stages keep). That
+is the policy: the language of a document is the language of its head.
+
 A `WITLID1` model (0.1.x, profiles only) is still read and behaves exactly
 as under 0.1.14: the nearest profile always wins, and the rule data is
 0.1.14's, kept frozen as data (`Language/Resources/witlid1-rules.json`). A
@@ -324,7 +346,8 @@ stay.
   and skipping the lines whose bit is 0.
 - **Report** (`corpus-report.json`, `docs/corpus-report.schema.json`): per
   shard the verdict, blob ids, content hash, error and statistics (records in,
-  documents extracted and out, drops by rule, languages, bytes, times), and the
+  documents extracted and out, drops by rule, languages, the languages of the
+  `language_unsupported` drops, bytes, times), and the
   platform (`runtime_target`, e.g. `linux-x64`) and degree it ran at — a
   platform, never a machine; the summary sums them over the fleet.
 
@@ -335,7 +358,7 @@ as the rest, and `Corpus.Integrity` writes `corpus-integrity.json`
 (`docs/corpus-integrity.schema.json`): for every shard that ran twice its two
 executions compared on everything an honest node
 cannot vary — the verdict, the content hash of the product, the record and
-document counts, the drop and language histograms. Times and bytes are not
+document counts, the drop and language histograms (the drops with the languages of the `language_unsupported` ones). Times and bytes are not
 compared. The platform picks the shards at random and keeps the two executions
 on different machines, so a node cannot tell whether its shard is being checked.
 No document says which machine ran what.

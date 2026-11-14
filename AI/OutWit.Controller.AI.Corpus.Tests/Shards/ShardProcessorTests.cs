@@ -304,8 +304,34 @@ public sealed class ShardProcessorTests
         {
             Assert.That(pack.Drops.Select(drop => (drop.Name, drop.Count)), Is.EquivalentTo(new[] { (ShardProcessor.DROP_LANGUAGE_UNKNOWN, 1), (ShardProcessor.DROP_LANGUAGE_UNSUPPORTED, 1) }));
             Assert.That(pack.Languages.Select(language => (language.Name, language.Count)), Is.EqualTo(new[] { ("eng", 1) }));
+            Assert.That(pack.UnsupportedLanguages.Select(language => (language.Name, language.Count)), Is.EqualTo(new[] { ("swe", 1) }), "the Swedish page, named");
+            Assert.That(witlid1.UnsupportedLanguages, Is.Empty);
             Assert.That(witlid1.Drops.Select(drop => (drop.Name, drop.Count)), Is.EqualTo(new[] { (ShardProcessor.DROP_LANGUAGE_UNKNOWN, 1) }), "0.1.14 labels the Swedish page with a language it has");
             Assert.That(witlid1.DocumentsOut, Is.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public void TheUnsupportedBreakdownNamesWhereEachDocumentWasNearestTest()
+    {
+        // A known unsupported language (Danish), a script no profile has (Armenian: no n-gram in
+        // common, "nearest" would be a tie), and the golden shard's own mix.
+        const string danish =
+            "Kommunen åbner det nye bibliotek i næste uge, når renoveringen er færdig.\n" +
+            "Børneafdelingen flytter til anden sal, og læsesalen får nye stole.";
+        const string armenian = "Քաղաքապետարանը հաջորդ շաբաթ կբացի նոր գրադարանը, երբ վերանորոգումն ավարտվի։";
+        var shard = WarcSynth.Shard([WarcSynth.ConversionRecord("https://example.test/da", danish), WarcSynth.ConversionRecord("https://example.test/hy", armenian)]);
+        var pipeline = new CorpusPipelineData { Version = "test-v1", CleanLines = false, FilterQuality = false, Sign = false };
+
+        var synthetic = RunBytes(shard, pipeline, m_model);
+        var golden = Run(WET_FIXTURE, CorpusSourceFormat.Wet, DefaultPipeline()).Product.Stats.Build(0, 0, 0, 0);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(synthetic.UnsupportedLanguages.Select(language => (language.Name, language.Count)), Is.EqualTo(new[] { ("dan", 1), (ShardStatsBuilder.UNSUPPORTED_NO_PROFILE, 1) }));
+            Assert.That(golden.UnsupportedLanguages.Sum(language => language.Count), Is.EqualTo(Count(golden, ShardProcessor.DROP_LANGUAGE_UNSUPPORTED)), "the breakdown adds up to the drop");
+            Assert.That(golden.UnsupportedLanguages.Select(language => language.Name), Is.Ordered.Using((IComparer<string>)StringComparer.Ordinal));
+            Assert.That(golden.Languages.Select(language => language.Name), Is.SubsetOf(m_model.Languages), "the histogram of documents out is untouched");
         });
     }
 

@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
 
 namespace OutWit.Controller.AI.Corpus.Shards;
@@ -9,10 +10,21 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// </summary>
 public sealed class ShardStatsBuilder
 {
+    #region Constants
+
+    /// <summary>The breakdown key of a document past the limit of its nearest supported language: <c>past_limit:</c> and that language's code.</summary>
+    public const string UNSUPPORTED_PAST_LIMIT = "past_limit:";
+
+    /// <summary>The breakdown key of a document that shares no n-gram with any profile: its nearest profile says nothing.</summary>
+    public const string UNSUPPORTED_NO_PROFILE = "no_profile";
+
+    #endregion
+
     #region Fields
 
     private readonly Dictionary<string, int> m_drops = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> m_languages = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> m_unsupported = new(StringComparer.Ordinal);
 
     #endregion
 
@@ -35,6 +47,37 @@ public sealed class ShardStatsBuilder
     public void Drop(string rule)
     {
         m_drops[rule] = m_drops.GetValueOrDefault(rule) + 1;
+    }
+
+    /// <summary>
+    /// Counts one document dropped as <see cref="ShardProcessor.DROP_LANGUAGE_UNSUPPORTED"/>, and
+    /// in the breakdown of those drops under <see cref="UnsupportedKey"/>.
+    /// </summary>
+    /// <param name="guess">The identifier's unsupported verdict.</param>
+    public void DropUnsupported(LanguageGuess guess)
+    {
+        Drop(ShardProcessor.DROP_LANGUAGE_UNSUPPORTED);
+        var key = UnsupportedKey(guess);
+        m_unsupported[key] = m_unsupported.GetValueOrDefault(key) + 1;
+    }
+
+    /// <summary>
+    /// Where an unsupported document goes in the breakdown: the code of its nearest profile when
+    /// that is a language the pack knows and does not support (<c>swe</c>);
+    /// <see cref="UNSUPPORTED_PAST_LIMIT"/> and the code when the nearest profile is a supported
+    /// language the document lies past the limit of (<c>past_limit:spa</c>: a language the pack
+    /// has no profile for, or text too unlike its own); <see cref="UNSUPPORTED_NO_PROFILE"/> when
+    /// the text shares no n-gram with any profile (a script no profile has), where "nearest"
+    /// would be an arbitrary tie.
+    /// </summary>
+    /// <param name="guess">The identifier's unsupported verdict.</param>
+    /// <returns>The key.</returns>
+    public static string UnsupportedKey(LanguageGuess guess)
+    {
+        if (guess.DistancePpm >= LanguageIdentifier.PPM)
+            return UNSUPPORTED_NO_PROFILE;
+
+        return guess.PastLimit ? UNSUPPORTED_PAST_LIMIT + guess.Nearest : guess.Nearest;
     }
 
     /// <summary>Counts one document in the product.</summary>
@@ -61,6 +104,7 @@ public sealed class ShardStatsBuilder
             DocumentsOut = DocumentsOut,
             Drops = Sorted(m_drops),
             Languages = Sorted(m_languages),
+            UnsupportedLanguages = Sorted(m_unsupported),
             BytesFetched = bytesFetched,
             BytesProduced = bytesProduced,
             FetchMs = fetchMs,

@@ -113,7 +113,10 @@ public sealed class ShardProcessor
                     var guess = m_identifier.Identify(document.Value.Text);
                     if (!guess.IsKnown)
                     {
-                        stats.Drop(guess.IsUnsupported ? DROP_LANGUAGE_UNSUPPORTED : DROP_LANGUAGE_UNKNOWN);
+                        if (guess.IsUnsupported)
+                            stats.DropUnsupported(guess);
+                        else
+                            stats.Drop(DROP_LANGUAGE_UNKNOWN);
                         continue;
                     }
 

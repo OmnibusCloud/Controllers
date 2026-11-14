@@ -37,7 +37,7 @@ public sealed class CorpusModelWireLayoutTests
     [TestCase(typeof(CorpusQualityData), 11)]
     [TestCase(typeof(CorpusPipelineData), 9)]
     [TestCase(typeof(CorpusTaskData), 5)]
-    [TestCase(typeof(CorpusShardStatsData), 10)]
+    [TestCase(typeof(CorpusShardStatsData), 11)]
     [TestCase(typeof(CorpusResultData), 13)]
     [TestCase(typeof(CorpusOptionsData), 4)]
     [TestCase(typeof(CorpusPreflightData), 9)]
@@ -97,6 +97,29 @@ public sealed class CorpusModelWireLayoutTests
         }
 
         return null;
+    }
+
+    [Test]
+    public void StatsRoundTripWithTheUnsupportedBreakdownTest()
+    {
+        var stats = new CorpusShardStatsData
+        {
+            RecordsIn = 3,
+            Drops = [new CorpusCountData { Name = "language_unsupported", Count = 2 }],
+            UnsupportedLanguages = [new CorpusCountData { Name = "past_limit:spa", Count = 1 }, new CorpusCountData { Name = "swe", Count = 1 }]
+        };
+
+        var back = MemoryPackSerializer.Deserialize<CorpusShardStatsData>(MemoryPackSerializer.Serialize(stats))!;
+        var other = stats.Clone();
+        other.UnsupportedLanguages[1].Count = 2;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(back.Is(stats), Is.True);
+            Assert.That(back.UnsupportedLanguages.Select(count => count.Name), Is.EqualTo(new[] { "past_limit:spa", "swe" }));
+            Assert.That(stats.Clone().Is(stats), Is.True);
+            Assert.That(other.Is(stats), Is.False, "the breakdown is part of the value");
+        });
     }
 
     [Test]

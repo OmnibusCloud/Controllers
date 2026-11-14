@@ -116,7 +116,7 @@ public sealed class LanguageIdentifier
         var distancePpm = Ppm(bestDistance, (long)m_maxRank * textProfile.Count);
 
         if (m_acceptance != null && !m_acceptance.Accepts(best!, distancePpm))
-            return new LanguageGuess("", second, margin) { Nearest = best!, DistancePpm = distancePpm, IsUnsupported = true };
+            return new LanguageGuess("", second, margin) { Nearest = best!, DistancePpm = distancePpm, IsUnsupported = true, PastLimit = m_acceptance.Supports(best!) };
 
         return new LanguageGuess(best!, second, margin) { Nearest = best!, DistancePpm = distancePpm };
     }
@@ -231,4 +231,7 @@ public sealed record LanguageGuess(string Code, string? RunnerUp, double Margin)
 
     /// <summary>The distance to the nearest profile in millionths of the worst distance (0 when the text is too short).</summary>
     public int DistancePpm { get; init; }
+
+    /// <summary>Whether an unsupported verdict came from the limit: the nearest profile is a supported language, the text lies past its limit (false when the nearest profile is a language the pack knows and does not support).</summary>
+    public bool PastLimit { get; init; }
 }

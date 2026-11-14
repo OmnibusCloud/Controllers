@@ -102,7 +102,7 @@ public sealed class LanguagePackedParityTests
         var margin = second == null ? 1.0 : (secondDistance - bestDistance) / worst;
         var distancePpm = LanguageIdentifier.Ppm(bestDistance, (long)maxRank * textProfile.Count);
         if (model.Acceptance != null && !model.Acceptance.Accepts(best!, distancePpm))
-            return new LanguageGuess("", second, margin) { Nearest = best!, DistancePpm = distancePpm, IsUnsupported = true };
+            return new LanguageGuess("", second, margin) { Nearest = best!, DistancePpm = distancePpm, IsUnsupported = true, PastLimit = model.Acceptance.Supports(best!) };
 
         return new LanguageGuess(best!, second, margin) { Nearest = best!, DistancePpm = distancePpm };
     }

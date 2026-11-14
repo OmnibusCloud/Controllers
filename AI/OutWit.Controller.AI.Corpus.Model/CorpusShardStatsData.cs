@@ -26,7 +26,7 @@ public sealed partial class CorpusShardStatsData : ModelBase
         if (modelBase is not CorpusShardStatsData other)
             return false;
 
-        if (Drops.Count != other.Drops.Count || Languages.Count != other.Languages.Count)
+        if (Drops.Count != other.Drops.Count || Languages.Count != other.Languages.Count || UnsupportedLanguages.Count != other.UnsupportedLanguages.Count)
             return false;
 
         for (var i = 0; i < Drops.Count; i++)
@@ -38,6 +38,12 @@ public sealed partial class CorpusShardStatsData : ModelBase
         for (var i = 0; i < Languages.Count; i++)
         {
             if (!Languages[i].Is(other.Languages[i], tolerance))
+                return false;
+        }
+
+        for (var i = 0; i < UnsupportedLanguages.Count; i++)
+        {
+            if (!UnsupportedLanguages[i].Is(other.UnsupportedLanguages[i], tolerance))
                 return false;
         }
 
@@ -66,7 +72,8 @@ public sealed partial class CorpusShardStatsData : ModelBase
             BytesProduced = BytesProduced,
             FetchMs = FetchMs,
             ProcessMs = ProcessMs,
-            WaitMs = WaitMs
+            WaitMs = WaitMs,
+            UnsupportedLanguages = UnsupportedLanguages.Select(u => u.Clone()).ToList()
         };
     }
 
@@ -118,6 +125,15 @@ public sealed partial class CorpusShardStatsData : ModelBase
     /// <summary>Wall time the shard waited on the node for a download slot and a processing slot (the node's own queue; not part of the fetch or the processing times).</summary>
     [MemoryPackOrder(9)]
     public int WaitMs { get; set; }
+
+    /// <summary>
+    /// The documents dropped as <c>language_unsupported</c>, by where they were nearest: a
+    /// language the pack knows and does not support (its code), <c>past_limit:</c> and a supported
+    /// language's code (past that language's limit), or <c>no_profile</c> (no n-gram in common
+    /// with any profile). Names in ordinal order; the counts sum to the drop's.
+    /// </summary>
+    [MemoryPackOrder(10)]
+    public List<CorpusCountData> UnsupportedLanguages { get; set; } = [];
 
     #endregion
 }

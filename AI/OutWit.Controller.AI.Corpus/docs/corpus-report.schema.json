@@ -20,7 +20,8 @@
         "bytes_fetched": { "type": "integer" },
         "bytes_produced": { "type": "integer" },
         "drops": { "$ref": "#/$defs/counts", "description": "Documents dropped per rule, summed over the completed shards." },
-        "languages": { "$ref": "#/$defs/counts", "description": "Documents out per ISO 639-3 code, summed over the completed shards." }
+        "languages": { "$ref": "#/$defs/counts", "description": "Documents out per ISO 639-3 code, summed over the completed shards." },
+        "unsupported_languages": { "$ref": "#/$defs/counts", "description": "Documents dropped as language_unsupported, by where they were nearest: the code of a language the pack knows and does not support, past_limit:<code> for a supported language the document lies past the limit of (a language the pack has no profile for, or text too unlike its own), no_profile for text that shares no n-gram with any profile. Sums to the drop language_unsupported; absent from reports of controllers before 0.2.0. Summed over the completed shards." }
       }
     },
     "shards": {
@@ -55,7 +56,8 @@
                   "process_ms": { "type": "integer" },
                   "wait_ms": { "type": "integer", "description": "Time the shard waited on the node for a download slot and a processing slot." },
                   "drops": { "$ref": "#/$defs/counts" },
-                  "languages": { "$ref": "#/$defs/counts" }
+                  "languages": { "$ref": "#/$defs/counts" },
+                  "unsupported_languages": { "$ref": "#/$defs/counts", "description": "Documents dropped as language_unsupported, by where they were nearest: the code of a language the pack knows and does not support, past_limit:<code> for a supported language the document lies past the limit of (a language the pack has no profile for, or text too unlike its own), no_profile for text that shares no n-gram with any profile. Sums to the drop language_unsupported; absent from reports of controllers before 0.2.0." }
                 }
               }
             ]

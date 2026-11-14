@@ -8,8 +8,9 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Corpus.Adapters;
 
 /// <summary>
-/// The host-side steps Split and Preflight share: read the manifest blob, hash the language
-/// model blob when one is given, parse, plan; and once the shard sizes are known, estimate
+/// The host-side steps Split and Preflight share: read the manifest blob, hash and read the
+/// language model blob when one is given (a model this controller cannot use is refused here,
+/// before any task is sent), parse, plan; and once the shard sizes are known, estimate
 /// what the job leaves on the server and hold it to the deployment's headroom.
 /// </summary>
 internal static class CorpusPlanning
@@ -35,11 +36,13 @@ internal static class CorpusPlanning
         long inputBytes = 0;
         var modelBlobId = Guid.Empty;
         var modelSha256 = "";
+        CorpusLanguageModelFacts? modelFacts = null;
         if (pool.TryGetValue(languageModel, out Guid modelBlob) && modelBlob != Guid.Empty)
         {
             var modelPath = await blobService.GetLocalPathAsync(modelBlob);
             modelBlobId = modelBlob;
             modelSha256 = ShardLanguageModels.Hash(modelPath);
+            modelFacts = CorpusLanguageModelFacts.Load(modelPath);
             inputBytes += new FileInfo(modelPath).Length;
         }
 
@@ -48,7 +51,7 @@ internal static class CorpusPlanning
         var parsed = CorpusManifestParser.Parse(json);
         inputBytes += new FileInfo(manifestPath).Length;
 
-        return (CorpusTaskPlanner.Plan(parsed, optionsData, modelBlobId, modelSha256), parsed, optionsData, inputBytes);
+        return (CorpusTaskPlanner.Plan(parsed, optionsData, modelBlobId, modelSha256, languageModel: modelFacts), parsed, optionsData, inputBytes);
     }
 
     /// <summary>Estimates what the job leaves on the server and asks the deployment for its limit.</summary>

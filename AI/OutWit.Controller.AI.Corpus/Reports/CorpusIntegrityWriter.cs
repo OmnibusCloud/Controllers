@@ -94,7 +94,8 @@ public static class CorpusIntegrityWriter
         var replicaStats = replica.Stats ?? new CorpusShardStatsData();
         if (primaryStats.DocumentsOut != replicaStats.DocumentsOut || primaryStats.DocumentsExtracted != replicaStats.DocumentsExtracted || primaryStats.RecordsIn != replicaStats.RecordsIn)
             fields.Add("documents");
-        if (!SameCounts(primaryStats.Drops, replicaStats.Drops))
+        // The breakdown of language_unsupported is part of the drops: a function of the shard.
+        if (!SameCounts(primaryStats.Drops, replicaStats.Drops) || !SameCounts(primaryStats.UnsupportedLanguages, replicaStats.UnsupportedLanguages))
             fields.Add("drops");
         if (!SameCounts(primaryStats.Languages, replicaStats.Languages))
             fields.Add("languages");
