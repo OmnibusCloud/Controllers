@@ -106,13 +106,21 @@ internal sealed class WasmHost : IDisposable
             store.SetWasiConfiguration(Wasi(request, stdinPath, stdoutPath, stderrPath));
             WasmHostLimits.Apply(store, request.Fuel, request.MemoryBytes, request.WallMs);
 
+            // With the budget given after instantiation, instantiation gets the budget and what
+            // copying segments can cost, whatever the platform charges for it.
+            if (request.FuelAfterInstantiation)
+                store.Fuel = (ulong)WasmHostLimits.InstantiationFuel(request.Fuel, request.MemoryBytes);
+
             using var linker = WasmHostLinker.Create(m_engine, request.RandomSeed);
 
             var start = DateTime.UtcNow;
-            var invocation = WasmHostGuestThread.Run(() => Invoke(linker, store, module));
+            var refuel = request.FuelAfterInstantiation ? request.Fuel : (long?)null;
+            var invocation = WasmHostGuestThread.Run(() => Invoke(linker, store, module, refuel));
             var wallMs = (int)(DateTime.UtcNow - start).TotalMilliseconds;
 
-            var fuelConsumed = (long)((ulong)request.Fuel - store.Fuel);
+            var fuelConsumed = request.FuelAfterInstantiation
+                ? Math.Max(0, Math.Max(1, request.Fuel) - (long)Math.Min(store.Fuel, long.MaxValue))
+                : (long)((ulong)request.Fuel - store.Fuel);
 
             // Dispose the store BEFORE reading — wasmtime holds OS handles on the stdio
             // redirect files until then.
@@ -164,7 +172,7 @@ internal sealed class WasmHost : IDisposable
         return wasi.WithStandardOutput(stdoutPath).WithStandardError(stderrPath);
     }
 
-    private static Invocation Invoke(Linker linker, Store store, WasmModule module)
+    private static Invocation Invoke(Linker linker, Store store, WasmModule module, long? refuel)
     {
         Instance instance;
         try
@@ -186,6 +194,12 @@ internal sealed class WasmHost : IDisposable
             // grant: the module never ran.
             return new(WasmHostVerdict.NotInstantiated, -1, null, 0, $"module failed to instantiate: {exception.Message}");
         }
+
+        // The budget again, now that the data segments are in place: what instantiation took
+        // depends on the platform (a copy-on-write image costs nothing, a copy costs a unit per
+        // byte), what the guest takes does not.
+        if (refuel is { } fuel)
+            store.Fuel = (ulong)Math.Max(1, fuel);
 
         try
         {

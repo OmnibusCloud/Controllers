@@ -59,6 +59,24 @@ internal static class WasmHostLimits
         store.SetEpochDeadline(WallToTicks(wallMs));
     }
 
+    /// <summary>
+    /// The fuel instantiation runs under when a run's budget is given after it
+    /// (<see cref="WasmHostRunRequest.FuelAfterInstantiation"/>): the budget plus the most that
+    /// copying data and element segments can cost — a unit per byte of the memory cap and per
+    /// element of the table cap — so that instantiation never runs out of fuel on a platform that
+    /// copies (Windows) where it would not on one that maps a copy-on-write image, while a start
+    /// function of the module's own is still bounded.
+    /// </summary>
+    /// <param name="fuel">The run's budget.</param>
+    /// <param name="memoryBytes">The cap of the guest's linear memory.</param>
+    /// <returns>The fuel to give the store before instantiation.</returns>
+    public static long InstantiationFuel(long fuel, long memoryBytes)
+    {
+        var copies = Math.Max(1, memoryBytes) + MAX_TABLES * MAX_TABLE_ELEMENTS;
+        var budget = Math.Max(1, fuel);
+        return budget > long.MaxValue - copies ? long.MaxValue : budget + copies;
+    }
+
     /// <summary>The epoch deadline of a wall-time budget: whole ticks, rounded up, at least one.</summary>
     /// <param name="wallMs">The wall time, milliseconds.</param>
     /// <returns>The deadline in ticks of <see cref="EPOCH_TICK_MS"/>.</returns>

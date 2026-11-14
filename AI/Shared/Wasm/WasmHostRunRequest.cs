@@ -31,6 +31,19 @@ internal sealed class WasmHostRunRequest
     /// <summary>The fuel the run may use.</summary>
     public required long Fuel { get; init; }
 
+    /// <summary>
+    /// Whether the budget is given again once the module is instantiated, right before
+    /// <c>_start</c>, so that it counts the guest's own instructions only. wasmtime charges one
+    /// unit of fuel per byte of data segments it copies at instantiation, and only where no
+    /// copy-on-write memory image is used (Windows always pays it, Linux does not): a budget set
+    /// before instantiation then depends on the platform for a guest that ends near it. With this
+    /// on, instantiation runs under the budget plus the most that copying segments can cost
+    /// (<see cref="WasmHostLimits.InstantiationFuel"/>), the store is filled up to the budget again
+    /// before <c>_start</c>, and <see cref="WasmHostRunOutcome.FuelConsumed"/> is the guest's alone.
+    /// Off by default: the budget then covers instantiation as well (Verify's behaviour).
+    /// </summary>
+    public bool FuelAfterInstantiation { get; init; }
+
     /// <summary>The cap of the guest's linear memory, bytes.</summary>
     public required long MemoryBytes { get; init; }
 
