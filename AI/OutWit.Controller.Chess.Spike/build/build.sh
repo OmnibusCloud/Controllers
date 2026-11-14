@@ -75,9 +75,13 @@ case "$recipe" in
     ;;
   osx-x64)
     # The x86-64 slice recipe of macos-lipo, built natively on an Intel Mac and embedding its
-    # own copy of the net (macos-lipo shares the arm64 slice's copy instead).
+    # own copy of the net (macos-lipo shares the arm64 slice's copy instead, so upstream never
+    # compiles the #embed path with Apple clang). The Apple clang of macos-15-intel types the
+    # #embed bytes as signed and rejects the narrowing into unsigned char; the warning flag
+    # only lets the bytes convert, it changes no code.
     exe=stockfish
-    cmd=(make -j"$jobs" -C "$src" ARCH=x86-64-universal build COMP=clang)
+    cmd=(make -j"$jobs" -C "$src" ARCH=x86-64-universal build COMP=clang
+         EXTRACXXFLAGS=-Wno-c++11-narrowing)
     ;;
   *)
     echo "unknown recipe $recipe" >&2

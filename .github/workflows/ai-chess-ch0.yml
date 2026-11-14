@@ -291,12 +291,19 @@ jobs:
             --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
             --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan native \
             --build-json "$RUNNER_TEMP/bin/build.json" | grep -v '^ '
+      # The fat binary is what osx-x64 would ship (its x86-64 slice reads the net out of the
+      # arm64 slice, so it cannot be thinned), and it can only be built on Apple silicon: the
+      # recipe's x86-64 slice is tested here in upstream's build of the same recipe, natively.
       - name: Cell osx-x64.official (upstream's fat binary, x86-64 slice natively)
+        if: always()
         run: |
           bin=$(bash "$SPIKE/build/official.sh" OFFICIAL_MACOS "$RUNNER_TEMP/official")
+          sfb=()
+          f="$RUNNER_TEMP/work/stockfish/src/benchmark.cpp"
+          [ -f "$f" ] && sfb=(--sfbench "$f")
           python -I "$SPIKE/harness/cell.py" --engine "$bin" --cell osx-x64.official \
             --out "$RUNNER_TEMP/results" --positions "$SPIKE/golden/positions.jsonl" \
-            --sfbench "$RUNNER_TEMP/work/stockfish/src/benchmark.cpp" --plan official | grep -v '^ '
+            "${sfb[@]}" --plan lite | grep -v '^ '
       - uses: actions/upload-artifact@v4
         if: always()
         with:
