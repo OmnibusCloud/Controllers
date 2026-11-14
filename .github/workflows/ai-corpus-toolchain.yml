@@ -153,13 +153,14 @@ jobs:
           exit $code
 
       # Each file ends in a bounded way (a text, a refusal, a trap or out of fuel) under the
-      # limits, and none outlives the wall-clock backstop.
+      # limits, and none outlives the wall-clock backstop. A file out of fuel runs once more
+      # with ten times as much, to show whether it would finish at all (information only).
       - name: The hostile set
         run: |
           python3 -I "$TESTS/pdfs.py" hostile "$RUNNER_TEMP/hostile"
           set +e
           python3 -I "$TESTS/run.py" "$RUNNER_TEMP/wasmtime/wasmtime" "$RUNNER_TEMP/pdftext.cwasm" "$RUNNER_TEMP/hostile" "$RUNNER_TEMP/results" \
-            --set hostile --jobs 4 --measure-fuel > "$RUNNER_TEMP/results-hostile.md"
+            --set hostile --jobs 4 --measure-fuel --fuel-tail 2000000000000 > "$RUNNER_TEMP/results-hostile.md"
           code=$?
           tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/results-hostile.md"
           exit $code
@@ -179,7 +180,7 @@ jobs:
             echo "::warning::$missing of the Common Crawl PDFs could not be fetched; the others are measured"
           fi
           python3 -I "$TESTS/run.py" "$RUNNER_TEMP/wasmtime/wasmtime" "$RUNNER_TEMP/pdftext.cwasm" "$RUNNER_TEMP/cc" "$RUNNER_TEMP/results" \
-            --set cc --jobs 4 --measure-fuel > "$RUNNER_TEMP/results-cc.md"
+            --set cc --jobs 4 --measure-fuel --fuel-tail 2000000000000 > "$RUNNER_TEMP/results-cc.md"
           code=$?
           tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/results-cc.md"
           exit $code

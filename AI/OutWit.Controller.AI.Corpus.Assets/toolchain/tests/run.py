@@ -14,6 +14,9 @@ per document, and checks what comes out against the contract.
     --jobs N            documents run in parallel (default 1)
     --measure-fuel      also find, by bisection under the command line, the least fuel each
                         finishing document needs (to 1 %)
+    --fuel-tail N       run a document that ran out of fuel once more with N, to report
+                        whether it finishes at all (information, not a test; its own
+                        backstop is --wall-tail, default 1200 s)
     --texts             keep every text.txt in <out-dir>/texts-<set> (with --expect they
                         are kept anyway, to be checked)
 
@@ -329,6 +332,8 @@ def main(argv):
     parser.add_argument("--wall", type=float, default=300.0)
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--measure-fuel", action="store_true")
+    parser.add_argument("--fuel-tail", type=int, default=0)
+    parser.add_argument("--wall-tail", type=float, default=1200.0)
     parser.add_argument("--texts", action="store_true")
     options = parser.parse_args(argv[1:])
 
@@ -356,6 +361,11 @@ def main(argv):
             except RuntimeError as error:
                 record["verdict"] = "contract"
                 record["problem"] = "not reproducible: %s" % error
+        if options.fuel_tail and record["verdict"] == "fuel":
+            # Informational: does the document finish at all, given more? Not a test.
+            tail = run_once(options.wasmtime, options.module, pdf, options.fuel_tail, options.memory, options.wall_tail)
+            record["tail"] = {key: tail.get(key) for key in ("verdict", "pages", "chars", "wall_ms", "peak_mb", "trap")}
+            record["tail"]["fuel"] = options.fuel_tail
         return record
 
     started = time.monotonic()
@@ -412,6 +422,11 @@ def summary(name, records, failures, elapsed, options):
     if fuels:
         lines.append("fuel needed (command line, to 1 %%), %d documents: median %.3g, p99 %.3g, max %.3g" % (
             len(fuels), percentile(fuels, 0.5), percentile(fuels, 0.99), max(fuels)))
+    for record in records:
+        if "tail" in record:
+            tail = record["tail"]
+            lines.append("out of fuel, run again at %.3g: %s %s, %s pages, %s characters, %.0f ms" % (
+                tail["fuel"], record["file"], tail["verdict"], tail.get("pages"), tail.get("chars"), tail["wall_ms"]))
     lines.append("")
     lines.append("| file | bytes | verdict | pages | chars | fuel needed | wall ms | peak MB | note |")
     lines.append("|---|---|---|---|---|---|---|---|---|")
