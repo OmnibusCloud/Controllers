@@ -89,7 +89,7 @@ def cpu_model():
                     return line.split(":", 1)[1].strip()
             out = subprocess.run(["lscpu"], stdout=subprocess.PIPE, universal_newlines=True).stdout
             for line in out.splitlines():
-                if line.startswith("Model name"):
+                if line.strip().startswith("Model name"):
                     return line.split(":", 1)[1].strip()
         if system == "Darwin":
             return subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"],
