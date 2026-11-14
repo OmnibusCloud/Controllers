@@ -1,0 +1,134 @@
+name: AI SMT SM-0
+run-name: "AI SMT SM-0: ${{ github.ref_name }}${{ inputs.select && ' (select)' || '' }}"
+
+# The SM-0 gate of the SMT controller (a spike): Z3 built for wasm32-wasip1 by the pinned
+# wasi-sdk of AI/OutWit.Controller.Smt.Spike/toolchain/pins.env, twice, in two folders on two
+# runner images, and compared byte for byte; a smoke test under the pinned wasmtime command line.
+
+on:
+  workflow_dispatch:
+    inputs:
+      select:
+        description: "Choose the benchmark slice anew from the SMT-LIB 2025 archives (writes a fetch list artifact)"
+        type: boolean
+        default: false
+  push:
+    branches:
+      - spike/smt-sm0
+    paths:
+      - 'AI/OutWit.Controller.Smt.Spike/**'
+      - 'AI/Shared/Wasm/**'
+      - '.github/workflows/ai-smt-sm0.yml'
+
+permissions:
+  contents: read
+
+env:
+  SPIKE: AI/OutWit.Controller.Smt.Spike
+  TOOLCHAIN: AI/OutWit.Controller.Smt.Spike/toolchain
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: build ${{ matrix.name }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: a
+            os: ubuntu-24.04
+          - name: b
+            os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build b runs the scripts from a copy in another folder, with its work folder at
+      # another depth: if any path reached the module, the two builds would differ.
+      - name: Build
+        id: build
+        env:
+          BUILD: ${{ matrix.name }}
+        run: |
+          set +e
+          if [ "$BUILD" = a ]; then
+            bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/work"
+          else
+            mkdir -p "$RUNNER_TEMP/elsewhere/copy"
+            cp -R "$TOOLCHAIN" "$RUNNER_TEMP/elsewhere/copy/toolchain"
+            bash "$RUNNER_TEMP/elsewhere/copy/toolchain/build.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/b/second/work"
+          fi
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" -eq 0 ] || [ "$code" -eq 3 ] || exit "$code"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: z3-wasm-build-${{ matrix.name }}
+          path: ${{ runner.temp }}/out
+          if-no-files-found: error
+
+      - name: Every download is pinned
+        if: steps.build.outputs.code != '0'
+        run: |
+          echo "::error::a download has no pin yet (UNPINNED lines in the build step)"
+          exit 1
+
+  compare:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: z3-wasm-build-*
+          path: builds
+
+      - name: The two builds are the same bytes
+        run: |
+          {
+            echo "### z3.wasm: two builds"
+            echo
+            echo "| file | build a | build b |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for name in z3.wasm LICENSE-z3.txt; do
+            a="$(sha256sum "builds/z3-wasm-build-a/$name" | cut -d' ' -f1)"
+            b="$(sha256sum "builds/z3-wasm-build-b/$name" | cut -d' ' -f1)"
+            echo "| $name | \`$a\` | \`$b\` |" >> "$GITHUB_STEP_SUMMARY"
+            if cmp -s "builds/z3-wasm-build-a/$name" "builds/z3-wasm-build-b/$name"; then
+              echo "same bytes: $name  $a"
+            else
+              echo "::error::$name differs between the two builds: $a and $b"
+              exit 1
+            fi
+          done
+          { echo; echo '```'; cat builds/z3-wasm-build-a/build-info.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: z3-wasm-build-a
+          path: ${{ runner.temp }}/module
+
+      - name: wasmtime
+        run: |
+          . "$TOOLCHAIN/pins.env"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/wasmtime.tar.xz" "$WASMTIME_URL"
+          echo "$WASMTIME_SHA256  $RUNNER_TEMP/wasmtime.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/wasmtime"
+          tar -xJf "$RUNNER_TEMP/wasmtime.tar.xz" -C "$RUNNER_TEMP/wasmtime" --strip-components=1
+          "$RUNNER_TEMP/wasmtime/wasmtime" --version
+
+      - name: Smoke
+        run: bash "$TOOLCHAIN/smoke.sh" "$RUNNER_TEMP/wasmtime/wasmtime" "$RUNNER_TEMP/module/z3.wasm" | tee -a "$GITHUB_STEP_SUMMARY"
