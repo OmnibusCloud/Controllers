@@ -73,34 +73,44 @@ jobs:
         run: |
           dotnet run --project AI/OutWit.Controller.AI.Verify.Assets/OutWit.Controller.AI.Verify.Assets.csproj -c Release -- build AI/OutWit.Controller.AI.Verify.Tests/@Data/runtimes --clean
 
-      - name: Build
-        shell: bash
-        run: dotnet build AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj -c Release
-
       # The Wasmtime package brings its own native library; the controller ships the newest
-      # patch of the engine's line instead (pinned in toolchain/pins.env). The tests run on
-      # that one: it replaces the package's copy after the build, before the tests.
+      # patch of the engine's line instead (pinned in toolchain/pins.env), and the wasm host
+      # refuses any other (its natives guard). natives.sh lays the pinned libraries out before the
+      # build, whose WasmHostPinnedNatives step (AI/Shared/WasmHostPinnedNatives.targets) puts this
+      # platform's in place of the package's copy in every output that runs the host.
       - name: Cache the engine downloads
         uses: actions/cache@v4
         with:
           path: AI/OutWit.Controller.AI.Verify.Tests/@Data/natives/.downloads
           key: verify-engine-natives-${{ hashFiles('AI/OutWit.Controller.AI.Verify.Assets/toolchain/pins.env') }}
 
-      - name: The pinned engine library under the tests
+      - name: The pinned engine library
         shell: bash
         run: |
           bash AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh AI/OutWit.Controller.AI.Verify.Tests/@Data/natives
+          grep -h "wasmtime [0-9]" AI/OutWit.Controller.AI.Verify.Tests/@Data/natives/win-x64/NOTICE.txt
+
+      - name: Build
+        shell: bash
+        run: dotnet build AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj -c Release
+
+      # The outputs that run the host hold the pinned library, byte for byte (a re-signed copy
+      # would be another file to the natives guard).
+      - name: The pinned engine library under the tests
+        shell: bash
+        run: |
           case "$RUNNER_OS" in
             Windows) rid=win-x64;   lib=wasmtime.dll ;;
             Linux)   rid=linux-x64; lib=libwasmtime.so ;;
             macOS)   rid=osx-arm64; lib=libwasmtime.dylib ;;
           esac
-          bin=AI/OutWit.Controller.AI.Verify.Tests/bin/Release/net10.0/runtimes/$rid/native
-          test -f "$bin/$lib" || { echo "::error::no $rid/$lib in the test output"; exit 1; }
-          cp "AI/OutWit.Controller.AI.Verify.Tests/@Data/natives/$rid/$lib" "$bin/$lib"
-          if [ "$RUNNER_OS" = "macOS" ]; then codesign --verify --verbose "$bin/$lib" || codesign --force -s - "$bin/$lib"; fi
-          if command -v sha256sum > /dev/null; then sha256sum "$bin/$lib"; else shasum -a 256 "$bin/$lib"; fi
-          grep -h "wasmtime [0-9]" "AI/OutWit.Controller.AI.Verify.Tests/@Data/natives/$rid/NOTICE.txt"
+          pinned="AI/OutWit.Controller.AI.Verify.Tests/@Data/natives/$rid/$lib"
+          for project in OutWit.Controller.AI.Verify.Tests OutWit.Controller.AI.Verify.Tests.TrapHost; do
+            bin="AI/$project/bin/Release/net10.0/runtimes/$rid/native/$lib"
+            cmp -s "$pinned" "$bin" || { echo "::error::$project does not hold the pinned $rid/$lib"; exit 1; }
+            if [ "$RUNNER_OS" = "macOS" ]; then codesign --verify --verbose "$bin"; fi
+            if command -v sha256sum > /dev/null; then sha256sum "$bin"; else shasum -a 256 "$bin"; fi
+          done
 
       - name: Verify
         run: dotnet test AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj -c Release --no-build --filter Category!=Load --logger "console;verbosity=normal"
@@ -170,8 +180,7 @@ jobs:
             Linux)   rid=linux-x64; lib=libwasmtime.so ;;
             macOS)   rid=osx-arm64; lib=libwasmtime.dylib ;;
           esac
-          bin=AI/OutWit.Controller.AI.Corpus.Tests/bin/Release/net10.0/runtimes/$rid/native
-          test -f "$bin/$lib" || { echo "::error::no $rid/$lib in the Corpus test output"; exit 1; }
-          cp "AI/OutWit.Controller.AI.Verify.Tests/@Data/natives/$rid/$lib" "$bin/$lib"
-          if [ "$RUNNER_OS" = "macOS" ]; then codesign --verify --verbose "$bin/$lib" || codesign --force -s - "$bin/$lib"; fi
+          bin=AI/OutWit.Controller.AI.Corpus.Tests/bin/Release/net10.0/runtimes/$rid/native/$lib
+          cmp -s "AI/OutWit.Controller.AI.Verify.Tests/@Data/natives/$rid/$lib" "$bin" || { echo "::error::the Corpus test output does not hold the pinned $rid/$lib"; exit 1; }
+          if [ "$RUNNER_OS" = "macOS" ]; then codesign --verify --verbose "$bin"; fi
           dotnet test AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj -c Release --no-build --filter "Category!=Load" --logger "console;verbosity=normal"

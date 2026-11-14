@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using OutWit.Controller.AI.Wasm;
 using Wasmtime;
 using WasmEngine = Wasmtime.Engine;
 using WasmModule = Wasmtime.Module;
@@ -7,7 +8,10 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 
 /// <summary>
 /// Compiled modules of task-supplied programs (the raw WASI runtime), keyed by content
-/// hash and bounded: a batch usually carries a few distinct modules many times over (one
+/// hash under the engine's compiled-code key (<see cref="WasmHost.CompiledCodeKey"/>: the
+/// native library's SHA-256 and the trap mode) and bounded. The cache lives in memory with its
+/// engine and persists nothing, so a module compiled by other natives or for another trap mode
+/// cannot reach it; the key says so for any copy of it that would: a batch usually carries a few distinct modules many times over (one
 /// candidate, many cases), so the compile is paid once per module. A module is handed out
 /// as a lease; when the cache is full it evicts the least recently used module that nobody
 /// holds, never one in flight — the load suite caught a wholesale clear disposing a module
@@ -26,6 +30,7 @@ internal sealed class VerifyTaskModuleCache : IDisposable
     #region Fields
 
     private readonly WasmEngine m_engine;
+    private readonly string m_codeKey;
     private readonly int m_capacity;
     private readonly object m_lock = new();
     private readonly Dictionary<string, Entry> m_entries = new(StringComparer.Ordinal);
@@ -35,9 +40,16 @@ internal sealed class VerifyTaskModuleCache : IDisposable
 
     #region Constructors
 
-    public VerifyTaskModuleCache(WasmEngine engine, int capacity = DEFAULT_CAPACITY)
+    /// <summary>
+    /// A cache over an engine.
+    /// </summary>
+    /// <param name="engine">The engine modules are compiled on.</param>
+    /// <param name="codeKey">What the engine's compiled code is valid for (<see cref="WasmHost.CompiledCodeKey"/>).</param>
+    /// <param name="capacity">The most idle modules kept.</param>
+    public VerifyTaskModuleCache(WasmEngine engine, string codeKey, int capacity = DEFAULT_CAPACITY)
     {
         m_engine = engine;
+        m_codeKey = codeKey;
         m_capacity = Math.Max(1, capacity);
     }
 
@@ -55,7 +67,7 @@ internal sealed class VerifyTaskModuleCache : IDisposable
     /// <exception cref="WasmtimeException">The bytes are not a valid module.</exception>
     public VerifyTaskModuleLease Lease(string name, byte[] bytes)
     {
-        var key = Convert.ToHexStringLower(SHA256.HashData(bytes));
+        var key = KeyOf(m_codeKey, bytes);
 
         lock (m_lock)
         {
@@ -80,6 +92,17 @@ internal sealed class VerifyTaskModuleCache : IDisposable
             m_entries[key] = entry;
             return Take(key, entry);
         }
+    }
+
+    /// <summary>
+    /// The key of a module's compiled code: the engine's compiled-code key and the module's SHA-256.
+    /// </summary>
+    /// <param name="codeKey">The engine's compiled-code key.</param>
+    /// <param name="bytes">The module bytes.</param>
+    /// <returns>The key.</returns>
+    public static string KeyOf(string codeKey, byte[] bytes)
+    {
+        return $"{codeKey}/{Convert.ToHexStringLower(SHA256.HashData(bytes))}";
     }
 
     /// <summary>Returns a lease; called by <see cref="VerifyTaskModuleLease.Dispose"/>.</summary>

@@ -24,6 +24,9 @@
     <!-- A host that loads controllers as the cloud client does (VerifyModuleLoadTests). -->
     <ProjectReference Include="..\OutWit.Controller.AI.Verify.Tests.ClientHost\OutWit.Controller.AI.Verify.Tests.ClientHost.csproj"
                       ReferenceOutputAssembly="false" Private="false" />
+    <!-- A second carrier of the wasm host, loaded first by that host (WasmHostNativeResolutionTests). -->
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify.Tests.Carrier\OutWit.Controller.AI.Verify.Tests.Carrier.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -43,5 +46,8 @@
     <None Update="Sandbox\Golden\*.golden.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Sandbox\Fixtures\*.wasm" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- The pinned native wasmtime library in place of the package's copy (the wasm host refuses any other). -->
+  <Import Project="..\Shared\WasmHostPinnedNatives.targets" />
 
 </Project>

@@ -28,7 +28,8 @@ public sealed class VerifySafetyPageTests
     [
         nameof(Sandbox.VerifyAdversarialTests),
         nameof(Sandbox.VerifyWasiRuntimeTests),
-        nameof(Sandbox.VerifySandboxHygieneTests)
+        nameof(Sandbox.VerifySandboxHygieneTests),
+        nameof(Wasm.WasmHostNativeResolutionTests)
     ];
 
     #endregion

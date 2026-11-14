@@ -64,12 +64,12 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// operating system's temp path. On a node it is a scope of the client's temp storage, so
     /// nothing of a task leaves the client's own folders. Created when missing, deleted on Dispose.
     /// </param>
-    /// <exception cref="InvalidOperationException">The loaded wasmtime binding is not the one this controller was built against (the message names both), or it cannot configure the engine.</exception>
+    /// <exception cref="InvalidOperationException">The loaded wasmtime binding is not the one this controller was built against (the message names both versions), the native library is not the pinned one or none was found (the message names both hashes), or the binding cannot configure the engine.</exception>
     public VerifyWasmSandbox(string? ioDirectory)
     {
         m_host = new WasmHost();
 
-        m_taskModules = new VerifyTaskModuleCache(m_host.Engine);
+        m_taskModules = new VerifyTaskModuleCache(m_host.Engine, m_host.CompiledCodeKey);
         m_tools = new VerifyToolRunner(m_host);
 
         m_ioDir = ioDirectory ?? Path.Combine(Path.GetTempPath(), $"witai_verify_{Guid.NewGuid():N}");

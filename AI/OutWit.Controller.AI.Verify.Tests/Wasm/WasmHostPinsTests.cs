@@ -121,6 +121,39 @@ public sealed class WasmHostPinsTests
         });
     }
 
+    [Test]
+    public void TheNativesGuardPinsTheLibrariesTheAssetToolBuildsTest()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(WasmHostNatives.VERSION, Is.EqualTo(WasmHostRepository.Pin(NATIVE_VERSION_PIN)), "the guard pins the version natives.sh builds");
+            Assert.That(WasmHostNatives.PINNED.Keys, Is.EquivalentTo(WasmHostRepository.NativesScriptRids()), "one pinned library a platform natives.sh builds");
+            Assert.That(WasmHostNatives.PINNED.Values, Is.Unique.And.All.Length.EqualTo(64));
+        });
+    }
+
+    [Test]
+    public void EveryControllerFetchesItsNativesFromTheEngineReleaseTest()
+    {
+        // The natives are one asset every consumer references, released on their own as
+        // wasmtime-v<version> (the bytes verify-v0.6.0 carried): Verify moved there in 0.12.0,
+        // Corpus started there.
+        var shippers = WasmHostRepository.AiProjects()
+            .Select(project => (Name: Path.GetFileName(project.Path), Natives: WasmHostRepository.ShippedNativeUris(project.Project)))
+            .Where(shipper => shipper.Natives.Count > 0)
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(shippers.Select(shipper => shipper.Name), Does.Contain(VERIFY_PROJECT).And.Contain(CORPUS_PROJECT));
+            foreach (var (name, natives) in shippers)
+            {
+                foreach (var (rid, uri) in natives)
+                    Assert.That(uri, Is.EqualTo($"gh-release://OmnibusCloud/Controllers/wasmtime-v{WasmHostNatives.VERSION}/wasmtime-{rid}.zip"), $"{name}: {rid}");
+            }
+        });
+    }
+
     #endregion
 
     #region Packaging Tests

@@ -15,16 +15,15 @@ public static class VerifyRuntimeDiagnosticsBuilder
 {
     /// <summary>Builds the inventory of this process: wasmtime version, runtime target, every known runtime with its availability and pin.</summary>
     /// <returns>The diagnostics record.</returns>
-    /// <exception cref="InvalidOperationException">The loaded wasmtime binding is not the one this controller was built against (the message names both).</exception>
+    /// <exception cref="InvalidOperationException">The loaded wasmtime binding is not the one this controller was built against (the message names both versions), or the native library is not the pinned one (the message names both hashes).</exception>
     public static VerifyRuntimeDiagnosticsData Build()
     {
-        // The version below is a managed fact; the binding guard makes it the one this controller
-        // was built against, and the engine makes the native library a proven one. A module whose
-        // wasmtime is another or cannot load fails the diagnostic with the reason instead of
-        // reporting a version it cannot run.
+        // The versions below are facts of the process; the host's guards make the binding the one
+        // this controller was built against and the native library the pinned one, and the
+        // engine proves the library loads. A module whose wasmtime is another or cannot load fails
+        // the diagnostic with the reason instead of reporting a version it cannot run.
         WasmHostBinding.ThrowIfUnavailable();
-        VerifyNativeLibrary.EnsureRegistered();
-        ProveTheEngineLoads();
+        ProveTheHostStarts();
 
         var root = VerifyRuntimeLocator.Locate();
 
@@ -61,13 +60,14 @@ public static class VerifyRuntimeDiagnosticsBuilder
     }
 
     /// <summary>
-    /// Makes and drops one engine. Kept out of line, so that the binding's members are looked up
-    /// after the guard has passed, not when the caller is compiled.
+    /// Makes and drops one wasm host: the native resolution, the natives guard, the engine. Kept
+    /// out of line, so that the binding's members are looked up after the guard has passed, not
+    /// when the caller is compiled.
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void ProveTheEngineLoads()
+    private static void ProveTheHostStarts()
     {
-        using (new Wasmtime.Engine())
+        using (new WasmHost())
         {
         }
     }
