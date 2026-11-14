@@ -135,7 +135,7 @@ public static class QualityFilter
             // (DataTrove's find_all_duplicate, / len(text)). Counting the first occurrence too
             // (Corpus 0.1.13 and earlier, as Dolma's tagger does) doubles the measure of a phrase
             // said twice: on four Common Crawl WET files the 5-gram rule then failed 51 % of the
-            // pages (28 % after the line stage), counting repeats only 22 % (12 %).
+            // pages (28 % after the line stage), counting repeats only 25 % (13 %).
             for (var n = 5; n <= 10; n++)
             {
                 var ratio = (double)ngrams.RepeatedChars(n) / text.Length;
