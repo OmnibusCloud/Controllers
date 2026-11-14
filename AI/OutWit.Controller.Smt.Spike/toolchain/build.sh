@@ -66,6 +66,7 @@ seen="$(sha256sum "$SRC/src/util/scoped_timer.cpp" | cut -d' ' -f1)"
 [ "$seen" = "$Z3_SCOPED_TIMER_SHA256" ] || { echo "src/util/scoped_timer.cpp changed ($seen): review the shim"; exit 1; }
 cp "$HERE/wasi/scoped_timer.cpp" "$SRC/src/util/scoped_timer.cpp"
 echo "  src/util/scoped_timer.cpp  <- toolchain/wasi/scoped_timer.cpp"
+python3 -I "$HERE/patch.py" "$SRC"
 
 # Flags.
 #  -fwasm-exceptions -mllvm -wasm-use-legacy-eh=false : C++ exceptions as the standard wasm
@@ -116,11 +117,14 @@ cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
   -DZ3_ENABLE_TRACING_FOR_NON_DEBUG=OFF
 
 echo "== build ($(nproc) jobs)"
-# -k: on a failure, every translation unit that fails is reported in one run.
+# On a failure the build runs once more ignoring errors (-i), so that every translation unit
+# that fails, in every library, is reported in one run.
 if ! make -C "$BUILD" -k -j"$(nproc)" shell > "$WORK/make.log" 2>&1; then
-  grep -n -E "error:|undefined symbol|Error [0-9]" "$WORK/make.log" | head -200
-  echo "== the build failed (the last lines of make.log follow)"
-  tail -50 "$WORK/make.log"
+  make -C "$BUILD" -i -j"$(nproc)" shell > "$WORK/make-all.log" 2>&1 || true
+  echo "== the build failed; every error of a run that ignores errors:"
+  grep -E "error:|undefined symbol|wasm-ld:" "$WORK/make-all.log" | sed "s|$WORK/||g" | sort | uniq -c | sort -rn | head -150
+  echo "== the last lines of the first run"
+  tail -30 "$WORK/make.log"
   exit 1
 fi
 grep -c -E "warning:" "$WORK/make.log" | sed 's/^/warnings: /' || true
@@ -151,7 +155,7 @@ echo "== the module"
   echo "cflags: $CFLAGS_COMMON"
   echo "ldflags: $LDFLAGS_COMMON $LIBS_COMMON"
   echo "cmake: -DZ3_SINGLE_THREADED=ON -DZ3_POLLING_TIMER=OFF -DZ3_USE_LIB_GMP=OFF -DBUILD_SHARED_LIBS=OFF Release"
-  echo "shim: src/util/scoped_timer.cpp (no threads; a timer never fires)"
+  echo "shims: src/util/scoped_timer.cpp (no threads; a timer never fires), patch.py (hwf: round to nearest only)"
   echo "size: $(wc -c < "$OUT/z3.wasm") bytes; without the name section $(wc -c < "$WORK/z3-noname.wasm") bytes"
   echo "sha256: $(sha256sum "$OUT/z3.wasm" | cut -d' ' -f1)"
   echo
