@@ -120,12 +120,7 @@ internal sealed class SpikeEngine : IDisposable
     /// <returns>The host's outcome and the stdout's answer blocks.</returns>
     public (WasmHostRunOutcome Outcome, string Script) Batch(SmtProblem problem, SpikeOptions options)
     {
-        var nonce = SpikeProblems.Nonce(problem);
-        var echo = $"(echo \"{nonce}\")\n";
-        var values = problem.Constants.Count > 0 ? $"(get-value ({string.Join(" ", problem.Constants.Select(c => c.Symbol.ToString()))}))\n" + echo : "";
-        var script = "(set-option :print-success false)\n(set-option :produce-models true)\n" + problem.Canonical
-                     + $"(set-option :rlimit {options.Rlimit})\n(check-sat)\n" + echo + "(get-model)\n" + echo + values
-                     + "(get-info :reason-unknown)\n" + echo + "(get-info :all-statistics)\n" + echo + "(exit)\n";
+        var (script, _) = SpikeScripts.Check(problem, options.Rlimit);
         var outcome = m_host.Run(m_module, new WasmHostRunRequest
         {
             Argv = options.Argv(),

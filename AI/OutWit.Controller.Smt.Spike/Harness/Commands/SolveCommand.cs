@@ -73,10 +73,11 @@ internal static class SolveCommand
             if (canonical == null)
                 continue;
 
-            var driver = new SmtSessionDriver(canonical, SpikeProblems.Nonce(canonical), options.Rlimit, System.Diagnostics.Stopwatch.StartNew());
-            var argv = options.Argv();
-            var outcome = native.Run(argv.Skip(1).ToList(), driver, options.WallMs);
-            var record = SpikeRecords.Session(problem, canonical, "native", driver, outcome);
+            // The whole script at once: a conversation over pipes stalled on the Windows build of
+            // Z3 (run 43596434994); the answers are the same, the check is timed to its block's end.
+            var (script, nonce) = SpikeScripts.Check(canonical, options.Rlimit);
+            var (outcome, checkMs) = native.RunScript(options.Argv().Skip(1).ToList(), script, nonce, options.WallMs);
+            var record = SpikeRecords.Script(problem, canonical, outcome, checkMs);
             SpikeRecords.Write(writer, record);
             Progress(i, problems.Count, record);
         }

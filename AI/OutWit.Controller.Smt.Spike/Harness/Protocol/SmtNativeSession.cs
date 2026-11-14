@@ -110,6 +110,97 @@ internal sealed class SmtNativeSession
         };
     }
 
+    /// <summary>
+    /// Runs one whole script at once: written to stdin, stdin closed, stdout read to its end. No
+    /// interleaving, so it works whatever the solver's buffering of a pipe is.
+    /// </summary>
+    /// <param name="args">The solver's arguments (no argv[0]).</param>
+    /// <param name="script">Every command, the last one (exit).</param>
+    /// <param name="nonce">The token of the first answer block's end (to time the check).</param>
+    /// <param name="wallMs">The wall clock after which the process is killed.</param>
+    /// <returns>How it ended, and the milliseconds until the first nonce line arrived (-1 when none did).</returns>
+    public (SmtSessionOutcome Outcome, long FirstBlockMs) RunScript(IReadOnlyList<string> args, string script, string nonce, int wallMs)
+    {
+        var info = new ProcessStartInfo(m_z3)
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            StandardInputEncoding = new UTF8Encoding(false),
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+        foreach (var arg in args)
+            info.ArgumentList.Add(arg);
+
+        var clock = Stopwatch.StartNew();
+        using var process = new Process { StartInfo = info };
+        var stderr = new StringBuilder();
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data != null && stderr.Length < 64 << 10)
+                stderr.AppendLine(e.Data);
+        };
+
+        try
+        {
+            process.Start();
+        }
+        catch (Exception exception)
+        {
+            return (new SmtSessionOutcome { End = "start_failed", Fault = exception.Message, WallMs = clock.ElapsedMilliseconds }, -1);
+        }
+
+        TryLowerPriority(process);
+        process.BeginErrorReadLine();
+
+        var stdout = new StringBuilder();
+        long firstBlockMs = -1;
+        var reader = Task.Run(() =>
+        {
+            try
+            {
+                string? line;
+                while ((line = process.StandardOutput.ReadLine()) != null)
+                {
+                    if (firstBlockMs < 0 && line == nonce)
+                        firstBlockMs = clock.ElapsedMilliseconds;
+                    stdout.Append(line).Append('\n');
+                }
+            }
+            catch (IOException)
+            {
+                // the process went away
+            }
+        });
+
+        try
+        {
+            process.StandardInput.Write(script);
+            process.StandardInput.Close();
+        }
+        catch (IOException)
+        {
+            // the solver stopped reading (it exited); what it wrote is kept
+        }
+
+        var timedOut = !reader.Wait(wallMs);
+        if (timedOut)
+            TryKill(process);
+        process.WaitForExit(10_000);
+        reader.Wait(5000);
+
+        return (new SmtSessionOutcome
+        {
+            End = timedOut ? "timeout" : "exited",
+            ExitCode = timedOut || !process.HasExited ? -1 : process.ExitCode,
+            Stdout = stdout.ToString(),
+            Stderr = stderr.ToString(),
+            WallMs = clock.ElapsedMilliseconds
+        }, firstBlockMs);
+    }
+
     private static void Converse(Process process, SmtSessionDriver driver, StringBuilder stdout)
     {
         var input = process.StandardInput;

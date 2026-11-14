@@ -32,11 +32,26 @@ internal static class LimitsCommand
             var (driver, outcome) = engine.Session(problem, options, projection, maxModels);
             Write(writer, name, row, problem, "wasm", driver, outcome, options);
 
-            if (native != null && onNative)
+            if (native != null && onNative && projection != null)
             {
+                // enumerate needs the conversation (each model blocked before the next check)
                 var nativeDriver = new SmtSessionDriver(problem, SpikeProblems.Nonce(problem), options.Rlimit, Stopwatch.StartNew(), projection, maxModels);
-                var nativeOutcome = native.Run(options.Argv().Skip(1).ToList(), nativeDriver, options.WallMs);
+                var nativeOutcome = native.Run(options.Argv().Skip(1).ToList(), nativeDriver, Math.Min(options.WallMs, 120_000));
                 Write(writer, name, row, problem, "native", nativeDriver, nativeOutcome, options);
+            }
+            else if (native != null && onNative)
+            {
+                var (script, nonce) = SpikeScripts.Check(problem, options.Rlimit);
+                var (nativeOutcome, checkMs) = native.RunScript(options.Argv().Skip(1).ToList(), script, nonce, options.WallMs);
+                var record = SpikeRecords.Script(row, problem, nativeOutcome, checkMs);
+                record["case"] = name;
+                record["query"] = "check";
+                record["memory_mb"] = options.MemoryMb;
+                record["rlimit"] = options.Rlimit;
+                record.Remove("model");
+                record.Remove("values");
+                SpikeRecords.Write(writer, record);
+                Console.WriteLine($"{name,-38} native verdict={record["verdict"]} end={nativeOutcome.End} exit={nativeOutcome.ExitCode} {nativeOutcome.WallMs} ms {record["reason"]}");
             }
         }
 

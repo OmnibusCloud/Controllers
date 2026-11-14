@@ -61,6 +61,45 @@ internal static class SpikeRecords
         };
     }
 
+    /// <summary>The record of a whole-script run of the native solver (no conversation).</summary>
+    /// <param name="problem">The slice's row.</param>
+    /// <param name="canonical">The canonical problem.</param>
+    /// <param name="outcome">How the process ended.</param>
+    /// <param name="checkMs">Milliseconds from the start until the verdict's block ended.</param>
+    /// <returns>The record, with the fields of a session record.</returns>
+    public static Dictionary<string, object?> Script(SpikeProblem problem, SmtProblem canonical, SmtSessionOutcome outcome, long checkMs)
+    {
+        var (verdict, errors, model, values, reason, statistics) = SpikeScripts.Read(canonical, outcome.Stdout);
+        return new Dictionary<string, object?>
+        {
+            ["id"] = problem.Id,
+            ["logic"] = problem.Logic,
+            ["expected"] = problem.Status,
+            ["engine"] = "native",
+            ["mode"] = "script",
+            ["verdict"] = verdict,
+            ["agree"] = Agreement(problem.Status, verdict),
+            ["reason"] = reason,
+            ["end"] = outcome.End,
+            ["exit_code"] = outcome.ExitCode,
+            ["fault"] = outcome.Fault,
+            ["fuel"] = 0,
+            ["rlimit_count"] = (long?)Statistic(statistics, ":rlimit-count"),
+            ["z3_max_memory_mb"] = Statistic(statistics, ":max-memory"),
+            ["peak_memory"] = 0,
+            ["wall_ms"] = outcome.WallMs,
+            ["check_ms"] = checkMs,
+            ["errors"] = errors,
+            ["stdout_sha256"] = SpikeProblems.Sha256(outcome.Stdout),
+            ["stdout_bytes"] = outcome.Stdout.Length,
+            ["stderr_tail"] = Tail(outcome.Stderr, 400),
+            ["canonical_sha256"] = canonical.Hash,
+            ["constants"] = canonical.Constants.Count,
+            ["model"] = model,
+            ["values"] = values
+        };
+    }
+
     /// <summary>The record of a run through the unchanged host (the whole script as a stdin file).</summary>
     /// <param name="problem">The slice's row.</param>
     /// <param name="canonical">The canonical problem.</param>
