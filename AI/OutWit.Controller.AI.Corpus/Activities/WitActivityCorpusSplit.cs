@@ -9,7 +9,8 @@ namespace OutWit.Controller.AI.Corpus.Activities;
 
 /// <summary>
 /// Host-side: parse the manifest blob, check every source against the allowlist and the cap,
-/// pin the language model, and emit one task per shard for Grid.ForEach.
+/// pin the language model, hold the server storage estimate to the deployment's headroom, and
+/// emit one task per shard for Grid.ForEach.
 /// </summary>
 [Activity("Corpus.Split")]
 [MemoryPackable]

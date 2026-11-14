@@ -44,7 +44,7 @@ public sealed class WitControllerCorpusModuleTests
             .Where(type => type.GetCustomAttribute<ActivityAttribute>() != null)
             .ToList();
 
-        Assert.That(activities, Has.Count.EqualTo(7));
+        Assert.That(activities, Has.Count.EqualTo(9));
         Assert.That(activities.Select(type => type.GetCustomAttribute<ActivityAttribute>()!.Type), Is.All.StartsWith("Corpus."));
     }
 

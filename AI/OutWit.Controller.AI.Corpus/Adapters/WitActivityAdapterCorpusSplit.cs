@@ -3,6 +3,7 @@ using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Controller.AI.Corpus.Storage;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -32,7 +33,8 @@ internal sealed class WitActivityAdapterCorpusSplit : WitActivityAdapterFunction
 
     protected override async Task Process(WitActivityCorpusSplit activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        var (plan, _) = await CorpusPlanning.PlanAsync(BlobService, pool, activity.Manifest, activity.LanguageModel, activity.Options, "Manifest");
+        var (plan, manifest, options, inputBytes) = await CorpusPlanning.PlanAsync(BlobService, pool, activity.Manifest, activity.LanguageModel, activity.Options, "Manifest");
+        var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
 
         if (plan.Errors.Count > 0)
             throw new InvalidOperationException($"The manifest has {plan.Errors.Count} problem(s): {string.Join(" ", plan.Errors.Take(5))}");
@@ -40,7 +42,15 @@ internal sealed class WitActivityAdapterCorpusSplit : WitActivityAdapterFunction
         foreach (var note in plan.Notes)
             Logger.LogInformation("Corpus.Split: {Note}", note);
 
-        await FillSizesAsync(plan.Tasks, ProcessingManager.CancellationToken(status.JobId));
+        await FillSizesAsync(plan.Tasks, cancellationToken);
+
+        // The preflight's storage check, enforced: a job the deployment has no room for does not start.
+        var sources = plan.Tasks.Select(task => task.Source!).ToList();
+        var (estimate, limit, refusal) = await CorpusPlanning.CheckStorageAsync(sources, manifest.Pipeline, options, inputBytes, new CorpusStorageHeadroomHost(BlobService), cancellationToken);
+        if (refusal != null)
+            throw new InvalidOperationException(refusal);
+
+        Logger.LogInformation("Corpus.Split: {Storage}", CorpusStorageCheck.Describe(estimate, limit));
 
         if (!pool.TrySetCollection(activity.ReturnReference, plan.Tasks))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");

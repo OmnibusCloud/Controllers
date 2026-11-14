@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Controller.AI.Corpus.Storage;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -31,7 +32,8 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
 
     protected override async Task Process(WitActivityCorpusPreflight activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        var (plan, manifest) = await CorpusPlanning.PlanAsync(BlobService, pool, activity.Manifest, activity.LanguageModel, activity.Options, "Manifest");
+        var (plan, manifest, options, inputBytes) = await CorpusPlanning.PlanAsync(BlobService, pool, activity.Manifest, activity.LanguageModel, activity.Options, "Manifest");
+        var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
 
         var report = new CorpusPreflightData
         {
@@ -45,16 +47,37 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
 
         // Sources without a size: ask the origin (HEAD) so the traffic line is not 0, within a
         // probe budget; the rest is extrapolated at the mean and the message says so.
+        var sizes = manifest.Sources.Select(source => source.SizeBytes).ToList();
         if (plan.Errors.Count == 0 && manifest.Sources.Any(source => source.SizeBytes <= 0))
         {
             var origins = manifest.AllowedOrigins.Select(ShardOrigin.Normalize).ToList();
-            var probe = await ShardSizeProbe.ProbeAsync(manifest.Sources, origins, ShardOriginPolicy.Machine, CLIENT.Value, ProcessingManager.CancellationToken(status.JobId));
+            var probe = await ShardSizeProbe.ProbeAsync(manifest.Sources, origins, ShardOriginPolicy.Machine, CLIENT.Value, cancellationToken);
             report.EstimatedTrafficBytes += probe.EstimatedBytes;
             report.Messages.Add($"{probe.Probed} source size(s) probed at the origin" +
                                 (probe.Failed > 0 ? $", {probe.Failed} unanswered" : "") +
                                 (probe.Unprobed > 0 ? $", {probe.Unprobed} not asked (beyond the probe budget, or a host this server does not fetch from)" : "") +
                                 (probe.Failed + probe.Unprobed > 0 ? " (estimated at the mean)" : "") +
                                 $"; traffic estimate {report.EstimatedTrafficBytes} bytes.");
+            if (probe.Sizes.Count == sizes.Count)
+                sizes = [.. probe.Sizes];
+        }
+
+        // What the job leaves on the server, from the same sizes, against the deployment's headroom.
+        if (manifest.Sources.Count > 0)
+        {
+            var sized = manifest.Sources.Select((source, index) => new CorpusSourceData { Url = source.Url, Format = source.Format, SizeBytes = sizes[index] }).ToList();
+            var (estimate, limit, refusal) = await CorpusPlanning.CheckStorageAsync(sized, manifest.Pipeline, options, inputBytes, new CorpusStorageHeadroomHost(BlobService), cancellationToken);
+
+            report.EstimatedStorageBytes = estimate.TotalBytes;
+            report.StorageHeadroomBytes = limit.HeadroomBytes;
+            report.StorageRetentionDays = limit.RetentionDays;
+            report.Messages.Add(CorpusStorageCheck.Describe(estimate, limit));
+
+            if (refusal != null)
+            {
+                report.WellFormed = false;
+                report.Messages.Add(refusal);
+            }
         }
 
         if (!pool.TrySetValue(activity.ReturnReference, report))

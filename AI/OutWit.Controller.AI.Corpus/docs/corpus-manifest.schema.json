@@ -16,6 +16,7 @@
         "language_model_sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$", "description": "Pin of the language model blob's bytes; the job does not start when the blob differs." },
         "target_languages": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "ISO 639-3 codes to keep; empty keeps every identified language." },
         "identify_language": { "type": "boolean", "default": true },
+        "clean_lines": { "type": "boolean", "default": true, "description": "Whether the lines that do not read like prose (menus, prices, footers) leave each document before it is judged." },
         "filter_quality": { "type": "boolean", "default": true },
         "sign": { "type": "boolean", "default": true, "description": "Whether a MinHash signature is produced per document." },
         "quality": {

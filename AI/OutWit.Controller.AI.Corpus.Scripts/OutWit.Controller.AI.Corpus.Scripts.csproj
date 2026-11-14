@@ -5,7 +5,7 @@
   <PropertyGroup>
     <ControllerName>Corpus</ControllerName>
     <Version>0.1.2</Version>
-    <Description>Bundled .wit scripts for the OutWit Corpus controller — CorpusProcess (public-corpus shards fetched by the nodes, cleaned, language-tagged, quality-filtered and signed, with sampled re-execution), CorpusPreflight and CorpusDedup (the near-duplicate merge over a run).</Description>
+    <Description>Bundled .wit scripts for the OutWit Corpus controller — CorpusProcess (public-corpus shards fetched by the nodes, cleaned, language-tagged, quality-filtered and signed, with sampled re-execution), CorpusPreflight, CorpusDedup (the near-duplicate merge over a run) and CorpusRuntimeDiagnostics (the module's diagnostics and the capabilities document).</Description>
     <PackageTags>corpus;common-crawl;scripts;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
 

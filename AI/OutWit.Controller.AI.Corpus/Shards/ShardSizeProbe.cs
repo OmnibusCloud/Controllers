@@ -40,7 +40,7 @@ public static class ShardSizeProbe
 
         var unsized = sources.Count(source => source.SizeBytes <= 0);
         if (unsized == 0)
-            return new ShardSizeProbeResult(0, 0, 0, 0);
+            return new ShardSizeProbeResult(0, 0, 0, 0) { Sizes = sources.Select(source => source.SizeBytes).ToList() };
 
         var known = sizes.Where(size => size.HasValue).Select(size => size!.Value).ToList();
         var probed = known.Count;
@@ -49,7 +49,10 @@ public static class ShardSizeProbe
         var unprobed = unsized - attempted;
         var mean = probed > 0 ? (long)known.Average() : 0;
 
-        return new ShardSizeProbeResult(known.Sum() + mean * (failed + unprobed), probed, failed, unprobed);
+        // Each source's size as the estimate counts it: the manifest's, the origin's, or the mean.
+        var filled = sources.Select((source, index) => source.SizeBytes > 0 ? source.SizeBytes : sizes[index] ?? mean).ToList();
+
+        return new ShardSizeProbeResult(known.Sum() + mean * (failed + unprobed), probed, failed, unprobed) { Sizes = filled };
     }
 
     /// <summary>The origin's size of every unsized source, aligned with the sources (null = sized already, not probed, or unanswered).</summary>
@@ -114,4 +117,8 @@ public static class ShardSizeProbe
 /// <param name="Probed">Sources whose size the origin gave.</param>
 /// <param name="Failed">Sources probed without an answer.</param>
 /// <param name="Unprobed">Unsized sources beyond the probe budget, estimated at the mean.</param>
-public sealed record ShardSizeProbeResult(long EstimatedBytes, int Probed, int Failed, int Unprobed);
+public sealed record ShardSizeProbeResult(long EstimatedBytes, int Probed, int Failed, int Unprobed)
+{
+    /// <summary>Every source's size as the estimate counts it, aligned with the sources: the manifest's, the origin's answer, or the mean of the answers (0 when there is none).</summary>
+    public IReadOnlyList<long> Sizes { get; init; } = [];
+}

@@ -11,6 +11,8 @@ namespace OutWit.Controller.AI.Corpus.Live;
 /// manifest (and the language model), submits CorpusPreflight or CorpusProcess, prints the
 /// report and the integrity document, and compares the content hashes of repeated runs —
 /// the fleet-level proof that the same shard gives the same product on any node.
+/// <c>diagnostics</c> runs CorpusRuntimeDiagnostics (the server's module) and prints the
+/// capabilities document.
 /// </summary>
 public static class Program
 {
@@ -26,11 +28,15 @@ public static class Program
     private const string PROCESS_SCRIPT = "CorpusProcess";
     private const string PREFLIGHT_SCRIPT = "CorpusPreflight";
     private const string DEDUP_SCRIPT = "CorpusDedup";
+    private const string DIAGNOSTICS_SCRIPT = "CorpusRuntimeDiagnostics";
 
     private const string REPORT = "report";
     private const string INTEGRITY = "integrity";
     private const string RESULT = "result";
     private const string DEDUP = "dedup";
+    private const string CAPABILITIES = "capabilities";
+
+    private const double BYTES_PER_MIB = 1024.0 * 1024.0;
 
     private static readonly TimeSpan POLL_INTERVAL = TimeSpan.FromSeconds(5);
 
@@ -40,7 +46,8 @@ public static class Program
 
     public static async Task<int> Main(string[] args)
     {
-        if (args.Length < 2 || args[0] is "-h" or "--help")
+        var diagnostics = args.Length >= 1 && args[0] == "diagnostics";
+        if ((args.Length < 2 && !diagnostics) || args.Length == 0 || args[0] is "-h" or "--help")
             return Usage();
 
         var key = Environment.GetEnvironmentVariable(KEY_ENV);
@@ -50,8 +57,8 @@ public static class Program
             return 2;
         }
 
-        var manifestPath = args[1];
-        if (!File.Exists(manifestPath))
+        var manifestPath = diagnostics ? "" : args[1];
+        if (!diagnostics && !File.Exists(manifestPath))
         {
             Console.Error.WriteLine($"manifest not found: {manifestPath}");
             return 2;
@@ -75,8 +82,11 @@ public static class Program
 
         Console.WriteLine($"server   : {server}");
         Console.WriteLine($"identity : {identity}");
-        Console.WriteLine($"input    : {Path.GetFileName(manifestPath)}, {new FileInfo(manifestPath).Length} byte(s)");
-        Console.WriteLine($"model    : {(modelPath == null ? "(none)" : $"{Path.GetFileName(modelPath)}, {new FileInfo(modelPath).Length} byte(s)")}");
+        if (!diagnostics)
+        {
+            Console.WriteLine($"input    : {Path.GetFileName(manifestPath)}, {new FileInfo(manifestPath).Length} byte(s)");
+            Console.WriteLine($"model    : {(modelPath == null ? "(none)" : $"{Path.GetFileName(modelPath)}, {new FileInfo(modelPath).Length} byte(s)")}");
+        }
 
         await using var client = new WitCloudClient(server, identity, key);
         await client.ConnectAsync();
@@ -89,6 +99,7 @@ public static class Program
             "preflight" => await PreflightAsync(client, manifestPath, modelPath, options),
             "process" => await ProcessAsync(client, manifestPath, modelPath, options),
             "dedup" => await DedupAsync(client, manifestPath, options),
+            "diagnostics" => await DiagnosticsAsync(client, options),
             _ => Usage()
         };
     }
@@ -114,7 +125,10 @@ public static class Program
         Console.WriteLine($"  completed in {result.Duration}");
         Console.WriteLine($"  well-formed : {report.WellFormed}");
         Console.WriteLine($"  tasks       : {report.TaskCount}");
-        Console.WriteLine($"  traffic     : {report.EstimatedTrafficBytes / (1024.0 * 1024.0):F1} MB estimated");
+        Console.WriteLine($"  traffic     : {report.EstimatedTrafficBytes / BYTES_PER_MIB:F1} MB estimated");
+        Console.WriteLine($"  storage     : {report.EstimatedStorageBytes / BYTES_PER_MIB:F1} MB estimated on the server" +
+                          (report.StorageHeadroomBytes > 0 ? $", headroom {report.StorageHeadroomBytes / BYTES_PER_MIB:F1} MB" : ", no headroom stated") +
+                          (report.StorageRetentionDays > 0 ? $", kept {report.StorageRetentionDays} day(s)" : ""));
         Console.WriteLine($"  refused     : {(report.RefusedOrigins.Count == 0 ? "-" : string.Join(", ", report.RefusedOrigins))}");
         Console.WriteLine($"  oversized   : {report.OversizedSources}");
         foreach (var message in report.Messages)
@@ -192,6 +206,48 @@ public static class Program
             Console.WriteLine($"    [{shard.GetProperty("index").GetInt32(),3}] {shard.GetProperty("documents").GetInt64()} docs, {shard.GetProperty("duplicates").GetInt64()} dropped");
 
         return 0;
+    }
+
+    private static async Task<int> DiagnosticsAsync(WitCloudClient client, RunOptions options)
+    {
+        var handle = await client.Scripts.RunAsync(DIAGNOSTICS_SCRIPT);
+        Console.WriteLine($"{DIAGNOSTICS_SCRIPT} submitted: job {handle.JobId}");
+
+        var result = await handle.WaitAsync<CorpusRuntimeDiagnosticsData>(RESULT, pollInterval: POLL_INTERVAL);
+        if (result.Status != ProcessingJobStatus.Completed || result.Result == null)
+        {
+            Console.WriteLine($"  {result.Status} after {result.Duration}: {result.ErrorMessage}");
+            return 1;
+        }
+
+        var d = result.Result;
+        Console.WriteLine($"  completed in {result.Duration}: controller {d.ControllerVersion}, target {d.RuntimeTarget}");
+        Console.WriteLine($"  stages      : {string.Join(" > ", d.Stages)}; fingerprint {d.StageSetSha256[..Math.Min(12, d.StageSetSha256.Length)]}… {(d.StagesVerified ? "verified" : "DIFFERS FROM THE PIN")}");
+        Console.WriteLine($"  parsers     : {d.HtmlParser}; {d.Compressor}");
+        Console.WriteLine($"  language    : {d.LanguageModelFormat}, reference model {d.ReferenceLanguageModelSha256[..Math.Min(12, d.ReferenceLanguageModelSha256.Length)]}…");
+        Console.WriteLine($"  origins     : {string.Join(", ", d.PublicOrigins)}" + (d.MachineOrigins.Count > 0 ? $"; the server's operator lists {string.Join(", ", d.MachineOrigins)}" : ""));
+        Console.WriteLine($"  caps        : shard {d.MaxShardBytes / BYTES_PER_MIB:F0} MB, {d.DownloadsPerNode} download(s) per node, {d.MemoryPerShardBytes / BYTES_PER_MIB:F0} MB per shard in flight");
+
+        var capabilities = (await handle.WaitAsync<Guid?>(CAPABILITIES, pollInterval: POLL_INTERVAL)).Result;
+        if (capabilities == null)
+        {
+            Console.WriteLine("  capabilities: (none)");
+            return d.StagesVerified ? 0 : 1;
+        }
+
+        var bytes = await client.Blobs.DownloadBlobAsync(capabilities.Value);
+        await SaveAsync(options, "capabilities.json", bytes);
+
+        using var document = JsonDocument.Parse(bytes);
+        var storage = document.RootElement.GetProperty("storage");
+        Console.WriteLine($"  capabilities: {document.RootElement.GetProperty("schema").GetString()}, {bytes.Length} bytes; storage headroom " +
+                          (storage.TryGetProperty("headroom_bytes", out var headroom) ? $"{headroom.GetInt64() / BYTES_PER_MIB:F1} MB" : "not stated") +
+                          (storage.TryGetProperty("retention_days", out var days) ? $", kept {days.GetInt32()} day(s)" : ""));
+        if (document.RootElement.TryGetProperty("pool", out var pool))
+            Console.WriteLine($"  pool        : {pool.GetProperty("nodes").GetInt32()} node(s), {pool.GetProperty("measured").GetInt32()} measured, {pool.GetProperty("rate").GetDouble():F2} MB/s of WET" +
+                              (pool.TryGetProperty("workers", out var workers) ? $", {workers.GetInt32()} shard(s) at once" : ""));
+
+        return d.StagesVerified ? 0 : 1;
     }
 
     #endregion
@@ -293,6 +349,7 @@ public static class Program
         Console.WriteLine("corpus-live preflight <manifest.json> [--model <model.bin>]");
         Console.WriteLine("corpus-live process   <manifest.json> [--model <model.bin>] [--sampling R] [--max-shard-mb N] [--runs N] [--save <dir>]");
         Console.WriteLine("corpus-live dedup     <report.json> [--threshold J] [--save <dir>]");
+        Console.WriteLine("corpus-live diagnostics [--save <dir>]");
         Console.WriteLine();
         Console.WriteLine($"env: {KEY_ENV} (wit_sk_ key, required), {SERVER_ENV} (default {DEFAULT_SERVER}), {IDENTITY_ENV} (default {DEFAULT_IDENTITY})");
         return 2;

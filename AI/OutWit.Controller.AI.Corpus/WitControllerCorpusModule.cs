@@ -26,6 +26,7 @@ public sealed class WitControllerCorpusModule : WitPluginBase, IWitControllerNod
         services.AddVariable<WitVariableCorpusResult>();
         services.AddVariable<WitVariableCorpusOptions>();
         services.AddVariable<WitVariableCorpusPreflight>();
+        services.AddVariable<WitVariableCorpusRuntimeDiagnostics>();
 
         services.AddCollection<WitVariableCorpusTaskCollection>();
         services.AddCollection<WitVariableCorpusResultCollection>();
@@ -37,5 +38,7 @@ public sealed class WitControllerCorpusModule : WitPluginBase, IWitControllerNod
         services.AddActivityAdapter<WitActivityCorpusSamplingRate, WitActivityAdapterCorpusSamplingRate>();
         services.AddActivityAdapter<WitActivityCorpusIntegrity, WitActivityAdapterCorpusIntegrity>();
         services.AddActivityAdapter<WitActivityCorpusDedup, WitActivityAdapterCorpusDedup>();
+        services.AddActivityAdapter<WitActivityCorpusRuntimeDiagnostics, WitActivityAdapterCorpusRuntimeDiagnostics>();
+        services.AddActivityAdapter<WitActivityCorpusCapabilities, WitActivityAdapterCorpusCapabilities>();
     }
 }
