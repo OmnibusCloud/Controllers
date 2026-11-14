@@ -59,6 +59,12 @@ internal static class EvaluateCommand
 
             SmtValidation validation;
             SmtModel model;
+            if (modelText == null)
+            {
+                model = new SmtModel();
+                validation = new SmtValidation { Class = "partial", Reason = "no model printed (" + Text(record, "end") + ")" };
+            }
+            else
             try
             {
                 model = SmtModel.Parse(modelText, valuesText);

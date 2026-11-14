@@ -285,6 +285,12 @@ jobs:
         if: always()
         run: dotnet "$BIN/smt-spike.dll" evaluate --problems problems --list "$SPIKE/bench/fetch-list.tsv" --results "$OUT/results-wasm.jsonl" --out "$OUT/eval.jsonl" | tee "$OUT/eval-summary.txt"
 
+      # Z3 as the oracle of the evaluator: the closed script (§4.5) of every model and wrong model.
+      - name: Evaluator against Z3
+        if: always()
+        timeout-minutes: 45
+        run: dotnet "$BIN/smt-spike.dll" oracle --module module/z3.wasm --cache z3.cwasm --problems problems --list "$SPIKE/bench/fetch-list.tsv" --results "$OUT/results-wasm.jsonl" --out "$OUT/oracle.jsonl" | tee "$OUT/oracle-summary.txt"
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:

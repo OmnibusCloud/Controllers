@@ -72,6 +72,7 @@ def main(argv):
             "native": {r["id"]: r for r in load(os.path.join(folder, "results-native.jsonl")) if r.get("engine") == "native"},
             "limits": [r for r in load(os.path.join(folder, "limits.jsonl")) if r.get("case")],
             "eval": load(os.path.join(folder, "eval.jsonl")),
+            "oracle": load(os.path.join(folder, "oracle.jsonl")),
         }
     out = []
     failed = False
@@ -268,7 +269,8 @@ def main(argv):
                 text += ", stderr " + r["stderr_tail"].strip()[:60]
             cells.append(text.replace("|", "/"))
         out.append("| %s | %s | %s |" % (case, engine, " | ".join(cells)))
-    limit_ids = [(c, e) for c, e in cases if e == "wasm"]
+    limit_ids = [(c, e) for c, e in cases if e == "wasm"
+                 and all(any(r["case"] == c and r["engine"] == "wasm" for r in platforms[n]["limits"]) for n in names)]
     limit_same = 0
     for case, _ in limit_ids:
         values = {json.dumps([(r.get("verdict"), r.get("fuel"), r.get("end"), r.get("count")) for r in platforms[n]["limits"] if r["case"] == case and r["engine"] == "wasm"]) for n in names}
@@ -306,6 +308,29 @@ def main(argv):
             classes = {next((x["class"] for x in platforms[n]["eval"] if x["id"] == r["id"]), None) for n in names}
             same_eval += len(classes) == 1
         out.append("\nSame class on every platform: %d of %d." % (same_eval, len(ev)))
+
+    # The evaluator against Z3 on the closed scripts.
+    out.append("\n## The evaluator against Z3 (closed script of every model and wrong model)\n")
+    out.append("| platform | checked | evaluator validated, Z3 sat | failed, unsat | validated, Z3 unsat | failed, Z3 sat | partial: Z3 sat / unsat / other | contradictions |")
+    out.append("|---|---|---|---|---|---|---|---|")
+    for name in names:
+        rs = platforms[name]["oracle"]
+        if not rs:
+            continue
+
+        def count(evaluator, z3):
+            return sum(1 for r in rs if r["evaluator"] == evaluator and r["z3"] == z3)
+
+        partial = [r for r in rs if r["evaluator"] == "partial"]
+        out.append("| %s | %d | %d | %d | %d | %d | %d / %d / %d | %d |" % (
+            name, len(rs), count("validated", "sat"), count("failed", "unsat"), count("validated", "unsat"), count("failed", "sat"),
+            sum(r["z3"] == "sat" for r in partial), sum(r["z3"] == "unsat" for r in partial),
+            sum(r["z3"] not in ("sat", "unsat") for r in partial), sum(1 for r in rs if r.get("contradiction"))))
+        if any(r.get("contradiction") for r in rs):
+            failed = True
+        other = [r for r in rs if r["evaluator"] != "partial" and r["z3"] not in ("sat", "unsat")]
+        if other:
+            out.append("\n%s: Z3 gave no verdict on %d closed scripts: %s" % (name, len(other), [(r["id"], r["kind"], r["z3"]) for r in other[:8]]))
 
     print("\n".join(out))
     return 1 if failed else 0

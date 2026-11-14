@@ -10,7 +10,8 @@ namespace OutWit.Controller.Smt.Spike;
 /// <item><c>native --z3 PATH --problems DIR --list fetch-list.tsv --out FILE [--limit N]</c></item>
 /// <item><c>limits --module z3.wasm --out FILE [--z3 PATH] [--cache FILE] [--big] [--native-big]</c></item>
 /// <item><c>evaluate --problems DIR --list fetch-list.tsv --results FILE --out FILE [--mutants N] [--engine wasm|native]</c></item>
-/// <item><c>selftest</c></item>
+/// <item><c>oracle --module z3.wasm --problems DIR --list fetch-list.tsv --results FILE --out FILE [--mutants N]</c></item>
+/// <item><c>run --module z3.wasm --smt FILE</c>, <c>selftest</c></item>
 /// </list>
 /// Envelope options for wasm, native and limits: --rlimit, --fuel, --memory-mb, --wall-ms, --seed.
 /// The harness runs below normal priority.
@@ -41,6 +42,7 @@ internal static class Program
                 "evaluate" => EvaluateCommand.Run(args),
                 "selftest" => SelfTestCommand.Run(),
                 "run" => RunCommand.Run(args),
+                "oracle" => OracleCommand.Run(args),
                 _ => Usage()
             };
         }
