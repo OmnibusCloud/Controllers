@@ -35,7 +35,7 @@ public sealed record QualityRules
     /// repetition thresholds of FineWeb-2's Chinese (<c>cmn_Hani.yml</c>), the largest language
     /// of these scripts. Gopher's thresholds are for English words: over letters, a repetition
     /// rule failed 47 % of the Japanese and 26 % of the Chinese pages of four Common Crawl WET
-    /// files (21-23 % of the pages elsewhere), most of them prose that names one product or
+    /// files (18-23 % of the pages elsewhere), most of them prose that names one product or
     /// place again and again.
     /// </summary>
     public static readonly QualityRules Unspaced = new()
