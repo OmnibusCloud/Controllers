@@ -24,7 +24,7 @@ public sealed class CorpusDeduplicator
     /// <summary>Most documents one merge holds in memory with 128-hash signatures (about 1 KB each); with another hash count, as many as fit <see cref="MAX_SIGNATURE_VALUES"/>.</summary>
     public const int MAX_DOCUMENTS = 4_000_000;
 
-    /// <summary>Most signature values one merge holds in memory (8 bytes each): 4 GiB.</summary>
+    /// <summary>Most signature values one merge holds in memory (8 bytes each): 512 million, about 4 GB.</summary>
     public const long MAX_SIGNATURE_VALUES = (long)MAX_DOCUMENTS * MinHashSigner.HASHES;
 
     #endregion
