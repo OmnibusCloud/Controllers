@@ -42,6 +42,8 @@ internal sealed class SmtNativeSession
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
+            // No byte-order mark ahead of the first command.
+            StandardInputEncoding = new UTF8Encoding(false),
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
         };

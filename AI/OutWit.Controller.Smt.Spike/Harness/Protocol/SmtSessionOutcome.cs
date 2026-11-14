@@ -43,10 +43,10 @@ internal sealed class SmtSessionOutcome
     public long WallMs { get; init; }
 
     /// <summary>Milliseconds to make the instance (store, linker, instantiation); 0 for native.</summary>
-    public long InstantiateMs { get; init; }
+    public double InstantiateMs { get; init; }
 
     /// <summary>Milliseconds from the start until the solver first asked for input (wasm) .</summary>
-    public long StartupMs { get; init; }
+    public double StartupMs { get; init; }
 
     #endregion
 }

@@ -105,15 +105,15 @@ internal sealed class SmtWasmSession
         }
         catch (TrapException trap)
         {
-            return new Invocation(EndOf(trap), -1, WasmHostTraps.Fault(trap.Type), 0, 0, 0, clock.ElapsedMilliseconds);
+            return new Invocation(EndOf(trap), -1, WasmHostTraps.Fault(trap.Type), 0, 0, 0, clock.Elapsed.TotalMilliseconds);
         }
         catch (WasmtimeException exception)
         {
-            return new Invocation("not_instantiated", -1, exception.Message, 0, 0, 0, clock.ElapsedMilliseconds);
+            return new Invocation("not_instantiated", -1, exception.Message, 0, 0, 0, clock.Elapsed.TotalMilliseconds);
         }
 
         var instantiationFuel = (long)(INSTANTIATION_FUEL - store.Fuel);
-        var instantiateMs = clock.ElapsedMilliseconds;
+        var instantiateMs = clock.Elapsed.TotalMilliseconds;
 
         // The guest's budget, from its first instruction: the same number on every platform.
         store.Fuel = (ulong)Math.Max(1, fuel);
@@ -177,7 +177,7 @@ internal sealed class SmtWasmSession
 
     #region Nested Types
 
-    private sealed record Invocation(string End, int ExitCode, string? Fault, long Fuel, long InstantiationFuel, long PeakMemory, long InstantiateMs);
+    private sealed record Invocation(string End, int ExitCode, string? Fault, long Fuel, long InstantiationFuel, long PeakMemory, double InstantiateMs);
 
     #endregion
 }

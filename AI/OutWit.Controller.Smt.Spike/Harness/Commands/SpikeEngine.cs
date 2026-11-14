@@ -75,6 +75,8 @@ internal sealed class SpikeEngine : IDisposable
 
         var capture = Path.Combine(Path.GetTempPath(), "smt-sm0-capture-" + Environment.ProcessId);
         var engine = new SpikeEngine(host, module, capture);
+        var native = WasmHostNativeLibrary.ResolvedPath ?? WasmHostNativeLibrary.Locate();
+        var nativeSha = native != null && File.Exists(native) ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(native))).ToLowerInvariant() : null;
         engine.Meta = new Dictionary<string, object?>
         {
             ["kind"] = "meta",
@@ -88,7 +90,8 @@ internal sealed class SpikeEngine : IDisposable
             ["compile_ms"] = compileMs,
             ["deserialize_ms"] = deserializeMs,
             ["explicit_traps"] = host.ExplicitTraps,
-            ["wasmtime_native"] = WasmHostNativeLibrary.ResolvedPath ?? WasmHostNativeLibrary.Locate(),
+            ["wasmtime_native"] = native,
+            ["wasmtime_native_sha256"] = nativeSha,
             ["binding"] = WasmHostBinding.Loaded?.ToString()
         };
         return engine;

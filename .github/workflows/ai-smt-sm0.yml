@@ -171,3 +171,150 @@ jobs:
 
       - name: Smoke
         run: bash "$TOOLCHAIN/smoke.sh" "$RUNNER_TEMP/wasmtime/wasmtime" "$RUNNER_TEMP/module/z3.wasm" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # The slice named by bench/fetch-list.tsv, fetched once from the SMT-LIB archives (cached by the
+  # list's hash) and handed to the run jobs as an artifact. Nothing of it is committed.
+  data:
+    if: ${{ !inputs.select }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      ready: ${{ steps.list.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Is there a fetch list
+        id: list
+        run: |
+          if [ -f "$SPIKE/bench/fetch-list.tsv" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "$(($(wc -l < "$SPIKE/bench/fetch-list.tsv") - 1)) problems listed"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "no fetch list yet: run the workflow with select = true and commit its fetch-list.tsv"
+          fi
+
+      - name: Cache the slice
+        if: steps.list.outputs.ready == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/problems
+          key: smt-sm0-problems-${{ hashFiles('AI/OutWit.Controller.Smt.Spike/bench/fetch-list.tsv') }}
+
+      - name: Fetch the slice
+        if: steps.list.outputs.ready == 'true'
+        run: python3 -I "$SPIKE/bench/fetch.py" "$TOOLCHAIN/pins.env" "$SPIKE/bench/fetch-list.tsv" "$RUNNER_TEMP/problems"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.list.outputs.ready == 'true'
+        with:
+          name: smt-sm0-problems
+          path: ${{ runner.temp }}/problems
+          retention-days: 7
+          if-no-files-found: error
+
+  # Every platform runs the same module bytes on the same slice: the wasm sessions (and every
+  # fifth problem once more through the unchanged host), the native release as the baseline,
+  # the limit cases, and the model evaluator over the sat answers.
+  run:
+    needs: [compare, data]
+    if: needs.data.outputs.ready == 'true'
+    name: run ${{ matrix.rid }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-2022, rid: win-x64, big: true }
+          - { os: ubuntu-24.04, rid: linux-x64, big: true }
+          - { os: macos-15, rid: osx-arm64, big: false }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64, big: true }
+          - { os: windows-11-arm, rid: win-arm64, big: false }
+          - { os: macos-15-intel, rid: osx-x64, big: false }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    env:
+      RID: ${{ matrix.rid }}
+      HARNESS: AI/OutWit.Controller.Smt.Spike/Harness
+      BIN: AI/OutWit.Controller.Smt.Spike/Harness/bin/Release/net10.0
+      OUT: results-${{ matrix.rid }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: z3-wasm-build-a
+          path: module
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: smt-sm0-problems
+          path: problems
+
+      - name: Harness, wasmtime natives, native Z3
+        run: |
+          dotnet build "$HARNESS" -c Release -nologo -v q
+          bash "$TOOLCHAIN/binaries.sh" natives "$RID" "$BIN"
+          bash "$TOOLCHAIN/binaries.sh" z3 "$RID" z3native | tail -1 > z3path
+          mkdir -p "$OUT"
+          cp module/build-info.txt "$OUT/"
+
+      - name: Evaluator self-test
+        run: dotnet "$BIN/smt-spike.dll" selftest
+
+      - name: Wasm
+        timeout-minutes: 90
+        run: dotnet "$BIN/smt-spike.dll" wasm --module module/z3.wasm --cache z3.cwasm --problems problems --list "$SPIKE/bench/fetch-list.tsv" --out "$OUT/results-wasm.jsonl" --batch-every 5
+
+      - name: Native
+        timeout-minutes: 60
+        run: dotnet "$BIN/smt-spike.dll" native --z3 "$(cat z3path)" --problems problems --list "$SPIKE/bench/fetch-list.tsv" --out "$OUT/results-native.jsonl"
+
+      - name: Limits
+        timeout-minutes: 60
+        run: |
+          BIG=""
+          if [ "${{ matrix.big }}" = "true" ]; then BIG="--big"; fi
+          if [ "$RID" = "linux-x64" ] || [ "$RID" = "win-x64" ]; then BIG="$BIG --native-big"; fi
+          dotnet "$BIN/smt-spike.dll" limits --module module/z3.wasm --cache z3.cwasm --z3 "$(cat z3path)" --out "$OUT/limits.jsonl" $BIG
+
+      - name: Model evaluator
+        if: always()
+        run: dotnet "$BIN/smt-spike.dll" evaluate --problems problems --list "$SPIKE/bench/fetch-list.tsv" --results "$OUT/results-wasm.jsonl" --out "$OUT/eval.jsonl" | tee "$OUT/eval-summary.txt"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-${{ matrix.rid }}
+          path: results-${{ matrix.rid }}
+          if-no-files-found: warn
+
+  report:
+    needs: run
+    if: always() && needs.run.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          path: results
+
+      - name: Report
+        run: |
+          set +e
+          python3 -I "$SPIKE/bench/report.py" results "$SPIKE/bench/fetch-list.tsv" > report.md
+          code=$?
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smt-sm0-report
+          path: report.md

@@ -88,7 +88,7 @@ internal sealed class SmtGuestStdio
             if (InputRequests == 1)
             {
                 FuelAtFirstRead = fuelUsed;
-                MsAtFirstRead = Clock?.ElapsedMilliseconds ?? 0;
+                MsAtFirstRead = Clock?.Elapsed.TotalMilliseconds ?? 0;
             }
 
             var next = OutputExceeded ? null : m_driver.Next(Encoding.UTF8.GetString(m_stdout.GetBuffer(), 0, (int)m_stdout.Length), fuelUsed);
@@ -188,7 +188,7 @@ internal sealed class SmtGuestStdio
     public System.Diagnostics.Stopwatch? Clock { get; init; }
 
     /// <summary>The clock when the guest first asked for input: the solver's own start-up time.</summary>
-    public long MsAtFirstRead { get; private set; }
+    public double MsAtFirstRead { get; private set; }
 
     /// <summary>The fuel the guest used before it first asked for input: the solver's own start-up.</summary>
     public long FuelAtFirstRead { get; private set; }
