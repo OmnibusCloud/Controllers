@@ -14,7 +14,7 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.1.14 — under its proof on the test fleet, not yet released to nuget.org.**
+**Status: 0.1.14 — proven on the test fleet, not yet released to nuget.org.**
 The stage libraries are wired into nine activities and four bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test

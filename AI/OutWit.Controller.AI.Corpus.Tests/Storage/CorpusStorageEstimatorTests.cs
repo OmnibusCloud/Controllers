@@ -16,10 +16,10 @@ public sealed class CorpusStorageEstimatorTests
     private const long MIB = 1024 * 1024;
 
     /// <summary>
-    /// The twenty Common Crawl WET shards of the test fleet's acceptance run of 2026-11-14
-    /// (CC-MAIN-2026-43, every stage on, sampling 0.25), processed by controller 0.1.14 on one
-    /// machine: the bytes fetched and the text and documents produced, per shard. The same run
-    /// under 0.1.13 gave exactly the products the fleet's report holds, shard by shard.
+    /// The test fleet's acceptance run of 2026-11-14 under controller 0.1.14 (twenty Common Crawl
+    /// WET shards of CC-MAIN-2026-43, every stage on, sampling 0.25): what its report says it
+    /// fetched and produced, per shard. A run of the same shards on one machine gave the same
+    /// products, shard by shard; the job left 807,802,380 bytes of blobs on the server.
     /// </summary>
     private static readonly (long Fetched, long Text, int Documents)[] LIVE_RUN =
     [
@@ -31,10 +31,10 @@ public sealed class CorpusStorageEstimatorTests
     ];
 
     /// <summary>The shards the fleet ran sampled in that run.</summary>
-    private static readonly int[] LIVE_SAMPLED = [1, 5, 8, 10, 17];
+    private static readonly int[] LIVE_SAMPLED = [0, 6, 10, 12, 17];
 
-    /// <summary>The fleet run's report, integrity and dedup documents (under 0.1.13), and its inputs (manifest and model).</summary>
-    private const long LIVE_DOCUMENTS = 39116 + 2745 + 1129619;
+    /// <summary>Its report, integrity and dedup documents, and its inputs (manifest and model).</summary>
+    private const long LIVE_DOCUMENTS = 41565 + 2746 + 1187453;
     private const long LIVE_INPUTS = 3314 + 241721;
 
     #endregion
