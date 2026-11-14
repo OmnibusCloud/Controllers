@@ -11,8 +11,10 @@ Every number on this page was measured, in the controller's tests or on a test f
 [README](../README.md) explains how things work inside; [safety.md](safety.md) is the same
 sandbox told for the people who lend their computers.
 
-Version described: **Verify 0.11.3**. It is proven on a six-node test fleet (Windows, Linux,
-macOS) and is not yet on nuget.org or on the live network.
+Version described: **Verify 0.12.0**, for the test server. 0.11.3 is proven on a six-node test
+fleet (Windows, Linux, macOS); neither is on nuget.org or on the live network. What 0.12.0
+changed for an application: an exit status of 126 or more is the program's exit (section 7), and
+the fuel a task reports is its program's own (section 10).
 
 ## Contents
 
@@ -216,7 +218,7 @@ name a machine.
 | `Pass` | the run, or every case, did what was expected | |
 | `Fail` | it ran, but a case printed the wrong thing or exited with the wrong code (not a crash) | a wrong answer |
 | `CompileError` | the program never ran | a C/C++ compile or link error; a module that does not validate or imports what the sandbox does not provide; a source name that is not portable |
-| `RuntimeError` | it crashed, or exited non-zero where 0 was expected | an exception, a panic, `abort`, an out-of-bounds access, a stack overflow |
+| `RuntimeError` | it crashed, or exited non-zero where 0 was expected (any status, 126 and more included) | an exception, a panic, `abort`, an out-of-bounds access, a stack overflow, `exit(200)` |
 | `Timeout` | fuel or wall time ran out | an endless or too slow program |
 | `MemoryExceeded` | the program's allocator was refused memory | Python's `MemoryError`, Lua's "not enough memory", C++'s `bad_alloc` |
 | `OutputExceeded` | stdout passed its cap | printing in a loop |
@@ -246,15 +248,15 @@ the order of magnitude a planner should expect.
 
 | Runtime id | What runs | Typical task: fuel / wall / peak memory |
 |---|---|---|
-| `python-3.14.6` | CPython 3.14.6, pure Python with the standard library | 0.5 G / 145 ms / 40 MiB (a hello: 124 M) |
+| `python-3.14.6` | CPython 3.14.6, pure Python with the standard library | 0.5 G / 145 ms / 40 MiB (a hello: 121 M) |
 | `python-3.14.6-sympy-1.14.0` | the same with sympy 1.14.0 and mpmath 1.4.1 | 3.5 G / 1.6 s / 50 MiB: `import sympy` is most of it |
-| `python-3.14.6-numpy-2.5.4` | CPython 3.14.6 with numpy 2.5.4, started from a snapshot with numpy imported | 39 M / 11 ms / 40 MiB (a 300×300 `linalg.solve`: 0.25 G) |
+| `python-3.14.6-numpy-2.5.4` | CPython 3.14.6 with numpy 2.5.4, started from a snapshot with numpy imported | 26 M / 11 ms / 40 MiB (a 300×300 `linalg.solve`: about 0.24 G) |
 | `quickjs-0.15.1` | QuickJS-NG 0.15.1, JavaScript | 12 M / 1 ms / 1.2 MiB |
 | `typescript-sucrase-3.35.1` | TypeScript on the same QuickJS; sucrase strips the types | 0.7 G / 114 ms / 3.4 MiB: loading the transpiler is most of it |
 | `ruby-3.4.1` | Ruby 3.4.1 with the standard library and the gems base64, csv, matrix, prime | 0.63 G / 304 ms / 53 MiB |
 | `lua-5.4.8` | Lua 5.4.8 with its standard library | 2.6 M / under 1 ms / 1.3 MiB |
 | `clang-22.1.0` | C17 and C++20 compiled and linked on the node, run as a raw module | the build: 0.2 G for a C hello, 10–20 G and about 5 s for a C++ program of a couple of hundred lines; the run: the program's own |
-| `wasi` | the task's own compiled module | the module's own (the demo modules: a median of 33 thousand fuel) |
+| `wasi` | the task's own compiled module | the module's own (the demo modules: a median of 22 thousand fuel) |
 
 What an author must know, runtime by runtime. The same facts are in the capabilities
 document's `notes`.
@@ -331,6 +333,12 @@ is an explicit check, so a guest's crash never takes the host down. Elsewhere tr
 hardware faults, which is faster. The verdicts, the outputs and the fuel are the same either
 way.
 
+The sandbox runs only on the engine it was built and tested with: the .NET binding the controller
+was compiled against, and the native library pinned by its SHA-256 for the platform (section
+13). Anything else, an older patch, a damaged copy, another controller's different file in the
+client's shared load context, keeps the sandbox off, and the node's self-check names both
+versions or both hashes.
+
 ## 10. Determinism and integrity
 
 What is guaranteed:
@@ -341,9 +349,9 @@ What is guaranteed:
   host paths and no directory listings.
 
 What is a metric, not identity (it lives in the provenance):
-- **Fuel** is reproducible on one host.
-  - Between hosts it drifts slightly for the interpreters that read files: CPython by 0.0002–0.06 %; Ruby and Lua by a fixed step between Linux and the other systems (a Lua hello: 569,680 on Linux, 602,449 on Windows and macOS).
-  - QuickJS tasks, C/C++ programs and raw modules are equal everywhere.
+- **Fuel** is the program's own and reproducible on one host.
+  - Since 0.12.0 the budget is given once the module is instantiated, so the copy of its data segments (a unit a byte where wasmtime copies them, nothing where Linux maps an image) is in neither the budget nor the fuel reported. That copy was the fixed step earlier versions showed for Ruby and Lua between Linux and the other systems (a Lua hello: 569,680 on Linux, 602,449 on Windows and macOS).
+  - The hello of every runtime costs one pinned number on Windows, Linux and macOS (the controller's tests).
 - **Peak memory** of a CPython task can differ by one 64 KiB page.
 - **Wall time** depends on the hardware.
 
@@ -397,8 +405,8 @@ wrong answer, a crash and a timeout for each language.
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 0.11.3 | `OutWit.Controller.AI.Verify` (GitHub Packages; nuget.org at 1.0.0) |
-| The engine | wasmtime long-term line 48: the .NET binding 48.0.2 over the native library 48.0.8 | natives per platform, release `verify-v0.6.0` (about 8 MB each) |
+| The controller | 0.12.0 | `OutWit.Controller.AI.Verify` (GitHub Packages; nuget.org at 1.0.0) |
+| The engine | wasmtime long-term line 48: the .NET binding 48.0.2 over the native library 48.0.8, pinned by SHA-256 | natives per platform, release `wasmtime-v48.0.8` (about 8 MB each; the bytes `verify-v0.6.0` carried) |
 | The language runtimes | as in section 8 | `verify-wasm.zip`, release `verify-v0.10.0` (68.7 MB) |
 | The numpy runtime | CPython 3.14.6 + numpy 2.5.4 | `verify-python-numpy.zip`, release `verify-v0.11.0` (17.2 MB) |
 
@@ -418,6 +426,6 @@ How a deployment uses them:
   - in Python by its recursion limit;
   - in JavaScript by a `RangeError` (about 300 levels);
   - in C/C++ by the 8 MiB stack (100,000 to 160,000 levels for a small function).
-- Fuel and memory metrics differ slightly between platforms for the interpreters that read files (section 10). Verdicts and outputs do not.
+- The peak memory of a CPython task can differ by a page between platforms (section 10). Verdicts and outputs do not.
 - A run waits for its slowest share (section 11).
 - The controller is proven on the test fleet. Its release to nuget.org and to the live network is the owner's decision.
