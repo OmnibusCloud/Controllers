@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Security.Cryptography;
 
 namespace OutWit.Controller.AI.Wasm;
@@ -112,12 +114,26 @@ internal static class WasmHostNatives
             throw new InvalidOperationException(problem);
     }
 
-    /// <summary>Why the library the binding loaded is not the pinned one; null when it is.</summary>
+    /// <summary>
+    /// Why the library the binding loaded is not the pinned one; null when it is. Every wasmtime
+    /// library the operating system has loaded into the process must be the pinned one (a copy of
+    /// the host refuses to load any other, but when none answers the runtime's own probing may find
+    /// one, in the binding's folder or on the system's search path), and so must the one a copy of
+    /// the host noted, or this controller's own file where none did (an isolated context).
+    /// </summary>
     /// <returns>The reason, naming both hashes, or null.</returns>
     public static string? LoadedProblem()
     {
+        var rid = WasmHostNativeLibrary.PortableRid;
+        foreach (var image in LoadedImages())
+        {
+            var problem = Check(rid, Sha256Of(image), LOADED);
+            if (problem != null)
+                return problem;
+        }
+
         var path = WasmHostNativeLibrary.LoadedPath;
-        return Check(WasmHostNativeLibrary.PortableRid, path == null ? null : Sha256Of(path), LOADED);
+        return Check(rid, path == null ? null : Sha256Of(path), LOADED);
     }
 
     /// <summary>
@@ -131,6 +147,29 @@ internal static class WasmHostNatives
         var own = WasmHostNativeLibrary.Locate();
         var problem = Check(WasmHostNativeLibrary.PortableRid, own == null ? null : Sha256Of(own), CARRIED);
         return problem ?? $"the pinned wasmtime library {CARRIED} did not load ({WasmHostNativeLibrary.LoadFailure ?? failure.GetType().Name}); the sandbox stays off";
+    }
+
+    /// <summary>
+    /// The files of the wasmtime libraries the operating system has loaded into this process, by
+    /// the platform's file name; none where the process cannot list its modules.
+    /// </summary>
+    private static IReadOnlyList<string> LoadedImages()
+    {
+        var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        try
+        {
+            using var process = Process.GetCurrentProcess();
+            return process.Modules
+                .Cast<ProcessModule>()
+                .Select(module => module.FileName)
+                .Where(path => !string.IsNullOrEmpty(path) && string.Equals(Path.GetFileName(path), WasmHostNativeLibrary.FileName, comparison) && File.Exists(path))
+                .Distinct(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception exception) when (exception is PlatformNotSupportedException or NotSupportedException or InvalidOperationException or Win32Exception)
+        {
+            return [];
+        }
     }
 
     #endregion

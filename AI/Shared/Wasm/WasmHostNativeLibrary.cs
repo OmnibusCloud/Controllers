@@ -29,7 +29,10 @@ namespace OutWit.Controller.AI.Wasm;
 /// So a controller that ships no natives, or broken ones, cannot take the library away from
 /// another: the order the runtime asks in is resolver, load context, default probing, then the
 /// handlers. Whichever copy loads the library notes its path process-wide (per binding assembly),
-/// where every copy finds the library the binding is using.
+/// where every copy finds the library the binding is using. A library the runtime's own probing
+/// finds before any handler is asked (one beside the binding, one on the system's search path) is
+/// none of a copy's doing: the natives guard refuses the host then, since it checks every wasmtime
+/// library loaded into the process (<see cref="WasmHostNatives.LoadedProblem"/>).
 /// </para>
 /// </summary>
 internal static class WasmHostNativeLibrary

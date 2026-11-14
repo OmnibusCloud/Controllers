@@ -85,6 +85,19 @@ internal static class WasmHostClientHost
         return Path.Combine(folder, Path.GetFileName(assembly));
     }
 
+    /// <summary>
+    /// The native library the <c>Wasmtime</c> package brings (48.0.2, not the pinned patch): the
+    /// carrier's build output keeps the package's own copy.
+    /// </summary>
+    /// <returns>Its path.</returns>
+    public static string PackageLibrary()
+    {
+        var bin = Path.Combine(AiRoot(), CARRIER, "bin", Configuration(), Framework());
+        var library = Path.Combine(bin, "runtimes", OutWit.Controller.AI.Wasm.WasmHostNativeLibrary.PortableRid, "native", OutWit.Controller.AI.Wasm.WasmHostNativeLibrary.FileName);
+        Assert.That(File.Exists(library), Is.True, $"the carrier's output keeps the package's library: {library}");
+        return library;
+    }
+
     /// <summary>Copies the library at a path into a module's <c>runtimes/&lt;rid&gt;/native/</c>.</summary>
     /// <param name="library">The library file.</param>
     /// <param name="module">The module folder.</param>

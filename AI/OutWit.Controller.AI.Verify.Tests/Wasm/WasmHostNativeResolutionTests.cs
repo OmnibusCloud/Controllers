@@ -12,7 +12,8 @@ namespace OutWit.Controller.AI.Verify.Tests.Wasm;
 /// loaded first by the client-like host and makes its host first, so its copy owns the binding and
 /// the resolver; Verify follows in the same context. Each copy also answers the binding's load
 /// context's <c>ResolvingUnmanagedDll</c> for its own folder, and only with the pinned library, so
-/// the other controller's sandbox works whatever the first one carries. A process each.
+/// the other controller's sandbox works whatever the first one carries. A library the runtime
+/// finds by its own probing before any handler is asked keeps both sandboxes off. A process each.
 /// </summary>
 [TestFixture]
 public sealed class WasmHostNativeResolutionTests
@@ -152,6 +153,34 @@ public sealed class WasmHostNativeResolutionTests
         {
             Assert.That(exitCode, Is.EqualTo(0), report);
             Assert.That(report, Does.Contain($"{NATIVE_FAILED}{Mismatch(changed, "in this controller's folder")}"), report);
+            Assert.That(report, Does.Not.Contain(NATIVE_LOADED), report);
+        });
+    }
+
+    [Test]
+    public void AnotherLibraryTheRuntimeFoundItselfKeepsTheSandboxOffTest()
+    {
+        // The first carrier ships the package's own library (48.0.2) beside its binding, where no
+        // copy of the host looks but the runtime's probing does: it finds it before any handler is
+        // asked, and the binding runs on it. Neither carrier may run then; both name what was loaded.
+        var carrier = WasmHostClientHost.CopyCarrier(Path.Combine(m_root, "carrier"));
+        var package = WasmHostClientHost.PackageLibrary();
+        File.Copy(package, Path.Combine(Path.GetDirectoryName(carrier)!, WasmHostNativeLibrary.FileName));
+        var found = WasmHostNatives.Sha256Of(package)!;
+        Assert.That(WasmHostNatives.IsPinned(package), Is.False, "the package's library is not the pinned patch");
+
+        var controllers = Path.Combine(m_root, "controllers");
+        var verify = WasmHostClientHost.CopyVerifyModule(controllers);
+        WasmHostClientHost.AddNatives(m_pinned, verify);
+
+        var (exitCode, report) = WasmHostClientHost.Run(controllers, carrier);
+        TestContext.Out.WriteLine(report);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exitCode, Is.EqualTo(0), report);
+            Assert.That(report, Does.Contain($"{CARRIER_PREFIX}FAILED InvalidOperationException: {Mismatch(found, "loaded in this process")}"), report);
+            Assert.That(report, Does.Contain($"{NATIVE_FAILED}{Mismatch(found, "loaded in this process")}"), report);
             Assert.That(report, Does.Not.Contain(NATIVE_LOADED), report);
         });
     }
