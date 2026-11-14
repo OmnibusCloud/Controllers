@@ -31,6 +31,7 @@ What a program has inside the box:
 | Randomness | not yours: a sequence fixed by the task |
 | Your environment | none: no user name, no paths, no variables |
 | Output | what it prints, cut at 256 KB by default |
+| A crash | ends the program, and only the program: the sandbox catches every crash (a bad pointer, a stack overflow, an `abort`). On Windows the client runs with the processor's stack protection switched on, and a crash is still caught as an ordinary check, so the client keeps running and keeps the protection |
 
 ## What it takes from the machine
 
@@ -39,6 +40,10 @@ What a program has inside the box:
   three quarters of your RAM divided by the memory of one program). The work runs below
   normal priority: on Windows your own programs go first. Linux does not honour that
   setting for threads; there the cap on the number of programs is the protection.
+- **Compiling.** A C or C++ task is compiled on your computer. The compiler is itself a
+  program in the same sandbox, with a budget of its own (a fixed number of instructions,
+  1 GB of memory a step), so it can read only the task's sources and the language's own
+  library, and writes nothing to your disk.
 - **Disk.** The task files and the files a program's input and output pass through are
   kept in the client's own folders and deleted when the run ends. Nothing is written
   anywhere else.
@@ -64,6 +69,12 @@ change:
   for a second block of memory or a 64-bit one, read outside their memory, or call what
   the sandbox does not provide.
 - `VerifySandboxHygieneTests`: nothing is left on the disk after a run.
+- `VerifyHostProtectionTests`: a program that crashes in each way a program can (an
+  unreachable instruction, a bad memory access, a division by zero, a stack overflow) inside
+  a host built like the client, with the processor's stack protection on, ends as a crash
+  and leaves the host running.
+- `VerifyClangRuntimeTests`: a C or C++ build leaves nothing behind, and the program it
+  builds sees no file system.
 
 `dotnet test AI/OutWit.Controller.AI.Verify.Tests` runs them on your machine.
 
