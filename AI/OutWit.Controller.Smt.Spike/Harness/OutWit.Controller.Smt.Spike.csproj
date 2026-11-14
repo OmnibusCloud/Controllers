@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- SM-0 spike harness (not a controller, never packed): runs Z3's wasm module in the shared
+       wasm sandbox host, the native Z3 release as the baseline, and the host-side model
+       evaluator prototype. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>OutWit.Controller.Smt.Spike</RootNamespace>
+    <AssemblyName>smt-spike</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Wasmtime" Version="48.0.2" />
+  </ItemGroup>
+
+  <!-- The shared wasm sandbox host, compiled in as Verify and Corpus do, except its engine
+       configuration: Z3 is C++ with exceptions, so this spike's engine turns the wasm
+       exception-handling proposal on (Wasm/WasmHostEngineConfig.cs, otherwise identical). -->
+  <ItemGroup>
+    <Compile Include="..\..\Shared\Wasm\**\*.cs" Exclude="..\..\Shared\Wasm\WasmHostEngineConfig.cs" Link="Shared\Wasm\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

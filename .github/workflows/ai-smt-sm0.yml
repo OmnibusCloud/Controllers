@@ -47,10 +47,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # A build takes about twenty minutes; its output is kept per recipe (the toolchain files),
+      # so a run that changes only the harness reuses both builds (each built and compared once).
+      - name: Cache the build
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/out
+          key: z3-wasm-${{ matrix.name }}-${{ hashFiles('AI/OutWit.Controller.Smt.Spike/toolchain/build.sh', 'AI/OutWit.Controller.Smt.Spike/toolchain/pins.env', 'AI/OutWit.Controller.Smt.Spike/toolchain/patch.py', 'AI/OutWit.Controller.Smt.Spike/toolchain/imports.py', 'AI/OutWit.Controller.Smt.Spike/toolchain/wasi/**') }}
+
       # Build b runs the scripts from a copy in another folder, with its work folder at
       # another depth: if any path reached the module, the two builds would differ.
       - name: Build
         id: build
+        if: steps.cache.outputs.cache-hit != 'true'
         env:
           BUILD: ${{ matrix.name }}
         run: |
@@ -73,7 +83,7 @@ jobs:
           if-no-files-found: error
 
       - name: Every download is pinned
-        if: steps.build.outputs.code != '0'
+        if: steps.cache.outputs.cache-hit != 'true' && steps.build.outputs.code != '0'
         run: |
           echo "::error::a download has no pin yet (UNPINNED lines in the build step)"
           exit 1
@@ -108,6 +118,35 @@ jobs:
             fi
           done
           { echo; echo '```'; cat builds/z3-wasm-build-a/build-info.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  # Run once (workflow_dispatch, select = true): choose the slice from the SMT-LIB 2025
+  # archives with the native release as the judge of "solvable in a few seconds". The fetch list
+  # it writes is committed; the benchmark files never are.
+  select:
+    if: ${{ inputs.select }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Native Z3
+        run: |
+          bash "$TOOLCHAIN/binaries.sh" z3 linux-x64 "$RUNNER_TEMP/z3native" | tail -1 > "$RUNNER_TEMP/z3path"
+          cat "$RUNNER_TEMP/z3path"
+
+      - name: Choose the slice
+        run: |
+          zstd --version
+          python3 -I "$SPIKE/bench/select.py" "$TOOLCHAIN/pins.env" "$(cat "$RUNNER_TEMP/z3path")" "$RUNNER_TEMP/select" --jobs 4
+          cat "$RUNNER_TEMP/select/select-report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smt-sm0-fetch-list
+          path: |
+            ${{ runner.temp }}/select/fetch-list.tsv
+            ${{ runner.temp }}/select/select-report.md
+          if-no-files-found: error
 
   smoke:
     needs: build
