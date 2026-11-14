@@ -21,6 +21,14 @@ namespace OutWit.Controller.AI.Corpus.Storage;
 /// language stage on and off, the larger of the two. WARC has only the golden shard behind it.
 /// </para>
 /// <para>
+/// Re-measured for 0.2.0 with the PDF stage on (2026-11-14): the golden WARC head, whose one PDF
+/// now gives a document, reaches at most 0.0731 / 0.0861 / 0.0999 / 0.1450 of text per byte and
+/// 39.3 / 63.8 / 44.2 / 79.3 documents per MiB (the four WARC rows' settings, the language stage
+/// on or off, the larger), each inside its row with the margin; the whole WARC file 00000 of
+/// CC-MAIN-2026-43 (923,804,210 bytes, 221 PDFs) gives 0.0196 to 0.0387 and 12.5 to 24.7, a
+/// quarter of the head's. The WARC rows stand.
+/// </para>
+/// <para>
 /// A change to a stage that makes products larger shows in the guard test over the golden
 /// shards (<c>CorpusStorageRatiosTests</c>): the table moves with it.
 /// </para>

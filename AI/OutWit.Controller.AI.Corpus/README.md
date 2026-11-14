@@ -1,8 +1,9 @@
 # OutWit.Controller.AI.Corpus
 
 Public-corpus processing at CPU scale on anonymous volunteer nodes: raw web
-data (Common Crawl first) becomes training-grade text — extraction, cleaning,
-language identification, quality filtering and deduplication signatures —
+data (Common Crawl first) becomes training-grade text — extraction (HTML, and
+PDF in a wasm sandbox), cleaning, language identification, quality filtering and
+deduplication signatures —
 with every stage deterministic by requirement, so the same shard through the
 same pipeline version gives byte-identical output on any node and a sampled
 re-execution can check it.
@@ -14,15 +15,18 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.1.14 — proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.2.0 — the PDF stage; 0.1.14 proven on the test fleet, not yet released to nuget.org.**
 The stage libraries are wired into nine activities and four bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
 server the controller processed real Common Crawl WET shards on Windows and
 Linux nodes with every sampled pair agreeing on the content hash (0
 mismatches), and the dedup merge found the near-duplicates across twenty
-shards' signatures in seconds. What remains before 1.0: the quality thresholds tuned on real
-crawl text, and the dedup merge measured at the scale of a crawl segment.
+shards' signatures in seconds. 0.2.0 adds the PDF stage (see *PDFs*): the PDF
+responses of WARC shards become page-range documents through an extractor that runs
+in the controller's own wasm sandbox. What remains before 1.0: the quality thresholds
+tuned on real crawl text, the dedup merge measured at the scale of a crawl segment,
+and the PDF stage proven on the fleet.
 
 ## Activities
 
@@ -30,7 +34,7 @@ crawl text, and the dedup merge measured at the scale of a crawl segment.
 |---|---|---|---|
 | `Corpus.Split` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusTaskCollection` | parses the manifest, checks every source against the allowlist and the byte cap, hashes the language model blob and pins it into the pipeline, holds the server storage estimate to the deployment's headroom, emits one task per shard. Any problem fails the job here — a bad manifest never reaches a node |
 | `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate (sources without a size are asked at the origin with HEAD, up to 64 of them, the rest extrapolated at the mean), the server storage estimate and the headroom it is held to (see *Server storage*), every message by manifest line |
-| `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline, the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception; several shards may run on one client at once |
+| `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline (a WARC shard's PDFs through the sandboxed extractor), the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception; several shards may run on one client at once |
 | `Corpus.Collect` | host | `(CorpusResultCollection, CorpusOptions) → Blob report` | the job report: every shard's verdict, blobs and content hash in task order, the aggregate counters over the fleet |
 | `Corpus.SamplingRate` | host | `(CorpusOptions) → Double` | `SamplingRate` clamped to 0..1, the share of the shards `Grid.Replicas` runs twice |
 | `Corpus.Dedup` | host | `(Blob report, CorpusOptions) → Blob dedup` | the near-duplicate merge over the signature blobs a report names: LSH over the MinHash signatures (16 bands of 8), a candidate pair joins a cluster at a Jaccard estimate of `DedupThreshold` (0.8 by default), the lowest document of a cluster is kept; per shard a keep mask, plus the clusters |
@@ -81,6 +85,7 @@ One JSON document (`docs/corpus-manifest.schema.json`):
     "clean_lines": true,
     "filter_quality": true,
     "sign": true,
+    "extract_pdf": true,
     "quality": { "min_words": 50, "max_duplicate_line_ratio": 0.3 }
   },
   "allowed_origins": ["data.commoncrawl.org"],
@@ -137,6 +142,10 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   `top_ngram_chars_2..4`, `duplicate_ngram_chars_5..10`, `stop_words`,
   `lorem_ipsum` — a document is counted under the first it fails, in that
   order.
+- `extract_pdf` (on unless the manifest turns it off) runs the PDF stage on
+  WARC shards (see *PDFs*); off, a PDF response drops as `not_html`, exactly as
+  before the stage existed. WET shards carry no PDFs, so the switch does nothing
+  there.
 - Unknown keys are errors, so a typo cannot silently turn a stage off.
 
 ## The products
@@ -144,8 +153,10 @@ One JSON document (`docs/corpus-manifest.schema.json`):
 - **Text blob** (`text.jsonl.zst`): zstd-compressed JSON lines, one per
   document that passed every stage, `{"url","lang","text"}` in that order;
   `lang` is the ISO 639-3 code the pipeline identified ("" when the stage is
-  off). The result's `ContentSha256` is the SHA-256 of the *uncompressed*
-  lines — the identity a re-execution on another node must reproduce.
+  off). A document of a PDF is a range of its pages, and its `url` says which:
+  `https://…/report.pdf#page=3-9` (see *PDFs*). The result's `ContentSha256` is
+  the SHA-256 of the *uncompressed* lines — the identity a re-execution on
+  another node must reproduce.
 - **Signatures blob** (`signatures.bin`): the magic `WITSIG1\n`, the hashes
   per signature (int32 LE, 128), then one MinHash signature per document in
   product order (128 × uint64 LE) — a fixed layout, document *i* at
@@ -157,9 +168,102 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   and skipping the lines whose bit is 0.
 - **Report** (`corpus-report.json`, `docs/corpus-report.schema.json`): per
   shard the verdict, blob ids, content hash, error and statistics (records in,
-  documents extracted and out, drops by rule, languages, bytes, times), and the
-  platform (`runtime_target`, e.g. `linux-x64`) and degree it ran at — a
-  platform, never a machine; the summary sums them over the fleet.
+  documents extracted and out, drops by rule, languages, bytes, times, and the
+  PDF stage's `pdf_*` counts where a shard met a PDF), and the platform
+  (`runtime_target`, e.g. `linux-x64`) and degree it ran at — a platform, never
+  a machine; the summary sums them over the fleet.
+
+## PDFs
+
+A Common Crawl WARC file carries PDFs among its responses: about 1 % of them, a
+fifth of the file's bytes, and long texts. With `extract_pdf` on (the default),
+the PDF stage turns them into documents on the node, from the bytes the shard
+already holds: no other request, no other origin.
+
+**Which responses.** A WARC response with status 200 whose `Content-Type` or
+Common Crawl's `WARC-Identified-Payload-Type` is `application/pdf` and whose body
+starts with `%PDF-`. Common Crawl cuts a response at 5 MiB and says so in
+`WARC-Truncated`; such a PDF is read all the same (the extractor is lenient) and
+counted in `pdf_truncated`. A PDF larger than 64 MiB is not run.
+
+**The extractor and its sandbox.** `pdftext`, a WASI command module built from
+pdf_oxide 0.3.78 for wasm32-wasip1 (`OutWit.Controller.AI.Corpus.Assets`,
+`toolchain/`: a pinned Rust, a pinned lock file, two builds compared byte for
+byte), SHA-256 `13abba93015f27dac626fb4342cecf12641cf417246fd0f6639b0b05d450b5f6`.
+It travels as the data asset `corpus-pdftext-wasm.zip` (release `pdftext-v1.0.0`),
+which extracts to `wasm/pdftext.wasm` beside the controller; bytes that do not
+hash to the pin are not run. It runs in wasmtime inside the client's process, in
+the controller's own copy of the AI wasm host (binding 48.0.2, natives 48.0.8 —
+the bytes Verify ships, release `wasmtime-v48.0.8`): it sees only `/in/doc.pdf`
+and an empty `/out`, has no network, no clock of its own and seeded randomness,
+and is compiled once per process. Per PDF:
+
+| Limit | Value | Why |
+|---|---|---|
+| fuel | 8·10¹⁰, counted from `_start` (given after instantiation) | ten times the 99th percentile of the 210 complete PDFs of one Common Crawl WARC file (7.6·10⁹, the binding's own counter; the largest 1.9·10¹⁰); about 10 to 20 s of a core, the worst a hostile PDF can cost. Given after instantiation, it is the guest's alone: Windows pays a unit per byte of data segments at instantiation, Linux does not |
+| linear memory | 1 GiB | a grow past it is refused; the module then ends with Rust's allocation-failure message |
+| input | 64 MiB | the WARC reader's record cap |
+| text | 16 MiB of UTF-8 | a PDF with more drops as `pdf_oversized`; the module's whole output folder is held to it |
+| wall clock | 10 minutes | a backstop only: fuel binds first on any machine; a run that reaches it fails the shard (which then runs elsewhere), never a document |
+
+Every limit, the module's pin and the shaping rules below are part of the stage
+set's fingerprint: a changed limit is a changed pipeline.
+
+**Verdicts.** Every way a PDF ends is a verdict, the same on every node, counted
+among the shard's drops when it gives no document: `pdf_encrypted` (a password
+is needed; a PDF encrypted with the empty password is read), `pdf_unreadable`,
+`pdf_no_pages`, `pdf_fuel` (out of fuel), `pdf_memory` (a refused allocation),
+`pdf_trap` (the module crashed: a stack too deep, an abort), `pdf_error` (any
+other failure, or output that breaks the module's contract), `pdf_oversized`,
+`pdf_empty` (text, but no line once shaped). A node that cannot run the sandbox
+at all — no module beside the controller, another wasmtime binding loaded first
+in the client's shared load context, a native library that does not load — drops
+each PDF as `pdf_sandbox_unavailable` and goes on with the HTML; the integrity
+document does not compare such an execution (see *Integrity*).
+
+**Shaping.** The module writes UTF-8 with LF line ends and U+000C between pages.
+pdf_oxide already joins the lines of a paragraph and removes a hyphen between two
+lower-case Latin parts, so the stage does neither again. It splits the pages,
+collapses whitespace as for a WET or HTML document, and removes running headers
+and footers: a line that, with every run of digits folded to one, appears on half
+the pages or more of a PDF of five pages or more ("Page 3 of 12", a journal's
+name, a bare page number) leaves every page. Five pages: "half or more" is then
+three pages or more — a line on two pages can be a heading and its entry in the
+contents. Left in, such a line is the repetition the quality filter drops a
+document for.
+
+**What a document is.** A PDF becomes one or more **page-range documents** of at
+most 5,000 words. Pages are taken in order and put together while the document
+still fits; the page that would not fit starts the next one. The document's
+`url` is the PDF's with the range, `#page=a-b` (1-based, inclusive; empty pages
+inside a range belong to it). A page longer than 5,000 words is a document of its
+own, cut after its last whole line that fits (pdf_oxide's lines are paragraphs;
+a single line that alone is too long is cut after its last word that fits) and
+the rest of the page dropped: a page is the smallest unit an id can name, and a
+page five times a dense page of prose is a table, an index or a text layer gone
+wrong. A word is what the quality filter counts in a mixed text: a run between
+spaces with a letter or a digit in it, and each letter of a script written
+without spaces. Each document then goes through language identification, the
+line stage, the quality filter and the signatures exactly like a page of HTML,
+and each counts as one document extracted.
+
+**Counters.** Per shard, beside the drops: `pdf_in` (PDFs taken),
+`pdf_truncated`, `pdf_extracted` (PDFs that gave a document), `pdf_pages` (their
+pages), `pdf_documents`, `pdf_pages_cut`, `pdf_running_lines` and `pdf_fuel` (the
+fuel the sandbox burned, the same on every node). They appear in the report only
+where a shard met a PDF.
+
+**What it costs.** On one core of a desktop CPU (Ryzen 9 5950X, every stage
+on), Common Crawl's WARC file 00000 of CC-MAIN-2026-43 (923.8 MB, 221 PDFs) takes
+187 s with the PDF stage and 104 s without it. Its PDFs, a fifth of the file's
+bytes, give 314 page-range documents from 195 PDFs (2,881 pages; 23 empty, 2 out
+of fuel, 1 without a page); the product holds 11,160 documents instead of 10,946,
+and 6 % more text. The sandbox's 6.0·10¹¹ fuel is most of the 83 s;
+the median PDF takes 3·10⁸ fuel (well under a second), the two that run out of
+fuel are truncated files that would give 3 and 19 characters. The process's
+peak working set is 841 MiB instead of 292 MiB: a PDF's linear memory comes on
+top of the shard's budget, which is why a process runs no more PDFs at once
+than fit their ceilings into half its memory.
 
 ## Integrity
 
@@ -168,15 +272,16 @@ as the rest, and `Corpus.Integrity` writes `corpus-integrity.json`
 (`docs/corpus-integrity.schema.json`): for every shard that ran twice its two
 executions compared on everything an honest node
 cannot vary — the verdict, the content hash of the product, the record and
-document counts, the drop and language histograms. Times and bytes are not
-compared. The platform picks the shards at random and keeps the two executions
+document counts, the drop and language histograms, the PDF stage's counts. Times,
+bytes and fuel are not compared. The platform picks the shards at random and keeps the two executions
 on different machines, so a node cannot tell whether its shard is being checked.
 No document says which machine ran what.
 With a single machine available there is nothing to compare and no shard runs
 twice. A pair whose sides ran different controller versions (a rollout in
 progress) is counted as `version_skew`, not compared. A pair with a side that
 did not finish for a reason of its machine or its link — `FetchFailed`,
-`PipelineUnavailable`, `Failed` — is counted as `incomplete`, not compared: a
+`PipelineUnavailable`, `Failed`, or a node that could not run the PDF sandbox and
+dropped PDFs as `pdf_sandbox_unavailable` — is counted as `incomplete`, not compared: a
 mismatch says that two finished executions disagree, never that one of them
 stopped. The mismatch rate is over the compared pairs. The report has one entry per shard: a completed execution,
 then the lowest content hash.
@@ -244,6 +349,12 @@ measured on real runs, per format and per setting of `clean_lines` and
 | WARC | off | on | 0.12 | 60 |
 | WARC | off | off | 0.18 | 100 |
 
+The WARC rows hold with the PDF stage on (re-measured for 0.2.0): the golden
+WARC head with its one PDF reaches at most 0.073, 0.086, 0.100 and 0.145 of text
+per byte and 39, 64, 44 and 79 documents per MiB in the four rows' settings, and
+Common Crawl's whole WARC file 00000 (923.8 MB, 221 PDFs) 0.020 to 0.039 and 13
+to 25 — a quarter of the head's, which stays the rows' basis.
+
 A document is 1,024 bytes of signatures (none when `sign` is off). The sampled
 shards count twice — the largest ones, so the estimate does not depend on which
 the platform picks — and the documents and the inputs (manifest, model) are
@@ -283,12 +394,19 @@ admits no other to the work):
   compressor with their versions; the language-model format (`WITLID1`) and the
   hash of the reference model the tests and fleet proofs use; the public
   origins and the hosts the server's operator lists; the shard cap, the
-  downloads per node and the memory per shard.
+  downloads per node and the memory per shard; the PDF extractor's pin and
+  whether the answering process can run the PDF stage (`PdfStageProblem`, ""
+  when it can). The fingerprint covers the PDF stage's contract too: the
+  module's pin and every limit and shaping rule, so a changed limit is a changed
+  stage set.
 - `capabilities` (`corpus-capabilities.json`,
   `docs/corpus-capabilities.schema.json`): the same plus what an application
   shows before a run — the formats, the defaults and the ceilings, every
   pipeline switch and quality threshold a manifest may set with its default
-  (for scripts with and without word spacing), the thresholds it cannot set,
+  (for scripts with and without word spacing), the thresholds it cannot set, the
+  PDF stage (`pdf`: the module's hash, the engine, the fuel, memory, input, text
+  and document limits, the running-line rule, the drop rules, whether the host
+  can run it),
   the signatures and dedup parameters, the products with their schemas, the
   storage ratios with the deployment's headroom and retention window, and the
   pool as totals: nodes, measured nodes, MB of WET per second (and shards at
@@ -324,8 +442,11 @@ admits no other to the work):
   product hashed and compressed as it is written, on a thread below normal
   priority (a worker is often a desktop). At most one shard per core
   processes at once, fewer when memory is short (256 MB budgeted per shard);
-  the others of a batch wait their turn, already fetched. The task's temp
-  scope is deleted when the task ends, whatever the verdict.
+  the others of a batch wait their turn, already fetched. A PDF runs inline, in
+  the task's own temp scope (`pdf-in/`, `pdf-out/`, `pdf-io/`: nothing outside
+  the client's folders), and at most as many PDFs run at once in the process as
+  fit their 1 GiB memory ceilings into half its memory. The task's temp scope is
+  deleted when the task ends, whatever the verdict.
 - **Progress.** The node reports its share, not one shard, about twice a
   second through the host's activity progress sink: first the delivery
   (`receiving shards: 3/12, 512.3/1888.0 MB; 1/12 processed`), then the work
@@ -356,6 +477,7 @@ admits no other to the work):
 | Piece | Where | What it does |
 |---|---|---|
 | `WarcReader` / `WarcRecord` | `Warc/` | streams the records of a gzip (one member per record, as Common Crawl writes them) or plain WARC/WET file, one record in memory at a time; oversized records skipped and counted; a truncated tail ends the file with the complete records; malformed input is an error at an offset |
+| `PdfSandbox` / `PdfSandboxHost` / `PdfTextShaper` / `PdfTextChunker` / `PdfStageLimits` | `Pdf/` | the PDF extractor (pdftext, pdf_oxide for wasm32-wasip1) run in the controller's own copy of the AI wasm host (`AI/Shared/Wasm`, compiled in as source), the verdicts, the shaping of its text into pages without running lines, the page-range documents, the stage's contract; `ShardPdfStage` (`Shards/`) puts it in the pipeline |
 | `HttpResponsePayload` / `HtmlTextExtractor` | `Text/` | a WARC response's HTTP headers and body, decoded by header charset → meta charset → UTF-8; HTML to text on AngleSharp with a scoped rule set (scripts, styles, navigation, forms and hidden content dropped; blocks become lines; title first); a linear pre-scan refuses pages nested deeper than 512 or past 60k tags. Agrees with Common Crawl's own WET text at a median Jaccard of 0.85 on the golden shard |
 | `LanguageIdentifier` / `LanguageModel` / `LanguageModelTrainer` | `Language/` | character n-gram profiles (Cavnar–Trenkle, integer rank distance, ordinal ties); the model is trained by `corpus-assets` from WET files' own language labels and pinned by hash; the committed 16-language model agrees with the crawl's labels at 98.8 % on the shard |
 | `LineCleaner` / `QualityFilter` / `QualityRules` / `QualityStopWords` | `Quality/` | the line stage (C4's line rules, script-aware) and the Gopher quality and repetition rules with DataTrove's definitions of every measure, each threshold with its source in the code (Gopher, C4, FineWeb-2), every failed rule named with its measurement; scripts without word spacing are judged by their letters |
@@ -378,9 +500,12 @@ corpus-assets evaluate-language-model <model.bin> <wet.gz>
 
 ## Determinism
 
-Every stage is managed code with no platform-dependent path: the same shard
-through the same pipeline and the same controller version gives the same bytes
-on Windows, Linux and macOS, on one thread or many. A controller release that
+Every stage is managed code with no platform-dependent path, or, for PDFs, a
+pinned WebAssembly module in a sandbox that counts instructions instead of time
+(fuel given after instantiation, NaN canonicalisation, a pinned clock and seeded
+randomness): the same shard through the same pipeline and the same controller
+version gives the same bytes on Windows, Linux and macOS, on one thread or many,
+the PDF stage's verdicts and fuel included. A controller release that
 changes a stage changes the product of an unchanged pipeline (0.1.5 keeps WET
 line structure and adds the line stage), which is why the integrity document
 counts a pair whose sides ran different controller versions as `version_skew`
@@ -395,11 +520,22 @@ One streaming pass costs about 0.75 s of one core per megabyte of Common
 Crawl WET on a desktop CPU (Ryzen 9 5950X, every stage on); the stages count
 their n-grams over word ids and packed 64-bit keys, so nothing allocates per
 n-gram or per shingle and many shards on one machine do not stall each other
-in the garbage collector. A node runs one shard per core at most.
+in the garbage collector. A node runs one shard per core at most. A WARC file
+costs less per megabyte (0.11 s without its PDFs, 0.20 s with them: most of its
+bytes are not text); its PDFs nearly double it (see *PDFs*), and the work
+estimate, which counts a WARC megabyte as a WET one, still errs high.
 
 ## Tests
 
-`OutWit.Controller.AI.Corpus.Tests`: every stage on the golden shards (the
+`OutWit.Controller.AI.Corpus.Tests`: the PDF stage on PDFs of our own making —
+the extractor's contract set, the 41-file hostile set (bombs, nesting, cycles,
+broken cross references, fonts) every file of which ends bounded in its verdict,
+and a WARC shard of HTML and PDFs (a book with running headers that splits, a
+truncated one, encrypted ones, a page too dense for one document) — with their
+products pinned (text hash and fuel per file, the shard's content hash and
+counters), the module needed (in the test project's gitignored `@Data/wasm/`,
+where the asset extracts; the tests are ignored without it, and fail on the
+build server, which fetches it); every stage on the golden shards (the
 first complete members of a real WET and a real WARC file, 1.5 MB each, and
 the trained language model, committed under `Fixtures/`) and on hostile input
 (truncation, oversized records, garbage, hostile nesting, repetition); the
