@@ -118,11 +118,60 @@ jobs:
           dotnet build Grid/OutWit.Controller.Grid.Tests/OutWit.Controller.Grid.Tests.csproj -c Debug
           dotnet test Grid/OutWit.Controller.Grid.Tests/OutWit.Controller.Grid.Tests.csproj -c Debug --no-build --logger "console;verbosity=normal"
 
+      # The PDF stage's extractor module: the data asset Corpus declares (corpus-pdftext-wasm,
+      # its URI and SHA-256 read from the controller's project file), fetched from its release,
+      # checked against the pin and extracted into the tests' @Data the way it extracts beside the
+      # controller. The PDF tests (the contract and hostile sets, the WARC fixture's product) run
+      # on it and pin their products, so a difference between platforms fails here; on the build
+      # server a missing module is a failure, not a skip.
+      - name: Cache the PDF extractor module
+        uses: actions/cache@v4
+        with:
+          path: AI/OutWit.Controller.AI.Corpus.Tests/@Data/.downloads
+          key: corpus-pdftext-${{ hashFiles('AI/OutWit.Controller.AI.Corpus/OutWit.Controller.AI.Corpus.csproj') }}
+
+      - name: The PDF extractor module under the tests
+        shell: bash
+        run: |
+          project=AI/OutWit.Controller.AI.Corpus/OutWit.Controller.AI.Corpus.csproj
+          data=AI/OutWit.Controller.AI.Corpus.Tests/@Data
+          asset=$(sed -n '/Include="corpus-pdftext-wasm"/,/<\/ControllerDataAsset>/p' "$project")
+          uri=$(printf '%s\n' "$asset" | sed -n 's:.*<Uri>\(.*\)</Uri>.*:\1:p')
+          sha=$(printf '%s\n' "$asset" | sed -n 's:.*<Sha256>\(.*\)</Sha256>.*:\1:p')
+          case "$uri" in gh-release://*) ;; *) echo "::error::unexpected asset URI '$uri'"; exit 1 ;; esac
+          rest=${uri#gh-release://}
+          repo=${rest%%/*}/$(printf '%s' "${rest#*/}" | cut -d/ -f1)
+          tag=$(printf '%s' "$rest" | cut -d/ -f3)
+          file=$(printf '%s' "$rest" | cut -d/ -f4)
+          url="https://github.com/$repo/releases/download/$tag/$file"
+          zip="$data/.downloads/$file"
+          mkdir -p "$data/.downloads"
+          if [ ! -f "$zip" ]; then
+            curl -fsSL --retry 5 --retry-delay 10 -o "$zip.part" "$url" || { echo "::error::could not fetch $url"; exit 1; }
+            mv "$zip.part" "$zip"
+          fi
+          if command -v sha256sum > /dev/null; then actual=$(sha256sum "$zip" | cut -d' ' -f1); else actual=$(shasum -a 256 "$zip" | cut -d' ' -f1); fi
+          [ "$actual" = "$sha" ] || { echo "::error::$file hashes to $actual, not the pinned $sha"; rm -f "$zip"; exit 1; }
+          if command -v python3 > /dev/null; then py=python3; else py=python; fi
+          "$py" -I -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$zip" "$data"
+          ls -l "$data/wasm"
+          echo "$file $actual from $url"
+
       # The Corpus controller on the golden Common Crawl shards (committed fixtures): the stage
-      # libraries, the node-side task against a loopback origin, and the bundled scripts through
-      # the engine rig with in-process nodes.
+      # libraries, the PDF stage in its sandbox on the pinned engine library (the one the
+      # controller ships, as under Verify), the node-side task against a loopback origin, and the
+      # bundled scripts through the engine rig with in-process nodes.
       - name: Corpus
         shell: bash
         run: |
           dotnet build AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj -c Release
+          case "$RUNNER_OS" in
+            Windows) rid=win-x64;   lib=wasmtime.dll ;;
+            Linux)   rid=linux-x64; lib=libwasmtime.so ;;
+            macOS)   rid=osx-arm64; lib=libwasmtime.dylib ;;
+          esac
+          bin=AI/OutWit.Controller.AI.Corpus.Tests/bin/Release/net10.0/runtimes/$rid/native
+          test -f "$bin/$lib" || { echo "::error::no $rid/$lib in the Corpus test output"; exit 1; }
+          cp "AI/OutWit.Controller.AI.Verify.Tests/@Data/natives/$rid/$lib" "$bin/$lib"
+          if [ "$RUNNER_OS" = "macOS" ]; then codesign --verify --verbose "$bin/$lib" || codesign --force -s - "$bin/$lib"; fi
           dotnet test AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj -c Release --no-build --filter "Category!=Load" --logger "console;verbosity=normal"
