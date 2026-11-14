@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
 namespace OutWit.Controller.AI.Wasm;
@@ -38,6 +39,7 @@ internal static class WasmHostNatives
     };
 
     private const string LOADED = "loaded in this process";
+    private const string DYLD_LIBRARY = "/usr/lib/libSystem.B.dylib";
     private const string CARRIED = "in this controller's folder";
 
     private static readonly ConcurrentDictionary<string, string> HASHES = new(StringComparer.Ordinal);
@@ -158,19 +160,48 @@ internal static class WasmHostNatives
         var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         try
         {
-            using var process = Process.GetCurrentProcess();
-            return process.Modules
-                .Cast<ProcessModule>()
-                .Select(module => module.FileName)
+            return ImagePaths()
                 .Where(path => !string.IsNullOrEmpty(path) && string.Equals(Path.GetFileName(path), WasmHostNativeLibrary.FileName, comparison) && File.Exists(path))
                 .Distinct(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
-        catch (Exception exception) when (exception is PlatformNotSupportedException or NotSupportedException or InvalidOperationException or Win32Exception)
+        catch (Exception exception) when (exception is PlatformNotSupportedException or NotSupportedException or InvalidOperationException
+                                              or Win32Exception or DllNotFoundException or EntryPointNotFoundException)
         {
             return [];
         }
     }
+
+    /// <summary>
+    /// The paths of the images loaded into this process: the module list on Windows and Linux;
+    /// dyld's image list on macOS, where the process's module list leaves out a library the
+    /// runtime loaded with <c>dlopen</c> (seen on the build server).
+    /// </summary>
+    private static IEnumerable<string> ImagePaths()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            var count = DyldImageCount();
+            var paths = new List<string>((int)count);
+            for (var index = 0u; index < count; index++)
+            {
+                var name = Marshal.PtrToStringUTF8(DyldImageName(index));
+                if (name != null)
+                    paths.Add(name);
+            }
+
+            return paths;
+        }
+
+        using var process = Process.GetCurrentProcess();
+        return process.Modules.Cast<ProcessModule>().Select(module => module.FileName).ToList();
+    }
+
+    [DllImport(DYLD_LIBRARY, EntryPoint = "_dyld_image_count")]
+    private static extern uint DyldImageCount();
+
+    [DllImport(DYLD_LIBRARY, EntryPoint = "_dyld_get_image_name")]
+    private static extern IntPtr DyldImageName(uint index);
 
     #endregion
 }
