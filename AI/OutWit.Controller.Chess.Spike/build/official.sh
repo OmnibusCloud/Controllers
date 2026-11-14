@@ -17,8 +17,8 @@ want=${pin##*:}
 mkdir -p "$dir"
 
 curl -fsSL --retry 3 --max-time 900 -o "$dir/$asset" "$SF_RELEASE_URL/$asset"
-if command -v sha256sum >/dev/null 2>&1; then got=$(sha256sum "$dir/$asset" | cut -d' ' -f1)
-else got=$(shasum -a 256 "$dir/$asset" | cut -d' ' -f1); fi
+if command -v sha256sum >/dev/null 2>&1; then got=$(sha256sum < "$dir/$asset" | cut -d' ' -f1)
+else got=$(shasum -a 256 < "$dir/$asset" | cut -d' ' -f1); fi
 if [ "$got" != "$want" ]; then
   echo "::error::$asset has SHA-256 $got, pinned $want" >&2
   exit 1
