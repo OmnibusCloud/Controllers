@@ -246,7 +246,9 @@ never Latin, never across scripts). On Common Crawl's WARC file 00000 it joins 1
 breaks: 66 words made whole, 20 single-letter fragments the extractor had already
 split, 4 pairs from interleaved columns, and 10 compounds broken at their own
 hyphen (предметно-пространственной) joined as one word — the text cannot tell
-a compound's hyphen from a hyphenation.
+a compound's hyphen from a hyphenation. Known limit: such compounds come out as
+one word, the trade-off pdf_oxide makes for Latin, and no language-specific
+exception is made (language knowledge stays out of the code).
 
 **What a document is.** A PDF becomes one or more **page-range documents** of at
 most 5,000 words. Pages are taken in order and put together while the document
