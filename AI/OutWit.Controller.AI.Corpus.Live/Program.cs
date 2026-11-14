@@ -38,6 +38,9 @@ public static class Program
 
     private const double BYTES_PER_MIB = 1024.0 * 1024.0;
 
+    /// <summary>The reference language pack next to the tool: what --model defaults to and the bundled manifests pin.</summary>
+    private const string DEFAULT_MODEL = "models/language-pack-cc-2026-43-16.bin";
+
     private static readonly TimeSpan POLL_INTERVAL = TimeSpan.FromSeconds(5);
 
     #endregion
@@ -64,7 +67,9 @@ public static class Program
             return 2;
         }
 
-        var modelPath = OptionValue(args, "--model", null);
+        var modelPath = OptionValue(args, "--model", null) ?? DefaultModel();
+        if (modelPath == "none")
+            modelPath = null;
         if (modelPath != null && !File.Exists(modelPath))
         {
             Console.Error.WriteLine($"model not found: {modelPath}");
@@ -329,6 +334,12 @@ public static class Program
         return index >= 0 && index + 1 < args.Length ? args[index + 1] : fallback;
     }
 
+    private static string? DefaultModel()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, DEFAULT_MODEL);
+        return File.Exists(path) ? path : null;
+    }
+
     private static int OptionValue(string[] args, string name, int fallback)
     {
         var index = Array.IndexOf(args, name);
@@ -346,10 +357,11 @@ public static class Program
 
     private static int Usage()
     {
-        Console.WriteLine("corpus-live preflight <manifest.json> [--model <model.bin>]");
-        Console.WriteLine("corpus-live process   <manifest.json> [--model <model.bin>] [--sampling R] [--max-shard-mb N] [--runs N] [--save <dir>]");
+        Console.WriteLine("corpus-live preflight <manifest.json> [--model <model.bin>|none]");
+        Console.WriteLine("corpus-live process   <manifest.json> [--model <model.bin>|none] [--sampling R] [--max-shard-mb N] [--runs N] [--save <dir>]");
         Console.WriteLine("corpus-live dedup     <report.json> [--threshold J] [--save <dir>]");
         Console.WriteLine("corpus-live diagnostics [--save <dir>]");
+        Console.WriteLine($"--model defaults to the reference language pack ({DEFAULT_MODEL}); 'none' sends no model");
         Console.WriteLine();
         Console.WriteLine($"env: {KEY_ENV} (wit_sk_ key, required), {SERVER_ENV} (default {DEFAULT_SERVER}), {IDENTITY_ENV} (default {DEFAULT_IDENTITY})");
         return 2;

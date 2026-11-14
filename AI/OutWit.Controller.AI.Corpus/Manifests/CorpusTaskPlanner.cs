@@ -27,8 +27,9 @@ public static class CorpusTaskPlanner
     /// <param name="languageModelBlobId">The blob carrying the language model, or Guid.Empty.</param>
     /// <param name="languageModelSha256">Lower-case hex SHA-256 of that blob's bytes, or "".</param>
     /// <param name="policy">What the planning machine fetches from (null = this machine's policy).</param>
+    /// <param name="languageModel">What the host read in the language model blob (null = not read): a model this controller cannot use stops the plan.</param>
     /// <returns>The plan; tasks are empty when there are errors.</returns>
-    public static CorpusPlan Plan(CorpusManifest manifest, CorpusOptionsData? options, Guid languageModelBlobId, string languageModelSha256, ShardOriginPolicy? policy = null)
+    public static CorpusPlan Plan(CorpusManifest manifest, CorpusOptionsData? options, Guid languageModelBlobId, string languageModelSha256, ShardOriginPolicy? policy = null, CorpusLanguageModelFacts? languageModel = null)
     {
         policy ??= ShardOriginPolicy.Machine;
 
@@ -55,6 +56,8 @@ public static class CorpusTaskPlanner
             {
                 pipeline.LanguageModelBlobId = languageModelBlobId;
                 pipeline.LanguageModelSha256 = languageModelSha256;
+                if (languageModel != null)
+                    CheckLanguageModel(languageModel, pipeline, errors, notes);
             }
         }
         else
@@ -115,6 +118,28 @@ public static class CorpusTaskPlanner
                       $"Shards from there run only on machines whose owner lists the host in {ShardOriginPolicy.EXTRA_ORIGINS_VARIABLE}; every other machine answers OriginRefused.");
 
         return new CorpusPlan(errors.Count == 0 ? tasks : [], errors, notes, refused, outside, oversized, traffic);
+    }
+
+    /// <summary>The language model as the host read it: refused by name when this controller cannot use it, described when it can.</summary>
+    /// <param name="model">What the host read.</param>
+    /// <param name="pipeline">The pipeline (its target languages).</param>
+    /// <param name="errors">Receives the refusal.</param>
+    /// <param name="notes">Receives the description and target languages the model does not have.</param>
+    private static void CheckLanguageModel(CorpusLanguageModelFacts model, CorpusPipelineData pipeline, List<string> errors, List<string> notes)
+    {
+        if (model.Problem != null)
+        {
+            errors.Add($"pipeline: this controller cannot use the language model: {model.Problem} (it reads {string.Join(" and ", Language.LanguageModelFormat.READ)}).");
+            return;
+        }
+
+        notes.Add(model.Format == Language.LanguageModelFormat.WITLID1
+            ? $"language model: {model.Format}, {model.Languages.Count} language(s); every document is labelled with its nearest one (no unsupported-language test)."
+            : $"language model: {model.Format} pack '{model.Name}', {model.Languages.Count} supported language(s) ({string.Join(" ", model.Languages)}), {model.KnownLanguages} more it knows and drops as language_unsupported.");
+
+        var missing = pipeline.TargetLanguages.Where(code => !model.Languages.Contains(code, StringComparer.Ordinal)).ToList();
+        if (missing.Count > 0)
+            notes.Add($"target_languages: {string.Join(", ", missing)} not among the model's languages; no document is labelled so.");
     }
 
     /// <summary>The byte cap in force: the options' cap, bounded by the controller's.</summary>

@@ -31,6 +31,7 @@ public static class CorpusReportWriter
         var ordered = CorpusExecutions.Canonical(results);
         var drops = new SortedDictionary<string, long>(StringComparer.Ordinal);
         var languages = new SortedDictionary<string, long>(StringComparer.Ordinal);
+        var unsupported = new SortedDictionary<string, long>(StringComparer.Ordinal);
         var verdicts = new SortedDictionary<string, int>(StringComparer.Ordinal);
 
         long recordsIn = 0, extracted = 0, documentsOut = 0, fetched = 0, produced = 0;
@@ -50,6 +51,8 @@ public static class CorpusReportWriter
                 drops[drop.Name] = drops.GetValueOrDefault(drop.Name) + drop.Count;
             foreach (var language in result.Stats.Languages)
                 languages[language.Name] = languages.GetValueOrDefault(language.Name) + language.Count;
+            foreach (var language in result.Stats.UnsupportedLanguages)
+                unsupported[language.Name] = unsupported.GetValueOrDefault(language.Name) + language.Count;
             if (result.Stats.Pdf is { } shardPdf)
                 pdf = Add(pdf ?? new CorpusPdfStatsData(), shardPdf);
         }
@@ -74,6 +77,7 @@ public static class CorpusReportWriter
             writer.WriteNumber("bytes_produced", produced);
             WriteCounts(writer, "drops", drops);
             WriteCounts(writer, "languages", languages);
+            WriteCounts(writer, "unsupported_languages", unsupported);
             WritePdf(writer, pdf);
             writer.WriteEndObject();
 
@@ -115,6 +119,7 @@ public static class CorpusReportWriter
             writer.WriteNumber("wait_ms", stats.WaitMs);
             WriteCounts(writer, "drops", stats.Drops.ToDictionary(count => count.Name, count => (long)count.Count, StringComparer.Ordinal));
             WriteCounts(writer, "languages", stats.Languages.ToDictionary(count => count.Name, count => (long)count.Count, StringComparer.Ordinal));
+            WriteCounts(writer, "unsupported_languages", stats.UnsupportedLanguages.ToDictionary(count => count.Name, count => (long)count.Count, StringComparer.Ordinal));
             WritePdf(writer, stats.Pdf);
             writer.WriteEndObject();
         }

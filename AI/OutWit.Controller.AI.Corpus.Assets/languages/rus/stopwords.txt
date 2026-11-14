@@ -1,0 +1,26 @@
+# Russian stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/rus_Cyrl.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 0f4b40e216f7ff0331744b5352aa77d6995250e4ad50cd82153955044b04e0f1.
+# In the order of the source; Corpus 0.1.14 shipped this list.
+в
+и
+на
+с
+года
+по
+году
+из
+был
+к
+не
+от
+что
+за
+для
+его
+как
+а
+он
+также
+до
+после

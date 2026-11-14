@@ -13,13 +13,14 @@
       "additionalProperties": false,
       "properties": {
         "version": { "type": "string", "minLength": 1, "description": "The lab's name for the contract; travels into every product." },
-        "language_model_sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$", "description": "Pin of the language model blob's bytes; the job does not start when the blob differs." },
-        "target_languages": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "ISO 639-3 codes to keep; empty keeps every identified language." },
+        "language_model_sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$", "description": "Pin of the language model blob's bytes; the job does not start when the blob differs. A language pack (WITLID2) carries its languages' rule data and acceptance limits, so the pin covers them: a document in a language the pack does not support drops as language_unsupported, one with too little text as language_unknown. A WITLID1 model gives the products it gave under Corpus 0.1.x." },
+        "target_languages": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "ISO 639-3 codes to keep (languages the model supports); empty keeps every identified language. Another supported language drops as language_not_target." },
         "identify_language": { "type": "boolean", "default": true },
         "clean_lines": { "type": "boolean", "default": true, "description": "Whether the lines that do not read like prose (menus, prices, footers) leave each document before it is judged." },
         "filter_quality": { "type": "boolean", "default": true },
         "sign": { "type": "boolean", "default": true, "description": "Whether a MinHash signature is produced per document." },
         "extract_pdf": { "type": "boolean", "default": true, "description": "Whether the PDF stage runs on WARC shards: a response that is a PDF (Content-Type or WARC-Identified-Payload-Type application/pdf, the body starting with %PDF-) becomes text in the controller's wasm sandbox and then page-range documents of at most 5,000 words (url#page=a-b) that go through the stages after it like a page of HTML. Off, a PDF drops as not_html. WET shards carry no PDFs." },
+        "filter_curly_bracket": { "type": "boolean", "default": false, "description": "C4's curly-bracket rule (Raffel et al. 2020; DataTrove's filter_curly_bracket): a document goes, as curly_bracket, when a line C4 would test holds '{' - a line without a word over 1,000 characters, with the shape of prose, that does not mention JavaScript. Catches code and template leftovers; off by default." },
         "quality": {
           "type": "object",
           "additionalProperties": false,

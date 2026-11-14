@@ -20,7 +20,8 @@ namespace OutWit.Controller.AI.Corpus.Tests.Shards;
 /// one becomes page-range documents named <c>url#page=a-b</c>, running headers and footers are gone,
 /// Cyrillic and Greek words broken at a line end are whole again, the documents go through the
 /// language, line and quality stages like a page, and the product and its counters are pinned — the
-/// PDF stage's cross-platform proof.
+/// PDF stage's cross-platform proof — under the 0.1.x model (the stage's own pin) and under the
+/// reference language pack (where the two meet).
 /// </summary>
 [TestFixture]
 public sealed class ShardPdfStageTests
@@ -28,12 +29,23 @@ public sealed class ShardPdfStageTests
     #region Constants
 
     private const string MODEL_FIXTURE = "language-model-cc-2026-43-16.bin";
+    private const string PACK_FIXTURE = "language-pack-cc-2026-43-16.bin";
 
     /// <summary>The product of the fixture through the default pipeline with the stage on (produced on win-x64, re-checked on every platform the workflow runs).</summary>
     private const string GOLDEN_SHA256 = "e907a225c20a98aad47b2d321deb68fcbb62df434b7f69097cd76137470bb123";
 
     /// <summary>The counters of that run.</summary>
-    private const string GOLDEN_STATS = "records=16 extracted=10 out=9 drops=[http_status:1,not_html:2,pdf_empty:1,pdf_encrypted:1,pdf_no_pages:1,pdf_unreadable:1,stop_words:1] languages=[eng:8,rus:1] pdf=[in:12,truncated:1,extracted:8,pages:32,documents:9,cut:1,running:38,fuel:705671179]";
+    private const string GOLDEN_STATS = "records=16 extracted=10 out=9 drops=[http_status:1,not_html:2,pdf_empty:1,pdf_encrypted:1,pdf_no_pages:1,pdf_unreadable:1,stop_words:1] languages=[eng:8,rus:1] unsupported=[] pdf=[in:12,truncated:1,extracted:8,pages:32,documents:9,cut:1,running:38,fuel:705671179]";
+
+    /// <summary>
+    /// The product of the fixture through the same pipeline under the reference language pack: the
+    /// same documents (the Greek PDF, the only one the pack judges otherwise, leaves either way), so
+    /// the same hash; the counters name it unsupported where the 0.1.x model dropped it by stop words.
+    /// </summary>
+    private const string PACK_GOLDEN_SHA256 = GOLDEN_SHA256;
+
+    /// <summary>The counters of that run.</summary>
+    private const string PACK_GOLDEN_STATS = "records=16 extracted=10 out=9 drops=[http_status:1,language_unsupported:1,not_html:2,pdf_empty:1,pdf_encrypted:1,pdf_no_pages:1,pdf_unreadable:1] languages=[eng:8,rus:1] unsupported=[ell:1] pdf=[in:12,truncated:1,extracted:8,pages:32,documents:9,cut:1,running:38,fuel:705671179]";
 
     #endregion
 
@@ -246,6 +258,27 @@ public sealed class ShardPdfStageTests
         });
     }
 
+    [Test]
+    public void ThePdfStagesProductUnderTheLanguagePackIsPinnedTest()
+    {
+        // Where the PDF stage meets the language pack: the same PDFs make the same documents, and
+        // the ones the pack does not support (the Greek PDF) leave as language_unsupported, named.
+        var pack = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", PACK_FIXTURE));
+        var run = Run(Pipeline(extractPdf: true), RequireStage(), model: pack);
+        var stats = run.Product.Stats.Build(0, 0, 0, 0);
+        var described = Describe(stats);
+        TestContext.Progress.WriteLine($"PDF fixture product under the pack {run.Product.ContentSha256}: {described}");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(pack.Format, Is.EqualTo(LanguageModelFormat.WITLID2));
+            Assert.That(run.Product.ContentSha256, Is.EqualTo(PACK_GOLDEN_SHA256));
+            Assert.That(described, Is.EqualTo(PACK_GOLDEN_STATS));
+            Assert.That(stats.UnsupportedLanguages.Select(language => language.Name), Does.Contain("ell"), "the Greek PDF, named");
+            Assert.That(Documents(run.Text).Select(document => document.Url), Has.None.StartsWith(PdfWarcFixture.HOST + "chroniko.pdf#"));
+        });
+    }
+
     #endregion
 
     #region Tools
@@ -258,9 +291,9 @@ public sealed class ShardPdfStageTests
         return stage;
     }
 
-    private (ShardProduct Product, byte[] Text, byte[] Signatures) Run(CorpusPipelineData pipeline, ShardPdfStage? stage = null, byte[]? shardBytes = null)
+    private (ShardProduct Product, byte[] Text, byte[] Signatures) Run(CorpusPipelineData pipeline, ShardPdfStage? stage = null, byte[]? shardBytes = null, LanguageModel? model = null)
     {
-        var processor = new ShardProcessor(pipeline, pipeline.IdentifyLanguage ? m_model : null, stage);
+        var processor = new ShardProcessor(pipeline, pipeline.IdentifyLanguage ? model ?? m_model : null, stage);
         using var shard = new MemoryStream(shardBytes ?? m_shard, writable: false);
         using var text = new MemoryStream();
         using var signatures = new MemoryStream();
@@ -297,7 +330,7 @@ public sealed class ShardPdfStageTests
             .ToList();
     }
 
-    /// <summary>The counters as one line: records, documents, drops, languages, the PDF stage's counts.</summary>
+    /// <summary>The counters as one line: records, documents, drops, languages, the unsupported ones, the PDF stage's counts.</summary>
     private static string Describe(CorpusShardStatsData stats)
     {
         var pdf = stats.Pdf;
@@ -305,6 +338,7 @@ public sealed class ShardPdfStageTests
             $"records={stats.RecordsIn} extracted={stats.DocumentsExtracted} out={stats.DocumentsOut} " +
             $"drops=[{string.Join(',', stats.Drops.Select(drop => $"{drop.Name}:{drop.Count}"))}] " +
             $"languages=[{string.Join(',', stats.Languages.Select(language => $"{language.Name}:{language.Count}"))}] " +
+            $"unsupported=[{string.Join(',', stats.UnsupportedLanguages.Select(language => $"{language.Name}:{language.Count}"))}] " +
             $"pdf=[in:{pdf?.In},truncated:{pdf?.Truncated},extracted:{pdf?.Extracted},pages:{pdf?.Pages},documents:{pdf?.Documents},cut:{pdf?.PagesCut},running:{pdf?.RunningLines},fuel:{pdf?.Fuel}]");
     }
 

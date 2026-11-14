@@ -1,0 +1,26 @@
+# Chinese stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/cmn_Hani.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 cf7c589709fbfc6b7f61c31603ed2977dfabe923e423623884c6cf099706c15e.
+# In the order of the source; Corpus 0.1.14 shipped this list. The crawl labels Chinese 'zho'; FineWeb-2 calls it cmn_Hani.
+的
+年
+在
+月
+是
+和
+日
+了
+於
+·
+為
+有
+被
+人
+中
+为
+他
+與
+後
+也
+而
+由

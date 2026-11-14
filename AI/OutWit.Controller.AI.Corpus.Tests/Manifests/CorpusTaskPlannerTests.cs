@@ -109,6 +109,51 @@ public sealed class CorpusTaskPlannerTests
     }
 
     [Test]
+    public void AModelThisControllerCannotUseStopsThePlanTest()
+    {
+        var pack = File.ReadAllBytes(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-pack-cc-2026-43-16.bin"));
+        var manifest = Manifest(sources: ["https://h/a.warc.gz"]);
+
+        var garbage = CorpusTaskPlanner.Plan(manifest, null, Guid.NewGuid(), MODEL_SHA, languageModel: CorpusLanguageModelFacts.Read(System.Text.Encoding.ASCII.GetBytes("not a model at all")));
+        var truncated = CorpusTaskPlanner.Plan(manifest, null, Guid.NewGuid(), MODEL_SHA, languageModel: CorpusLanguageModelFacts.Read(pack[..(pack.Length / 2)]));
+        var stageOff = Manifest(sources: ["https://h/a.warc.gz"]);
+        stageOff.Pipeline.IdentifyLanguage = false;
+        var off = CorpusTaskPlanner.Plan(stageOff, null, Guid.NewGuid(), MODEL_SHA, languageModel: CorpusLanguageModelFacts.Read([1, 2, 3]));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(garbage.Tasks, Is.Empty);
+            Assert.That(garbage.Errors, Has.Some.Contains("this controller cannot use the language model").And.Some.Contains("WITLID1 and WITLID2"));
+            Assert.That(truncated.Tasks, Is.Empty);
+            Assert.That(truncated.Errors, Has.Some.Contains("truncated"));
+            Assert.That(off.Errors, Is.Empty, "a model the pipeline does not use is not judged");
+        });
+    }
+
+    [Test]
+    public void AUsableModelIsDescribedAndTargetsItLacksAreNamedTest()
+    {
+        var pack = CorpusLanguageModelFacts.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-pack-cc-2026-43-16.bin"));
+        var witlid1 = CorpusLanguageModelFacts.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-model-cc-2026-43-16.bin"));
+        var manifest = Manifest(sources: ["https://h/a.warc.gz"]);
+        manifest.Pipeline.TargetLanguages = ["eng", "swe"];
+
+        var withPack = CorpusTaskPlanner.Plan(manifest, null, Guid.NewGuid(), MODEL_SHA, languageModel: pack);
+        var withWitlid1 = CorpusTaskPlanner.Plan(manifest, null, Guid.NewGuid(), MODEL_SHA, languageModel: witlid1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(pack.Problem, Is.Null);
+            Assert.That(pack.KnownLanguages, Is.EqualTo(23));
+            Assert.That(withPack.Errors, Is.Empty);
+            Assert.That(withPack.Tasks, Has.Count.EqualTo(1));
+            Assert.That(withPack.Notes, Has.Some.Contains("WITLID2 pack 'cc-2026-43-16', 16 supported language(s)"));
+            Assert.That(withPack.Notes, Has.Some.Contains("target_languages: swe not among the model's languages"));
+            Assert.That(withWitlid1.Notes, Has.Some.Contains("WITLID1, 16 language(s)"));
+        });
+    }
+
+    [Test]
     public void LanguageStageOffNeedsNoModelTest()
     {
         var manifest = Manifest(sources: ["https://h/a.warc.gz"]);

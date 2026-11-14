@@ -47,7 +47,7 @@ public sealed class CorpusScalingDiagnosticsTests
     {
         var fixtures = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures");
         var golden = File.ReadAllBytes(Path.Combine(fixtures, "cc-main-2026-43-00000-head.warc.wet.gz"));
-        var model = OutWit.Controller.AI.Corpus.Language.LanguageModel.Load(Path.Combine(fixtures, "language-model-cc-2026-43-16.bin"));
+        var model = OutWit.Controller.AI.Corpus.Language.LanguageModel.Load(Path.Combine(fixtures, "language-pack-cc-2026-43-16.bin"));
         var identifier = new OutWit.Controller.AI.Corpus.Language.LanguageIdentifier(model);
 
         var records = new List<string>();

@@ -23,7 +23,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
 
     private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
     private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
-    private const string MODEL_FIXTURE = "language-model-cc-2026-43-16.bin";
+    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
 
     #endregion
 
@@ -257,6 +257,34 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
         {
             Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Failed));
             Assert.That(Origin.Requests, Is.EqualTo(before), "nothing is fetched for a refused manifest");
+        });
+    }
+
+    [Test]
+    public async Task ALanguageModelThisControllerCannotUseIsRefusedBeforeAnyWorkTest()
+    {
+        // A truncated pack: Split refuses the job before a task exists (no node ever answers
+        // PipelineUnavailable for it), and Preflight names the reason.
+        var pack = await File.ReadAllBytesAsync(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", MODEL_FIXTURE));
+        var broken = await BlobService.UploadBytesAsync(pack[..(pack.Length / 2)], "broken-pack.bin");
+        var manifest = await UploadAsync(Manifest(WET_FIXTURE), "manifest.json");
+        var before = Origin.Requests;
+
+        var process = Engine.Compile(m_processScript);
+        var processStatus = await Engine.ScheduleAndWaitAsync(process, manifest, broken, new CorpusOptionsData());
+
+        var preflight = Engine.Compile(m_preflightScript);
+        var preflightStatus = await Engine.ScheduleAndWaitAsync(preflight, manifest, broken, new CorpusOptionsData());
+        var report = (CorpusPreflightData)preflight.Variables["result"].Value!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(processStatus.Result, Is.EqualTo(WitProcessingResult.Failed), "Split refuses the job");
+            Assert.That(Origin.Requests, Is.EqualTo(before), "nothing is fetched, not even a size");
+            Assert.That(preflightStatus.Result, Is.EqualTo(WitProcessingResult.Completed), "preflight reports, it does not fail");
+            Assert.That(report.WellFormed, Is.False);
+            Assert.That(report.TaskCount, Is.Zero);
+            Assert.That(report.Messages, Has.Some.Contains("this controller cannot use the language model").And.Some.Contains("truncated"));
         });
     }
 

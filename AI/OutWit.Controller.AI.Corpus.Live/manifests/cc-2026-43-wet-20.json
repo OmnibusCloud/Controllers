@@ -1,7 +1,7 @@
 {
   "pipeline": {
     "version": "cc-text-v1",
-    "language_model_sha256": "9670e262a8453661e47f0a4e838e0970fff561e20b3865b383227b01ba25558f",
+    "language_model_sha256": "74c6c348b897998ca947e286cd673f41d20e9efc3c242befc575a852d8d8dbd3",
     "identify_language": true,
     "filter_quality": true,
     "sign": true

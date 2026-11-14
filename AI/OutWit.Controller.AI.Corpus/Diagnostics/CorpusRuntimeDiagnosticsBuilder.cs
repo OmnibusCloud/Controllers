@@ -10,8 +10,8 @@ namespace OutWit.Controller.AI.Corpus.Diagnostics;
 
 /// <summary>
 /// Builds what the controller module of this process carries: its version, the stage set and
-/// its fingerprint computed here, the parser and compressor versions, the language-model format
-/// and the reference model's hash, the rule of where this machine fetches from, the caps.
+/// its fingerprint computed here, the parser and compressor versions, the language-pack format
+/// and the reference pack's hash, the rule of where this machine fetches from, the caps.
 /// A plain script function evaluates on the host, so through <c>CorpusRuntimeDiagnostics</c>
 /// this describes the server's module. Mirrors Verify's diagnostics.
 /// </summary>
@@ -37,7 +37,7 @@ public static class CorpusRuntimeDiagnosticsBuilder
             StagesVerified = verified,
             HtmlParser = HtmlParser(),
             Compressor = Compressor(),
-            LanguageModelFormat = CorpusReferenceLanguageModel.FORMAT,
+            LanguageModelFormat = CorpusStageSet.LANGUAGE_FORMAT,
             ReferenceLanguageModelSha256 = CorpusReferenceLanguageModel.SHA256,
             PublicOrigins = [.. ShardOriginPolicy.PUBLIC_ORIGINS],
             MachineOrigins = policy.ExtraOrigins.Order(StringComparer.Ordinal).ToList(),

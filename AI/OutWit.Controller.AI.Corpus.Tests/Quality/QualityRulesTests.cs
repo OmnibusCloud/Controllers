@@ -1,12 +1,14 @@
+using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Quality;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Quality;
 
 /// <summary>
-/// The rules of each language: the script decides what a word is (a letter, for scripts
-/// without word spacing, except a borrowed Latin word), Japanese and Chinese carry FineWeb-2's
-/// repetition thresholds, every language of the committed model has its stop words, and the
-/// stop-word rule catches a page in another language under the label.
+/// The rules of each language under a WITLID1 model (Corpus 0.1.14's rule data, now frozen as
+/// data in <see cref="LanguageRuleSet.Witlid1"/>): the script decides what a word is (a letter,
+/// for scripts without word spacing, except a borrowed Latin word), Japanese and Chinese carry
+/// FineWeb-2's repetition thresholds, every language of the committed model has its stop words,
+/// and the stop-word rule catches a page in another language under the label.
 /// </summary>
 [TestFixture]
 public sealed class QualityRulesTests
@@ -19,6 +21,9 @@ public sealed class QualityRulesTests
         "The chair thanked the volunteers for their work on the summer programme and the autumn fair.\n" +
         "A vote on the revised bylaws was postponed until every member had received the final draft.\n" +
         "The next meeting will take place in the community hall on the first Tuesday of the month.";
+
+    // Japanese thresholds without the stop-word rule (what 0.1.14 called QualityRules.Japanese).
+    private static readonly QualityRules JAPANESE = LanguageRuleSet.Witlid1.For("jpn") with { MinStopWords = 0 };
 
     #endregion
 
@@ -33,21 +38,21 @@ public sealed class QualityRulesTests
             "下次会议将于下月第一个星期二在社区礼堂举行。上次会议纪要经简短讨论后获得通过，没有修改。";
 
         var asSpaced = QualityFilter.Judge(chinese, QualityRules.Spaced);
-        var asUnspaced = QualityFilter.Judge(chinese, QualityRules.ForLanguage("zho"));
+        var asUnspaced = QualityFilter.Judge(chinese, LanguageRuleSet.Witlid1.For("zho"));
 
         Assert.Multiple(() =>
         {
             Assert.That(asSpaced.Passed, Is.False, "a space-split sees three giant words");
             Assert.That(asUnspaced.Passed, Is.True, string.Join(", ", asUnspaced.FailedRules));
             Assert.That(asUnspaced.Measures["words"], Is.GreaterThan(100));
-            Assert.That(QualityRules.ForLanguage("eng"), Is.SameAs(QualityRules.English));
-            Assert.That(QualityRules.ForLanguage(""), Is.SameAs(QualityRules.Spaced));
-            Assert.That(QualityRules.ForLanguage("yue"), Is.SameAs(QualityRules.Unspaced), "no stop-word list: the script's rules as they are");
-            Assert.That(QualityRules.ForLanguage("deu").MaxDuplicateNgramCharRatio, Is.SameAs(QualityRules.Spaced.MaxDuplicateNgramCharRatio));
-            Assert.That(QualityRules.ForLanguage("zho").CountsLetters, Is.True);
-            Assert.That(QualityRules.ForLanguage("zho").MaxDuplicateNgramCharRatio, Is.SameAs(QualityRules.Unspaced.MaxDuplicateNgramCharRatio));
-            Assert.That(QualityRules.ForLanguage("jpn").MaxDuplicateNgramCharRatio, Is.SameAs(QualityRules.Japanese.MaxDuplicateNgramCharRatio));
-            Assert.That(QualityRules.ForLanguage("jpn"), Is.SameAs(QualityRules.ForLanguage("jpn")));
+            Assert.That(LanguageRuleSet.Witlid1.For("eng"), Is.SameAs(LanguageRuleSet.Witlid1.For("eng")));
+            Assert.That(LanguageRuleSet.Witlid1.For(""), Is.SameAs(QualityRules.Spaced));
+            Assert.That(LanguageRuleSet.Witlid1.For("yue"), Is.SameAs(QualityRules.Unspaced), "no stop-word list: the script's rules as they are");
+            Assert.That(LanguageRuleSet.Witlid1.For("deu").MaxDuplicateNgramCharRatio, Is.SameAs(QualityRules.Spaced.MaxDuplicateNgramCharRatio));
+            Assert.That(LanguageRuleSet.Witlid1.For("zho").CountsLetters, Is.True);
+            Assert.That(LanguageRuleSet.Witlid1.For("zho").MaxDuplicateNgramCharRatio, Is.SameAs(QualityRules.Unspaced.MaxDuplicateNgramCharRatio));
+            Assert.That(LanguageRuleSet.Witlid1.For("jpn").MaxDuplicateNgramCharRatio, Is.SameAs(JAPANESE.MaxDuplicateNgramCharRatio));
+            Assert.That(LanguageRuleSet.Witlid1.For("jpn"), Is.SameAs(LanguageRuleSet.Witlid1.For("jpn")));
         });
     }
 
@@ -73,8 +78,8 @@ public sealed class QualityRulesTests
         var latin = string.Join('\n', sentences);
         var katakana = latin.Replace("Surface", "サーフェス", StringComparison.Ordinal);
 
-        var asLatin = QualityFilter.Judge(latin, QualityRules.Japanese);
-        var asKatakana = QualityFilter.Judge(katakana, QualityRules.Japanese);
+        var asLatin = QualityFilter.Judge(latin, JAPANESE);
+        var asKatakana = QualityFilter.Judge(katakana, JAPANESE);
 
         Assert.Multiple(() =>
         {
@@ -100,7 +105,7 @@ public sealed class QualityRulesTests
         }
 
         var text = builder.ToString();
-        var asJapanese = QualityFilter.Judge(text, QualityRules.Japanese);
+        var asJapanese = QualityFilter.Judge(text, JAPANESE);
         var asChinese = QualityFilter.Judge(text, QualityRules.Unspaced);
 
         Assert.Multiple(() =>
@@ -110,7 +115,7 @@ public sealed class QualityRulesTests
             Assert.That(asJapanese.Measures["duplicate_ngram_chars_6"], Is.Zero);
             Assert.That(asJapanese.Passed, Is.True, string.Join(", ", asJapanese.FailedRules));
             Assert.That(asChinese.FailedRules, Is.EqualTo(new[] { "duplicate_ngram_chars_5" }));
-            Assert.That(QualityRules.Japanese.MaxDuplicateNgramCharRatio, Is.EqualTo(new[] { 0.243, 0.225, 0.207, 0.19, 0.175, 0.159 }));
+            Assert.That(JAPANESE.MaxDuplicateNgramCharRatio, Is.EqualTo(new[] { 0.243, 0.225, 0.207, 0.19, 0.175, 0.159 }));
             Assert.That(QualityRules.Unspaced.MaxDuplicateNgramCharRatio, Is.EqualTo(new[] { 0.198, 0.182, 0.167, 0.154, 0.14, 0.127 }));
         });
     }
@@ -128,12 +133,12 @@ public sealed class QualityRulesTests
         {
             foreach (var code in model)
             {
-                Assert.That(QualityRules.ForLanguage(code).MinStopWords, Is.EqualTo(2), code);
-                Assert.That(QualityRules.ForLanguage(code).StopWords, Is.Not.Empty, code);
+                Assert.That(LanguageRuleSet.Witlid1.For(code).MinStopWords, Is.EqualTo(2), code);
+                Assert.That(LanguageRuleSet.Witlid1.For(code).StopWords, Is.Not.Empty, code);
             }
 
-            Assert.That(QualityRules.ForLanguage("deu").StopWords, Does.Contain("und"));
-            Assert.That(QualityRules.ForLanguage("jpn").StopWords, Does.Contain("の"));
+            Assert.That(LanguageRuleSet.Witlid1.For("deu").StopWords, Does.Contain("und"));
+            Assert.That(LanguageRuleSet.Witlid1.For("jpn").StopWords, Does.Contain("の"));
         });
     }
 
@@ -154,8 +159,8 @@ public sealed class QualityRulesTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(QualityFilter.Judge(finnish, QualityRules.ForLanguage("nld")).FailedRules, Is.EqualTo(new[] { "stop_words" }));
-            Assert.That(QualityFilter.Judge(dutch, QualityRules.ForLanguage("nld")).Passed, Is.True);
+            Assert.That(QualityFilter.Judge(finnish, LanguageRuleSet.Witlid1.For("nld")).FailedRules, Is.EqualTo(new[] { "stop_words" }));
+            Assert.That(QualityFilter.Judge(dutch, LanguageRuleSet.Witlid1.For("nld")).Passed, Is.True);
         });
     }
 
@@ -167,8 +172,8 @@ public sealed class QualityRulesTests
         var indonesian = "Pemerintah daerah menyiapkan cadangan beras untuk musim panen raya tahun ini di beberapa provinsi. "
             + string.Join(' ', Enumerable.Range(0, 60).Select(i => $"kata{i}"));
 
-        var article = QualityFilter.Judge(ARTICLE, QualityRules.English);
-        var foreign = QualityFilter.Judge(indonesian, QualityRules.English);
+        var article = QualityFilter.Judge(ARTICLE, LanguageRuleSet.Witlid1.For("eng"));
+        var foreign = QualityFilter.Judge(indonesian, LanguageRuleSet.Witlid1.For("eng"));
 
         Assert.Multiple(() =>
         {

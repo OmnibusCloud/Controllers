@@ -117,4 +117,32 @@ public sealed class LineCleanerTests
             Assert.That(HtmlTextExtractor.Collapse(wet), Is.EqualTo("First line Second line Third line"), "Collapse itself still flattens; the WET path uses CollapseLines");
         });
     }
+
+    // C4's curly-bracket rule walks the lines as C4 does: too-long word, then the shape of
+    // prose, then JavaScript; the first line left that holds "{" drops the page, before the
+    // policy lines are looked at (TFDS c4_utils.clean_page, DataTrove C4QualityFilter).
+    [TestCase("The template prints {name} in the heading of every page on this site.", true)]
+    [TestCase("Our cookie policy lists every {cookie} we set, with its purpose and lifetime.", true)]
+    [TestCase("The closing bracket } alone is not what the rule looks for in this line.", false)]
+    [TestCase("{menu}", false)]
+    [TestCase("Enable JavaScript to see {the} widget on this page, then reload it again.", false)]
+    [TestCase("No bracket in this ordinary sentence about the weather and the sea.", false)]
+    public void CurlyBracketLinesTest(string line, bool drops)
+    {
+        var page = "A first line of prose that has nothing to do with any brackets at all.\n" + line + "\nHome";
+
+        Assert.That(LineCleaner.HoldsCurlyBracket(page, QualityRules.Spaced), Is.EqualTo(drops));
+    }
+
+    [Test]
+    public void ACurlyBracketInALongWordLineDoesNotCountTest()
+    {
+        var line = "The encoded block {" + new string('x', LineCleaner.MAX_WORD_LENGTH + 1) + " ends here, after a very long run of letters.";
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(LineCleaner.HoldsCurlyBracket(line, QualityRules.Spaced), Is.False, "C4 drops the line for its word first");
+            Assert.That(LineCleaner.HoldsCurlyBracket("函数的参数写在{和}之间，这是模板留下的痕迹。", QualityRules.Unspaced), Is.True, "letters count in a script without spaces");
+        });
+    }
 }

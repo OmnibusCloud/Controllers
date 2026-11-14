@@ -4,10 +4,10 @@
   "members": {
     "CorpusCountData": 2,
     "CorpusSourceData": 4,
-    "CorpusQualityData": 10,
+    "CorpusQualityData": 11,
     "CorpusPipelineData": 10,
     "CorpusTaskData": 5,
-    "CorpusShardStatsData": 11,
+    "CorpusShardStatsData": 12,
     "CorpusResultData": 13,
     "CorpusOptionsData": 4,
     "CorpusPreflightData": 9,

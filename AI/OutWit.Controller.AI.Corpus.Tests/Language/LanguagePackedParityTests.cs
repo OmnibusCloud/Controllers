@@ -35,7 +35,7 @@ public sealed class LanguagePackedParityTests
     [Test]
     public void PackedGuessEqualsTheStringFormGuessTest()
     {
-        var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-model-cc-2026-43-16.bin"));
+        var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-pack-cc-2026-43-16.bin"));
         var identifier = new LanguageIdentifier(model);
         var maxRank = model.Profiles.Max(profile => profile.Grams.Count);
 
@@ -100,7 +100,11 @@ public sealed class LanguagePackedParityTests
 
         var worst = (double)maxRank * textProfile.Count;
         var margin = second == null ? 1.0 : (secondDistance - bestDistance) / worst;
-        return new LanguageGuess(best!, second, margin);
+        var distancePpm = LanguageIdentifier.Ppm(bestDistance, (long)maxRank * textProfile.Count);
+        if (model.Acceptance != null && !model.Acceptance.Accepts(best!, distancePpm))
+            return new LanguageGuess("", second, margin) { Nearest = best!, DistancePpm = distancePpm, IsUnsupported = true, PastLimit = model.Acceptance.Supports(best!) };
+
+        return new LanguageGuess(best!, second, margin) { Nearest = best!, DistancePpm = distancePpm };
     }
 
     private static IEnumerable<string> Documents()

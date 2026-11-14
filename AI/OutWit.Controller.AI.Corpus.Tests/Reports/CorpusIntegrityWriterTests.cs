@@ -217,6 +217,17 @@ public sealed class CorpusIntegrityWriterTests
 
 
     [Test]
+    public void TheUnsupportedBreakdownIsComparedWithTheDropsTest()
+    {
+        var primary = Result(0, "aaa", 10);
+        primary.Stats!.UnsupportedLanguages = [new CorpusCountData { Name = "swe", Count = 2 }];
+        var replica = primary.Clone();
+        replica.Stats!.UnsupportedLanguages = [new CorpusCountData { Name = "dan", Count = 2 }];
+
+        Assert.That(CorpusIntegrityWriter.Differences(primary, replica), Is.EqualTo(new[] { "drops" }));
+    }
+
+    [Test]
     public void ShardsExecutedOnceAreAnEmptyDocumentTest()
     {
         using var document = JsonDocument.Parse(CorpusIntegrityWriter.Write([Result(0, "aaa", 1), Result(1, "bbb", 1)]));

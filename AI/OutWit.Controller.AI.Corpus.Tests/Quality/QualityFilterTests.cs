@@ -17,7 +17,7 @@ public sealed class QualityFilterTests
     #region Constants
 
     private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string MODEL_FIXTURE = "language-model-cc-2026-43-16.bin";
+    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
 
     private const string ARTICLE =
         "The committee reviewed the annual report in detail and approved the budget for the coming year.\n" +
@@ -214,7 +214,8 @@ public sealed class QualityFilterTests
     [Test]
     public void GoldenShardPagesSurviveAtAPlausibleRateWithDropsByRuleTest()
     {
-        var identifier = new LanguageIdentifier(LanguageModel.Load(Fixture(MODEL_FIXTURE)));
+        var model = LanguageModel.Load(Fixture(MODEL_FIXTURE));
+        var identifier = new LanguageIdentifier(model);
         var total = 0;
         var passed = 0;
         var drops = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -224,7 +225,7 @@ public sealed class QualityFilterTests
         {
             var text = Encoding.UTF8.GetString(record.Payload.Span);
             var language = identifier.Identify(text);
-            var verdict = QualityFilter.Judge(text, QualityRules.ForLanguage(language.Code));
+            var verdict = QualityFilter.Judge(text, model.Rules.For(language.Code));
 
             total++;
             if (verdict.Passed)

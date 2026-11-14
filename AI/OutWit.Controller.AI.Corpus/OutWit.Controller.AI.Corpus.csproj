@@ -42,6 +42,12 @@
     <Compile Include="..\Shared\Wasm\**\*.cs" Link="Wasm\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <!-- The rule data a WITLID1 language model gets (Corpus 0.1.14's per-language tables, frozen):
+       data, not code; a language pack (WITLID2) carries its own. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Language\Resources\witlid1-rules.json" LogicalName="OutWit.Controller.AI.Corpus.Language.witlid1-rules.json" />
+  </ItemGroup>
+
   <PropertyGroup>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>

@@ -81,6 +81,26 @@ public sealed class CorpusReportWriterTests
     }
 
     [Test]
+    public void TheUnsupportedBreakdownIsReportedPerShardAndSummedTest()
+    {
+        var first = Completed(0, documentsOut: 10, languages: [("eng", 10)], drops: [("language_unsupported", 3)]);
+        first.Stats!.UnsupportedLanguages = [new CorpusCountData { Name = "past_limit:spa", Count = 1 }, new CorpusCountData { Name = "swe", Count = 2 }];
+        var second = Completed(1, documentsOut: 5, languages: [("deu", 5)], drops: [("language_unsupported", 4)]);
+        second.Stats!.UnsupportedLanguages = [new CorpusCountData { Name = "dan", Count = 1 }, new CorpusCountData { Name = "swe", Count = 3 }];
+
+        using var report = JsonDocument.Parse(CorpusReportWriter.Write([first, second]));
+        var summary = report.RootElement.GetProperty("summary").GetProperty("unsupported_languages");
+        var shard = report.RootElement.GetProperty("shards")[0].GetProperty("stats").GetProperty("unsupported_languages");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summary.EnumerateObject().Select(p => (p.Name, p.Value.GetInt64())), Is.EqualTo(new[] { ("dan", 1L), ("past_limit:spa", 1L), ("swe", 5L) }));
+            Assert.That(shard.EnumerateObject().Select(p => (p.Name, p.Value.GetInt64())), Is.EqualTo(new[] { ("past_limit:spa", 1L), ("swe", 2L) }));
+            Assert.That(report.RootElement.GetProperty("summary").GetProperty("languages").EnumerateObject().Select(p => p.Name), Is.EqualTo(new[] { "deu", "eng" }), "the language histogram is the documents out, untouched");
+        });
+    }
+
+    [Test]
     public void EmptyRunIsAValidReportTest()
     {
         using var report = JsonDocument.Parse(CorpusReportWriter.Write([]));

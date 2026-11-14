@@ -6,12 +6,15 @@ using OutWit.Controller.AI.Corpus.Warc;
 namespace OutWit.Controller.AI.Corpus.Assets;
 
 /// <summary>
+/// corpus-assets build-language-pack &lt;out.bin&gt; --languages &lt;dir&gt; --train &lt;wet.gz&gt;... --calibrate &lt;wet.gz&gt;... [options]
+/// corpus-assets evaluate-language-pack &lt;pack.bin&gt; &lt;wet.gz&gt;... [--no-judge] [--threads N]
 /// corpus-assets train-language-model &lt;out.bin&gt; &lt;wet.gz&gt;... [--profile N] [--min-docs N]
 /// corpus-assets evaluate-language-model &lt;model.bin&gt; &lt;wet.gz&gt;
 ///
-/// Trains the n-gram language model from the single-language conversion records of the given
-/// WET files (labelled by Common Crawl's classifier) and prints its SHA-256; evaluates a model
-/// against a WET file's labels and prints the agreement.
+/// Builds a language pack (WITLID2: profiles, rule data, calibrated limits) from a folder of
+/// per-language source data and Common Crawl WET files labelled by the crawl's classifier, and
+/// measures it on other files; trains and evaluates a profiles-only WITLID1 model. Every build
+/// prints the SHA-256 a manifest pins.
 /// </summary>
 internal static class Program
 {
@@ -19,20 +22,22 @@ internal static class Program
 
     private static int Main(string[] args)
     {
-        if (args.Length < 3)
+        if (args.Length < 2)
             return Usage();
 
         try
         {
             return args[0] switch
             {
-                "train-language-model" => Train(args[1], args.Skip(2).Where(a => !a.StartsWith("--", StringComparison.Ordinal) && !int.TryParse(a, out _)).ToList(),
+                "build-language-pack" => LanguagePackCommands.Build(new CommandLine(args.Skip(1))),
+                "evaluate-language-pack" => LanguagePackCommands.Evaluate(new CommandLine(args.Skip(1))),
+                "train-language-model" when args.Length >= 3 => Train(args[1], args.Skip(2).Where(a => !a.StartsWith("--", StringComparison.Ordinal) && !int.TryParse(a, out _)).ToList(),
                     OptionValue(args, "--profile", LanguageModelTrainer.DEFAULT_PROFILE_SIZE), OptionValue(args, "--min-docs", LanguageModelTrainer.DEFAULT_MIN_DOCUMENTS)),
-                "evaluate-language-model" => Evaluate(args[1], args[2]),
+                "evaluate-language-model" when args.Length >= 3 => Evaluate(args[1], args[2]),
                 _ => Usage()
             };
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is FormatException or ArgumentException or InvalidOperationException or IOException)
         {
             Console.Error.WriteLine($"corpus-assets: {exception.Message}");
             return 1;
@@ -70,7 +75,7 @@ internal static class Program
     {
         var model = LanguageModel.Load(modelPath);
         var identifier = new LanguageIdentifier(model);
-        var known = model.Profiles.Select(p => p.Code).ToHashSet(StringComparer.Ordinal);
+        var known = model.Languages.ToHashSet(StringComparer.Ordinal);
 
         var total = 0;
         var agree = 0;
@@ -113,17 +118,22 @@ internal static class Program
 
     #region Tools
 
+    /// <summary>Prints how to call the tool.</summary>
+    /// <returns>The usage exit code.</returns>
+    public static int Usage()
+    {
+        Console.WriteLine("corpus-assets build-language-pack <out.bin> --languages <dir> --train <wet.gz>... [--known-train <wet.gz>...]");
+        Console.WriteLine("              --calibrate <wet.gz>... [--recall 0.999] [--name NAME] [--profile 3000] [--min-docs 200] [--known-min-docs 100] [--threads N]");
+        Console.WriteLine("corpus-assets evaluate-language-pack <pack.bin> <wet.gz>... [--no-judge] [--threads N]");
+        Console.WriteLine("corpus-assets train-language-model <out.bin> <wet.gz>... [--profile N] [--min-docs N]");
+        Console.WriteLine("corpus-assets evaluate-language-model <model.bin> <wet.gz>");
+        return 2;
+    }
+
     private static int OptionValue(string[] args, string name, int fallback)
     {
         var index = Array.IndexOf(args, name);
         return index >= 0 && index + 1 < args.Length && int.TryParse(args[index + 1], out var value) ? value : fallback;
-    }
-
-    private static int Usage()
-    {
-        Console.WriteLine("corpus-assets train-language-model <out.bin> <wet.gz>... [--profile N] [--min-docs N]");
-        Console.WriteLine("corpus-assets evaluate-language-model <model.bin> <wet.gz>");
-        return 2;
     }
 
     #endregion

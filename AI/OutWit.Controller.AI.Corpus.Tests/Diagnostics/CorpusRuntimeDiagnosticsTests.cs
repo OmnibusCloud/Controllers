@@ -22,7 +22,7 @@ public sealed class CorpusRuntimeDiagnosticsTests
 {
     #region Constants
 
-    private const string MODEL_FIXTURE = "language-model-cc-2026-43-16.bin";
+    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
 
     #endregion
 
@@ -42,7 +42,7 @@ public sealed class CorpusRuntimeDiagnosticsTests
             Assert.That(diagnostics.StagesVerified, Is.True);
             Assert.That(diagnostics.HtmlParser, Does.Match("^AngleSharp [0-9]+[.][0-9]+[.][0-9]+$"));
             Assert.That(diagnostics.Compressor, Does.Match("^ZstdSharp [0-9]+[.][0-9]+[.][0-9]+, level 9$"));
-            Assert.That(diagnostics.LanguageModelFormat, Is.EqualTo("WITLID1"));
+            Assert.That(diagnostics.LanguageModelFormat, Is.EqualTo("WITLID2"), "the format of the reference language pack");
             Assert.That(diagnostics.ReferenceLanguageModelSha256, Is.EqualTo(CorpusReferenceLanguageModel.SHA256));
             Assert.That(diagnostics.PublicOrigins, Is.EqualTo(new[] { "data.commoncrawl.org" }));
             Assert.That(diagnostics.MachineOrigins, Is.EqualTo(new[] { "data.lab.example", "mirror.lab.example" }));
@@ -138,7 +138,9 @@ public sealed class CorpusRuntimeDiagnosticsTests
         {
             Assert.That(Convert.ToHexStringLower(SHA256.HashData(bytes)), Is.EqualTo(CorpusReferenceLanguageModel.SHA256));
             Assert.That(reader.ReadString(), Is.EqualTo(CorpusReferenceLanguageModel.FORMAT));
-            Assert.That(model.Profiles.Select(profile => profile.Code), Is.EqualTo(CorpusReferenceLanguageModel.LANGUAGES));
+            Assert.That(model.Languages, Is.EqualTo(CorpusReferenceLanguageModel.LANGUAGES));
+            Assert.That(model.Profiles.Select(profile => profile.Code).Except(model.Languages), Is.EqualTo(CorpusReferenceLanguageModel.KNOWN_LANGUAGES));
+            Assert.That(model.Name, Is.EqualTo(CorpusReferenceLanguageModel.NAME));
         });
     }
 

@@ -15,7 +15,11 @@ namespace OutWit.Controller.AI.Corpus.Diagnostics;
 /// limit is a changed stage set even where no PDF runs. The stages are built into the controller,
 /// so a controller version is a stage set; the fingerprint moves with any stage whose product
 /// changes, and the pin with it. The language stage needs a job's model and is not in the
-/// fingerprint; the MinHash and zstd digests and the PDF stage's own products are pinned by the
+/// fingerprint: its data — the profiles, the acceptance limits and every language's rule data the
+/// line stage and the quality filter read (script, stop words, thresholds) — is a language pack in
+/// <see cref="LANGUAGE_FORMAT"/>, which the manifest pins by hash; the fingerprint's documents
+/// carry no language and are judged by the script defaults, which no pack changes. The MinHash and
+/// zstd digests and the PDF stage's own products are pinned by the
 /// controller's tests.
 /// </summary>
 public static class CorpusStageSet
@@ -34,6 +38,9 @@ public static class CorpusStageSet
         "compress",
         "sign"
     ];
+
+    /// <summary>The format of the language data the language stage reads (WITLID1 models are still read, with Corpus 0.1.14's rule data).</summary>
+    public const string LANGUAGE_FORMAT = Language.LanguageModelFormat.WITLID2;
 
     /// <summary>The first line of the text the fingerprint hashes; moves when what it covers changes.</summary>
     public const string FINGERPRINT_SCHEMA = "corpus-stage-set/2";

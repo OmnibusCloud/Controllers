@@ -29,6 +29,12 @@ public static class WarcSynth
         return Record("conversion", uri, "text/plain", Encoding.UTF8.GetBytes(text));
     }
 
+    /// <summary>A WET conversion record with the language label Common Crawl's classifier gives (<c>WARC-Identified-Content-Language</c>).</summary>
+    public static byte[] LabelledConversionRecord(string uri, string text, string language)
+    {
+        return Record("conversion", uri, "text/plain", Encoding.UTF8.GetBytes(text), [$"WARC-Identified-Content-Language: {language}"]);
+    }
+
     /// <summary>A WARC response record carrying an HTTP 200 HTML response.</summary>
     public static byte[] HtmlResponseRecord(string uri, string html)
     {

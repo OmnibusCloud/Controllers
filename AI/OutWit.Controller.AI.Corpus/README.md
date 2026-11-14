@@ -15,7 +15,9 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.2.0 — the PDF stage; 0.1.14 proven on the test fleet, not yet released to nuget.org.**
+**Status: 0.2.0 — 0.1.14 proven on the test fleet; 0.2.0 (the PDF stage; language packs with the
+unsupported-language test, C4's curly-bracket rule as a switch) proven in CI, not yet on the
+fleet; not yet released to nuget.org.**
 The stage libraries are wired into nine activities and four bundled scripts; the
 engine rig in the tests fetches the golden shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
@@ -32,7 +34,7 @@ and the PDF stage proven on the fleet.
 
 | Activity | Runs on | Signature | What it does |
 |---|---|---|---|
-| `Corpus.Split` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusTaskCollection` | parses the manifest, checks every source against the allowlist and the byte cap, hashes the language model blob and pins it into the pipeline, holds the server storage estimate to the deployment's headroom, emits one task per shard. Any problem fails the job here — a bad manifest never reaches a node |
+| `Corpus.Split` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusTaskCollection` | parses the manifest, checks every source against the allowlist and the byte cap, hashes the language model blob and pins it into the pipeline, reads it and refuses one this controller cannot use (a format it does not read, a truncated or non-canonical pack, a threshold it does not have) by name, holds the server storage estimate to the deployment's headroom, emits one task per shard. Any problem fails the job here — a bad manifest never reaches a node |
 | `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, the traffic estimate (sources without a size are asked at the origin with HEAD, up to 64 of them, the rest extrapolated at the mean), the server storage estimate and the headroom it is held to (see *Server storage*), every message by manifest line |
 | `Corpus.ProcessShard` | node | `(CorpusTask) → CorpusResult` | the allowlist re-check, the pinned model, the capped fetch, the pipeline (a WARC shard's PDFs through the sandboxed extractor), the uploads. Every way a shard can fail is a verdict in the result (`OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), never an exception — except a fault of the node that another node would not have (a PDF the node cannot run, a product it cannot upload): that fails the node's batch, and `Grid.ForEach` runs the node's tasks on another node; several shards may run on one client at once |
 | `Corpus.Collect` | host | `(CorpusResultCollection, CorpusOptions) → Blob report` | the job report: every shard's verdict, blobs and content hash in task order, the aggregate counters over the fleet |
@@ -64,8 +66,8 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
 `Corpus.Dedup` over a finished run's report (`Job:CorpusDedup(Blob:report, CorpusOptions:opts)`);
 `CorpusRuntimeDiagnostics.wit` takes nothing and returns `result` (the diagnostics) and
 `capabilities` (the document). `languageModel` is the
-blob of a model trained by `corpus-assets` (see below); pass an empty blob when
-the pipeline's `identify_language` is `false`. `CorpusOptions`: `MaxShardBytes`
+blob of a language pack built by `corpus-assets` (see *Language packs*), or of a
+0.1.x model; pass an empty blob when the pipeline's `identify_language` is `false`. `CorpusOptions`: `MaxShardBytes`
 (0 = the controller's cap of 1 GiB; a smaller value lowers it), `SamplingRate`
 (the share of shards re-executed for integrity, 0 to 1; 0 by default),
 `DedupThreshold` (0 = 0.8) and `FetchConcurrency` (reserved; the node's own
@@ -79,13 +81,14 @@ One JSON document (`docs/corpus-manifest.schema.json`):
 {
   "pipeline": {
     "version": "cc-text-v1",
-    "language_model_sha256": "9670e262…",
+    "language_model_sha256": "74c6c348…",
     "target_languages": ["eng", "deu"],
     "identify_language": true,
     "clean_lines": true,
     "filter_quality": true,
     "sign": true,
     "extract_pdf": true,
+    "filter_curly_bracket": false,
     "quality": { "min_words": 50, "max_duplicate_line_ratio": 0.3 }
   },
   "allowed_origins": ["data.commoncrawl.org"],
@@ -99,7 +102,8 @@ One JSON document (`docs/corpus-manifest.schema.json`):
 - `pipeline.version` is the lab's name for the contract and travels into every
   product; change a threshold, change the version. Thresholds left out (or 0)
   are the stage defaults; `language_model_sha256` is optional and, when given,
-  must match the model blob or the job does not start.
+  must match the model blob or the job does not start. A language pack carries
+  its languages' rule data and acceptance limits, so the pin covers them too.
 - `allowed_origins` are host names, matched exactly and case-insensitively
   (ports and paths do not matter); a source whose host is not listed is
   refused on the host and, should it ever get there, on the node. The list
@@ -109,6 +113,11 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   `.warc.gz` → WARC); an object may state `format`, a `size` estimate for the
   traffic line and the cap check, and the origin's published `sha256`, which
   the node verifies after the fetch.
+- The language stage (`identify_language`) labels a document with a language
+  of the job's language pack, or drops it: too little text to tell (fewer
+  than 20 letters) as `language_unknown`, a language the pack does not
+  support as `language_unsupported` (see *Language packs*), a supported
+  language `target_languages` does not list as `language_not_target`.
 - `clean_lines` (on unless the manifest turns it off) removes, before a
   document is judged, the lines that do not read like prose — the C4 line
   rules (Raffel et al. 2020), made script-aware: a line stays when it ends a
@@ -133,9 +142,10 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   word spacing it is a letter (a Latin word inside such text stays one
   word), and Japanese and Chinese take FineWeb-2's repetition thresholds. A
   document needs two distinct stop words of its language (Gopher's eight
-  for English, FineWeb-2's lists for the other languages of the committed
-  model), which on Common Crawl mostly removes pages in a language the
-  identifier does not know; a page with "lorem ipsum" goes (C4). The drop
+  for English, FineWeb-2's lists for the other languages of the reference
+  pack: the pack's rule data), which removes pages in a language the
+  identifier does not know that it labelled with one it does; a page with
+  "lorem ipsum" goes (C4). The drop
   names are the rules': `min_words`, `max_words`, `mean_word_length`,
   `symbol_to_word_ratio`, `alphabetic_words`, `bullet_lines`,
   `ellipsis_lines`, `duplicate_lines`, `duplicate_line_chars`,
@@ -146,7 +156,188 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   WARC shards (see *PDFs*); off, a PDF response drops as `not_html`, exactly as
   before the stage existed. WET shards carry no PDFs, so the switch does nothing
   there.
+- `filter_curly_bracket` (off unless the manifest turns it on) is C4's
+  curly-bracket rule as C4 (TFDS `c4_utils.clean_page`) and DataTrove
+  (`C4QualityFilter`, `filter_curly_bracket`) define it: walking the lines,
+  a line with a word over 1,000 characters, a line without the shape of
+  prose and a line that mentions JavaScript are passed over, and the first
+  line left that holds `{` drops the document as `curly_bracket` — before
+  the policy and cookie lines are looked at, whether or not the line stage
+  is on. It catches code and template leftovers, and some prose that quotes
+  a brace; FineWeb keeps it on (−2.8 % of its tokens). On a held-out Common
+  Crawl WET file (00035, see *Language packs*) it drops 254 documents, and
+  the documents out fall by 1.4 % (11,151 to 10,996), the text by 2.1 %.
+  Whether a lab wants code-bearing pages is the lab's decision.
 - Unknown keys are errors, so a typo cannot silently turn a stage off.
+
+## Language packs
+
+A language model is a job's input, pinned by `language_model_sha256`; the
+controller's code holds no per-language table. A **language pack** (format
+`WITLID2`, `Language/LanguageModelFormat.cs`) carries, as data, everything a
+language needs:
+
+- the character n-gram profiles (n = 1 to 4, 3,000 n-grams per language,
+  Cavnar–Trenkle out-of-place distance) of the languages it **supports**, and
+  of languages it **knows but does not support**;
+- per supported language, its **acceptance limit**: the largest distance from
+  its own profile a document may have, calibrated on labelled text;
+- per supported language, its **rule data**: the script (ISO 15924; it
+  decides whether the quality stages count words or letters), the stop words
+  and how many a document must hold, and the quality thresholds that differ
+  from the script's defaults (FineWeb-2's for Japanese and Chinese).
+
+A document is labelled with its nearest profile only when that profile is a
+supported language and the distance is inside the language's limit.
+Otherwise the document is **unknown** and drops as `language_unsupported`,
+so a report shows how much text a lab loses to languages outside the pack,
+and nothing is labelled with a language it merely resembles. A Swedish page
+finds the Swedish profile instead of the German one; a page in a language
+the pack has no profile for at all is usually too far from every supported
+profile. `language_unknown` keeps its meaning: too little text to tell.
+
+Which languages a lab loses is in the shard statistics and the report, as
+the map `unsupported_languages` next to the drops (the language histogram
+stays the documents out): the code of the known language a document was
+nearest to (`swe`), `past_limit:` and a supported language's code when the
+document lies past that language's limit (`past_limit:spa`: a language the
+pack has no profile for, or text too unlike its own), and `no_profile` for
+text that shares no n-gram with any profile (a script no profile has, where
+"nearest" would be a tie). The counts add up to `language_unsupported`.
+
+The host reads the pack before any task is sent: `Corpus.Split` refuses a
+model this controller cannot use, and `Corpus.Preflight` names the reason
+(a format it does not read, a truncated or non-canonical pack, a threshold
+it does not have); a node never meets it as `PipelineUnavailable`. The
+preflight also describes the model and names `target_languages` it does not
+have.
+
+A document whose crawl label lists several languages is judged by the head
+the identifier reads (its first 4,000 characters): a page whose main language
+is supported but whose head is in another drops as unsupported (4.4 % of such
+pages on the evaluation files, 1.25 % of those the quality stages keep). That
+is the policy: the language of a document is the language of its head.
+
+A `WITLID1` model (0.1.x, profiles only) is still read and behaves exactly
+as under 0.1.14: the nearest profile always wins, and the rule data is
+0.1.14's, kept frozen as data (`Language/Resources/witlid1-rules.json`). A
+manifest pinned to the old model's hash keeps producing the same bytes on WET
+shards, and on WARC shards with `"extract_pdf": false`; with the PDF stage on
+(the default, which 0.1.14 did not have) a WARC shard's PDFs join its product.
+
+**The reference pack** — `Fixtures/language-pack-cc-2026-43-16.bin` in the
+tests, the default of the tests and of `corpus-live`: `cc-2026-43-16`,
+610,372 bytes, SHA-256
+`74c6c348b897998ca947e286cd673f41d20e9efc3c242befc575a852d8d8dbd3`. All
+input files are Common Crawl CC-MAIN-2026-43 WET files:
+
+- **training** — the 16 supported languages from segment 1791170053823.21,
+  files 00001 and 00002: the files of the 0.1.x model, so the 16 profiles are
+  that model's to the n-gram, and the pack never labels a document
+  differently from it, it can only say "unknown";
+- **known languages** — the 23 languages with at least 100 documents in
+  those two files and files 00020-00029 of the same segment: `ara aze ben bul
+  cat dan ell est fin heb hrv hun ind kor lav lit nor ron slk slv srp swe
+  tha`;
+- **calibration** — files 00030-00034 of the same segment, at a recall of
+  0.999 (a language's region holds 999 of 1,000 of its calibration
+  documents);
+- **rule data** — `OutWit.Controller.AI.Corpus.Assets/languages/`;
+- **evaluation** — nine files used for nothing else: 00000 and 00035-00039
+  of the same segment and file 00500 of segments 1791170054112.6,
+  1791170054429.52 and 1791170055137.36.
+
+On the evaluation files (128,699 documents labelled with a supported
+language, 10,126 with another), the supported languages keep their label at
+99.01 % (99.27 % without the test), and of the documents the line stage and
+the quality filter keep, the test loses 0.07 %. Documents in other languages
+become unknown at 98.5 %, and of those the quality stages would keep — the
+mislabelled text in 0.1.14's products — at 98.1 % (by characters 94.6 %):
+Swedish, Norwegian, Romanian, Hungarian and Bulgarian 100 %, Slovak 99.8 %,
+Danish and Catalan 99.3 %. What gets through is a close relative the pack
+has no profile for: Galician reads as Spanish, Belarusian as Ukrainian or
+Russian, Afrikaans and Frisian as Dutch, Luxembourgish as German — each
+fewer than 30 documents in nine files, too few to train a profile from the
+files used. One held-out file (00035) under the default pipeline: 11,737
+documents out with the 0.1.x model, 11,151 with the pack (−5.0 %; 2,559
+`language_unsupported`), the text product 7.4 % smaller. Of the 586
+documents no longer kept, 283 carry another language's label, 249 are mixed
+pages whose main language is another, 48 mixed pages whose main language is
+supported, 5 carry a supported language's label. The `stop_words` drops fall
+from 1,042 to 169: that rule was catching foreign text the pack now names.
+Identification against 39 profiles costs no more than against 16: the
+profiles are searched through one index (507 µs per document; 0.1.14 took
+557 µs with its 16).
+
+## Adding a language
+
+A language is data, not code: a folder of rule data, a pack built and
+evaluated with `corpus-assets`, and a manifest that pins the new pack's
+hash. No controller release.
+
+1. **Text.** Common Crawl labels every WET record with the language its
+   classifier identified (`WARC-Identified-Content-Language`), so any WET
+   file is labelled text. A supported language needs 200 single-language
+   documents in the training files (`--min-docs`) and 50 in the calibration
+   files; a CC-MAIN-2026-43 file holds about 15,500 single-language
+   documents, so a language with 1 % of them needs two training files, one
+   with 0.1 % about thirteen. Keep training, calibration and evaluation
+   files apart.
+2. **Rule data**, a folder `languages/<code>/` named by the crawl's label
+   (ISO 639-3):
+   - `language.json` — `{"name": "Swedish", "script": "Latn"}`; `"quality"`
+     with the thresholds the language has of its own (any of the manifest's
+     ten names, `top_ngram_chars` with three values, `duplicate_ngram_chars`
+     with six); `"min_stop_words"` (2 by default); `"notes"` saying where
+     each value comes from;
+   - `stopwords.txt` — one word per line, `#` comment lines, its source and
+     licence in the header. FineWeb-2 publishes a stop-word list and tuned
+     thresholds per language (`configs/<code>_<script>.yml`, Apache-2.0).
+     Without a list the stop-word rule is off for the language.
+3. **Build:**
+   ```
+   corpus-assets build-language-pack my-pack.bin --languages languages \
+     --train <wet.gz>... [--known-train <wet.gz>...] --calibrate <wet.gz>... [--recall 0.999]
+   ```
+   Every language with a folder is supported; every other label with
+   `--known-min-docs` (100) documents in the training and `--known-train`
+   files becomes a known profile, its text unknown instead of mislabelled
+   (rare languages need more files than the supported ones). The tool prints
+   the documents per language, the limits and the pack's SHA-256, and the
+   pack records its input files by name and hash. The same inputs give the
+   same bytes.
+4. **Evaluate** on files outside both sets:
+   ```
+   corpus-assets evaluate-language-pack my-pack.bin <wet.gz>...
+   ```
+   Per supported language: its documents, the recall without the
+   unsupported test and with it, how many it called unsupported, too short
+   or another supported language, and — `kept`, `kept lost` — of the
+   documents the line stage and the quality filter keep, how many the test
+   loses. Per other language: the share that becomes unknown and what the
+   rest was labelled as; `(k)` marks a known profile. Then the confusion
+   between supported languages and the documents with several labels. A
+   supported language should keep about 99 % and lose well under 1 % of its
+   kept documents; a known language should be about 99 % unknown. A close
+   relative without a profile shows up "labelled as" the language it
+   resembles: give `--known-train` more files until it has 100 documents.
+5. **Pin it.** `"language_model_sha256": "<the pack's SHA-256>"` in the
+   manifest, the pack as the job's `languageModel` blob (`corpus-live
+   --model my-pack.bin`). A new pack is a new pipeline: change
+   `pipeline.version` with it.
+
+**What still needs a controller release** is what is code. The word: a
+whitespace-separated token, or a letter in the scripts the controller knows
+to be written without spaces (`LanguageScripts.UNSPACED`: Han, Japanese,
+Thai, Lao, Khmer, Myanmar, Tibetan); a language in another script written
+without spaces, or one that needs a real word segmenter to be judged well,
+needs code. So does a new kind of quality rule (a threshold name the
+controller does not know makes it refuse the pack, never ignore the value),
+a change to the identification method, and the line stage's sentence ends:
+it knows `. ! ? 。 ． ！ ？ ‼ ⁇ ؟ ۔ । ॥`, so in a script that ends sentences
+otherwise (Ethiopic `።`, Burmese `။`, Armenian `։`, Thai with none) every
+line is judged as unterminated and needs twelve words, or forty letters, to
+stay.
 
 ## The products
 
@@ -168,10 +359,11 @@ One JSON document (`docs/corpus-manifest.schema.json`):
   and skipping the lines whose bit is 0.
 - **Report** (`corpus-report.json`, `docs/corpus-report.schema.json`): per
   shard the verdict, blob ids, content hash, error and statistics (records in,
-  documents extracted and out, drops by rule, languages, bytes, times, and the
-  PDF stage's `pdf_*` counts where a shard met a PDF), and the platform
-  (`runtime_target`, e.g. `linux-x64`) and degree it ran at — a platform, never
-  a machine; the summary sums them over the fleet.
+  documents extracted and out, drops by rule, languages, the languages of the
+  `language_unsupported` drops, bytes, times, and the PDF stage's `pdf_*` counts
+  where a shard met a PDF), and the platform (`runtime_target`, e.g.
+  `linux-x64`) and degree it ran at — a platform, never a machine; the summary
+  sums them over the fleet.
 
 ## PDFs
 
@@ -291,8 +483,9 @@ as the rest, and `Corpus.Integrity` writes `corpus-integrity.json`
 (`docs/corpus-integrity.schema.json`): for every shard that ran twice its two
 executions compared on everything an honest node
 cannot vary — the verdict, the content hash of the product, the record and
-document counts, the drop and language histograms, the PDF stage's counts. Times,
-bytes and fuel are not compared. The platform picks the shards at random and keeps the two executions
+document counts, the drop and language histograms (the drops with the languages of the
+`language_unsupported` ones), the PDF stage's counts. Times, bytes and fuel are not compared.
+The platform picks the shards at random and keeps the two executions
 on different machines, so a node cannot tell whether its shard is being checked.
 No document says which machine ran what.
 With a single machine available there is nothing to compare and no shard runs
@@ -409,7 +602,8 @@ admits no other to the work):
   platform; the stages in order and the stage set's fingerprint — the content
   hash of the benchmark's reference shard through the stages, computed there,
   with `StagesVerified` when it is the pinned one; the HTML parser and the
-  compressor with their versions; the language-model format (`WITLID1`) and the
+  compressor with their versions; the language-pack format (`WITLID2`; `WITLID1`
+  models are still read) and the
   hash of the reference model the tests and fleet proofs use; the public
   origins and the hosts the server's operator lists; the shard cap, the
   downloads per node and the memory per shard; the PDF extractor's pin and
@@ -445,7 +639,7 @@ admits no other to the work):
   origin honours it. At most two shards download at once per node, whatever
   the node's degree; the others wait their turn. The user agent names the
   controller and its version.
-- The language model arrives as a blob (the engine caches it per node) and is
+- The language pack (or model) arrives as a blob (the engine caches it per node) and is
   trusted only when its bytes hash to the pipeline's pin; a model that does
   not match is `PipelineUnavailable`, not a different result. A transfer over
   the blob channel that fails — the model coming in, a product going out — is
@@ -497,24 +691,34 @@ admits no other to the work):
 | `WarcReader` / `WarcRecord` | `Warc/` | streams the records of a gzip (one member per record, as Common Crawl writes them) or plain WARC/WET file, one record in memory at a time; oversized records skipped and counted; a truncated tail ends the file with the complete records; malformed input is an error at an offset |
 | `PdfSandbox` / `PdfSandboxHost` / `PdfTextShaper` / `PdfTextChunker` / `PdfStageLimits` | `Pdf/` | the PDF extractor (pdftext, pdf_oxide for wasm32-wasip1) run in the controller's own copy of the AI wasm host (`AI/Shared/Wasm`, compiled in as source), the verdicts, the shaping of its text into pages without running lines, the page-range documents, the stage's contract; `ShardPdfStage` (`Shards/`) puts it in the pipeline |
 | `HttpResponsePayload` / `HtmlTextExtractor` | `Text/` | a WARC response's HTTP headers and body, decoded by header charset → meta charset → UTF-8; HTML to text on AngleSharp with a scoped rule set (scripts, styles, navigation, forms and hidden content dropped; blocks become lines; title first); a linear pre-scan refuses pages nested deeper than 512 or past 60k tags. Agrees with Common Crawl's own WET text at a median Jaccard of 0.85 on the golden shard |
-| `LanguageIdentifier` / `LanguageModel` / `LanguageModelTrainer` | `Language/` | character n-gram profiles (Cavnar–Trenkle, integer rank distance, ordinal ties); the model is trained by `corpus-assets` from WET files' own language labels and pinned by hash; the committed 16-language model agrees with the crawl's labels at 98.8 % on the shard |
-| `LineCleaner` / `QualityFilter` / `QualityRules` / `QualityStopWords` | `Quality/` | the line stage (C4's line rules, script-aware) and the Gopher quality and repetition rules with DataTrove's definitions of every measure, each threshold with its source in the code (Gopher, C4, FineWeb-2), every failed rule named with its measurement; scripts without word spacing are judged by their letters |
+| `LanguageIdentifier` / `LanguageModel` / `LanguageModelFormat` / `LanguageAcceptance` / `LanguageRules` / `LanguageRuleSet` | `Language/` | character n-gram profiles (Cavnar–Trenkle, integer rank distance, ordinal ties) and the unsupported-language test; the two model formats (`WITLID1` profiles only, `WITLID2` language packs) with one canonical serialization each; each language's rule data (script, stop words, thresholds) as data, and the frozen rule data of `WITLID1` models (`Resources/witlid1-rules.json`); `LanguageScripts`, the scripts written without spaces — the one piece of language knowledge in code |
+| `LanguageModelTrainer` / `LanguagePackBuilder` / `LanguagePackCalibrator` / `LanguagePackEvaluator` / `LanguagePackSource` | `Language/` | what `corpus-assets` runs: profiles trained from WET files' own language labels, the per-language source folders read, the limits calibrated, a pack measured against the crawl's labels |
+| `LineCleaner` / `QualityFilter` / `QualityRules` / `QualityRuleOverrides` | `Quality/` | the line stage (C4's line rules, script-aware; C4's curly-bracket rule) and the Gopher quality and repetition rules with DataTrove's definitions of every measure, each threshold with its source in the code (Gopher, C4, FineWeb-2), every failed rule named with its measurement; scripts without word spacing are judged by their letters; the thresholds a language's rule data may set, by name |
 | `MinHashSigner` | `Signatures/` | 128 MinHash values over 5-word shingles (FNV-1a + a seeded universal hash family), LSH band keys, estimated Jaccard between signatures |
 | `CorpusCompressor` | `Compression/` | zstd through the managed ZstdSharp port at one pinned level, buffer and stream forms; the frame is a function of the content |
 | `ShardProcessor` and friends | `Shards/` | the pipeline over one shard (`ShardProcessor`), the allowlist gate (`ShardOrigin`), the capped retrying fetch (`ShardFetcher`), the pinned model cache (`ShardLanguageModels`), the signatures layout (`ShardSignatureWriter`), the canonical counters (`ShardStatsBuilder`) and the node-side task start to finish (`ShardTaskRunner`) |
 | `CorpusManifestParser` / `CorpusTaskPlanner` | `Manifests/` | the manifest document and the host-side plan |
 | `CorpusReportWriter` | `Reports/` | the job report |
 | `CorpusStorageEstimator` and friends | `Storage/` | the server storage estimate (`CorpusStorageEstimator` over the measured `CorpusStorageRatios`), the deployment's limit behind `ICorpusStorageHeadroom` (`CorpusStorageHeadroomHost`: the server's blob service, the operator's variable) and the refusal (`CorpusStorageCheck`) |
-| `CorpusRuntimeDiagnosticsBuilder` / `CorpusCapabilitiesWriter` | `Diagnostics/` | the module's diagnostics, the stage set and its fingerprint (`CorpusStageSet`), the reference language model's facts, the pool as totals (`CorpusPoolProbe`) and the capabilities document |
+| `CorpusRuntimeDiagnosticsBuilder` / `CorpusCapabilitiesWriter` | `Diagnostics/` | the module's diagnostics, the stage set and its fingerprint (`CorpusStageSet`), the reference language pack's facts, the pool as totals (`CorpusPoolProbe`) and the capabilities document |
 | `OutWit.Controller.AI.Corpus.Model` | | the wire types: source, pipeline, quality thresholds, task, result, statistics, options, preflight, runtime diagnostics — MemoryPack with pinned member order |
 
-`OutWit.Controller.AI.Corpus.Assets` (`corpus-assets`) trains and evaluates
-the language model from WET files:
+`OutWit.Controller.AI.Corpus.Assets` (`corpus-assets`) builds and evaluates
+language packs from the per-language source data in its `languages/` folder
+and WET files (see *Adding a language*), and still trains and evaluates the
+profiles-only `WITLID1` model:
 
 ```
+corpus-assets build-language-pack <out.bin> --languages <dir> --train <wet.gz>... [--known-train <wet.gz>...]
+              --calibrate <wet.gz>... [--recall 0.999] [--name NAME] [--profile 3000] [--min-docs 200] [--known-min-docs 100] [--threads N]
+corpus-assets evaluate-language-pack <pack.bin> <wet.gz>... [--no-judge] [--threads N]
 corpus-assets train-language-model <out.bin> <wet.gz>... [--profile N] [--min-docs N]
 corpus-assets evaluate-language-model <model.bin> <wet.gz>
 ```
+
+The stop-word lists in `languages/` are Gopher's eight English words and
+FineWeb-2's lists (Apache-2.0, `languages/LICENSE-fineweb-2.txt`), each file
+naming its source.
 
 ## Determinism
 
@@ -557,10 +761,14 @@ extracts; the tests are ignored without it, and fail on the build server, which
 fetches it); a node without the sandbox, which does not make a shard with a PDF
 (the fault leaves the task, and through the engine rig every node's batch fails)
 and makes a shard without one as any node does; every stage on the golden shards (the
-first complete members of a real WET and a real WARC file, 1.5 MB each, and
-the trained language model, committed under `Fixtures/`) and on hostile input
+first complete members of a real WET and a real WARC file, 1.5 MB each, the
+reference language pack and the 0.1.x model, committed under `Fixtures/`) and on
+hostile input
 (truncation, oversized records, garbage, hostile nesting, repetition); the
-pipeline's determinism and counters; the fetcher against a loopback origin
+pipeline's determinism and counters; the language packs (the format and its
+refusals, the unsupported-language test on sentences written for the tests, the
+0.1.x model's products pinned unchanged, the build and evaluation on a small
+generated fixture, the frozen 0.1.14 rule data); the fetcher against a loopback origin
 (retries, caps, final refusals, stalls); the node-side task's verdicts; the
 manifest parser and planner; the report; the wire layout of every model type;
 the storage estimate against a measured run and the golden shards, the

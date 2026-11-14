@@ -26,7 +26,7 @@ public sealed partial class CorpusShardStatsData : ModelBase
         if (modelBase is not CorpusShardStatsData other)
             return false;
 
-        if (Drops.Count != other.Drops.Count || Languages.Count != other.Languages.Count)
+        if (Drops.Count != other.Drops.Count || Languages.Count != other.Languages.Count || UnsupportedLanguages.Count != other.UnsupportedLanguages.Count)
             return false;
 
         if ((Pdf == null) != (other.Pdf == null) || (Pdf != null && !Pdf.Is(other.Pdf!, tolerance)))
@@ -41,6 +41,12 @@ public sealed partial class CorpusShardStatsData : ModelBase
         for (var i = 0; i < Languages.Count; i++)
         {
             if (!Languages[i].Is(other.Languages[i], tolerance))
+                return false;
+        }
+
+        for (var i = 0; i < UnsupportedLanguages.Count; i++)
+        {
+            if (!UnsupportedLanguages[i].Is(other.UnsupportedLanguages[i], tolerance))
                 return false;
         }
 
@@ -70,6 +76,7 @@ public sealed partial class CorpusShardStatsData : ModelBase
             FetchMs = FetchMs,
             ProcessMs = ProcessMs,
             WaitMs = WaitMs,
+            UnsupportedLanguages = UnsupportedLanguages.Select(u => u.Clone()).ToList(),
             Pdf = Pdf?.Clone()
         };
     }
@@ -123,8 +130,17 @@ public sealed partial class CorpusShardStatsData : ModelBase
     [MemoryPackOrder(9)]
     public int WaitMs { get; set; }
 
-    /// <summary>What the PDF stage did with the shard's PDFs; null when it met none (a WET shard, a WARC shard without a PDF, the stage off).</summary>
+    /// <summary>
+    /// The documents dropped as <c>language_unsupported</c>, by where they were nearest: a
+    /// language the pack knows and does not support (its code), <c>past_limit:</c> and a supported
+    /// language's code (past that language's limit), or <c>no_profile</c> (no n-gram in common
+    /// with any profile). Names in ordinal order; the counts sum to the drop's.
+    /// </summary>
     [MemoryPackOrder(10)]
+    public List<CorpusCountData> UnsupportedLanguages { get; set; } = [];
+
+    /// <summary>What the PDF stage did with the shard's PDFs; null when it met none (a WET shard, a WARC shard without a PDF, the stage off).</summary>
+    [MemoryPackOrder(11)]
     public CorpusPdfStatsData? Pdf { get; set; }
 
     #endregion

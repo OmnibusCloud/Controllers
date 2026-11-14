@@ -35,8 +35,10 @@ public sealed class ShardProcessor
     public const string DROP_HTML_REFUSED = "html_refused";
     public const string DROP_EMPTY_TEXT = "empty_text";
     public const string DROP_LANGUAGE_UNKNOWN = "language_unknown";
+    public const string DROP_LANGUAGE_UNSUPPORTED = "language_unsupported";
     public const string DROP_LANGUAGE_NOT_TARGET = "language_not_target";
     public const string DROP_NO_PROSE_LINES = "no_prose_lines";
+    public const string DROP_CURLY_BRACKET = "curly_bracket";
 
     private static readonly JsonWriterOptions JSON_OPTIONS = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, Indented = false, SkipValidation = true };
 
@@ -47,6 +49,7 @@ public sealed class ShardProcessor
     private readonly CorpusPipelineData m_pipeline;
     private readonly LanguageIdentifier? m_identifier;
     private readonly HashSet<string>? m_targets;
+    private readonly LanguageRuleSet m_rules;
     private ShardPdfStage? m_pdf;
 
     #endregion
@@ -71,6 +74,7 @@ public sealed class ShardProcessor
     {
         m_pipeline = pipeline;
         m_pdf = pdfStage;
+        m_rules = languageModel?.Rules ?? LanguageRuleSet.Witlid1;
 
         if (pipeline.IdentifyLanguage)
         {
@@ -135,7 +139,10 @@ public sealed class ShardProcessor
             var guess = m_identifier.Identify(text);
             if (!guess.IsKnown)
             {
-                stats.Drop(DROP_LANGUAGE_UNKNOWN);
+                if (guess.IsUnsupported)
+                    stats.DropUnsupported(guess);
+                else
+                    stats.Drop(DROP_LANGUAGE_UNKNOWN);
                 return;
             }
 
@@ -149,7 +156,13 @@ public sealed class ShardProcessor
         }
 
         var content = text;
-        var rules = ShardQualityRules.Resolve(language, m_pipeline.Quality);
+        var rules = ShardQualityRules.Resolve(m_rules.For(language), m_pipeline.Quality);
+        if (rules.FilterCurlyBracket && LineCleaner.HoldsCurlyBracket(content, rules))
+        {
+            stats.Drop(DROP_CURLY_BRACKET);
+            return;
+        }
+
         if (m_pipeline.CleanLines)
         {
             content = LineCleaner.Clean(content, rules, out _);

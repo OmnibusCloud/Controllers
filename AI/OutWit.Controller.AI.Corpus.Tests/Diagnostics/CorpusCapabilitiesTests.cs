@@ -93,8 +93,16 @@ public sealed class CorpusCapabilitiesTests
             Assert.That(root.GetProperty("benchmark_unit").GetString(), Is.EqualTo(CorpusBenchmark.UNIT));
             Assert.That(root.GetProperty("stages").GetProperty("verified").GetBoolean(), Is.True);
             Assert.That(root.GetProperty("stages").GetProperty("order").GetArrayLength(), Is.EqualTo(CorpusStageSet.STAGES.Count));
+            Assert.That(root.GetProperty("stages").GetProperty("language_format").GetString(), Is.EqualTo("WITLID2"), "the language data the stage set reads");
+            Assert.That(root.GetProperty("pipeline").GetProperty("switches").GetProperty("extract_pdf").GetBoolean(), Is.True, "the PDF stage is on unless a manifest turns it off");
             Assert.That(root.GetProperty("parsers").GetProperty("html").GetString(), Does.StartWith("AngleSharp "));
             Assert.That(root.GetProperty("language_model").GetProperty("reference_sha256").GetString(), Is.EqualTo(CorpusReferenceLanguageModel.SHA256));
+            Assert.That(root.GetProperty("language_model").GetProperty("format").GetString(), Is.EqualTo("WITLID2"));
+            Assert.That(root.GetProperty("language_model").GetProperty("formats").EnumerateArray().Select(format => format.GetString()), Is.EqualTo(new[] { "WITLID1", "WITLID2" }));
+            Assert.That(root.GetProperty("language_model").GetProperty("unsupported_drop").GetString(), Is.EqualTo("language_unsupported"));
+            Assert.That(root.GetProperty("language_model").GetProperty("reference_known_languages").GetArrayLength(), Is.EqualTo(CorpusReferenceLanguageModel.KNOWN_LANGUAGES.Count));
+            Assert.That(root.GetProperty("language_model").GetProperty("witlid1_reference_sha256").GetString(), Is.EqualTo(CorpusReferenceLanguageModel.WITLID1_SHA256));
+            Assert.That(root.GetProperty("pipeline").GetProperty("switches").GetProperty("filter_curly_bracket").GetBoolean(), Is.False, "C4's curly-bracket rule is off unless a manifest turns it on");
             Assert.That(root.GetProperty("formats").EnumerateArray().Select(format => format.GetString()), Is.EqualTo(new[] { "wet", "warc" }));
             Assert.That(root.GetProperty("origins").GetProperty("public")[0].GetString(), Is.EqualTo("data.commoncrawl.org"));
             Assert.That(root.GetProperty("origins").GetProperty("machine_variable").GetString(), Is.EqualTo(ShardOriginPolicy.EXTRA_ORIGINS_VARIABLE));

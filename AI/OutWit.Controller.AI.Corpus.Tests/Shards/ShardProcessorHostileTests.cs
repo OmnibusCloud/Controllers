@@ -29,7 +29,7 @@ public sealed class ShardProcessorHostileTests
     [OneTimeSetUp]
     public void Setup()
     {
-        m_model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-model-cc-2026-43-16.bin"));
+        m_model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-pack-cc-2026-43-16.bin"));
     }
 
     #endregion
