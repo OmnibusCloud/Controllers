@@ -4,10 +4,10 @@
   "title": "Verify capabilities",
   "description": "The capabilities blob of VerifyRuntimeDiagnostics: what a submitter can know before a run. It takes no taskset. Nodes run the same module as the host (the platform admits no other version to the work), so the runtimes listed are the pool's.",
   "type": "object",
-  "required": ["schema", "controller", "wasmtime", "benchmark_unit", "runtimes", "defaults", "ceilings", "packages"],
+  "required": ["schema", "controller", "wasmtime", "benchmark_unit", "runtimes", "defaults", "ceilings", "time", "sources", "modules", "packages"],
   "additionalProperties": false,
   "properties": {
-    "schema": { "type": "string", "const": "verify-capabilities/1" },
+    "schema": { "type": "string", "const": "verify-capabilities/2" },
     "controller": { "type": "string", "description": "The controller's version." },
     "wasmtime": { "type": "string", "description": "The engine the sandbox runs on: the version of the wasmtime .NET binding and of the native library under it, e.g. \"48.0.2.0 (native 48.0.8)\". A native library that is not one the controller ships is \"unpinned\" with the start of its SHA-256." },
     "benchmark_unit": { "type": "string", "description": "The unit of the pool's rate: tasks of the reference workload per second." },
@@ -28,41 +28,75 @@
     },
     "defaults": {
       "type": "object",
-      "description": "What applies when the options and the task leave a value unset.",
-      "required": ["batch_size", "max_degree", "fuel", "memory_bytes", "wall_ms", "stdout_bytes", "stderr_bytes"],
+      "description": "What applies when the options and the task leave a value unset. There is no wall time among them: it is not a limit since 0.13.0.",
+      "required": ["batch_size", "max_degree", "fuel", "memory_bytes", "stdout_bytes", "stderr_bytes"],
       "additionalProperties": false,
       "properties": {
-        "batch_size": { "type": "integer" },
-        "max_degree": { "type": "integer" },
-        "fuel": { "type": "integer" },
+        "batch_size": { "type": "integer", "description": "Tasks per batch." },
+        "max_degree": { "type": "integer", "description": "The most sandboxes a node runs at once, when its cores and its free memory allow that many." },
+        "fuel": { "type": "integer", "description": "The fuel budget of a task: the one budget of a run's work." },
         "memory_bytes": { "type": "integer" },
-        "wall_ms": { "type": "integer" },
-        "stdout_bytes": { "type": "integer" },
+        "stdout_bytes": { "type": "integer", "description": "The stdout a task keeps, all cases of a suite together." },
         "stderr_bytes": { "type": "integer" }
       }
     },
     "ceilings": {
       "type": "object",
-      "description": "The most a task may ask for; a larger request is clamped when the taskset is split.",
-      "required": ["fuel", "memory_bytes", "wall_ms", "stdout_bytes", "stderr_bytes"],
+      "description": "The most a task may ask for; a larger request is clamped when the taskset is split, and again on the node whatever the package says.",
+      "required": ["fuel", "memory_bytes", "stdout_bytes", "stderr_bytes"],
       "additionalProperties": false,
       "properties": {
         "fuel": { "type": "integer" },
         "memory_bytes": { "type": "integer" },
-        "wall_ms": { "type": "integer" },
         "stdout_bytes": { "type": "integer" },
         "stderr_bytes": { "type": "integer" }
       }
     },
+    "time": {
+      "type": "object",
+      "description": "How fuel relates to time. Fuel is the one budget of a run's work and Timeout means out of fuel. The wall clock gives no verdict: a node keeps a backstop of its own, backstop_base_ms plus the time the run's fuel budget lasts at backstop_fuel_per_second, and a run the backstop ends is a fault of the node.",
+      "required": ["reference_fuel_per_second", "backstop_base_ms", "backstop_fuel_per_second"],
+      "additionalProperties": false,
+      "properties": {
+        "reference_fuel_per_second": { "type": "integer", "description": "The fuel a plain busy loop burns a second on the slowest node the fleet has shown: what turns a fuel budget into seconds. Fuel bounds work, not time: other instructions are slower or faster." },
+        "backstop_base_ms": { "type": "integer", "description": "What every run gets on the clock besides the time of its fuel, milliseconds." },
+        "backstop_fuel_per_second": { "type": "integer", "description": "The slowest a run may burn its fuel before a node's clock ends it: a quarter of the reference rate." }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "description": "The rule a task's source names are held to, for every runtime; a taskset with another name is refused when it is split.",
+      "required": ["name_pattern", "max_name_bytes", "max_depth"],
+      "additionalProperties": false,
+      "properties": {
+        "name_pattern": { "type": "string", "description": "The rule as a regular expression: the characters, the segments and the leading dash. The parser also refuses '.' and '..' segments, a segment that ends with '.', the names Windows reserves for a device, two names that differ only in case, and a name that is a file and a folder of another." },
+        "max_name_bytes": { "type": "integer", "description": "The most bytes a name may have, folders included." },
+        "max_depth": { "type": "integer", "description": "The most segments a name may have, folders and the file." }
+      }
+    },
+    "modules": {
+      "type": "object",
+      "description": "What a module a task brings (the raw wasi runtime) or the compiler builds from a task's sources is held to before the node compiles it.",
+      "required": ["max_bytes", "max_nesting", "compile_fuel_per_byte"],
+      "additionalProperties": false,
+      "properties": {
+        "max_bytes": { "type": "integer", "description": "The largest module a raw wasi task may bring, bytes." },
+        "max_nesting": { "type": "integer", "description": "The deepest blocks, loops and ifs may nest in one function; a deeper module is a CompileError." },
+        "compile_fuel_per_byte": { "type": "integer", "description": "What a byte of the module costs to compile, in fuel, taken from the task's budget once a task. The shape of its functions (locals read inside nested loops, branch tables over nested blocks) is priced on top." }
+      }
+    },
     "packages": {
       "type": "object",
-      "description": "How a run is cut into the blobs nodes download: one batch per package while the run is small, about `target` packages once it is large.",
-      "required": ["target", "max_tasks", "max_bytes"],
+      "description": "How a run is cut into the blobs nodes download: one batch per package while the run is small, about `target` packages once it is large, every package and batch within the caps below. A node refuses a package or a batch that is larger.",
+      "required": ["target", "max_tasks", "max_bytes", "max_output_bytes", "max_batch_tasks", "max_batch_output_bytes"],
       "additionalProperties": false,
       "properties": {
         "target": { "type": "integer" },
-        "max_tasks": { "type": "integer" },
-        "max_bytes": { "type": "integer" }
+        "max_tasks": { "type": "integer", "description": "The most tasks one package holds." },
+        "max_bytes": { "type": "integer", "description": "The most task text one package holds, in characters; also the most one task may have." },
+        "max_output_bytes": { "type": "integer", "description": "The most output the tasks of one package may keep together, by their caps: a task counts for twice its stdout cap plus its stderr cap." },
+        "max_batch_tasks": { "type": "integer", "description": "The most tasks one batch holds; a larger batch size in the options is clamped to it." },
+        "max_batch_output_bytes": { "type": "integer", "description": "The most output the tasks of one batch may keep together, by their caps; a batch is cut where they reach it." }
       }
     },
     "pool": {

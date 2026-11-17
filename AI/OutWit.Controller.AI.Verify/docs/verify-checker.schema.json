@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-checker.schema.json",
   "title": "Verify checker spec",
-  "description": "The checker of VerifyGenerateAndCheck: one JSON object (not JSON lines). A taskset line without index/stdin/suite, plus the verdict rule at the top level. Every candidate that passed generation with output becomes one run of this program with the candidate's stdout on stdin, under the candidate's index.",
+  "description": "The checker of VerifyGenerateAndCheck: one JSON object (not JSON lines). A taskset line without index/stdin/suite, plus the verdict rule at the top level. Every candidate that passed generation with output becomes one run of this program with the candidate's stdout on stdin, under the candidate's index. The candidates are the settled results of the generator run: one a generator, the same one the corpus holds.",
   "type": "object",
   "required": ["runtime", "sources"],
   "additionalProperties": false,
@@ -12,8 +12,12 @@
     "sources": {
       "type": "object",
       "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^(?!-)[A-Za-z0-9._+-]+(/(?!-)[A-Za-z0-9._+-]+){0,7}$",
+        "maxLength": 128
+      },
       "additionalProperties": { "type": "string" },
-      "description": "File name → file content."
+      "description": "File name → file content. The names are held to the portable set, as in a taskset line (verify-taskset.schema.json)."
     },
     "args": { "type": "array", "items": { "type": "string" }, "description": "Arguments passed to every check." },
     "limits": { "$ref": "verify-taskset.schema.json#/properties/limits" },

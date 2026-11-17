@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-taskset.schema.json",
   "title": "Verify taskset line",
-  "description": "One task of a Verify taskset. A taskset is JSON lines: one object per line, no enclosing array. Submitted as the taskset blob of VerifyRun, VerifyGenerate and (as the generators) VerifyGenerateAndCheck.",
+  "description": "One task of a Verify taskset. A taskset is JSON lines: one object per line, no enclosing array. Submitted as the taskset blob of VerifyRun, VerifyGenerate and (as the generators) VerifyGenerateAndCheck. A taskset with a line that is not well formed, a source name outside the portable set, an unknown runtime id or a task whose text is over 8 MiB is refused whole when it is split; the preflight says so beforehand, by line, name or index.",
   "type": "object",
   "required": ["runtime", "sources"],
   "additionalProperties": false,
@@ -14,7 +14,7 @@
     },
     "runtime": {
       "type": "string",
-      "description": "A runtime id from the controller's catalog: python-3.14.6, python-3.14.6-sympy-1.14.0, python-3.14.6-numpy-2.5.4 (numpy built in; its default integer is 32-bit, use dtype=np.int64 for 64-bit integers; no BLAS, threads or SIMD), quickjs-0.15.1, typescript-sucrase-3.35.1 (TypeScript, the types stripped by sucrase, no type check), ruby-3.4.1, lua-5.4.8 (the sources are files in a read-only folder that is the guest's whole file system: the entry is Lua's script, require finds a neighbour), clang-22.1.0 (C17 and C++20 without exceptions, compiled on the node under its own budget: .c, .cc, .cpp, .cxx sources are compiled and linked, headers sit beside them; the program runs as a raw WASI module), or wasi (the entry is itself a WASI command module, compiled from Rust, C/C++, Zig, TinyGo or anything else that targets wasm32-wasi). For lua and clang the source names use '/' and must be the same file on Windows, Linux and macOS. An unknown id yields RuntimeUnavailable for the task."
+      "description": "A runtime id from the controller's catalog: python-3.14.6, python-3.14.6-sympy-1.14.0, python-3.14.6-numpy-2.5.4 (numpy built in; its default integer is 32-bit, use dtype=np.int64 for 64-bit integers; no BLAS, threads or SIMD), quickjs-0.15.1, typescript-sucrase-3.35.1 (TypeScript, the types stripped by sucrase, no type check), ruby-3.4.1, lua-5.4.8 (the sources are files in a read-only folder that is the guest's whole file system: the entry is Lua's script, require finds a neighbour), clang-22.1.0 (C17 and C++20 without exceptions, compiled on the node under its own budget: .c, .cc, .cpp, .cxx sources are compiled and linked, headers sit beside them; the program runs as a raw WASI module), or wasi (the entry is itself a WASI command module, compiled from Rust, C/C++, Zig, TinyGo or anything else that targets wasm32-wasi; at most 8 MiB, and compiling it is paid from the task's fuel). A taskset that names an unknown id is refused when it is split, and the preflight reports it as not well formed."
     },
     "entry": {
       "type": "string",
@@ -23,8 +23,12 @@
     "sources": {
       "type": "object",
       "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^(?!-)[A-Za-z0-9._+-]+(/(?!-)[A-Za-z0-9._+-]+){0,7}$",
+        "maxLength": 128
+      },
       "additionalProperties": { "type": "string" },
-      "description": "File name → file content. For the python, quickjs, typescript and ruby runtimes the entry is the program, passed inline; for lua and clang every source is a file in a read-only folder; for the wasi runtime the entry is the module's bytes in base64 (a preflight rejects anything else)."
+      "description": "File name → file content. For the python, quickjs, typescript and ruby runtimes the entry is the program, passed inline; for lua and clang every source is a file in a read-only folder; for the wasi runtime the entry is the module's bytes in base64 (a preflight rejects anything else). A name must be portable, whatever the runtime: the characters A-Z a-z 0-9 . _ - +, folders separated by '/', at most 128 bytes in all and 8 segments. Beyond what the pattern says: no '.' or '..' segment, no segment that ends with '.', none that Windows reserves for a device (CON, NUL, COM1, ...), no two names that differ only in case, and no name that is a file and a folder of another. A taskset with another name is refused when it is split, by the name."
     },
     "args": {
       "type": "array",
@@ -37,11 +41,11 @@
     },
     "seed": {
       "type": "integer",
-      "description": "Seed of the sandbox's deterministic random source (WASI random_get). Default 0."
+      "description": "Seed of the sandbox's deterministic random source (WASI random_get). Default 0. Every seed has a stream of its own. Seed 0 keeps the stream it always had; the stream of every other seed changed in 0.13.0 (seeds 2k and 2k+1 used to share one)."
     },
     "suite": {
       "type": "array",
-      "description": "Test cases. The task passes when every case passes; the first failing case sets the verdict.",
+      "description": "Test cases. The task passes when every case passes; the first failing case sets the verdict. The cases share the task's stdout cap.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -49,20 +53,20 @@
           "stdin": { "type": "string", "description": "Standard input of this case." },
           "args": { "type": "array", "items": { "type": "string" }, "description": "Appended to the task's args for this case." },
           "expected_stdout": { "type": "string", "description": "The exact stdout of a passing case; absent = only the exit code counts." },
-          "expected_exit": { "type": "integer", "default": 0, "description": "The exit code of a passing case. A non-zero exit where 0 was expected is a RuntimeError (the program crashed); any other mismatch is a Fail." }
+          "expected_exit": { "type": "integer", "default": 0, "description": "The exit code of a passing case. A case passes only when the program ended by itself (it returned or called exit) with this code: a crash is not an exit, so -1 does not pass on one. A case that is met passes whatever the program wrote to stderr. A non-zero exit where 0 was expected is a RuntimeError; any other mismatch of a run that ended by itself is a Fail." }
         }
       }
     },
     "limits": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Per-task limits; omitted fields take the job defaults, and every field is clamped to the host ceilings (fuel 2e12, memory 2 GiB, wall 120 s, stdout 8 MiB, stderr 1 MiB).",
+      "description": "Per-task limits; omitted fields take the job defaults, and every field is clamped to the ceilings (fuel 240e9, memory 2 GiB, stdout 8 MiB, stderr 1 MiB) when the taskset is split and again on the node.",
       "properties": {
-        "fuel": { "type": "integer", "minimum": 1, "description": "wasmtime fuel (instructions); default 50e9." },
+        "fuel": { "type": "integer", "minimum": 1, "description": "wasmtime fuel: one unit an instruction, and one a byte a call into the host moves. The one budget of a run's work: Timeout means out of fuel. Default 20e9, about ten seconds of a busy loop on a slow machine." },
         "memory": { "type": "integer", "minimum": 1, "description": "Linear memory cap in bytes; default 256 MiB." },
-        "wall_ms": { "type": "integer", "minimum": 1, "description": "Wall-clock cap in milliseconds; default 10000." },
-        "stdout_bytes": { "type": "integer", "minimum": 1, "description": "Captured stdout cap; default 256 KiB. Beyond it the task is OutputExceeded." },
-        "stderr_bytes": { "type": "integer", "minimum": 1, "description": "Captured stderr cap; default 64 KiB." }
+        "wall_ms": { "type": "integer", "minimum": 1, "description": "Accepted and not a limit since 0.13.0: a run is bounded by its fuel, and the wall clock is a node's own backstop that gives no verdict. There is no default and no ceiling; the preflight says so with one message when a taskset sets it." },
+        "stdout_bytes": { "type": "integer", "minimum": 1, "description": "Cap on the stdout the task keeps, all cases of a suite together; default 256 KiB. The write that passes it ends the run: OutputExceeded." },
+        "stderr_bytes": { "type": "integer", "minimum": 1, "description": "Captured stderr cap; default 64 KiB. Past it stderr is dropped and flagged, and the run goes on." }
       }
     }
   }

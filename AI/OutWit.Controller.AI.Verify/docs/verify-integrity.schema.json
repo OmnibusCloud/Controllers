@@ -2,43 +2,90 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-integrity.schema.json",
   "title": "Verify integrity",
-  "description": "The integrity blob of every Verify script: the share of batches (VerifyOptions.SamplingRate) that ran twice in one Grid.ForEach call, the two executions of each task compared on everything an honest node cannot vary (verdict, exit code, outputs, per-case outcomes). The platform keeps the two on different machines and the document does not say which. Empty pairs at rate 0.",
+  "description": "The integrity blob of every Verify script: what the server did with what the nodes returned. The share of packages (VerifyOptions.SamplingRate) that ran twice in the first fan-out, the executions of each of their tasks compared on everything an honest node cannot vary (verdict, exit code, outputs, per-case outcomes); every dispute and how three more executions settled it; and the counts: the result packages refused and why, the tasks sent out once more, the tasks left without a result, and the tasks that rest on one execution because they were not sampled. The platform keeps the executions of one package on different machines and the document does not say which. Empty pairs at rate 0.",
   "type": "object",
-  "required": ["summary", "pairs"],
+  "required": ["schema", "summary", "pairs", "disputes"],
   "additionalProperties": false,
   "properties": {
+    "schema": { "type": "string", "const": "verify-integrity/2" },
     "summary": {
       "type": "object",
-      "required": ["sampled", "compared", "mismatches", "mismatch_rate"],
+      "required": [
+        "tasks", "sampled", "compared", "mismatches", "mismatch_rate", "agreed", "single_execution",
+        "disputes", "disputes_resolved", "disputed", "repairs", "no_result", "rejected_results", "rejected"
+      ],
       "additionalProperties": false,
       "properties": {
-        "sampled": { "type": "integer", "description": "Pairs of executions of one task." },
+        "tasks": { "type": "integer", "description": "Tasks of the run." },
+        "sampled": { "type": "integer", "description": "Pairs of executions of one task in the first fan-out, both with a verdict." },
         "compared": { "type": "integer", "description": "Pairs compared; every pair is." },
         "mismatches": { "type": "integer", "description": "Compared pairs that disagree." },
-        "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." }
+        "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." },
+        "agreed": { "type": "integer", "description": "Tasks accepted on two or more executions that agree, a resolved dispute included." },
+        "single_execution": { "type": "integer", "description": "Tasks accepted on one execution: they rest on one machine. A task that was not sampled is one of them." },
+        "disputes": { "type": "integer", "description": "Tasks whose executions in the first fan-out disagreed, or whose package got more answers there than were asked for." },
+        "disputes_resolved": { "type": "integer", "description": "Disputes settled by a majority of three more executions." },
+        "disputed": { "type": "integer", "description": "Disputes that stand: disputes - disputes_resolved, the tasks with verdict Disputed." },
+        "repairs": { "type": "integer", "description": "Tasks without a verdict from the first fan-out, sent out once more." },
+        "no_result": { "type": "integer", "description": "Tasks left without a result: the tasks with verdict NoResult." },
+        "rejected_results": { "type": "integer", "description": "Result packages the server refused, every round and reason together." },
+        "rejected": {
+          "type": "object",
+          "description": "The refused result packages by reason, zero included. A refused package fails that package and not the run.",
+          "required": ["unknown_ticket", "duplicate", "unreadable", "version", "content", "surplus"],
+          "additionalProperties": false,
+          "properties": {
+            "unknown_ticket": { "type": "integer", "description": "A result under a ticket the fan-out did not give out." },
+            "duplicate": { "type": "integer", "description": "The same result blob returned again." },
+            "unreadable": { "type": "integer", "description": "Not a result package this version reads, not the bytes its reference names, damaged, or larger than one may be." },
+            "version": { "type": "integer", "description": "Made by another controller version, engine or runtime bytes than the server's." },
+            "content": { "type": "integer", "description": "Does not hold exactly the tasks of the package it answers (one missing, foreign or twice), or holds a result a node may not give." },
+            "surplus": { "type": "integer", "description": "More results under one ticket than copies were asked for, in the repair or the dispute round: which is the answer cannot be told, so none is taken." }
+          }
+        }
       }
     },
     "pairs": {
       "type": "array",
-      "description": "One record per sampled task, ordered by index.",
+      "description": "One record per pair of executions of a task in the first fan-out, ordered by index.",
       "items": {
         "type": "object",
-        "required": ["index", "primary", "replica", "compared"],
+        "required": ["index", "primary", "replica", "compared", "match"],
         "additionalProperties": false,
         "properties": {
           "index": { "type": "integer" },
           "primary": { "$ref": "#/$defs/side" },
           "replica": { "$ref": "#/$defs/side" },
-          "compared": { "type": "boolean" },
-          "match": { "type": "boolean", "description": "Present when compared." },
+          "compared": { "type": "boolean", "const": true },
+          "match": { "type": "boolean", "description": "Whether the two agree on everything that is compared." },
           "differs": { "type": "array", "items": { "type": "string", "enum": ["verdict", "exit", "stdout", "stderr", "cases"] }, "description": "Present on a mismatch: the fields that differ." }
+        }
+      }
+    },
+    "disputes": {
+      "type": "array",
+      "description": "One record per task whose executions disagreed, ordered by index: what three more executions on different machines came to. The server never chooses between two executions; the accepted result is the one most of the three returned, at least two, with no tie.",
+      "items": {
+        "type": "object",
+        "required": ["index", "first_copies", "copies", "agreeing", "outcome"],
+        "additionalProperties": false,
+        "properties": {
+          "index": { "type": "integer" },
+          "first_copies": { "type": "integer", "description": "Executions of the first fan-out that had a verdict." },
+          "copies": { "type": "integer", "description": "Executions of the dispute round that came back with a verdict." },
+          "agreeing": { "type": "integer", "description": "The most of them that returned one result." },
+          "outcome": {
+            "type": "string",
+            "enum": ["resolved", "no_majority", "too_few_copies", "surplus_copies"],
+            "description": "resolved: one result came from at least two copies and from more than any other; it is the task's. Otherwise the task is Disputed. no_majority: no result came from two copies and from more than any other. too_few_copies: fewer than two copies came back with a verdict. surplus_copies: the task's package got more answers than the round's packages commonly did, so one machine may have answered twice and nothing is settled by counting."
+          }
         }
       }
     }
   },
   "$defs": {
     "side": {
-      "type": ["object", "null"],
+      "type": "object",
       "required": ["verdict", "exit"],
       "additionalProperties": false,
       "properties": {

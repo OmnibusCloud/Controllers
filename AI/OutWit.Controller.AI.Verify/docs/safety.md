@@ -21,41 +21,72 @@ What a program has inside the box:
 
 | | |
 |---|---|
-| Processor | a fixed budget of instructions, and a time limit of 10 seconds by default (never more than 2 minutes). When either runs out the program is stopped |
+| Processor | a fixed budget of instructions: 20 thousand million by default, never more than 240 thousand million. The default is about 10 seconds of a plain busy loop on a slow machine, the largest two minutes of one. When the budget runs out the program is stopped. What the sandbox does at a program's request (reading a file, printing, making random bytes) is paid from the same budget, one unit a byte |
+| A run that drags | the budget counts work, not time, and some work is slow. So your computer also keeps a clock of its own on every run and ends it after 50 seconds for the default budget, a little over 8 minutes for the largest. That stop is your computer's own and says nothing about the program: the task is sent out once more, and if no computer does better it is reported as having no result |
 | Memory | 256 MB by default (never more than 2 GB), one block of it. Asking for more fails inside the program |
-| Files | only the language's own library, or the task's own files, read-only. It cannot write, change, delete or rename a file, and cannot list a folder |
+| Files | only the language's own library, or the task's own files, read-only, and only under the exact names they have. It cannot write, change, delete or rename a file, and cannot list a folder. What it can read about a file says nothing of your computer: the file's times and its disk read as zero, and its file number follows from its name inside the sandbox |
 | Your files | none. Your disk does not exist for it |
 | Network | none |
 | Other programs | it cannot start any |
 | Time | not yours: a clock that starts at zero and moves only when the program sleeps. A sleep returns at once |
 | Randomness | not yours: a sequence fixed by the task |
 | Your environment | none: no user name, no paths, no variables |
-| Output | what it prints, cut at 256 KB by default |
-| A crash | ends the program, and only the program: the sandbox catches every crash (a bad pointer, a stack overflow, an `abort`). On Windows the client runs with the processor's stack protection switched on, and a crash is still caught as an ordinary check, so the client keeps running and keeps the protection |
+| Output | what a task prints is kept up to a cap: 256 KB by default, never more than 8 MB, for all its test cases together. A byte past the cap is never stored, in memory or on disk, and the write that passes the cap ends the run. Error output past its own cap (64 KB by default, never more than 1 MB) is dropped and the run goes on |
+| A crash | ends the program, and only the program: the sandbox catches every crash (a bad pointer, a stack overflow, an `abort`). A bad pointer handed to the sandbox itself is answered with an error code inside the program. On Windows the client runs with the processor's stack protection switched on, and a crash is still caught as an ordinary check, so the client keeps running and keeps the protection |
 
 ## What it takes from the machine
 
-- **Processor.** At most one program a core at a time, 16 at most unless the lab asks
-  for more (never more than your cores), and fewer when memory is short (the limit is
-  three quarters of your RAM divided by the memory of one program). The work runs below
-  normal priority: on Windows your own programs go first. Linux does not honour that
-  setting for threads; there the cap on the number of programs is the protection.
-- **Compiling.** A C or C++ task is compiled on your computer. The compiler is itself a
-  program in the same sandbox, with a budget of its own (a fixed number of instructions,
-  1 GB of memory a step), so it can read only the task's sources and the language's own
-  library, and writes nothing to your disk.
-- **Disk.** The task files and the files a program's input and output pass through are
-  kept in the client's own folders and deleted when the run ends. Nothing is written
-  anywhere else.
+- **Processor.** At most one program a core at a time, 16 at most unless the lab sets
+  another number (never more than your cores), and fewer when memory is short: the limit
+  is three quarters of the memory that is free when a batch starts, divided by the memory
+  one program may take (for C and C++ tasks the compiler's 1 GB counts when it is the
+  larger). The work runs below normal priority: on Windows your own programs go first.
+  Linux does not honour that setting for threads; there the cap on the number of programs
+  is the protection.
+- **Compiling C and C++.** A C or C++ task is compiled on your computer. The compiler is
+  itself a program in the same sandbox, with a budget of its own: 100 thousand million
+  instructions for all the steps of a build and 1 GB of memory a step. It can read only
+  the task's sources and the language's own library. What it produces (the object files
+  and the program) is written to files in the client's own folder, each cut at 64 MB at
+  the write, and deleted when the task ends.
+- **Turning a module into machine code.** A program built from C or C++, and a module a
+  lab compiled itself, is turned into machine code on your computer before it runs. That
+  work takes the one thread of the worker that runs the task, so it stays within the
+  cores counted above. Before it starts, the module is checked and its shape is priced,
+  and the price is taken from the task's budget of instructions: a task that cannot pay
+  is stopped and nothing is compiled. A budget buys about as much of this work as it buys
+  of running: some ten seconds on a slow machine at the default budget, about two minutes
+  at the largest. A module that nests its blocks deeper than 2,048,
+  or one a lab brings that is larger than 8 MB, is refused. The first use of a language
+  in a process compiles that language's own module (the controller's, checked by its
+  SHA-256) on the engine's threads, once.
+- **Disk.** A program's output never reaches the disk. What does: the files a program's
+  input and a task's sources are given through, the compiler's products, and a package
+  of results until it is uploaded. All of it is kept in the client's own folders and
+  deleted when its task or its package is done. The task packages your computer
+  downloads are kept in the client's own cache. Nothing is written anywhere else.
 - **Network.** The client downloads the tasks and uploads the results. The programs
-  themselves send and receive nothing.
+  themselves send and receive nothing. A transfer has a time to finish in (two minutes
+  plus the time its bytes take at 32 KB a second), so one that hangs does not hold up
+  the others.
+- **What your computer refuses.** It checks a package before it runs any of it. A package
+  made by another version of the controller, one larger than a package may be (4,096
+  tasks at most), or one for a language whose files are missing or are not the pinned
+  ones is refused whole, and the network gives it to another computer.
 
 ## What leaves your computer
 
 For each program: what it printed, its exit code, the verdict, and how much it cost
-(instructions, memory, time). For the run: the kind of system (for example "windows-x64"),
-the versions of the controller and of the engine, and how many programs ran at once.
-Your computer's name, your user name and your address are not in any of it.
+(instructions, memory, time). For the run: the kind of system (for example "windows-x64")
+and the versions of the controller and of the engine. How many programs your computer ran
+at once and how long a batch took stay on your computer: with the limits the lab's to
+choose, your cores and your memory could be read off those numbers.
+
+Your computer's name, your user name and your address are not in any of it. When
+something goes wrong on your computer (a language file that is missing, a transfer that
+failed, a disk that is full), what travels is fixed words or a short code, without a
+path, an account name or the text of an error. The detail stays in the client's own log.
+What a program itself printed is the program's and travels as it is.
 
 ## How to check this yourself
 
@@ -65,6 +96,10 @@ change:
 - `VerifyAdversarialTests`: programs that try to open a network connection, read a file
   of yours, write to the library, climb out of their folder, start a process, loop forever,
   eat all memory, flood the output, sleep for an hour, list a folder, change a file's time.
+- `VerifyNodeProtectionTests`: what a hostile task cannot do to the computer that runs it:
+  a flood of output that never reaches the disk, a module that is priced before it is
+  compiled, a wild pointer that is the task's own error, a run the clock ends that has no
+  verdict, a batch held to the ceilings on the node.
 - `VerifyWasiRuntimeTests`: hand-made modules that try to grow a table without end, ask
   for a second block of memory or a 64-bit one, read outside their memory, or call what
   the sandbox does not provide.
@@ -94,9 +129,17 @@ change:
   (exceptions, shared memory, the garbage-collected heap, 64-bit memories) and takes away
   the few system calls that were the subject of past advisories, each named in the code
   next to what closes it.
-- **A program can use what it is given.** For the seconds it runs it can keep a core busy
+- **A program can use what it is given.** For as long as it runs it can keep a core busy
   and fill its memory. That is the work, not an escape.
-- **The limits are the lab's to set, up to a ceiling.** A lab can ask for up to 2 minutes
-  and 2 GB a program; it cannot ask for more.
+- **The limits are the lab's to set, up to a ceiling.** A lab can ask for up to
+  240 thousand million instructions and 2 GB a program; it cannot ask for more. Your
+  computer holds every batch to the ceilings itself, whatever the batch says.
+- **The budget bounds work, not time.** How long an instruction takes depends on what the
+  program does: a loop of additions burns several thousand million a second, a chain of
+  square roots or of cache misses a few hundred million. The clock your computer keeps on
+  every run is what bounds the time.
+- **The price of a module is an estimate.** It is fitted to measurements, not proved for
+  every module. Turning a module into machine code cannot be interrupted once it has
+  started; the expensive ones run one at a time in the client's process.
 - **This page is about the Verify controller.** Other controllers the client runs have
   their own rules.

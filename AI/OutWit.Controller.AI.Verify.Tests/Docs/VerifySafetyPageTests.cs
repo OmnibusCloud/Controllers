@@ -23,13 +23,15 @@ public sealed class VerifySafetyPageTests
     private const long KIBIBYTE = 1024;
     private const long MEBIBYTE = 1024 * KIBIBYTE;
     private const long GIBIBYTE = 1024 * MEBIBYTE;
+    private const long THOUSAND_MILLION = 1_000_000_000;
 
     private static readonly string[] NAMED_TESTS =
     [
         nameof(Sandbox.VerifyAdversarialTests),
         nameof(Sandbox.VerifyWasiRuntimeTests),
         nameof(Sandbox.VerifySandboxHygieneTests),
-        nameof(Wasm.WasmHostNativeResolutionTests)
+        nameof(Wasm.WasmHostNativeResolutionTests),
+        nameof(Sandbox.VerifyNodeProtectionTests)
     ];
 
     #endregion
@@ -43,14 +45,19 @@ public sealed class VerifySafetyPageTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(page, Does.Contain($"{VerifySandboxDefaults.DEFAULT_WALL_TIME_MS / 1000} seconds by default"));
-            Assert.That(page, Does.Contain($"never more than {VerifyLimitCeilings.MAX_WALL_TIME_MS / 60_000} minutes"));
+            Assert.That(page, Does.Contain($"{VerifySandboxDefaults.DEFAULT_FUEL_BUDGET / THOUSAND_MILLION} thousand million by default"));
+            Assert.That(page, Does.Contain($"never more than {VerifyLimitCeilings.MAX_FUEL_BUDGET / THOUSAND_MILLION} thousand million"));
+            Assert.That(page, Does.Contain($"about {VerifySandboxDefaults.DEFAULT_FUEL_BUDGET / VerifySandboxDefaults.REFERENCE_FUEL_PER_SECOND} seconds"));
+            Assert.That(page, Does.Contain($"after {VerifyBackstop.WallMs(VerifySandboxDefaults.DEFAULT_FUEL_BUDGET) / 1000} seconds for the default budget"));
+            Assert.That(page, Does.Contain($"a little over {VerifyBackstop.WallMs(VerifyLimitCeilings.MAX_FUEL_BUDGET) / 60_000} minutes for the largest"));
             Assert.That(page, Does.Contain($"{VerifySandboxDefaults.DEFAULT_MEMORY_BYTES / MEBIBYTE} MB by default"));
             Assert.That(page, Does.Contain($"never more than {VerifyLimitCeilings.MAX_MEMORY_BYTES / GIBIBYTE} GB"));
-            Assert.That(page, Does.Contain($"cut at {VerifySandboxDefaults.DEFAULT_STDOUT_LIMIT_BYTES / KIBIBYTE} KB by default"));
-            Assert.That(page, Does.Contain($"{VerifySandboxDegree.DEFAULT_MAX_DEGREE} at most unless the lab asks"));
-            Assert.That(page, Does.Contain($"up to {VerifyLimitCeilings.MAX_WALL_TIME_MS / 60_000} minutes"));
+            Assert.That(page, Does.Contain($"{VerifySandboxDefaults.DEFAULT_STDOUT_LIMIT_BYTES / KIBIBYTE} KB by default"));
+            Assert.That(page, Does.Contain($"never more than {VerifyLimitCeilings.MAX_STDOUT_LIMIT_BYTES / MEBIBYTE} MB"));
+            Assert.That(page, Does.Contain($"{VerifySandboxDegree.DEFAULT_MAX_DEGREE} at most"));
             Assert.That(page, Does.Contain($"and {VerifyLimitCeilings.MAX_MEMORY_BYTES / GIBIBYTE} GB a program"));
+            Assert.That(page, Does.Contain($"{VerifyClangBuild.STEP_MEMORY_BYTES / GIBIBYTE} GB of memory a step"));
+            Assert.That(page, Does.Contain($"{VerifyClangBuild.PRODUCT_LIMIT_BYTES / MEBIBYTE} MB"));
         });
     }
 
@@ -58,7 +65,7 @@ public sealed class VerifySafetyPageTests
     public void ThePageStatesTheShareOfMemoryTheCodeTakesTest()
     {
         Assert.That(VerifySandboxDegree.DEFAULT_RAM_HEADROOM, Is.EqualTo(0.75));
-        Assert.That(Load(PAGE), Does.Contain("three quarters of your RAM"));
+        Assert.That(Load(PAGE), Does.Contain("three quarters of the memory that is free"));
     }
 
     [Test]

@@ -2,24 +2,28 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-report.schema.json",
   "title": "Verify verdict report",
-  "description": "The report blob of VerifyRun, VerifyGenerate (over the generators) and VerifyGenerateAndCheck (over the checks). One JSON object: the run's identity. It carries only what two honest executions agree on wherever they ran (verdict, exit code, per-case outcome), so it is byte-identical for a taskset regardless of placement. Fuel, peak memory and wall time are metrics and live per task in the provenance blob.",
+  "description": "The report blob of VerifyRun, VerifyGenerate (over the generators) and VerifyGenerateAndCheck (over the checks). One JSON object: the run's identity. It carries only what two honest executions agree on wherever they ran (verdict, exit code, per-case outcome), so it is byte-identical for a taskset regardless of placement, as long as every node did its work and told the truth. A task the nodes could not settle is in it as such (NoResult with a reason, or Disputed), never left out and never counted as a pass. Fuel, peak memory and wall time are metrics and live per task in the provenance blob.",
   "type": "object",
-  "required": ["summary", "results"],
+  "required": ["schema", "summary", "results"],
   "additionalProperties": false,
   "properties": {
+    "schema": { "type": "string", "const": "verify-report/2" },
     "summary": {
       "type": "object",
-      "required": ["total", "pass", "pass_rate", "verdicts"],
+      "required": ["total", "pass", "pass_rate", "verdicts", "rejected_results", "disputes", "disputes_resolved"],
       "additionalProperties": false,
       "properties": {
         "total": { "type": "integer", "description": "Tasks in the report." },
         "pass": { "type": "integer", "description": "Tasks with verdict Pass." },
-        "pass_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "pass_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "pass / total; 0 for an empty report. NoResult and Disputed tasks are in the total and are not passes." },
         "verdicts": {
           "type": "object",
           "description": "Histogram over every verdict name, zero included.",
           "additionalProperties": { "type": "integer" }
-        }
+        },
+        "rejected_results": { "type": "integer", "description": "Result packages the server refused, every round and reason together (the integrity blob counts them by reason). 0 in a run without lying or failing nodes." },
+        "disputes": { "type": "integer", "description": "Tasks whose executions disagreed. 0 in a run without lying or failing nodes." },
+        "disputes_resolved": { "type": "integer", "description": "Disputes that three more executions settled by a majority. The others are the tasks with verdict Disputed." }
       }
     },
     "results": {
@@ -33,9 +37,15 @@
           "index": { "type": "integer" },
           "verdict": {
             "type": "string",
-            "enum": ["Pass", "Fail", "CompileError", "RuntimeError", "Timeout", "MemoryExceeded", "OutputExceeded", "RuntimeUnavailable"]
+            "enum": ["Pass", "Fail", "CompileError", "RuntimeError", "Timeout", "MemoryExceeded", "OutputExceeded", "RuntimeUnavailable", "NoResult", "Disputed"],
+            "description": "Timeout means out of fuel, and nothing else. NoResult: no node gave a verdict, also when the task was sent out once more; it says nothing about the program. Disputed: the executions disagreed and three more did not give one answer from at least two of them. RuntimeUnavailable is not produced since 0.13.0; the name stays so that reports of earlier runs can be read."
           },
-          "exit": { "type": "integer", "description": "Exit code; 0 for a passing task, -1 for a trap." },
+          "exit": { "type": "integer", "description": "Exit code; 0 for a passing task, -1 for a run that did not end by itself (a crash, a budget stop) and for a task without an accepted result (NoResult, Disputed)." },
+          "reason": {
+            "type": "string",
+            "enum": ["wall_clock", "node_fault", "no_answer"],
+            "description": "Present only for NoResult: why the task has no result. wall_clock: a node's wall-clock backstop ended the run while it still had fuel. node_fault: a node could not run the task for a reason of its own. no_answer: no result the server accepts came back for the task."
+          },
           "cases": {
             "type": "array",
             "description": "Present for tasks with a suite: one record per case.",

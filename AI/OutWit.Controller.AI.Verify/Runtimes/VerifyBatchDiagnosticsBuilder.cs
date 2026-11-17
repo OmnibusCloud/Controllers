@@ -3,9 +3,9 @@ using OutWit.Controller.AI.Verify.Model;
 namespace OutWit.Controller.AI.Verify.Runtimes;
 
 /// <summary>
-/// Assembles the per-batch provenance a node attaches to its result batch: with which wasmtime
-/// and runtime module it ran, at which degree, and how long it took. It says nothing about
-/// which machine ran it.
+/// Assembles what a node knows of a batch it ran: with which wasmtime and runtime module, at
+/// which degree, and how long it took. It says nothing about which machine ran it; the degree
+/// and the time are for the node's own log and do not leave it with the results.
 /// </summary>
 public static class VerifyBatchDiagnosticsBuilder
 {
