@@ -36,58 +36,70 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
 
     protected override async Task Process(WitActivityCorpusPreflight activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        var (plan, manifest, options, inputBytes) = await CorpusPlanning.PlanAsync(BlobService, pool, activity.Manifest, activity.LanguageModel, activity.Options, "Manifest");
+        var planned = await CorpusPlanning.PlanAsync(BlobService, pool, activity.Manifest, activity.LanguageModel, activity.Options, "Manifest");
+        var plan = planned.Plan;
+        var manifest = planned.Manifest;
+        var options = planned.Options;
         var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
 
+        // Every list of the answer is bounded, whatever the manifest holds: the first problems by
+        // line and a count of the rest, a bounded number of host names.
         var report = new CorpusPreflightData
         {
-            WellFormed = plan.Errors.Count == 0 && plan.Tasks.Count > 0,
+            WellFormed = plan.ErrorCount == 0 && plan.Tasks.Count > 0,
             TaskCount = plan.Tasks.Count,
             RefusedOrigins = [.. plan.RefusedOrigins],
             OversizedSources = plan.OversizedSources,
-            EstimatedTrafficBytes = plan.EstimatedTrafficBytes,
             Messages = [.. plan.Errors, .. plan.Notes]
         };
 
-        // Sources without a size: ask the origin (HEAD) so the traffic line is not 0, within a
-        // probe budget; the rest is extrapolated at the mean and the message says so.
-        var sizes = manifest.Sources.Select(source => source.SizeBytes).ToList();
-        if (plan.Errors.Count == 0 && manifest.Sources.Any(source => source.SizeBytes <= 0))
-        {
-            var origins = manifest.AllowedOrigins.Select(ShardOrigin.Normalize).ToList();
-            var probe = await ShardSizeProbe.ProbeAsync(manifest.Sources, origins, ShardOriginPolicy.Machine, CLIENT.Value, cancellationToken);
-            report.Messages.Add($"{probe.Probed} source size(s) probed at the origin" +
-                                (probe.Failed > 0 ? $", {probe.Failed} unanswered" : "") +
-                                (probe.Unprobed > 0 ? $", {probe.Unprobed} not asked (beyond the probe budget, or a host this server does not fetch from)" : "") +
-                                (probe.Failed + probe.Unprobed > 0 ? " (estimated at the mean)" : "") + ".");
-            if (probe.Sizes.Count == sizes.Count)
-                sizes = [.. probe.Sizes];
-        }
-
-        // The traffic promise from the same sizes: every shard once, the sampled ones a second time.
-        var traffic = CorpusTrafficEstimate.Of(sizes, options?.SamplingRate ?? 0);
-        report.EstimatedTrafficBytes = traffic.TotalBytes;
         if (manifest.Sources.Count > 0)
         {
+            // The origin's own word on a random sample: sizes for sources the manifest gave none
+            // for, and a check of the sizes it did give. A manifest with problems is not asked about.
+            var sizes = plan.ErrorCount == 0
+                ? await CorpusPlanning.SizeAsync(manifest, CLIENT.Value, cancellationToken)
+                : ShardSizeProbe.Unasked(manifest.Sources);
+
+            if (plan.ErrorCount == 0)
+                report.Messages.Add(CorpusPlanning.DescribeProbe(sizes));
+
+            var overdeclared = CorpusPlanning.Overdeclared(sizes);
+            if (overdeclared.Count > 0)
+            {
+                report.WellFormed = false;
+                report.Messages.AddRange(overdeclared);
+            }
+
+            // The busiest contributor's share at this fleet: a share and counts, never a node.
+            var cap = CorpusTaskPlanner.ShardCap(options);
+            var share = await PlanSharesAsync(sizes.Sizes, options?.SamplingRate ?? 0);
+
+            // What the contributors' links carry and what the nodes enforce, from the same sizes.
+            var estimates = CorpusPlanning.Estimate(planned, sizes, share?.PlannedNodes ?? 0);
+            var traffic = estimates.Traffic;
+            report.EstimatedTrafficBytes = traffic.TotalBytes;
+            report.EstimatedFetchBytes = traffic.FetchBytes;
+            report.EstimatedUploadBytes = traffic.UploadBytes;
+            report.RetryAllowanceBytes = traffic.RetryBytes;
+            report.FetchCeilingBytes = traffic.CeilingBytes;
+            report.UnsizedSources = sizes.Unsized;
             report.Messages.Add(traffic.Describe());
+            report.Messages.Add(traffic.DescribeCeiling(sizes.Unsized, cap));
             report.Messages.Add(traffic.DescribeRounds());
 
             // The disk a node needs: it holds a few shards at a time, never its whole share.
-            var largest = sizes.Count > 0 ? Math.Min(Math.Max(0, sizes.Max()), CorpusTaskPlanner.ShardCap(options)) : 0;
-            report.NodeDiskBytesPerShard = ShardDisk.Needed(largest > 0 ? largest : CorpusTaskPlanner.ShardCap(options));
-            report.Messages.Add(ShardDisk.Describe(largest, CorpusTaskPlanner.ShardCap(options)));
-        }
+            var largest = sizes.Sizes.Count > 0 ? Math.Min(Math.Max(0, sizes.Sizes.Max()), cap) : 0;
+            report.NodeDiskBytesPerShard = ShardDisk.Needed(largest > 0 ? largest : cap);
+            report.Messages.Add(ShardDisk.Describe(largest, cap));
 
-        // What the job leaves on the server, from the same sizes, against the deployment's headroom.
-        if (manifest.Sources.Count > 0)
-        {
-            var sized = manifest.Sources.Select((source, index) => new CorpusSourceData { Url = source.Url, Format = source.Format, SizeBytes = sizes[index] }).ToList();
-            var (estimate, limit, refusal) = await CorpusPlanning.CheckStorageAsync(sized, manifest.Pipeline, options, inputBytes, new CorpusStorageHeadroomHost(BlobService), cancellationToken);
+            // What the job leaves on the server, against the deployment's headroom.
+            var (limit, refusal) = await CorpusPlanning.CheckStorageAsync(estimates.Storage, new CorpusStorageHeadroomHost(BlobService), cancellationToken);
 
-            report.EstimatedStorageBytes = estimate.TotalBytes;
+            report.EstimatedStorageBytes = estimates.Storage.TotalBytes;
             report.StorageHeadroomBytes = limit.HeadroomBytes;
             report.StorageRetentionDays = limit.RetentionDays;
-            report.Messages.Add(CorpusStorageCheck.Describe(estimate, limit));
+            report.Messages.Add(CorpusStorageCheck.Describe(estimates.Storage, limit));
 
             if (refusal != null)
             {
@@ -95,8 +107,6 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
                 report.Messages.Add(refusal);
             }
 
-            // The busiest contributor's share at this fleet: a share and counts, never a node.
-            var share = await PlanSharesAsync(sizes, options?.SamplingRate ?? 0);
             if (share != null)
             {
                 report.BusiestNodeShare = share.BusiestShare;

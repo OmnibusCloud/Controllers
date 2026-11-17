@@ -3,7 +3,7 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// <summary>
 /// The node refuses its batch before doing anything: it runs another controller version than the
 /// job, it cannot run the PDF stage a shard of the batch needs, or its disk has no room for a
-/// shard. Thrown from <c>Corpus.ProcessShard</c> before a byte is fetched, so the batch fails with
+/// shard. Thrown from <c>Corpus.ProcessPackage</c> before a byte is fetched, so the batch fails with
 /// nothing lost and the platform gives its tasks to another node. The same goes for a node that
 /// cannot make its work folder, or that fails while it checks itself: whatever a node throws out
 /// of the activity is shown to the lab, so nothing but this exception leaves it. The message

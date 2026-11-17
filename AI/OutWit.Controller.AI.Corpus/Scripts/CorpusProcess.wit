@@ -1,23 +1,26 @@
 Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
 {
-    CorpusTaskCollection:tasks = Corpus.Split(manifest, languageModel, opts);
+    ~ The tasks and the results travel as blobs: every collection below holds references only. ~
+    CorpusTaskPackageCollection:tasks = Corpus.Split(manifest, languageModel, opts);
 
     Double:rate = Corpus.SamplingRate(opts);
     ProcessingOptions:checked = Grid.Replicas(2, rate);
 
-    CorpusResultCollection:executions = Grid.ForEach(task in tasks, checked)
-        => Corpus.ProcessShard(task);
+    CorpusResultPackageCollection:executions = Grid.ForEach(package in tasks, checked)
+        => Corpus.ProcessPackage(package);
 
-    CorpusTaskCollection:repairs = Corpus.Repairs(tasks, executions);
+    ~ A shard without a result (no answer the server accepts, or a fault of the node that ran it) goes out once more. ~
+    CorpusTaskPackageCollection:repairs = Corpus.Repairs(tasks, executions);
 
-    CorpusResultCollection:repaired = Grid.ForEach(task in repairs)
-        => Corpus.ProcessShard(task);
+    CorpusResultPackageCollection:repaired = Grid.ForEach(package in repairs)
+        => Corpus.ProcessPackage(package);
 
-    CorpusTaskCollection:disputes = Corpus.Disputes(tasks, executions, repairs, repaired);
+    ~ A shard whose copies disagree runs three more times, on different machines. ~
+    CorpusTaskPackageCollection:disputes = Corpus.Disputes(tasks, executions, repairs, repaired);
     ProcessingOptions:majority = Grid.Replicas(3);
 
-    CorpusResultCollection:resolved = Grid.ForEach(task in disputes, majority)
-        => Corpus.ProcessShard(task);
+    CorpusResultPackageCollection:resolved = Grid.ForEach(package in disputes, majority)
+        => Corpus.ProcessPackage(package);
 
     Blob:report = Corpus.Collect(tasks, executions, repairs, repaired, disputes, resolved, opts);
     Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved);

@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Delivery;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Signatures;
@@ -9,7 +10,9 @@ namespace OutWit.Controller.AI.Corpus.Manifests;
 /// the allowlist and the byte cap here, on the host, so a bad manifest never reaches a node;
 /// the pipeline completed with the language model's transport and pin. A host that is not a
 /// public origin does not stop the plan: whether to fetch from it is each machine's own
-/// decision, so the plan names such hosts and the machines answer for themselves.
+/// decision, so the plan names such hosts and the machines answer for themselves. A host that is
+/// not written in ASCII does stop it: such a name is mapped to its wire form by each machine's
+/// own library, and two machines need not map it alike.
 /// </summary>
 public static class CorpusTaskPlanner
 {
@@ -17,6 +20,12 @@ public static class CorpusTaskPlanner
 
     /// <summary>The controller's own cap on a shard: 1 GiB on the wire, whatever the options ask.</summary>
     public const long MAX_SHARD_BYTES = 1L << 30;
+
+    /// <summary>The most host names a plan lists (refused hosts, hosts outside the public origins): a list a manifest cannot grow.</summary>
+    public const int MAX_LISTED_HOSTS = 20;
+
+    /// <summary>The most duplicate listings a plan names.</summary>
+    public const int MAX_LISTED_DUPLICATES = 10;
 
     #endregion
 
@@ -34,15 +43,23 @@ public static class CorpusTaskPlanner
     {
         policy ??= ShardOriginPolicy.Machine;
 
-        var errors = new List<string>(manifest.Errors);
+        var errors = new CorpusProblems();
+        errors.Add(manifest.Errors, manifest.ErrorCount);
         var notes = new List<string>();
         var refused = new List<string>();
         var outside = new List<string>();
         var oversized = 0;
+        bool refusedMore = false, outsideMore = false;
 
         var cap = ShardCap(options);
-        var origins = manifest.AllowedOrigins.Select(ShardOrigin.Normalize).Where(host => host.Length > 0).Distinct(StringComparer.Ordinal).ToList();
-        if (origins.Count == 0 && manifest.Errors.Count == 0)
+        foreach (var origin in manifest.AllowedOrigins)
+        {
+            if (!ShardOrigin.IsAscii(origin))
+                errors.Add($"allowed_origins: '{ShardOrigin.Shown(origin)}' is not written in ASCII; write the host in its ASCII form (xn--...).");
+        }
+
+        var origins = manifest.AllowedOrigins.Where(ShardOrigin.IsAscii).Select(ShardOrigin.Normalize).Where(host => host.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+        if (origins.Count == 0 && manifest.ErrorCount == 0 && errors.Count == 0)
             errors.Add("allowed_origins: at least one host is required.");
 
         var pipeline = manifest.Pipeline.Clone();
@@ -70,7 +87,8 @@ public static class CorpusTaskPlanner
 
         DescribeProducts(pipeline, notes);
 
-        var tasks = new List<CorpusTaskData>(manifest.Sources.Count);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var duplicates = new CorpusProblems(MAX_LISTED_DUPLICATES);
         for (var index = 0; index < manifest.Sources.Count; index++)
         {
             var source = manifest.Sources[index];
@@ -78,8 +96,8 @@ public static class CorpusTaskPlanner
             if (refusal != null)
             {
                 errors.Add($"sources[{index}]: {refusal}");
-                if (Uri.TryCreate(source.Url, UriKind.Absolute, out var parsed) && !refused.Contains(parsed.IdnHost, StringComparer.OrdinalIgnoreCase))
-                    refused.Add(parsed.IdnHost);
+                if (Uri.TryCreate(source.Url, UriKind.Absolute, out var parsed))
+                    Note(refused, ShardOrigin.Shown(parsed.IdnHost), ref refusedMore);
             }
             else if (uri != null && policy.Check(uri) is { } unfit)
             {
@@ -87,42 +105,46 @@ public static class CorpusTaskPlanner
                 // host is for each machine's owner to decide.
                 if (ShardOriginPolicy.IsPublicOrigin(uri.IdnHost))
                     errors.Add($"sources[{index}]: {unfit}");
-                else if (!outside.Contains(uri.IdnHost, StringComparer.OrdinalIgnoreCase))
-                    outside.Add(uri.IdnHost);
+                else
+                    Note(outside, uri.IdnHost, ref outsideMore);
             }
 
             if (source.SizeBytes > cap)
             {
                 oversized++;
-                errors.Add($"sources[{index}]: the estimated size {source.SizeBytes} exceeds the cap of {cap} bytes.");
+                errors.Add($"sources[{index}]: the declared size {source.SizeBytes} exceeds the cap of {cap} bytes.");
             }
 
-            tasks.Add(new CorpusTaskData
-            {
-                TaskIndex = index,
-                Source = source.Clone(),
-                Pipeline = pipeline.Clone(),
-                AllowedOrigins = [.. origins],
-                MaxShardBytes = cap
-            });
+            if (!seen.Add(source.Url))
+                duplicates.Add($"'{ShardOrigin.Shown(source.Url)}' is listed more than once; each listing is a task of its own.");
         }
 
-        // Every shard once, and the shards sampled for integrity a second time (the largest, as the storage estimate takes them).
+        // Every shard once, and the packages sampled for integrity a second time (the largest, as the storage estimate takes them).
         var traffic = CorpusTrafficEstimate.Of(manifest.Sources.Select(source => source.SizeBytes).ToList(), options?.SamplingRate ?? 0);
 
-        var duplicates = manifest.Sources.GroupBy(source => source.Url, StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).Select(group => group.Key).ToList();
-        foreach (var duplicate in duplicates)
-            notes.Add($"'{duplicate}' is listed more than once; each listing is a task of its own.");
+        notes.AddRange(duplicates.ToList("duplicate listing"));
 
-        if (tasks.Count > 0)
-            notes.Add($"{tasks.Count} shard(s), cap {cap} bytes each, estimated traffic {traffic.TotalBytes} bytes" +
-                      (traffic.SampledShards > 0 ? $" ({traffic.CopyBytes} of them the second fetch of the {traffic.SampledShards} largest shard(s), sampled for integrity)." : "."));
+        if (manifest.Sources.Count > 0)
+        {
+            var perPackage = CorpusPackagePlanner.ShardsPerPackage(manifest.Sources.Count);
+            notes.Add($"{manifest.Sources.Count} shard(s), cap {cap} bytes each, fetches by the manifest's own sizes {traffic.FetchBytes} bytes" +
+                      (traffic.SampledPackages > 0 ? $" ({traffic.CopyBytes} of them the second fetch of the {traffic.SampledShards} largest shard(s), sampled for integrity)." : "."));
+
+            if (perPackage > 1)
+                notes.Add($"The shards travel in {CorpusPackagePlanner.Packages(manifest.Sources.Count)} packages of up to {perPackage} consecutive shards: the platform assigns a package to a node and samples a package for integrity as a whole (a job of up to {CorpusPackagePlanner.MAX_PACKAGES} shards has one shard a package).");
+        }
 
         if (outside.Count > 0)
-            notes.Add($"{string.Join(", ", outside)}: not a public origin ({string.Join(", ", ShardOriginPolicy.PUBLIC_ORIGINS)}). " +
+            notes.Add($"{string.Join(", ", outside)}{(outsideMore ? " and other hosts" : "")}: not a public origin ({string.Join(", ", ShardOriginPolicy.PUBLIC_ORIGINS)}). " +
                       $"Shards from there run only on machines whose owner lists the host in {ShardOriginPolicy.EXTRA_ORIGINS_VARIABLE}; every other machine answers OriginRefused.");
 
-        return new CorpusPlan(errors.Count == 0 ? tasks : [], errors, notes, refused, outside, oversized, traffic.TotalBytes);
+        var planned = errors.Count == 0;
+        return new CorpusPlan(planned ? new CorpusPlanTasks(manifest.Sources, pipeline, origins, cap) : [], errors.ToList(), notes, refused, outside, oversized, traffic.FetchBytes)
+        {
+            ErrorCount = errors.Count,
+            Pipeline = pipeline,
+            MaxShardBytes = cap
+        };
     }
 
     /// <summary>
@@ -155,7 +177,7 @@ public static class CorpusTaskPlanner
     /// <param name="pipeline">The pipeline (its target languages).</param>
     /// <param name="errors">Receives the refusal.</param>
     /// <param name="notes">Receives the description and target languages the model does not have.</param>
-    private static void CheckLanguageModel(CorpusLanguageModelFacts model, CorpusPipelineData pipeline, List<string> errors, List<string> notes)
+    private static void CheckLanguageModel(CorpusLanguageModelFacts model, CorpusPipelineData pipeline, CorpusProblems errors, List<string> notes)
     {
         if (model.Problem != null)
         {
@@ -169,7 +191,7 @@ public static class CorpusTaskPlanner
 
         var missing = pipeline.TargetLanguages.Where(code => !model.Languages.Contains(code, StringComparer.Ordinal)).ToList();
         if (missing.Count > 0)
-            notes.Add($"target_languages: {string.Join(", ", missing)} not among the model's languages; no document is labelled so.");
+            notes.Add($"target_languages: {string.Join(", ", missing.Take(MAX_LISTED_HOSTS))}{(missing.Count > MAX_LISTED_HOSTS ? $" and {missing.Count - MAX_LISTED_HOSTS} more" : "")} not among the model's languages; no document is labelled so.");
     }
 
     /// <summary>
@@ -199,12 +221,56 @@ public static class CorpusTaskPlanner
         }
     }
 
+    /// <summary>
+    /// A plan's tasks as a job's first round, one at a time: each under a ticket of its own, on
+    /// the controller version the job runs on, counted at the size the server learned for its
+    /// shard and held to the size it was declared with.
+    /// </summary>
+    /// <param name="plan">The plan.</param>
+    /// <param name="controllerVersion">The server's controller version.</param>
+    /// <param name="sizes">What the server knows of the shards' sizes (the manifest's, the origin's answers); null for the manifest's own.</param>
+    /// <returns>The tasks in manifest order, each made as it is asked for.</returns>
+    public static IEnumerable<CorpusTaskData> Issue(CorpusPlan plan, string controllerVersion, ShardSizeProbeResult? sizes = null)
+    {
+        for (var index = 0; index < plan.Tasks.Count; index++)
+        {
+            var task = plan.Tasks[index];
+            task.Ticket = Trust.CorpusTickets.New();
+            task.RequiredControllerVersion = controllerVersion;
+
+            if (sizes != null && index < sizes.Sizes.Count && task.Source != null)
+            {
+                // The work estimate is the size the server learned; the claim is the declared or the answered one.
+                task.Source = new CorpusSourceData { Url = task.Source.Url, Format = task.Source.Format, SizeBytes = sizes.Sizes[index], Sha256 = task.Source.Sha256 };
+                task.DeclaredBytes = sizes.Declared[index];
+            }
+
+            yield return task;
+        }
+    }
+
     /// <summary>The byte cap in force: the options' cap, bounded by the controller's.</summary>
     /// <param name="options">Job options (null = defaults).</param>
     /// <returns>The cap.</returns>
     public static long ShardCap(CorpusOptionsData? options)
     {
         return options is { MaxShardBytes: > 0 } ? Math.Min(options.MaxShardBytes, MAX_SHARD_BYTES) : MAX_SHARD_BYTES;
+    }
+
+    #endregion
+
+    #region Tools
+
+    /// <summary>Adds a host to a bounded list of names, once; past the bound the list only says there are more.</summary>
+    private static void Note(List<string> hosts, string host, ref bool more)
+    {
+        if (hosts.Contains(host, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        if (hosts.Count < MAX_LISTED_HOSTS)
+            hosts.Add(host);
+        else
+            more = true;
     }
 
     #endregion

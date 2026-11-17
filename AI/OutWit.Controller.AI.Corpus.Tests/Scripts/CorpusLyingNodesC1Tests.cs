@@ -268,17 +268,20 @@ public sealed class CorpusLyingNodesC1Tests : CorpusScriptTestBase
         var answered = 0;
         var values = NodesManager.ValuesReturned;
         var surplus = NodesManager.SurplusReturned;
-        NodesManager.Twice = (nodeId, result) => nodeId == liar && result.Verdict == CorpusShardVerdict.Completed && Interlocked.Exchange(ref answered, 1) == 0;
+        NodesManager.Twice = (nodeId, answer) => nodeId == liar && answer.Fault.Length == 0 && Interlocked.Exchange(ref answered, 1) == 0;
 
         using var run = await RunAsync(1.0, null);
         var summary = run.Integrity.RootElement.GetProperty("summary");
-        var executions = run.Variables("executions").OfType<CorpusResultData>().ToList();
+        var answers = run.Variables("executions").OfType<CorpusResultPackageData>().ToList();
+        var executions = ResultsOf(answers);
 
         Assert.Multiple(() =>
         {
             Assert.That(NodesManager.SurplusReturned - surplus, Is.EqualTo(1), "the node did return a second value");
             Assert.That(NodesManager.ValuesReturned - values, Is.EqualTo(2 * SHARDS + 1), "one more than the tasks of the run");
-            Assert.That(executions, Has.Count.EqualTo(2 * SHARDS), "one value per task reached the server: Grid left the second out");
+            Assert.That(answers, Has.Count.EqualTo(2 * SHARDS), "one answer per task reached the server: Grid left the second out");
+            Assert.That(answers.GroupBy(answer => answer.Ticket).Select(copies => copies.Count()), Is.All.EqualTo(2), "a package and its copy under every package ticket, no third");
+            Assert.That(executions, Has.Count.EqualTo(2 * SHARDS));
             Assert.That(executions.GroupBy(result => result.Ticket).Select(copies => copies.Count()), Is.All.EqualTo(2), "a shard and its copy under every ticket, no third");
             Assert.That(run.Status.Result, Is.EqualTo(WitProcessingResult.Completed), Describe(run.Status));
             Assert.That(run.Verdicts, Is.All.EqualTo("Completed"));
@@ -296,13 +299,14 @@ public sealed class CorpusLyingNodesC1Tests : CorpusScriptTestBase
     {
         using var run = await RunAsync(1.0, Liar(result => result.ContentSha256 = FORGED_HASH));
         var documents = Encoding.UTF8.GetString(run.ReportBytes) + Encoding.UTF8.GetString(run.IntegrityBytes);
-        var tickets = new[] { "tasks", "repairs", "disputes" }.SelectMany(run.Variables).OfType<CorpusTaskData>().Select(task => task.Ticket).ToList();
+        var packages = new[] { "tasks", "repairs", "disputes" }.SelectMany(run.Variables).OfType<CorpusTaskPackageData>().ToList();
+        var tickets = packages.Select(package => package.Ticket).Concat(TasksOf(packages).Select(task => task.Ticket)).ToList();
 
         Assert.Multiple(() =>
         {
-            Assert.That(tickets, Has.Count.GreaterThan(SHARDS), "the first round's and the dispute round's");
+            Assert.That(tickets, Has.Count.GreaterThan(2 * SHARDS), "the first round's and the dispute round's, of the packages and of the shards in them");
             Assert.That(tickets, Is.All.Matches<string>(CorpusTickets.IsWellFormed));
-            Assert.That(tickets, Is.Unique, "a ticket per shard per round");
+            Assert.That(tickets, Is.Unique, "a ticket per package and per shard, per round");
             foreach (var ticket in tickets)
                 Assert.That(documents, Does.Not.Contain(ticket));
         });

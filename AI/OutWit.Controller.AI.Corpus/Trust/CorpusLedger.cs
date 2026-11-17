@@ -1,5 +1,5 @@
-using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Signatures;
 
 namespace OutWit.Controller.AI.Corpus.Trust;
@@ -26,26 +26,34 @@ namespace OutWit.Controller.AI.Corpus.Trust;
 /// The same ledger answers at every step of the script: which shards the repair round takes,
 /// which the dispute round, and what the report and the integrity document say.
 /// <para>
+/// <b>Nothing of a run is held.</b> The ledger reads its rounds from their sources
+/// (<see cref="CorpusRoundSource"/>), one task package at a time, judges each shard as its values
+/// are read and hands it over; what it keeps is counts. A question that needs the shards (the
+/// report, the next round's tasks) reads the run again in the same way, so the memory a run of any
+/// length takes is that of one package.
+/// </para>
+/// <para>
 /// <b>Two machines, not two values.</b> The server sees values, not machines: the platform keeps
-/// the copies of a shard on different machines and hands over what they returned without saying
-/// which task each value answered. A machine that holds two tasks of a round can spend the slot of
-/// one on the other's ticket, which leaves the one short. So in the dispute round, where every
-/// shard is asked for in three copies, a value counts towards "two machines" only as far as it
-/// cannot be such a second answer: of a shard's leading result, as many values as the other
-/// shards of the round are short of may be one machine's second, and do not count. With one lying
-/// machine among the copies, whatever the others lose, the result that is accepted was returned
-/// by an honest machine; and three machines that agree still settle their shard when another
-/// shard of the round lost a copy. Counting values as machines rests on the platform: Grid 1.3.0
-/// and later keep, of what a node's batch returns, one value at most for each return variable its
-/// tasks asked for. With an older Grid a node could return several values for one task and this
-/// ruling would count them as machines.
+/// the copies of a package on different machines and hands over what they returned without saying
+/// which task each value answered. A machine that holds two packages of a round can spend the
+/// slot of one on the other's ticket, which leaves the one short. So in the dispute round, where
+/// every package is asked for in three copies, a value counts towards "two machines" only as far
+/// as it cannot be such a second answer: of a shard's leading result, as many values as the other
+/// packages of the round are short of may be one machine's second, and do not count. With one
+/// lying machine among the copies, whatever the others lose, the result that is accepted was
+/// returned by an honest machine; and three machines that agree still settle their shard when
+/// another package of the round lost a copy. Counting values as machines rests on two things: an
+/// answer gives a shard one value at most (<see cref="CorpusRoundSourceBlobs"/>), and the
+/// platform — Grid 1.3.0 and later — keeps, of what a node's batch returns, one value at most for
+/// each return variable its tasks asked for. With an older Grid a node could return several
+/// answers for one task and this ruling would count them as machines.
 /// </para>
 /// <para>
 /// What is left: a shard that was not sampled rests on the machine that ran it, and a machine
-/// that holds a sampled shard's copy and a shard of its own can spend the copy's slot on its own
-/// shard, which then shows two agreeing executions that are one machine's. No product changes by
-/// it (that shard was one machine's word either way); the count of executions overstates how it
-/// was checked.
+/// that holds a sampled package's copy and a package of its own can spend the copy's slot on its
+/// own package, whose shards then show two agreeing executions that are one machine's. No product
+/// changes by it (those shards were one machine's word either way); the count of executions
+/// overstates how they were checked.
 /// </para>
 /// </summary>
 public sealed class CorpusLedger
@@ -64,7 +72,7 @@ public sealed class CorpusLedger
     /// <summary>The values the repair round asks for of a shard: one.</summary>
     public const int REPAIR_COPIES = 1;
 
-    /// <summary>A result under no ticket of the round it came back in: another job's, another round's, another shard's the node was not given, or none.</summary>
+    /// <summary>A value under no ticket of the round it came back in: another job's, another round's, another package's the node was not given, or none.</summary>
     public const string REJECTED_UNKNOWN_TICKET = "unknown_ticket";
 
     /// <summary>A value that is no result, or a result not shaped as an honest node shapes one (<see cref="CorpusResultCheck"/>).</summary>
@@ -75,13 +83,17 @@ public sealed class CorpusLedger
 
     /// <summary>
     /// A result that does not hold what its task asked for: its ticket is one shard's and its
-    /// index or URL another's, or it is at odds with the task's pipeline (another output mode,
-    /// other MinHash parameters, a product where none is kept, more bytes than the cap, languages
-    /// the pipeline cannot label).
+    /// index or URL another's, or it is at odds with the task (another output mode, other MinHash
+    /// parameters, a product where none is kept, more bytes than the shard was to be held to,
+    /// languages the pipeline cannot label).
     /// </summary>
     public const string REJECTED_CONTENT = "content";
 
-    /// <summary>More values under one ticket than the round asked for, in a round that takes none of them then (the repair round, the dispute round): which of them is the answer cannot be told.</summary>
+    /// <summary>
+    /// More values under one ticket than are taken: in a round that settles a shard (the repair
+    /// round, the dispute round) none of them is the answer then; an answer beyond the ones a
+    /// round opens for a package; two results for one shard in one answer.
+    /// </summary>
     public const string REJECTED_SURPLUS = "surplus";
 
     /// <summary>Every reason a value is dropped for, in the order the documents list them.</summary>
@@ -110,7 +122,7 @@ public sealed class CorpusLedger
 
     /// <summary>
     /// A dispute whose leading result does not lead by two machines once the values that may be
-    /// one machine's second are left out: other shards of the round are short of answers.
+    /// one machine's second are left out: other packages of the round are short of answers.
     /// </summary>
     public const string DISPUTE_SURPLUS_COPIES = "surplus_copies";
 
@@ -123,23 +135,35 @@ public sealed class CorpusLedger
 
     #region Fields
 
-    private readonly SortedDictionary<int, CorpusLedgerShard> m_shards = [];
-    private readonly SortedDictionary<string, int> m_rejected = new(StringComparer.Ordinal);
+    private readonly CorpusRoundSource m_first;
+    private readonly CorpusRoundSource? m_repair;
+    private readonly CorpusRoundSource? m_dispute;
+    private readonly CorpusLedgerShards m_shards;
+    private readonly CorpusLedgerTally m_tally;
 
     #endregion
 
     #region Constructors
 
-    private CorpusLedger(string controllerVersion)
+    private CorpusLedger(string controllerVersion, CorpusRoundSource first, CorpusRoundSource? repair, CorpusRoundSource? dispute)
     {
         ControllerVersion = controllerVersion;
+        m_first = first;
+        m_repair = repair;
+        m_dispute = dispute;
+        m_shards = new CorpusLedgerShards(first.Shards, () => Judge(new CorpusLedgerTally()));
+
+        // One reading of the run for everything that is a count: the shards themselves are not kept.
+        m_tally = new CorpusLedgerTally();
+        foreach (var shard in Judge(m_tally))
+            m_tally.Add(shard);
     }
 
     #endregion
 
     #region Functions
 
-    /// <summary>Builds the ledger of a run from the rounds that have been run so far.</summary>
+    /// <summary>Builds the ledger of a run held in memory from the rounds that have been run so far.</summary>
     /// <param name="controllerVersion">The server's controller version: the only one a result may carry.</param>
     /// <param name="first">The first round: the job's tasks and what came back.</param>
     /// <param name="repair">The repair round, or null when it has not run.</param>
@@ -147,53 +171,55 @@ public sealed class CorpusLedger
     /// <returns>The ledger.</returns>
     public static CorpusLedger Build(string controllerVersion, CorpusRound first, CorpusRound? repair = null, CorpusRound? dispute = null)
     {
-        var ledger = new CorpusLedger(controllerVersion);
+        return Build(
+            controllerVersion,
+            new CorpusRoundSourceMemory(first),
+            repair == null ? null : new CorpusRoundSourceMemory(repair),
+            dispute == null ? null : new CorpusRoundSourceMemory(dispute));
+    }
 
-        foreach (var task in first.Tasks)
-            ledger.m_shards.TryAdd(task.TaskIndex, new CorpusLedgerShard(task));
-
-        ledger.Take(first, shard => shard.First, _ => { });
-        foreach (var shard in ledger.m_shards.Values)
-            JudgeFirst(shard);
-
-        if (repair != null)
-        {
-            ledger.Take(repair, shard => shard.Repair, shard => shard.SentToRepair = true);
-            foreach (var shard in ledger.m_shards.Values.Where(shard => shard.SentToRepair && shard.NeedsRepair))
-                ledger.JudgeRepair(shard);
-        }
-
-        if (dispute != null)
-        {
-            ledger.Take(dispute, shard => shard.Dispute, shard => shard.SentToDispute = true);
-            var sent = ledger.m_shards.Values.Where(shard => shard.SentToDispute && shard.NeedsDispute).ToList();
-
-            // What the round is short of: every shard of it was asked for in three copies.
-            var missing = sent.Sum(shard => Math.Max(0, DISPUTE_COPIES - shard.Dispute.Count));
-            foreach (var shard in sent)
-                ledger.JudgeDispute(shard, missing - Math.Max(0, DISPUTE_COPIES - shard.Dispute.Count));
-        }
-
-        foreach (var shard in ledger.m_shards.Values)
-            Close(shard);
-
-        ledger.NodeFaults = ledger.m_shards.Values.Sum(shard => shard.First.Concat(shard.Repair).Concat(shard.Dispute).Count(entry => entry.Kind == CorpusLedgerEntryKind.Fault));
-
-        return ledger;
+    /// <summary>
+    /// Builds the ledger of a run from the sources of its rounds. The run is read once here, one
+    /// task package at a time, for its counts; every later question (the shards, the tasks of the
+    /// next round) reads it again in the same way.
+    /// </summary>
+    /// <param name="controllerVersion">The server's controller version: the only one a result may carry.</param>
+    /// <param name="first">The first round.</param>
+    /// <param name="repair">The repair round, or null when it has not run.</param>
+    /// <param name="dispute">The dispute round, or null when it has not run.</param>
+    /// <returns>The ledger.</returns>
+    /// <exception cref="InvalidOperationException">A round's task packages are not in ascending shard order: they are not the ones this controller wrote.</exception>
+    public static CorpusLedger Build(string controllerVersion, CorpusRoundSource first, CorpusRoundSource? repair = null, CorpusRoundSource? dispute = null)
+    {
+        return new CorpusLedger(controllerVersion, first, repair, dispute);
     }
 
     /// <summary>The tasks of the repair round: the shards the first round left without a result, each under a new ticket.</summary>
     /// <returns>The tasks, in shard order; empty when every shard has a result or a dispute.</returns>
     public List<CorpusTaskData> RepairTasks()
     {
-        return m_shards.Values.Where(shard => shard.NeedsRepair && !shard.SentToRepair).Select(Reissue).ToList();
+        return EnumerateRepairTasks().ToList();
+    }
+
+    /// <summary>The tasks of the repair round, made one at a time as they are asked for (<see cref="PendingRepairs"/> says how many there are).</summary>
+    /// <returns>The tasks, in shard order.</returns>
+    public IEnumerable<CorpusTaskData> EnumerateRepairTasks()
+    {
+        return m_shards.Where(shard => shard.NeedsRepair && !shard.SentToRepair).Select(Reissue);
     }
 
     /// <summary>The tasks of the dispute round: the shards whose copies disagreed, each under a new ticket.</summary>
     /// <returns>The tasks, in shard order; empty when no copies disagreed.</returns>
     public List<CorpusTaskData> DisputeTasks()
     {
-        return m_shards.Values.Where(shard => shard.NeedsDispute && !shard.SentToDispute).Select(Reissue).ToList();
+        return EnumerateDisputeTasks().ToList();
+    }
+
+    /// <summary>The tasks of the dispute round, made one at a time as they are asked for (<see cref="PendingDisputes"/> says how many there are).</summary>
+    /// <returns>The tasks, in shard order.</returns>
+    public IEnumerable<CorpusTaskData> EnumerateDisputeTasks()
+    {
+        return m_shards.Where(shard => shard.NeedsDispute && !shard.SentToDispute).Select(Reissue);
     }
 
     /// <summary>The fields two results of one shard disagree on; empty when they agree.</summary>
@@ -237,40 +263,104 @@ public sealed class CorpusLedger
 
     #endregion
 
-    #region Binding
+    #region Reading
 
-    /// <summary>Binds every value of a round to a shard by its ticket, or drops it.</summary>
-    private void Take(CorpusRound round, Func<CorpusLedgerShard, List<CorpusLedgerEntry>> entries, Action<CorpusLedgerShard> sent)
+    /// <summary>
+    /// Reads the run from its start and judges it shard by shard: the first round's packages in
+    /// order, and beside them the repair and the dispute round, which hold shards of the same job
+    /// in the same order. Every shard is complete when it is handed over, and is not kept.
+    /// </summary>
+    /// <param name="tally">Receives what is dropped on the way.</param>
+    private IEnumerable<CorpusLedgerShard> Judge(CorpusLedgerTally tally)
     {
-        var tickets = new Dictionary<string, (CorpusLedgerShard Shard, CorpusTaskData Task)>(StringComparer.Ordinal);
-        foreach (var task in round.Tasks)
-        {
-            if (!CorpusTickets.IsWellFormed(task.Ticket) || !m_shards.TryGetValue(task.TaskIndex, out var shard))
-                continue;
+        tally.Add(m_first.Unbound);
+        tally.Add(m_repair?.Unbound);
+        tally.Add(m_dispute?.Unbound);
 
-            if (tickets.TryAdd(task.Ticket, (shard, task)))
-                sent(shard);
+        using var repair = new CorpusLedgerCursor(m_repair, tally);
+        using var dispute = new CorpusLedgerCursor(m_dispute, tally);
+        var missing = m_dispute?.Missing ?? 0;
+        var last = -1;
+
+        foreach (var package in m_first.Read())
+        {
+            tally.Add(package.Dropped);
+
+            var at = 0;
+            while (at < package.Slots.Count)
+            {
+                // A shard is its first task; a second task for the same shard binds to it too.
+                var task = package.Slots[at].Task;
+                if (task.TaskIndex <= last)
+                    throw new InvalidOperationException(CorpusRoundSourceBlobs.ERROR_NOT_TASK_PACKAGES);
+
+                last = task.TaskIndex;
+                var shard = new CorpusLedgerShard(task);
+                for (; at < package.Slots.Count && package.Slots[at].Task.TaskIndex == last; at++)
+                    Take(package.Slots[at], shard.First, tally);
+
+                CorpusLedgerRuling.JudgeFirst(shard);
+
+                if (repair.Take(last, out var repairSlots, out _))
+                {
+                    shard.SentToRepair = true;
+                    foreach (var slot in repairSlots)
+                        Take(slot, shard.Repair, tally);
+
+                    if (shard.NeedsRepair)
+                        CorpusLedgerRuling.JudgeRepair(shard, tally);
+                }
+
+                if (dispute.Take(last, out var disputeSlots, out var disputePackage))
+                {
+                    shard.SentToDispute = true;
+                    foreach (var slot in disputeSlots)
+                        Take(slot, shard.Dispute, tally);
+
+                    // What the other packages of the round are short of: every one was asked for in three copies.
+                    if (shard.NeedsDispute)
+                        CorpusLedgerRuling.JudgeDispute(shard, missing - Math.Max(0, DISPUTE_COPIES - disputePackage!.Returned), tally);
+                }
+
+                CorpusLedgerRuling.Close(shard);
+                yield return shard;
+            }
         }
 
-        foreach (var value in round.Results)
+        repair.Finish();
+        dispute.Finish();
+    }
+
+    #endregion
+
+    #region Binding
+
+    /// <summary>Checks every value under a task's ticket and adds it to the shard's entries of the round.</summary>
+    private void Take(CorpusRoundSlot slot, List<CorpusLedgerEntry> entries, CorpusLedgerTally tally)
+    {
+        foreach (var value in slot.Values)
         {
-            if (value is not CorpusResultData result)
+            switch (value.Kind)
             {
-                Reject(REJECTED_UNREADABLE);
-                continue;
+                case CorpusLedgerEntryKind.Execution when value.Result != null:
+                    entries.Add(Entry(value.Result, slot.Task, tally));
+                    break;
+                case CorpusLedgerEntryKind.Fault when CorpusResultCodes.IsFault(value.Code):
+                    entries.Add(new CorpusLedgerEntry(CorpusLedgerEntryKind.Fault, null, value.Code));
+                    break;
+                case CorpusLedgerEntryKind.Rejected when REJECTION_REASONS.Contains(value.Code):
+                    tally.Reject(value.Code);
+                    entries.Add(new CorpusLedgerEntry(CorpusLedgerEntryKind.Rejected, null, value.Code));
+                    break;
+                default:
+                    tally.Reject(REJECTED_UNREADABLE);
+                    entries.Add(new CorpusLedgerEntry(CorpusLedgerEntryKind.Rejected, null, REJECTED_UNREADABLE));
+                    break;
             }
-
-            if (!CorpusTickets.IsWellFormed(result.Ticket) || !tickets.TryGetValue(result.Ticket, out var bound))
-            {
-                Reject(REJECTED_UNKNOWN_TICKET);
-                continue;
-            }
-
-            entries(bound.Shard).Add(Entry(result, bound.Task));
         }
     }
 
-    private CorpusLedgerEntry Entry(CorpusResultData result, CorpusTaskData task)
+    private CorpusLedgerEntry Entry(CorpusResultData result, CorpusTaskData task, CorpusLedgerTally tally)
     {
         var reason = !CorpusResultCheck.IsWellFormed(result) ? REJECTED_UNREADABLE
             : result.TaskIndex != task.TaskIndex || !string.Equals(result.SourceUrl, task.Source?.Url ?? "", StringComparison.Ordinal) ? REJECTED_CONTENT
@@ -280,31 +370,13 @@ public sealed class CorpusLedger
 
         if (reason != null)
         {
-            Reject(reason);
+            tally.Reject(reason);
             return new CorpusLedgerEntry(CorpusLedgerEntryKind.Rejected, null, reason);
         }
 
         return result.Verdict == CorpusShardVerdict.NodeFault
             ? new CorpusLedgerEntry(CorpusLedgerEntryKind.Fault, result, result.Error)
             : new CorpusLedgerEntry(CorpusLedgerEntryKind.Execution, result, "");
-    }
-
-    /// <summary>
-    /// More values came back under a ticket than its round asked for, in a round that settles a
-    /// shard: which of them is the answer cannot be told, so none is. Each value that would have
-    /// been taken becomes a rejection (<see cref="REJECTED_SURPLUS"/>); one that was dropped for a
-    /// reason of its own keeps it.
-    /// </summary>
-    private void DropSurplus(List<CorpusLedgerEntry> entries)
-    {
-        for (var index = 0; index < entries.Count; index++)
-        {
-            if (entries[index].Kind == CorpusLedgerEntryKind.Rejected)
-                continue;
-
-            entries[index] = new CorpusLedgerEntry(CorpusLedgerEntryKind.Rejected, null, REJECTED_SURPLUS);
-            Reject(REJECTED_SURPLUS);
-        }
     }
 
     /// <summary>Whether a checked result is one the task's pipeline can have produced.</summary>
@@ -330,8 +402,9 @@ public sealed class CorpusLedger
         if (result.MinHash != null && MinHashParameters.Resolve(result.MinHash) != MinHashParameters.Resolve(pipeline.MinHash))
             return false;
 
+        // More bytes than the node was to accept for the shard: the cap, or the size it was declared with.
         var stats = result.Stats!;
-        if (stats.BytesFetched > CorpusTaskPlanner.NodeShardCap(task.MaxShardBytes))
+        if (stats.BytesFetched > ShardLimits.FetchCap(task))
             return false;
 
         if (!pipeline.IdentifyLanguage)
@@ -343,168 +416,9 @@ public sealed class CorpusLedger
         return pipeline.TargetLanguages.Count == 0 || stats.Languages.All(language => pipeline.TargetLanguages.Contains(language.Name, StringComparer.Ordinal));
     }
 
-    private void Reject(string reason)
-    {
-        m_rejected[reason] = m_rejected.GetValueOrDefault(reason) + 1;
-        RejectedResults++;
-    }
-
     #endregion
 
-    #region Judging
-
-    private static void JudgeFirst(CorpusLedgerShard shard)
-    {
-        var executions = Executions(shard.First);
-
-        // More answers than the round sent out: one machine answered twice, and nothing says which.
-        if (shard.First.Count > FIRST_ROUND_COPIES || !Agree(executions))
-            shard.NeedsDispute = true;
-        else if (executions.Count == 0)
-            shard.NeedsRepair = true;
-        else
-            Accept(shard, executions[0], executions.Count);
-    }
-
-    private void JudgeRepair(CorpusLedgerShard shard)
-    {
-        shard.NeedsRepair = false;
-
-        // The round asks for one value: with more that would be taken, which of them is the
-        // answer cannot be told, so none is, and the shard has no result.
-        if (Taken(shard.Repair) > REPAIR_COPIES)
-        {
-            DropSurplus(shard.Repair);
-            return;
-        }
-
-        var executions = Executions(shard.Repair);
-        if (executions.Count == 1)
-            Accept(shard, executions[0], 1);
-    }
-
-    /// <summary>
-    /// Settles one shard of the dispute round.
-    /// </summary>
-    /// <param name="shard">The shard.</param>
-    /// <param name="borrowable">The values the other shards of the round are short of, together: as many of this shard's may be one machine's second.</param>
-    private void JudgeDispute(CorpusLedgerShard shard, int borrowable)
-    {
-        // More values than machines were asked: none is taken.
-        if (Taken(shard.Dispute) > DISPUTE_COPIES)
-        {
-            DropSurplus(shard.Dispute);
-            Leave(shard, DISPUTE_TOO_FEW_COPIES, 0);
-            return;
-        }
-
-        var executions = Executions(shard.Dispute);
-        if (executions.Count < DISPUTE_QUORUM)
-        {
-            Leave(shard, DISPUTE_TOO_FEW_COPIES, executions.Count);
-            return;
-        }
-
-        // The executions that agree with one another, the largest group first.
-        var groups = new List<List<CorpusResultData>>();
-        foreach (var execution in executions)
-        {
-            var same = groups.FirstOrDefault(group => Differences(group[0], execution).Count == 0);
-            if (same == null)
-                groups.Add([execution]);
-            else
-                same.Add(execution);
-        }
-
-        groups = groups.OrderByDescending(group => group.Count).ToList();
-        var most = groups[0].Count;
-        var next = groups.Count > 1 ? groups[1].Count : 0;
-
-        if (most < DISPUTE_QUORUM || most <= next)
-        {
-            Leave(shard, DISPUTE_NO_MAJORITY, most);
-            return;
-        }
-
-        // Two machines must have returned the leading result. Of its values, as many as the
-        // other shards of the round are short of may be one machine's second, and do not count.
-        var machines = most - borrowable;
-        if (machines < DISPUTE_QUORUM || machines <= next)
-        {
-            Leave(shard, DISPUTE_SURPLUS_COPIES, most);
-            return;
-        }
-
-        Accept(shard, groups[0][0], most);
-        shard.DisputeOutcome = DISPUTE_RESOLVED;
-        shard.DisputeAgreeing = most;
-    }
-
-    /// <summary>A dispute that was not settled: why, and how many of its executions agreed at the most.</summary>
-    private static void Leave(CorpusLedgerShard shard, string outcome, int agreeing)
-    {
-        shard.DisputeOutcome = outcome;
-        shard.DisputeAgreeing = agreeing;
-    }
-
-    /// <summary>What the shard ends as once no further round is coming.</summary>
-    private static void Close(CorpusLedgerShard shard)
-    {
-        shard.Faults = shard.First.Concat(shard.Repair).Concat(shard.Dispute)
-            .Where(entry => entry.Kind == CorpusLedgerEntryKind.Fault)
-            .Select(entry => entry.Code)
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToList();
-
-        if (shard.Accepted != null)
-            return;
-
-        if (shard.NeedsDispute)
-        {
-            // A dispute no round was run for (or none held the shard) has no copies at all.
-            if (shard.DisputeOutcome.Length == 0)
-                shard.DisputeOutcome = DISPUTE_TOO_FEW_COPIES;
-
-            shard.Outcome = CorpusShardOutcome.Disputed;
-            return;
-        }
-
-        // What the nodes said: a fault of a node's own when one returned the shard so, and
-        // "no answer" when nothing that was accepted came back.
-        shard.Outcome = CorpusShardOutcome.NoResult;
-        shard.Reason = shard.First.Concat(shard.Repair).Any(entry => entry.Kind == CorpusLedgerEntryKind.Fault) ? NO_RESULT_NODE_FAULT : NO_RESULT_NO_ANSWER;
-    }
-
-    private static void Accept(CorpusLedgerShard shard, CorpusResultData result, int copies)
-    {
-        shard.Outcome = CorpusShardOutcome.Accepted;
-        shard.Accepted = result;
-        shard.Copies = copies;
-        shard.NeedsRepair = false;
-    }
-
-    /// <summary>The values of a round that were not dropped on arrival: executions and node faults.</summary>
-    private static int Taken(IEnumerable<CorpusLedgerEntry> entries)
-    {
-        return entries.Count(entry => entry.Kind != CorpusLedgerEntryKind.Rejected);
-    }
-
-    private static List<CorpusResultData> Executions(IEnumerable<CorpusLedgerEntry> entries)
-    {
-        return entries.Where(entry => entry.Kind == CorpusLedgerEntryKind.Execution).Select(entry => entry.Result!).ToList();
-    }
-
-    private static bool Agree(IReadOnlyList<CorpusResultData> executions)
-    {
-        for (var index = 1; index < executions.Count; index++)
-        {
-            if (Differences(executions[0], executions[index]).Count > 0)
-                return false;
-        }
-
-        return true;
-    }
+    #region Tools
 
     /// <summary>The shard's task again, under a ticket of its own for the new round.</summary>
     private static CorpusTaskData Reissue(CorpusLedgerShard shard)
@@ -547,32 +461,42 @@ public sealed class CorpusLedger
     /// <summary>The server's controller version.</summary>
     public string ControllerVersion { get; }
 
-    /// <summary>Every shard of the job, in index order.</summary>
-    public IReadOnlyCollection<CorpusLedgerShard> Shards => m_shards.Values;
+    /// <summary>
+    /// Every shard of the job, in index order. The shards are not held: each enumeration reads the
+    /// run again, one task package at a time, and hands over each shard as it is judged; the
+    /// count is known without reading.
+    /// </summary>
+    public IReadOnlyCollection<CorpusLedgerShard> Shards => m_shards;
 
     /// <summary>Values dropped over every round.</summary>
-    public int RejectedResults { get; private set; }
+    public int RejectedResults => m_tally.RejectedResults;
 
     /// <summary>The dropped values by reason, reasons in ordinal order.</summary>
-    public IReadOnlyDictionary<string, int> Rejected => m_rejected;
+    public IReadOnlyDictionary<string, int> Rejected => m_tally.Rejected;
 
-    /// <summary>Results returned as a node fault over every round (not the ones dropped as surplus).</summary>
-    public int NodeFaults { get; private set; }
+    /// <summary>Shards returned as a node fault over every round (not the ones dropped as surplus).</summary>
+    public int NodeFaults => m_tally.NodeFaults;
 
     /// <summary>Shards the repair round took.</summary>
-    public int Repairs => m_shards.Values.Count(shard => shard.SentToRepair);
+    public int Repairs => m_tally.Repairs;
 
     /// <summary>Shards the repair round gave a result.</summary>
-    public int Repaired => m_shards.Values.Count(shard => shard.SentToRepair && !shard.SentToDispute && shard.Outcome == CorpusShardOutcome.Accepted);
+    public int Repaired => m_tally.Repaired;
 
     /// <summary>Shards whose copies disagreed.</summary>
-    public int Disputes => m_shards.Values.Count(shard => shard.NeedsDispute);
+    public int Disputes => m_tally.Disputes;
 
     /// <summary>Of those, the ones the dispute round settled.</summary>
-    public int DisputesResolved => m_shards.Values.Count(shard => shard.NeedsDispute && shard.Outcome == CorpusShardOutcome.Accepted);
+    public int DisputesResolved => m_tally.DisputesResolved;
 
     /// <summary>Shards accepted on one machine's word.</summary>
-    public int SingleExecutions => m_shards.Values.Count(shard => shard.Outcome == CorpusShardOutcome.Accepted && shard.Copies == 1);
+    public int SingleExecutions => m_tally.SingleExecutions;
+
+    /// <summary>Shards the first round left without a result that no repair round has taken yet: how many tasks <see cref="EnumerateRepairTasks"/> gives.</summary>
+    public int PendingRepairs => m_tally.PendingRepairs;
+
+    /// <summary>Shards whose copies disagreed that no dispute round has taken yet: how many tasks <see cref="EnumerateDisputeTasks"/> gives.</summary>
+    public int PendingDisputes => m_tally.PendingDisputes;
 
     #endregion
 }

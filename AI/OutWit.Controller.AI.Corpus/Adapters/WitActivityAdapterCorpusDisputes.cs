@@ -11,27 +11,30 @@ internal sealed class WitActivityAdapterCorpusDisputes : WitActivityAdapterFunct
 {
     #region Constructors
 
-    public WitActivityAdapterCorpusDisputes(IWitProcessingManager processingManager, ILogger logger)
+    public WitActivityAdapterCorpusDisputes(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
         : base(processingManager, logger)
     {
+        BlobService = blobService;
     }
 
     #endregion
 
     #region Processing
 
-    protected override Task Process(WitActivityCorpusDisputes activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
+    protected override async Task Process(WitActivityCorpusDisputes activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        var ledger = CorpusRounds.Ledger(pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired);
-        var tasks = ledger.DisputeTasks();
+        var packages = await CorpusRounds.HostAsync("Corpus.Disputes", async () =>
+        {
+            var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired);
 
-        if (tasks.Count > 0)
-            Logger.LogWarning("Corpus.Disputes: the copies of {Count} shard(s) disagree; each runs again on up to three machines.", tasks.Count);
+            if (ledger.PendingDisputes > 0)
+                Logger.LogWarning("Corpus.Disputes: the copies of {Count} shard(s) disagree; each runs again on up to three machines.", ledger.PendingDisputes);
 
-        if (!pool.TrySetCollection(activity.ReturnReference, tasks))
+            return await CorpusRounds.PackagesAsync(BlobService, ledger.EnumerateDisputeTasks(), ledger.PendingDisputes);
+        });
+
+        if (!pool.TrySetCollection(activity.ReturnReference, packages))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
-
-        return Task.CompletedTask;
     }
 
     #endregion
@@ -71,6 +74,12 @@ internal sealed class WitActivityAdapterCorpusDisputes : WitActivityAdapterFunct
             throw;
         }
     }
+
+    #endregion
+
+    #region Properties
+
+    private IWitBlobService BlobService { get; }
 
     #endregion
 }

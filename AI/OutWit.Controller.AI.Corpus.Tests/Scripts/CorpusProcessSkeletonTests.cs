@@ -89,7 +89,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
         });
 
         // Split asked the origin for the sizes the manifest did not give: the work estimate is the shard's real size.
-        var tasks = ((System.Collections.IEnumerable)job.Variables["tasks"].Value!).OfType<CorpusTaskData>().OrderBy(t => t.TaskIndex).ToList();
+        var tasks = TasksOf(job.Variables["tasks"].Value).OrderBy(t => t.TaskIndex).ToList();
         Assert.That(tasks.Select(t => t.Source!.SizeBytes), Is.EqualTo(new[]
         {
             new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length,
@@ -143,7 +143,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
         // Four executions, two shards: the report still has one entry for each.
         using var report = await ReadJsonAsync((Guid)job.Variables["report"].Value!);
         Assert.That(report.RootElement.GetProperty("shards").GetArrayLength(), Is.EqualTo(2));
-        Assert.That(((System.Collections.IEnumerable)job.Variables["executions"].Value!).OfType<CorpusResultData>().Count(), Is.EqualTo(4));
+        Assert.That(ResultsOf(job.Variables["executions"].Value), Has.Count.EqualTo(4));
 
         // Rate 0 (the default) leaves the integrity document empty.
         var plain = Engine.Compile(m_processScript);
@@ -310,8 +310,9 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
             Assert.That(goodStatus.Result, Is.EqualTo(WitProcessingResult.Completed));
             Assert.That(goodReport.WellFormed, Is.True, string.Join(" | ", goodReport.Messages));
             Assert.That(goodReport.TaskCount, Is.EqualTo(1));
-            Assert.That(goodReport.EstimatedTrafficBytes, Is.EqualTo(new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length), "a source without a size is probed at the origin");
-            Assert.That(goodReport.Messages, Has.Some.Contains("1 source size(s) probed"));
+            Assert.That(goodReport.EstimatedFetchBytes, Is.EqualTo(new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length), "a source without a size is probed at the origin");
+            Assert.That(goodReport.UnsizedSources, Is.Zero, "the origin's answer is the shard's size from then on");
+            Assert.That(goodReport.Messages, Has.Some.Contains("1 source(s) without a size answered"));
 
             Assert.That(badStatus.Result, Is.EqualTo(WitProcessingResult.Completed), "preflight reports, it does not fail");
             Assert.That(badReport.WellFormed, Is.False);

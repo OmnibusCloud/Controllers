@@ -38,7 +38,12 @@ public sealed partial class CorpusPreflightData : ModelBase
                && StorageRetentionDays.Is(other.StorageRetentionDays)
                && BusiestNodeShare.Is(other.BusiestNodeShare, tolerance)
                && PlannedNodes.Is(other.PlannedNodes)
-               && NodeDiskBytesPerShard.Is(other.NodeDiskBytesPerShard);
+               && NodeDiskBytesPerShard.Is(other.NodeDiskBytesPerShard)
+               && EstimatedFetchBytes.Is(other.EstimatedFetchBytes)
+               && EstimatedUploadBytes.Is(other.EstimatedUploadBytes)
+               && RetryAllowanceBytes.Is(other.RetryAllowanceBytes)
+               && FetchCeilingBytes.Is(other.FetchCeilingBytes)
+               && UnsizedSources.Is(other.UnsizedSources);
     }
 
     /// <summary>Deep copy.</summary>
@@ -58,7 +63,12 @@ public sealed partial class CorpusPreflightData : ModelBase
             StorageRetentionDays = StorageRetentionDays,
             BusiestNodeShare = BusiestNodeShare,
             PlannedNodes = PlannedNodes,
-            NodeDiskBytesPerShard = NodeDiskBytesPerShard
+            NodeDiskBytesPerShard = NodeDiskBytesPerShard,
+            EstimatedFetchBytes = EstimatedFetchBytes,
+            EstimatedUploadBytes = EstimatedUploadBytes,
+            RetryAllowanceBytes = RetryAllowanceBytes,
+            FetchCeilingBytes = FetchCeilingBytes,
+            UnsizedSources = UnsizedSources
         };
     }
 
@@ -85,12 +95,16 @@ public sealed partial class CorpusPreflightData : ModelBase
     [MemoryPackOrder(3)]
     public int OversizedSources { get; set; }
 
-    /// <summary>What the contributors will fetch: every source's estimated size once, and the second fetch of the shards sampled for integrity (the largest ones are taken as the sampled ones).</summary>
+    /// <summary>
+    /// What the contributors' links will carry, down and up: <see cref="EstimatedFetchBytes"/>,
+    /// <see cref="EstimatedUploadBytes"/> and <see cref="RetryAllowanceBytes"/> together. Up to
+    /// Corpus 0.4.0 this was the fetches alone.
+    /// </summary>
     [ToString]
     [MemoryPackOrder(4)]
     public long EstimatedTrafficBytes { get; set; }
 
-    /// <summary>Every problem, by manifest line.</summary>
+    /// <summary>The manifest's problems by line and the preflight's notes: a bounded list (the first problems, then how many more there are).</summary>
     [MemoryPackOrder(5)]
     public List<string> Messages { get; set; } = [];
 
@@ -136,6 +150,39 @@ public sealed partial class CorpusPreflightData : ModelBase
     [ToString]
     [MemoryPackOrder(11)]
     public long NodeDiskBytesPerShard { get; set; }
+
+    /// <summary>
+    /// What the contributors will fetch from the origins: every shard once, and the second fetch
+    /// of the shards sampled for integrity (the largest are taken as the sampled ones). A shard is
+    /// counted at the size the manifest declares or the origin answered, a shard with neither at
+    /// the mean of the origin's answers, and at the cap when there is none.
+    /// </summary>
+    [ToString]
+    [MemoryPackOrder(12)]
+    public long EstimatedFetchBytes { get; set; }
+
+    /// <summary>What the contributors will upload: the text and the signatures of every execution, from the measured ratios of product to shard bytes (none for a run that keeps statistics and hashes only), and the result packages.</summary>
+    [ToString]
+    [MemoryPackOrder(13)]
+    public long EstimatedUploadBytes { get; set; }
+
+    /// <summary>The part of the estimate set aside for fetches that start over and for shards fetched again in a repair or a dispute: a fixed share of <see cref="EstimatedFetchBytes"/>.</summary>
+    [MemoryPackOrder(14)]
+    public long RetryAllowanceBytes { get; set; }
+
+    /// <summary>
+    /// The most the nodes accept for the same fetches, whoever wrote the manifest: every shard at
+    /// the size it is held to (its declared size and a slack, or the cap when it has no size of
+    /// its own). The estimate is what is expected; this is what is enforced.
+    /// </summary>
+    [ToString]
+    [MemoryPackOrder(15)]
+    public long FetchCeilingBytes { get; set; }
+
+    /// <summary>Shards with no size of their own (the manifest gives none and the origin was not asked or did not answer): estimated, and held by the nodes to the cap only.</summary>
+    [ToString]
+    [MemoryPackOrder(16)]
+    public int UnsizedSources { get; set; }
 
     #endregion
 }

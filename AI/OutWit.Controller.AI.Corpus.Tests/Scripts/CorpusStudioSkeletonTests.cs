@@ -1,4 +1,5 @@
 using OutWit.Controller.AI.Corpus.Language;
+using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Engine.Interfaces;
@@ -95,10 +96,18 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
         var report = (CorpusPreflightData)job.Variables["result"].Value!;
         var largest = Math.Max(Size(WET_FIXTURE), Size(WARC_FIXTURE));
 
+        var once = Size(WET_FIXTURE) + Size(WARC_FIXTURE);
+
         Assert.Multiple(() =>
         {
-            Assert.That(report.EstimatedTrafficBytes, Is.EqualTo(Size(WET_FIXTURE) + Size(WARC_FIXTURE) + largest), "the larger shard a second time");
-            Assert.That(report.Messages, Has.Some.EqualTo($"Contributor traffic estimate {report.EstimatedTrafficBytes} bytes: every shard once ({Size(WET_FIXTURE) + Size(WARC_FIXTURE)}) and the second fetch of the 1 largest shard(s), sampled for integrity ({largest})."));
+            Assert.That(report.EstimatedFetchBytes, Is.EqualTo(once + largest), "the larger shard a second time");
+            Assert.That(report.EstimatedUploadBytes, Is.GreaterThan(0), "M-8: the products every execution uploads are traffic too");
+            Assert.That(report.RetryAllowanceBytes, Is.EqualTo((once + largest + CorpusTrafficEstimate.RETRY_ALLOWANCE_DIVISOR - 1) / CorpusTrafficEstimate.RETRY_ALLOWANCE_DIVISOR), "M-8: an allowance for what is fetched more than once");
+            Assert.That(report.EstimatedTrafficBytes, Is.EqualTo(report.EstimatedFetchBytes + report.EstimatedUploadBytes + report.RetryAllowanceBytes + report.PlannedNodes * Size(MODEL_FIXTURE)), "and the language model, once for each node the plan uses");
+            Assert.That(report.PlannedNodes, Is.GreaterThan(0));
+            Assert.That(report.FetchCeilingBytes, Is.EqualTo(ShardLimits.DeclaredCap(Size(WET_FIXTURE)) + ShardLimits.DeclaredCap(Size(WARC_FIXTURE)) + ShardLimits.DeclaredCap(largest)), "H-8: what the nodes accept at the most");
+            Assert.That(report.Messages, Has.Some.StartsWith($"Contributor traffic estimate {report.EstimatedTrafficBytes} bytes: fetches {once + largest} (every shard once {once} and the second fetch of the 1 largest shard(s), sampled for integrity, {largest}), uploads {report.EstimatedUploadBytes} (the products and the result packages of every execution), the language model {report.PlannedNodes * Size(MODEL_FIXTURE)} ({report.PlannedNodes} node(s), once each) and an allowance of {report.RetryAllowanceBytes}"));
+            Assert.That(report.Messages, Has.Some.StartsWith($"The nodes accept at most {report.FetchCeilingBytes} bytes for those fetches, whoever wrote the manifest"));
         });
     }
 
@@ -118,7 +127,7 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
             Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(perShard), "the largest shard, half of it again for its products, 64 MiB");
             Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(ShardDisk.Needed(largest)), "what a node asks of its own disk before it fetches");
             Assert.That(report.Messages, Has.Some.StartsWith("Node disk: a node holds at most its degree and 2 more shards at a time").And.Contains($"Each held shard needs {perShard} bytes free"));
-            Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a sampled shard whose two copies disagree is fetched again by up to 3 machines (a dispute: at most 1 shard(s) here), and a shard a node returns as a fault of its own is fetched once more (a repair)."));
+            Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a node that fails or falls silent has its whole share fetched again by other nodes. The allowance is not a bound: a sampled shard whose two copies disagree is fetched again by up to 3 machines (a dispute: at most 1 shard(s) here), and a shard a node returns as a fault of its own is fetched once more (a repair); the report's counters (repairs, disputes) say what a run added."));
         });
     }
 
@@ -131,7 +140,7 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
         await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData());
         var report = (CorpusPreflightData)job.Variables["result"].Value!;
 
-        Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a shard a node returns as a fault of its own is fetched once more (a repair)."));
+        Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a node that fails or falls silent has its whole share fetched again by other nodes. The allowance is not a bound: a shard a node returns as a fault of its own is fetched once more (a repair); the report's counters (repairs, disputes) say what a run added."));
     }
 
     #endregion
@@ -238,7 +247,7 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
 
             Assert.Multiple(() =>
             {
-                Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/5"));
+                Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/6"));
                 Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));
                 Assert.That(summary.GetProperty("disputes_resolved").GetInt32(), Is.EqualTo(summary.GetProperty("signature_mismatches").GetInt32()), "three machines ran each such shard again, and two of them are honest");
                 Assert.That(summary.GetProperty("signature_mismatches").GetInt32(), Is.GreaterThanOrEqualTo(1), "the dishonest node held a side of at least one pair");

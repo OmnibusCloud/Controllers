@@ -11,27 +11,31 @@ internal sealed class WitActivityAdapterCorpusRepairs : WitActivityAdapterFuncti
 {
     #region Constructors
 
-    public WitActivityAdapterCorpusRepairs(IWitProcessingManager processingManager, ILogger logger)
+    public WitActivityAdapterCorpusRepairs(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
         : base(processingManager, logger)
     {
+        BlobService = blobService;
     }
 
     #endregion
 
     #region Processing
 
-    protected override Task Process(WitActivityCorpusRepairs activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
+    protected override async Task Process(WitActivityCorpusRepairs activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        var ledger = CorpusRounds.Ledger(pool, activity.Tasks, activity.Executions);
-        var tasks = ledger.RepairTasks();
+        var packages = await CorpusRounds.HostAsync("Corpus.Repairs", async () =>
+        {
+            var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions);
 
-        if (tasks.Count > 0)
-            Logger.LogWarning("Corpus.Repairs: {Count} shard(s) came back without a result ({Faults} node fault(s), {Rejected} value(s) dropped); they are sent out once more.", tasks.Count, ledger.NodeFaults, ledger.RejectedResults);
+            if (ledger.PendingRepairs > 0)
+                Logger.LogWarning("Corpus.Repairs: {Count} shard(s) came back without a result ({Faults} node fault(s), {Rejected} value(s) dropped); they are sent out once more.", ledger.PendingRepairs, ledger.NodeFaults, ledger.RejectedResults);
 
-        if (!pool.TrySetCollection(activity.ReturnReference, tasks))
+            // The run is read once more, a shard at a time, and its tasks go straight into packages.
+            return await CorpusRounds.PackagesAsync(BlobService, ledger.EnumerateRepairTasks(), ledger.PendingRepairs);
+        });
+
+        if (!pool.TrySetCollection(activity.ReturnReference, packages))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
-
-        return Task.CompletedTask;
     }
 
     #endregion
@@ -63,6 +67,12 @@ internal sealed class WitActivityAdapterCorpusRepairs : WitActivityAdapterFuncti
             throw;
         }
     }
+
+    #endregion
+
+    #region Properties
+
+    private IWitBlobService BlobService { get; }
 
     #endregion
 }

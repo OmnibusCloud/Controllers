@@ -39,7 +39,7 @@ public sealed class WitControllerCorpusModuleTests
     [Test]
     public void EveryActivityIsNamedUnderTheCorpusPrefixTest()
     {
-        var activities = typeof(WitActivityCorpusProcessShard).Assembly
+        var activities = typeof(WitActivityCorpusProcessPackage).Assembly
             .GetTypes()
             .Where(type => type.GetCustomAttribute<ActivityAttribute>() != null)
             .ToList();

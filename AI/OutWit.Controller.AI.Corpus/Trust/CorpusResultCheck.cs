@@ -19,9 +19,6 @@ public static class CorpusResultCheck
 {
     #region Constants
 
-    /// <summary>The most shards a node says it processes at once.</summary>
-    public const int MAX_DEGREE = 4096;
-
     /// <summary>The most characters of a controller version or a runtime target.</summary>
     public const int MAX_LABEL_CHARS = 32;
 
@@ -49,7 +46,7 @@ public static class CorpusResultCheck
             || !Enum.IsDefined(result.Verdict)
             || !Enum.IsDefined(result.Output)
             || result.TaskIndex < 0
-            || result.Degree is < 0 or > MAX_DEGREE
+            || result.Degree != 0
             || result.NodeId != Guid.Empty
             || result.NodeName is not { Length: 0 }
             || result.SourceUrl == null || result.SourceUrl.Length > MAX_URL_CHARS

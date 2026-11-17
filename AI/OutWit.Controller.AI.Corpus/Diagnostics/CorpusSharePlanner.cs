@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Delivery;
 using OutWit.Controller.AI.Corpus.Storage;
 
 namespace OutWit.Controller.AI.Corpus.Diagnostics;
@@ -10,7 +11,7 @@ namespace OutWit.Controller.AI.Corpus.Diagnostics;
 /// one that has, at the slowest measured rate); the tasks largest first, each to the node that
 /// finishes it earliest; the two executions of a sampled shard never on one node; then the node count
 /// trimmed while the longest share grows by no more than 2 %. A task's work is its shard's size in
-/// megabytes, as <c>Corpus.ProcessShard</c> estimates it. Which shards the platform samples is random;
+/// megabytes, as <c>Corpus.ProcessPackage</c> estimates it (a package is one shard up to the most packages a round has). Which packages the platform samples is random;
 /// the plan takes the largest ones, as the storage estimate does. Every node counts as a machine of
 /// its own here. The answer is a share and counts: no node is named.
 /// </summary>
@@ -21,7 +22,7 @@ public static class CorpusSharePlanner
     /// <summary>How much longer the longest share may get when the plan uses one node fewer (the allocator's default, 2 %).</summary>
     public const double IMPROVEMENT_THRESHOLD = 0.02;
 
-    /// <summary>The work of a shard whose size is not known: one typical Common Crawl WET file, in megabytes (as <c>Corpus.ProcessShard</c> estimates it).</summary>
+    /// <summary>The work of a shard whose size is not known: one typical Common Crawl WET file, in megabytes (as <c>Corpus.ProcessPackage</c> estimates it).</summary>
     public const double DEFAULT_SHARD_MEGABYTES = 64;
 
     /// <summary>The executions of a sampled shard: the original and one copy on another node.</summary>
@@ -46,7 +47,9 @@ public static class CorpusSharePlanner
         if (nodes.Count == 0 || shardBytes.Count == 0)
             return CorpusSharePlan.NONE with { PoolNodes = nodes.Count };
 
-        var tasks = Tasks(shardBytes, nodes.Count > 1 ? CorpusStorageEstimator.SampledShards(shardBytes.Count, samplingRate) : 0);
+        // The platform assigns packages: a shard each up to the most packages a round has, consecutive shards beyond.
+        var work = PackageWork(shardBytes);
+        var tasks = Tasks(work, nodes.Count > 1 ? CorpusStorageEstimator.SampledShards(work.Count, samplingRate) : 0);
         var ranked = Rank(nodes);
 
         // With copies every node stays a candidate: a node free of an item may be the slowest one.
@@ -79,7 +82,7 @@ public static class CorpusSharePlanner
             total > 0 ? planned.Max(group => group.Work) / total : 0);
     }
 
-    /// <summary>A shard's work as <c>Corpus.ProcessShard</c> estimates it: its megabytes on the wire, at least 1, or a typical shard when its size is not known.</summary>
+    /// <summary>A shard's work as <c>Corpus.ProcessPackage</c> estimates it: its megabytes on the wire, at least 1, or a typical shard when its size is not known.</summary>
     /// <param name="sizeBytes">The shard's size (0 or less: not known).</param>
     /// <returns>The work units.</returns>
     public static double Work(long sizeBytes)
@@ -87,22 +90,43 @@ public static class CorpusSharePlanner
         return sizeBytes > 0 ? Math.Max(1, sizeBytes / BYTES_PER_MIB) : DEFAULT_SHARD_MEGABYTES;
     }
 
-    /// <summary>The executions, largest first: every shard once, and the largest <paramref name="sampled"/> a second time.</summary>
-    private static List<PlannedTask> Tasks(IReadOnlyList<long> shardBytes, int sampled)
+    /// <summary>The work of every package of a run, in the order the packages are made: a shard's own work up to <see cref="CorpusPackagePlanner.MAX_PACKAGES"/> shards, the megabytes of consecutive shards beyond (a typical shard for each one whose size is not known), as <c>Corpus.ProcessPackage</c> estimates it.</summary>
+    /// <param name="shardBytes">Each shard's size on the wire (0 or less: not known).</param>
+    /// <returns>One work value per package.</returns>
+    public static List<double> PackageWork(IReadOnlyList<long> shardBytes)
     {
-        var copied = Enumerable.Range(0, shardBytes.Count)
-            .OrderByDescending(index => Work(shardBytes[index]))
+        var perPackage = CorpusPackagePlanner.ShardsPerPackage(shardBytes.Count);
+        var work = new List<double>(CorpusPackagePlanner.Packages(shardBytes.Count));
+
+        for (var start = 0; start < shardBytes.Count; start += perPackage)
+        {
+            double megabytes = 0;
+            var end = Math.Min(shardBytes.Count, start + perPackage);
+            for (var index = start; index < end; index++)
+                megabytes += shardBytes[index] > 0 ? shardBytes[index] / BYTES_PER_MIB : DEFAULT_SHARD_MEGABYTES;
+
+            work.Add(Math.Max(1, megabytes));
+        }
+
+        return work;
+    }
+
+    /// <summary>The executions, largest first: every package once, and the largest <paramref name="sampled"/> a second time.</summary>
+    private static List<PlannedTask> Tasks(IReadOnlyList<double> work, int sampled)
+    {
+        var copied = Enumerable.Range(0, work.Count)
+            .OrderByDescending(index => work[index])
             .Take(sampled)
             .ToHashSet();
 
-        var tasks = new List<PlannedTask>(shardBytes.Count + sampled);
-        for (var index = 0; index < shardBytes.Count; index++)
-            tasks.Add(new PlannedTask(Work(shardBytes[index]), copied.Contains(index) ? index : null));
+        var tasks = new List<PlannedTask>(work.Count + sampled);
+        for (var index = 0; index < work.Count; index++)
+            tasks.Add(new PlannedTask(work[index], copied.Contains(index) ? index : null));
 
         foreach (var index in copied.Order())
         {
             for (var copy = 1; copy < SAMPLED_EXECUTIONS; copy++)
-                tasks.Add(new PlannedTask(Work(shardBytes[index]), index));
+                tasks.Add(new PlannedTask(work[index], index));
         }
 
         return tasks.OrderByDescending(task => task.Work).ToList();

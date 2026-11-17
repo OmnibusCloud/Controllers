@@ -48,12 +48,20 @@ public static class CorpusStorageCheck
         if (estimate.SampledShards > 0)
             parts.Add($"second copies of {estimate.SampledShards} sampled shard(s) {Bytes(estimate.ReplicaBytes)}");
         parts.Add($"documents {Bytes(estimate.DocumentBytes)}");
+        parts.Add($"task and result packages {Bytes(estimate.PackageBytes)}");
         parts.Add($"inputs {Bytes(estimate.InputBytes)}");
 
         var line = $"Server storage estimate {Bytes(estimate.TotalBytes)}{Window(limit)}: {string.Join(", ", parts)}.";
 
         if (estimate.UnsizedSources > 0)
-            line += $" {estimate.UnsizedSources} source(s) without a known size are not in it.";
+        {
+            line += estimate.UnsizedAtCap
+                ? $" {estimate.UnsizedSources} source(s) without a known size are counted at the cap a node holds a shard to: declare their sizes for a closer estimate."
+                : $" {estimate.UnsizedSources} source(s) without a known size are not in it.";
+        }
+
+        if (!estimate.MeasuredFilter)
+            line += " The quality filter runs with thresholds of the manifest or of the language pack, not the ones the estimate was measured with: it is taken as keeping what an unfiltered run keeps.";
 
         line += limit.IsStated
             ? $" The deployment allows one job {Bytes(limit.HeadroomBytes)} ({limit.Source})."

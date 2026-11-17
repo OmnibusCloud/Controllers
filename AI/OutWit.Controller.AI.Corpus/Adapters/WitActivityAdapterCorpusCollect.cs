@@ -18,10 +18,11 @@ internal sealed class WitActivityAdapterCorpusCollect : WitActivityAdapterFuncti
 
     #region Constructors
 
-    public WitActivityAdapterCorpusCollect(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
+    public WitActivityAdapterCorpusCollect(IWitProcessingManager processingManager, IWitBlobService blobService, IWitTempStorage tempStorage, ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        TempStorage = tempStorage;
     }
 
     #endregion
@@ -30,15 +31,19 @@ internal sealed class WitActivityAdapterCorpusCollect : WitActivityAdapterFuncti
 
     protected override async Task Process(WitActivityCorpusCollect activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        // The task list is the server's own: the report holds every shard of it, bound to what
-        // came back by the tickets, whatever order and whatever indexes the nodes returned.
-        var ledger = CorpusRounds.Ledger(pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved);
+        var reportBlobId = await CorpusRounds.HostAsync("Corpus.Collect", async () =>
+        {
+            // The task list is the server's own: the report holds every shard of it, bound to what
+            // came back by the tickets, whatever order and whatever indexes the nodes returned.
+            var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved);
 
-        if (ledger.RejectedResults > 0 || ledger.Disputes > 0)
-            Logger.LogWarning("Corpus.Collect: {Rejected} value(s) dropped, {Disputes} dispute(s) of which {Resolved} settled.", ledger.RejectedResults, ledger.Disputes, ledger.DisputesResolved);
+            if (ledger.RejectedResults > 0 || ledger.Disputes > 0)
+                Logger.LogWarning("Corpus.Collect: {Rejected} value(s) dropped, {Disputes} dispute(s) of which {Resolved} settled.", ledger.RejectedResults, ledger.Disputes, ledger.DisputesResolved);
 
-        var reportBytes = CorpusReportWriter.Write(ledger);
-        var reportBlobId = await BlobService.UploadBytesAsync(reportBytes, BLOB_NAME);
+            // Written to a file a shard at a time and uploaded as that file: the report grows
+            // with the manifest and is never held.
+            return await CorpusDocuments.UploadAsync(BlobService, TempStorage, BLOB_NAME, stream => CorpusReportWriter.Write(ledger, stream));
+        });
 
         if (!pool.TrySetValue(activity.ReturnReference, reportBlobId))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
@@ -83,6 +88,8 @@ internal sealed class WitActivityAdapterCorpusCollect : WitActivityAdapterFuncti
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IWitTempStorage TempStorage { get; }
 
     #endregion
 }

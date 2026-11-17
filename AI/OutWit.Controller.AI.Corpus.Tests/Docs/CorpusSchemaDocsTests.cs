@@ -76,7 +76,7 @@ public sealed class CorpusSchemaDocsTests
     {
         // The check itself: a missing required field, an unknown one and a wrong type are named.
         using var schema = Load("corpus-capabilities.schema.json");
-        using var broken = JsonDocument.Parse("""{"schema":"corpus-capabilities/2","controller":1,"surprise":true}""");
+        using var broken = JsonDocument.Parse("""{"schema":"corpus-capabilities/3","controller":1,"surprise":true}""");
 
         var problems = CorpusSchemaCheck.Validate(schema.RootElement, broken.RootElement);
 
@@ -161,7 +161,7 @@ public sealed class CorpusSchemaDocsTests
             Assert.That(report.RootElement.GetProperty("shards").EnumerateArray().SelectMany(PropertyNames).Distinct(),
                 Is.EquivalentTo(PropertyNames(schema.RootElement.GetProperty("properties").GetProperty("shards").GetProperty("items").GetProperty("properties"))), "every shard property the schema names is written by some kind of shard, and nothing else");
             Assert.That(shard.GetProperty("runtime_target").GetString(), Is.EqualTo("linux-x64"));
-            Assert.That(shard.GetProperty("degree").GetInt32(), Is.EqualTo(8));
+            Assert.That(shard.TryGetProperty("degree", out _), Is.False, "a shard's record does not say what its machine is");
             Assert.That(PropertyNames(shard), Is.SubsetOf(PropertyNames(schema.RootElement.GetProperty("properties").GetProperty("shards").GetProperty("items").GetProperty("properties"))));
             Assert.That(PropertyNames(withPdfs.GetProperty("stats")), Is.EquivalentTo(PropertyNames(shardStats)), "every stats property the schema names is written for a shard with PDFs");
             Assert.That(PropertyNames(report.RootElement.GetProperty("summary")), Is.EquivalentTo(PropertyNames(schema.RootElement.GetProperty("properties").GetProperty("summary").GetProperty("properties"))));

@@ -6,9 +6,9 @@ using OutWit.Controller.AI.Corpus.Trust;
 namespace OutWit.Controller.AI.Corpus.Shards;
 
 /// <summary>
-/// What a node can know before it does any work, checked at the start of every task of a batch,
-/// before a byte is fetched: the controller version the job runs on, the PDF sandbox when the task
-/// is a WARC shard with the PDF stage on (the binding, the natives guard, the module and its pin:
+/// What a node can know before it does any work, checked at the start of every task package of a
+/// batch from the package's reference alone, before a byte is fetched: the controller version the
+/// job runs on, the PDF sandbox when the package holds a WARC shard with the PDF stage on (the binding, the natives guard, the module and its pin:
 /// everything <see cref="PdfSandboxHost"/> checks when it makes the sandbox), and room on the disk
 /// for the shard. A node that fails one refuses its batch (<see cref="ShardBatchRefusedException"/>)
 /// and the platform moves the work, so nothing a node has already done is lost to a fault it could
@@ -48,10 +48,24 @@ public static class ShardBatchGuard
         if (refusal == null)
             return;
 
-        if (m_refused.Count >= MAX_REMEMBERED)
-            m_refused.Clear();
+        Remember(jobId, refusal);
+        throw refusal;
+    }
 
-        m_refused[jobId] = (refusal, DateTime.UtcNow + MEMORY);
+    /// <summary>Checks a task package on this node, from its reference alone, and throws when the node must refuse its batch.</summary>
+    /// <param name="jobId">The job the package belongs to.</param>
+    /// <param name="package">The package's reference.</param>
+    /// <param name="workDirectory">The folder its shards would be fetched into.</param>
+    /// <exception cref="ShardBatchRefusedException">The node refuses the batch.</exception>
+    public static void ThrowIfRefused(Guid jobId, CorpusTaskPackageData package, string workDirectory)
+    {
+        ThrowIfJobRefused(jobId);
+
+        var refusal = Check(package, ControllerBuildInfo.VERSION, () => PdfSandboxHost.Problem, () => ShardDisk.HasRoom(workDirectory, package.LargestShardBytes));
+        if (refusal == null)
+            return;
+
+        Remember(jobId, refusal);
         throw refusal;
     }
 
@@ -77,14 +91,30 @@ public static class ShardBatchGuard
     /// <returns>The refusal, or null.</returns>
     public static ShardBatchRefusedException? Refusal(CorpusTaskData task, string ownVersion, Func<string?> pdfProblem, Func<bool> hasRoom)
     {
-        if (!string.Equals(task.RequiredControllerVersion, ownVersion, StringComparison.Ordinal))
+        return Refusal(task.RequiredControllerVersion, task.Source?.Format == CorpusSourceFormat.Warc && task.Pipeline?.ExtractPdf == true, ownVersion, pdfProblem, hasRoom);
+    }
+
+    /// <summary>Why a node refuses a task package's batch, or null when it takes the package: the same three questions as for a task, answered from the package's reference.</summary>
+    /// <param name="package">The package's reference.</param>
+    /// <param name="ownVersion">The node's controller version.</param>
+    /// <param name="pdfProblem">Says why the node has no PDF sandbox (null when it has one); asked only for a package that holds a WARC shard with the PDF stage on.</param>
+    /// <param name="hasRoom">Says whether the disk has room for the package's largest shard.</param>
+    /// <returns>The refusal, or null.</returns>
+    public static ShardBatchRefusedException? Refusal(CorpusTaskPackageData package, string ownVersion, Func<string?> pdfProblem, Func<bool> hasRoom)
+    {
+        return Refusal(package.RequiredControllerVersion, package.NeedsPdfSandbox, ownVersion, pdfProblem, hasRoom);
+    }
+
+    private static ShardBatchRefusedException? Refusal(string? requiredVersion, bool needsPdf, string ownVersion, Func<string?> pdfProblem, Func<bool> hasRoom)
+    {
+        if (!string.Equals(requiredVersion, ownVersion, StringComparison.Ordinal))
         {
             // The required version is the task's own text: it is repeated only when it has the shape of a version.
-            var required = CorpusText.IsName(task.RequiredControllerVersion, CorpusResultCheck.MAX_LABEL_CHARS, ".-+") ? task.RequiredControllerVersion : "another version";
+            var required = CorpusText.IsName(requiredVersion, CorpusResultCheck.MAX_LABEL_CHARS, ".-+") ? requiredVersion : "another version";
             return new ShardBatchRefusedException(ShardBatchRefusedException.VERSION, $"This node runs Corpus {ownVersion} and the job requires {required}: one job runs on one controller version.");
         }
 
-        if (task.Source?.Format == CorpusSourceFormat.Warc && task.Pipeline?.ExtractPdf == true && pdfProblem() != null)
+        if (needsPdf && pdfProblem() != null)
             return new ShardBatchRefusedException(ShardBatchRefusedException.PDF_SANDBOX, "This node cannot run the PDF stage and the batch holds a WARC shard that needs it: another node takes the batch.");
 
         if (!hasRoom())
@@ -105,14 +135,38 @@ public static class ShardBatchGuard
     /// <returns>The refusal, or null.</returns>
     internal static ShardBatchRefusedException? Check(CorpusTaskData task, string ownVersion, Func<string?> pdfProblem, Func<bool> hasRoom)
     {
+        return Guarded(() => Refusal(task, ownVersion, pdfProblem, hasRoom));
+    }
+
+    /// <summary><see cref="Refusal(CorpusTaskPackageData, string, Func{string}, Func{bool})"/>, and a refusal in fixed words too when the node fails while it asks itself.</summary>
+    /// <param name="package">The package's reference.</param>
+    /// <param name="ownVersion">This node's controller version.</param>
+    /// <param name="pdfProblem">Says why this node has no PDF sandbox, or null when it has one.</param>
+    /// <param name="hasRoom">Says whether the disk has room for the package's largest shard.</param>
+    /// <returns>The refusal, or null.</returns>
+    internal static ShardBatchRefusedException? Check(CorpusTaskPackageData package, string ownVersion, Func<string?> pdfProblem, Func<bool> hasRoom)
+    {
+        return Guarded(() => Refusal(package, ownVersion, pdfProblem, hasRoom));
+    }
+
+    private static ShardBatchRefusedException? Guarded(Func<ShardBatchRefusedException?> ask)
+    {
         try
         {
-            return Refusal(task, ownVersion, pdfProblem, hasRoom);
+            return ask();
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             return new ShardBatchRefusedException(ShardBatchRefusedException.INTERNAL, "This node failed before it could start the batch: another node takes the batch.");
         }
+    }
+
+    private static void Remember(Guid jobId, ShardBatchRefusedException refusal)
+    {
+        if (m_refused.Count >= MAX_REMEMBERED)
+            m_refused.Clear();
+
+        m_refused[jobId] = (refusal, DateTime.UtcNow + MEMORY);
     }
 
     /// <summary>

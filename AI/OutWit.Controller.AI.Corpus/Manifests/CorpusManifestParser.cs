@@ -1,4 +1,7 @@
+using System.Text;
 using System.Text.Json;
+using OutWit.Controller.AI.Corpus.Delivery;
+using OutWit.Controller.AI.Corpus.Json;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Signatures;
 
@@ -9,11 +12,17 @@ namespace OutWit.Controller.AI.Corpus.Manifests;
 /// <c>allowed_origins</c> and <c>sources</c> (a URL string or an object with <c>url</c>,
 /// <c>format</c>, <c>size</c>, <c>sha256</c>). Strict about names — an unknown key is an
 /// error, so a typo cannot silently turn a stage off — and about types. The format of a bare
-/// URL follows its extension: <c>.warc.wet.gz</c> is WET, <c>.warc.gz</c> is WARC.
+/// URL follows its extension: <c>.warc.wet.gz</c> is WET, <c>.warc.gz</c> is WARC. What it
+/// answers with is bounded whatever the manifest holds: the first problems by line and a count of
+/// the rest (<see cref="CorpusProblems"/>), and no more sources than a job may have
+/// (<see cref="CorpusPackagePlanner.MAX_SHARDS"/>).
 /// </summary>
 public static class CorpusManifestParser
 {
     #region Constants
+
+    /// <summary>The most bytes a manifest may be: a manifest past it is refused by name before a byte of it is read.</summary>
+    public const long MAX_BYTES = 256L * 1024 * 1024;
 
     private static readonly HashSet<string> ROOT_KEYS = new(StringComparer.Ordinal) { "pipeline", "allowed_origins", "sources" };
     private static readonly HashSet<string> PIPELINE_KEYS = new(StringComparer.Ordinal) { "version", "language_model_sha256", "target_languages", "identify_language", "clean_lines", "filter_quality", "sign", "extract_pdf", "quality", "filter_curly_bracket", "minhash", "output" };
@@ -34,57 +43,111 @@ public static class CorpusManifestParser
     /// <returns>The manifest, with every problem listed in its errors.</returns>
     public static CorpusManifest Parse(string json)
     {
-        var errors = new List<string>();
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json.TrimStart('\uFEFF')));
+        return Parse(stream);
+    }
+
+    /// <summary>
+    /// Parses a manifest document from a stream. The document is read as it comes, a source at a
+    /// time: its text is never held, only what it says (the pipeline, the origins, and for every
+    /// source its URL, format, size and hash).
+    /// </summary>
+    /// <param name="stream">The document, UTF-8.</param>
+    /// <returns>The manifest, with every problem listed in its errors.</returns>
+    public static CorpusManifest Parse(Stream stream)
+    {
+        return Parse(stream, CorpusPackagePlanner.MAX_SHARDS);
+    }
+
+    /// <summary>Parses a manifest document from a stream, keeping at most a given number of sources (the bound of a job, lower in a test of the bound itself).</summary>
+    /// <param name="stream">The document, UTF-8.</param>
+    /// <param name="maxShards">The most sources kept; a manifest that names more is refused by name.</param>
+    /// <returns>The manifest, with every problem listed in its errors.</returns>
+    internal static CorpusManifest Parse(Stream stream, int maxShards)
+    {
+        // The problems in the order a reader of the manifest expects them, whatever the order of
+        // the document's keys: its keys, its pipeline, its origins, its sources.
+        var keys = new CorpusProblems();
+        var pipelineErrors = new CorpusProblems();
+        var originErrors = new CorpusProblems();
+        var sourceErrors = new CorpusProblems();
+
         var pipeline = new CorpusPipelineData();
         var origins = new List<string>();
         var sources = new List<CorpusSourceData>();
+        bool hasPipeline = false, hasOrigins = false, hasSources = false;
+        var listed = 0;
 
-        JsonDocument document;
         try
         {
-            document = JsonDocument.Parse(json.TrimStart('﻿'), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            var listedAsArray = CorpusJsonStream.Read(stream, "sources",
+                (name, value) =>
+                {
+                    switch (name)
+                    {
+                        case "pipeline":
+                            hasPipeline = true;
+                            pipeline = ParsePipeline(value, pipelineErrors);
+                            break;
+                        case "allowed_origins":
+                            hasOrigins = true;
+                            origins = ParseStrings(value, "allowed_origins", originErrors);
+                            break;
+                        case "sources":
+                            hasSources = true;
+                            sourceErrors.Add("sources: must be an array.");
+                            break;
+                        default:
+                            keys.Add($"manifest: unknown key '{name}'.");
+                            break;
+                    }
+                },
+                (index, item) =>
+                {
+                    listed = index + 1;
+
+                    // A job takes a bounded number of shards: past the bound nothing more is kept, only counted.
+                    if (index < maxShards)
+                        ParseSourceItem(item, index, sources, sourceErrors);
+                },
+                new JsonReaderOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+
+            hasSources |= listedAsArray;
         }
         catch (JsonException exception)
         {
-            errors.Add($"manifest: not valid JSON ({exception.Message}).");
-            return new CorpusManifest(pipeline, origins, sources, errors);
+            var problem = exception.Message == CorpusJsonStream.NOT_AN_OBJECT
+                ? "manifest: the document must be a JSON object."
+                : $"manifest: not valid JSON ({exception.Message}).";
+
+            return new CorpusManifest(new CorpusPipelineData(), [], [], [problem]);
         }
 
-        using (document)
-        {
-            var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object)
-            {
-                errors.Add("manifest: the document must be a JSON object.");
-                return new CorpusManifest(pipeline, origins, sources, errors);
-            }
+        var errors = new CorpusProblems();
+        errors.Add(keys.Listed, keys.Count);
 
-            foreach (var property in root.EnumerateObject())
-            {
-                if (!ROOT_KEYS.Contains(property.Name))
-                    errors.Add($"manifest: unknown key '{property.Name}'.");
-            }
+        if (!hasPipeline)
+            errors.Add("manifest: 'pipeline' is required.");
+        errors.Add(pipelineErrors.Listed, pipelineErrors.Count);
 
-            if (root.TryGetProperty("pipeline", out var pipelineElement))
-                pipeline = ParsePipeline(pipelineElement, errors);
-            else
-                errors.Add("manifest: 'pipeline' is required.");
+        if (!hasOrigins)
+            errors.Add("manifest: 'allowed_origins' is required.");
+        errors.Add(originErrors.Listed, originErrors.Count);
 
-            if (root.TryGetProperty("allowed_origins", out var originsElement))
-                origins = ParseStrings(originsElement, "allowed_origins", errors);
-            else
-                errors.Add("manifest: 'allowed_origins' is required.");
+        if (!hasSources)
+            errors.Add("manifest: 'sources' is required.");
+        errors.Add(sourceErrors.Listed, sourceErrors.Count);
 
-            if (root.TryGetProperty("sources", out var sourcesElement))
-                sources = ParseSources(sourcesElement, errors);
-            else
-                errors.Add("manifest: 'sources' is required.");
-        }
+        if (listed > maxShards)
+            errors.Add($"sources: the manifest names {listed} shards; a job takes at most {maxShards}. Split the manifest into several jobs.");
+
+        if (hasSources && sources.Count == 0 && errors.Count == 0)
+            errors.Add("sources: the manifest names no shard.");
 
         if (string.IsNullOrWhiteSpace(pipeline.Version))
             errors.Add("pipeline: 'version' is required.");
 
-        return new CorpusManifest(pipeline, origins, sources, errors);
+        return new CorpusManifest(pipeline, origins, sources, [.. errors.Listed]) { ErrorCount = errors.Count };
     }
 
     /// <summary>The format a URL's extension implies, or null.</summary>
@@ -100,7 +163,7 @@ public static class CorpusManifestParser
         return null;
     }
 
-    private static CorpusPipelineData ParsePipeline(JsonElement element, List<string> errors)
+    private static CorpusPipelineData ParsePipeline(JsonElement element, CorpusProblems errors)
     {
         var pipeline = new CorpusPipelineData();
         var curlyBracket = false;
@@ -170,7 +233,7 @@ public static class CorpusManifestParser
         return pipeline;
     }
 
-    private static CorpusMinHashData ParseMinHash(JsonElement element, List<string> errors)
+    private static CorpusMinHashData ParseMinHash(JsonElement element, CorpusProblems errors)
     {
         var minHash = new CorpusMinHashData();
         if (element.ValueKind != JsonValueKind.Object)
@@ -210,7 +273,7 @@ public static class CorpusManifestParser
         return minHash;
     }
 
-    private static CorpusOutputMode ParseOutput(JsonProperty property, List<string> errors)
+    private static CorpusOutputMode ParseOutput(JsonProperty property, CorpusProblems errors)
     {
         if (property.Value.ValueKind == JsonValueKind.String && CorpusOutputModeNames.TryParse(property.Value.GetString(), out var mode))
             return mode;
@@ -219,7 +282,7 @@ public static class CorpusManifestParser
         return CorpusOutputMode.Full;
     }
 
-    private static CorpusQualityData ParseQuality(JsonElement element, List<string> errors)
+    private static CorpusQualityData ParseQuality(JsonElement element, CorpusProblems errors)
     {
         var quality = new CorpusQualityData();
         if (element.ValueKind != JsonValueKind.Object)
@@ -260,41 +323,23 @@ public static class CorpusManifestParser
         return quality;
     }
 
-    private static List<CorpusSourceData> ParseSources(JsonElement element, List<string> errors)
+    private static void ParseSourceItem(JsonElement item, int index, List<CorpusSourceData> sources, CorpusProblems errors)
     {
-        var sources = new List<CorpusSourceData>();
-        if (element.ValueKind != JsonValueKind.Array)
+        var where = $"sources[{index}]";
+        var source = item.ValueKind switch
         {
-            errors.Add("sources: must be an array.");
-            return sources;
-        }
+            JsonValueKind.String => ParseSource(item.GetString() ?? "", null, 0, "", where, errors),
+            JsonValueKind.Object => ParseSourceObject(item, where, errors),
+            _ => null
+        };
 
-        var index = 0;
-        foreach (var item in element.EnumerateArray())
-        {
-            var where = $"sources[{index}]";
-            var source = item.ValueKind switch
-            {
-                JsonValueKind.String => ParseSource(item.GetString() ?? "", null, 0, "", where, errors),
-                JsonValueKind.Object => ParseSourceObject(item, where, errors),
-                _ => null
-            };
-
-            if (source != null)
-                sources.Add(source);
-            else if (item.ValueKind is not (JsonValueKind.String or JsonValueKind.Object))
-                errors.Add($"{where}: must be a URL string or an object.");
-
-            index++;
-        }
-
-        if (sources.Count == 0 && errors.Count == 0)
-            errors.Add("sources: the manifest names no shard.");
-
-        return sources;
+        if (source != null)
+            sources.Add(source);
+        else if (item.ValueKind is not (JsonValueKind.String or JsonValueKind.Object))
+            errors.Add($"{where}: must be a URL string or an object.");
     }
 
-    private static CorpusSourceData? ParseSourceObject(JsonElement item, string where, List<string> errors)
+    private static CorpusSourceData? ParseSourceObject(JsonElement item, string where, CorpusProblems errors)
     {
         var url = "";
         string? format = null;
@@ -330,7 +375,7 @@ public static class CorpusManifestParser
         return ParseSource(url, format, size, sha, where, errors);
     }
 
-    private static CorpusSourceData? ParseSource(string url, string? format, long size, string sha, string where, List<string> errors)
+    private static CorpusSourceData? ParseSource(string url, string? format, long size, string sha, string where, CorpusProblems errors)
     {
         if (string.IsNullOrWhiteSpace(url))
         {
@@ -361,7 +406,7 @@ public static class CorpusManifestParser
         return new CorpusSourceData { Url = url.Trim(), Format = resolved.Value, SizeBytes = size, Sha256 = sha };
     }
 
-    private static List<string> ParseStrings(JsonElement element, string where, List<string> errors)
+    private static List<string> ParseStrings(JsonElement element, string where, CorpusProblems errors)
     {
         var values = new List<string>();
         if (element.ValueKind != JsonValueKind.Array)
@@ -384,7 +429,7 @@ public static class CorpusManifestParser
         return values;
     }
 
-    private static string String(JsonProperty property, string where, List<string> errors)
+    private static string String(JsonProperty property, string where, CorpusProblems errors)
     {
         if (property.Value.ValueKind == JsonValueKind.String)
             return property.Value.GetString() ?? "";
@@ -393,7 +438,7 @@ public static class CorpusManifestParser
         return "";
     }
 
-    private static bool Bool(JsonProperty property, string where, List<string> errors)
+    private static bool Bool(JsonProperty property, string where, CorpusProblems errors)
     {
         if (property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)
             return property.Value.GetBoolean();

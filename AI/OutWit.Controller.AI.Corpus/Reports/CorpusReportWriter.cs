@@ -18,17 +18,23 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// indexes and their URLs are the server's own task list: a shard is in the report whether or not
 /// anything came back for it, and nothing a node returns can put another URL there. Each accepted
 /// shard says how many results it rests on (<c>executions</c>: 1 is one machine's word). No
-/// document says which machine ran what, and no ticket is written. Schema <c>corpus-report/3</c>.
+/// document says which machine ran what or what that machine is (its platform is named,
+/// <c>runtime_target</c>; its cores and memory are not), and no ticket is written. Schema
+/// <c>corpus-report/4</c>; <c>/3</c> also said how many shards the machine of each result ran at
+/// once (<c>degree</c>).
 /// </summary>
 public static class CorpusReportWriter
 {
     #region Constants
 
     /// <summary>The report schema name.</summary>
-    public const string SCHEMA = "corpus-report/3";
+    public const string SCHEMA = "corpus-report/4";
 
-    /// <summary>The earlier report schemas Corpus.Dedup still reads: <c>/2</c> chose between executions by what they said, <c>/1</c> also named the nodes.</summary>
-    public static readonly IReadOnlyList<string> PREVIOUS_SCHEMAS = ["corpus-report/2", "corpus-report/1"];
+    /// <summary>The earlier report schemas Corpus.Dedup still reads: <c>/3</c> said the degree of the node that ran each shard, <c>/2</c> chose between executions by what they said, <c>/1</c> also named the nodes.</summary>
+    public static readonly IReadOnlyList<string> PREVIOUS_SCHEMAS = ["corpus-report/3", "corpus-report/2", "corpus-report/1"];
+
+    /// <summary>The bytes the writer holds before it hands them to the stream.</summary>
+    private const int FLUSH_BYTES = 1 << 16;
 
     /// <summary>The report's word for a shard whose copies disagreed and stayed unsettled.</summary>
     public const string VERDICT_DISPUTED = "Disputed";
@@ -45,6 +51,20 @@ public static class CorpusReportWriter
     /// <returns>UTF-8 JSON.</returns>
     public static byte[] Write(CorpusLedger ledger)
     {
+        using var buffer = new MemoryStream();
+        Write(ledger, buffer);
+        return buffer.ToArray();
+    }
+
+    /// <summary>
+    /// Writes the report to a stream, a shard at a time: the run is read twice (once for the
+    /// summary, which stands first in the document, once for the shards), and no more of it is
+    /// held than the ledger holds, so a report of any length is written in the memory of a short one.
+    /// </summary>
+    /// <param name="ledger">The server's account of the run.</param>
+    /// <param name="stream">Receives the UTF-8 JSON.</param>
+    public static void Write(CorpusLedger ledger, Stream stream)
+    {
         var drops = new SortedDictionary<string, long>(StringComparer.Ordinal);
         var languages = new SortedDictionary<string, long>(StringComparer.Ordinal);
         var unsupported = new SortedDictionary<string, long>(StringComparer.Ordinal);
@@ -52,14 +72,25 @@ public static class CorpusReportWriter
 
         long recordsIn = 0, extracted = 0, documentsOut = 0, fetched = 0, produced = 0;
         CorpusPdfStatsData? pdf = null;
-        var accepted = ledger.Shards.Where(shard => shard.Accepted != null).Select(shard => shard.Accepted!).ToList();
-        var output = ledger.Shards.Any(shard => shard.Task.Pipeline?.Output == CorpusOutputMode.StatsAndHashes) ? CorpusOutputMode.StatsAndHashes : CorpusOutputMode.Full;
-        var minHashes = accepted.Where(result => result.MinHash != null).Select(result => result.MinHash!).ToList();
+        var output = CorpusOutputMode.Full;
+        CorpusMinHashData? minHash = null;
+        var oneMinHash = true;
+        var shards = 0;
 
         foreach (var shard in ledger.Shards)
         {
+            shards++;
             var verdict = Verdict(shard);
             verdicts[verdict] = verdicts.GetValueOrDefault(verdict) + 1;
+            if (shard.Task.Pipeline?.Output == CorpusOutputMode.StatsAndHashes)
+                output = CorpusOutputMode.StatsAndHashes;
+
+            if (shard.Accepted?.MinHash is { } signed)
+            {
+                minHash ??= signed;
+                oneMinHash &= signed.Is(minHash);
+            }
+
             if (shard.Accepted?.Stats is not { } stats)
                 continue;
 
@@ -75,48 +106,52 @@ public static class CorpusReportWriter
                 pdf = Add(pdf ?? new CorpusPdfStatsData(), shardPdf);
         }
 
-        using var buffer = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
+        using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
+
+        writer.WriteStartObject();
+        writer.WriteString("schema", SCHEMA);
+        writer.WriteString("controller", ledger.ControllerVersion);
+
+        writer.WriteStartObject("summary");
+        writer.WriteNumber("tasks", shards);
+        writer.WriteStartObject("verdicts");
+        foreach (var pair in verdicts)
+            writer.WriteNumber(pair.Key, pair.Value);
+        writer.WriteEndObject();
+        writer.WriteNumber("single_execution", ledger.SingleExecutions);
+        writer.WriteNumber("rejected_results", ledger.RejectedResults);
+        writer.WriteNumber("repairs", ledger.Repairs);
+        writer.WriteNumber("disputes", ledger.Disputes);
+        writer.WriteNumber("disputes_resolved", ledger.DisputesResolved);
+        writer.WriteNumber("records_in", recordsIn);
+        writer.WriteNumber("documents_extracted", extracted);
+        writer.WriteNumber("documents_out", documentsOut);
+        writer.WriteNumber("bytes_fetched", fetched);
+        writer.WriteNumber("bytes_produced", produced);
+        WriteCounts(writer, "drops", drops);
+        WriteCounts(writer, "languages", languages);
+        WriteCounts(writer, "unsupported_languages", unsupported);
+        WritePdf(writer, pdf);
+        WriteFunnel(writer, recordsIn, extracted, documentsOut, drops);
+        writer.WriteString("output", CorpusOutputModeNames.Name(output));
+        if (minHash != null && oneMinHash)
+            WriteMinHash(writer, minHash);
+        writer.WriteEndObject();
+
+        writer.WriteStartArray("shards");
+        foreach (var shard in ledger.Shards)
         {
-            writer.WriteStartObject();
-            writer.WriteString("schema", SCHEMA);
-            writer.WriteString("controller", ledger.ControllerVersion);
+            WriteShard(writer, shard);
 
-            writer.WriteStartObject("summary");
-            writer.WriteNumber("tasks", ledger.Shards.Count);
-            writer.WriteStartObject("verdicts");
-            foreach (var pair in verdicts)
-                writer.WriteNumber(pair.Key, pair.Value);
-            writer.WriteEndObject();
-            writer.WriteNumber("single_execution", ledger.SingleExecutions);
-            writer.WriteNumber("rejected_results", ledger.RejectedResults);
-            writer.WriteNumber("repairs", ledger.Repairs);
-            writer.WriteNumber("disputes", ledger.Disputes);
-            writer.WriteNumber("disputes_resolved", ledger.DisputesResolved);
-            writer.WriteNumber("records_in", recordsIn);
-            writer.WriteNumber("documents_extracted", extracted);
-            writer.WriteNumber("documents_out", documentsOut);
-            writer.WriteNumber("bytes_fetched", fetched);
-            writer.WriteNumber("bytes_produced", produced);
-            WriteCounts(writer, "drops", drops);
-            WriteCounts(writer, "languages", languages);
-            WriteCounts(writer, "unsupported_languages", unsupported);
-            WritePdf(writer, pdf);
-            WriteFunnel(writer, recordsIn, extracted, documentsOut, drops);
-            writer.WriteString("output", CorpusOutputModeNames.Name(output));
-            if (minHashes.Count > 0 && minHashes.All(minHash => minHash.Is(minHashes[0])))
-                WriteMinHash(writer, minHashes[0]);
-            writer.WriteEndObject();
-
-            writer.WriteStartArray("shards");
-            foreach (var shard in ledger.Shards)
-                WriteShard(writer, shard);
-            writer.WriteEndArray();
-
-            writer.WriteEndObject();
+            // What is written goes to the stream as it grows, not at the end.
+            if (writer.BytesPending > FLUSH_BYTES)
+                writer.Flush();
         }
 
-        return buffer.ToArray();
+        writer.WriteEndArray();
+
+        writer.WriteEndObject();
+        writer.Flush();
     }
 
     /// <summary>The report's word for how a shard ended: its accepted result's verdict, or one of the two outcomes without a result.</summary>
@@ -157,7 +192,6 @@ public static class CorpusReportWriter
         writer.WriteString("error", result?.Error ?? "");
         writer.WriteString("controller", result?.ControllerVersion ?? "");
         writer.WriteString("runtime_target", result?.RuntimeTarget ?? "");
-        writer.WriteNumber("degree", result?.Degree ?? 0);
         if (result?.MinHash != null)
             WriteMinHash(writer, result.MinHash);
         writer.WriteString("signatures_sha256", result?.SignaturesSha256 ?? "");

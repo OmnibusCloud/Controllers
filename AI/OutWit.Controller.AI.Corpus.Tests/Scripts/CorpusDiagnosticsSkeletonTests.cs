@@ -160,7 +160,7 @@ public sealed class CorpusDiagnosticsSkeletonTests : CorpusScriptTestBase
             Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
             Assert.That(shard.GetProperty("verdict").GetString(), Is.EqualTo("Completed"));
             Assert.That(shard.GetProperty("runtime_target").GetString(), Is.EqualTo(CorpusRuntimeDiagnosticsBuilder.RuntimeTarget()));
-            Assert.That(shard.GetProperty("degree").GetInt32(), Is.GreaterThan(0));
+            Assert.That(shard.TryGetProperty("degree", out _), Is.False, "a shard's record says the platform it ran on, not how many shards its machine runs at once");
         });
     }
 

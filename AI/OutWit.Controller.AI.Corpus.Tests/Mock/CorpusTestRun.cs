@@ -103,7 +103,6 @@ internal static class CorpusTestRun
             ControllerVersion = VERSION,
             SourceUrl = task.Source!.Url,
             RuntimeTarget = "linux-x64",
-            Degree = 8,
             Output = pipeline.Output,
             Ticket = task.Ticket,
             Stats = new CorpusShardStatsData
@@ -132,7 +131,6 @@ internal static class CorpusTestRun
             ControllerVersion = VERSION,
             SourceUrl = task.Source!.Url,
             RuntimeTarget = "linux-x64",
-            Degree = 8,
             Output = task.Pipeline!.Output,
             Ticket = task.Ticket
         };

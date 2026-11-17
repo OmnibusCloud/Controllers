@@ -12,7 +12,9 @@ namespace OutWit.Controller.AI.Corpus;
 /// <summary>
 /// The Corpus controller: public-corpus processing at CPU scale. The node fetches its shard
 /// from the public origin itself (Pattern U), streams it through deterministic stages and
-/// returns the cleaned text, its signatures and its statistics through the blob subsystem.
+/// returns the cleaned text, its signatures and its statistics through the blob subsystem. The
+/// tasks and the results travel as blobs too: what the script's variables hold of a round is a
+/// bounded number of references, whatever the manifest's length.
 /// </summary>
 [WitPluginManifest(ControllerBuildInfo.NAME, Version = ControllerBuildInfo.VERSION)]
 [WitPluginDependency("Variables", MinimumVersion = "1.0.0")]
@@ -22,16 +24,16 @@ public sealed class WitControllerCorpusModule : WitPluginBase, IWitControllerNod
     /// <param name="services">The service collection of the engine host or node.</param>
     public override void Initialize(IServiceCollection services)
     {
-        services.AddVariable<WitVariableCorpusTask>();
-        services.AddVariable<WitVariableCorpusResult>();
+        services.AddVariable<WitVariableCorpusTaskPackage>();
+        services.AddVariable<WitVariableCorpusResultPackage>();
         services.AddVariable<WitVariableCorpusOptions>();
         services.AddVariable<WitVariableCorpusPreflight>();
         services.AddVariable<WitVariableCorpusRuntimeDiagnostics>();
 
-        services.AddCollection<WitVariableCorpusTaskCollection>();
-        services.AddCollection<WitVariableCorpusResultCollection>();
+        services.AddCollection<WitVariableCorpusTaskPackageCollection>();
+        services.AddCollection<WitVariableCorpusResultPackageCollection>();
 
-        services.AddActivityAdapter<WitActivityCorpusProcessShard, WitActivityAdapterCorpusProcessShard>();
+        services.AddActivityAdapter<WitActivityCorpusProcessPackage, WitActivityAdapterCorpusProcessPackage>();
         services.AddActivityAdapter<WitActivityCorpusSplit, WitActivityAdapterCorpusSplit>();
         services.AddActivityAdapter<WitActivityCorpusPreflight, WitActivityAdapterCorpusPreflight>();
         services.AddActivityAdapter<WitActivityCorpusRepairs, WitActivityAdapterCorpusRepairs>();

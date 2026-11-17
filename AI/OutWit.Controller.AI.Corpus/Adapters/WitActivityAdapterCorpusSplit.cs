@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Manifests;
-using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Storage;
 using OutWit.Engine.Data.ActivityAdapters;
@@ -14,6 +13,9 @@ namespace OutWit.Controller.AI.Corpus.Adapters;
 internal sealed class WitActivityAdapterCorpusSplit : WitActivityAdapterFunction<WitActivityCorpusSplit>
 {
     #region Constants
+
+    /// <summary>The most problems a refusal quotes: the preflight lists them; a refusal names the first.</summary>
+    private const int QUOTED_PROBLEMS = 5;
 
     private static readonly Lazy<HttpClient> CLIENT = new(() => ShardHttp.CreateClient(ShardOriginPolicy.Machine));
 
@@ -33,63 +35,42 @@ internal sealed class WitActivityAdapterCorpusSplit : WitActivityAdapterFunction
 
     protected override async Task Process(WitActivityCorpusSplit activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        var (plan, manifest, options, inputBytes) = await CorpusPlanning.PlanAsync(BlobService, pool, activity.Manifest, activity.LanguageModel, activity.Options, "Manifest");
+        var planned = await CorpusPlanning.PlanAsync(BlobService, pool, activity.Manifest, activity.LanguageModel, activity.Options, "Manifest");
+        var plan = planned.Plan;
         var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
 
-        if (plan.Errors.Count > 0)
-            throw new InvalidOperationException($"The manifest has {plan.Errors.Count} problem(s): {string.Join(" ", plan.Errors.Take(5))}");
+        if (plan.ErrorCount > 0)
+            throw new InvalidOperationException($"The manifest has {plan.ErrorCount} problem(s): {string.Join(" ", plan.Errors.Take(QUOTED_PROBLEMS))}");
 
         foreach (var note in plan.Notes)
             Logger.LogInformation("Corpus.Split: {Note}", note);
 
-        await FillSizesAsync(plan.Tasks, cancellationToken);
+        // The origin's own word on a random sample of the shards: a shard the manifest gave no
+        // size for gets one (its work estimate, and what a node holds it to), and a declared size
+        // far below the origin's stops the job here, by name, instead of on the nodes.
+        var sizes = await CorpusPlanning.SizeAsync(planned.Manifest, CLIENT.Value, cancellationToken);
+        Logger.LogInformation("Corpus.Split: {Probe}", CorpusPlanning.DescribeProbe(sizes));
+
+        var overdeclared = CorpusPlanning.Overdeclared(sizes);
+        if (overdeclared.Count > 0)
+            throw new InvalidOperationException($"The manifest has {overdeclared.Count} problem(s): {string.Join(" ", overdeclared.Take(QUOTED_PROBLEMS))}");
 
         // The preflight's storage check, enforced: a job the deployment has no room for does not start.
-        var sources = plan.Tasks.Select(task => task.Source!).ToList();
-        var (estimate, limit, refusal) = await CorpusPlanning.CheckStorageAsync(sources, manifest.Pipeline, options, inputBytes, new CorpusStorageHeadroomHost(BlobService), cancellationToken);
+        var estimates = CorpusPlanning.Estimate(planned, sizes);
+        var (limit, refusal) = await CorpusPlanning.CheckStorageAsync(estimates.Storage, new CorpusStorageHeadroomHost(BlobService), cancellationToken);
         if (refusal != null)
             throw new InvalidOperationException(refusal);
 
-        Logger.LogInformation("Corpus.Split: {Storage}", CorpusStorageCheck.Describe(estimate, limit));
+        Logger.LogInformation("Corpus.Split: {Storage}", CorpusStorageCheck.Describe(estimates.Storage, limit));
 
-        // What binds a result to its task on the server, and the one version the job runs on.
-        CorpusTaskPlanner.Issue(plan.Tasks, ControllerBuildInfo.VERSION);
+        // The first round: every task under a ticket of its own, on the one version the job runs
+        // on, written into packages as it is made. What the script gets is the packages' references.
+        var packages = await CorpusRounds.HostAsync("Corpus.Split", () => CorpusRounds.PackagesAsync(BlobService, CorpusTaskPlanner.Issue(plan, ControllerBuildInfo.VERSION, sizes), plan.Tasks.Count));
 
-        if (!pool.TrySetCollection(activity.ReturnReference, plan.Tasks))
+        Logger.LogInformation("Corpus.Split: {Shards} shard(s) in {Packages} task package(s), {Bytes} bytes of references' blobs.", plan.Tasks.Count, packages.Count, packages.Sum(package => package.SizeBytes));
+
+        if (!pool.TrySetCollection(activity.ReturnReference, packages))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
-    }
-
-    /// <summary>
-    /// The work estimate of a task is its shard's size: sources the manifest left unsized are
-    /// asked at the origin (HEAD, within the probe budget) and the rest take the mean of the
-    /// answers, so the allocator weighs a 1 GB WARC file against a 60 MB WET file correctly.
-    /// A failed probe leaves the size unknown; the node enforces the cap either way.
-    /// </summary>
-    private async Task FillSizesAsync(IReadOnlyList<CorpusTaskData> tasks, CancellationToken cancellationToken)
-    {
-        var sources = tasks.Select(task => task.Source!).ToList();
-        if (sources.All(source => source.SizeBytes > 0))
-            return;
-
-        try
-        {
-            var origins = tasks.SelectMany(task => task.AllowedOrigins).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            var sizes = await ShardSizeProbe.ProbeSizesAsync(sources, origins, ShardOriginPolicy.Machine, CLIENT.Value, cancellationToken);
-            var known = sizes.Where(size => size is > 0).Select(size => size!.Value).ToList();
-            var mean = known.Count > 0 ? (long)known.Average() : 0;
-
-            for (var index = 0; index < sources.Count; index++)
-            {
-                if (sources[index].SizeBytes <= 0)
-                    sources[index].SizeBytes = sizes[index] ?? mean;
-            }
-
-            Logger.LogInformation("Corpus.Split: {Probed} shard size(s) from the origin, {Total:F1} MB in all", known.Count, sources.Sum(source => source.SizeBytes) / (1024.0 * 1024.0));
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            Logger.LogWarning(exception, "Corpus.Split: the shard sizes could not be probed; the work estimate falls back to a typical shard.");
-        }
     }
 
     #endregion
