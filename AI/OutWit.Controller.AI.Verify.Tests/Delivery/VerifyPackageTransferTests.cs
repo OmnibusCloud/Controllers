@@ -66,24 +66,44 @@ public sealed class VerifyPackageTransferTests
     }
 
     [Test]
-    public async Task ResultsTravelBackAsBlobsTest()
+    public async Task ResultsTravelBackAsBlobsUnderTheirTicketTest()
     {
-        var executed = new List<VerifyResultBatchData> { ResultBatch(0, 3), ResultBatch(3, 2) };
+        var packages = await VerifyTaskPackages.PublishAsync([TaskBatch(0, 3), TaskBatch(3, 2)], m_blobs, NullLogger.Instance, "test");
 
-        var first = await VerifyPackageTransfer.UploadResultsAsync(m_blobs, [executed[0]], NullLogger.Instance, CancellationToken.None);
-        var second = await VerifyPackageTransfer.UploadResultsAsync(m_blobs, [executed[1]], NullLogger.Instance, CancellationToken.None);
+        var first = await UploadAsync(packages[0], ResultBatch(0, 3));
+        var second = await UploadAsync(packages[1], ResultBatch(3, 2));
 
         Assert.Multiple(() =>
         {
             Assert.That(first.TaskCount, Is.EqualTo(3));
             Assert.That(first.BatchCount, Is.EqualTo(1));
+            Assert.That(first.Ticket, Is.EqualTo(packages[0].Ticket));
+            Assert.That(first.Sha256, Has.Length.EqualTo(64));
             Assert.That(second.ResultsBlobId, Is.Not.EqualTo(first.ResultsBlobId));
         });
 
-        // The host reads whatever came back, in whatever order.
-        var loaded = await VerifyResultPackages.LoadAsync(new[] { second, first }, m_blobs);
+        // The host reads a package back from its blob, batch by batch.
+        var loaded = VerifyResultPackageReader.Read(await m_blobs.GetLocalPathAsync(second.ResultsBlobId), 1, 2).ToList();
 
-        Assert.That(loaded.SelectMany(batch => batch.Results).Select(result => result.TaskIndex).Order(), Is.EqualTo(new[] { 0, 1, 2, 3, 4 }));
+        Assert.That(loaded.SelectMany(batch => batch.Results).Select(result => result.TaskIndex), Is.EqualTo(new[] { 3, 4 }));
+        Assert.That(loaded[0].Ticket, Is.EqualTo(packages[1].Ticket));
+    }
+
+    [Test]
+    public async Task EveryPackageHasATicketOfItsOwnAndNamesItsVersionAndItsTasksTest()
+    {
+        var packages = await VerifyTaskPackages.PublishAsync(Enumerable.Range(0, 6).Select(index => TaskBatch(index * 4, 4)).ToList(), m_blobs, NullLogger.Instance, "test");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(packages.All(package => VerifyTickets.IsWellFormed(package.Ticket)), Is.True, "32 lower-case hex characters");
+            Assert.That(packages.Select(package => package.Ticket).Distinct().Count(), Is.EqualTo(6));
+            Assert.That(packages.All(package => package.RequiredControllerVersion == ControllerBuildInfo.VERSION), Is.True);
+            Assert.That(packages[1].IndexDigest, Is.EqualTo(VerifyTickets.IndexDigest([7, 6, 5, 4])), "the digest is of the indices, whatever their order");
+            Assert.That(packages[1].IndexDigest, Is.Not.EqualTo(packages[0].IndexDigest));
+            Assert.That(VerifyTickets.IndexDigest([4, 5, 6]), Is.Not.EqualTo(packages[1].IndexDigest), "a task less is another digest");
+            Assert.That(VerifyTickets.IndexDigest([4, 5, 6, 7, 7]), Is.Not.EqualTo(packages[1].IndexDigest), "and so is a task twice");
+        });
     }
 
     #endregion
@@ -145,16 +165,72 @@ public sealed class VerifyPackageTransferTests
     }
 
     [Test]
-    public void AResultPackageWithoutABlobFailsTheCollectionTest()
+    public async Task L5ATransferThatNeverReturnsDoesNotHoldTheGateTest()
     {
-        Assert.That(
-            async () => await VerifyResultPackages.LoadAsync(new[] { new VerifyResultPackageData() }, m_blobs),
-            Throws.TypeOf<InvalidDataException>());
+        // The blob channel's calls take no token. One that never came back held the gate's one
+        // slot, and with it every transfer of every job on the node.
+        var gate = new VerifyBlobGate();
+        var never = new TaskCompletionSource<int>();
+
+        Assert.That(async () => await gate.RunAsync(() => never.Task, TimeSpan.FromMilliseconds(200), CancellationToken.None), Throws.TypeOf<TimeoutException>());
+
+        var next = gate.RunAsync(() => Task.FromResult(7), TimeSpan.FromSeconds(30), CancellationToken.None);
+        var finished = await Task.WhenAny(next, Task.Delay(TimeSpan.FromSeconds(10)));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finished, Is.SameAs(next), "the slot is free again");
+            Assert.That(next.Result, Is.EqualTo(7));
+            Assert.That(gate.IsOpen, Is.True);
+        });
+    }
+
+    [Test]
+    public void L5ATransferHasATimeByItsSizeTest()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(VerifyPackageTransfer.TransferTimeout(0), Is.EqualTo(TimeSpan.FromMinutes(2)));
+            Assert.That(VerifyPackageTransfer.TransferTimeout(8L << 20), Is.EqualTo(TimeSpan.FromMinutes(2) + TimeSpan.FromSeconds(256)));
+            Assert.That(VerifyPackageTransfer.TransferTimeout(-1), Is.EqualTo(TimeSpan.FromMinutes(2)));
+        });
+    }
+
+    [Test]
+    public async Task H4ATransferThatFailsForGoodSaysNothingOfTheNodeTest()
+    {
+        var package = (await VerifyTaskPackages.PublishAsync([TaskBatch(0, 2)], m_blobs, NullLogger.Instance, "test")).Single();
+        var broken = new VerifyThrowingBlobService(@"Access to the path 'C:\Users\contributor\AppData\Local\OmnibusCloud\blobs' is denied.");
+
+        // Two attempts without a wait between them, in place of nine over five minutes.
+        var failure = Assert.ThrowsAsync<IOException>(async () =>
+            await VerifyPackageTransfer.FetchAsync(broken, package, NullLogger.Instance, CancellationToken.None, [TimeSpan.Zero]));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(broken.Attempts, Is.EqualTo(2));
+            Assert.That(failure!.Message, Does.StartWith("The download of a task package failed 2 time(s)"));
+            Assert.That(failure.Message, Does.Not.Contain("contributor").And.Not.Contain("AppData").And.Not.Contain(":\\"), "what the channel said stays in the node's log");
+            Assert.That(failure.InnerException, Is.Null, "and no exception that could carry it travels along");
+        });
     }
 
     #endregion
 
     #region Tools
+
+    private async Task<VerifyResultPackageData> UploadAsync(VerifyTaskPackageData package, VerifyResultBatchData batch)
+    {
+        batch.Ticket = package.Ticket;
+        var path = Path.Combine(m_storagePath, $"{Guid.NewGuid():N}.results");
+        using (var writer = new VerifyResultPackageWriter(path))
+        {
+            writer.Write(batch);
+            writer.Complete();
+        }
+
+        return await VerifyPackageTransfer.UploadResultsAsync(m_blobs, path, package.Ticket, batch.Results.Count, 1, NullLogger.Instance, CancellationToken.None);
+    }
 
     private static VerifyTaskBatchData TaskBatch(int firstIndex, int count)
     {

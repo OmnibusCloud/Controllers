@@ -79,13 +79,18 @@ public sealed class VerifyExecuteVerdictTests : VerifySandboxTestBase
     }
 
     [Test]
-    public void WallClockExhaustionIsTimeoutTest()
+    public void AWallTimeInTheLimitsIsNotWhatEndsALoopTest()
     {
-        // Huge fuel so the epoch deadline is what fires, not fuel.
-        var result = Run(Python, PythonTask("while True: pass"),
-            new VerifyLimitsData { FuelBudget = 500_000_000_000, WallTimeMs = 500 });
+        // A wall time of half a second and fuel for seconds: the loop ends when the fuel does,
+        // and reports the fuel. The clock ends no run with a verdict.
+        var limits = new VerifyLimitsData { FuelBudget = 3_000_000_000, WallTimeMs = 500 };
+        var result = Run(Python, PythonTask("while True: pass"), limits);
 
-        Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Timeout));
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Timeout));
+            Assert.That(result.FuelConsumed, Is.EqualTo(limits.FuelBudget));
+        });
     }
 
     [Test]
@@ -109,14 +114,17 @@ public sealed class VerifyExecuteVerdictTests : VerifySandboxTestBase
     }
 
     [Test]
-    public void UnknownRuntimeIsRuntimeUnavailableTest()
+    public void H5ARuntimeTheNodeDoesNotHaveRefusesTheBatchAndIsNoVerdictTest()
     {
+        // RuntimeUnavailable was a verdict: what a report said of a task depended on which node
+        // ran it. A node refuses the batch now, and the platform gives it to another.
         var task = PythonTask("print('x')");
         task.RuntimeId = "python-9.9.9";
         var batch = new VerifyTaskBatchData { RuntimeId = "python-9.9.9", Tasks = [task] };
-        var result = OutWit.Controller.AI.Verify.Sandbox.VerifyBatchExecutor.Execute(Sandbox, RuntimesRoot, batch);
 
-        Assert.That(result.Results[0].Verdict, Is.EqualTo(VerifyVerdict.RuntimeUnavailable));
+        Assert.That(() => OutWit.Controller.AI.Verify.Sandbox.VerifyBatchExecutor.Execute(Sandbox, RuntimesRoot, batch),
+            Throws.TypeOf<OutWit.Controller.AI.Verify.Sandbox.VerifyBatchRefusedException>()
+                .With.Message.EqualTo("runtime 'python-9.9.9' cannot be used on this node: the runtime id is not known to this controller"));
     }
 
     [Test]

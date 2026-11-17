@@ -15,7 +15,7 @@ internal enum WasmHostVerdict
     /// <summary>The fuel ran out: the deterministic budget stop.</summary>
     OutOfFuel,
 
-    /// <summary>The epoch deadline passed: the wall-clock backstop, which depends on the machine.</summary>
+    /// <summary>The epoch deadline passed: the wall-clock backstop, which depends on the machine and is no statement about the program.</summary>
     Interrupted,
 
     /// <summary>The guest failed for want of memory: a failed end (not a success, not a budget stop) whose stderr the caller's test recognises as a refused allocation.</summary>
@@ -32,5 +32,11 @@ internal enum WasmHostVerdict
     /// wasmtime 48's own <c>proc_exit</c> failed a status of 126 or more this way, and the host's
     /// (<see cref="WasmHostExit"/>) takes its place. The engine's own exception travels with the outcome.
     /// </summary>
-    EngineError
+    EngineError,
+
+    /// <summary>
+    /// The guest wrote more to stdout than its cap and the run was asked to end there
+    /// (<see cref="WasmHostRunRequest.StopAtStdoutLimit"/>): the run ended at the write that passed the cap.
+    /// </summary>
+    OutputLimit
 }

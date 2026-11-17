@@ -12,8 +12,8 @@ namespace OutWit.Controller.AI.Wasm;
 /// The clock starts at a pinned instant and moves only when the program waits: a sleep
 /// (poll_oneoff) returns at once and the clock reads that much later; a wait of no length
 /// still takes a nanosecond, as every real one takes some time. Nothing of the host's time
-/// reaches the program, and no wait holds a worker. random_get draws from a PRNG seeded by
-/// the run.
+/// reaches the program, and no wait holds a worker. Randomness and the file calls are the
+/// run's own too (<see cref="WasmHostSyscalls"/>).
 ///
 /// Four calls are taken away, each for a stated reason: renumbering a descriptor, listing a
 /// folder, and setting a file's times (by descriptor and by path) answer with an error and
@@ -64,21 +64,25 @@ internal static class WasmHostLinker
     /// Creates the linker for one run.
     /// </summary>
     /// <param name="engine">The host's engine.</param>
-    /// <param name="randomSeed">The run's seed for random_get.</param>
-    /// <returns>A linker with WASI defined and the run's own time and randomness in it; the caller disposes it.</returns>
-    public static Linker Create(WasmEngine engine, long randomSeed)
+    /// <returns>A linker with WASI defined and the run's own time in it; the caller disposes it.</returns>
+    public static Linker Create(WasmEngine engine)
     {
         var linker = new Linker(engine) { AllowShadowing = true };
         linker.DefineWasi();
 
         // The run's clock, the same for every clock id: it reads the pinned instant until the
         // program waits. Removes the last source of fuel non-determinism found in the runtime
-        // spike, and with it any sight of the host's time.
+        // spike, and with it any sight of the host's time. The pointer is the guest's: one
+        // outside its memory answers "bad address".
         var clock = new GuestClock(PINNED_CLOCK_NS);
         linker.DefineFunction(WASI_MODULE, "clock_time_get",
             (Caller caller, int clockId, long precision, int timePtr) =>
             {
-                caller.GetMemory(GUEST_MEMORY)?.WriteInt64(timePtr, clock.Now);
+                var memory = caller.GetMemory(GUEST_MEMORY);
+                if (memory == null || (long)(uint)timePtr + sizeof(long) > memory.GetLength())
+                    return ERRNO_FAULT;
+
+                memory.WriteInt64((uint)timePtr, clock.Now);
                 return ERRNO_SUCCESS;
             });
 
@@ -88,23 +92,6 @@ internal static class WasmHostLinker
         linker.DefineFunction(WASI_MODULE, "poll_oneoff",
             (Caller caller, int subscriptionsPtr, int eventsPtr, int count, int storedPtr) =>
                 Poll(caller.GetMemory(GUEST_MEMORY), clock, subscriptionsPtr, eventsPtr, count, storedPtr));
-
-        // Seeded PRNG: deterministic bytes from the run's seed (xorshift64*), so any
-        // randomness the guest draws is identical on every node.
-        var state = new RandomState(unchecked((ulong)randomSeed) | 1UL);
-        linker.DefineFunction(WASI_MODULE, "random_get",
-            (Caller caller, int bufferPtr, int length) =>
-            {
-                var memory = caller.GetMemory(GUEST_MEMORY);
-                if (memory == null)
-                    return ERRNO_SUCCESS;
-
-                var span = memory.GetSpan(bufferPtr, length);
-                for (var i = 0; i < length; i++)
-                    span[i] = state.NextByte();
-
-                return ERRNO_SUCCESS;
-            });
 
         // No descriptor juggling. Nothing a guest does needs fd_renumber (the C library's dup2),
         // and it is where wasmtime up to 44.0.2 leaked host descriptors (GHSA-3p27-qvp9-27qf):
@@ -228,22 +215,6 @@ internal static class WasmHostLinker
         public long After(long duration)
         {
             return duration > long.MaxValue - Now ? long.MaxValue : Now + duration;
-        }
-    }
-
-    private sealed class RandomState(ulong seed)
-    {
-        private ulong m_state = seed;
-
-        /// <summary>The next pseudo-random byte of the seeded stream.</summary>
-        /// <returns>A byte.</returns>
-        public byte NextByte()
-        {
-            // xorshift64* — deterministic, seed-driven; quality is irrelevant, reproducibility is the point.
-            m_state ^= m_state >> 12;
-            m_state ^= m_state << 25;
-            m_state ^= m_state >> 27;
-            return (byte)((m_state * 0x2545F4914F6CDD1DUL) >> 56);
         }
     }
 

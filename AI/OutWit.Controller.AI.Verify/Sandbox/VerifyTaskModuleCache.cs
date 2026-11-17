@@ -34,6 +34,7 @@ internal sealed class VerifyTaskModuleCache : IDisposable
     private readonly int m_capacity;
     private readonly object m_lock = new();
     private readonly Dictionary<string, Entry> m_entries = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, object> m_compiling = new(StringComparer.Ordinal);
     private long m_clock;
 
     #endregion
@@ -69,28 +70,46 @@ internal sealed class VerifyTaskModuleCache : IDisposable
     {
         var key = KeyOf(m_codeKey, bytes);
 
+        object turn;
         lock (m_lock)
         {
             if (m_entries.TryGetValue(key, out var hit))
                 return Take(key, hit);
+
+            if (!m_compiling.TryGetValue(key, out turn!))
+                m_compiling[key] = turn = new object();
         }
 
-        // Compile outside the lock: a compile takes milliseconds to seconds and the other
-        // workers' lookups should not wait on it.
-        var compiled = WasmModule.FromBytes(m_engine, name, bytes);
-
-        lock (m_lock)
+        // One worker compiles a module; the others that want the same one wait for it instead of
+        // compiling it again beside it. Outside the cache's lock: a compile takes milliseconds
+        // to seconds, and lookups of other modules should not wait on it.
+        lock (turn)
         {
-            if (m_entries.TryGetValue(key, out var raced))
+            lock (m_lock)
             {
-                compiled.Dispose();
-                return Take(key, raced);
+                if (m_entries.TryGetValue(key, out var compiledMeanwhile))
+                    return Take(key, compiledMeanwhile);
             }
 
-            EvictIdle();
-            var entry = new Entry(compiled);
-            m_entries[key] = entry;
-            return Take(key, entry);
+            try
+            {
+                var compiled = WasmModule.FromBytes(m_engine, name, bytes);
+
+                lock (m_lock)
+                {
+                    EvictIdle();
+                    var entry = new Entry(compiled);
+                    m_entries[key] = entry;
+                    return Take(key, entry);
+                }
+            }
+            finally
+            {
+                lock (m_lock)
+                {
+                    m_compiling.Remove(key);
+                }
+            }
         }
     }
 

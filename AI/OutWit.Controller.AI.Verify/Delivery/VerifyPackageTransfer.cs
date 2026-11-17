@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Sandbox;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Verify.Delivery;
@@ -12,7 +13,13 @@ namespace OutWit.Controller.AI.Verify.Delivery;
 /// because one failed item fails the node's whole share. A few downloads run at once, so the
 /// packages of a share arrive ahead of the work instead of one before each; the first
 /// transfer of all goes alone (<see cref="VerifyBlobGate"/>), and retries are spread so that
-/// transfers that failed together do not come back together.
+/// transfers that failed together do not come back together. Every attempt has a time to
+/// finish in, by the size of what it moves (<see cref="TransferTimeout"/>).
+/// <para>
+/// A node holds what it is sent to the caps itself, whoever made the package: a blob larger
+/// than a task package may be, or one that names more tasks than a package may hold, is refused
+/// before it is read (<see cref="VerifyBatchRefusedException"/>).
+/// </para>
 /// </summary>
 public static class VerifyPackageTransfer
 {
@@ -20,6 +27,12 @@ public static class VerifyPackageTransfer
 
     /// <summary>Package downloads in flight on this node at once.</summary>
     private const int FETCH_DEGREE = 4;
+
+    /// <summary>What every attempt of a transfer gets, whatever it moves.</summary>
+    public static readonly TimeSpan TRANSFER_BASE_TIME = TimeSpan.FromMinutes(2);
+
+    /// <summary>The slowest a transfer may move its bytes before the attempt counts as failed: 32 KiB a second.</summary>
+    public const long TRANSFER_SLOWEST_BYTES_PER_SECOND = 32 * 1024;
 
     private static readonly TimeSpan[] RETRY_DELAYS =
     [
@@ -50,12 +63,19 @@ public static class VerifyPackageTransfer
     /// <param name="logger">Receives a warning per failed attempt.</param>
     /// <param name="cancellationToken">The job's token.</param>
     /// <returns>The local path of the blob.</returns>
-    public static async Task<string> FetchAsync(IWitBlobService blobs, VerifyTaskPackageData package, ILogger logger, CancellationToken cancellationToken)
+    /// <exception cref="IOException">The download failed at every attempt; the message is fixed words.</exception>
+    public static Task<string> FetchAsync(IWitBlobService blobs, VerifyTaskPackageData package, ILogger logger, CancellationToken cancellationToken)
+    {
+        return FetchAsync(blobs, package, logger, cancellationToken, RETRY_DELAYS);
+    }
+
+    /// <summary>Downloads a task package, waiting between the attempts as told: for tests of what a failure says.</summary>
+    internal static async Task<string> FetchAsync(IWitBlobService blobs, VerifyTaskPackageData package, ILogger logger, CancellationToken cancellationToken, IReadOnlyList<TimeSpan> retryDelays)
     {
         await FETCH.WaitAsync(cancellationToken);
         try
         {
-            return await WithRetryAsync(() => blobs.GetLocalPathAsync(package.TasksBlobId), "download of a task package", logger, cancellationToken);
+            return await WithRetryAsync(() => blobs.GetLocalPathAsync(package.TasksBlobId), TransferTimeout(package.SizeBytes), "download of a task package", logger, cancellationToken, retryDelays);
         }
         finally
         {
@@ -63,7 +83,7 @@ public static class VerifyPackageTransfer
         }
     }
 
-    /// <summary>Reads the task batches of a downloaded package, after checking it is the package the reference names.</summary>
+    /// <summary>Reads the task batches of a downloaded package, after checking it is the package the reference names and no larger than a package may be.</summary>
     /// <param name="blobs">The node's blob service, for a package the cache has dropped while it waited for its turn.</param>
     /// <param name="package">The reference.</param>
     /// <param name="path">The local path <see cref="FetchAsync"/> returned.</param>
@@ -71,10 +91,14 @@ public static class VerifyPackageTransfer
     /// <param name="cancellationToken">The job's token.</param>
     /// <returns>The task batches, in order.</returns>
     /// <exception cref="InvalidDataException">The blob is not the package the reference names.</exception>
+    /// <exception cref="VerifyBatchRefusedException">The package is larger than a node takes.</exception>
     public static async Task<List<VerifyTaskBatchData>> ReadTasksAsync(IWitBlobService blobs, VerifyTaskPackageData package, string path, ILogger logger, CancellationToken cancellationToken)
     {
         if (!File.Exists(path))
             path = await FetchAsync(blobs, package, logger, cancellationToken);
+
+        if (new FileInfo(path).Length > VerifyPackageCodec.MAX_TASKS_IMAGE_BYTES)
+            throw new VerifyBatchRefusedException("the task package is larger than a node takes", null);
 
         var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
         VerifyPackageCodec.EnsureHash(bytes, package.Sha256, "task package");
@@ -84,31 +108,51 @@ public static class VerifyPackageTransfer
         if (tasks != package.TaskCount)
             throw new InvalidDataException($"The task package holds {tasks} task(s), its reference names {package.TaskCount}.");
 
+        if (tasks > VerifyPackagePlanner.MAX_PACKAGE_TASKS)
+            throw new VerifyBatchRefusedException($"the task package holds {tasks} tasks; a node takes no more than {VerifyPackagePlanner.MAX_PACKAGE_TASKS}", null);
+
         return batches;
     }
 
-    /// <summary>Uploads the result batches of a package as one blob.</summary>
+    /// <summary>Uploads a result package from the file it was written to.</summary>
     /// <param name="blobs">The node's blob service.</param>
-    /// <param name="results">The result batches, one per task batch executed.</param>
+    /// <param name="path">The package file (<see cref="VerifyResultPackageWriter"/>), complete.</param>
+    /// <param name="ticket">The ticket of the task package the results answer.</param>
+    /// <param name="taskCount">The results in the package.</param>
+    /// <param name="batchCount">The batches in the package.</param>
     /// <param name="logger">Receives a warning per failed attempt.</param>
     /// <param name="cancellationToken">The job's token.</param>
     /// <returns>The reference to return to the host.</returns>
-    public static async Task<VerifyResultPackageData> UploadResultsAsync(IWitBlobService blobs, IReadOnlyList<VerifyResultBatchData> results, ILogger logger, CancellationToken cancellationToken)
+    /// <exception cref="IOException">The upload failed at every attempt; the message is fixed words.</exception>
+    public static async Task<VerifyResultPackageData> UploadResultsAsync(IWitBlobService blobs, string path, string ticket, int taskCount, int batchCount, ILogger logger, CancellationToken cancellationToken)
     {
-        var content = VerifyPackageCodec.WriteResults(results);
-        var blobId = await WithRetryAsync(() => blobs.UploadBytesAsync(content, VerifyPackageCodec.RESULTS_FILE_NAME), "upload of a result package", logger, cancellationToken);
+        var size = new FileInfo(path).Length;
+        var sha256 = VerifyPackageCodec.HashFile(path);
+        var blobId = await WithRetryAsync(() => blobs.UploadFileAsync(path), TransferTimeout(size), "upload of a result package", logger, cancellationToken, RETRY_DELAYS);
 
         return new VerifyResultPackageData
         {
             ResultsBlobId = blobId,
-            Sha256 = VerifyPackageCodec.Hash(content),
-            SizeBytes = content.Length,
-            TaskCount = results.Sum(batch => batch.Results.Count),
-            BatchCount = results.Count
+            Sha256 = sha256,
+            SizeBytes = size,
+            TaskCount = taskCount,
+            BatchCount = batchCount,
+            Ticket = ticket
         };
     }
 
-    private static async Task<T> WithRetryAsync<T>(Func<Task<T>> transfer, string what, ILogger logger, CancellationToken cancellationToken)
+    /// <summary>
+    /// The time one attempt of a transfer has: two minutes, and the time its bytes take at the
+    /// slowest rate a transfer may have.
+    /// </summary>
+    /// <param name="bytes">The bytes the transfer moves.</param>
+    /// <returns>The time.</returns>
+    public static TimeSpan TransferTimeout(long bytes)
+    {
+        return TRANSFER_BASE_TIME + TimeSpan.FromSeconds(Math.Max(0, bytes) / (double)TRANSFER_SLOWEST_BYTES_PER_SECOND);
+    }
+
+    private static async Task<T> WithRetryAsync<T>(Func<Task<T>> transfer, TimeSpan timeout, string what, ILogger logger, CancellationToken cancellationToken, IReadOnlyList<TimeSpan> retryDelays)
     {
         var clock = Stopwatch.StartNew();
 
@@ -118,21 +162,23 @@ public static class VerifyPackageTransfer
 
             try
             {
-                return await GATE.RunAsync(transfer, cancellationToken);
+                return await GATE.RunAsync(transfer, timeout, cancellationToken);
             }
-            catch (Exception exception) when (exception is not OperationCanceledException && attempt < RETRY_DELAYS.Length)
+            catch (Exception exception) when (exception is not OperationCanceledException && attempt < retryDelays.Count)
             {
-                var delay = Spread(RETRY_DELAYS[attempt]);
+                var delay = Spread(retryDelays[attempt]);
                 logger.LogWarning(exception, "Verify: the {What} failed (attempt {Attempt} of {Attempts}); the next one starts in {Delay:F1} s",
-                    what, attempt + 1, RETRY_DELAYS.Length + 1, delay.TotalSeconds);
+                    what, attempt + 1, retryDelays.Count + 1, delay.TotalSeconds);
 
                 await Task.Delay(delay, cancellationToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                // The last attempt: the error a submitter or an operator reads is the only trace
-                // a node leaves of it, so it says how long the transfer was tried.
-                throw new IOException($"The {what} failed {attempt + 1} time(s) over {clock.Elapsed.TotalSeconds:F0} s: {exception.Message}", exception);
+                // The last attempt. What the blob channel said stays in the node's log: the
+                // error that travels says only what was tried and for how long, since a channel's
+                // own words can name a folder or an address of the node.
+                logger.LogError(exception, "Verify: the {What} failed {Attempts} time(s) over {Elapsed:F0} s", what, attempt + 1, clock.Elapsed.TotalSeconds);
+                throw new IOException($"The {what} failed {attempt + 1} time(s) over {clock.Elapsed.TotalSeconds:F0} s.");
             }
         }
     }

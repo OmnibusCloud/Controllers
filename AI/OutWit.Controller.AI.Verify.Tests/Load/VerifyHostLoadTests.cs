@@ -2,12 +2,13 @@ using System.Diagnostics;
 using System.Text;
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Tasksets;
+using OutWit.Controller.AI.Verify.Tests.Settlement;
 
 namespace OutWit.Controller.AI.Verify.Tests.Load;
 
 /// <summary>
 /// Load on the host side (Category=Load): a hundred thousand tasks through the parser and the
-/// planner, a hundred thousand results through every writer. No sandbox involved; these are
+/// planner, a hundred thousand results through the settlement into every document. No sandbox involved; these are
 /// the activities the server runs, and they must stay in seconds and in kilobytes per task.
 /// </summary>
 [TestFixture]
@@ -50,31 +51,38 @@ public sealed class VerifyHostLoadTests
     }
 
     [Test]
-    public void AHundredThousandResultsThroughEveryWriterTest()
+    public async Task AHundredThousandResultsAreSettledIntoEveryDocumentTest()
     {
-        var primaries = Batches(0, TASKS, "alpha");
-        var replicas = Batches(0, SAMPLED, "beta");
-        var allResults = primaries.SelectMany(b => b.Results).ToList();
+        // The server's whole pass: every result package taken in under its ticket, a tenth of
+        // them twice, every task ruled on, the four documents written.
+        using var rig = new VerifySettleRig();
+        var batches = Enumerable.Range(0, TASKS / BATCH_SIZE)
+            .Select(batch => VerifySettleRig.Batch(Enumerable.Range(batch * BATCH_SIZE, BATCH_SIZE).ToArray()))
+            .ToArray();
+        var issued = await rig.PublishAsync(batches);
+
+        var returned = new List<VerifyResultPackageData>();
+        foreach (var package in issued)
+            returned.Add(await rig.AnswerAsync(package, Answer));
+        foreach (var package in issued.Take(issued.Count * SAMPLED / TASKS))
+            returned.Add(await rig.AnswerAsync(package, Answer));
 
         var stopwatch = Stopwatch.StartNew();
-        var report = VerifyReportWriter.Write(allResults);
-        var reportTime = stopwatch.Elapsed;
-        var corpus = VerifyCorpusWriter.Write(allResults);
-        var corpusTime = stopwatch.Elapsed - reportTime;
-        var provenance = VerifyProvenanceWriter.Write(primaries);
-        var provenanceTime = stopwatch.Elapsed - reportTime - corpusTime;
-        var integrity = VerifyIntegrityWriter.Write([.. primaries, .. replicas]);
+        var run = await rig.SettleAsync(issued, returned);
         stopwatch.Stop();
 
         TestContext.Out.WriteLine(
-            $"report {report.Length / 1024} KB in {reportTime.TotalSeconds:F1} s; corpus {corpus.Length / 1024} KB in {corpusTime.TotalSeconds:F1} s; " +
-            $"provenance {provenance.Length / 1024} KB in {provenanceTime.TotalSeconds:F1} s; integrity {integrity.Length / 1024} KB; total {stopwatch.Elapsed.TotalSeconds:F1} s");
+            $"{issued.Count} packages, {returned.Count} result packages settled in {stopwatch.Elapsed.TotalSeconds:F1} s; report {run.Report.Length / 1024} KB; " +
+            $"outputs {run.Outputs.Length / 1024} KB; provenance {run.Provenance.Length / 1024} KB; integrity {run.Integrity.Length / 1024} KB");
 
         Assert.Multiple(() =>
         {
             Assert.That(stopwatch.Elapsed, Is.LessThan(BUDGET));
-            Assert.That(report.Length, Is.LessThan(TASKS * 200), "under 200 bytes per task");
-            Assert.That(VerifyReportWriter.ReadSummary(report).Total, Is.EqualTo(TASKS));
+            Assert.That(run.Report.Length, Is.LessThan(TASKS * 200), "under 200 bytes per task");
+            Assert.That(run.Summary.Total, Is.EqualTo(TASKS));
+            Assert.That(run.Summary.RejectedResults, Is.Zero);
+            Assert.That(run.IntegrityCount("sampled"), Is.EqualTo(SAMPLED));
+            Assert.That(run.IntegrityCount("mismatches"), Is.Zero);
         });
     }
 
@@ -82,41 +90,20 @@ public sealed class VerifyHostLoadTests
 
     #region Helpers
 
-    private static List<VerifyResultBatchData> Batches(int from, int count, string nodeName)
+    private static VerifyResultData Answer(VerifyTaskData task)
     {
-        var nodeId = Guid.NewGuid();
-        var batches = new List<VerifyResultBatchData>();
-        for (var offset = from; offset < from + count; offset += BATCH_SIZE)
+        var index = task.TaskIndex;
+        return new VerifyResultData
         {
-            var results = new List<VerifyResultData>();
-            for (var i = offset; i < Math.Min(offset + BATCH_SIZE, from + count); i++)
-            {
-                results.Add(new VerifyResultData
-                {
-                    TaskIndex = i,
-                    Verdict = i % 7 == 0 ? VerifyVerdict.Fail : VerifyVerdict.Pass,
-                    ExitCode = 0,
-                    Stdout = $"{i}\n",
-                    FuelConsumed = 120_000_000 + i,
-                    PeakMemoryBytes = 40 * 1024 * 1024,
-                    WallMs = 40,
-                    CaseResults = [new VerifyCaseResultData { CaseIndex = 0, Passed = i % 7 != 0, Verdict = i % 7 == 0 ? VerifyVerdict.Fail : VerifyVerdict.Pass, ActualStdout = $"{i}\n" }]
-                });
-            }
-
-            batches.Add(new VerifyResultBatchData
-            {
-                Results = results,
-                Diagnostics = new VerifyBatchDiagnosticsData
-                {
-                    NodeId = nodeId, NodeName = nodeName, RuntimeTarget = "linux-x64", WasmtimeVersion = "48.0.2.0",
-                    NativeLibraryPath = "(load context)", RuntimeId = "python-3.14.6", RuntimeSha256 = "aaa",
-                    Degree = 2, TaskCount = results.Count, WallMs = 100, ControllerVersion = "1.0.0-test"
-                }
-            });
-        }
-
-        return batches;
+            TaskIndex = index,
+            Verdict = index % 7 == 0 ? VerifyVerdict.Fail : VerifyVerdict.Pass,
+            ExitCode = 0,
+            Stdout = $"{index}\n",
+            FuelConsumed = 120_000_000 + index,
+            PeakMemoryBytes = 40 * 1024 * 1024,
+            WallMs = 40,
+            CaseResults = [new VerifyCaseResultData { CaseIndex = 0, Passed = index % 7 != 0, Verdict = index % 7 == 0 ? VerifyVerdict.Fail : VerifyVerdict.Pass, ActualStdout = $"{index}\n" }]
+        };
     }
 
     #endregion

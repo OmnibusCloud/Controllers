@@ -48,17 +48,55 @@ internal sealed class WasmHostRunRequest
     /// <summary>The cap of the guest's linear memory, bytes.</summary>
     public required long MemoryBytes { get; init; }
 
-    /// <summary>The wall time the run may take, milliseconds; a backstop, fuel binds first.</summary>
+    /// <summary>
+    /// The wall time the run may take, milliseconds. A backstop only: it protects the machine from
+    /// a run that fuel does not end, and a run it ends (<see cref="WasmHostVerdict.Interrupted"/>)
+    /// says something about the machine, not about the program.
+    /// </summary>
     public required int WallMs { get; init; }
 
     /// <summary>The seed of the guest's <c>random_get</c> stream.</summary>
     public long RandomSeed { get; init; }
 
-    /// <summary>The most bytes of stdout the outcome carries; 0 for no cap.</summary>
+    /// <summary>
+    /// The most bytes of stdout the host keeps; 0 for no cap, less than 0 to keep nothing. The cap
+    /// is at the write: a byte past it is never stored, in memory or on disk.
+    /// </summary>
     public int StdoutLimitBytes { get; init; }
 
-    /// <summary>The most bytes of stderr the outcome carries; 0 for no cap.</summary>
+    /// <summary>
+    /// The most bytes of stderr the host keeps; 0 for no cap. The cap is at the write; the run
+    /// goes on, and what it writes past the cap is dropped.
+    /// </summary>
     public int StderrLimitBytes { get; init; }
+
+    /// <summary>
+    /// Whether the write that takes stdout past <see cref="StdoutLimitBytes"/> ends the run
+    /// (<see cref="WasmHostVerdict.OutputLimit"/>). Off by default: the run goes on and the rest
+    /// is dropped.
+    /// </summary>
+    public bool StopAtStdoutLimit { get; init; }
+
+    /// <summary>
+    /// A host file the guest's stdout goes to instead of the outcome (a tool whose stdout is its
+    /// product), or null. The cap and the stop rule are the same; the outcome's stdout is empty.
+    /// </summary>
+    public string? StdoutFile { get; init; }
+
+    /// <summary>
+    /// The most bytes the guest may put into its writable folders, all files together, counted at
+    /// the write (and at a call that sets a file's size); a write past it answers "no space left".
+    /// 0 for no cap.
+    /// </summary>
+    public long WritableLimitBytes { get; init; }
+
+    /// <summary>
+    /// Whether a call into the host costs fuel in proportion to the bytes it moves (a unit a
+    /// byte read, written or filled, as the engine charges a guest's own bulk copies), so that a
+    /// run cannot spend the host's time for nothing. Off by default: only the guest's own
+    /// instructions cost fuel then.
+    /// </summary>
+    public bool ChargeHostCalls { get; init; }
 
     /// <summary>
     /// Recognises a refused allocation in the guest's stderr (as capped, or the host's fault when

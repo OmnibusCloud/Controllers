@@ -73,5 +73,12 @@ public static class VerifyEngineVersion
     /// <summary>The engine of this process, e.g. "48.0.2.0 (native 48.0.8)".</summary>
     public static string Current => DESCRIPTION.Value;
 
+    /// <summary>
+    /// The engine every node of this controller version reports: this binding over the pinned
+    /// native library. A node on any other library does not start its sandbox, so a result that
+    /// names another engine was not made by this version.
+    /// </summary>
+    public static string Pinned => Format(typeof(Wasmtime.Engine).Assembly.GetName().Version?.ToString() ?? "unknown", WasmHostNatives.VERSION);
+
     #endregion
 }

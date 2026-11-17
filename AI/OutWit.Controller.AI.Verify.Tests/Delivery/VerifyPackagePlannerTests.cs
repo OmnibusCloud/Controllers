@@ -1,4 +1,5 @@
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Sandbox;
 using OutWit.Controller.AI.Verify.Delivery;
 
 namespace OutWit.Controller.AI.Verify.Tests.Delivery;
@@ -11,6 +12,13 @@ namespace OutWit.Controller.AI.Verify.Tests.Delivery;
 [TestFixture]
 public sealed class VerifyPackagePlannerTests
 {
+    #region Constants
+
+    // Tasks that print a line: 16 KiB of stdout and of stderr, 48 KiB a task by the package's count.
+    private static readonly VerifyLimitsData SMALL_OUTPUT = new() { StdoutLimitBytes = 16 * 1024, StderrLimitBytes = 16 * 1024 };
+
+    #endregion
+
     #region Count Tests
 
     [Test]
@@ -27,8 +35,9 @@ public sealed class VerifyPackagePlannerTests
     [Test]
     public void ALargeRunIsCutIntoAboutTheTargetTest()
     {
-        // The million-task run of the scale proofs: 7,813 batches of 128.
-        var batches = Batches(count: 7813, tasksPerBatch: 128);
+        // The million-task run of the scale proofs: 7,813 batches of 128, of tasks that keep
+        // little output (the output a package may keep is a cap of its own: the next tests).
+        var batches = Batches(count: 7813, tasksPerBatch: 128, limits: SMALL_OUTPUT);
 
         var packages = VerifyPackagePlanner.Plan(batches);
 
@@ -45,11 +54,32 @@ public sealed class VerifyPackagePlannerTests
     public void AHugeRunStopsAtTheTaskCapTest()
     {
         // Ten million tasks: the target would ask for almost ten thousand tasks a package.
-        var batches = Batches(count: 78125, tasksPerBatch: 128, shared: true);
+        var batches = Batches(count: 78125, tasksPerBatch: 128, shared: true, limits: SMALL_OUTPUT);
 
         var packages = VerifyPackagePlanner.Plan(batches);
 
         Assert.That(packages.Max(package => package.Sum(batch => batch.Tasks.Count)), Is.EqualTo(VerifyPackagePlanner.MAX_PACKAGE_TASKS));
+    }
+
+    [Test]
+    public void H1APackageClosesAtTheOutputItsTasksMayKeepTest()
+    {
+        // At the default caps a task may keep 576 KiB (its stdout cap twice and its stderr cap),
+        // so the 256 MiB a package may keep close it at 455 tasks: three batches of 128. A node
+        // never holds a result package larger than that, whatever the run's size.
+        var perTask = VerifyPackagePlanner.OutputBytes(VerifySandboxDefaults.Resolve(null, null));
+        var batches = Batches(count: 7813, tasksPerBatch: 128, shared: true);
+
+        var packages = VerifyPackagePlanner.Plan(batches);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(perTask, Is.EqualTo(576 * 1024));
+            Assert.That(VerifyPackagePlanner.MAX_PACKAGE_OUTPUT_BYTES / perTask, Is.EqualTo(455));
+            Assert.That(packages.Max(package => package.Sum(VerifyPackagePlanner.OutputBytes)), Is.LessThanOrEqualTo(VerifyPackagePlanner.MAX_PACKAGE_OUTPUT_BYTES));
+            Assert.That(packages.Max(package => package.Sum(batch => batch.Tasks.Count)), Is.EqualTo(3 * 128));
+            Assert.That(packages.Sum(package => package.Count), Is.EqualTo(batches.Count));
+        });
     }
 
     #endregion
@@ -100,14 +130,19 @@ public sealed class VerifyPackagePlannerTests
 
     #region Tools
 
-    private static List<VerifyTaskBatchData> Batches(int count, int tasksPerBatch, bool shared = false)
+    private static List<VerifyTaskBatchData> Batches(int count, int tasksPerBatch, bool shared = false, VerifyLimitsData? limits = null)
     {
         // "shared" reuses one task list for every batch: the plan reads counts and sizes only,
         // and millions of task objects would be a test of the garbage collector.
         var template = Batch(tasksPerBatch, sourceLength: 20);
 
         return Enumerable.Range(0, count)
-            .Select(_ => shared ? new VerifyTaskBatchData { RuntimeId = template.RuntimeId, Tasks = template.Tasks } : Batch(tasksPerBatch, sourceLength: 20))
+            .Select(_ =>
+            {
+                var batch = shared ? new VerifyTaskBatchData { RuntimeId = template.RuntimeId, Tasks = template.Tasks } : Batch(tasksPerBatch, sourceLength: 20);
+                batch.DefaultLimits = limits;
+                return batch;
+            })
             .ToList();
     }
 
