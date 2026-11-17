@@ -212,8 +212,12 @@ public sealed partial class CorpusLeakA5Tests : CorpusScriptTestBase
             m_documents["job status"] = Describe(status);
             foreach (var name in new[] { "tasks", "repairs", "disputes" })
             {
-                if (process.Variables[name].Value is IEnumerable tasks)
-                    m_tickets.AddRange(tasks.OfType<CorpusTaskData>().Select(task => task.Ticket));
+                // The tickets of every round: the packages' own and the ones of the shards inside them.
+                if (process.Variables[name].Value is IEnumerable packages)
+                {
+                    m_tickets.AddRange(packages.OfType<CorpusTaskPackageData>().Select(package => package.Ticket));
+                    m_tickets.AddRange(TasksOf(packages).Select(task => task.Ticket));
+                }
             }
 
             var dedup = Engine.Compile(LoadScript("CorpusDedup.wit"));

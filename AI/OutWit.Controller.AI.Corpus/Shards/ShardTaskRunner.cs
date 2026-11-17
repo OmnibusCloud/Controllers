@@ -51,7 +51,7 @@ public static class ShardTaskRunner
 
     #region Fields
 
-    /// <summary>The node's degree (cores, memory), reported with every result.</summary>
+    /// <summary>The node's degree (cores, memory). It stays on the node: no result says it.</summary>
     private static readonly int DEGREE = ShardDegree.ForCurrentMachine();
 
     /// <summary>Shards processing at once in this process: the node's degree.</summary>
@@ -63,6 +63,9 @@ public static class ShardTaskRunner
     #endregion
 
     #region Functions
+
+    /// <summary>The shards this node holds on disk at once: the ones it processes and <see cref="FETCH_AHEAD"/> more. As many tasks of a package are started together.</summary>
+    internal static int Window => DEGREE + FETCH_AHEAD;
 
     /// <summary>Runs one task.</summary>
     /// <param name="task">The task.</param>
@@ -109,7 +112,6 @@ public static class ShardTaskRunner
             SourceUrl = task.Source?.Url ?? "",
             ControllerVersion = ControllerBuildInfo.VERSION,
             RuntimeTarget = CorpusRuntimeDiagnosticsBuilder.RuntimeTarget(),
-            Degree = DEGREE,
             Output = task.Pipeline?.Output ?? CorpusOutputMode.Full,
             Ticket = task.Ticket ?? ""
         };
@@ -173,8 +175,8 @@ public static class ShardTaskRunner
             }
         }
 
-        // The node's own ceiling, whoever wrote the task.
-        var cap = CorpusTaskPlanner.NodeShardCap(task.MaxShardBytes);
+        // The node's own ceiling, whoever wrote the task, and below it the size the shard was declared with.
+        var cap = ShardLimits.FetchCap(task);
         var shardPath = Path.Combine(workDirectory, SHARD_FILE);
         var textPath = Path.Combine(workDirectory, TEXT_FILE);
         var signaturesPath = Path.Combine(workDirectory, SIGNATURES_FILE);
@@ -206,7 +208,8 @@ public static class ShardTaskRunner
             }
             catch (ShardOversizedException)
             {
-                return Verdict(result, CorpusShardVerdict.Oversized, CorpusResultCodes.OVERSIZED);
+                // Past the cap, or past what the manifest declared for it: the shard's, on any node.
+                return Verdict(result, CorpusShardVerdict.Oversized, ShardLimits.DeclaredBinds(task) ? CorpusResultCodes.OVERSIZED_DECLARED : CorpusResultCodes.OVERSIZED);
             }
             catch (ShardOriginRefusedException exception)
             {
@@ -385,7 +388,7 @@ public static class ShardTaskRunner
     /// </summary>
     private static CorpusResultData Fault(CorpusResultData result, string code, Exception? exception, ILogger? logger)
     {
-        logger?.LogWarning("Corpus.ProcessShard {Index}: a fault of this node, {Code} ({Kind}, 0x{HResult:X8}); the shard goes back unanswered.",
+        logger?.LogWarning("Corpus.ProcessPackage, shard {Index}: a fault of this node, {Code} ({Kind}, 0x{HResult:X8}); the shard goes back unanswered.",
             result.TaskIndex, code, exception?.GetType().Name ?? "none", exception?.HResult ?? 0);
 
         result.Verdict = CorpusShardVerdict.NodeFault;

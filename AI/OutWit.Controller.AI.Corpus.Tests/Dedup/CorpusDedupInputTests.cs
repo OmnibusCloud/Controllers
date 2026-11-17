@@ -164,14 +164,15 @@ public sealed class CorpusDedupInputTests
     {
         string[] hostile =
         [
-            "", "null", "[]", "{}", "{\"schema\":\"corpus-report/3\"}", "{\"schema\":\"corpus-report/3\",\"shards\":7}",
-            "{\"schema\":7,\"shards\":[]}", "{\"schema\":\"something-else/1\",\"shards\":[]}", "not json at all", "{\"schema\":\"corpus-report/3\",\"shards\":["
+            "", "null", "[]", "{}", "{\"schema\":\"corpus-report/4\"}", "{\"schema\":\"corpus-report/4\",\"shards\":7}",
+            "{\"schema\":7,\"shards\":[]}", "{\"schema\":\"something-else/1\",\"shards\":[]}", "not json at all", "{\"schema\":\"corpus-report/4\",\"shards\":[",
+            "{\"schema\":\"corpus-report/4\",\"shards\":[],\"shards\":[]}"
         ];
 
         Assert.Multiple(() =>
         {
             foreach (var text in hostile)
-                Assert.That(() => CorpusDedupInput.Read(Encoding.UTF8.GetBytes(text)), Throws.InvalidOperationException.With.Message.EqualTo("The report is not a corpus-report/3 document."), text);
+                Assert.That(() => CorpusDedupInput.Read(Encoding.UTF8.GetBytes(text)), Throws.InvalidOperationException.With.Message.EqualTo("The report is not a corpus-report/4 document."), text);
         });
     }
 

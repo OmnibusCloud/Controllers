@@ -9,8 +9,9 @@ namespace OutWit.Controller.AI.Corpus.Activities;
 
 /// <summary>
 /// Host-side: the shards the first round left without a result — every machine that held one
-/// returned it as a fault of its own, or returned something the server dropped — as tasks for one
-/// more round, each under a new ticket. Empty when every shard has a result or a dispute.
+/// returned it as a fault of its own, or returned something the server dropped — as task packages
+/// for one more round, each shard and each package under a new ticket. Empty when every shard has
+/// a result or a dispute.
 /// </summary>
 [Activity("Corpus.Repairs")]
 [MemoryPackable]

@@ -10,7 +10,7 @@ using OutWit.Controller.AI.Corpus.Trust;
 namespace OutWit.Controller.AI.Corpus.Tests.Diagnostics;
 
 /// <summary>
-/// The capabilities document (<c>corpus-capabilities/2</c>) states what an application needs to
+/// The capabilities document (<c>corpus-capabilities/3</c>) states what an application needs to
 /// read the documents of a hardened run: every fixed word that stands where a node's text once
 /// stood, the copies a result rests on, the limits a hostile input meets, the case table. Each is
 /// held to the code's own constant, so the document cannot drift from what the controller does.

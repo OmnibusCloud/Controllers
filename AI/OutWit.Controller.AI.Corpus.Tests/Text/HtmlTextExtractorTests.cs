@@ -19,6 +19,9 @@ public sealed class HtmlTextExtractorTests
     private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
     private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
 
+    /// <summary>SHA-256 over the extracted text of every HTML response of the golden WARC shard, in file order.</summary>
+    private const string EXTRACTED_TEXT_SHA256 = "1ccba0aeb54b9c6ad18b923a6c53bfe4ceb98781d6f7a51428e2bd28fc4b8d90";
+
     #endregion
 
     #region Rule Tests
@@ -133,17 +136,16 @@ public sealed class HtmlTextExtractorTests
     }
 
     [Test]
-    public void ExtractionIsByteIdenticalAcrossRunsTest()
+    public void L7ExtractionIsTheSameBytesOnEveryMachineTest()
     {
-        static string Digest()
-        {
-            using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            foreach (var response in Responses().Where(r => r.Payload.IsHtml))
-                sha.AppendData(Encoding.UTF8.GetBytes(HtmlTextExtractor.Extract(response.Payload.DecodeBody())));
-            return Convert.ToHexStringLower(sha.GetHashAndReset());
-        }
+        // Audit finding L-7: this test compared an extraction with a second one in the same
+        // process, which cannot differ. The text of the golden shard's pages is pinned instead:
+        // the three platforms of the build server are held to one value.
+        using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        foreach (var response in Responses().Where(r => r.Payload.IsHtml))
+            sha.AppendData(Encoding.UTF8.GetBytes(HtmlTextExtractor.Extract(response.Payload.DecodeBody())));
 
-        Assert.That(Digest(), Is.EqualTo(Digest()));
+        Assert.That(Convert.ToHexStringLower(sha.GetHashAndReset()), Is.EqualTo(EXTRACTED_TEXT_SHA256), "the extractor's text of the golden WARC head: a changed value is a changed extractor, and the golden content hashes move with it");
     }
 
     [Test]

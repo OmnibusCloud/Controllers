@@ -8,20 +8,20 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Corpus.Variables;
 
-/// <summary>One shard's result — what Corpus.ProcessShard returns.</summary>
-[Variable("CorpusResult")]
+/// <summary>A reference to one task package — the item Grid.ForEach hands a node; the tasks themselves are a blob.</summary>
+[Variable("CorpusTaskPackage")]
 [MemoryPackable]
-public sealed partial class WitVariableCorpusResult : WitVariable<CorpusResultData?>, IWitVariableFactory<WitVariableCorpusResult>
+public sealed partial class WitVariableCorpusTaskPackage : WitVariable<CorpusTaskPackageData?>, IWitVariableFactory<WitVariableCorpusTaskPackage>
 {
     #region Constructors
 
-    public WitVariableCorpusResult(string name)
+    public WitVariableCorpusTaskPackage(string name)
         : base(name)
     {
     }
 
     [MemoryPackConstructor]
-    public WitVariableCorpusResult(string name, CorpusResultData? value)
+    public WitVariableCorpusTaskPackage(string name, CorpusTaskPackageData? value)
         : base(name, value)
     {
     }
@@ -36,7 +36,7 @@ public sealed partial class WitVariableCorpusResult : WitVariable<CorpusResultDa
     /// <returns>True when the models are equal by value.</returns>
     public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
     {
-        if (modelBase is not WitVariableCorpusResult variable)
+        if (modelBase is not WitVariableCorpusTaskPackage variable)
             return false;
 
         return base.Is(modelBase, tolerance)
@@ -45,9 +45,9 @@ public sealed partial class WitVariableCorpusResult : WitVariable<CorpusResultDa
 
     /// <summary>Deep copy of the variable.</summary>
     /// <returns>The copy.</returns>
-    public override WitVariableCorpusResult Clone()
+    public override WitVariableCorpusTaskPackage Clone()
     {
-        return new WitVariableCorpusResult(Name, (CorpusResultData?)GetValue()?.Clone());
+        return new WitVariableCorpusTaskPackage(Name, (CorpusTaskPackageData?)GetValue()?.Clone());
     }
 
     #endregion
@@ -57,9 +57,9 @@ public sealed partial class WitVariableCorpusResult : WitVariable<CorpusResultDa
     /// <summary>Creates a variable of this type under a name.</summary>
     /// <param name="name">The variable name in the script's pool.</param>
     /// <returns>The new variable.</returns>
-    public static WitVariableCorpusResult Create(string name)
+    public static WitVariableCorpusTaskPackage Create(string name)
     {
-        return new WitVariableCorpusResult(name);
+        return new WitVariableCorpusTaskPackage(name);
     }
 
     #endregion

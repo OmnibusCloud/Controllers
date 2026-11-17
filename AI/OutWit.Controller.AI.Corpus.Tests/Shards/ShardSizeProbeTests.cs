@@ -84,11 +84,13 @@ public sealed class ShardSizeProbeTests
         using var client = ShardHttp.CreateClient(CorpusTestOrigin.Policy);
         var before = m_origin.Requests;
 
-        var sizes = await ShardSizeProbe.ProbeSizesAsync([Source(m_origin.HopUrl("http://169.254.169.254/latest/meta-data/"))], [m_origin.Host], CorpusTestOrigin.Policy, client);
+        var result = await ShardSizeProbe.ProbeAsync([Source(m_origin.HopUrl("http://169.254.169.254/latest/meta-data/"))], [m_origin.Host], CorpusTestOrigin.Policy, client);
 
         Assert.Multiple(() =>
         {
-            Assert.That(sizes, Is.EqualTo(new long?[] { null }));
+            Assert.That(result.Probed, Is.Zero);
+            Assert.That(result.Failed, Is.EqualTo(1), "asked, and no size came of it");
+            Assert.That(result.Declared, Is.EqualTo(new long[] { 0 }), "the shard has no size of its own");
             Assert.That(m_origin.Requests - before, Is.EqualTo(1), "the first hop only");
         });
     }

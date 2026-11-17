@@ -1,14 +1,22 @@
+using System.Security.Cryptography;
 using OutWit.Controller.AI.Corpus.Model;
 
 namespace OutWit.Controller.AI.Corpus.Shards;
 
 /// <summary>
-/// Asks the origin how big the shards are (HEAD, Content-Length) for the sources whose
-/// manifest entry carries no size, so the preflight's traffic line means something to a
-/// contributor. The requests leave the machine that plans the job, so they obey that
-/// machine's policy like any fetch: a source this machine does not fetch from is not asked.
-/// A few requests at a time, a bounded number of probes: a manifest of thousands of shards
-/// gets a sample and an extrapolation, not a thousand requests.
+/// Asks the origin how big the shards are (HEAD, Content-Length), for a sample drawn at random:
+/// <list type="bullet">
+/// <item>of the sources whose manifest entry carries no size, so that the estimates mean
+/// something and the answered ones get a size the nodes hold them to;</item>
+/// <item>of the sources that do carry a size, so that a manifest whose sizes are far below the
+/// origin's is found out before the job starts (the nodes refuse such a shard either way).</item>
+/// </list>
+/// The sample is drawn by the server's own random source, so whoever writes a manifest cannot
+/// know which entries will be asked; half the probe budget goes to each kind when both are there.
+/// The requests leave the machine that plans the job, so they obey that machine's policy like any
+/// fetch: a source this machine does not fetch from is not asked. A few requests at a time, a
+/// bounded number in all: a manifest of thousands of shards gets a sample and an extrapolation,
+/// not a thousand requests.
 /// </summary>
 public static class ShardSizeProbe
 {
@@ -27,63 +35,141 @@ public static class ShardSizeProbe
 
     #region Functions
 
-    /// <summary>Probes the sizes of the sources that have none.</summary>
+    /// <summary>Probes a random sample of the sources and says what every shard is counted at and held to.</summary>
     /// <param name="sources">The manifest's sources.</param>
     /// <param name="allowedOrigins">The allowlist; a source off it is not probed.</param>
     /// <param name="policy">What this machine fetches from; a source outside it is not probed.</param>
     /// <param name="client">A client from <see cref="ShardHttp.CreateClient"/> for the same policy.</param>
     /// <param name="cancellationToken">Cancels the probes.</param>
+    /// <param name="random">Draws a number from 0 up to (not including) its argument; null for the platform's cryptographic source. A test gives its own.</param>
     /// <returns>What was learned.</returns>
-    public static async Task<ShardSizeProbeResult> ProbeAsync(IReadOnlyList<CorpusSourceData> sources, IReadOnlyCollection<string> allowedOrigins, ShardOriginPolicy policy, HttpClient client, CancellationToken cancellationToken = default)
+    public static async Task<ShardSizeProbeResult> ProbeAsync(IReadOnlyList<CorpusSourceData> sources, IReadOnlyCollection<string> allowedOrigins, ShardOriginPolicy policy, HttpClient client, CancellationToken cancellationToken = default, Func<int, int>? random = null)
     {
-        var sizes = await ProbeSizesAsync(sources, allowedOrigins, policy, client, cancellationToken);
+        random ??= RandomNumberGenerator.GetInt32;
 
-        var unsized = sources.Count(source => source.SizeBytes <= 0);
-        if (unsized == 0)
-            return new ShardSizeProbeResult(0, 0, 0, 0) { Sizes = sources.Select(source => source.SizeBytes).ToList() };
+        var unsized = new List<int>();
+        var sized = new List<int>();
+        var unsizedTotal = 0;
 
-        var known = sizes.Where(size => size.HasValue).Select(size => size!.Value).ToList();
-        var probed = known.Count;
-        var attempted = Math.Min(sources.Count(source => source.SizeBytes <= 0 && MayProbe(source, allowedOrigins, policy)), MAX_PROBES);
-        var failed = attempted - probed;
-        var unprobed = unsized - attempted;
-        var mean = probed > 0 ? (long)known.Average() : 0;
+        for (var index = 0; index < sources.Count; index++)
+        {
+            var isUnsized = sources[index].SizeBytes <= 0;
+            if (isUnsized)
+                unsizedTotal++;
 
-        // Each source's size as the estimate counts it: the manifest's, the origin's, or the mean.
-        var filled = sources.Select((source, index) => source.SizeBytes > 0 ? source.SizeBytes : sizes[index] ?? mean).ToList();
+            if (MayProbe(sources[index], allowedOrigins, policy))
+                (isUnsized ? unsized : sized).Add(index);
+        }
 
-        return new ShardSizeProbeResult(known.Sum() + mean * (failed + unprobed), probed, failed, unprobed) { Sizes = filled };
+        // Half the budget each; what one kind does not use goes to the other.
+        var takeUnsized = Math.Min(unsized.Count, MAX_PROBES / 2 + Math.Max(0, MAX_PROBES / 2 - sized.Count));
+        var takeSized = Math.Min(sized.Count, MAX_PROBES - takeUnsized);
+        var asked = Draw(unsized, takeUnsized, random).Concat(Draw(sized, takeSized, random)).ToList();
+
+        var answers = new Dictionary<int, long?>(asked.Count);
+        using (var gate = new SemaphoreSlim(CONCURRENCY, CONCURRENCY))
+        {
+            var pending = asked.Select(async index =>
+            {
+                await gate.WaitAsync(cancellationToken);
+                try
+                {
+                    return (Index: index, Size: await HeadAsync(sources[index], allowedOrigins, policy, client, cancellationToken));
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            }).ToList();
+
+            foreach (var answer in await Task.WhenAll(pending))
+                answers[answer.Index] = answer.Size;
+        }
+
+        var sizes = new long[sources.Count];
+        var declared = new long[sources.Count];
+        var over = new List<ShardSizeMismatch>();
+        long probedBytes = 0;
+        int probed = 0, failed = 0, verified = 0;
+
+        for (var index = 0; index < sources.Count; index++)
+        {
+            var stated = sources[index].SizeBytes;
+            var answered = answers.TryGetValue(index, out var answer);
+
+            if (stated > 0)
+            {
+                sizes[index] = declared[index] = stated;
+                if (answer is not { } atOrigin)
+                    continue;
+
+                verified++;
+                if (atOrigin > ShardLimits.DeclaredCap(stated))
+                    over.Add(new ShardSizeMismatch(index, stated, atOrigin));
+            }
+            else if (answer is > 0)
+            {
+                // The origin's own word: the shard is counted at it and held to it.
+                sizes[index] = declared[index] = answer.Value;
+                probedBytes += answer.Value;
+                probed++;
+            }
+            else if (answered)
+                failed++;
+        }
+
+        // An unsized source nobody answered for is counted at the mean of the answers: they are a
+        // random sample of the unsized sources this machine may ask. It stays without a size of
+        // its own, and a node holds it to the cap.
+        var mean = probed > 0 ? probedBytes / probed : 0;
+        var withoutSize = 0;
+        for (var index = 0; index < sources.Count; index++)
+        {
+            if (declared[index] > 0)
+                continue;
+
+            withoutSize++;
+            sizes[index] = mean;
+        }
+
+        return new ShardSizeProbeResult(probedBytes + mean * withoutSize, probed, failed, unsizedTotal - probed - failed)
+        {
+            Sizes = sizes,
+            Declared = declared,
+            Unsized = withoutSize,
+            Verified = verified,
+            Overdeclared = over,
+            MeanBytes = mean
+        };
     }
 
-    /// <summary>The origin's size of every unsized source, aligned with the sources (null = sized already, not probed, or unanswered).</summary>
+    /// <summary>What a job knows of its shards' sizes when nothing is asked at the origin: the manifest's own, each a claim the nodes hold it to.</summary>
     /// <param name="sources">The manifest's sources.</param>
-    /// <param name="allowedOrigins">The allowlist; a source off it is not probed.</param>
-    /// <param name="policy">What this machine fetches from; a source outside it is not probed.</param>
-    /// <param name="client">A client from <see cref="ShardHttp.CreateClient"/> for the same policy.</param>
-    /// <param name="cancellationToken">Cancels the probes.</param>
-    /// <returns>One entry per source.</returns>
-    public static async Task<long?[]> ProbeSizesAsync(IReadOnlyList<CorpusSourceData> sources, IReadOnlyCollection<string> allowedOrigins, ShardOriginPolicy policy, HttpClient client, CancellationToken cancellationToken = default)
+    /// <returns>The sizes; a source without one has none.</returns>
+    public static ShardSizeProbeResult Unasked(IReadOnlyList<CorpusSourceData> sources)
     {
-        var sizes = new long?[sources.Count];
-        var candidates = sources.Select((source, index) => (source, index))
-            .Where(entry => entry.source.SizeBytes <= 0 && MayProbe(entry.source, allowedOrigins, policy))
-            .Take(MAX_PROBES).ToList();
-        using var gate = new SemaphoreSlim(CONCURRENCY, CONCURRENCY);
+        var sizes = sources.Select(source => Math.Max(0, source.SizeBytes)).ToArray();
+        var unsized = sizes.Count(size => size == 0);
 
-        await Task.WhenAll(candidates.Select(async entry =>
+        return new ShardSizeProbeResult(0, 0, 0, unsized) { Sizes = sizes, Declared = sizes, Unsized = unsized };
+    }
+
+    #endregion
+
+    #region Tools
+
+    /// <summary>Draws <paramref name="count"/> of the candidates at random, each as likely as any other, and puts them in manifest order.</summary>
+    private static List<int> Draw(List<int> candidates, int count, Func<int, int> random)
+    {
+        for (var index = 0; index < count; index++)
         {
-            await gate.WaitAsync(cancellationToken);
-            try
-            {
-                sizes[entry.index] = await HeadAsync(entry.source, allowedOrigins, policy, client, cancellationToken);
-            }
-            finally
-            {
-                gate.Release();
-            }
-        }));
+            var pick = index + random(candidates.Count - index);
+            (candidates[index], candidates[pick]) = (candidates[pick], candidates[index]);
+        }
 
-        return sizes;
+        var drawn = candidates.GetRange(0, count);
+        drawn.Sort();
+        return drawn;
     }
 
     private static bool MayProbe(CorpusSourceData source, IReadOnlyCollection<string> allowedOrigins, ShardOriginPolicy policy)
@@ -110,15 +196,4 @@ public static class ShardSizeProbe
     }
 
     #endregion
-}
-
-/// <summary>What the probe learned.</summary>
-/// <param name="EstimatedBytes">Bytes of the unsized sources: the probed sizes plus the mean for the rest.</param>
-/// <param name="Probed">Sources whose size the origin gave.</param>
-/// <param name="Failed">Sources probed without an answer.</param>
-/// <param name="Unprobed">Unsized sources beyond the probe budget, estimated at the mean.</param>
-public sealed record ShardSizeProbeResult(long EstimatedBytes, int Probed, int Failed, int Unprobed)
-{
-    /// <summary>Every source's size as the estimate counts it, aligned with the sources: the manifest's, the origin's answer, or the mean of the answers (0 when there is none).</summary>
-    public IReadOnlyList<long> Sizes { get; init; } = [];
 }

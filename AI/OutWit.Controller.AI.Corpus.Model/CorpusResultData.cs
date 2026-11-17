@@ -8,7 +8,8 @@ namespace OutWit.Controller.AI.Corpus.Model;
 /// <summary>
 /// The product of one shard task: the verdict, the uploaded product and signature blobs, the
 /// content hash of the uncompressed product (the verification identity a re-execution must
-/// reproduce) and the statistics.
+/// reproduce) and the statistics. Results travel back inside a result package
+/// (<see cref="CorpusResultPackageData"/>), never as a return value of their own.
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only.
@@ -128,7 +129,7 @@ public sealed partial class CorpusResultData : ModelBase
     [MemoryPackOrder(11)]
     public string RuntimeTarget { get; set; } = "";
 
-    /// <summary>Shards the node processes at once (its cores, bounded by memory): the context of the processing time. 0 = not reported.</summary>
+    /// <summary>Not filled since Corpus 0.5.0: a result does not say how many shards its machine runs at once (its cores and memory are the machine's own). Kept for the wire layout; a result that fills it is dropped.</summary>
     [MemoryPackOrder(12)]
     public int Degree { get; set; }
 

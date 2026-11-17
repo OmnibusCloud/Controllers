@@ -8,20 +8,20 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Corpus.Variables;
 
-/// <summary>The tasks of a job — output of Corpus.Split, input to Grid.ForEach.</summary>
-[Variable("CorpusTaskCollection")]
+/// <summary>The task packages of a round — output of Corpus.Split, Corpus.Repairs and Corpus.Disputes, input to Grid.ForEach. References only: its size does not grow with the manifest beyond the most packages a round has.</summary>
+[Variable("CorpusTaskPackageCollection")]
 [MemoryPackable]
-public sealed partial class WitVariableCorpusTaskCollection : WitCollection<CorpusTaskData?>, IWitVariableFactory<WitVariableCorpusTaskCollection>
+public sealed partial class WitVariableCorpusTaskPackageCollection : WitCollection<CorpusTaskPackageData?>, IWitVariableFactory<WitVariableCorpusTaskPackageCollection>
 {
     #region Constructors
 
-    public WitVariableCorpusTaskCollection(string name)
+    public WitVariableCorpusTaskPackageCollection(string name)
         : base(name)
     {
     }
 
     [MemoryPackConstructor]
-    public WitVariableCorpusTaskCollection(string name, IReadOnlyList<CorpusTaskData?> value)
+    public WitVariableCorpusTaskPackageCollection(string name, IReadOnlyList<CorpusTaskPackageData?> value)
         : base(name, value)
     {
     }
@@ -36,7 +36,7 @@ public sealed partial class WitVariableCorpusTaskCollection : WitCollection<Corp
     /// <returns>True when the models are equal by value.</returns>
     public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
     {
-        if (modelBase is not WitVariableCorpusTaskCollection variable)
+        if (modelBase is not WitVariableCorpusTaskPackageCollection variable)
             return false;
 
         return base.Is(modelBase, tolerance)
@@ -45,13 +45,13 @@ public sealed partial class WitVariableCorpusTaskCollection : WitCollection<Corp
 
     /// <summary>Deep copy of the variable.</summary>
     /// <returns>The copy.</returns>
-    public override WitVariableCorpusTaskCollection Clone()
+    public override WitVariableCorpusTaskPackageCollection Clone()
     {
         var clonedItems = GetValue()?
-            .Select(x => (CorpusTaskData?)x?.Clone())
+            .Select(x => (CorpusTaskPackageData?)x?.Clone())
             .ToArray() ?? [];
 
-        return new WitVariableCorpusTaskCollection(Name, clonedItems);
+        return new WitVariableCorpusTaskPackageCollection(Name, clonedItems);
     }
 
     #endregion
@@ -61,9 +61,9 @@ public sealed partial class WitVariableCorpusTaskCollection : WitCollection<Corp
     /// <summary>Creates a variable of this type under a name.</summary>
     /// <param name="name">The variable name in the script's pool.</param>
     /// <returns>The new variable.</returns>
-    public static WitVariableCorpusTaskCollection Create(string name)
+    public static WitVariableCorpusTaskPackageCollection Create(string name)
     {
-        return new WitVariableCorpusTaskCollection(name);
+        return new WitVariableCorpusTaskPackageCollection(name);
     }
 
     #endregion

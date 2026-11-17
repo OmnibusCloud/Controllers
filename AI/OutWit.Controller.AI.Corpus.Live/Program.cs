@@ -130,7 +130,9 @@ public static class Program
         Console.WriteLine($"  completed in {result.Duration}");
         Console.WriteLine($"  well-formed : {report.WellFormed}");
         Console.WriteLine($"  tasks       : {report.TaskCount}");
-        Console.WriteLine($"  traffic     : {report.EstimatedTrafficBytes / BYTES_PER_MIB:F1} MB estimated");
+        Console.WriteLine($"  traffic     : {report.EstimatedTrafficBytes / BYTES_PER_MIB:F1} MB estimated (fetches {report.EstimatedFetchBytes / BYTES_PER_MIB:F1}, uploads {report.EstimatedUploadBytes / BYTES_PER_MIB:F1}, allowance {report.RetryAllowanceBytes / BYTES_PER_MIB:F1}); " +
+                          $"the nodes accept {report.FetchCeilingBytes / BYTES_PER_MIB:F1} MB for the fetches at the most" +
+                          (report.UnsizedSources > 0 ? $"; {report.UnsizedSources} shard(s) have no size and are held to the cap only" : ""));
         Console.WriteLine($"  storage     : {report.EstimatedStorageBytes / BYTES_PER_MIB:F1} MB estimated on the server" +
                           (report.StorageHeadroomBytes > 0 ? $", headroom {report.StorageHeadroomBytes / BYTES_PER_MIB:F1} MB" : ", no headroom stated") +
                           (report.StorageRetentionDays > 0 ? $", kept {report.StorageRetentionDays} day(s)" : ""));
@@ -290,7 +292,7 @@ public static class Program
         if (summary.TryGetProperty("output", out var output))
             Console.WriteLine($"             output: {output.GetString()}");
 
-        // What the results rest on (corpus-report/3): how many shards one machine alone answered
+        // What the results rest on (corpus-report/4): how many shards one machine alone answered
         // for, and everything that did not go the plain way.
         if (summary.TryGetProperty("single_execution", out var single))
             Console.WriteLine($"             trust: {single.GetInt32()} shard(s) rest on one execution; rejected results {summary.GetProperty("rejected_results").GetInt32()}, " +
@@ -324,7 +326,7 @@ public static class Program
                               ? $"; signatures compared {signatures.GetInt32()}, signature mismatches {summary.GetProperty("signature_mismatches").GetInt32()}"
                               : ""));
 
-        // corpus-integrity/5: what was dropped, what was sent out again, how each dispute ended.
+        // corpus-integrity/6: what was dropped, what was sent out again, how each dispute ended.
         if (summary.TryGetProperty("rejected_results", out var rejected))
         {
             var reasons = root.TryGetProperty("rejected", out var byReason)

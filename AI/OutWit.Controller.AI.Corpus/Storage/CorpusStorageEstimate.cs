@@ -27,11 +27,15 @@ public sealed class CorpusStorageEstimate : ModelBase
                && SignatureBytes.Is(other.SignatureBytes)
                && ReplicaBytes.Is(other.ReplicaBytes)
                && DocumentBytes.Is(other.DocumentBytes)
+               && PackageBytes.Is(other.PackageBytes)
+               && ResultPackageBytes.Is(other.ResultPackageBytes)
                && InputBytes.Is(other.InputBytes)
                && Documents.Is(other.Documents)
                && SampledShards.Is(other.SampledShards)
                && UnsizedSources.Is(other.UnsizedSources)
-               && ProductsKept.Is(other.ProductsKept);
+               && UnsizedAtCap.Is(other.UnsizedAtCap)
+               && ProductsKept.Is(other.ProductsKept)
+               && MeasuredFilter.Is(other.MeasuredFilter);
     }
 
     /// <summary>Deep copy.</summary>
@@ -44,11 +48,15 @@ public sealed class CorpusStorageEstimate : ModelBase
             SignatureBytes = SignatureBytes,
             ReplicaBytes = ReplicaBytes,
             DocumentBytes = DocumentBytes,
+            PackageBytes = PackageBytes,
+            ResultPackageBytes = ResultPackageBytes,
             InputBytes = InputBytes,
             Documents = Documents,
             SampledShards = SampledShards,
             UnsizedSources = UnsizedSources,
-            ProductsKept = ProductsKept
+            UnsizedAtCap = UnsizedAtCap,
+            ProductsKept = ProductsKept,
+            MeasuredFilter = MeasuredFilter
         };
     }
 
@@ -82,16 +90,32 @@ public sealed class CorpusStorageEstimate : ModelBase
     /// <summary>Shards that run twice at the job's sampling rate.</summary>
     public int SampledShards { get; init; }
 
-    /// <summary>Sources with no size known: they are not in the estimate.</summary>
+    /// <summary>The task packages and the result packages of every execution: the blobs the job's tasks and results travel in.</summary>
+    [ToString]
+    public long PackageBytes { get; init; }
+
+    /// <summary>Sources with no size known: counted at the cap when <see cref="UnsizedAtCap"/>, left out otherwise.</summary>
     public int UnsizedSources { get; init; }
+
+    /// <summary>Whether the sources with no size known are in the estimate, each at the cap the nodes hold a shard to.</summary>
+    public bool UnsizedAtCap { get; init; }
+
+    /// <summary>False when the quality filter is on under thresholds the ratios were not measured with (a manifest's own, a language pack's own): the estimate then takes the unfiltered ratios.</summary>
+    public bool MeasuredFilter { get; init; } = true;
 
     /// <summary>Whether the run keeps its text and signatures on the server; false for statistics and hashes only.</summary>
     [ToString]
     public bool ProductsKept { get; init; } = true;
 
+    /// <summary>Of <see cref="PackageBytes"/>, the result packages: the part the nodes upload (the task packages are the server's).</summary>
+    public long ResultPackageBytes { get; init; }
+
+    /// <summary>What the nodes upload: the products of every execution (text, signatures, the second copies of the sampled shards) and the result packages. The server writes the task packages and the documents itself.</summary>
+    public long UploadBytes => TextBytes + SignatureBytes + ReplicaBytes + ResultPackageBytes;
+
     /// <summary>Everything together.</summary>
     [ToString]
-    public long TotalBytes => TextBytes + SignatureBytes + ReplicaBytes + DocumentBytes + InputBytes;
+    public long TotalBytes => TextBytes + SignatureBytes + ReplicaBytes + DocumentBytes + PackageBytes + InputBytes;
 
     #endregion
 }

@@ -29,7 +29,7 @@ public static class CorpusPoolProbe
         if (nodes == null)
             return null;
 
-        var compatible = await nodes.GetCompatibleNodes<WitActivityCorpusProcessShard>(WitProcessingOptions.Default);
+        var compatible = await nodes.GetCompatibleNodes<WitActivityCorpusProcessPackage>(WitProcessingOptions.Default);
 
         return Summarize(compatible.Select(node => node.BenchmarkResult));
     }
@@ -42,7 +42,7 @@ public static class CorpusPoolProbe
         if (nodes == null)
             return null;
 
-        var compatible = await nodes.GetCompatibleNodes<WitActivityCorpusProcessShard>(WitProcessingOptions.Default);
+        var compatible = await nodes.GetCompatibleNodes<WitActivityCorpusProcessPackage>(WitProcessingOptions.Default);
 
         return compatible.Select(node => new CorpusShareNode(node.BenchmarkResult.Rate, node.BenchmarkResult.Iterations > 0)).ToList();
     }

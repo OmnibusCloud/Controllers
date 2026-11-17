@@ -9,8 +9,9 @@ namespace OutWit.Controller.AI.Corpus.Model;
 /// <summary>
 /// One node task: one shard through one pipeline. The task carries the origins it may fetch
 /// from and the byte cap, re-checked on the node before any request — the node never
-/// fetches what the task did not declare — the ticket its result must return, and the controller
-/// version the job runs on.
+/// fetches what the task did not declare — the ticket its result must return, the controller
+/// version the job runs on, and the size the shard was declared with. Tasks travel to a node inside
+/// a task package (<see cref="CorpusTaskPackageData"/>), never as a parameter of their own.
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only.
@@ -33,7 +34,8 @@ public sealed partial class CorpusTaskData : ModelBase
                && AllowedOrigins.Is(other.AllowedOrigins)
                && MaxShardBytes.Is(other.MaxShardBytes)
                && Ticket.Is(other.Ticket)
-               && RequiredControllerVersion.Is(other.RequiredControllerVersion);
+               && RequiredControllerVersion.Is(other.RequiredControllerVersion)
+               && DeclaredBytes.Is(other.DeclaredBytes);
     }
 
     /// <summary>Deep copy.</summary>
@@ -48,7 +50,8 @@ public sealed partial class CorpusTaskData : ModelBase
             AllowedOrigins = [.. AllowedOrigins],
             MaxShardBytes = MaxShardBytes,
             Ticket = Ticket,
-            RequiredControllerVersion = RequiredControllerVersion
+            RequiredControllerVersion = RequiredControllerVersion,
+            DeclaredBytes = DeclaredBytes
         };
     }
 
@@ -94,6 +97,17 @@ public sealed partial class CorpusTaskData : ModelBase
     [ToString]
     [MemoryPackOrder(6)]
     public string RequiredControllerVersion { get; set; } = "";
+
+    /// <summary>
+    /// The shard's size on the wire as a claim: what the manifest declares, or what the origin
+    /// answered when the server asked. The node holds the shard to it (with a small slack) and
+    /// answers <see cref="CorpusShardVerdict.Oversized"/> for one far above it, so the traffic a
+    /// preflight promises is what the nodes accept, whoever wrote the manifest. 0 = the shard has
+    /// no size of its own (its work estimate is a mean); it is held to <see cref="MaxShardBytes"/> only.
+    /// </summary>
+    [ToString]
+    [MemoryPackOrder(7)]
+    public long DeclaredBytes { get; set; }
 
     #endregion
 }

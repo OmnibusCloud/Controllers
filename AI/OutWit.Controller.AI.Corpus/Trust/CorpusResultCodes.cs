@@ -48,6 +48,9 @@ public static class CorpusResultCodes
     /// <summary>Oversized: the shard unpacks to more than a shard may (a decompression bomb).</summary>
     public const string OVERSIZED_UNPACKED = "oversized_unpacked";
 
+    /// <summary>Oversized: more bytes on the wire than the size the manifest declares for the shard (or the origin answered when the server asked) and its slack: the manifest promised less traffic than the shard takes.</summary>
+    public const string OVERSIZED_DECLARED = "oversized_declared";
+
     /// <summary>Malformed: the bytes are not a WARC file where a record should start.</summary>
     public const string NOT_WARC = "not_warc";
 
@@ -90,11 +93,14 @@ public static class CorpusResultCodes
     /// <summary>NodeFault: anything else that went wrong inside the node.</summary>
     public const string FAULT_INTERNAL = "internal";
 
+    /// <summary>NodeFault: the task package did not arrive on the node, or arrived as other bytes than its reference names.</summary>
+    public const string FAULT_TASKS = "tasks";
+
     /// <summary>Every code a <see cref="CorpusShardVerdict.NodeFault"/> may carry.</summary>
     public static readonly IReadOnlyList<string> FAULTS =
     [
         FAULT_DISK, FAULT_DISK_SPACE, FAULT_NETWORK, FAULT_LANGUAGE_MODEL, FAULT_PDF_SANDBOX,
-        FAULT_PDF_BACKSTOP, FAULT_UPLOAD, FAULT_MEMORY, FAULT_INTERNAL
+        FAULT_PDF_BACKSTOP, FAULT_UPLOAD, FAULT_MEMORY, FAULT_INTERNAL, FAULT_TASKS
     ];
 
     private static readonly IReadOnlySet<string> FAULT_SET = new HashSet<string>(FAULTS, StringComparer.Ordinal);
@@ -104,7 +110,7 @@ public static class CorpusResultCodes
         [CorpusShardVerdict.Completed] = Set("", NOTE_TRUNCATED),
         [CorpusShardVerdict.OriginRefused] = Set(ORIGIN_NOT_ALLOWED, ORIGIN_NOT_LISTED, ORIGIN_ADDRESS, ORIGIN_REDIRECT),
         [CorpusShardVerdict.FetchFailed] = Set(HASH_MISMATCH, BODY_TRUNCATED),
-        [CorpusShardVerdict.Oversized] = Set(OVERSIZED, OVERSIZED_UNPACKED),
+        [CorpusShardVerdict.Oversized] = Set(OVERSIZED, OVERSIZED_UNPACKED, OVERSIZED_DECLARED),
         [CorpusShardVerdict.Malformed] = Set(NOT_WARC, BAD_COMPRESSION),
         [CorpusShardVerdict.PipelineUnavailable] = Set(NO_LANGUAGE_MODEL, LANGUAGE_MODEL_REFUSED),
         [CorpusShardVerdict.Failed] = Set(TASK_INVALID),

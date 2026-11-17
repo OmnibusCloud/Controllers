@@ -9,7 +9,7 @@ using OutWit.Controller.AI.Corpus.Trust;
 namespace OutWit.Controller.AI.Corpus.Tests.Reports;
 
 /// <summary>
-/// The integrity document (<c>corpus-integrity/5</c>): the first round's pairs compared field by
+/// The integrity document (<c>corpus-integrity/6</c>): the first round's pairs compared field by
 /// field, signatures a mismatch of their own kind, a pair with a side that is no result counted
 /// apart, the disputes and what settled them, the shards without a result, the values dropped; no
 /// machine named.
@@ -38,7 +38,7 @@ public sealed class CorpusIntegrityWriterTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(document.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/5"));
+            Assert.That(document.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/6"));
             Assert.That(summary.GetProperty("shards").GetInt32(), Is.EqualTo(4));
             Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(2), "the shard executed once makes no pair");
             Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));

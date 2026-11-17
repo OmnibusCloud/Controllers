@@ -9,8 +9,8 @@ namespace OutWit.Controller.AI.Corpus.Activities;
 
 /// <summary>
 /// Host-side: the shards whose copies disagreed (or that came back more often than they were sent
-/// out) as tasks for the dispute round, each under a new ticket; the script runs them on three
-/// machines (<c>Grid.Replicas(3)</c>). Empty when no copies disagreed.
+/// out) as task packages for the dispute round, each shard and each package under a new ticket;
+/// the script runs them on three machines (<c>Grid.Replicas(3)</c>). Empty when no copies disagreed.
 /// </summary>
 [Activity("Corpus.Disputes")]
 [MemoryPackable]

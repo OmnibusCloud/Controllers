@@ -4,9 +4,10 @@ using OutWit.Controller.AI.Corpus.Warc;
 namespace OutWit.Controller.AI.Corpus.Shards;
 
 /// <summary>
-/// What bounds the reading of one shard, whatever its bytes say: the largest record held in
-/// memory, by format, and the most the file may unpack to. Each is a function of the shard alone,
-/// so a shard past a limit ends the same way on every node.
+/// What bounds the fetching and the reading of one shard, whatever its bytes say: the most it
+/// may be on the wire (the cap, and the size it was declared with), the largest record held in
+/// memory, by format, and the most the file may unpack to. Each is a function of the shard and
+/// its task alone, so a shard past a limit ends the same way on every node.
 /// </summary>
 public static class ShardLimits
 {
@@ -31,6 +32,17 @@ public static class ShardLimits
     /// <summary>What no shard may unpack past: sixteen times the 1 GiB a shard may be on the wire.</summary>
     public const long MAX_UNPACKED_BYTES = 16L * 1024 * 1024 * 1024;
 
+    /// <summary>
+    /// The slack a declared size has, as a divisor of it: a shard may be an eighth larger than
+    /// the manifest declares (or the origin answered) before a node refuses it. A manifest's
+    /// size is often an estimate; a shard several times its declaration is a manifest that
+    /// promised the contributors less traffic than it asks of them.
+    /// </summary>
+    public const int DECLARED_SLACK_DIVISOR = 8;
+
+    /// <summary>The least slack a declared size has: a mebibyte, so a declaration of a few kilobytes is not held to the byte.</summary>
+    public const long DECLARED_SLACK_MIN_BYTES = 1024 * 1024;
+
     #endregion
 
     #region Functions
@@ -42,6 +54,38 @@ public static class ShardLimits
     {
         var byRatio = Math.Max(0, packedBytes) > MAX_UNPACKED_BYTES / UNPACK_RATIO ? MAX_UNPACKED_BYTES : Math.Max(0, packedBytes) * UNPACK_RATIO;
         return Math.Clamp(byRatio, MIN_UNPACKED_BYTES, MAX_UNPACKED_BYTES);
+    }
+
+    /// <summary>The most bytes a shard of a declared size may be on the wire: the declaration and its slack.</summary>
+    /// <param name="declaredBytes">What the manifest declares or the origin answered; 0 or less = the shard has no size of its own.</param>
+    /// <returns>The bound; <see cref="long.MaxValue"/> for a shard with no size of its own (the cap alone holds it).</returns>
+    public static long DeclaredCap(long declaredBytes)
+    {
+        if (declaredBytes <= 0)
+            return long.MaxValue;
+
+        var slack = Math.Max(declaredBytes / DECLARED_SLACK_DIVISOR, DECLARED_SLACK_MIN_BYTES);
+        return declaredBytes > long.MaxValue - slack ? long.MaxValue : declaredBytes + slack;
+    }
+
+    /// <summary>
+    /// The most bytes a node accepts for a task's shard: the node's own ceiling and the task's cap
+    /// (<see cref="Manifests.CorpusTaskPlanner.NodeShardCap"/>), and below them the size the shard
+    /// was declared with and its slack. The server holds a result to the same number.
+    /// </summary>
+    /// <param name="task">The task.</param>
+    /// <returns>The bound, 1 byte or more.</returns>
+    public static long FetchCap(CorpusTaskData task)
+    {
+        return Math.Min(Manifests.CorpusTaskPlanner.NodeShardCap(task.MaxShardBytes), DeclaredCap(task.DeclaredBytes));
+    }
+
+    /// <summary>Whether a task's shard is held to its declared size rather than to the cap: a shard past the bound is then <c>oversized_declared</c>.</summary>
+    /// <param name="task">The task.</param>
+    /// <returns>True when the declared size and its slack are below the cap.</returns>
+    public static bool DeclaredBinds(CorpusTaskData task)
+    {
+        return DeclaredCap(task.DeclaredBytes) < Manifests.CorpusTaskPlanner.NodeShardCap(task.MaxShardBytes);
     }
 
     /// <summary>The largest record of a shard of the given format that is held in memory.</summary>

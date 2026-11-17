@@ -26,7 +26,10 @@ public sealed record CorpusLanguageModelFacts(string Format, string Name, IReadO
         try
         {
             var model = LanguageModel.FromBytes(bytes);
-            return new CorpusLanguageModelFacts(model.Format, model.Name, model.Languages, model.Profiles.Count - model.Languages.Count, null);
+            return new CorpusLanguageModelFacts(model.Format, model.Name, model.Languages, model.Profiles.Count - model.Languages.Count, null)
+            {
+                MeasuredThresholds = HasMeasuredThresholds(model, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)))
+            };
         }
         catch (FormatException exception)
         {
@@ -45,6 +48,37 @@ public sealed record CorpusLanguageModelFacts(string Format, string Name, IReadO
 
         return Read(File.ReadAllBytes(path));
     }
+
+    /// <summary>
+    /// Whether a model judges its documents by rule data the controller is proven with: a WITLID1
+    /// model always does (it carries none and gets the controller's own), the reference pack does
+    /// (the pack the storage ratios hold for, known by its hash), and any other pack does when the
+    /// rule data of every language it supports is the controller's own, value by value.
+    /// </summary>
+    private static bool HasMeasuredThresholds(LanguageModel model, string sha256)
+    {
+        if (model.Format == LanguageModelFormat.WITLID1 || string.Equals(sha256, Diagnostics.CorpusReferenceLanguageModel.SHA256, StringComparison.Ordinal))
+            return true;
+
+        foreach (var code in model.Languages)
+        {
+            if (!model.Rules.TryGet(code, out var rules) || !LanguageRuleSet.Witlid1.TryGet(code, out var reference) || !rules.SameAs(reference))
+                return false;
+        }
+
+        return true;
+    }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// Whether the model's quality thresholds are ones the storage estimate holds for (the
+    /// controller's own rule data, or the reference pack's). A pack with rule data of its own may
+    /// keep more, or less, than was measured: the estimate then counts it as an unfiltered run.
+    /// </summary>
+    public bool MeasuredThresholds { get; init; } = true;
 
     #endregion
 }

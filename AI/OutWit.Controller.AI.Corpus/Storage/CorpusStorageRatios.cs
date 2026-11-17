@@ -65,6 +65,27 @@ public static class CorpusStorageRatios
     public const int DEDUP_BYTES_PER_SHARD = 512;
 
     /// <summary>
+    /// One shard's task in a task package (measured 93 bytes: a Common Crawl WARC URL with its
+    /// published hash, a ticket and the frame's head, compressed with its neighbours; a guard
+    /// test holds packages of 1, 98 and 1,024 such tasks to it).
+    /// </summary>
+    public const int TASK_PACKAGE_BYTES_PER_SHARD = 128;
+
+    /// <summary>
+    /// One shard's result in a result package (measured 568 bytes with every drop rule, sixteen
+    /// languages, the unsupported breakdown and the PDF counts, under hashes, blob ids and a
+    /// ticket that do not compress; the same guard test holds it).
+    /// </summary>
+    public const int RESULT_PACKAGE_BYTES_PER_SHARD = 768;
+
+    /// <summary>
+    /// A package blob's own bytes: its header and the frame of what its tasks share (measured
+    /// about 350 bytes for a pipeline with sixteen target languages; a package of one shard is
+    /// 444 bytes of tasks and 1,196 of results).
+    /// </summary>
+    public const int PACKAGE_BASE_BYTES = 1024;
+
+    /// <summary>
     /// One document in the dedup document: its bit in the keep mask and its share of the
     /// cluster listing (measured 5.6 bytes over 203,462 documents with 11.7 % of them in
     /// clusters; a clustered document costs about 46 bytes, so 16 covers a third clustered).
@@ -88,14 +109,42 @@ public static class CorpusStorageRatios
 
     #region Functions
 
-    /// <summary>The row for a format under a pipeline.</summary>
+    /// <summary>
+    /// The row for a format under a pipeline. The rows with the quality filter on were measured
+    /// with the thresholds the controller is proven with; a run under other thresholds — a
+    /// manifest's <c>pipeline.quality</c>, a language pack with rule data of its own — may keep
+    /// anything up to what an unfiltered run keeps, so it takes the unfiltered row.
+    /// </summary>
     /// <param name="format">The shard's format.</param>
-    /// <param name="pipeline">The pipeline (its line stage and quality filter switches).</param>
+    /// <param name="pipeline">The pipeline (its line stage and quality filter switches, and its threshold overrides).</param>
+    /// <param name="measuredThresholds">Whether the language model's rule data is the one the table was measured with (true when the pipeline uses no model).</param>
     /// <returns>The row; an unknown format takes the largest row of all.</returns>
-    public static CorpusStorageRatio For(CorpusSourceFormat format, CorpusPipelineData pipeline)
+    public static CorpusStorageRatio For(CorpusSourceFormat format, CorpusPipelineData pipeline, bool measuredThresholds = true)
     {
-        return TABLE.FirstOrDefault(row => row.Format == format && row.CleanLines == pipeline.CleanLines && row.FilterQuality == pipeline.FilterQuality)
+        var filtered = FiltersAsMeasured(pipeline, measuredThresholds);
+
+        return TABLE.FirstOrDefault(row => row.Format == format && row.CleanLines == pipeline.CleanLines && row.FilterQuality == filtered)
                ?? TABLE.OrderByDescending(row => row.TextPerByte).First();
+    }
+
+    /// <summary>Whether a pipeline's quality filter runs with the thresholds the table was measured with: the filter is on, the manifest sets no threshold of its own, and the language model's rule data is the measured one.</summary>
+    /// <param name="pipeline">The pipeline.</param>
+    /// <param name="measuredThresholds">Whether the language model's rule data is the one the table was measured with.</param>
+    /// <returns>True when the filtered rows hold for the pipeline.</returns>
+    public static bool FiltersAsMeasured(CorpusPipelineData pipeline, bool measuredThresholds = true)
+    {
+        return pipeline.FilterQuality && measuredThresholds && !OverridesThresholds(pipeline.Quality);
+    }
+
+    /// <summary>Whether a manifest's <c>pipeline.quality</c> sets a threshold (the curly-bracket switch only ever drops more, and is no override).</summary>
+    /// <param name="quality">The pipeline's thresholds; null when the manifest gives none.</param>
+    /// <returns>True when any threshold is set.</returns>
+    public static bool OverridesThresholds(CorpusQualityData? quality)
+    {
+        return quality != null
+               && (quality.MinWords > 0 || quality.MaxWords > 0 || quality.MinMeanWordLength > 0 || quality.MaxMeanWordLength > 0
+                   || quality.MaxSymbolToWordRatio > 0 || quality.MaxBulletLineRatio > 0 || quality.MaxEllipsisLineRatio > 0
+                   || quality.MinAlphabeticWordRatio > 0 || quality.MaxDuplicateLineRatio > 0 || quality.MaxDuplicateLineCharRatio > 0);
     }
 
     private static CorpusStorageRatio Row(CorpusSourceFormat format, bool cleanLines, bool filterQuality, double textPerByte, double documentsPerMib)

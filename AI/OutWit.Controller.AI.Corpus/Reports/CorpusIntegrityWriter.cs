@@ -27,7 +27,10 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// under one ticket than a round takes (<c>surplus</c>). Every reason is written, 0 included.</item>
 /// </list>
 /// A shard in none of these lists was run once, and its result is one machine's word
-/// (<c>single_execution</c> says how many). Schema <c>corpus-integrity/5</c>; <c>/4</c> let a
+/// (<c>single_execution</c> says how many). Schema <c>corpus-integrity/6</c>: the shape of
+/// <c>/5</c> with one more fault code (<c>tasks</c>: a node's task package did not arrive) and a
+/// wider <c>surplus</c> (an answer beyond the ones a round opens for a package, two results for
+/// one shard in one answer), since tasks and results travel in packages; <c>/4</c> let a
 /// result opt out of the comparison by the version it claimed and chose the execution that stood
 /// for a shard by its own content hash. <c>version_skew</c> is kept for readers of <c>/4</c> and
 /// is always 0: a result of another version is dropped (<c>rejected</c>, reason <c>version</c>).
@@ -37,7 +40,7 @@ public static class CorpusIntegrityWriter
     #region Constants
 
     /// <summary>The document schema name.</summary>
-    public const string SCHEMA = "corpus-integrity/5";
+    public const string SCHEMA = "corpus-integrity/6";
 
     /// <summary>A compared pair's signatures: both sides made the same.</summary>
     public const string SIGNATURES_MATCH = "match";
@@ -47,6 +50,9 @@ public static class CorpusIntegrityWriter
 
     /// <summary>A compared pair's signatures: neither side made any (the pipeline does not sign); nothing to compare.</summary>
     public const string SIGNATURES_NONE = "none";
+
+    /// <summary>The bytes the writer holds before it hands them to the stream.</summary>
+    private const int FLUSH_BYTES = 1 << 16;
 
     private const string KIND_EXECUTION = "execution";
     private const string KIND_FAULT = "fault";
@@ -61,65 +67,118 @@ public static class CorpusIntegrityWriter
     /// <returns>The JSON document bytes.</returns>
     public static byte[] Write(CorpusLedger ledger)
     {
-        var pairs = ledger.Shards.Where(shard => shard.First.Count >= 2).Select(Pair).ToList();
-        var disputes = ledger.Shards.Where(shard => shard.NeedsDispute).ToList();
-        var unanswered = ledger.Shards.Where(shard => shard.Outcome == CorpusShardOutcome.NoResult).ToList();
-
-        var compared = pairs.Count(pair => pair.Compared);
-        var mismatches = pairs.Count(pair => pair.Compared && !pair.Match);
-
         using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
+        Write(ledger, stream);
+        return stream.ToArray();
+    }
+
+    /// <summary>
+    /// Writes the ledger's account to a stream. The run is read once for the summary and once for
+    /// each of the three lists (pairs, disputes, shards without a result), every record written
+    /// as its shard is judged: the lists grow with the run, and none of them is held.
+    /// </summary>
+    /// <param name="ledger">The server's account of the run.</param>
+    /// <param name="stream">Receives the UTF-8 JSON.</param>
+    public static void Write(CorpusLedger ledger, Stream stream)
+    {
+        int shards = 0, sampled = 0, compared = 0, mismatches = 0, signaturesCompared = 0, signatureMismatches = 0, unanswered = 0;
+        foreach (var shard in ledger.Shards)
         {
-            writer.WriteStartObject();
-            writer.WriteString("schema", SCHEMA);
-            writer.WriteString("controller", ledger.ControllerVersion);
+            shards++;
+            if (shard.Outcome == CorpusShardOutcome.NoResult)
+                unanswered++;
 
-            writer.WriteStartObject("summary");
-            writer.WriteNumber("shards", ledger.Shards.Count);
-            writer.WriteNumber("single_execution", ledger.SingleExecutions);
-            writer.WriteNumber("sampled", pairs.Count);
-            writer.WriteNumber("compared", compared);
-            writer.WriteNumber("version_skew", 0);
-            writer.WriteNumber("incomplete", pairs.Count(pair => !pair.Compared));
-            writer.WriteNumber("mismatches", mismatches);
-            writer.WriteNumber("mismatch_rate", compared == 0 ? 0.0 : (double)mismatches / compared);
-            writer.WriteNumber("signatures_compared", pairs.Count(pair => pair.Compared && pair.Signatures != SIGNATURES_NONE));
-            writer.WriteNumber("signature_mismatches", pairs.Count(pair => pair.Compared && pair.Signatures == SIGNATURES_DIFFER));
-            writer.WriteNumber("rejected_results", ledger.RejectedResults);
-            writer.WriteNumber("node_faults", ledger.NodeFaults);
-            writer.WriteNumber("repairs", ledger.Repairs);
-            writer.WriteNumber("repaired", ledger.Repaired);
-            writer.WriteNumber("no_result", unanswered.Count);
-            writer.WriteNumber("disputes", ledger.Disputes);
-            writer.WriteNumber("disputes_resolved", ledger.DisputesResolved);
-            writer.WriteNumber("disputed", ledger.Disputes - ledger.DisputesResolved);
-            writer.WriteEndObject();
+            if (shard.First.Count < 2)
+                continue;
 
-            writer.WriteStartObject("rejected");
-            foreach (var reason in CorpusLedger.REJECTION_REASONS)
-                writer.WriteNumber(reason, ledger.Rejected.GetValueOrDefault(reason));
-            writer.WriteEndObject();
+            var pair = Pair(shard);
+            sampled++;
+            if (!pair.Compared)
+                continue;
 
-            writer.WriteStartArray("pairs");
-            foreach (var pair in pairs)
-                WritePair(writer, pair);
-            writer.WriteEndArray();
-
-            writer.WriteStartArray("disputes");
-            foreach (var shard in disputes)
-                WriteDispute(writer, shard);
-            writer.WriteEndArray();
-
-            writer.WriteStartArray("no_result");
-            foreach (var shard in unanswered)
-                WriteNoResult(writer, shard);
-            writer.WriteEndArray();
-
-            writer.WriteEndObject();
+            compared++;
+            if (!pair.Match)
+                mismatches++;
+            if (pair.Signatures != SIGNATURES_NONE)
+                signaturesCompared++;
+            if (pair.Signatures == SIGNATURES_DIFFER)
+                signatureMismatches++;
         }
 
-        return stream.ToArray();
+        using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
+
+        writer.WriteStartObject();
+        writer.WriteString("schema", SCHEMA);
+        writer.WriteString("controller", ledger.ControllerVersion);
+
+        writer.WriteStartObject("summary");
+        writer.WriteNumber("shards", shards);
+        writer.WriteNumber("single_execution", ledger.SingleExecutions);
+        writer.WriteNumber("sampled", sampled);
+        writer.WriteNumber("compared", compared);
+        writer.WriteNumber("version_skew", 0);
+        writer.WriteNumber("incomplete", sampled - compared);
+        writer.WriteNumber("mismatches", mismatches);
+        writer.WriteNumber("mismatch_rate", compared == 0 ? 0.0 : (double)mismatches / compared);
+        writer.WriteNumber("signatures_compared", signaturesCompared);
+        writer.WriteNumber("signature_mismatches", signatureMismatches);
+        writer.WriteNumber("rejected_results", ledger.RejectedResults);
+        writer.WriteNumber("node_faults", ledger.NodeFaults);
+        writer.WriteNumber("repairs", ledger.Repairs);
+        writer.WriteNumber("repaired", ledger.Repaired);
+        writer.WriteNumber("no_result", unanswered);
+        writer.WriteNumber("disputes", ledger.Disputes);
+        writer.WriteNumber("disputes_resolved", ledger.DisputesResolved);
+        writer.WriteNumber("disputed", ledger.Disputes - ledger.DisputesResolved);
+        writer.WriteEndObject();
+
+        writer.WriteStartObject("rejected");
+        foreach (var reason in CorpusLedger.REJECTION_REASONS)
+            writer.WriteNumber(reason, ledger.Rejected.GetValueOrDefault(reason));
+        writer.WriteEndObject();
+
+        writer.WriteStartArray("pairs");
+        foreach (var shard in ledger.Shards)
+        {
+            if (shard.First.Count >= 2)
+                WritePair(writer, Pair(shard));
+
+            Flush(writer);
+        }
+
+        writer.WriteEndArray();
+
+        // A run without a dispute and without a shard left unanswered is not read again for them.
+        writer.WriteStartArray("disputes");
+        if (ledger.Disputes > 0)
+        {
+            foreach (var shard in ledger.Shards)
+            {
+                if (shard.NeedsDispute)
+                    WriteDispute(writer, shard);
+
+                Flush(writer);
+            }
+        }
+
+        writer.WriteEndArray();
+
+        writer.WriteStartArray("no_result");
+        if (unanswered > 0)
+        {
+            foreach (var shard in ledger.Shards)
+            {
+                if (shard.Outcome == CorpusShardOutcome.NoResult)
+                    WriteNoResult(writer, shard);
+
+                Flush(writer);
+            }
+        }
+
+        writer.WriteEndArray();
+
+        writer.WriteEndObject();
+        writer.Flush();
     }
 
     /// <summary>The fields two results of one shard disagree on; empty when they agree.</summary>
@@ -129,6 +188,13 @@ public static class CorpusIntegrityWriter
     public static List<string> Differences(CorpusResultData primary, CorpusResultData replica)
     {
         return CorpusLedger.Differences(primary, replica);
+    }
+
+    /// <summary>Hands what is written to the stream once it is more than a buffer's worth.</summary>
+    private static void Flush(Utf8JsonWriter writer)
+    {
+        if (writer.BytesPending > FLUSH_BYTES)
+            writer.Flush();
     }
 
     private static PairRecord Pair(CorpusLedgerShard shard)

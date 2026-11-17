@@ -33,7 +33,9 @@ public sealed class CorpusTaskPlannerTests
             Assert.That(plan.Tasks[0].AllowedOrigins, Is.EqualTo(new[] { "h" }));
             Assert.That(plan.Tasks[0].Pipeline!.LanguageModelBlobId, Is.EqualTo(modelBlob));
             Assert.That(plan.Tasks[0].Pipeline!.LanguageModelSha256, Is.EqualTo(MODEL_SHA));
-            Assert.That(ReferenceEquals(plan.Tasks[0].Pipeline, plan.Tasks[1].Pipeline), Is.False, "each task owns its pipeline copy");
+            Assert.That(plan.Tasks[0].Pipeline, Is.SameAs(plan.Tasks[1].Pipeline), "the pipeline is the job's: one for every task, written once into a package (audit M-5: every task repeated it)");
+            Assert.That(plan.Tasks[0].Pipeline, Is.SameAs(plan.Pipeline));
+            Assert.That(plan.Tasks[0].AllowedOrigins, Is.SameAs(plan.Tasks[1].AllowedOrigins));
             Assert.That(plan.EstimatedTrafficBytes, Is.Zero, "no sizes in the manifest");
         });
     }

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Tests.Mock;
 using OutWit.Engine.Interfaces;
 using OutWit.Engine.Sdk;
@@ -8,9 +9,11 @@ using OutWit.Engine.Sdk;
 namespace OutWit.Controller.AI.Corpus.Tests.Scripts;
 
 /// <summary>
-/// The distributed test rig for the bundled scripts: the engine SDK host with the staged
-/// controllers, in-process mock nodes, a file-backed blob service, and a loopback origin that
-/// serves the golden shards — the "nodes" really fetch over HTTP and run the pipeline.
+/// The distributed test rig for the bundled scripts: the engine SDK host with the modules the rig
+/// names (<see cref="CorpusRigModules"/>: the controller under test and what its scripts call,
+/// each checked to be this build's, and nothing else that happens to be staged), in-process mock
+/// nodes, a file-backed blob service, and a loopback origin that serves the golden shards — the
+/// "nodes" really fetch over HTTP and run the pipeline.
 /// </summary>
 public abstract class CorpusScriptTestBase
 {
@@ -25,26 +28,22 @@ public abstract class CorpusScriptTestBase
     [OneTimeSetUp]
     public void ScriptBaseSetUp()
     {
-        var solutionRoot = FindSolutionRoot();
-        if (solutionRoot == null)
-            Assert.Ignore("Solution root not found");
+        SolutionRoot = FindSolutionRoot() ?? throw new InvalidOperationException("The rig cannot find the solution root (OutWit.slnx) above the test folder.");
 
-        SolutionRoot = solutionRoot;
-
-        var controllersPath = FindControllersPath();
-        if (controllersPath == null)
-            Assert.Ignore("@Controllers not found");
+        // A named set, each module held to this build: a missing, mixed or foreign module fails the
+        // fixture by name instead of being skipped or loaded in silence.
+        var modules = CorpusRigModules.Folder;
 
         m_blobStoragePath = Path.Combine(Path.GetTempPath(), $"witai_corpus_e2e_{Guid.NewGuid():N}");
         BlobService = new CorpusTestBlobService(Path.Combine(m_blobStoragePath, "blobs"));
         Origin = new CorpusTestOrigin(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures"));
 
         var tempStorage = new WitTempStorageDefault(Path.Combine(m_blobStoragePath, "temp"));
-        NodesManager = new CorpusTestNodesManager(WitEngineNodeSdk.Instance);
+        NodesManager = new CorpusTestNodesManager(WitEngineNodeSdk.Instance, BlobService, Nodes);
 
         WitEngineNodeSdk.Instance.Reload(
             useIsolatedContext: false,
-            moduleFolder: controllersPath,
+            moduleFolder: modules,
             configureServices: services =>
             {
                 services.AddSingleton<IWitBlobService>(BlobService);
@@ -55,7 +54,7 @@ public abstract class CorpusScriptTestBase
         Engine.Reload(
             useIsolatedContext: false,
             logger: null,
-            moduleFolder: controllersPath,
+            moduleFolder: modules,
             configureServices: services =>
             {
                 services.AddSingleton<IWitBlobService>(BlobService);
@@ -77,14 +76,10 @@ public abstract class CorpusScriptTestBase
 
     #region Tools
 
-    /// <summary>Reads a bundled script by file name, or ignores the fixture when it is missing.</summary>
+    /// <summary>Reads a bundled script by file name; a script that is missing fails the fixture.</summary>
     protected string LoadScript(string fileName)
     {
-        var path = Path.Combine(SolutionRoot, "AI", "OutWit.Controller.AI.Corpus", "Scripts", fileName);
-        if (!File.Exists(path))
-            Assert.Ignore($"{fileName} not found at {path}");
-
-        return File.ReadAllText(path);
+        return File.ReadAllText(Path.Combine(SolutionRoot, "AI", "OutWit.Controller.AI.Corpus", "Scripts", fileName));
     }
 
     protected async Task<Guid> UploadAsync(string text, string name)
@@ -105,6 +100,18 @@ public abstract class CorpusScriptTestBase
     protected async Task<JsonDocument> ReadJsonAsync(Guid blobId)
     {
         return JsonDocument.Parse(await ReadBytesAsync(blobId));
+    }
+
+    /// <summary>The tasks behind a job variable that holds task packages: the blobs are opened and read.</summary>
+    protected List<CorpusTaskData> TasksOf(object? packages)
+    {
+        return CorpusTestPackages.Tasks(BlobService, packages);
+    }
+
+    /// <summary>The results behind a job variable that holds answers: the blobs are opened and read.</summary>
+    protected List<CorpusResultData> ResultsOf(object? answers)
+    {
+        return CorpusTestPackages.Results(BlobService, answers);
     }
 
     /// <summary>What a job's status says, all of it: the result and the message of the job and of every step under it (a status's own ToString has no message).</summary>
@@ -144,30 +151,12 @@ public abstract class CorpusScriptTestBase
         return null;
     }
 
-    private static string? FindControllersPath()
-    {
-        // The staged modules live under @Controllers/<Configuration> at the solution root; the
-        // configuration is the one this test assembly was built with (Release in CI).
-        var configuration = typeof(CorpusScriptTestBase).Assembly
-            .GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), false)
-            .OfType<System.Reflection.AssemblyConfigurationAttribute>()
-            .FirstOrDefault()?.Configuration ?? "Debug";
-
-        var dir = AppContext.BaseDirectory;
-        while (dir != null)
-        {
-            var candidate = Path.Combine(dir, "@Controllers", configuration);
-            if (Directory.Exists(candidate))
-                return candidate;
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        return null;
-    }
-
     #endregion
 
     #region Properties
+
+    /// <summary>How many mock nodes the rig has (three unless a fixture says otherwise).</summary>
+    protected virtual int Nodes => 3;
 
     protected string SolutionRoot { get; private set; } = null!;
 
@@ -177,7 +166,7 @@ public abstract class CorpusScriptTestBase
 
     protected CorpusTestOrigin Origin { get; private set; } = null!;
 
-    /// <summary>The rig's three nodes; a test may make one of them dishonest.</summary>
+    /// <summary>The rig's nodes; a test may make one of them dishonest.</summary>
     internal CorpusTestNodesManager NodesManager { get; private set; } = null!;
 
     #endregion

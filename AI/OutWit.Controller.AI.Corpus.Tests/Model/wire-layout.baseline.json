@@ -1,18 +1,162 @@
 {
-  "comment": "The published wire layout of OutWit.Controller.AI.Corpus.Model: the Model package version and the MemoryPack member count of every DTO. A member appended to a DTO is a new Model version - bump <Version> in the Model csproj, publish it, and only then let the controller depend on it (the server restores the Model from the feed as a lib next to the module's copy; the lib wins). Update this file in the same commit as the csproj.",
-  "modelVersion": "0.1.6",
-  "members": {
-    "CorpusCountData": 2,
-    "CorpusSourceData": 4,
-    "CorpusQualityData": 11,
-    "CorpusPipelineData": 12,
-    "CorpusTaskData": 7,
-    "CorpusShardStatsData": 12,
-    "CorpusResultData": 17,
-    "CorpusOptionsData": 4,
-    "CorpusPreflightData": 12,
-    "CorpusRuntimeDiagnosticsData": 17,
-    "CorpusPdfStatsData": 8,
-    "CorpusMinHashData": 3
+  "comment": "The published wire layout of OutWit.Controller.AI.Corpus.Model: the Model package version and, for every MemoryPack DTO, its members in wire order with name, type and the value a new instance holds. A member is only ever appended, with the next order; a member that changes its name, its type, its place or its default is a wire change for a deployed fleet and for every application built against the package. Bump <Version> in the Model csproj, publish it, and only then let the controller depend on it. Update this file in the same commit as the csproj (CorpusModelWireLayoutTests prints the current layout when it differs).",
+  "modelVersion": "0.2.0",
+  "types": {
+    "CorpusCountData": [
+      "0: Name: String = \"\"",
+      "1: Count: Int32 = 0"
+    ],
+    "CorpusMinHashData": [
+      "0: Hashes: Int32 = 0",
+      "1: ShingleWords: Int32 = 0",
+      "2: Bands: Int32 = 0"
+    ],
+    "CorpusOptionsData": [
+      "0: MaxShardBytes: Int64 = 0",
+      "1: FetchConcurrency: Int32 = 0",
+      "2: SamplingRate: Double = 0",
+      "3: DedupThreshold: Double = 0"
+    ],
+    "CorpusPdfStatsData": [
+      "0: In: Int32 = 0",
+      "1: Truncated: Int32 = 0",
+      "2: Extracted: Int32 = 0",
+      "3: Pages: Int32 = 0",
+      "4: Documents: Int32 = 0",
+      "5: PagesCut: Int32 = 0",
+      "6: RunningLines: Int32 = 0",
+      "7: Fuel: Int64 = 0"
+    ],
+    "CorpusPipelineData": [
+      "0: Version: String = \"\"",
+      "1: LanguageModelSha256: String = \"\"",
+      "2: TargetLanguages: List<String> = []",
+      "3: IdentifyLanguage: Boolean = true",
+      "4: FilterQuality: Boolean = true",
+      "5: Sign: Boolean = true",
+      "6: Quality: CorpusQualityData? = null",
+      "7: LanguageModelBlobId: Guid = Guid.Empty",
+      "8: CleanLines: Boolean = true",
+      "9: ExtractPdf: Boolean = true",
+      "10: MinHash: CorpusMinHashData? = null",
+      "11: Output: CorpusOutputMode = Full"
+    ],
+    "CorpusPreflightData": [
+      "0: WellFormed: Boolean = false",
+      "1: TaskCount: Int32 = 0",
+      "2: RefusedOrigins: List<String> = []",
+      "3: OversizedSources: Int32 = 0",
+      "4: EstimatedTrafficBytes: Int64 = 0",
+      "5: Messages: List<String> = []",
+      "6: EstimatedStorageBytes: Int64 = 0",
+      "7: StorageHeadroomBytes: Int64 = 0",
+      "8: StorageRetentionDays: Int32 = 0",
+      "9: BusiestNodeShare: Double = 0",
+      "10: PlannedNodes: Int32 = 0",
+      "11: NodeDiskBytesPerShard: Int64 = 0",
+      "12: EstimatedFetchBytes: Int64 = 0",
+      "13: EstimatedUploadBytes: Int64 = 0",
+      "14: RetryAllowanceBytes: Int64 = 0",
+      "15: FetchCeilingBytes: Int64 = 0",
+      "16: UnsizedSources: Int32 = 0"
+    ],
+    "CorpusQualityData": [
+      "0: MinWords: Int32 = 0",
+      "1: MaxWords: Int32 = 0",
+      "2: MinMeanWordLength: Double = 0",
+      "3: MaxMeanWordLength: Double = 0",
+      "4: MaxSymbolToWordRatio: Double = 0",
+      "5: MaxBulletLineRatio: Double = 0",
+      "6: MaxEllipsisLineRatio: Double = 0",
+      "7: MinAlphabeticWordRatio: Double = 0",
+      "8: MaxDuplicateLineRatio: Double = 0",
+      "9: MaxDuplicateLineCharRatio: Double = 0",
+      "10: FilterCurlyBracket: Boolean = false"
+    ],
+    "CorpusResultData": [
+      "0: TaskIndex: Int32 = 0",
+      "1: Verdict: CorpusShardVerdict = Completed",
+      "2: TextBlobId: Guid = Guid.Empty",
+      "3: SignaturesBlobId: Guid = Guid.Empty",
+      "4: ContentSha256: String = \"\"",
+      "5: Error: String = \"\"",
+      "6: Stats: CorpusShardStatsData? = null",
+      "7: NodeId: Guid = Guid.Empty",
+      "8: NodeName: String = \"\"",
+      "9: ControllerVersion: String = \"\"",
+      "10: SourceUrl: String = \"\"",
+      "11: RuntimeTarget: String = \"\"",
+      "12: Degree: Int32 = 0",
+      "13: Output: CorpusOutputMode = Full",
+      "14: MinHash: CorpusMinHashData? = null",
+      "15: SignaturesSha256: String = \"\"",
+      "16: Ticket: String = \"\""
+    ],
+    "CorpusResultPackageData": [
+      "0: Ticket: String = \"\"",
+      "1: ResultsBlobId: Guid = Guid.Empty",
+      "2: Fault: String = \"\""
+    ],
+    "CorpusRuntimeDiagnosticsData": [
+      "0: ControllerVersion: String = \"\"",
+      "1: RuntimeTarget: String = \"\"",
+      "2: Stages: List<String> = []",
+      "3: StageSetSha256: String = \"\"",
+      "4: StagesVerified: Boolean = false",
+      "5: HtmlParser: String = \"\"",
+      "6: Compressor: String = \"\"",
+      "7: LanguageModelFormat: String = \"\"",
+      "8: ReferenceLanguageModelSha256: String = \"\"",
+      "9: PublicOrigins: List<String> = []",
+      "10: MachineOrigins: List<String> = []",
+      "11: MaxShardBytes: Int64 = 0",
+      "12: DownloadsPerNode: Int32 = 0",
+      "13: MemoryPerShardBytes: Int64 = 0",
+      "14: PdfModuleSha256: String = \"\"",
+      "15: PdfStageProblem: String = \"\"",
+      "16: MachineOriginCount: Int32 = 0"
+    ],
+    "CorpusShardStatsData": [
+      "0: RecordsIn: Int32 = 0",
+      "1: DocumentsExtracted: Int32 = 0",
+      "2: DocumentsOut: Int32 = 0",
+      "3: Drops: List<CorpusCountData> = []",
+      "4: Languages: List<CorpusCountData> = []",
+      "5: BytesFetched: Int64 = 0",
+      "6: BytesProduced: Int64 = 0",
+      "7: FetchMs: Int32 = 0",
+      "8: ProcessMs: Int32 = 0",
+      "9: WaitMs: Int32 = 0",
+      "10: UnsupportedLanguages: List<CorpusCountData> = []",
+      "11: Pdf: CorpusPdfStatsData? = null"
+    ],
+    "CorpusSourceData": [
+      "0: Url: String = \"\"",
+      "1: Format: CorpusSourceFormat = Wet",
+      "2: SizeBytes: Int64 = 0",
+      "3: Sha256: String = \"\""
+    ],
+    "CorpusTaskData": [
+      "0: TaskIndex: Int32 = 0",
+      "1: Source: CorpusSourceData? = null",
+      "2: Pipeline: CorpusPipelineData? = null",
+      "3: AllowedOrigins: List<String> = []",
+      "4: MaxShardBytes: Int64 = 0",
+      "5: Ticket: String = \"\"",
+      "6: RequiredControllerVersion: String = \"\"",
+      "7: DeclaredBytes: Int64 = 0"
+    ],
+    "CorpusTaskPackageData": [
+      "0: TasksBlobId: Guid = Guid.Empty",
+      "1: Sha256: String = \"\"",
+      "2: SizeBytes: Int64 = 0",
+      "3: ShardCount: Int32 = 0",
+      "4: ShardBytes: Int64 = 0",
+      "5: LargestShardBytes: Int64 = 0",
+      "6: NeedsPdfSandbox: Boolean = false",
+      "7: Ticket: String = \"\"",
+      "8: RequiredControllerVersion: String = \"\"",
+      "9: UnsizedShards: Int32 = 0"
+    ]
   }
 }

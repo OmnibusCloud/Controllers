@@ -18,10 +18,11 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
 
     #region Constructors
 
-    public WitActivityAdapterCorpusIntegrity(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
+    public WitActivityAdapterCorpusIntegrity(IWitProcessingManager processingManager, IWitBlobService blobService, IWitTempStorage tempStorage, ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        TempStorage = tempStorage;
     }
 
     #endregion
@@ -30,10 +31,13 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
 
     protected override async Task Process(WitActivityCorpusIntegrity activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        var ledger = CorpusRounds.Ledger(pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved);
+        var blobId = await CorpusRounds.HostAsync("Corpus.Integrity", async () =>
+        {
+            var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved);
 
-        var bytes = CorpusIntegrityWriter.Write(ledger);
-        var blobId = await BlobService.UploadBytesAsync(bytes, BLOB_NAME);
+            // The pairs grow with the manifest (a share of its shards): written as they are read.
+            return await CorpusDocuments.UploadAsync(BlobService, TempStorage, BLOB_NAME, stream => CorpusIntegrityWriter.Write(ledger, stream));
+        });
 
         if (!pool.TrySetValue(activity.ReturnReference, blobId))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
@@ -77,6 +81,8 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IWitTempStorage TempStorage { get; }
 
     #endregion
 }

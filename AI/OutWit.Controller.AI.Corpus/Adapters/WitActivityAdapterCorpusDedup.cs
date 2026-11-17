@@ -44,8 +44,13 @@ internal sealed class WitActivityAdapterCorpusDedup : WitActivityAdapterFunction
             throw new InvalidOperationException($"Corpus.Dedup: the report is larger than {CorpusDedupInput.MAX_REPORT_BYTES} bytes.");
 
         // A run without signatures is refused by name, and one with more documents than a merge
-        // holds: here, from the report's own counts, before a blob is opened.
-        var input = CorpusDedupInput.Read(await File.ReadAllBytesAsync(reportPath, cancellationToken));
+        // holds: here, from the report's own counts, before a blob is opened. The report is read
+        // as a stream, a shard at a time: it grows with its run and is never held.
+        var input = await Task.Run(() =>
+        {
+            using var file = new FileStream(reportPath, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16);
+            return CorpusDedupInput.Read(file);
+        }, cancellationToken);
         if (input.Refusal != null)
             throw new InvalidOperationException($"Corpus.Dedup: {input.Refusal}");
 

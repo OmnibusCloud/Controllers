@@ -1,6 +1,7 @@
 using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Benchmark;
 using OutWit.Controller.AI.Corpus.Dedup;
+using OutWit.Controller.AI.Corpus.Delivery;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
@@ -24,19 +25,23 @@ namespace OutWit.Controller.AI.Corpus.Diagnostics;
 /// module and limits, every drop rule with the stage that applies it, the products and the output
 /// modes that keep them, the measured storage ratios with the deployment's headroom, and the pool as
 /// totals. A JSON document like every other output, so an
-/// application reads it without the controller's types. Schema <c>corpus-capabilities/2</c>:
-/// <c>/1</c> and the limits a hostile shard meets (the record caps per format, what a shard may
-/// unpack to, the HTML parser's budget, the language pack's size), the shards a node holds ahead,
-/// the case table, and <c>trust</c> — how many machines a result rests on, the two outcomes
-/// without a result, and every fixed word a document may carry in place of a text (the codes of
-/// each verdict, of a node's faults, of a dropped value, of a refused batch).
+/// application reads it without the controller's types. Schema <c>corpus-capabilities/3</c>:
+/// <c>/2</c> and what bounds a job as a whole (the shards a manifest may name, its size, the
+/// packages its tasks travel in, the problems a preflight lists), the slack a declared size has
+/// before a node refuses its shard, what the traffic estimate adds for retries, and the bytes a
+/// shard's task and result take in their packages. <c>/2</c> brought the limits a hostile shard
+/// meets (the record caps per format, what a shard may unpack to, the HTML parser's budget, the
+/// language pack's size), the shards a node holds ahead, the case table, and <c>trust</c> — how
+/// many machines a result rests on, the two outcomes without a result, and every fixed word a
+/// document may carry in place of a text (the codes of each verdict, of a node's faults, of a
+/// dropped value, of a refused batch).
 /// </summary>
 public static class CorpusCapabilitiesWriter
 {
     #region Constants
 
     /// <summary>The document's schema tag.</summary>
-    public const string SCHEMA = "corpus-capabilities/2";
+    public const string SCHEMA = "corpus-capabilities/3";
 
     #endregion
 
@@ -64,6 +69,7 @@ public static class CorpusCapabilitiesWriter
             WriteOrigins(writer, diagnostics);
             WriteDefaults(writer);
             WriteCeilings(writer);
+            WriteTraffic(writer);
             WritePipeline(writer);
             WritePdf(writer, diagnostics);
             WriteSignatures(writer);
@@ -175,6 +181,22 @@ public static class CorpusCapabilitiesWriter
         writer.WriteNumber("size_probes", ShardSizeProbe.MAX_PROBES);
         writer.WriteNumber("dedup_documents", CorpusDeduplicator.MAX_DOCUMENTS);
         writer.WriteNumber("dedup_clusters_listed", CorpusDedupWriter.MAX_CLUSTERS_LISTED);
+        writer.WriteNumber("dedup_report_bytes", CorpusDedupInput.MAX_REPORT_BYTES);
+        writer.WriteNumber("manifest_bytes", CorpusManifestParser.MAX_BYTES);
+        writer.WriteNumber("shards", CorpusPackagePlanner.MAX_SHARDS);
+        writer.WriteNumber("packages", CorpusPackagePlanner.MAX_PACKAGES);
+        writer.WriteNumber("package_shards", CorpusPackagePlanner.MAX_PACKAGE_SHARDS);
+        writer.WriteNumber("problems_listed", CorpusProblems.MAX_LISTED);
+        writer.WriteNumber("declared_slack_divisor", ShardLimits.DECLARED_SLACK_DIVISOR);
+        writer.WriteNumber("declared_slack_min_bytes", ShardLimits.DECLARED_SLACK_MIN_BYTES);
+        writer.WriteEndObject();
+    }
+
+    /// <summary>What the preflight's traffic estimate adds to the fetches and the uploads.</summary>
+    private static void WriteTraffic(Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject("traffic");
+        writer.WriteNumber("retry_allowance", CorpusTrafficEstimate.RETRY_ALLOWANCE);
         writer.WriteEndObject();
     }
 
@@ -363,6 +385,9 @@ public static class CorpusCapabilitiesWriter
         writer.WriteEndArray();
 
         writer.WriteNumber("margin", CorpusStorageRatios.MARGIN);
+        writer.WriteNumber("task_package_bytes_per_shard", CorpusStorageRatios.TASK_PACKAGE_BYTES_PER_SHARD);
+        writer.WriteNumber("result_package_bytes_per_shard", CorpusStorageRatios.RESULT_PACKAGE_BYTES_PER_SHARD);
+        writer.WriteNumber("package_base_bytes", CorpusStorageRatios.PACKAGE_BASE_BYTES);
         if (limit.IsStated)
             writer.WriteNumber("headroom_bytes", limit.HeadroomBytes);
         if (limit.RetentionDays > 0)

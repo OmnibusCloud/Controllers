@@ -389,13 +389,29 @@ public sealed class CorpusLedgerC1Tests
     [Test]
     public void C1TheSameRunGivesTheSameDocumentsTest()
     {
+        // L-7: this test wrote one ledger twice and compared the two, which cannot differ. The
+        // property is that a shard's entry does not depend on where the values of other shards
+        // arrived among its own (the platform hands values over in the order the nodes answered):
+        // the same three values in every such order give the same bytes. Of two copies that agree
+        // the first to arrive is the one named, so their own order is kept.
         var tasks = CorpusTestRun.Tasks(2);
-        var first = new object?[] { CorpusTestRun.Completed(tasks[1], 'b'), CorpusTestRun.Completed(tasks[0], 'a'), CorpusTestRun.Completed(tasks[0], 'a') };
+        var b = CorpusTestRun.Completed(tasks[1], 'b');
+        var a1 = CorpusTestRun.Completed(tasks[0], 'a');
+        var a2 = CorpusTestRun.Completed(tasks[0], 'a');
+        var arrivals = new[] { new object?[] { b, a1, a2 }, new object?[] { a1, b, a2 }, new object?[] { a1, a2, b } };
+
+        var report = CorpusReportWriter.Write(CorpusTestRun.Ledger(tasks, arrivals[0]));
+        var integrity = CorpusIntegrityWriter.Write(CorpusTestRun.Ledger(tasks, arrivals[0]));
 
         Assert.Multiple(() =>
         {
-            Assert.That(CorpusReportWriter.Write(CorpusTestRun.Ledger(tasks, first)), Is.EqualTo(CorpusReportWriter.Write(CorpusTestRun.Ledger(tasks, first))));
-            Assert.That(CorpusIntegrityWriter.Write(CorpusTestRun.Ledger(tasks, first)), Is.EqualTo(CorpusIntegrityWriter.Write(CorpusTestRun.Ledger(tasks, first))));
+            Assert.That(Encoding.UTF8.GetString(report), Does.Contain("\"executions\": 2").Or.Contain("\"executions\":2"), "the run is the one meant: a sampled shard and a plain one");
+
+            foreach (var arrival in arrivals.Skip(1))
+            {
+                Assert.That(CorpusReportWriter.Write(CorpusTestRun.Ledger(tasks, arrival)), Is.EqualTo(report));
+                Assert.That(CorpusIntegrityWriter.Write(CorpusTestRun.Ledger(tasks, arrival)), Is.EqualTo(integrity));
+            }
         });
     }
 

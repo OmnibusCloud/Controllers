@@ -8,7 +8,7 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Corpus.Benchmark;
 
 /// <summary>
-/// The node benchmark of <c>Corpus.ProcessShard</c>: the reference shard
+/// The node benchmark of <c>Corpus.ProcessPackage</c>: the reference shard
 /// (<see cref="CorpusBenchmarkShard"/>) processed by one worker per slot of the node's degree at
 /// once, the way a node runs the shards of a batch; a warm-up first, then timed runs. The rate is
 /// in megabytes of real Common Crawl WET per second at that degree — the unit the adapter's work

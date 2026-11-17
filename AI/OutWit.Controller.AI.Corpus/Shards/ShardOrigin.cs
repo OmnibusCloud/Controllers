@@ -9,6 +9,12 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// </summary>
 public static class ShardOrigin
 {
+    #region Constants
+
+    private const int MAX_SHOWN_CHARS = 128;
+
+    #endregion
+
     #region Functions
 
     /// <summary>Parses a source URL and decides whether a task names it: an absolute HTTP(S) URL without credentials whose host is on the task's list.</summary>
@@ -28,6 +34,11 @@ public static class ShardOrigin
 
         if (parsed.UserInfo.Length > 0)
             return $"'{parsed.Host}': a URL with a user name or password is not fetched.";
+
+        // A host outside ASCII is mapped to its wire form by the machine's own library, and two
+        // machines need not map it alike: it is written in its ASCII form or not fetched.
+        if (!IsAsciiHost(url, parsed))
+            return $"'{Shown(parsed.Host)}': a host that is not written in ASCII is not fetched; write it in its ASCII form (xn--...).";
 
         if (!IsAllowed(parsed, allowedOrigins))
             return $"'{parsed.Host}' is not an allowed origin.";
@@ -65,6 +76,58 @@ public static class ShardOrigin
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Whether a URL's host is written in ASCII: in the URL as given (no character outside ASCII
+    /// and no percent escape before the path) and as parsed. Only such a host reads the same on
+    /// every machine.
+    /// </summary>
+    /// <param name="url">The URL as the manifest or the task gives it.</param>
+    /// <param name="parsed">The same URL, parsed.</param>
+    /// <returns>True for an ASCII host.</returns>
+    public static bool IsAsciiHost(string url, Uri parsed)
+    {
+        if (!IsAscii(parsed.Host))
+            return false;
+
+        var start = url.IndexOf("://", StringComparison.Ordinal);
+        if (start < 0)
+            return false;
+
+        for (var index = start + 3; index < url.Length; index++)
+        {
+            var c = url[index];
+            if (c is '/' or '?' or '#' or '\\')
+                break;
+
+            if (c > 0x7F || c == '%')
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>Whether a string holds ASCII characters only.</summary>
+    /// <param name="text">The string.</param>
+    /// <returns>True when no character is outside ASCII.</returns>
+    public static bool IsAscii(string text)
+    {
+        foreach (var c in text)
+        {
+            if (c > 0x7F)
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>A host name as a message shows it: within a length, so one line of a manifest cannot make a message of any size.</summary>
+    /// <param name="host">The host.</param>
+    /// <returns>The host, cut at 128 characters.</returns>
+    public static string Shown(string host)
+    {
+        return host.Length <= MAX_SHOWN_CHARS ? host : host[..MAX_SHOWN_CHARS] + "...";
     }
 
     /// <summary>The host part of an allowlist entry: a bare host stays, a URL or host:port loses the rest.</summary>
