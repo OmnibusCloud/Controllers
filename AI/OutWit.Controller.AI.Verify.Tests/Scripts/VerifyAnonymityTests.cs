@@ -58,6 +58,7 @@ public sealed class VerifyAnonymityTests : VerifyScriptTestBase
     private string m_runScript = null!;
     private string m_preflightScript = null!;
     private string m_diagnosticsScript = null!;
+    private string m_generateAndCheckScript = null!;
     private string m_brokenRoot = null!;
     private VerifyTestNodesManager m_nodes = null!;
 
@@ -76,6 +77,7 @@ public sealed class VerifyAnonymityTests : VerifyScriptTestBase
         m_runScript = LoadScript("VerifyRun.wit");
         m_preflightScript = LoadScript("VerifyPreflight.wit");
         m_diagnosticsScript = LoadScript("VerifyRuntimeDiagnostics.wit");
+        m_generateAndCheckScript = LoadScript("VerifyGenerateAndCheck.wit");
 
         // A node whose Ruby is still being unpacked: the folder is there, the module is not.
         m_brokenRoot = Path.Combine(Path.GetTempPath(), $"witai_verify_anon_{Guid.NewGuid():N}");
@@ -200,6 +202,24 @@ public sealed class VerifyAnonymityTests : VerifyScriptTestBase
             Assert.That(status.Message, Does.Contain("cobol-1959"), "by its name");
             Assert.That(m_nodes.Shares, Is.EqualTo(sharesBefore), "no node was asked");
             VerifyLeakScan.AssertClean(status.Message ?? "", "the message of the refused taskset");
+        });
+    }
+
+    [Test]
+    public async Task H5ACheckerWithARuntimeNobodyHasIsRefusedByNameTest()
+    {
+        // The checks would be packages no node can run: the checker is refused where the check
+        // tasks are made, as a taskset is where it is split.
+        var generators = await UploadAsync("""{"runtime":"python-3.14.6","sources":{"m.py":"print(1)"}}""" + "\n", "generators.jsonl");
+        var checker = await UploadAsync("""{"runtime":"cobol-1959","sources":{"c.cob":"DISPLAY 1"},"expected_stdout":"1\n"}""", "checker.json");
+
+        var status = await Engine.ScheduleAndWaitAsync(Engine.Compile(m_generateAndCheckScript), generators, checker, new VerifyOptionsData());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(status.Result, Is.Not.EqualTo(WitProcessingResult.Completed));
+            Assert.That(status.Message, Does.Contain("cobol-1959"), "by its name");
+            VerifyLeakScan.AssertClean(status.Message ?? "", "the message of the refused checker");
         });
     }
 
