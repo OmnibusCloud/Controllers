@@ -1,7 +1,5 @@
-using System.Collections;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
-using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Reports;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -32,14 +30,14 @@ internal sealed class WitActivityAdapterCorpusCollect : WitActivityAdapterFuncti
 
     protected override async Task Process(WitActivityCorpusCollect activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        if (!pool.TryGetObject(activity.Results, out var resultsObject) || resultsObject is not IEnumerable resultsEnumerable)
-            throw new InvalidOperationException("Failed to get parameter 'Results'.");
+        // The task list is the server's own: the report holds every shard of it, bound to what
+        // came back by the tickets, whatever order and whatever indexes the nodes returned.
+        var ledger = CorpusRounds.Ledger(pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved);
 
-        // Grid.ForEach returns results in completion order; each carries its TaskIndex and the
-        // report writer re-keys.
-        var results = resultsEnumerable.OfType<CorpusResultData>().ToList();
+        if (ledger.RejectedResults > 0 || ledger.Disputes > 0)
+            Logger.LogWarning("Corpus.Collect: {Rejected} value(s) dropped, {Disputes} dispute(s) of which {Resolved} settled.", ledger.RejectedResults, ledger.Disputes, ledger.DisputesResolved);
 
-        var reportBytes = CorpusReportWriter.Write(results);
+        var reportBytes = CorpusReportWriter.Write(ledger);
         var reportBlobId = await BlobService.UploadBytesAsync(reportBytes, BLOB_NAME);
 
         if (!pool.TrySetValue(activity.ReturnReference, reportBlobId))
@@ -54,19 +52,23 @@ internal sealed class WitActivityAdapterCorpusCollect : WitActivityAdapterFuncti
     {
         try
         {
-            if (parameters.Length != 2)
-                throw new ArgumentException($"Expected 2 parameter(s), got {parameters.Length}.");
+            if (parameters.Length != 7)
+                throw new ArgumentException($"Expected 7 parameter(s), got {parameters.Length}.");
 
-            if (parameters[0] is not IWitReference results)
-                throw new ArgumentException("Parameter 'Results' must be a variable reference.");
-
-            if (parameters[1] is not IWitReference options)
-                throw new ArgumentException("Parameter 'Options' must be a variable reference.");
+            var references = new IWitReference[7];
+            string[] names = ["Tasks", "Executions", "Repairs", "Repaired", "Disputes", "Resolved", "Options"];
+            for (var index = 0; index < references.Length; index++)
+                references[index] = parameters[index] as IWitReference ?? throw new ArgumentException($"Parameter '{names[index]}' must be a variable reference.");
 
             return new WitActivityCorpusCollect
             {
-                Results = results,
-                Options = options
+                Tasks = references[0],
+                Executions = references[1],
+                Repairs = references[2],
+                Repaired = references[3],
+                Disputes = references[4],
+                Resolved = references[5],
+                Options = references[6]
             };
         }
         catch (Exception e)

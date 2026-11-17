@@ -206,8 +206,9 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
 
             Assert.Multiple(() =>
             {
-                Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/4"));
+                Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/5"));
                 Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));
+                Assert.That(summary.GetProperty("disputes_resolved").GetInt32(), Is.EqualTo(summary.GetProperty("signature_mismatches").GetInt32()), "three machines ran each such shard again, and two of them are honest");
                 Assert.That(summary.GetProperty("signature_mismatches").GetInt32(), Is.GreaterThanOrEqualTo(1), "the dishonest node held a side of at least one pair");
                 Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.EqualTo(summary.GetProperty("signature_mismatches").GetInt32()), "nothing else differs");
                 Assert.That(mismatched.Select(pair => pair.GetProperty("signatures").GetString()), Is.All.EqualTo("differ"));

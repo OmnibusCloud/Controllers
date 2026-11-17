@@ -1,0 +1,145 @@
+using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Pdf;
+using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Controller.AI.Corpus.Tests.Mock;
+
+namespace OutWit.Controller.AI.Corpus.Tests.Shards;
+
+/// <summary>
+/// What a node knows before it does any work refuses its whole batch, with nothing fetched: the
+/// job's controller version (audit finding C-1: one job, one version), the PDF sandbox a WARC
+/// shard needs (H-9: found out at the first PDF, with the node's finished shards lost), room on
+/// the disk (H-7). What leaves the node is a fixed sentence.
+/// </summary>
+[TestFixture]
+[NonParallelizable]
+public sealed class ShardBatchGuardTests
+{
+    #region Setup
+
+    [SetUp]
+    [TearDown]
+    public void Forget()
+    {
+        ShardBatchGuard.Clear();
+        PdfSandboxHost.ClearOverride();
+    }
+
+    #endregion
+
+    #region Tests
+
+    [Test]
+    public void C1ANodeOnAnotherVersionRefusesItsBatchTest()
+    {
+        var task = CorpusTestRun.Task(0);
+        task.RequiredControllerVersion = "0.3.0";
+
+        var refusal = ShardBatchGuard.Refusal(task, "0.4.0", () => null, () => true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(refusal, Is.Not.Null);
+            Assert.That(refusal!.Code, Is.EqualTo(ShardBatchRefusedException.VERSION));
+            Assert.That(refusal.Message, Is.EqualTo("This node runs Corpus 0.4.0 and the job requires 0.3.0: one job runs on one controller version."));
+            Assert.That(ShardBatchGuard.Refusal(CorpusTestRun.Task(0), CorpusTestRun.VERSION, () => null, () => true), Is.Null, "the job's version is this node's");
+        });
+    }
+
+    [TestCase("")]
+    [TestCase("C:\\Users\\someone\\a path")]
+    [TestCase("0.4.0\nand a second line")]
+    public void C1ATaskWithoutAVersionIsRefusedAndItsTextIsNotRepeatedTest(string required)
+    {
+        var task = CorpusTestRun.Task(0);
+        task.RequiredControllerVersion = required;
+
+        var refusal = ShardBatchGuard.Refusal(task, "0.4.0", () => null, () => true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(refusal!.Code, Is.EqualTo(ShardBatchRefusedException.VERSION));
+            Assert.That(refusal.Message, Is.EqualTo("This node runs Corpus 0.4.0 and the job requires another version: one job runs on one controller version."));
+        });
+    }
+
+    [Test]
+    public void H9ANodeWithoutTheSandboxRefusesAWarcBatchBeforeItStartsTest()
+    {
+        var warc = CorpusTestRun.Task(0, new CorpusPipelineData { Version = "test", IdentifyLanguage = false });
+        warc.Source!.Format = CorpusSourceFormat.Warc;
+        var withoutPdfStage = warc.Clone();
+        withoutPdfStage.Pipeline!.ExtractPdf = false;
+        var wet = CorpusTestRun.Task(1);
+        var asked = 0;
+
+        string? Problem()
+        {
+            asked++;
+            return "the PDF sandbox cannot start: DllNotFoundException at C:\\Users\\someone\\client\\runtimes";
+        }
+
+        var refusal = ShardBatchGuard.Refusal(warc, CorpusTestRun.VERSION, Problem, () => true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(refusal!.Code, Is.EqualTo(ShardBatchRefusedException.PDF_SANDBOX));
+            Assert.That(refusal.Message, Is.EqualTo("This node cannot run the PDF stage and the batch holds a WARC shard that needs it: another node takes the batch."), "the reason stays in the node's log");
+            Assert.That(ShardBatchGuard.Refusal(warc, CorpusTestRun.VERSION, () => null, () => true), Is.Null, "a node with the sandbox takes it");
+            Assert.That(ShardBatchGuard.Refusal(withoutPdfStage, CorpusTestRun.VERSION, Problem, () => true), Is.Null, "the stage is off: no sandbox is needed");
+            Assert.That(ShardBatchGuard.Refusal(wet, CorpusTestRun.VERSION, Problem, () => true), Is.Null, "a WET shard needs none");
+            Assert.That(asked, Is.EqualTo(1), "the sandbox is asked for only when a shard needs it");
+        });
+    }
+
+    [Test]
+    public void H7ANodeWithoutRoomForTheShardRefusesItsBatchTest()
+    {
+        var refusal = ShardBatchGuard.Refusal(CorpusTestRun.Task(0), CorpusTestRun.VERSION, () => null, () => false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(refusal!.Code, Is.EqualTo(ShardBatchRefusedException.DISK_SPACE));
+            Assert.That(refusal.Message, Is.EqualTo("This node's disk has no room for a shard of the batch: another node takes the batch."));
+        });
+    }
+
+    [Test]
+    public void ARefusalStopsTheRestOfTheJobsBatchOnThisNodeTest()
+    {
+        var job = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        var task = CorpusTestRun.Task(0);
+        task.RequiredControllerVersion = "0.0.1";
+        var work = Path.Combine(Path.GetTempPath(), $"witai_corpus_guard_{Guid.NewGuid():N}");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(() => ShardBatchGuard.ThrowIfRefused(job, task, work), Throws.TypeOf<ShardBatchRefusedException>().With.Property("Code").EqualTo(ShardBatchRefusedException.VERSION));
+            Assert.That(() => ShardBatchGuard.ThrowIfJobRefused(job), Throws.TypeOf<ShardBatchRefusedException>(), "a task of the same batch that waited for its turn stops before it fetches");
+            Assert.That(() => ShardBatchGuard.ThrowIfRefused(job, CorpusTestRun.Task(1), work), Throws.TypeOf<ShardBatchRefusedException>(), "and one that would have been taken goes with the batch");
+            Assert.That(() => ShardBatchGuard.ThrowIfJobRefused(other), Throws.Nothing);
+            Assert.That(() => ShardBatchGuard.ThrowIfRefused(other, CorpusTestRun.Task(0), work), Throws.Nothing);
+            Assert.That(Directory.Exists(work), Is.False, "nothing is made for a refused batch");
+        });
+    }
+
+    [Test]
+    public void ShardDiskNeedsTheShardItsProductsAndAMarginTest()
+    {
+        var here = Path.Combine(Path.GetTempPath(), $"witai_corpus_disk_{Guid.NewGuid():N}", "not", "made", "yet");
+        var free = ShardDisk.FreeBytes(here);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ShardDisk.Needed(1000), Is.EqualTo(1000 + 500 + ShardDisk.MARGIN_BYTES));
+            Assert.That(ShardDisk.NeededByNode(1L << 30, 8), Is.EqualTo(10 * ShardDisk.Needed(1L << 30)), "the degree and two more shards");
+            Assert.That(free, Is.GreaterThan(0), "the volume of a folder that does not exist yet is its nearest ancestor's");
+            Assert.That(ShardDisk.HasRoom(here, 1), Is.True);
+            Assert.That(ShardDisk.HasRoom(here, long.MaxValue / 4), Is.False);
+            Assert.That(ShardDisk.HasRoom(here, 0), Is.True, "a shard of unknown size is not judged");
+        });
+    }
+
+    #endregion
+}

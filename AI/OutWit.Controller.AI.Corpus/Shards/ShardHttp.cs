@@ -75,12 +75,12 @@ public static class ShardHttp
             response.Dispose();
 
             if (hop >= MAX_REDIRECTS)
-                throw new ShardOriginRefusedException($"'{uri}' redirects more than {MAX_REDIRECTS} times.");
+                throw new ShardOriginRefusedException(Trust.CorpusResultCodes.ORIGIN_REDIRECT, $"'{uri}' redirects more than {MAX_REDIRECTS} times.");
 
             var next = location.IsAbsoluteUri ? location : new Uri(current, location);
             var refusal = ShardOrigin.Check(next.AbsoluteUri, allowedOrigins, policy, out var allowed);
             if (refusal != null || allowed == null)
-                throw new ShardOriginRefusedException($"'{current}' redirects to a place that is not fetched: {refusal}");
+                throw new ShardOriginRefusedException(Trust.CorpusResultCodes.ORIGIN_REDIRECT, $"'{current}' redirects to a place that is not fetched: {refusal}");
 
             current = allowed;
         }

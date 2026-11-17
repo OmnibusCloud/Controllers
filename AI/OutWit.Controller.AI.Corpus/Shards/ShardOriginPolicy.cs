@@ -120,7 +120,7 @@ public sealed class ShardOriginPolicy
 
         var usable = addresses.Where(ShardAddress.IsPublic).ToArray();
         if (usable.Length == 0)
-            throw new ShardOriginRefusedException($"'{host}' resolves to no public address ({string.Join(", ", addresses.Select(address => address.ToString()))}).");
+            throw new ShardOriginRefusedException(Trust.CorpusResultCodes.ORIGIN_ADDRESS, $"'{host}' resolves to no public address ({string.Join(", ", addresses.Select(address => address.ToString()))}).");
 
         return usable;
     }

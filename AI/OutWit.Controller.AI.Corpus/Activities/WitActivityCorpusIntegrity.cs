@@ -8,8 +8,9 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Corpus.Activities;
 
 /// <summary>
-/// Host-side: the executions of every shard that ran more than once compared on everything an
-/// honest node cannot vary, as the integrity blob of the run.
+/// Host-side: the integrity document of a run (a JSON blob) — the pairs of the first round
+/// compared, the disputes and how three machines settled them, the shards without a result, the
+/// values dropped on arrival.
 /// </summary>
 [Activity("Corpus.Integrity")]
 [MemoryPackable]
@@ -19,7 +20,7 @@ public sealed partial class WitActivityCorpusIntegrity : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Results}";
+        return $"{Tasks}, {Executions}, {Repairs}, {Repaired}, {Disputes}, {Resolved}";
     }
 
     #endregion
@@ -36,14 +37,24 @@ public sealed partial class WitActivityCorpusIntegrity : WitActivityFunction
             return false;
 
         return base.Is(activity, tolerance)
-               && Results.Check(activity.Results);
+               && Tasks.Check(activity.Tasks)
+               && Executions.Check(activity.Executions)
+               && Repairs.Check(activity.Repairs)
+               && Repaired.Check(activity.Repaired)
+               && Disputes.Check(activity.Disputes)
+               && Resolved.Check(activity.Resolved);
     }
 
     protected override WitActivityCorpusIntegrity InnerClone()
     {
         return new WitActivityCorpusIntegrity
         {
-            Results = Results?.Clone() as IWitReference
+            Tasks = Tasks?.Clone() as IWitReference,
+            Executions = Executions?.Clone() as IWitReference,
+            Repairs = Repairs?.Clone() as IWitReference,
+            Repaired = Repaired?.Clone() as IWitReference,
+            Disputes = Disputes?.Clone() as IWitReference,
+            Resolved = Resolved?.Clone() as IWitReference
         };
     }
 
@@ -51,9 +62,29 @@ public sealed partial class WitActivityCorpusIntegrity : WitActivityFunction
 
     #region Properties
 
-    /// <summary>Reference to the collection of all executions.</summary>
+    /// <summary>Reference to the job's tasks (the output of Corpus.Split): the server's own list of shards and first-round tickets.</summary>
     [MemoryPackAllowSerialize]
-    public IWitReference? Results { get; init; }
+    public IWitReference? Tasks { get; init; }
+
+    /// <summary>Reference to what the first round returned.</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Executions { get; init; }
+
+    /// <summary>Reference to the repair round's tasks (the output of Corpus.Repairs).</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Repairs { get; init; }
+
+    /// <summary>Reference to what the repair round returned.</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Repaired { get; init; }
+
+    /// <summary>Reference to the dispute round's tasks (the output of Corpus.Disputes).</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Disputes { get; init; }
+
+    /// <summary>Reference to what the dispute round returned.</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Resolved { get; init; }
 
     #endregion
 }

@@ -172,6 +172,33 @@ public static class CorpusTaskPlanner
             notes.Add($"target_languages: {string.Join(", ", missing)} not among the model's languages; no document is labelled so.");
     }
 
+    /// <summary>
+    /// The byte cap a node holds a shard to, whatever its task says: the task's cap when it is
+    /// within the controller's ceiling, the ceiling otherwise (a task with no cap, or one above
+    /// the ceiling, was not made by <c>Corpus.Split</c>).
+    /// </summary>
+    /// <param name="taskMaxShardBytes">The cap the task carries.</param>
+    /// <returns>The cap in force, 1 to <see cref="MAX_SHARD_BYTES"/>.</returns>
+    public static long NodeShardCap(long taskMaxShardBytes)
+    {
+        return taskMaxShardBytes is > 0 and <= MAX_SHARD_BYTES ? taskMaxShardBytes : MAX_SHARD_BYTES;
+    }
+
+    /// <summary>
+    /// Makes planned tasks a job's first round: every task gets a ticket of its own, drawn at
+    /// random, and the controller version the job runs on.
+    /// </summary>
+    /// <param name="tasks">The planned tasks; changed in place.</param>
+    /// <param name="controllerVersion">The server's controller version.</param>
+    public static void Issue(IEnumerable<CorpusTaskData> tasks, string controllerVersion)
+    {
+        foreach (var task in tasks)
+        {
+            task.Ticket = Trust.CorpusTickets.New();
+            task.RequiredControllerVersion = controllerVersion;
+        }
+    }
+
     /// <summary>The byte cap in force: the options' cap, bounded by the controller's.</summary>
     /// <param name="options">Job options (null = defaults).</param>
     /// <returns>The cap.</returns>

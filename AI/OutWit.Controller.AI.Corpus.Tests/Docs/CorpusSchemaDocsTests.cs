@@ -2,6 +2,7 @@ using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Diagnostics;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Reports;
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Storage;
 
@@ -118,30 +119,30 @@ public sealed class CorpusSchemaDocsTests
     public void TheReportWriterOutputValidatesTest()
     {
         using var schema = Load("corpus-report.schema.json");
-        var results = new List<CorpusResultData>
+        // Every kind of shard entry: completed, completed with PDFs after a node fault and a
+        // repair, refused, disputed and settled, disputed and open, without a result.
+        var pipeline = CorpusTestRun.Signed();
+        pipeline.IdentifyLanguage = true;
+        var tasks = CorpusTestRun.Tasks(6, pipeline);
+        var withPdf = CorpusTestRun.Completed(tasks[2], 'b', 6, drops: [("pdf_encrypted", 1)]);
+        withPdf.Stats!.Pdf = new CorpusPdfStatsData { In = 3, Truncated = 1, Extracted = 2, Pages = 14, Documents = 3, PagesCut = 0, RunningLines = 20, Fuel = 123_456_789 };
+        var first = new object?[]
         {
-            new()
-            {
-                TaskIndex = 0, Verdict = CorpusShardVerdict.Completed, TextBlobId = Guid.NewGuid(), SignaturesBlobId = Guid.NewGuid(),
-                ContentSha256 = "aa", ControllerVersion = "0.1.13", SourceUrl = "https://data.commoncrawl.org/a.warc.wet.gz", RuntimeTarget = "linux-x64", Degree = 4,
-                MinHash = new CorpusMinHashData { Hashes = 128, ShingleWords = 5, Bands = 16 },
-                Stats = new CorpusShardStatsData { RecordsIn = 10, DocumentsExtracted = 9, DocumentsOut = 5, Drops = [new CorpusCountData { Name = "min_words", Count = 4 }], Languages = [new CorpusCountData { Name = "eng", Count = 5 }] }
-            },
-            new()
-            {
-                TaskIndex = 2, Verdict = CorpusShardVerdict.Completed, TextBlobId = Guid.NewGuid(), SignaturesBlobId = Guid.NewGuid(),
-                ContentSha256 = "bb", ControllerVersion = "0.2.0", SourceUrl = "https://data.commoncrawl.org/a.warc.gz", RuntimeTarget = "windows-x64", Degree = 8,
-                MinHash = new CorpusMinHashData { Hashes = 128, ShingleWords = 5, Bands = 16 },
-                Stats = new CorpusShardStatsData
-                {
-                    RecordsIn = 30, DocumentsExtracted = 12, DocumentsOut = 6, Drops = [new CorpusCountData { Name = "pdf_encrypted", Count = 1 }], Languages = [new CorpusCountData { Name = "eng", Count = 6 }],
-                    Pdf = new CorpusPdfStatsData { In = 3, Truncated = 1, Extracted = 2, Pages = 14, Documents = 3, PagesCut = 0, RunningLines = 20, Fuel = 123_456_789 }
-                }
-            },
-            new() { TaskIndex = 1, Verdict = CorpusShardVerdict.OriginRefused, Error = "not a public origin", SourceUrl = "https://evil.example/x.warc.gz" }
+            CorpusTestRun.Completed(tasks[0], drops: [("min_words", 4)]),
+            CorpusTestRun.Verdict(tasks[1], CorpusShardVerdict.OriginRefused, "origin_not_listed"),
+            CorpusTestRun.Fault(tasks[2]),
+            CorpusTestRun.Completed(tasks[3]), CorpusTestRun.Completed(tasks[3], '0'),
+            CorpusTestRun.Completed(tasks[4]), CorpusTestRun.Completed(tasks[4], '0'),
+            CorpusTestRun.Fault(tasks[5], "network")
         };
+        var before = CorpusTestRun.Ledger(tasks, first);
+        var repairs = before.RepairTasks();
+        var disputes = before.DisputeTasks();
+        withPdf.Ticket = repairs[0].Ticket;
+        var ledger = CorpusTestRun.Ledger(tasks, first, (repairs, [withPdf, CorpusTestRun.Fault(repairs[1], "network")]),
+            (disputes, [CorpusTestRun.Completed(disputes[0]), CorpusTestRun.Completed(disputes[0]), CorpusTestRun.Completed(disputes[1]), CorpusTestRun.Completed(disputes[1], '0')]));
 
-        using var report = JsonDocument.Parse(CorpusReportWriter.Write(results));
+        using var report = JsonDocument.Parse(CorpusReportWriter.Write(ledger));
         var shard = report.RootElement.GetProperty("shards")[0];
         var withPdfs = report.RootElement.GetProperty("shards")[2];
         var shardStats = schema.RootElement.GetProperty("properties").GetProperty("shards").GetProperty("items").GetProperty("properties").GetProperty("stats").GetProperty("oneOf")[1].GetProperty("properties");
@@ -149,8 +150,13 @@ public sealed class CorpusSchemaDocsTests
         Assert.Multiple(() =>
         {
             Assert.That(CorpusSchemaCheck.Validate(schema.RootElement, report.RootElement), Is.Empty);
+            Assert.That(schema.RootElement.GetProperty("properties").GetProperty("schema").GetProperty("const").GetString(), Is.EqualTo(CorpusReportWriter.SCHEMA));
+            Assert.That(report.RootElement.GetProperty("shards").EnumerateArray().Select(entry => entry.GetProperty("verdict").GetString()),
+                Is.EqualTo(new[] { "Completed", "OriginRefused", "Completed", "Completed", "Disputed", "NoResult" }));
+            Assert.That(report.RootElement.GetProperty("shards").EnumerateArray().SelectMany(PropertyNames).Distinct(),
+                Is.EquivalentTo(PropertyNames(schema.RootElement.GetProperty("properties").GetProperty("shards").GetProperty("items").GetProperty("properties"))), "every shard property the schema names is written by some kind of shard, and nothing else");
             Assert.That(shard.GetProperty("runtime_target").GetString(), Is.EqualTo("linux-x64"));
-            Assert.That(shard.GetProperty("degree").GetInt32(), Is.EqualTo(4));
+            Assert.That(shard.GetProperty("degree").GetInt32(), Is.EqualTo(8));
             Assert.That(PropertyNames(shard), Is.SubsetOf(PropertyNames(schema.RootElement.GetProperty("properties").GetProperty("shards").GetProperty("items").GetProperty("properties"))));
             Assert.That(PropertyNames(withPdfs.GetProperty("stats")), Is.EquivalentTo(PropertyNames(shardStats)), "every stats property the schema names is written for a shard with PDFs");
             Assert.That(PropertyNames(report.RootElement.GetProperty("summary")), Is.EquivalentTo(PropertyNames(schema.RootElement.GetProperty("properties").GetProperty("summary").GetProperty("properties"))));

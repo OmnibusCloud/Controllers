@@ -17,6 +17,9 @@ public sealed record CorpusDedupResult(double Threshold, int Bands, int Document
     /// <summary>Documents that are near-duplicates of an earlier one.</summary>
     public int Duplicates => Shards.Sum(shard => shard.Duplicates);
 
+    /// <summary>The completed shards the merge left out because their signatures blob is not what the report says of it; in shard order.</summary>
+    public IReadOnlyList<CorpusDedupExclusion> Excluded { get; init; } = [];
+
     #endregion
 }
 

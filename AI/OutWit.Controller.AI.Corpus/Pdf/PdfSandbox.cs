@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using OutWit.Controller.AI.Corpus.Trust;
 using OutWit.Controller.AI.Wasm;
 using WasmModule = Wasmtime.Module;
 
@@ -197,14 +198,14 @@ public sealed class PdfSandbox : IDisposable
             case WasmHostVerdict.EngineError:
                 return PdfExtraction.Refused(PdfVerdict.Error, fuel);
             case WasmHostVerdict.Interrupted:
-                throw new PdfSandboxException($"a PDF ran past the wall-clock backstop of {PdfStageLimits.WALL_MS} ms with fuel left: the machine, not the document, stopped it");
+                throw new PdfSandboxException(CorpusResultCodes.FAULT_PDF_BACKSTOP, $"a PDF ran past the wall-clock backstop of {PdfStageLimits.WALL_MS} ms with fuel left: the machine, not the document, stopped it");
             case WasmHostVerdict.NotInstantiated:
             case WasmHostVerdict.NoStart:
-                throw new PdfSandboxException($"the PDF extractor module did not run: {outcome.Fault}");
+                throw new PdfSandboxException(CorpusResultCodes.FAULT_PDF_SANDBOX, $"the PDF extractor module did not run: {outcome.Fault}");
             case WasmHostVerdict.Exited:
                 break;
             default:
-                throw new PdfSandboxException($"the sandbox ended a PDF run as {outcome.Verdict}");
+                throw new PdfSandboxException(CorpusResultCodes.FAULT_PDF_SANDBOX, $"the sandbox ended a PDF run as {outcome.Verdict}");
         }
 
         // The module's whole output is bounded after the fact (WASI gives a writable folder no

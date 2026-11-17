@@ -34,6 +34,8 @@ public sealed class WitControllerCorpusModule : WitPluginBase, IWitControllerNod
         services.AddActivityAdapter<WitActivityCorpusProcessShard, WitActivityAdapterCorpusProcessShard>();
         services.AddActivityAdapter<WitActivityCorpusSplit, WitActivityAdapterCorpusSplit>();
         services.AddActivityAdapter<WitActivityCorpusPreflight, WitActivityAdapterCorpusPreflight>();
+        services.AddActivityAdapter<WitActivityCorpusRepairs, WitActivityAdapterCorpusRepairs>();
+        services.AddActivityAdapter<WitActivityCorpusDisputes, WitActivityAdapterCorpusDisputes>();
         services.AddActivityAdapter<WitActivityCorpusCollect, WitActivityAdapterCorpusCollect>();
         services.AddActivityAdapter<WitActivityCorpusSamplingRate, WitActivityAdapterCorpusSamplingRate>();
         services.AddActivityAdapter<WitActivityCorpusIntegrity, WitActivityAdapterCorpusIntegrity>();

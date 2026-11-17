@@ -1,5 +1,6 @@
 using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Text;
+using OutWit.Controller.AI.Corpus.Trust;
 using OutWit.Controller.AI.Corpus.Warc;
 
 namespace OutWit.Controller.AI.Corpus.Shards;
@@ -104,7 +105,7 @@ public sealed class ShardPdfStage
         stats.PdfIn(record.Header(TRUNCATED) != null);
 
         var sandbox = Sandbox()
-                      ?? throw new PdfSandboxException($"this node cannot run the PDF stage ({m_problem}); the shard holds a PDF, so another node must make its product");
+                      ?? throw new PdfSandboxException(CorpusResultCodes.FAULT_PDF_SANDBOX, $"this node cannot run the PDF stage ({m_problem}); the shard holds a PDF, so another node must make its product");
 
         var extraction = Run(sandbox, payload.Body.Span, cancellationToken);
         stats.PdfFuel(extraction.Fuel);

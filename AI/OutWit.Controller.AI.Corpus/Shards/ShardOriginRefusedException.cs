@@ -10,10 +10,12 @@ public sealed class ShardOriginRefusedException : Exception
     #region Constructors
 
     /// <summary>Creates the exception.</summary>
-    /// <param name="message">What was refused and why.</param>
-    public ShardOriginRefusedException(string message)
+    /// <param name="code">The refusal's code (<see cref="Trust.CorpusResultCodes"/>): what a result says of it.</param>
+    /// <param name="message">What was refused and why: the node's own log reads it, nothing else does.</param>
+    public ShardOriginRefusedException(string code, string message)
         : base(message)
     {
+        Code = code;
     }
 
     #endregion
@@ -33,6 +35,13 @@ public sealed class ShardOriginRefusedException : Exception
 
         return null;
     }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>The refusal's code.</summary>
+    public string Code { get; }
 
     #endregion
 }

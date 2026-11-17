@@ -52,6 +52,9 @@ internal sealed class WitActivityAdapterCorpusSplit : WitActivityAdapterFunction
 
         Logger.LogInformation("Corpus.Split: {Storage}", CorpusStorageCheck.Describe(estimate, limit));
 
+        // What binds a result to its task on the server, and the one version the job runs on.
+        CorpusTaskPlanner.Issue(plan.Tasks, ControllerBuildInfo.VERSION);
+
         if (!pool.TrySetCollection(activity.ReturnReference, plan.Tasks))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
     }

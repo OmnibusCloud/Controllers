@@ -8,6 +8,17 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
     CorpusResultCollection:executions = Grid.ForEach(task in tasks, checked)
         => Corpus.ProcessShard(task);
 
-    Blob:report = Corpus.Collect(executions, opts);
-    Blob:integrity = Corpus.Integrity(executions);
+    CorpusTaskCollection:repairs = Corpus.Repairs(tasks, executions);
+
+    CorpusResultCollection:repaired = Grid.ForEach(task in repairs)
+        => Corpus.ProcessShard(task);
+
+    CorpusTaskCollection:disputes = Corpus.Disputes(tasks, executions, repairs, repaired);
+    ProcessingOptions:majority = Grid.Replicas(3);
+
+    CorpusResultCollection:resolved = Grid.ForEach(task in disputes, majority)
+        => Corpus.ProcessShard(task);
+
+    Blob:report = Corpus.Collect(tasks, executions, repairs, repaired, disputes, resolved, opts);
+    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved);
 }

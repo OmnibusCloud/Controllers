@@ -156,18 +156,27 @@ public static class MinHashSigner
         var rows = signature.Length / bands;
         var keys = new ulong[bands];
         for (var band = 0; band < bands; band++)
-        {
-            var h = FNV_OFFSET ^ (ulong)band;
-            for (var row = 0; row < rows; row++)
-            {
-                h ^= signature[band * rows + row];
-                h *= FNV_PRIME;
-            }
-
-            keys[band] = h;
-        }
+            keys[band] = BandKey(signature, band, rows);
 
         return keys;
+    }
+
+    /// <summary>The LSH key of one band of a signature: the same value <see cref="BandKeys"/> gives at that band.</summary>
+    /// <param name="signature">The signature.</param>
+    /// <param name="band">The band, from 0.</param>
+    /// <param name="rows">Rows per band: the signature length over the band count.</param>
+    /// <returns>The band's 64-bit key.</returns>
+    public static ulong BandKey(ReadOnlySpan<ulong> signature, int band, int rows)
+    {
+        var h = FNV_OFFSET ^ (ulong)band;
+        var start = band * rows;
+        for (var row = 0; row < rows; row++)
+        {
+            h ^= signature[start + row];
+            h *= FNV_PRIME;
+        }
+
+        return h;
     }
 
     /// <summary>

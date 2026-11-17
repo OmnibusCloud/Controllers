@@ -50,9 +50,10 @@ public sealed class CorpusReportFunnelTests
         // The target languages make the language stage drop as well; the PDF stage is off so the
         // test runs without the extractor module.
         var pipeline = new CorpusPipelineData { Version = "test-v1", ExtractPdf = false, TargetLanguages = ["eng", "deu", "rus"] };
-        var results = new[] { Result(0, WET_FIXTURE, CorpusSourceFormat.Wet, pipeline), Result(1, WARC_FIXTURE, CorpusSourceFormat.Warc, pipeline) };
+        var tasks = CorpusTestRun.Tasks(2, pipeline);
+        var results = new object?[] { Result(tasks[0], WET_FIXTURE, CorpusSourceFormat.Wet), Result(tasks[1], WARC_FIXTURE, CorpusSourceFormat.Warc) };
 
-        using var report = JsonDocument.Parse(CorpusReportWriter.Write(results));
+        using var report = JsonDocument.Parse(CorpusReportWriter.Write(CorpusTestRun.Ledger(tasks, results)));
         var summary = report.RootElement.GetProperty("summary");
         var funnel = summary.GetProperty("funnel");
         var dropped = funnel.GetProperty("dropped");
@@ -83,9 +84,10 @@ public sealed class CorpusReportFunnelTests
     public void AStatsAndHashesReportNamesNoBlobTest()
     {
         var pipeline = new CorpusPipelineData { Version = "test-v1", Output = CorpusOutputMode.StatsAndHashes };
-        var result = Result(0, WET_FIXTURE, CorpusSourceFormat.Wet, pipeline);
+        var tasks = CorpusTestRun.Tasks(1, pipeline);
+        var result = Result(tasks[0], WET_FIXTURE, CorpusSourceFormat.Wet);
 
-        using var report = JsonDocument.Parse(CorpusReportWriter.Write([result]));
+        using var report = JsonDocument.Parse(CorpusReportWriter.Write(CorpusTestRun.Ledger(tasks, [result])));
         var summary = report.RootElement.GetProperty("summary");
         var shard = report.RootElement.GetProperty("shards")[0];
 
@@ -124,8 +126,9 @@ public sealed class CorpusReportFunnelTests
 
     #region Tools
 
-    private CorpusResultData Result(int index, string fixture, CorpusSourceFormat format, CorpusPipelineData pipeline)
+    private CorpusResultData Result(CorpusTaskData task, string fixture, CorpusSourceFormat format)
     {
+        var pipeline = task.Pipeline!;
         if (format == CorpusSourceFormat.Warc && pipeline.ExtractPdf)
             PdfTestModule.Require();
 
@@ -137,13 +140,15 @@ public sealed class CorpusReportFunnelTests
 
         return new CorpusResultData
         {
-            TaskIndex = index,
+            TaskIndex = task.TaskIndex,
             Verdict = CorpusShardVerdict.Completed,
             TextBlobId = pipeline.Output == CorpusOutputMode.Full ? Guid.NewGuid() : Guid.Empty,
             SignaturesBlobId = ShardProcessor.KeepsSignatures(pipeline) ? Guid.NewGuid() : Guid.Empty,
             ContentSha256 = product.ContentSha256,
             Stats = product.Stats.Build(1, text.Length, 0, 0),
-            ControllerVersion = "test",
+            ControllerVersion = CorpusTestRun.VERSION,
+            SourceUrl = task.Source!.Url,
+            Ticket = task.Ticket,
             Output = pipeline.Output,
             MinHash = signs ? MinHashParameters.Resolve(pipeline.MinHash).ToData() : null,
             SignaturesSha256 = product.SignaturesSha256
