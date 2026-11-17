@@ -3,13 +3,15 @@ using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
 using OutWit.Controller.AI.Verify.Sandbox;
 
-// Runs one guest of each trap kind in the sandbox and prints "<kind> <verdict>" per line. A host
-// whose process a trap kills prints nothing past "running" and exits with the fault's code.
+// Runs one guest of each trap kind in the sandbox and prints "<kind> <verdict> <fuel> <words>"
+// per line. A host whose process a trap kills prints nothing past "running" and exits with the
+// fault's code. With --explicit-traps the sandbox takes traps as explicit checks whatever the
+// process: the mode a host under hardware stack protection runs in, on a machine that has none.
 
 var wasi = VerifyRuntimeCatalog.Resolve(null, VerifyRuntimeCatalog.WASI, out var reason)
            ?? throw new InvalidOperationException(reason);
 
-using var sandbox = new VerifyWasmSandbox();
+using var sandbox = new VerifyWasmSandbox(null, explicitTraps: args.Contains("--explicit-traps"));
 Console.WriteLine($"running, shadow stacks {(ShadowStacks.Enforced() ? "on" : "off")}, traps {(sandbox.ExplicitTraps ? "explicit" : "hardware")}");
 foreach (var (kind, body) in TrapModules.BODIES)
 {
@@ -20,7 +22,7 @@ foreach (var (kind, body) in TrapModules.BODIES)
         Sources = [new VerifySourceFileData { Name = $"{kind}.wasm", Content = Convert.ToBase64String(TrapModules.Build(body)) }]
     };
     var result = sandbox.Execute(wasi, task, VerifySandboxDefaults.Resolve(null, null));
-    Console.WriteLine($"{kind} {result.Verdict} {result.Stderr.Split('\n')[0]}");
+    Console.WriteLine($"{kind} {result.Verdict} {result.FuelConsumed} {result.Stderr.Split('\n')[0]}");
 }
 
 return 0;

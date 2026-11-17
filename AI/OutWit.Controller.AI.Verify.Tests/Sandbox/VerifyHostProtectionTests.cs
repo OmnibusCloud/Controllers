@@ -9,6 +9,13 @@ namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
 /// cloud client's worker died with every task in it. The test host of these tests is not such a
 /// process, so the check runs a separate executable built the way a host is
 /// (OutWit.Controller.AI.Verify.Tests.TrapHost) and reads its output.
+/// <para>
+/// Whether that executable really runs under shadow stacks depends on the machine: the
+/// processor and the system must enforce them. Where they do not, the proof of survival under
+/// stack protection does not run, and its test says so by being skipped with that reason
+/// rather than passing (audit finding V:M-7). The explicit-trap mode itself is asked for in a
+/// test of its own, so it is exercised on every machine.
+/// </para>
 /// </summary>
 [TestFixture]
 public sealed class VerifyHostProtectionTests
@@ -17,6 +24,10 @@ public sealed class VerifyHostProtectionTests
 
     private const string HOST = "OutWit.Controller.AI.Verify.Tests.TrapHost";
     private const int TIMEOUT_MS = 180_000;
+
+    private const string SHADOW_STACKS_ON = "shadow stacks on";
+    private const string SHADOW_STACKS_OFF = "shadow stacks off";
+    private const string TRAPS_EXPLICIT = "traps explicit";
 
     private const int IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS = 20;
     private const int IMAGE_DLLCHARACTERISTICS_EX_CET_COMPAT = 0x1;
@@ -28,23 +39,61 @@ public sealed class VerifyHostProtectionTests
     [Test]
     public void AGuestTrapLeavesTheHostRunningTest()
     {
-        var (exitCode, output) = RunHost();
-        TestContext.Out.WriteLine(output);
+        var run = RunHost();
+        TestContext.Out.WriteLine(run.Output);
+
+        AssertEveryTrapIsAVerdict(run);
+    }
+
+    [Test]
+    public void M7AHostUnderStackProtectionSurvivesAGuestTrapTest()
+    {
+        // The proof the page for contributors promises: a process with hardware-enforced stack
+        // protection is not killed by a guest's trap. It is a proof only where the process really
+        // runs under that protection. The test above passes with it off as well, and used to be
+        // the only one: on a machine without it nothing said that the proof had not run.
+        if (!OperatingSystem.IsWindows())
+            Assert.Ignore("hardware-enforced stack protection (CET shadow stacks) is Windows': the proof does not run on this system");
+
+        var run = RunHost();
+        TestContext.Out.WriteLine(run.Output);
+
+        if (!run.Output.Contains(SHADOW_STACKS_ON))
+        {
+            Assert.That(run.Output, Does.Contain(SHADOW_STACKS_OFF), run.Output);
+            Assert.Ignore("the trap host ran WITHOUT shadow stacks on this machine (its processor or its system does not enforce them): " +
+                          "that a host under hardware stack protection survives a guest's trap was NOT proven here. " +
+                          "The explicit-trap mode such a host runs in is still exercised (ExplicitTrapsGiveTheVerdictsOfHardwareTrapsTest).");
+        }
+
+        Assert.That(run.Output, Does.Contain(TRAPS_EXPLICIT), "a host with shadow stacks takes traps as explicit checks");
+        AssertEveryTrapIsAVerdict(run);
+    }
+
+    [Test]
+    public void M7ExplicitTrapsGiveTheVerdictsOfHardwareTrapsTest()
+    {
+        // The mode a host under stack protection runs in, asked for on any machine: the build
+        // server's Windows may not enforce shadow stacks, and the explicit checks would never run
+        // there. The same four guests, the same verdicts, words and fuel as in the mode the
+        // process picks for itself.
+        var chosen = RunHost();
+        var forced = RunHost("--explicit-traps");
+        TestContext.Out.WriteLine(chosen.Output);
+        TestContext.Out.WriteLine(forced.Output);
 
         Assert.Multiple(() =>
         {
-            Assert.That(exitCode, Is.EqualTo(0), $"the host exited with 0x{exitCode:X8}");
-            Assert.That(output, Does.Contain("unreachable RuntimeError wasm trap: unreachable"));
-            Assert.That(output, Does.Contain("out-of-bounds RuntimeError wasm trap: out of bounds memory access"));
-            Assert.That(output, Does.Contain("division-by-zero RuntimeError wasm trap: integer division by zero"));
-            Assert.That(output, Does.Contain("stack-overflow RuntimeError wasm trap: call stack exhausted"));
+            Assert.That(forced.Output, Does.Contain(TRAPS_EXPLICIT));
+            AssertEveryTrapIsAVerdict(forced);
+            Assert.That(TrapLines(forced.Output), Is.EqualTo(TrapLines(chosen.Output)), "verdict, fuel and words of every trap, in both modes");
         });
     }
 
     [Test]
     public void TheHostIsBuiltWithStackProtectionTest()
     {
-        // Without the flag the test above would prove nothing on Windows.
+        // Without the flag the stack-protection proof would prove nothing on Windows.
         if (!OperatingSystem.IsWindows())
             Assert.Ignore("hardware-enforced stack protection is a Windows apphost flag");
 
@@ -59,9 +108,9 @@ public sealed class VerifyHostProtectionTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(output, Does.Contain("shadow stacks on, traps explicit").Or.Contain("shadow stacks off, traps hardware"), output);
+            Assert.That(output, Does.Contain($"{SHADOW_STACKS_ON}, {TRAPS_EXPLICIT}").Or.Contain($"{SHADOW_STACKS_OFF}, traps hardware"), output);
             if (!OperatingSystem.IsWindows())
-                Assert.That(output, Does.Contain("shadow stacks off, traps hardware"), "only Windows has shadow stacks");
+                Assert.That(output, Does.Contain($"{SHADOW_STACKS_OFF}, traps hardware"), "only Windows has shadow stacks");
         });
     }
 
@@ -69,12 +118,33 @@ public sealed class VerifyHostProtectionTests
 
     #region Tools
 
-    private static (int ExitCode, string Output) RunHost()
+    private static void AssertEveryTrapIsAVerdict((int ExitCode, string Output) run)
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(run.ExitCode, Is.EqualTo(0), $"the host exited with 0x{run.ExitCode:X8}");
+            Assert.That(run.Output, Does.Match(@"unreachable RuntimeError \d+ wasm trap: unreachable"));
+            Assert.That(run.Output, Does.Match(@"out-of-bounds RuntimeError \d+ wasm trap: out of bounds memory access"));
+            Assert.That(run.Output, Does.Match(@"division-by-zero RuntimeError \d+ wasm trap: integer division by zero"));
+            Assert.That(run.Output, Does.Match(@"stack-overflow RuntimeError \d+ wasm trap: call stack exhausted"));
+        });
+    }
+
+    /// <summary>The lines of the four guests: everything the host printed but its first line, which names the mode.</summary>
+    private static string[] TrapLines(string output)
+    {
+        return output.Split('\n').Select(line => line.TrimEnd('\r')).Where(line => line.Length > 0 && !line.StartsWith("running", StringComparison.Ordinal)).ToArray();
+    }
+
+    private static (int ExitCode, string Output) RunHost(params string[] arguments)
     {
         var path = HostPath();
-        var start = OperatingSystem.IsWindows()
-            ? new ProcessStartInfo(path)
-            : new ProcessStartInfo("dotnet", $"\"{Path.ChangeExtension(path, ".dll")}\"");
+        var start = OperatingSystem.IsWindows() ? new ProcessStartInfo(path) : new ProcessStartInfo("dotnet");
+        if (!OperatingSystem.IsWindows())
+            start.ArgumentList.Add(Path.ChangeExtension(path, ".dll"));
+        foreach (var argument in arguments)
+            start.ArgumentList.Add(argument);
+
         start.RedirectStandardOutput = true;
         start.RedirectStandardError = true;
         start.UseShellExecute = false;

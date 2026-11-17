@@ -16,7 +16,8 @@ namespace OutWit.Controller.AI.Wasm;
 /// trapped took the whole cloud client down with it. In such a process every trap becomes an
 /// explicit check and the host's protection stays on. Elsewhere the hardware traps stay: explicit
 /// checks cost a guest a fifth to a half of its speed. The verdicts, the outputs and the fuel are
-/// the same either way (fuel counts wasm operators, not machine instructions).</item>
+/// the same either way (fuel counts wasm operators, not machine instructions): a test runs the
+/// same programs in both modes in one process and compares them.</item>
 /// <item>The async stack size. The engine refuses a guest stack larger than its async stack,
 /// whose default (2 MiB) the binding cannot change: setting it lets a guest have the stack a
 /// program has on Linux (<see cref="WasmHostGuestThread.ENGINE_STACK_BYTES"/>).</item>
@@ -59,16 +60,22 @@ internal static class WasmHostEngineNative
     /// when this process enforces shadow stacks.
     /// </summary>
     /// <param name="config">The configuration the engine will be made from.</param>
-    /// <returns>True when traps are explicit checks in this process.</returns>
+    /// <param name="explicitTraps">
+    /// True to make traps explicit checks whatever the process: what a host with shadow stacks gets
+    /// by itself, asked for where the process has none (a comparison of the two modes, a host that
+    /// prefers the checks). False leaves the choice to the process, and never turns the checks off
+    /// in one that needs them.
+    /// </param>
+    /// <returns>True when traps are explicit checks in the engine made from the configuration.</returns>
     /// <exception cref="InvalidOperationException">The binding has no native handle or the native library lacks the calls.</exception>
-    public static bool Apply(Config config)
+    public static bool Apply(Config config, bool explicitTraps = false)
     {
         var handle = NativeHandleOf(config);
         var library = TheBindingsLibrary();
 
         Export<SetSize>(library, ASYNC_STACK_SIZE)(handle, ASYNC_STACK_BYTES);
 
-        var explicitTraps = HostEnforcesShadowStacks();
+        explicitTraps = explicitTraps || HostEnforcesShadowStacks();
         if (explicitTraps)
             Export<SetFlag>(library, SIGNALS_BASED_TRAPS)(handle, false);
 

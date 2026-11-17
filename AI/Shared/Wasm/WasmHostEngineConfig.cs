@@ -32,10 +32,11 @@ internal static class WasmHostEngineConfig
     /// already applied through the C API.
     /// </summary>
     /// <param name="parallelCompilation">Whether a compile may use threads of the engine's own besides the caller's.</param>
-    /// <param name="explicitTraps">True when traps are explicit checks in this process.</param>
+    /// <param name="forceExplicitTraps">True to make traps explicit checks whatever the process; false leaves it to the process (a process with shadow stacks always has them).</param>
+    /// <param name="explicitTraps">True when traps are explicit checks in the engine made from the configuration.</param>
     /// <returns>A configuration not yet used, to make one engine from.</returns>
     /// <exception cref="InvalidOperationException">No native library was found, the one loaded is not the pinned one, or the binding has no native handle or the library lacks the calls.</exception>
-    public static Config Create(bool parallelCompilation, out bool explicitTraps)
+    public static Config Create(bool parallelCompilation, bool forceExplicitTraps, out bool explicitTraps)
     {
         var config = NewConfig();
         try
@@ -57,7 +58,7 @@ internal static class WasmHostEngineConfig
                 .WithRelaxedSIMD(true, true)
                 .WithParallelCompilation(parallelCompilation);
 
-            explicitTraps = WasmHostEngineNative.Apply(config);
+            explicitTraps = WasmHostEngineNative.Apply(config, forceExplicitTraps);
             return config;
         }
         catch

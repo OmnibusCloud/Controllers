@@ -44,7 +44,7 @@ internal static class WasmHostLimits
     /// <param name="store">A store not yet used.</param>
     /// <param name="fuel">The fuel the run may use (at least one unit is given).</param>
     /// <param name="memoryBytes">The cap of the guest's linear memory (at least one byte).</param>
-    /// <param name="wallMs">The wall time the run may take; a backstop, fuel binds first.</param>
+    /// <param name="wallMs">The wall time the run may take: a backstop of the host's own, not a budget of the guest's work. Fuel bounds the work; how long a unit of it takes depends on the machine and on what the guest does, so the clock can end a run before its fuel does.</param>
     public static void Apply(Store store, long fuel, long memoryBytes, int wallMs)
     {
         store.Fuel = (ulong)Math.Max(1, fuel);
