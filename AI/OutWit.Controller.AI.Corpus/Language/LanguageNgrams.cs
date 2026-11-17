@@ -1,12 +1,14 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
+using OutWit.Controller.AI.Corpus.Text.Casing;
 
 namespace OutWit.Controller.AI.Corpus.Language;
 
 /// <summary>
 /// Text to character n-grams, the same way for training and for identification: lower-cased
-/// by the invariant culture, digits and punctuation become word boundaries, every word is
+/// by the controller's own table (<see cref="CorpusCasing"/>: one Unicode version on every
+/// node, not the machine's globalization library), digits and punctuation become word boundaries, every word is
 /// padded with the boundary mark so that word starts and ends count, and n-grams of 1 to
 /// <see cref="MAX_N"/> characters are taken over the padded words. Pure functions of the
 /// text — no culture, no locale, no platform in the result.
@@ -42,7 +44,7 @@ public static class LanguageNgrams
 
             if (Rune.IsLetter(rune))
             {
-                word.Append(Rune.ToLowerInvariant(rune).ToString());
+                word.Append(CorpusCasing.ToLower(rune).ToString());
                 continue;
             }
 
@@ -101,7 +103,7 @@ public static class LanguageNgrams
 
             int written;
             if (Rune.IsLetter(rune))
-                written = Rune.ToLowerInvariant(rune).EncodeToUtf16(utf16);
+                written = CorpusCasing.ToLower(rune).EncodeToUtf16(utf16);
             else if (Rune.GetUnicodeCategory(rune) is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark)
                 written = rune.EncodeToUtf16(utf16);
             else

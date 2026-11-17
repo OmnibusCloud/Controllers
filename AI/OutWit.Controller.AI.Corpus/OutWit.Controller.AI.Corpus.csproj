@@ -100,6 +100,12 @@
     <None Include="build\OutWit.Controller.AI.Corpus.targets" Pack="true" PackagePath="build\" />
   </ItemGroup>
 
+  <!-- The lower-case table of the stages (Text/Casing) is derived from the Unicode Character
+       Database: its copyright and permission notice travels with every copy of the package. -->
+  <ItemGroup>
+    <None Include="LICENSE-unicode.txt" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
   <Import Project="..\..\Build\OutWit.Controller.targets" />
 
 </Project>

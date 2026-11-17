@@ -129,7 +129,8 @@ public static class CorpusBenchmarkShard
         for (var i = 0; i < words; i++)
         {
             var word = Word(random, vocabulary);
-            builder.Append(inSentence == 0 ? char.ToUpperInvariant(word[0]) + word[1..] : word);
+            // The vocabulary is lower-case ASCII: its capital is a bit, on any machine.
+            builder.Append(inSentence == 0 ? (char)(word[0] & ~0x20) + word[1..] : word);
             inSentence++;
             if (inSentence >= sentenceLength || i == words - 1)
             {

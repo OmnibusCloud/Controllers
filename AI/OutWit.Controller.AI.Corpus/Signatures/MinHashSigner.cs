@@ -1,4 +1,5 @@
 using System.Text;
+using OutWit.Controller.AI.Corpus.Text.Casing;
 
 namespace OutWit.Controller.AI.Corpus.Signatures;
 
@@ -216,7 +217,7 @@ public static class MinHashSigner
         return shingles;
     }
 
-    /// <summary>The tokens of a text: runs of letters and digits, lower-cased by the invariant culture.</summary>
+    /// <summary>The tokens of a text: runs of letters and digits, lower-cased by the controller's own table (<see cref="CorpusCasing"/>).</summary>
     private static List<string> Words(string text)
     {
         var words = new List<string>();
@@ -226,7 +227,7 @@ public static class MinHashSigner
         {
             if (Rune.IsLetterOrDigit(rune))
             {
-                var written = Rune.ToLowerInvariant(rune).EncodeToUtf16(utf16);
+                var written = CorpusCasing.ToLower(rune).EncodeToUtf16(utf16);
                 word.Append(utf16[..written]);
                 continue;
             }
