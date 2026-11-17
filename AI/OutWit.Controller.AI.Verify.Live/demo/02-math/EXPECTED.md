@@ -3,6 +3,12 @@
 Measured on a six-node test fleet (Windows x64 and Linux x64) with Verify 0.11.3, using the
 commands of `SCRIPT.md`.
 
+**With Verify 0.13.0** the verdicts below are unchanged: a test of the controller runs every
+row of this kit in the sandbox (`VerifyDemoKitTests`). The report gained a `schema` tag and
+three counters, and fuel now counts the bytes a program reads and prints, so the sizes and
+SHA-256 values in the table of the run are those of the version named above. They are measured
+again when the kit is next walked on a fleet.
+
 ## The corpus
 
 ```
