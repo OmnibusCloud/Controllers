@@ -44,7 +44,8 @@ public sealed partial class CorpusRuntimeDiagnosticsData : ModelBase
                && DownloadsPerNode.Is(other.DownloadsPerNode)
                && MemoryPerShardBytes.Is(other.MemoryPerShardBytes)
                && PdfModuleSha256.Is(other.PdfModuleSha256)
-               && PdfStageProblem.Is(other.PdfStageProblem);
+               && PdfStageProblem.Is(other.PdfStageProblem)
+               && MachineOriginCount.Is(other.MachineOriginCount);
     }
 
     /// <summary>Deep copy.</summary>
@@ -68,7 +69,8 @@ public sealed partial class CorpusRuntimeDiagnosticsData : ModelBase
             DownloadsPerNode = DownloadsPerNode,
             MemoryPerShardBytes = MemoryPerShardBytes,
             PdfModuleSha256 = PdfModuleSha256,
-            PdfStageProblem = PdfStageProblem
+            PdfStageProblem = PdfStageProblem,
+            MachineOriginCount = MachineOriginCount
         };
     }
 
@@ -120,7 +122,7 @@ public sealed partial class CorpusRuntimeDiagnosticsData : ModelBase
     [MemoryPackOrder(9)]
     public List<string> PublicOrigins { get; set; } = [];
 
-    /// <summary>The further hosts the answering machine's operator lists (taken as written); a job's own list narrows, never widens.</summary>
+    /// <summary>Not filled: the hosts the answering machine's operator lists are the operator's own, and whoever runs the diagnostics is not shown them (<see cref="MachineOriginCount"/> says how many there are). Kept for the wire layout.</summary>
     [MemoryPackOrder(10)]
     public List<string> MachineOrigins { get; set; } = [];
 
@@ -144,6 +146,10 @@ public sealed partial class CorpusRuntimeDiagnosticsData : ModelBase
     /// <summary>Why the answering process cannot run the PDF stage (no module, another binding, no native library); "" when it can.</summary>
     [MemoryPackOrder(15)]
     public string PdfStageProblem { get; set; } = "";
+
+    /// <summary>How many further hosts the answering machine's operator lists beside the public origins: a count, never the names. A job's own list narrows what a machine fetches from, never widens it.</summary>
+    [MemoryPackOrder(16)]
+    public int MachineOriginCount { get; set; }
 
     #endregion
 }

@@ -102,6 +102,38 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
         });
     }
 
+    [Test]
+    public async Task H7PreflightStatesTheDiskANodeNeedsAndTheRoundsTheEstimateLeavesOutTest()
+    {
+        var manifest = await UploadAsync(Manifest(WET_FIXTURE, WARC_FIXTURE), "disk.json");
+
+        var job = Engine.Compile(m_preflightScript);
+        await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData { SamplingRate = 0.5 });
+        var report = (CorpusPreflightData)job.Variables["result"].Value!;
+        var largest = Math.Max(Size(WET_FIXTURE), Size(WARC_FIXTURE));
+        var perShard = largest + largest / 2 + (64L << 20);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(perShard), "the largest shard, half of it again for its products, 64 MiB");
+            Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(ShardDisk.Needed(largest)), "what a node asks of its own disk before it fetches");
+            Assert.That(report.Messages, Has.Some.StartsWith("Node disk: a node holds at most its degree and 2 more shards at a time").And.Contains($"Each held shard needs {perShard} bytes free"));
+            Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a sampled shard whose two copies disagree is fetched again by up to 3 machines (a dispute: at most 1 shard(s) here), and a shard a node returns as a fault of its own is fetched once more (a repair)."));
+        });
+    }
+
+    [Test]
+    public async Task H7PreflightWithoutSamplingPromisesNoDisputeTest()
+    {
+        var manifest = await UploadAsync(Manifest(WET_FIXTURE), "disk-plain.json");
+
+        var job = Engine.Compile(m_preflightScript);
+        await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData());
+        var report = (CorpusPreflightData)job.Variables["result"].Value!;
+
+        Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a shard a node returns as a fault of its own is fetched once more (a repair)."));
+    }
+
     #endregion
 
     #region Run Tests
@@ -206,8 +238,9 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
 
             Assert.Multiple(() =>
             {
-                Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/4"));
+                Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/5"));
                 Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));
+                Assert.That(summary.GetProperty("disputes_resolved").GetInt32(), Is.EqualTo(summary.GetProperty("signature_mismatches").GetInt32()), "three machines ran each such shard again, and two of them are honest");
                 Assert.That(summary.GetProperty("signature_mismatches").GetInt32(), Is.GreaterThanOrEqualTo(1), "the dishonest node held a side of at least one pair");
                 Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.EqualTo(summary.GetProperty("signature_mismatches").GetInt32()), "nothing else differs");
                 Assert.That(mismatched.Select(pair => pair.GetProperty("signatures").GetString()), Is.All.EqualTo("differ"));

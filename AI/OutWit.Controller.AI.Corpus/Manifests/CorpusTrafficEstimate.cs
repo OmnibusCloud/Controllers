@@ -38,6 +38,19 @@ public sealed record CorpusTrafficEstimate(long OnceBytes, long CopyBytes, int S
             : line + ".";
     }
 
+    /// <summary>
+    /// What the estimate leaves out, said beside it: the rounds a run adds only when something
+    /// went wrong. A shard whose copies disagree is fetched again by up to three machines, and a
+    /// shard a node returned as a fault of its own once more.
+    /// </summary>
+    /// <returns>The preflight's second line on traffic.</returns>
+    public string DescribeRounds()
+    {
+        return SampledShards > 0
+            ? $"Not in the traffic estimate: a sampled shard whose two copies disagree is fetched again by up to {Trust.CorpusLedger.DISPUTE_COPIES} machines (a dispute: at most {SampledShards} shard(s) here), and a shard a node returns as a fault of its own is fetched once more (a repair)."
+            : "Not in the traffic estimate: a shard a node returns as a fault of its own is fetched once more (a repair).";
+    }
+
     #endregion
 
     #region Properties

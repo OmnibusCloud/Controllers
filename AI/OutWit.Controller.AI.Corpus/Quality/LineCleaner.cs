@@ -1,4 +1,5 @@
 using System.Text;
+using OutWit.Controller.AI.Corpus.Text.Casing;
 
 namespace OutWit.Controller.AI.Corpus.Quality;
 
@@ -105,7 +106,7 @@ public static class LineCleaner
 
         foreach (var line in text.Split('\n'))
         {
-            if (!line.Contains('{') || HasLongWord(line) || !IsProseShaped(line, rules) || line.Contains(JAVASCRIPT, StringComparison.OrdinalIgnoreCase))
+            if (!line.Contains('{') || HasLongWord(line) || !IsProseShaped(line, rules) || CorpusCasing.ContainsIgnoreAsciiCase(line, JAVASCRIPT))
                 continue;
 
             return true;
@@ -167,12 +168,14 @@ public static class LineCleaner
     /// <returns>True when the line goes.</returns>
     public static bool IsBoilerplate(string line)
     {
-        if (line.Contains(JAVASCRIPT, StringComparison.OrdinalIgnoreCase) || line.Contains(COOKIE, StringComparison.OrdinalIgnoreCase))
+        // The phrases are ASCII, and only the case of ASCII letters is set aside: the answer is
+        // the controller's, not the globalization library's of the machine.
+        if (CorpusCasing.ContainsIgnoreAsciiCase(line, JAVASCRIPT) || CorpusCasing.ContainsIgnoreAsciiCase(line, COOKIE))
             return true;
 
         foreach (var phrase in POLICY)
         {
-            if (line.Contains(phrase, StringComparison.OrdinalIgnoreCase))
+            if (CorpusCasing.ContainsIgnoreAsciiCase(line, phrase))
                 return true;
         }
 

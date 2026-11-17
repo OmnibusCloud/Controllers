@@ -236,11 +236,11 @@ public sealed class ShardFetcherTests
     {
         var before = m_origin.Requests;
 
-        var exception = Assert.ThrowsAsync<HttpRequestException>(() => m_fetcher.FetchAsync(new Uri(m_origin.FlakyUrl(WET_FIXTURE, 10)), Path.Combine(m_directory, "never.gz"), 0, CancellationToken.None));
+        var exception = Assert.ThrowsAsync<ShardFetchException>(() => m_fetcher.FetchAsync(new Uri(m_origin.FlakyUrl(WET_FIXTURE, 10)), Path.Combine(m_directory, "never.gz"), 0, CancellationToken.None));
 
         Assert.Multiple(() =>
         {
-            Assert.That(exception!.Message, Does.Contain("3 attempt(s)"));
+            Assert.That(exception!.Status, Is.EqualTo(HttpStatusCode.ServiceUnavailable), "the origin answered: its status is what the result will say");
             Assert.That(m_origin.Requests - before, Is.EqualTo(3), "the policy's attempts, no more");
         });
     }
@@ -250,11 +250,11 @@ public sealed class ShardFetcherTests
     {
         var before = m_origin.Requests;
 
-        var exception = Assert.ThrowsAsync<HttpRequestException>(() => m_fetcher.FetchAsync(new Uri($"{m_origin.BaseUrl}forbidden"), Path.Combine(m_directory, "forbidden.gz"), 0, CancellationToken.None));
+        var exception = Assert.ThrowsAsync<ShardFetchException>(() => m_fetcher.FetchAsync(new Uri($"{m_origin.BaseUrl}forbidden"), Path.Combine(m_directory, "forbidden.gz"), 0, CancellationToken.None));
 
         Assert.Multiple(() =>
         {
-            Assert.That(exception!.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+            Assert.That(exception!.Status, Is.EqualTo(HttpStatusCode.Forbidden));
             Assert.That(m_origin.Requests - before, Is.EqualTo(1), "a 403 is not retried");
         });
     }
@@ -287,7 +287,9 @@ public sealed class ShardFetcherTests
     {
         var port = m_origin.Port == 65535 ? 65534 : m_origin.Port + 1;
 
-        Assert.ThrowsAsync<HttpRequestException>(() => m_fetcher.FetchAsync(new Uri($"http://127.0.0.1:{port}/shards/x.gz"), Path.Combine(m_directory, "dead.gz"), 0, CancellationToken.None));
+        var exception = Assert.ThrowsAsync<ShardFetchException>(() => m_fetcher.FetchAsync(new Uri($"http://127.0.0.1:{port}/shards/x.gz"), Path.Combine(m_directory, "dead.gz"), 0, CancellationToken.None));
+
+        Assert.That(exception!.Status, Is.Null, "nobody answered: the node cannot tell its own link from the origin");
     }
 
     [Test]

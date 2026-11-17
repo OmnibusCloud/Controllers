@@ -68,8 +68,9 @@ public abstract class CorpusScriptTestBase
     public void ScriptBaseTearDown()
     {
         Origin?.Dispose();
-        if (m_blobStoragePath != null && Directory.Exists(m_blobStoragePath))
-            Directory.Delete(m_blobStoragePath, recursive: true);
+
+        // The adapters hand each task's scope over for deletion; it lives under this folder.
+        CorpusTestFolders.Delete(m_blobStoragePath);
     }
 
     #endregion
@@ -104,6 +105,23 @@ public abstract class CorpusScriptTestBase
     protected async Task<JsonDocument> ReadJsonAsync(Guid blobId)
     {
         return JsonDocument.Parse(await ReadBytesAsync(blobId));
+    }
+
+    /// <summary>What a job's status says, all of it: the result and the message of the job and of every step under it (a status's own ToString has no message).</summary>
+    protected static string Describe(IWitProcessingStatus status)
+    {
+        var text = new StringBuilder();
+        var pending = new Stack<IWitProcessingStatus>();
+        pending.Push(status);
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            text.Append(current.Result).Append(": ").AppendLine(current.Message);
+            foreach (var child in current.Children)
+                pending.Push(child);
+        }
+
+        return text.ToString();
     }
 
     /// <summary>A manifest over golden shards served by the loopback origin.</summary>

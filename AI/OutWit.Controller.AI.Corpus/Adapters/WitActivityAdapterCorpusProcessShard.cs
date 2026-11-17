@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Benchmark;
 using OutWit.Controller.AI.Corpus.Model;
-using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Benchmark;
@@ -42,15 +41,42 @@ internal sealed class WitActivityAdapterCorpusProcessShard : WitActivityAdapterF
             throw new InvalidOperationException("Failed to get parameter 'Task'.");
 
         var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
-        var scope = TempStorage.CreateScope($"corpus-{status.JobId:N}-{task.TaskIndex}");
+        var jobId = status.JobId;
 
-        // The shard's place in what this node tells the host about its share: how much has
-        // arrived from the origin, then how many shards are processed.
-        using var ticket = ShardShareProgress.Enter(status.JobId, task.Source?.SizeBytes ?? 0, CorpusActivityProgressReporter.Create(ProcessingManager, status.JobId), Logger);
+        // The scope is unique to this execution, not to the shard: a later round of the job may
+        // bring the same shard to this node again. A node that cannot make it refuses the batch.
+        string scope;
+        try
+        {
+            scope = ShardBatchGuard.CreateScope(TempStorage, $"corpus-{jobId:N}-{task.TaskIndex}-{Guid.NewGuid():N}");
+        }
+        catch (ShardBatchRefusedException exception)
+        {
+            Logger.LogWarning("Corpus.ProcessShard {Index}: the batch is refused ({Code}).", task.TaskIndex, exception.Code);
+            throw;
+        }
 
         try
         {
-            var result = await ShardTaskRunner.RunAsync(task, FETCHER.Value, BlobService, scope, ticket, Logger, cancellationToken);
+            // What this node can know before any work: its version against the job's, its PDF
+            // sandbox when the shard needs one, room on its disk. A node that fails one refuses
+            // the batch here, with nothing fetched, and the platform moves the work.
+            ShardBatchGuard.ThrowIfRefused(jobId, task, scope);
+        }
+        catch (ShardBatchRefusedException exception)
+        {
+            Logger.LogWarning("Corpus.ProcessShard {Index}: the batch is refused ({Code}).", task.TaskIndex, exception.Code);
+            TryDeleteScope(scope, task.TaskIndex);
+            throw;
+        }
+
+        // The shard's place in what this node tells the host about its share: how much has
+        // arrived from the origin, then how many shards are processed.
+        using var ticket = ShardShareProgress.Enter(jobId, task.Source?.SizeBytes ?? 0, CorpusActivityProgressReporter.Create(ProcessingManager, jobId), Logger);
+
+        try
+        {
+            var result = await ShardTaskRunner.RunAsync(task, FETCHER.Value, BlobService, scope, ticket, Logger, null, () => ShardBatchGuard.ThrowIfJobRefused(jobId), cancellationToken);
 
             if (result.Verdict == CorpusShardVerdict.Completed)
                 Logger.LogInformation("Corpus.ProcessShard {Index}: {Out}/{In} documents kept, {Bytes} bytes in, {Fetch} ms fetch, {Process} ms process",
@@ -61,22 +87,24 @@ internal sealed class WitActivityAdapterCorpusProcessShard : WitActivityAdapterF
             if (!pool.TrySetValue(activity.ReturnReference, result))
                 throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
         }
-        catch (PdfSandboxException exception)
-        {
-            // The node's batch fails and Grid.ForEach gives its tasks to another node.
-            Logger.LogWarning("Corpus.ProcessShard {Index}: {Reason}", task.TaskIndex, exception.Message);
-            throw;
-        }
         finally
         {
-            try
-            {
-                TempStorage.DeleteScope(scope);
-            }
-            catch (Exception exception)
-            {
-                Logger.LogWarning(exception, "Corpus.ProcessShard {Index}: the work directory could not be deleted.", task.TaskIndex);
-            }
+            // Not on the result's path: a delete can wait on the node's file system far longer
+            // than the work took (ShardCleanup). The shard and its products are gone already.
+            var index = task.TaskIndex;
+            ShardCleanup.Schedule(() => TryDeleteScope(scope, index));
+        }
+    }
+
+    private void TryDeleteScope(string scope, int taskIndex)
+    {
+        try
+        {
+            TempStorage.DeleteScope(scope);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning("Corpus.ProcessShard {Index}: the work directory could not be deleted ({Kind}).", taskIndex, exception.GetType().Name);
         }
     }
 

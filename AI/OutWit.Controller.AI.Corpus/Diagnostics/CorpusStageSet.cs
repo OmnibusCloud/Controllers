@@ -2,6 +2,9 @@ using System.Security.Cryptography;
 using System.Text;
 using OutWit.Controller.AI.Corpus.Benchmark;
 using OutWit.Controller.AI.Corpus.Pdf;
+using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Controller.AI.Corpus.Text;
+using OutWit.Controller.AI.Corpus.Text.Casing;
 
 namespace OutWit.Controller.AI.Corpus.Diagnostics;
 
@@ -42,11 +45,29 @@ public static class CorpusStageSet
     /// <summary>The format of the language data the language stage reads (WITLID1 models are still read, with Corpus 0.1.14's rule data).</summary>
     public const string LANGUAGE_FORMAT = Language.LanguageModelFormat.WITLID2;
 
-    /// <summary>The first line of the text the fingerprint hashes; moves when what it covers changes.</summary>
-    public const string FINGERPRINT_SCHEMA = "corpus-stage-set/2";
+    /// <summary>The first line of the text the fingerprint hashes; moves when what it covers changes (<c>/3</c>: the case table and the reading limits).</summary>
+    public const string FINGERPRINT_SCHEMA = "corpus-stage-set/3";
+
+    /// <summary>
+    /// The case handling of the stages as one line: the Unicode version and the hash of the
+    /// lower-case table the language n-grams and the MinHash tokens are made with. A part of the
+    /// fingerprint: another table is another product for the documents that hold a code point
+    /// whose mapping moved.
+    /// </summary>
+    public static readonly string CASING = $"unicode {CorpusCasing.UNICODE_VERSION} simple lower case (U+0130 kept), table sha256={CorpusCasing.TABLE_SHA256}; ASCII comparisons fold A-Z only";
+
+    /// <summary>
+    /// The limits a shard is read within, as one line: each decides what becomes a document and
+    /// what drops, so each is a part of the fingerprint.
+    /// </summary>
+    public static readonly string READING = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+        $"record wet<={ShardLimits.MAX_WET_RECORD_BYTES} warc<={ShardLimits.MAX_WARC_RECORD_BYTES} (larger: {ShardProcessor.DROP_RECORD_OVERSIZED}); " +
+        $"unpacked<={ShardLimits.UNPACK_RATIO}x within {ShardLimits.MIN_UNPACKED_BYTES}..{ShardLimits.MAX_UNPACKED_BYTES}; " +
+        $"html chars<={HtmlTextExtractor.MAX_HTML_CHARS} decoded bytes<={HttpResponsePayload.MAX_DECODE_BYTES} tags<={HtmlTextExtractor.MAX_TAGS} nesting<{HtmlTextExtractor.MAX_NESTING} elements<={HtmlTextExtractor.MAX_ELEMENTS} " +
+        $"(pre-scan: {ShardProcessor.DROP_HTML_REFUSED}; parser: {ShardProcessor.DROP_HTML_TOO_COMPLEX}; a failure of the parser's own: {ShardProcessor.DROP_HTML_ERROR}); charset utf-7: {ShardProcessor.DROP_UNSUPPORTED_CHARSET}");
 
     /// <summary>The pinned fingerprint: <see cref="Compose"/> of the benchmark's reference product and this controller's PDF stage.</summary>
-    public const string PINNED_SHA256 = "48be081f37c3a060936f6d5f80df736f3191bcf22936aa1d4da9d83950d8a682";
+    public const string PINNED_SHA256 = "2f691cec7accdc309207b9859a3193636b2809119020d846fb6c30b0af994678";
 
     #endregion
 
@@ -66,7 +87,7 @@ public static class CorpusStageSet
     /// <returns>Lower-case hex SHA-256.</returns>
     public static string Compose(string referenceSha256)
     {
-        var text = $"{FINGERPRINT_SCHEMA}\nreference {referenceSha256}\npdf {PdfStageLimits.DESCRIPTOR}\n";
+        var text = $"{FINGERPRINT_SCHEMA}\nreference {referenceSha256}\npdf {PdfStageLimits.DESCRIPTOR}\ncasing {CASING}\nreading {READING}\n";
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
     }
 

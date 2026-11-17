@@ -20,6 +20,12 @@ namespace OutWit.Controller.AI.Corpus.Language;
 /// A WITLID2 file is read strictly: every list in its canonical order, no byte after the end,
 /// every value valid for this controller (an unknown threshold name is an error). So reading
 /// and writing again gives the same bytes, and the hash a manifest pins is the pack's meaning.
+/// <para>
+/// A model is a lab's input, and both layouts are read as one: the file and every count in it are
+/// held to <see cref="LanguageModelLimits"/> before anything is allocated for them, an n-gram has
+/// 1 to <see cref="LanguageNgrams.MAX_N"/> characters and stands once in its profile, a language
+/// code is a short ASCII word. A file past a limit is no model, by name.
+/// </para>
 /// </summary>
 public static class LanguageModelFormat
 {
@@ -59,9 +65,12 @@ public static class LanguageModelFormat
     /// <summary>Reads a model of either format.</summary>
     /// <param name="bytes">The bytes.</param>
     /// <returns>The model.</returns>
-    /// <exception cref="FormatException">The bytes are not a model this controller reads.</exception>
+    /// <exception cref="FormatException">The bytes are not a model this controller reads, or a model past its limits.</exception>
     public static LanguageModel Read(byte[] bytes)
     {
+        if (bytes.Length > LanguageModelLimits.MAX_BYTES)
+            throw new FormatException($"the language model is larger than {LanguageModelLimits.MAX_BYTES} bytes");
+
         using var stream = new MemoryStream(bytes);
         using var reader = new BinaryReader(stream, Encoding.UTF8);
 
@@ -70,7 +79,7 @@ public static class LanguageModelFormat
             var magic = reader.ReadString();
             return magic switch
             {
-                WITLID1 => ReadWitlid1(reader),
+                WITLID1 => ReadWitlid1(reader, stream),
                 WITLID2 => ReadWitlid2(reader, stream),
                 _ => throw new FormatException("not a language model")
             };
@@ -78,6 +87,11 @@ public static class LanguageModelFormat
         catch (EndOfStreamException)
         {
             throw new FormatException("the language model is truncated");
+        }
+        catch (IOException)
+        {
+            // A string whose length prefix is no length.
+            throw new FormatException("the language model is not readable");
         }
         catch (ArgumentException exception)
         {
@@ -97,19 +111,13 @@ public static class LanguageModelFormat
         }
     }
 
-    private static LanguageModel ReadWitlid1(BinaryReader reader)
+    private static LanguageModel ReadWitlid1(BinaryReader reader, Stream stream)
     {
-        var count = reader.ReadInt32();
+        var total = 0;
+        var count = Count(reader, stream, LanguageModelLimits.MAX_PROFILES, "profiles");
         var profiles = new List<LanguageProfile>(count);
         for (var i = 0; i < count; i++)
-        {
-            var code = reader.ReadString();
-            var gramCount = reader.ReadInt32();
-            var grams = new List<string>(gramCount);
-            for (var j = 0; j < gramCount; j++)
-                grams.Add(reader.ReadString());
-            profiles.Add(new LanguageProfile(code, grams));
-        }
+            profiles.Add(ReadProfile(reader, stream, ref total));
 
         return new LanguageModel(profiles);
     }
@@ -158,46 +166,43 @@ public static class LanguageModelFormat
 
     private static LanguageModel ReadWitlid2(BinaryReader reader, Stream stream)
     {
-        var name = reader.ReadString();
+        var name = Text(reader, LanguageModelLimits.MAX_TEXT_CHARS, "name");
 
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
         var previous = (string?)null;
-        var metadataCount = Count(reader, stream);
+        var metadataCount = Count(reader, stream, LanguageModelLimits.MAX_METADATA, "metadata entries");
         for (var i = 0; i < metadataCount; i++)
         {
-            var key = reader.ReadString();
+            var key = Text(reader, LanguageModelLimits.MAX_TEXT_CHARS, "metadata key");
             previous = InOrder(previous, key, "metadata");
-            metadata[key] = reader.ReadString();
+            metadata[key] = Text(reader, LanguageModelLimits.MAX_TEXT_CHARS, "metadata value");
         }
 
         var profiles = new List<LanguageProfile>();
         var rules = new List<LanguageRules>();
         var limits = new Dictionary<string, int>(StringComparer.Ordinal);
+        var total = 0;
         previous = null;
-        var profileCount = Count(reader, stream);
+        var profileCount = Count(reader, stream, LanguageModelLimits.MAX_PROFILES, "profiles");
         for (var i = 0; i < profileCount; i++)
         {
-            var code = reader.ReadString();
+            var profile = ReadProfile(reader, stream, ref total);
+            var code = profile.Code;
             previous = InOrder(previous, code, "profiles");
-
-            var gramCount = Count(reader, stream);
-            var grams = new List<string>(gramCount);
-            for (var j = 0; j < gramCount; j++)
-                grams.Add(reader.ReadString());
-            profiles.Add(new LanguageProfile(code, grams));
+            profiles.Add(profile);
 
             if (!reader.ReadBoolean())
                 continue;
 
-            var script = reader.ReadString();
+            var script = Text(reader, LanguageModelLimits.MAX_CODE_CHARS, "script");
             var limit = reader.ReadInt32();
 
             var words = new List<string>();
             var previousWord = (string?)null;
-            var wordCount = Count(reader, stream);
+            var wordCount = Count(reader, stream, LanguageModelLimits.MAX_STOP_WORDS, $"{code} stop words");
             for (var j = 0; j < wordCount; j++)
             {
-                var word = reader.ReadString();
+                var word = Text(reader, LanguageModelLimits.MAX_STOP_WORD_CHARS, "stop word");
                 previousWord = InOrder(previousWord, word, $"{code} stop words");
                 words.Add(word);
             }
@@ -206,12 +211,12 @@ public static class LanguageModelFormat
 
             var overrides = new List<KeyValuePair<string, IReadOnlyList<double>>>();
             var previousKey = (string?)null;
-            var overrideCount = Count(reader, stream);
+            var overrideCount = Count(reader, stream, LanguageModelLimits.MAX_OVERRIDES, $"{code} thresholds");
             for (var j = 0; j < overrideCount; j++)
             {
-                var key = reader.ReadString();
+                var key = Text(reader, LanguageModelLimits.MAX_TEXT_CHARS, "threshold name");
                 previousKey = InOrder(previousKey, key, $"{code} thresholds");
-                var valueCount = Count(reader, stream);
+                var valueCount = Count(reader, stream, LanguageModelLimits.MAX_OVERRIDE_VALUES, $"{code} threshold values");
                 var values = new double[valueCount];
                 for (var v = 0; v < valueCount; v++)
                     values[v] = reader.ReadDouble();
@@ -228,14 +233,55 @@ public static class LanguageModelFormat
         return new LanguageModel(name, profiles, new LanguageRuleSet(rules), limits, metadata);
     }
 
-    private static int Count(BinaryReader reader, Stream stream)
+    /// <summary>One profile: its code and its n-grams, each 1 to <see cref="LanguageNgrams.MAX_N"/> characters and once.</summary>
+    private static LanguageProfile ReadProfile(BinaryReader reader, Stream stream, ref int total)
     {
-        // Every element takes at least one byte: a count past the bytes left is not a pack.
+        var code = Text(reader, LanguageModelLimits.MAX_CODE_CHARS, "language code");
+        if (!LanguageModelLimits.IsCode(code))
+            throw new FormatException("the language model holds a language code that is not a short word of ASCII letters, digits, '-' and '_'");
+
+        var gramCount = Count(reader, stream, LanguageModelLimits.MAX_GRAMS, $"{code} n-grams");
+        total += gramCount;
+        if (total > LanguageModelLimits.MAX_TOTAL_GRAMS)
+            throw new FormatException($"the language model lists more than {LanguageModelLimits.MAX_TOTAL_GRAMS} n-grams in all");
+
+        var grams = new List<string>(gramCount);
+        var seen = new HashSet<string>(gramCount, StringComparer.Ordinal);
+        for (var j = 0; j < gramCount; j++)
+        {
+            var gram = Text(reader, LanguageNgrams.MAX_N, "n-gram");
+            if (gram.Length == 0)
+                throw new FormatException($"the language model holds an empty n-gram ({code})");
+            if (!seen.Add(gram))
+                throw new FormatException($"the language model lists an n-gram twice in one profile ({code})");
+
+            grams.Add(gram);
+        }
+
+        return new LanguageProfile(code, grams);
+    }
+
+    private static int Count(BinaryReader reader, Stream stream, int most, string what)
+    {
+        // Every element takes at least one byte: a count past the bytes left is not a model; a
+        // count past the limit is a model this controller does not load.
         var count = reader.ReadInt32();
         if (count < 0 || count > stream.Length - stream.Position)
             throw new FormatException("the language pack holds an impossible count");
 
+        if (count > most)
+            throw new FormatException($"the language model holds {count} {what}, more than the {most} a model may");
+
         return count;
+    }
+
+    private static string Text(BinaryReader reader, int mostChars, string what)
+    {
+        var text = reader.ReadString();
+        if (text.Length > mostChars)
+            throw new FormatException($"the language model holds a {what} of more than {mostChars} characters");
+
+        return text;
     }
 
     private static string InOrder(string? previous, string current, string what)

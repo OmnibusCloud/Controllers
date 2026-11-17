@@ -3,6 +3,7 @@ using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Controller.AI.Corpus.Trust;
 using OutWit.Controller.AI.Corpus.Tests.Mock;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Shards;
@@ -55,8 +56,7 @@ public sealed class ShardTaskRunnerTests
     {
         m_origin.Dispose();
         m_servedOrigins.ForEach(origin => origin.Dispose());
-        if (Directory.Exists(m_root))
-            Directory.Delete(m_root, recursive: true);
+        CorpusTestFolders.Delete(m_root);
     }
 
     #endregion
@@ -141,7 +141,7 @@ public sealed class ShardTaskRunnerTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.OriginRefused));
-            Assert.That(result.Error, Does.Contain("not a public origin"));
+            Assert.That(result.Error, Is.EqualTo(CorpusResultCodes.ORIGIN_NOT_LISTED));
             Assert.That(m_origin.Requests, Is.EqualTo(before));
         });
     }
@@ -157,7 +157,7 @@ public sealed class ShardTaskRunnerTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.OriginRefused));
-            Assert.That(result.Error, Does.Contain("redirects to a place that is not fetched"));
+            Assert.That(result.Error, Is.EqualTo(CorpusResultCodes.ORIGIN_REDIRECT));
         });
     }
 
@@ -173,7 +173,7 @@ public sealed class ShardTaskRunnerTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.OriginRefused));
-            Assert.That(result.Error, Does.Contain("not an allowed origin"));
+            Assert.That(result.Error, Is.EqualTo(CorpusResultCodes.ORIGIN_NOT_ALLOWED));
             Assert.That(m_origin.Requests, Is.EqualTo(before));
             Assert.That(result.Stats, Is.Null);
         });
@@ -191,12 +191,13 @@ public sealed class ShardTaskRunnerTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.PipelineUnavailable));
+            Assert.That(result.Error, Is.EqualTo(CorpusResultCodes.NO_LANGUAGE_MODEL));
             Assert.That(m_origin.Requests, Is.EqualTo(before), "the model is checked before the fetch");
         });
     }
 
     [Test]
-    public async Task ModelOffItsPinIsPipelineUnavailableTest()
+    public async Task AModelThatArrivedWithOtherBytesThanItsPinIsANodeFaultTest()
     {
         ShardLanguageModels.Clear();
         var task = Task(WET_FIXTURE, CorpusSourceFormat.Wet);
@@ -206,8 +207,9 @@ public sealed class ShardTaskRunnerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.PipelineUnavailable));
-            Assert.That(result.Error, Does.Contain("does not match the pinned"));
+            // The server hashed the very blob it pinned: other bytes here are this node's transfer.
+            Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.NodeFault));
+            Assert.That(result.Error, Is.EqualTo(CorpusResultCodes.FAULT_LANGUAGE_MODEL));
         });
     }
 
@@ -232,7 +234,7 @@ public sealed class ShardTaskRunnerTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.FetchFailed));
-            Assert.That(result.Error, Does.Contain("404"));
+            Assert.That(result.Error, Is.EqualTo("http_404"));
         });
     }
 
@@ -247,7 +249,7 @@ public sealed class ShardTaskRunnerTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.FetchFailed));
-            Assert.That(result.Error, Does.Contain("not the published"));
+            Assert.That(result.Error, Is.EqualTo(CorpusResultCodes.HASH_MISMATCH));
         });
     }
 
@@ -309,23 +311,32 @@ public sealed class ShardTaskRunnerTests
             Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.Completed), result.Error);
             Assert.That(result.Stats!.Pdf!.In, Is.EqualTo(PdfWarcFixture.PDF_CANDIDATES));
             Assert.That(result.Stats.Pdf.Extracted, Is.GreaterThan(0));
-            Assert.That(Directory.GetDirectories(work).Select(Path.GetFileName), Is.SupersetOf(new[] { "pdf-in", "pdf-out", "pdf-io" }), "the PDFs' folders are the task's own");
-            Assert.That(Directory.EnumerateFiles(Path.Combine(work, "pdf-out"), "*", SearchOption.AllDirectories), Is.Empty, "each run's output is gone after it");
-            Assert.That(Directory.EnumerateFiles(Path.Combine(work, "pdf-in")), Is.Empty);
+            Assert.That(Directory.GetDirectories(work).Select(Path.GetFileName), Is.EqualTo(new[] { "pdf" }), "the PDFs' folders are the task's own");
+            Assert.That(ShardCleanup.Drain(TimeSpan.FromMinutes(1)), Is.True, "each run's folder is taken away off the shard's path");
+            Assert.That(Directory.EnumerateFileSystemEntries(Path.Combine(work, "pdf")), Is.Empty, "each run's input and output are gone after it");
+            Assert.That(Directory.EnumerateFiles(work), Is.Empty, "the shard and its products went before the task gave its place on the disk back");
         });
     }
 
     [Test]
-    public async Task ANodeWithoutTheSandboxDoesNotMakeAShardWithAPdfTest()
+    public async Task ASandboxThatFailsMidShardReturnsTheShardAsANodeFaultTest()
     {
-        // Not a verdict in a result (it would be a product, or a failure, of this node alone): the
-        // fault leaves the task, the node's batch fails, and Grid.ForEach runs it elsewhere.
+        // Not a verdict (it would be a product, or a failure, of this node alone) and not the end
+        // of the node's batch either: the shard goes back unanswered with the fault's code, and
+        // the script sends it out once more. (A node that has no sandbox at all refuses its batch
+        // before it starts: ShardBatchGuard.)
         var task = await ServedTask("with-pdfs.warc.gz", PdfWarcFixture.Shard());
 
-        var exception = Assert.ThrowsAsync<PdfSandboxException>(() =>
-            ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), null, null, new ShardPdfStage(null, "no sandbox in this test", null), CancellationToken.None));
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), null, null, new ShardPdfStage(null, "no sandbox in this test", null), null, CancellationToken.None);
 
-        Assert.That(exception!.Message, Does.Contain("no sandbox in this test"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.NodeFault));
+            Assert.That(result.Error, Is.EqualTo(CorpusResultCodes.FAULT_PDF_SANDBOX));
+            Assert.That(result.Stats, Is.Null);
+            Assert.That(result.ContentSha256, Is.Empty);
+            Assert.That(result.Ticket, Is.EqualTo(task.Ticket));
+        });
     }
 
     [Test]
@@ -334,7 +345,7 @@ public sealed class ShardTaskRunnerTests
         var bytes = PdfWarcFixture.ShardWithoutPdfs();
         var task = await ServedTask("without-pdfs.warc.gz", bytes);
 
-        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), null, null, new ShardPdfStage(null, "no sandbox in this test", null), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(task, m_fetcher, m_blobs, Work(), null, null, new ShardPdfStage(null, "no sandbox in this test", null), null, CancellationToken.None);
 
         var direct = new ShardProcessor(task.Pipeline!, LanguageModel.Load(Path.Combine(Fixtures(), MODEL_FIXTURE)));
         var expected = direct.Process(new MemoryStream(bytes), CorpusSourceFormat.Warc, new MemoryStream(), new MemoryStream());

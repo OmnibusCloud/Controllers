@@ -4,15 +4,16 @@
 
   <PropertyGroup>
     <ControllerName>Corpus</ControllerName>
-    <Version>0.1.3</Version>
-    <Description>Bundled .wit scripts for the OutWit Corpus controller — CorpusProcess (public-corpus shards fetched by the nodes, cleaned, language-tagged, quality-filtered and signed, with sampled re-execution), CorpusPreflight, CorpusDedup (the near-duplicate merge over a run) and CorpusRuntimeDiagnostics (the module's diagnostics and the capabilities document).</Description>
+    <Version>0.1.4</Version>
+    <Description>Bundled .wit scripts for the OutWit Corpus controller — CorpusProcess (public-corpus shards fetched by the nodes, cleaned, language-tagged, quality-filtered and signed, with sampled re-execution, a repair round for shards a node could not answer and a dispute round by three machines for copies that disagree), CorpusPreflight, CorpusDedup (the near-duplicate merge over a run) and CorpusRuntimeDiagnostics (the module's diagnostics and the capabilities document).</Description>
     <PackageTags>corpus;common-crawl;scripts;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
 
   <!-- Compatibility marker: enable at first publish of the controller package, when it exists
-       on a feed (a reference to a package no feed has breaks restore until then).
+       on a feed (a reference to a package no feed has breaks restore until then). The scripts of 0.1.4
+       call Corpus.Repairs and Corpus.Disputes: they need a controller from 0.4.0 on.
   <ItemGroup>
-    <PackageReference Include="OutWit.Controller.AI.Corpus" Version="[0.1.0, 1.0.0)" />
+    <PackageReference Include="OutWit.Controller.AI.Corpus" Version="[0.4.0, 1.0.0)" />
   </ItemGroup>
   -->
 

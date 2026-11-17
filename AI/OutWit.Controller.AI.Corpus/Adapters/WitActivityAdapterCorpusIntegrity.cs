@@ -1,7 +1,5 @@
-using System.Collections;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
-using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Reports;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -32,10 +30,9 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
 
     protected override async Task Process(WitActivityCorpusIntegrity activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        if (!pool.TryGetObject(activity.Results, out var resultsObject) || resultsObject is not IEnumerable resultsEnumerable)
-            throw new InvalidOperationException("Failed to get parameter 'Results'.");
+        var ledger = CorpusRounds.Ledger(pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved);
 
-        var bytes = CorpusIntegrityWriter.Write(resultsEnumerable.OfType<CorpusResultData>().ToList());
+        var bytes = CorpusIntegrityWriter.Write(ledger);
         var blobId = await BlobService.UploadBytesAsync(bytes, BLOB_NAME);
 
         if (!pool.TrySetValue(activity.ReturnReference, blobId))
@@ -50,15 +47,22 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
     {
         try
         {
-            if (parameters.Length != 1)
-                throw new ArgumentException($"Expected 1 parameter(s), got {parameters.Length}.");
+            if (parameters.Length != 6)
+                throw new ArgumentException($"Expected 6 parameter(s), got {parameters.Length}.");
 
-            if (parameters[0] is not IWitReference results)
-                throw new ArgumentException("Parameter 'Results' must be a variable reference.");
+            var references = new IWitReference[6];
+            string[] names = ["Tasks", "Executions", "Repairs", "Repaired", "Disputes", "Resolved"];
+            for (var index = 0; index < references.Length; index++)
+                references[index] = parameters[index] as IWitReference ?? throw new ArgumentException($"Parameter '{names[index]}' must be a variable reference.");
 
             return new WitActivityCorpusIntegrity
             {
-                Results = results
+                Tasks = references[0],
+                Executions = references[1],
+                Repairs = references[2],
+                Repaired = references[3],
+                Disputes = references[4],
+                Resolved = references[5]
             };
         }
         catch (Exception e)

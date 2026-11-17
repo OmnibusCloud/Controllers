@@ -40,7 +40,8 @@ public sealed partial class CorpusResultData : ModelBase
                && Degree.Is(other.Degree)
                && Output.Is(other.Output)
                && MinHash.Check(other.MinHash)
-               && SignaturesSha256.Is(other.SignaturesSha256);
+               && SignaturesSha256.Is(other.SignaturesSha256)
+               && Ticket.Is(other.Ticket);
     }
 
     /// <summary>Deep copy.</summary>
@@ -64,7 +65,8 @@ public sealed partial class CorpusResultData : ModelBase
             Degree = Degree,
             Output = Output,
             MinHash = MinHash?.Clone(),
-            SignaturesSha256 = SignaturesSha256
+            SignaturesSha256 = SignaturesSha256,
+            Ticket = Ticket
         };
     }
 
@@ -94,7 +96,11 @@ public sealed partial class CorpusResultData : ModelBase
     [MemoryPackOrder(4)]
     public string ContentSha256 { get; set; } = "";
 
-    /// <summary>Why the task did not complete, or "".</summary>
+    /// <summary>
+    /// A fixed code, never free text: why the task did not complete (<c>http_404</c>,
+    /// <c>not_warc</c>, ...), the node's fault under <see cref="CorpusShardVerdict.NodeFault"/>
+    /// (<c>disk</c>, <c>network</c>, ...), a note on a completed shard (<c>truncated</c>), or "".
+    /// </summary>
     [MemoryPackOrder(5)]
     public string Error { get; set; } = "";
 
@@ -142,6 +148,14 @@ public sealed partial class CorpusResultData : ModelBase
     /// </summary>
     [MemoryPackOrder(15)]
     public string SignaturesSha256 { get; set; } = "";
+
+    /// <summary>
+    /// The ticket of the task this result answers, repeated from the task. The server accepts a
+    /// result only under a ticket it gave out for that shard in that round; a result under any
+    /// other is dropped and counted. Never written to a document a lab sees.
+    /// </summary>
+    [MemoryPackOrder(16)]
+    public string Ticket { get; set; } = "";
 
     #endregion
 }

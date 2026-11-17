@@ -9,7 +9,8 @@ namespace OutWit.Controller.AI.Corpus.Model;
 /// <summary>
 /// One node task: one shard through one pipeline. The task carries the origins it may fetch
 /// from and the byte cap, re-checked on the node before any request — the node never
-/// fetches what the task did not declare.
+/// fetches what the task did not declare — the ticket its result must return, and the controller
+/// version the job runs on.
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only.
@@ -30,7 +31,9 @@ public sealed partial class CorpusTaskData : ModelBase
                && Source.Check(other.Source)
                && Pipeline.Check(other.Pipeline)
                && AllowedOrigins.Is(other.AllowedOrigins)
-               && MaxShardBytes.Is(other.MaxShardBytes);
+               && MaxShardBytes.Is(other.MaxShardBytes)
+               && Ticket.Is(other.Ticket)
+               && RequiredControllerVersion.Is(other.RequiredControllerVersion);
     }
 
     /// <summary>Deep copy.</summary>
@@ -43,7 +46,9 @@ public sealed partial class CorpusTaskData : ModelBase
             Source = Source?.Clone(),
             Pipeline = Pipeline?.Clone(),
             AllowedOrigins = [.. AllowedOrigins],
-            MaxShardBytes = MaxShardBytes
+            MaxShardBytes = MaxShardBytes,
+            Ticket = Ticket,
+            RequiredControllerVersion = RequiredControllerVersion
         };
     }
 
@@ -72,6 +77,23 @@ public sealed partial class CorpusTaskData : ModelBase
     [ToString]
     [MemoryPackOrder(4)]
     public long MaxShardBytes { get; set; }
+
+    /// <summary>
+    /// The task's ticket: 16 random bytes of the server as 32 lower-case hex characters, new for
+    /// every round a shard is sent out in. The node returns it in its result, and the server
+    /// accepts a result only under a ticket it gave out for that shard in that round, so a node
+    /// cannot answer for a shard it was not given. Never written to a document a lab sees.
+    /// </summary>
+    [MemoryPackOrder(5)]
+    public string Ticket { get; set; } = "";
+
+    /// <summary>
+    /// The controller version of the server that made the task. A node on another version
+    /// refuses its batch before doing anything, so one job runs on one version.
+    /// </summary>
+    [ToString]
+    [MemoryPackOrder(6)]
+    public string RequiredControllerVersion { get; set; } = "";
 
     #endregion
 }

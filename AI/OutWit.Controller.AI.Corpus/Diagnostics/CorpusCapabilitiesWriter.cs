@@ -11,7 +11,8 @@ using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Signatures;
 using OutWit.Controller.AI.Corpus.Storage;
 using OutWit.Controller.AI.Corpus.Text;
-using OutWit.Controller.AI.Corpus.Warc;
+using OutWit.Controller.AI.Corpus.Text.Casing;
+using OutWit.Controller.AI.Corpus.Trust;
 
 namespace OutWit.Controller.AI.Corpus.Diagnostics;
 
@@ -23,14 +24,19 @@ namespace OutWit.Controller.AI.Corpus.Diagnostics;
 /// module and limits, every drop rule with the stage that applies it, the products and the output
 /// modes that keep them, the measured storage ratios with the deployment's headroom, and the pool as
 /// totals. A JSON document like every other output, so an
-/// application reads it without the controller's types. Schema <c>corpus-capabilities/1</c>.
+/// application reads it without the controller's types. Schema <c>corpus-capabilities/2</c>:
+/// <c>/1</c> and the limits a hostile shard meets (the record caps per format, what a shard may
+/// unpack to, the HTML parser's budget, the language pack's size), the shards a node holds ahead,
+/// the case table, and <c>trust</c> — how many machines a result rests on, the two outcomes
+/// without a result, and every fixed word a document may carry in place of a text (the codes of
+/// each verdict, of a node's faults, of a dropped value, of a refused batch).
 /// </summary>
 public static class CorpusCapabilitiesWriter
 {
     #region Constants
 
     /// <summary>The document's schema tag.</summary>
-    public const string SCHEMA = "corpus-capabilities/1";
+    public const string SCHEMA = "corpus-capabilities/2";
 
     #endregion
 
@@ -62,6 +68,8 @@ public static class CorpusCapabilitiesWriter
             WritePdf(writer, diagnostics);
             WriteSignatures(writer);
             WriteDropRules(writer);
+            WriteCasing(writer);
+            WriteTrust(writer);
             WriteProducts(writer);
             WriteStorage(writer, limit);
             WritePool(writer, pool);
@@ -144,6 +152,7 @@ public static class CorpusCapabilitiesWriter
         writer.WriteNumber("dedup_threshold", CorpusDeduplicator.DEFAULT_THRESHOLD);
         writer.WriteNumber("downloads_per_node", ShardFetchPolicy.Default.MaxConcurrent);
         writer.WriteNumber("memory_per_shard_bytes", ShardDegree.MEMORY_PER_SHARD);
+        writer.WriteNumber("shards_held_beyond_degree", ShardTaskRunner.FETCH_AHEAD);
         writer.WriteEndObject();
     }
 
@@ -152,13 +161,56 @@ public static class CorpusCapabilitiesWriter
         writer.WriteStartObject("ceilings");
         writer.WriteNumber("max_shard_bytes", CorpusTaskPlanner.MAX_SHARD_BYTES);
         writer.WriteNumber("sampling_rate", 1);
-        writer.WriteNumber("record_bytes", WarcReader.DEFAULT_MAX_RECORD_BYTES);
+        writer.WriteNumber("record_bytes", ShardLimits.MAX_WARC_RECORD_BYTES);
+        writer.WriteNumber("wet_record_bytes", ShardLimits.MAX_WET_RECORD_BYTES);
+        writer.WriteNumber("unpack_ratio", ShardLimits.UNPACK_RATIO);
+        writer.WriteNumber("unpacked_bytes_min", ShardLimits.MIN_UNPACKED_BYTES);
+        writer.WriteNumber("unpacked_bytes_max", ShardLimits.MAX_UNPACKED_BYTES);
         writer.WriteNumber("html_chars", HtmlTextExtractor.MAX_HTML_CHARS);
+        writer.WriteNumber("html_decode_bytes", HttpResponsePayload.MAX_DECODE_BYTES);
         writer.WriteNumber("html_nesting", HtmlTextExtractor.MAX_NESTING);
         writer.WriteNumber("html_tags", HtmlTextExtractor.MAX_TAGS);
+        writer.WriteNumber("html_elements", HtmlTextExtractor.MAX_ELEMENTS);
+        writer.WriteNumber("language_model_bytes", LanguageModelLimits.MAX_BYTES);
         writer.WriteNumber("size_probes", ShardSizeProbe.MAX_PROBES);
         writer.WriteNumber("dedup_documents", CorpusDeduplicator.MAX_DOCUMENTS);
         writer.WriteNumber("dedup_clusters_listed", CorpusDedupWriter.MAX_CLUSTERS_LISTED);
+        writer.WriteEndObject();
+    }
+
+    /// <summary>The case handling that reaches a product: the controller's own table, not the node's library.</summary>
+    private static void WriteCasing(Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject("casing");
+        writer.WriteString("unicode", CorpusCasing.UNICODE_VERSION);
+        writer.WriteString("mapping", "simple_lowercase");
+        writer.WriteString("table_sha256", CorpusCasing.TABLE_SHA256);
+        writer.WriteEndObject();
+    }
+
+    /// <summary>What a result rests on, and every fixed word that stands where a node's text once stood.</summary>
+    private static void WriteTrust(Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject("trust");
+        writer.WriteNumber("copies", CorpusLedger.FIRST_ROUND_COPIES);
+        writer.WriteNumber("dispute_copies", CorpusLedger.DISPUTE_COPIES);
+        writer.WriteNumber("dispute_quorum", CorpusLedger.DISPUTE_QUORUM);
+        WriteStrings(writer, "outcomes", [CorpusReportWriter.VERDICT_DISPUTED, CorpusReportWriter.VERDICT_NO_RESULT]);
+        WriteStrings(writer, "no_result_reasons", CorpusLedger.NO_RESULT_REASONS);
+        WriteStrings(writer, "rejection_reasons", CorpusLedger.REJECTION_REASONS);
+        WriteStrings(writer, "dispute_outcomes", CorpusLedger.DISPUTE_OUTCOMES);
+        WriteStrings(writer, "fault_codes", CorpusResultCodes.FAULTS);
+
+        writer.WriteStartObject("verdict_codes");
+        foreach (var verdict in Enum.GetValues<CorpusShardVerdict>())
+        {
+            if (verdict != CorpusShardVerdict.NodeFault)
+                WriteStrings(writer, verdict.ToString(), CorpusResultCodes.CodesOf(verdict));
+        }
+
+        writer.WriteEndObject();
+        WriteStrings(writer, "batch_refusals", ShardBatchRefusedException.CODES);
+        WriteStrings(writer, "dedup_exclusions", CorpusDedupExclusion.REASONS);
         writer.WriteEndObject();
     }
 
@@ -221,6 +273,7 @@ public static class CorpusCapabilitiesWriter
         writer.WriteBoolean("available", diagnostics.PdfStageProblem.Length == 0);
         writer.WriteNumber("fuel", PdfStageLimits.FUEL);
         writer.WriteBoolean("fuel_after_instantiation", true);
+        writer.WriteNumber("shard_fuel", PdfStageLimits.SHARD_FUEL);
         writer.WriteNumber("memory_bytes", PdfStageLimits.MEMORY_BYTES);
         writer.WriteNumber("input_bytes", PdfStageLimits.MAX_INPUT_BYTES);
         writer.WriteNumber("text_bytes", PdfStageLimits.MAX_TEXT_BYTES);

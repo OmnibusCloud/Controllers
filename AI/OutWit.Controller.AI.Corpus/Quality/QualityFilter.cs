@@ -1,4 +1,5 @@
 using System.Text;
+using OutWit.Controller.AI.Corpus.Text.Casing;
 
 namespace OutWit.Controller.AI.Corpus.Quality;
 
@@ -59,8 +60,37 @@ public static class QualityFilter
     /// <returns>The verdict with every failed rule and the measurements behind it.</returns>
     public static QualityVerdict Judge(string text, QualityRules rules)
     {
+        return Judge(text, rules, firstFailureOnly: false);
+    }
+
+    /// <summary>
+    /// Judges a document, in full or only as far as its first failed rule.
+    /// </summary>
+    /// <param name="text">The extracted text (lines separated by '\n').</param>
+    /// <param name="rules">The thresholds.</param>
+    /// <param name="firstFailureOnly">
+    /// True to stop at the length rules when one of them fails: the words are counted without
+    /// being made (<see cref="WordCount"/>), and a document with fewer or more of them than the
+    /// rules allow is answered there, with that rule alone — the rule a full judgement names
+    /// first. A document within its length is judged in full either way. What a shard's product
+    /// needs; a document of millions of words costs a pass over its characters, not their split.
+    /// </param>
+    /// <returns>The verdict with the failed rules and the measurements behind them.</returns>
+    public static QualityVerdict Judge(string text, QualityRules rules, bool firstFailureOnly)
+    {
         var failed = new List<string>();
         var measures = new Dictionary<string, double>(StringComparer.Ordinal);
+
+        if (firstFailureOnly)
+        {
+            var count = WordCount(text, rules);
+            if (count < rules.MinWords || count > rules.MaxWords)
+            {
+                measures["words"] = count;
+                failed.Add(count < rules.MinWords ? RULE_MIN_WORDS : RULE_MAX_WORDS);
+                return new QualityVerdict(false, failed, measures);
+            }
+        }
 
         var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         var words = Words(text, rules);
@@ -177,7 +207,7 @@ public static class QualityFilter
 
         // C4: "we removed any page where the phrase 'lorem ipsum' appeared" (also in FineWeb's
         // C4 filter): a template or a demo page.
-        if (text.Contains(LOREM_IPSUM, StringComparison.OrdinalIgnoreCase))
+        if (CorpusCasing.ContainsIgnoreAsciiCase(text, LOREM_IPSUM))
             failed.Add(RULE_LOREM_IPSUM);
 
         return new QualityVerdict(failed.Count == 0, failed, measures);
@@ -221,6 +251,59 @@ public static class QualityFilter
             words.Add(run.ToString());
 
         return words;
+    }
+
+    /// <summary>
+    /// How many words <see cref="Words"/> would give, counted without making one: a pass over
+    /// the characters, no string.
+    /// </summary>
+    /// <param name="text">The text.</param>
+    /// <param name="rules">The rules (their shape decides the split).</param>
+    /// <returns>The number of words.</returns>
+    public static long WordCount(string text, QualityRules rules)
+    {
+        long count = 0;
+
+        if (!rules.CountsLetters)
+        {
+            // Split on white space, empty entries removed: the runs of anything else.
+            var inWord = false;
+            foreach (var c in text)
+            {
+                if (char.IsWhiteSpace(c))
+                {
+                    inWord = false;
+                    continue;
+                }
+
+                if (!inWord)
+                    count++;
+                inWord = true;
+            }
+
+            return count;
+        }
+
+        var inRun = false;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (Rune.IsLetter(rune) && !IsUnspacedScript(rune.Value))
+            {
+                inRun = true;
+                continue;
+            }
+
+            if (inRun)
+            {
+                count++;
+                inRun = false;
+            }
+
+            if (Rune.IsLetter(rune))
+                count++;
+        }
+
+        return inRun ? count + 1 : count;
     }
 
     /// <summary>Whether a code point belongs to a script written without spaces between words (Han, kana, Bopomofo, Thai, Lao, Tibetan, Myanmar, Khmer).</summary>

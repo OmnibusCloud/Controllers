@@ -36,6 +36,22 @@ public sealed class ShardProcessor
     public const string DROP_HTTP_STATUS = "http_status";
     public const string DROP_NOT_HTML = "not_html";
     public const string DROP_HTML_REFUSED = "html_refused";
+
+    /// <summary>A record larger than a record of its format may be (<see cref="ShardLimits.MaxRecordBytes"/>): skipped, never held.</summary>
+    public const string DROP_RECORD_OVERSIZED = "record_oversized";
+
+    /// <summary>A page whose charset has a name the platform knows and does not decode (UTF-7): one page without text, not a shard without a product.</summary>
+    public const string DROP_UNSUPPORTED_CHARSET = "unsupported_charset";
+
+    /// <summary>A page the HTML parser itself found past its budget: its tree reached the nesting limit, or it made more elements than a page may have.</summary>
+    public const string DROP_HTML_TOO_COMPLEX = "html_too_complex";
+    /// <summary>
+    /// A page its decoder or the HTML parser failed on in a way of their own (an error of logic
+    /// over the page's bytes, not a limit): the page drops, as a PDF the extractor fails on does
+    /// (<c>pdf_error</c>), and the shard is made.
+    /// </summary>
+    public const string DROP_HTML_ERROR = "html_error";
+
     public const string DROP_EMPTY_TEXT = "empty_text";
     public const string DROP_LANGUAGE_UNKNOWN = "language_unknown";
     public const string DROP_LANGUAGE_UNSUPPORTED = "language_unsupported";
@@ -129,7 +145,10 @@ public sealed class ShardProcessor
     {
         var stats = new ShardStatsBuilder();
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        using var reader = new WarcReader(shard, ownsStream: false);
+
+        // The reader holds one record at a time, of a size its format allows, stops at the most
+        // the file may unpack to, and looks at the token inside a record as between records.
+        using var reader = new WarcReader(shard, ShardLimits.MaxRecordBytes(format), ownsStream: false, ShardLimits.MaxUnpackedBytes(shard.Length), cancellationToken);
         using var signed = new ShardHashingStream(signatures);
 
         if (m_sign)
@@ -148,6 +167,14 @@ public sealed class ShardProcessor
                     stats.Extracted();
                     Judge(url, document, stats, buffer, hash, compressor, signed);
                 }
+            }
+
+            // A record too large to hold was read past, not into memory: it is a record of the
+            // shard and a drop of its own, so that nothing a shard held goes uncounted.
+            for (var skipped = 0; skipped < reader.SkippedOversized; skipped++)
+            {
+                stats.Record();
+                stats.Drop(DROP_RECORD_OVERSIZED);
             }
         }
 
@@ -205,7 +232,9 @@ public sealed class ShardProcessor
 
         if (m_pipeline.FilterQuality)
         {
-            var verdict = QualityFilter.Judge(content, rules);
+            // The first failed rule is the drop's name: nothing is measured past it, and a
+            // document of millions of words fails its length rule before it is split into them.
+            var verdict = QualityFilter.Judge(content, rules, firstFailureOnly: true);
             if (!verdict.Passed)
             {
                 stats.Drop(verdict.FailedRules[0]);
@@ -244,7 +273,16 @@ public sealed class ShardProcessor
         if (record.Type != RECORD_RESPONSE)
             return [];
 
-        var payload = HttpResponsePayload.Parse(record.Payload);
+        HttpResponsePayload? payload;
+        try
+        {
+            payload = HttpResponsePayload.Parse(record.Payload);
+        }
+        catch (Exception exception) when (IsOfThePage(exception))
+        {
+            payload = null;
+        }
+
         if (payload == null)
             return Drop(stats, DROP_HTTP_UNPARSABLE);
 
@@ -258,13 +296,56 @@ public sealed class ShardProcessor
         if (!payload.IsHtml)
             return Drop(stats, DROP_NOT_HTML);
 
-        if (!HtmlTextExtractor.TryExtract(payload.DecodeBody(), out var text, out _))
-            return Drop(stats, DROP_HTML_REFUSED);
+        HtmlReading read;
+        string text;
+        try
+        {
+            if (!payload.TryDecodeBody(out var html))
+                return Drop(stats, DROP_UNSUPPORTED_CHARSET);
+
+            (read, text) = HtmlReader != null ? HtmlReader(html) : ReadPage(html);
+        }
+        catch (Exception exception) when (IsOfThePage(exception))
+        {
+            // One page must never be the end of its shard: whoever controls a crawled page
+            // would remove a gigabyte of others with it.
+            return Drop(stats, DROP_HTML_ERROR);
+        }
+
+        if (read != HtmlReading.Text)
+            return Drop(stats, read == HtmlReading.Refused ? DROP_HTML_REFUSED : DROP_HTML_TOO_COMPLEX);
 
         if (text.Length == 0)
             return Drop(stats, DROP_EMPTY_TEXT);
 
         return [(url, text)];
+    }
+
+    private static (HtmlReading Reading, string Text) ReadPage(string html)
+    {
+        var reading = HtmlTextExtractor.Read(html, out var text);
+        return (reading, text);
+    }
+
+    /// <summary>
+    /// Whether an exception out of the decoding or the parsing of one page is the page's: an
+    /// error of logic over its bytes, which the same bytes cause on every node under the same
+    /// controller version, so it is a statement about the input and the page drops. Everything
+    /// else is the node's and goes up, to come back as a node fault: memory, cancellation, a
+    /// library that is missing, mismatched or will not load, anything of the file system. A node
+    /// whose parser does not load must not report a shard of dropped pages.
+    /// </summary>
+    private static bool IsOfThePage(Exception exception)
+    {
+        return exception is (InvalidOperationException and not ObjectDisposedException)
+            or ArgumentException
+            or IndexOutOfRangeException
+            or NullReferenceException
+            or FormatException
+            or KeyNotFoundException
+            or InvalidCastException
+            or ArithmeticException
+            or (NotSupportedException and not PlatformNotSupportedException);
     }
 
     private static IReadOnlyList<(string Url, string Text)> Drop(ShardStatsBuilder stats, string rule)
@@ -287,6 +368,13 @@ public sealed class ShardProcessor
 
         buffer.WriteByte((byte)'\n');
     }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>Reads a page in the HTML parser's place (tests of a parser that fails); null for the parser.</summary>
+    internal Func<string, (HtmlReading Reading, string Text)>? HtmlReader { get; init; }
 
     #endregion
 }

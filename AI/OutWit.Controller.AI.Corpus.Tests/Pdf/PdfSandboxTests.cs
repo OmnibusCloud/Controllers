@@ -68,8 +68,7 @@ public sealed class PdfSandboxTests
     public void TearDown()
     {
         m_sandbox?.Dispose();
-        if (m_work != null && Directory.Exists(m_work))
-            Directory.Delete(m_work, recursive: true);
+        CorpusTestFolders.Delete(m_work);
     }
 
     #endregion
@@ -208,6 +207,8 @@ public sealed class PdfSandboxTests
         var work = Path.Combine(m_work, "leaves-nothing");
         m_sandbox.Extract(PdfSynth.Document([["A page."]]), work);
 
+        // Taken away off the run's own path (ShardCleanup), so there is a moment to wait for.
+        Assert.That(OutWit.Controller.AI.Corpus.Shards.ShardCleanup.Drain(TimeSpan.FromMinutes(1)), Is.True);
         Assert.That(Directory.EnumerateFiles(work, "*", SearchOption.AllDirectories), Is.Empty);
     }
 

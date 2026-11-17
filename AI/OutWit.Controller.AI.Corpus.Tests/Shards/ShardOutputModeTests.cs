@@ -54,8 +54,7 @@ public sealed class ShardOutputModeTests
     public void TearDown()
     {
         m_origin.Dispose();
-        if (Directory.Exists(m_root))
-            Directory.Delete(m_root, recursive: true);
+        CorpusTestFolders.Delete(m_root);
     }
 
     #endregion

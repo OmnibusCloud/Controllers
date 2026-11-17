@@ -40,7 +40,8 @@ public static class CorpusRuntimeDiagnosticsBuilder
             LanguageModelFormat = CorpusStageSet.LANGUAGE_FORMAT,
             ReferenceLanguageModelSha256 = CorpusReferenceLanguageModel.SHA256,
             PublicOrigins = [.. ShardOriginPolicy.PUBLIC_ORIGINS],
-            MachineOrigins = policy.ExtraOrigins.Order(StringComparer.Ordinal).ToList(),
+            // The operator's own host names are not a lab's to read: how many, never which.
+            MachineOriginCount = policy.ExtraOrigins.Count,
             MaxShardBytes = CorpusTaskPlanner.MAX_SHARD_BYTES,
             DownloadsPerNode = ShardFetchPolicy.Default.MaxConcurrent,
             MemoryPerShardBytes = ShardDegree.MEMORY_PER_SHARD,

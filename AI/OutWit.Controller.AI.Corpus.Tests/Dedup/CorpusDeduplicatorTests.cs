@@ -104,17 +104,27 @@ public sealed class CorpusDeduplicatorTests
     }
 
     [Test]
-    public void EmptyAndEmptySignatureDocumentsAreHandledTest()
+    public void EmptyRunsAndEmptyShardsAreHandledTest()
     {
         var empty = new CorpusDeduplicator().Run([]);
-        var blank = new CorpusDeduplicator().Run([Shard(0, [[], MinHashSigner.Sign("one two three four five six seven eight nine ten eleven twelve")])]);
+        var blank = new CorpusDeduplicator().Run([Shard(0, []), Shard(1, [MinHashSigner.Sign("one two three four five six seven eight nine ten eleven twelve")])]);
 
         Assert.Multiple(() =>
         {
             Assert.That(empty.Documents, Is.Zero);
-            Assert.That(blank.Documents, Is.EqualTo(2));
-            Assert.That(blank.Shards[0].Keep, Is.All.True, "a document without a signature is kept, never compared");
+            Assert.That(blank.Documents, Is.EqualTo(1));
+            Assert.That(blank.Shards.Select(shard => shard.Documents), Is.EqualTo(new[] { 0, 1 }));
+            Assert.That(blank.Shards[1].Keep, Is.All.True);
         });
+    }
+
+    [Test]
+    public void ABandKeyIsTheKeyOfThatBandTest()
+    {
+        var signature = MinHashSigner.Sign("one two three four five six seven eight nine ten eleven twelve");
+        var keys = MinHashSigner.BandKeys(signature, 16);
+
+        Assert.That(Enumerable.Range(0, 16).Select(band => MinHashSigner.BandKey(signature, band, 8)), Is.EqualTo(keys));
     }
 
     [TestCase(0)]
@@ -143,7 +153,7 @@ public sealed class CorpusDeduplicatorTests
 
     private static CorpusDedupShard Shard(int index, IReadOnlyList<ulong[]> signatures)
     {
-        return new CorpusDedupShard(index, Guid.NewGuid(), signatures);
+        return CorpusDedupShard.Of(index, Guid.NewGuid(), signatures);
     }
 
     /// <summary>Replaces a few words so the text is a near-duplicate, not a copy.</summary>

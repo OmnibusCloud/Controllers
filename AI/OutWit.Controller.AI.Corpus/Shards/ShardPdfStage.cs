@@ -1,5 +1,6 @@
 using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Text;
+using OutWit.Controller.AI.Corpus.Trust;
 using OutWit.Controller.AI.Corpus.Warc;
 
 namespace OutWit.Controller.AI.Corpus.Shards;
@@ -33,11 +34,14 @@ public sealed class ShardPdfStage
     public const string DROP_PDF_EMPTY = "pdf_empty";
     public const string DROP_PDF_OVERSIZED = "pdf_oversized";
 
-    /// <summary>Every drop rule of the stage, in the order of <see cref="PdfVerdict"/> (and <c>pdf_empty</c>).</summary>
+    /// <summary>A PDF met after the shard's PDFs had burned the fuel one shard may spend on them (<see cref="PdfStageLimits.SHARD_FUEL"/>): not run.</summary>
+    public const string DROP_PDF_SHARD_FUEL = "pdf_shard_fuel";
+
+    /// <summary>Every drop rule of the stage, in the order of <see cref="PdfVerdict"/> (then <c>pdf_empty</c> and <c>pdf_shard_fuel</c>).</summary>
     public static readonly IReadOnlyList<string> DROPS =
     [
         DROP_PDF_ENCRYPTED, DROP_PDF_UNREADABLE, DROP_PDF_NO_PAGES, DROP_PDF_FUEL, DROP_PDF_MEMORY,
-        DROP_PDF_TRAP, DROP_PDF_ERROR, DROP_PDF_OVERSIZED, DROP_PDF_EMPTY
+        DROP_PDF_TRAP, DROP_PDF_ERROR, DROP_PDF_OVERSIZED, DROP_PDF_EMPTY, DROP_PDF_SHARD_FUEL
     ];
 
     private const string IDENTIFIED_PAYLOAD_TYPE = "WARC-Identified-Payload-Type";
@@ -104,7 +108,12 @@ public sealed class ShardPdfStage
         stats.PdfIn(record.Header(TRUNCATED) != null);
 
         var sandbox = Sandbox()
-                      ?? throw new PdfSandboxException($"this node cannot run the PDF stage ({m_problem}); the shard holds a PDF, so another node must make its product");
+                      ?? throw new PdfSandboxException(CorpusResultCodes.FAULT_PDF_SANDBOX, $"this node cannot run the PDF stage ({m_problem}); the shard holds a PDF, so another node must make its product");
+
+        // One shard's PDFs have one budget together: a shard of documents that each burn their
+        // whole fuel must not cost a node a budget per document without end.
+        if (stats.PdfFuelSpent() >= ShardFuel)
+            return Drop(stats, DROP_PDF_SHARD_FUEL);
 
         var extraction = Run(sandbox, payload.Body.Span, cancellationToken);
         stats.PdfFuel(extraction.Fuel);
@@ -150,6 +159,8 @@ public sealed class ShardPdfStage
         if (m_workDirectory != null)
             return sandbox.Extract(pdf, m_workDirectory, cancellationToken);
 
+        // A tool's run, outside a task: a folder of its own in the system's temp folder, taken
+        // away behind the run's own folder and, like it, off the run's path (ShardCleanup).
         var directory = Path.Combine(Path.GetTempPath(), WORK_PREFIX + Guid.NewGuid().ToString("N"));
         try
         {
@@ -157,15 +168,7 @@ public sealed class ShardPdfStage
         }
         finally
         {
-            try
-            {
-                if (Directory.Exists(directory))
-                    Directory.Delete(directory, recursive: true);
-            }
-            catch (IOException)
-            {
-                // a temp folder of a tool run; best-effort
-            }
+            ShardCleanup.Schedule(directory);
         }
     }
 
@@ -192,7 +195,7 @@ public sealed class ShardPdfStage
             return "";
 
         var semicolon = contentType.IndexOf(';');
-        return (semicolon >= 0 ? contentType[..semicolon] : contentType).Trim().ToLowerInvariant();
+        return Text.Casing.CorpusCasing.ToLowerAscii((semicolon >= 0 ? contentType[..semicolon] : contentType).Trim());
     }
 
     #endregion
@@ -201,6 +204,9 @@ public sealed class ShardPdfStage
 
     /// <summary>Why the stage has no sandbox; null when it has one or has not asked yet.</summary>
     public string? Problem => m_problem;
+
+    /// <summary>The fuel the PDFs of one shard may burn together (tests of a shard past it take a smaller one).</summary>
+    internal long ShardFuel { get; init; } = PdfStageLimits.SHARD_FUEL;
 
     #endregion
 }

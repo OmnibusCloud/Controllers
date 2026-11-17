@@ -48,7 +48,7 @@ public sealed class WarcRecord
     {
         foreach (var (key, value) in Headers)
         {
-            if (string.Equals(key, name, StringComparison.OrdinalIgnoreCase))
+            if (Text.Casing.CorpusCasing.EqualsIgnoreAsciiCase(key, name))
                 return value;
         }
 

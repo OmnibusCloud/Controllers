@@ -3,7 +3,6 @@ using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Dedup;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Reports;
-using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -39,24 +38,26 @@ internal sealed class WitActivityAdapterCorpusDedup : WitActivityAdapterFunction
         pool.TryGetValue(activity.Options, out CorpusOptionsData? options);
         var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
 
-        // A run without signatures, or with signatures made in different ways, is refused by name.
-        var input = CorpusDedupInput.Read(await File.ReadAllBytesAsync(await BlobService.GetLocalPathAsync(reportBlobId), cancellationToken));
+        // The report is a lab's input: its size is asked before it is read.
+        var reportPath = await BlobService.GetLocalPathAsync(reportBlobId);
+        if (new FileInfo(reportPath).Length > CorpusDedupInput.MAX_REPORT_BYTES)
+            throw new InvalidOperationException($"Corpus.Dedup: the report is larger than {CorpusDedupInput.MAX_REPORT_BYTES} bytes.");
+
+        // A run without signatures is refused by name, and one with more documents than a merge
+        // holds: here, from the report's own counts, before a blob is opened.
+        var input = CorpusDedupInput.Read(await File.ReadAllBytesAsync(reportPath, cancellationToken));
         if (input.Refusal != null)
             throw new InvalidOperationException($"Corpus.Dedup: {input.Refusal}");
 
-        var shards = new List<CorpusDedupShard>();
-        foreach (var source in input.Shards)
-        {
-            var bytes = await File.ReadAllBytesAsync(await BlobService.GetLocalPathAsync(source.SignaturesBlobId), cancellationToken);
-            if (CorpusDedupInput.Check(source, bytes) is { } mismatch)
-                throw new InvalidOperationException($"Corpus.Dedup: {mismatch}");
+        // Every blob once, each held to the hash and the document count the report states; one
+        // that is not what the report says is left out and named.
+        var (shards, excluded) = await CorpusDedupLoader.LoadAsync(input, blobId => BlobService.GetLocalPathAsync(blobId), cancellationToken);
+        foreach (var exclusion in excluded)
+            Logger.LogWarning("Corpus.Dedup: shard {Index} is left out of the merge ({Reason}).", exclusion.Index, exclusion.Reason);
 
-            shards.Add(new CorpusDedupShard(source.Index, source.SignaturesBlobId, ShardSignatureWriter.Read(bytes)));
-        }
-
-        var result = await Task.Run(() => new CorpusDeduplicator(options?.DedupThreshold ?? 0, input.Parameters.Bands).Run(shards, cancellationToken), cancellationToken);
-        Logger.LogInformation("Corpus.Dedup: {Documents} document(s) in {Shards} shard(s), {Duplicates} near-duplicate(s) in {Clusters} cluster(s) at threshold {Threshold}, {Parameters}",
-            result.Documents, result.Shards.Count, result.Duplicates, result.Clusters.Count, result.Threshold, input.Parameters.Describe());
+        var result = await Task.Run(() => new CorpusDeduplicator(options?.DedupThreshold ?? 0, input.Parameters.Bands).Run(shards, cancellationToken), cancellationToken) with { Excluded = excluded };
+        Logger.LogInformation("Corpus.Dedup: {Documents} document(s) in {Shards} shard(s), {Duplicates} near-duplicate(s) in {Clusters} cluster(s) at threshold {Threshold}, {Parameters}; {Excluded} shard(s) left out",
+            result.Documents, result.Shards.Count, result.Duplicates, result.Clusters.Count, result.Threshold, input.Parameters.Describe(), excluded.Count);
 
         var blobId = await BlobService.UploadBytesAsync(CorpusDedupWriter.Write(result, input.Parameters), BLOB_NAME);
 
@@ -66,7 +67,7 @@ internal sealed class WitActivityAdapterCorpusDedup : WitActivityAdapterFunction
 
     /// <summary>The completed shards' signature blobs from a corpus report.</summary>
     /// <param name="report">The report bytes.</param>
-    /// <returns>Shard index and blob id, in report order.</returns>
+    /// <returns>Shard index and blob id, in index order.</returns>
     /// <exception cref="InvalidOperationException">Not a corpus report, or a run the merge refuses (see <see cref="CorpusDedupInput"/>).</exception>
     public static List<(int Index, Guid SignaturesBlobId)> ReadSignatureBlobs(byte[] report)
     {

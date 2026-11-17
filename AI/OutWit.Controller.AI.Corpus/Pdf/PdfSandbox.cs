@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using OutWit.Controller.AI.Corpus.Trust;
 using OutWit.Controller.AI.Wasm;
 using WasmModule = Wasmtime.Module;
 
@@ -12,11 +13,19 @@ namespace OutWit.Controller.AI.Corpus.Pdf;
 /// the host's pinned clock and seeded randomness, the fuel given after instantiation, a 1 GiB
 /// linear memory, and a wall-clock backstop. Every way a PDF can end is a <see cref="PdfVerdict"/>;
 /// a host-side fault (a run that reaches the backstop, a module that cannot be instantiated)
-/// throws <see cref="PdfSandboxException"/>, so the shard fails and runs elsewhere.
+/// throws <see cref="PdfSandboxException"/>, so the shard goes back as a fault of this node.
+/// <para>
+/// A run's time is its fuel's and nothing else's. Each run has a folder of its own (the guest
+/// sees <c>/in</c> and <c>/out</c>, the same on every run), written once and never used again,
+/// and nobody waits for it to go: it is handed to <see cref="Shards.ShardCleanup"/>. Deleting the
+/// input on the run's own path was where a run waited 90 s on a machine that inspects new files
+/// (see there).
+/// </para>
 /// <para>
 /// The module is compiled once, on construction; one sandbox serves every shard of a process,
 /// concurrently. At most a few PDFs run at once in the process, so that their memory ceilings
-/// together stay within half the memory the process may use.
+/// together stay within the PDFs' share of the memory the process may use (a quarter; the shards
+/// in flight have half).
 /// </para>
 /// </summary>
 public sealed class PdfSandbox : IDisposable
@@ -29,9 +38,10 @@ public sealed class PdfSandbox : IDisposable
     private const string INPUT_FILE = "doc.pdf";
     private const string TEXT_FILE = "text.txt";
     private const string RESULT_FILE = "result.json";
-    private const string IN_FOLDER = "pdf-in";
-    private const string OUT_FOLDER = "pdf-out";
-    private const string CAPTURE_FOLDER = "pdf-io";
+    private const string RUNS_FOLDER = "pdf";
+    private const string IN_FOLDER = "in";
+    private const string OUT_FOLDER = "out";
+    private const string CAPTURE_FOLDER = "io";
 
     private const int EXIT_TEXT = 0;
     private const int EXIT_REFUSED = 2;
@@ -54,6 +64,9 @@ public sealed class PdfSandbox : IDisposable
     private readonly SemaphoreSlim m_slots;
     private bool m_disposed;
 
+    /// <summary>The runs of this process, for the names of their folders.</summary>
+    private static long m_runs;
+
     #endregion
 
     #region Constructors
@@ -72,10 +85,12 @@ public sealed class PdfSandbox : IDisposable
     /// <param name="fuel">The fuel one PDF may burn from <c>_start</c> on.</param>
     /// <param name="memoryBytes">The cap of the module's linear memory.</param>
     /// <param name="maxTextBytes">The most text one PDF may give.</param>
+    /// <param name="wallMs">The wall-clock backstop of one run (tests of a run the machine, not the document, stops).</param>
     /// <exception cref="InvalidDataException">The file's bytes are not the pinned module.</exception>
     /// <exception cref="InvalidOperationException">The loaded wasmtime binding is not the one this controller was built against, or the engine cannot be made.</exception>
-    public PdfSandbox(string modulePath, long fuel, long memoryBytes, int maxTextBytes = PdfStageLimits.MAX_TEXT_BYTES)
+    public PdfSandbox(string modulePath, long fuel, long memoryBytes, int maxTextBytes = PdfStageLimits.MAX_TEXT_BYTES, int wallMs = PdfStageLimits.WALL_MS)
     {
+        WallMs = Math.Max(1, wallMs);
         var bytes = File.ReadAllBytes(modulePath);
         var sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes));
         if (!string.Equals(sha256, PdfStageLimits.MODULE_SHA256, StringComparison.Ordinal))
@@ -103,8 +118,8 @@ public sealed class PdfSandbox : IDisposable
     #region Functions
 
     /// <summary>
-    /// Extracts the text of one PDF. Its folders are made in the work directory (the task's temp
-    /// scope on a node) and emptied after the run.
+    /// Extracts the text of one PDF. The run's folder is made in the work directory (the task's
+    /// temp scope on a node), a new one for every run, and handed over for deletion after it.
     /// </summary>
     /// <param name="pdf">The PDF's bytes.</param>
     /// <param name="workDirectory">A folder of the caller's own; nothing is written outside it.</param>
@@ -112,6 +127,7 @@ public sealed class PdfSandbox : IDisposable
     /// <returns>The verdict, the text and what the run cost.</returns>
     /// <exception cref="PdfSandboxException">The run reached the wall-clock backstop, or the module could not be instantiated: a fault of the host, not of the PDF.</exception>
     /// <exception cref="OperationCanceledException">The token was cancelled while the PDF waited for a slot.</exception>
+    /// <exception cref="IOException">The run's folder or its input could not be written: this node's disk.</exception>
     public PdfExtraction Extract(ReadOnlySpan<byte> pdf, string workDirectory, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -119,22 +135,23 @@ public sealed class PdfSandbox : IDisposable
         if (pdf.Length > PdfStageLimits.MAX_INPUT_BYTES)
             return PdfExtraction.Refused(PdfVerdict.Oversized, 0);
 
-        var inDirectory = Path.Combine(workDirectory, IN_FOLDER);
-        var outDirectory = Path.Combine(workDirectory, OUT_FOLDER);
-        var captureDirectory = Path.Combine(workDirectory, CAPTURE_FOLDER);
-        var inputPath = Path.Combine(inDirectory, INPUT_FILE);
-
-        Directory.CreateDirectory(inDirectory);
-        Empty(outDirectory);
-        File.WriteAllBytes(inputPath, pdf.ToArray());
+        // A folder of this run's own: nothing of an earlier run is read, overwritten or waited for.
+        var run = Interlocked.Increment(ref m_runs).ToString("x8", System.Globalization.CultureInfo.InvariantCulture);
+        var runDirectory = Path.Combine(workDirectory, RUNS_FOLDER, run);
+        var inDirectory = Path.Combine(runDirectory, IN_FOLDER);
+        var outDirectory = Path.Combine(runDirectory, OUT_FOLDER);
 
         try
         {
+            Directory.CreateDirectory(inDirectory);
+            Directory.CreateDirectory(outDirectory);
+            File.WriteAllBytes(Path.Combine(inDirectory, INPUT_FILE), pdf);
+
             WasmHostRunOutcome outcome;
             m_slots.Wait(cancellationToken);
             try
             {
-                outcome = m_host.Run(m_module, Request(inDirectory, outDirectory, captureDirectory));
+                outcome = m_host.Run(m_module, Request(inDirectory, outDirectory, Path.Combine(runDirectory, CAPTURE_FOLDER)));
             }
             finally
             {
@@ -145,24 +162,18 @@ public sealed class PdfSandbox : IDisposable
         }
         finally
         {
-            TryDelete(inputPath);
-            TryEmpty(outDirectory);
+            Discard(runDirectory);
         }
     }
 
-    /// <summary>How many PDFs a process runs at once: their memory ceilings within half its memory, one at least, never more than its cores.</summary>
+    /// <summary>How many PDFs a process runs at once: their memory ceilings within the PDFs' share of its memory (a quarter: <see cref="Shards.ShardDegree"/> holds the node's one memory budget), one at least, never more than its cores.</summary>
     /// <param name="memoryBytes">The memory ceiling of one run.</param>
     /// <param name="availableBytes">The memory the process may use (0 or less = unknown, cores decide).</param>
     /// <param name="cores">Logical processors.</param>
     /// <returns>At least 1.</returns>
     public static int Slots(long memoryBytes, long availableBytes, int cores)
     {
-        var byCores = Math.Max(1, cores);
-        if (availableBytes <= 0)
-            return byCores;
-
-        var byMemory = (int)Math.Min(int.MaxValue, availableBytes / 2 / Math.Max(1, memoryBytes));
-        return Math.Clamp(byMemory, 1, byCores);
+        return Shards.ShardDegree.PdfSlots(memoryBytes, availableBytes, cores);
     }
 
     private WasmHostRunRequest Request(string inDirectory, string outDirectory, string captureDirectory)
@@ -175,7 +186,7 @@ public sealed class PdfSandbox : IDisposable
             Fuel = Fuel,
             FuelAfterInstantiation = true,
             MemoryBytes = MemoryBytes,
-            WallMs = PdfStageLimits.WALL_MS,
+            WallMs = WallMs,
             RandomSeed = PdfStageLimits.RANDOM_SEED,
             StdoutLimitBytes = STDOUT_LIMIT_BYTES,
             StderrLimitBytes = STDERR_LIMIT_BYTES,
@@ -197,14 +208,14 @@ public sealed class PdfSandbox : IDisposable
             case WasmHostVerdict.EngineError:
                 return PdfExtraction.Refused(PdfVerdict.Error, fuel);
             case WasmHostVerdict.Interrupted:
-                throw new PdfSandboxException($"a PDF ran past the wall-clock backstop of {PdfStageLimits.WALL_MS} ms with fuel left: the machine, not the document, stopped it");
+                throw new PdfSandboxException(CorpusResultCodes.FAULT_PDF_BACKSTOP, $"a PDF ran past the wall-clock backstop of {WallMs} ms with fuel left: the machine, not the document, stopped it");
             case WasmHostVerdict.NotInstantiated:
             case WasmHostVerdict.NoStart:
-                throw new PdfSandboxException($"the PDF extractor module did not run: {outcome.Fault}");
+                throw new PdfSandboxException(CorpusResultCodes.FAULT_PDF_SANDBOX, $"the PDF extractor module did not run: {outcome.Fault}");
             case WasmHostVerdict.Exited:
                 break;
             default:
-                throw new PdfSandboxException($"the sandbox ended a PDF run as {outcome.Verdict}");
+                throw new PdfSandboxException(CorpusResultCodes.FAULT_PDF_SANDBOX, $"the sandbox ended a PDF run as {outcome.Verdict}");
         }
 
         // The module's whole output is bounded after the fact (WASI gives a writable folder no
@@ -274,47 +285,6 @@ public sealed class PdfSandbox : IDisposable
         return Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length);
     }
 
-    private static void Empty(string directory)
-    {
-        if (Directory.Exists(directory))
-            Directory.Delete(directory, recursive: true);
-
-        Directory.CreateDirectory(directory);
-    }
-
-    private static void TryEmpty(string directory)
-    {
-        try
-        {
-            Empty(directory);
-        }
-        catch (IOException)
-        {
-            // emptied again before the next run
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // emptied again before the next run
-        }
-    }
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch (IOException)
-        {
-            // overwritten by the next run; the scope goes with the task
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // overwritten by the next run; the scope goes with the task
-        }
-    }
-
     #endregion
 
     #region IDisposable
@@ -335,6 +305,12 @@ public sealed class PdfSandbox : IDisposable
 
     #region Properties
 
+    /// <summary>
+    /// Takes a finished run's folder away. Never on the run's own path: the default hands it to
+    /// <see cref="Shards.ShardCleanup"/> and returns at once.
+    /// </summary>
+    internal Action<string> Discard { get; set; } = Shards.ShardCleanup.Schedule;
+
     /// <summary>The fuel one PDF may burn from <c>_start</c> on.</summary>
     public long Fuel { get; }
 
@@ -343,6 +319,9 @@ public sealed class PdfSandbox : IDisposable
 
     /// <summary>The most text one PDF may give, bytes of UTF-8.</summary>
     public int MaxTextBytes { get; }
+
+    /// <summary>The wall-clock backstop of one run, milliseconds: a run that reaches it with fuel left is a fault of this node, never the document's verdict.</summary>
+    public int WallMs { get; }
 
     #endregion
 }

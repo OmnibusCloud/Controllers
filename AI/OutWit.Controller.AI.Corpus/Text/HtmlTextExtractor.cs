@@ -2,6 +2,8 @@ using System.Text;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
+using AngleSharp.Text;
+using OutWit.Controller.AI.Corpus.Text.Casing;
 
 namespace OutWit.Controller.AI.Corpus.Text;
 
@@ -12,6 +14,17 @@ namespace OutWit.Controller.AI.Corpus.Text;
 /// breaks, inline text runs are joined with single spaces, and the result is lines of
 /// collapsed whitespace with the title first — the shape Common Crawl's own WET conversion
 /// has, so the two can be compared.
+/// <para>
+/// A page is hostile input, and the parser's work on it is bounded twice. A linear pre-scan
+/// (<see cref="Inspect"/>) refuses a page whose markup, read the way a tokenizer reads it,
+/// nests deeper or holds more tags than a page may, before the parser pays for it
+/// (<c>html_refused</c>). The pre-scan is a reading of its own and can be argued with, so the
+/// budget itself sits in the parser: its tree is held to the same nesting limit
+/// (<see cref="MAX_NESTING"/>), and the parse stops the moment an element lands at that limit or
+/// the tree holds more elements than a page may have (<see cref="MAX_ELEMENTS"/>, the copies the
+/// parser makes on its own included: <see cref="HtmlTreeBudget"/>) — <c>html_too_complex</c>.
+/// Both are functions of the page and the parser version, the same on every node.
+/// </para>
 /// </summary>
 public static class HtmlTextExtractor
 {
@@ -30,84 +43,152 @@ public static class HtmlTextExtractor
     /// <summary>Most tags a page may carry before it counts as hostile rather than large.</summary>
     public const int MAX_TAGS = 60_000;
 
-    private static readonly HashSet<string> VOID_TAGS = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>
+    /// Most elements the parser's tree may hold for one page: the tags a page may carry and as
+    /// many again that no tag names (the html, head, body and table parts the parser supplies,
+    /// the formatting elements it opens again in every block that follows an unclosed one).
+    /// </summary>
+    public const int MAX_ELEMENTS = 2 * MAX_TAGS;
+
+    private static readonly HashSet<string> VOID_TAGS = new(StringComparer.Ordinal)
     {
         "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"
     };
 
-    private static readonly HashSet<string> DROPPED = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>Elements whose content a tokenizer reads as text up to their end tag: no tag inside counts.</summary>
+    private static readonly HashSet<string> TEXT_TAGS = new(StringComparer.Ordinal)
+    {
+        "script", "style", "xmp", "iframe", "noembed", "noframes", "textarea", "title"
+    };
+
+    private const string PLAINTEXT = "plaintext";
+
+    private static readonly HashSet<string> DROPPED = new(StringComparer.Ordinal)
     {
         "script", "style", "noscript", "template", "svg", "canvas", "iframe", "object", "embed",
         "nav", "header", "footer", "aside", "form", "button", "select", "option", "textarea", "input",
         "head", "link", "meta", "base", "title"
     };
 
-    private static readonly HashSet<string> BLOCKS = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> BLOCKS = new(StringComparer.Ordinal)
     {
         "address", "article", "blockquote", "br", "caption", "dd", "details", "div", "dl", "dt", "fieldset",
         "figcaption", "figure", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "legend", "li", "main", "ol", "p",
         "pre", "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul", "body", "html"
     };
 
+    #endregion
+
+    #region Fields
+
     /// <summary>One parser per thread: a node runs several shards at once and the parser's thread safety is not a documented contract.</summary>
     [ThreadStatic]
     private static HtmlParser? m_parser;
 
-    private static HtmlParser Parser => m_parser ??= new HtmlParser(new HtmlParserOptions { IsScripting = false, IsNotConsumingCharacterReferences = false });
+    /// <summary>The budget of the page this thread is parsing: the parser's callback counts into it.</summary>
+    [ThreadStatic]
+    private static HtmlTreeBudget? m_budget;
 
     #endregion
 
     #region Functions
 
     /// <summary>
+    /// Reads an HTML document: its text, or the reason it has none.
+    /// </summary>
+    /// <param name="html">The document.</param>
+    /// <param name="text">Lines of text separated by '\n', the title first when present; "" for a document without text or one that was not read.</param>
+    /// <returns>Whether the page was read, refused by the pre-scan, or found past the parser's budget.</returns>
+    public static HtmlReading Read(string html, out string text)
+    {
+        text = "";
+        if (Inspect(html) != null)
+            return HtmlReading.Refused;
+
+        try
+        {
+            text = Extract(html);
+            return HtmlReading.Text;
+        }
+        catch (HtmlTooComplexException)
+        {
+            return HtmlReading.TooComplex;
+        }
+    }
+
+    /// <summary>
     /// Extracts the text of an HTML document, or refuses a hostile one.
     /// </summary>
     /// <param name="html">The document.</param>
     /// <param name="text">Lines of text separated by '\n', the title first when present; "" for a document without text or a refused one.</param>
-    /// <param name="refusal">Why the document was refused (nesting or tag count past the caps), or null.</param>
-    /// <returns>True when the document was extracted, false when it was refused.</returns>
+    /// <param name="refusal">Why the document was not read (the pre-scan's caps, or the parser's budget), or null.</param>
+    /// <returns>True when the document was extracted, false when it was not.</returns>
     public static bool TryExtract(string html, out string text, out string? refusal)
     {
+        text = "";
         refusal = Inspect(html);
         if (refusal != null)
+            return false;
+
+        try
         {
-            text = "";
+            text = Extract(html);
+            return true;
+        }
+        catch (HtmlTooComplexException exception)
+        {
+            refusal = exception.Message;
             return false;
         }
-
-        text = Extract(html);
-        return true;
     }
 
     /// <summary>
     /// Extracts the text of an HTML document. Callers that may meet hostile pages use
-    /// <see cref="TryExtract"/>, which refuses them before the parser pays for them.
+    /// <see cref="Read"/>, which refuses them before the parser pays for them.
     /// </summary>
     /// <param name="html">The document.</param>
     /// <returns>Lines of text separated by '\n', the title first when present; "" for a document without text.</returns>
+    /// <exception cref="HtmlTooComplexException">The parser went past its budget on the page.</exception>
     public static string Extract(string html)
     {
         if (html.Length > MAX_HTML_CHARS)
             html = html[..MAX_HTML_CHARS];
 
-        using var document = Parser.ParseDocument(html);
+        var budget = m_budget ??= new HtmlTreeBudget(MAX_NESTING, MAX_ELEMENTS);
+        budget.Reset();
+        try
+        {
+            using var document = Parser.ParseDocument(html);
 
-        var lines = new List<string>();
-        var title = Collapse(document.Title ?? "");
-        if (title.Length > 0)
-            lines.Add(title);
+            // The last element the parser made was never followed by another.
+            budget.Finish();
 
-        var current = new StringBuilder();
-        if (document.Body != null)
-            Walk(document.Body, current, lines);
-        Flush(current, lines);
+            var lines = new List<string>();
+            var title = Collapse(document.Title ?? "");
+            if (title.Length > 0)
+                lines.Add(title);
 
-        return string.Join('\n', lines);
+            var current = new StringBuilder();
+            if (document.Body != null)
+                Walk(document.Body, current, lines);
+            Flush(current, lines);
+
+            return string.Join('\n', lines);
+        }
+        finally
+        {
+            budget.Reset();
+        }
     }
 
     /// <summary>
-    /// A linear pre-scan of the markup: counts tags and tracks nesting from open and close
-    /// tags (void elements and self-closing tags do not nest), without parsing.
+    /// A linear pre-scan of the markup, read the way an HTML tokenizer reads it: counts tags and
+    /// tracks nesting from open and close tags (void elements and self-closing tags do not nest),
+    /// without parsing. A comment ends where a tokenizer ends it (<c>&lt;!--&gt;</c> and
+    /// <c>&lt;!---&gt;</c> are empty comments, <c>--!&gt;</c> closes one); the content of an
+    /// element a tokenizer reads as text (script, style, xmp, iframe, noembed, noframes,
+    /// textarea, title) is skipped up to that element's own end tag and no further; after
+    /// <c>&lt;plaintext&gt;</c> nothing is markup. Names are compared as ASCII.
     /// </summary>
     /// <param name="html">The document.</param>
     /// <returns>The refusal reason, or null when the page is within the caps.</returns>
@@ -121,29 +202,21 @@ public static class HtmlTextExtractor
         while (i < length)
         {
             var open = html.IndexOf('<', i);
-            if (open < 0 || open >= length)
+            if (open < 0 || open + 1 >= length)
                 break;
+
+            var c = html[open + 1];
+            if (c == '!' || c == '?')
+            {
+                i = SkipDeclaration(html, open, length);
+                continue;
+            }
 
             var close = html.IndexOf('>', open + 1);
             if (close < 0 || close >= length)
                 break;
 
             i = close + 1;
-            if (open + 1 >= length)
-                break;
-
-            var c = html[open + 1];
-            if (c == '!' || c == '?')
-            {
-                // Comments and declarations: skip a comment to its end so its contents never count.
-                if (string.CompareOrdinal(html, open, "<!--", 0, 4) == 0)
-                {
-                    var end = html.IndexOf("-->", open + 4, StringComparison.Ordinal);
-                    i = end < 0 ? length : end + 3;
-                }
-
-                continue;
-            }
 
             tags++;
             if (tags > MAX_TAGS)
@@ -155,21 +228,24 @@ public static class HtmlTextExtractor
                 continue;
             }
 
-            if (!char.IsLetter(c))
+            if (!char.IsAsciiLetter(c))
                 continue;
 
             var nameEnd = open + 1;
-            while (nameEnd < close && (char.IsLetterOrDigit(html[nameEnd]) || html[nameEnd] == '-'))
+            while (nameEnd < close && (char.IsAsciiLetterOrDigit(html[nameEnd]) || html[nameEnd] == '-'))
                 nameEnd++;
-            var name = html.AsSpan(open + 1, nameEnd - open - 1);
+            var name = CorpusCasing.ToLowerAscii(html.Substring(open + 1, nameEnd - open - 1));
 
-            if (html[close - 1] == '/' || VOID_TAGS.Contains(name.ToString()))
+            if (html[close - 1] == '/' || VOID_TAGS.Contains(name))
                 continue;
 
-            if (name.Equals("script", StringComparison.OrdinalIgnoreCase) || name.Equals("style", StringComparison.OrdinalIgnoreCase))
+            if (name == PLAINTEXT)
+                break;
+
+            if (TEXT_TAGS.Contains(name))
             {
-                // Raw text elements: their content is not markup; jump to the closing tag.
-                var end = html.IndexOf("</" + name.ToString(), close + 1, StringComparison.OrdinalIgnoreCase);
+                // Text up to the element's own end tag; without one, text to the end.
+                var end = IndexOfEndTag(html, name, close + 1, length);
                 i = end < 0 ? length : end;
                 continue;
             }
@@ -186,6 +262,86 @@ public static class HtmlTextExtractor
         return null;
     }
 
+    /// <summary>Where the markup goes on after a declaration or a comment that opens at <paramref name="open"/> with <c>&lt;!</c> or <c>&lt;?</c>.</summary>
+    private static int SkipDeclaration(string html, int open, int length)
+    {
+        if (string.CompareOrdinal(html, open, "<!--", 0, 4) == 0)
+        {
+            var start = open + 4;
+
+            // An empty comment: a tokenizer ends "<!-->" and "<!--->" at once.
+            if (start < length && html[start] == '>')
+                return start + 1;
+            if (start + 1 < length && html[start] == '-' && html[start + 1] == '>')
+                return start + 2;
+
+            // The first "-->" or "--!>", found in one pass over the comment: two searches, each to
+            // the end of the page when its own ending never comes, would make a page of comments
+            // cost the square of its length.
+            for (var at = start; at < length; at++)
+            {
+                at = html.IndexOf("--", at, length - at, StringComparison.Ordinal);
+                if (at < 0 || at + 2 >= length)
+                    return length;
+
+                if (html[at + 2] == '>')
+                    return at + 3;
+
+                if (html[at + 2] == '!' && at + 3 < length && html[at + 3] == '>')
+                    return at + 4;
+            }
+
+            return length;
+        }
+
+        // A doctype, a processing instruction, a CDATA marker: it ends at the next '>'.
+        var close = html.IndexOf('>', open + 1);
+        return close < 0 ? length : close + 1;
+    }
+
+    /// <summary>The first <c>&lt;/name</c> at or after a position that a tokenizer takes for the end tag: followed by white space, '/' or '>'.</summary>
+    private static int IndexOfEndTag(string html, string name, int start, int length)
+    {
+        var span = html.AsSpan(0, length);
+        for (var index = start; index + 2 + name.Length <= length; index++)
+        {
+            index = html.IndexOf("</", index, length - index, StringComparison.Ordinal);
+            if (index < 0 || index + 2 + name.Length > length)
+                return -1;
+
+            if (!CorpusCasing.EqualsIgnoreAsciiCase(span.Slice(index + 2, name.Length), name))
+                continue;
+
+            var after = index + 2 + name.Length;
+            if (after >= length || html[after] is '>' or '/' or ' ' or '\t' or '\n' or '\r' or '\f')
+                return index;
+        }
+
+        return -1;
+    }
+
+    private static HtmlParser CreateParser()
+    {
+        return new HtmlParser(new HtmlParserOptions
+        {
+            IsScripting = false,
+            IsNotConsumingCharacterReferences = false,
+            // The parser's own nesting limit, stated: its tree never goes deeper, whatever the
+            // library's default becomes.
+            MaximumDepth = MAX_NESTING,
+            OnCreated = Created
+        });
+    }
+
+    /// <summary>
+    /// The parser's callback for every element it makes: the page's budget judges the one made
+    /// before (in the tree by now) on the parser's own tree, and stops the parse past it.
+    /// </summary>
+    private static void Created(IElement element, TextPosition position)
+    {
+        m_budget?.Created(element);
+    }
+
     private static void Walk(INode node, StringBuilder current, List<string> lines)
     {
         // Iterative, not recursive: a hostile page nests tens of thousands of elements deep.
@@ -198,7 +354,7 @@ public static class HtmlTextExtractor
 
             if (item is IElement element)
             {
-                var tag = element.LocalName;
+                var tag = CorpusCasing.ToLowerAscii(element.LocalName);
                 if (exit)
                 {
                     if (BLOCKS.Contains(tag))
@@ -212,9 +368,12 @@ public static class HtmlTextExtractor
                 if (BLOCKS.Contains(tag))
                     Flush(current, lines);
 
+                // By position, last child first: asking a node for its previous sibling is a
+                // search of its parent's children, and a page may put all its nodes under one.
                 stack.Push((item, true));
-                for (var child = item.LastChild; child != null; child = child.PreviousSibling)
-                    stack.Push((child, false));
+                var children = item.ChildNodes;
+                for (var index = children.Length - 1; index >= 0; index--)
+                    stack.Push((children[index], false));
                 continue;
             }
 
@@ -240,7 +399,7 @@ public static class HtmlTextExtractor
             return true;
 
         var style = element.GetAttribute("style");
-        return style != null && style.Contains("display:none", StringComparison.OrdinalIgnoreCase) || style != null && style.Contains("display: none", StringComparison.OrdinalIgnoreCase);
+        return style != null && (CorpusCasing.ContainsIgnoreAsciiCase(style, "display:none") || CorpusCasing.ContainsIgnoreAsciiCase(style, "display: none"));
     }
 
     private static void Flush(StringBuilder current, List<string> lines)
@@ -300,6 +459,12 @@ public static class HtmlTextExtractor
 
         return builder.ToString();
     }
+
+    #endregion
+
+    #region Properties
+
+    private static HtmlParser Parser => m_parser ??= CreateParser();
 
     #endregion
 }

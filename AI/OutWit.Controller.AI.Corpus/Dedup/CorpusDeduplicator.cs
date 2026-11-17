@@ -53,26 +53,37 @@ public sealed class CorpusDeduplicator
 
     /// <summary>Runs the merge over the shards' signatures.</summary>
     /// <param name="shards">The shards, any order; sorted by index inside.</param>
-    /// <param name="cancellationToken">Stops between shards.</param>
+    /// <param name="cancellationToken">Stops between bands.</param>
     /// <returns>The decision.</returns>
     /// <exception cref="InvalidOperationException">More documents than one merge holds.</exception>
+    /// <exception cref="ArgumentException">The shards' signatures differ in length, or the bands do not divide it.</exception>
     public CorpusDedupResult Run(IReadOnlyList<CorpusDedupShard> shards, CancellationToken cancellationToken = default)
     {
         var ordered = shards.OrderBy(shard => shard.ShardIndex).ToList();
-        var total = ordered.Sum(shard => (long)shard.Signatures.Count);
-        var capacity = Capacity(ordered.SelectMany(shard => shard.Signatures).Select(signature => signature.Length).DefaultIfEmpty(MinHashSigner.HASHES).Max());
+        var hashes = ordered.Count > 0 ? ordered[0].Hashes : MinHashSigner.HASHES;
+        if (ordered.Any(shard => shard.Hashes != hashes))
+            throw new ArgumentException("the shards' signatures have one length", nameof(shards));
+
+        var total = ordered.Sum(shard => (long)shard.Documents);
+        var capacity = Capacity(hashes);
         if (total > capacity)
             throw new InvalidOperationException($"{total} documents exceed the merge's capacity of {capacity}.");
 
-        var signatures = new ulong[total][];
-        var refs = new CorpusDocumentRef[total];
+        if (total > 0 && (hashes % m_bands != 0))
+            throw new ArgumentException("bands must divide the signature length");
+
+        var rows = hashes / m_bands;
+
+        // Document number to its shard and its ordinal there.
+        var shardOf = new int[total];
+        var ordinalOf = new int[total];
         var next = 0;
-        foreach (var shard in ordered)
+        for (var shard = 0; shard < ordered.Count; shard++)
         {
-            for (var ordinal = 0; ordinal < shard.Signatures.Count; ordinal++)
+            for (var ordinal = 0; ordinal < ordered[shard].Documents; ordinal++)
             {
-                signatures[next] = shard.Signatures[ordinal];
-                refs[next] = new CorpusDocumentRef(shard.ShardIndex, ordinal);
+                shardOf[next] = shard;
+                ordinalOf[next] = ordinal;
                 next++;
             }
         }
@@ -87,12 +98,10 @@ public sealed class CorpusDeduplicator
             cancellationToken.ThrowIfCancellationRequested();
             firstByKey.Clear();
 
-            for (var document = 0; document < signatures.Length; document++)
+            for (var document = 0; document < parent.Length; document++)
             {
-                if (signatures[document].Length == 0)
-                    continue;
-
-                var key = MinHashSigner.BandKeys(signatures[document], m_bands)[band];
+                var signature = ordered[shardOf[document]].Signature(ordinalOf[document]);
+                var key = MinHashSigner.BandKey(signature, band, rows);
                 if (!firstByKey.TryGetValue(key, out var first))
                 {
                     firstByKey[key] = document;
@@ -102,13 +111,13 @@ public sealed class CorpusDeduplicator
                 if (Find(parent, first) == Find(parent, document))
                     continue;
 
-                if (MinHashSigner.Similarity(signatures[first], signatures[document]) >= m_threshold)
+                if (MinHashSigner.Similarity(ordered[shardOf[first]].Signature(ordinalOf[first]), signature) >= m_threshold)
                     Union(parent, first, document);
             }
         }
 
         var members = new Dictionary<int, List<int>>();
-        for (var document = 0; document < signatures.Length; document++)
+        for (var document = 0; document < parent.Length; document++)
         {
             var root = Find(parent, document);
             if (!members.TryGetValue(root, out var list))
@@ -123,7 +132,7 @@ public sealed class CorpusDeduplicator
             list.Sort();
             keep[list[0]] = true;
             if (list.Count > 1)
-                clusters.Add(list.Select(document => refs[document]).ToList());
+                clusters.Add(list.Select(document => new CorpusDocumentRef(ordered[shardOf[document]].ShardIndex, ordinalOf[document])).ToList());
         }
 
         clusters.Sort((a, b) => a[0].CompareTo(b[0]));
@@ -132,7 +141,7 @@ public sealed class CorpusDeduplicator
         var offset = 0;
         foreach (var shard in ordered)
         {
-            var mask = new bool[shard.Signatures.Count];
+            var mask = new bool[shard.Documents];
             Array.Copy(keep, offset, mask, 0, mask.Length);
             shardResults.Add(new CorpusDedupShardResult(shard.ShardIndex, shard.SignaturesBlobId, mask));
             offset += mask.Length;

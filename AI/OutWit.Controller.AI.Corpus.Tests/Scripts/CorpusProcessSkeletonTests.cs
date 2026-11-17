@@ -60,7 +60,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
         Assert.Multiple(() =>
         {
             Assert.That(process.Activities.Count, Is.GreaterThan(0));
-            Assert.That(process.Variables.Select(v => v.Name), Is.SupersetOf(new[] { "manifest", "languageModel", "opts", "tasks", "rate", "checked", "executions", "report", "integrity" }));
+            Assert.That(process.Variables.Select(v => v.Name), Is.SupersetOf(new[] { "manifest", "languageModel", "opts", "tasks", "rate", "checked", "executions", "repairs", "repaired", "disputes", "majority", "resolved", "report", "integrity" }));
             Assert.That(preflight.Variables.Select(v => v.Name), Is.SupersetOf(new[] { "manifest", "languageModel", "opts", "result" }));
         });
     }
@@ -182,7 +182,8 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
 
         Assert.Multiple(() =>
         {
-            Assert.That(document.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-dedup/1"));
+            Assert.That(document.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-dedup/2"));
+            Assert.That(document.RootElement.GetProperty("excluded").GetArrayLength(), Is.Zero, "every blob is the one the report names");
             Assert.That(summary.GetProperty("documents").GetInt64(), Is.EqualTo(documentsOut));
             Assert.That(summary.GetProperty("duplicates").GetInt64(), Is.GreaterThanOrEqualTo(perShard), "the second copy is all duplicates");
             Assert.That(summary.GetProperty("duplicates").GetInt64(), Is.LessThan(documentsOut), "the first copy's representatives stay");
@@ -202,7 +203,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
         Assert.That(processStatus.Result, Is.EqualTo(WitProcessingResult.Completed), processStatus.ToString());
 
         var current = System.Text.Encoding.UTF8.GetString(await ReadBytesAsync((Guid)process.Variables["report"].Value!));
-        var previousBlob = await UploadAsync(current.Replace(CorpusReportWriter.SCHEMA, CorpusReportWriter.PREVIOUS_SCHEMA), "previous-report.json");
+        var previousBlob = await UploadAsync(current.Replace(CorpusReportWriter.SCHEMA, CorpusReportWriter.PREVIOUS_SCHEMAS[0]), "previous-report.json");
 
         var dedup = Engine.Compile(m_dedupScript);
         var status = await Engine.ScheduleAndWaitAsync(dedup, previousBlob, new CorpusOptionsData());
@@ -211,11 +212,12 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
     }
 
     [Test]
-    public async Task AShardWithAPdfFailsTheBatchOfANodeWithoutTheSandboxTest()
+    public async Task AWarcBatchIsRefusedBeforeAnyFetchByANodeWithoutTheSandboxTest()
     {
-        // Every mock node of this process answers as a node without the sandbox: the golden WARC
-        // shard (one PDF) fails each node's batch, Grid.ForEach hands it on until no node is left,
-        // and the job fails rather than report a product without its PDF. A WET shard is made.
+        // Every mock node of this process answers as a node without the sandbox: each refuses the
+        // batch that holds the WARC shard before it fetches anything, Grid.ForEach hands it on
+        // until no node is left, and the job fails rather than report a product without its PDF.
+        // A WET shard is made.
         var warc = await UploadAsync(Manifest(WARC_FIXTURE), "warc.json");
         var wet = await UploadAsync(Manifest(WET_FIXTURE), "wet.json");
 
@@ -233,7 +235,8 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
             Assert.Multiple(() =>
             {
                 Assert.That(warcStatus.Result, Is.EqualTo(WitProcessingResult.Failed), warcStatus.ToString());
-                Assert.That(fetches, Is.GreaterThanOrEqualTo(2), "the shard reached the nodes and was handed on (the size probe aside)");
+                Assert.That(fetches, Is.EqualTo(1), "the server's size probe and nothing else: no node fetched a byte of a batch it could not finish");
+                Assert.That(Describe(warcStatus), Does.Not.Contain("no sandbox in this test"), "what leaves a node is a fixed sentence, not the reason's text");
                 Assert.That(wetStatus.Result, Is.EqualTo(WitProcessingResult.Completed), wetStatus.ToString());
             });
         }

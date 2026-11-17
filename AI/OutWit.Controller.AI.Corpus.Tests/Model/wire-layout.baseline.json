@@ -1,17 +1,17 @@
 {
   "comment": "The published wire layout of OutWit.Controller.AI.Corpus.Model: the Model package version and the MemoryPack member count of every DTO. A member appended to a DTO is a new Model version - bump <Version> in the Model csproj, publish it, and only then let the controller depend on it (the server restores the Model from the feed as a lib next to the module's copy; the lib wins). Update this file in the same commit as the csproj.",
-  "modelVersion": "0.1.5",
+  "modelVersion": "0.1.6",
   "members": {
     "CorpusCountData": 2,
     "CorpusSourceData": 4,
     "CorpusQualityData": 11,
     "CorpusPipelineData": 12,
-    "CorpusTaskData": 5,
+    "CorpusTaskData": 7,
     "CorpusShardStatsData": 12,
-    "CorpusResultData": 16,
+    "CorpusResultData": 17,
     "CorpusOptionsData": 4,
-    "CorpusPreflightData": 11,
-    "CorpusRuntimeDiagnosticsData": 16,
+    "CorpusPreflightData": 12,
+    "CorpusRuntimeDiagnosticsData": 17,
     "CorpusPdfStatsData": 8,
     "CorpusMinHashData": 3
   }

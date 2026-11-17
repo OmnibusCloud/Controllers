@@ -7,16 +7,19 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// <summary>
 /// The dedup document: the merge's parameters (the threshold, the bands, and the hash count and
 /// shingle size of the signatures it merged) and totals, per shard the keep mask (a bitset,
-/// base64, bit i = document i of the shard's product, 1 = keep), and the clusters of two or
+/// base64, bit i = document i of the shard's product, 1 = keep), the clusters of two or
 /// more as (shard, ordinal) pairs — listed up to a cap, the masks carrying the complete
-/// decision. Schema <c>corpus-dedup/1</c>.
+/// decision — and the completed shards the merge left out because their signatures blob was not
+/// what the report says of it (<c>excluded</c>, each with a fixed reason): such a shard has no
+/// mask, and its documents are in no cluster. Schema <c>corpus-dedup/2</c> (<c>/1</c> merged
+/// whatever a blob held, and had no <c>excluded</c>).
 /// </summary>
 public static class CorpusDedupWriter
 {
     #region Constants
 
     /// <summary>The document schema name.</summary>
-    public const string SCHEMA = "corpus-dedup/1";
+    public const string SCHEMA = "corpus-dedup/2";
 
     /// <summary>Clusters listed at most.</summary>
     public const int MAX_CLUSTERS_LISTED = 100_000;
@@ -52,6 +55,7 @@ public static class CorpusDedupWriter
             writer.WriteNumber("hashes", parameters.Hashes);
             writer.WriteNumber("shingle_words", parameters.ShingleWords);
             writer.WriteNumber("shards", result.Shards.Count);
+            writer.WriteNumber("excluded", result.Excluded.Count);
             writer.WriteNumber("documents", result.Documents);
             writer.WriteNumber("duplicates", result.Duplicates);
             writer.WriteNumber("kept", result.Documents - result.Duplicates);
@@ -68,6 +72,18 @@ public static class CorpusDedupWriter
                 writer.WriteNumber("documents", shard.Documents);
                 writer.WriteNumber("duplicates", shard.Duplicates);
                 writer.WriteString("keep", Convert.ToBase64String(ToBitset(shard.Keep)));
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
+
+            writer.WriteStartArray("excluded");
+            foreach (var exclusion in result.Excluded)
+            {
+                writer.WriteStartObject();
+                writer.WriteNumber("index", exclusion.Index);
+                writer.WriteString("signatures_blob", exclusion.SignaturesBlobId == Guid.Empty ? "" : exclusion.SignaturesBlobId.ToString("D"));
+                writer.WriteString("reason", exclusion.Reason);
                 writer.WriteEndObject();
             }
 
