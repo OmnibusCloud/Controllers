@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using OutWit.Controller.Grid.Builders;
 using OutWit.Controller.Grid.Model;
 using OutWit.Engine.Interfaces;
 
@@ -24,6 +25,15 @@ namespace OutWit.Controller.Grid.Utils;
 /// Copies of one item stay on different machines through every round, using only this call's record of
 /// who returned which item. A copy with no machine left is dropped; an item fails the job only when it
 /// has no result at all.
+///
+/// A node answers only what it was asked. A task names its return variables, and a node returns the
+/// variables of those names: that is what every node has done since the first Grid.ForEach. Here a
+/// batch's values are held to it: a value is kept when it comes under a return variable some task of
+/// the batch asked for, as many times as tasks of the batch asked for that name; any other value is
+/// left out of the results (with a warning) and the rest of the batch stands. Nothing is reordered and
+/// no batch fails for it, so a call whose nodes answer as asked returns exactly what it returned
+/// before. What it gives: no machine has more values in a call's results than its tasks asked for, so
+/// a controller that compares the copies of an item can count each value as one machine's.
 /// </summary>
 public static class GridReassignment
 {
@@ -111,7 +121,13 @@ public static class GridReassignment
                     if (result.Status != null)
                         outcome.CompletedStatuses.Add(result.Status);
 
-                    foreach (var variable in result.Variables)
+                    IReadOnlyList<IWitVariable> answers = KeepAsked(group, result.Variables, out int leftOut);
+                    if (leftOut > 0)
+                        logWarning?.Invoke(
+                            $"Node {group.Node.NodeId} returned {leftOut} value(s) its {group.Count} task(s) did not ask for; "
+                            + "they are left out of the results.");
+
+                    foreach (var variable in answers)
                         outcome.Results.Add(variable.Value);
 
                     RecordHolder(holders, group);
@@ -173,6 +189,52 @@ public static class GridReassignment
         }
 
         return kept;
+    }
+
+    /// <summary>
+    /// The values of a batch that its tasks asked for, in the order the node returned them. A name is
+    /// good for as many values as tasks of the batch asked for it: the slot Grid gives a task is asked
+    /// once, and a variable of the script whose name passes for a return variable is asked by every task
+    /// that carries it, exactly as the node is asked. The list itself comes back when nothing is left out.
+    /// </summary>
+    /// <param name="group">The node's batch.</param>
+    /// <param name="variables">What the node returned for it.</param>
+    /// <param name="leftOut">How many values were not asked for.</param>
+    /// <returns>The values that were asked for.</returns>
+    private static IReadOnlyList<IWitVariable> KeepAsked(WitGridTaskGroup group, IReadOnlyList<IWitVariable> variables, out int leftOut)
+    {
+        leftOut = 0;
+        if (variables.Count == 0)
+            return variables;
+
+        var asked = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var task in group)
+        {
+            foreach (var variable in task.Variables)
+            {
+                if (variable.IsReturnVariable())
+                    asked[variable.Name] = asked.GetValueOrDefault(variable.Name) + 1;
+            }
+        }
+
+        List<IWitVariable>? kept = null;
+        for (int index = 0; index < variables.Count; index++)
+        {
+            var variable = variables[index];
+
+            if (variable?.Name is string name && asked.TryGetValue(name, out int left) && left > 0)
+            {
+                asked[name] = left - 1;
+                kept?.Add(variable);
+                continue;
+            }
+
+            // The first value left out: from here on the kept ones are a list of their own.
+            kept ??= variables.Take(index).ToList();
+            leftOut++;
+        }
+
+        return kept ?? variables;
     }
 
     private static void RecordHolder(Dictionary<int, HashSet<Guid>> holders, WitGridTaskGroup group)
