@@ -9,8 +9,9 @@ using OutWit.Engine.Sdk;
 namespace OutWit.Controller.AI.Verify.Tests.Scripts;
 
 /// <summary>
-/// The distributed test rig for the bundled scripts: the engine SDK host with the staged
-/// controllers, in-process mock nodes and a file-backed blob service. Opt-in on the runtime
+/// The distributed test rig for the bundled scripts: the engine SDK host with the controllers
+/// the scripts need (a named set, <see cref="VerifyRigModules"/>), in-process mock nodes and a
+/// file-backed blob service. Opt-in on the runtime
 /// download, like the sandbox tests: the "nodes" really run Python/JS in wasmtime.
 /// </summary>
 public abstract class VerifyScriptTestBase
@@ -39,9 +40,10 @@ public abstract class VerifyScriptTestBase
         // The in-process nodes read this to locate the runtime archive.
         Environment.SetEnvironmentVariable(VerifyRuntimeLocator.OverrideEnvVar, runtimesRoot);
 
-        var controllersPath = FindControllersPath();
-        if (controllersPath == null)
-            Assert.Ignore("@Controllers not found");
+        // The modules the bundled scripts need and no other, each checked to be this build's
+        // own: a module of another controller in the shared staging folder is not loaded, and a
+        // module an earlier build left there is a failure, not what gets tested.
+        var controllersPath = VerifyRigModules.ScriptRig();
 
         m_blobStoragePath = Path.Combine(Path.GetTempPath(), $"witai_verify_e2e_{Guid.NewGuid():N}");
         BlobService = new VerifyTestBlobService(m_blobStoragePath);
@@ -115,27 +117,6 @@ public abstract class VerifyScriptTestBase
         {
             if (File.Exists(Path.Combine(dir, "OutWit.slnx")))
                 return dir;
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        return null;
-    }
-
-    private static string? FindControllersPath()
-    {
-        // The staged modules live under @Controllers/<Configuration> at the solution root; the
-        // configuration is the one this test assembly was built with (Release in CI).
-        var configuration = typeof(VerifyScriptTestBase).Assembly
-            .GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), false)
-            .OfType<System.Reflection.AssemblyConfigurationAttribute>()
-            .FirstOrDefault()?.Configuration ?? "Debug";
-
-        var dir = AppContext.BaseDirectory;
-        while (dir != null)
-        {
-            var candidate = Path.Combine(dir, "@Controllers", configuration);
-            if (Directory.Exists(candidate))
-                return candidate;
             dir = Path.GetDirectoryName(dir);
         }
 

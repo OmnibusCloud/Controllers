@@ -27,7 +27,6 @@ public sealed class WasmHostBindingMismatchTests
     private const string DEPENDENCY_MODULE = "variables.module";
     private const string BINDING_FILE = "Wasmtime.Dotnet.dll";
     private const string BUILT_AGAINST = WasmHostBinding.BUILT_AGAINST;
-    private const string CI_ENV = "GITHUB_ACTIONS";
     private const int TIMEOUT_MS = 180_000;
 
     // The Assembly table row: HashAlgId (4 bytes), then MajorVersion, MinorVersion, BuildNumber (2 each).
@@ -108,27 +107,8 @@ public sealed class WasmHostBindingMismatchTests
 
     private static string StagedModule()
     {
-        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
-        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "OutWit.slnx")))
-            directory = directory.Parent;
-        if (directory == null)
-            Assert.Ignore("Solution root not found");
-
-        var configuration = typeof(WasmHostBindingMismatchTests).Assembly
-            .GetCustomAttributes(typeof(AssemblyConfigurationAttribute), false)
-            .OfType<AssemblyConfigurationAttribute>()
-            .FirstOrDefault()?.Configuration ?? "Debug";
-        var staged = Path.Combine(directory!.FullName, "@Controllers", configuration, MODULE);
-        if (!File.Exists(Path.Combine(staged, BINDING_FILE)))
-        {
-            // The build stages the module with the tests; on the build server its absence is a regression.
-            if (string.Equals(Environment.GetEnvironmentVariable(CI_ENV), "true", StringComparison.OrdinalIgnoreCase))
-                Assert.Fail($"no staged {MODULE} at '{staged}'");
-
-            Assert.Ignore($"Staged module not found at '{staged}'");
-        }
-
-        return staged;
+        // This build's own module, or a failure that says whose it is (VerifyRigModules).
+        return WasmHostClientHost.StagedVerifyModule();
     }
 
     private static void CopyTree(string source, string destination)

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using OutWit.Common.Plugins;
+using OutWit.Controller.AI.Verify.Tests.Mock;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Verify.Tests;
@@ -20,8 +21,11 @@ namespace OutWit.Controller.AI.Verify.Tests;
 /// wasmtime type (strings only) and is ignored when an earlier fixture has already loaded
 /// them. Run it on its own for the real verdict:
 ///   dotnet test --filter FullyQualifiedName~VerifyModuleLoadTests
-/// Opt-in: the native library is staged from this test's bin and the language runtimes from
-/// @Data/runtimes (download-spike-runtimes.ps1), both only for the duration of the fixture.
+/// The module is a copy of this build's own files in a folder of the test's own. Its native
+/// library is the packaged one: the data asset the module's manifest declares, fetched from its
+/// release and checked against the manifest (the test used to copy the library from its own
+/// output, so it could not notice a package that ships without one). The language runtimes are
+/// still laid out from @Data/runtimes (verify-assets), not taken from their release archives.
 /// </summary>
 [TestFixture]
 [Order(0)]
@@ -35,6 +39,7 @@ public class VerifyModuleLoadTests
     private const string SELF_CHECK_METHOD = "Run";
     private const string RUNTIMES_OVERRIDE_ENV = "WITAI_VERIFY_RUNTIMES";
     private const string CI_ENV = "GITHUB_ACTIONS";
+    private const string NATIVES_FOLDER = "runtimes/";
 
     private const string NATIVE_LOADED = "wasmtime-native: loaded";
     private const string MANAGED_PREFIX = "wasmtime-managed: ";
@@ -101,28 +106,44 @@ public class VerifyModuleLoadTests
             !Directory.Exists(Path.Combine(fixtureRuntimes, "python-3.14.6-numpy-2.5.4")))
             Assert.Ignore($"Pinned runtimes not found under '{fixtureRuntimes}' — run verify-assets build @Data/runtimes to opt in.");
 
-        // The configuration this test assembly was built with (Release in CI) names the staging folder.
-        var configuration = typeof(VerifyModuleLoadTests).Assembly
-            .GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), false)
-            .OfType<System.Reflection.AssemblyConfigurationAttribute>()
-            .FirstOrDefault()?.Configuration ?? "Debug";
-        m_controllersPath = Path.Combine(solutionRoot, "@Controllers", configuration);
-        m_moduleDir = Path.Combine(m_controllersPath, "verify.module");
-        if (!File.Exists(Path.Combine(m_moduleDir, "controller.json")))
-            Assert.Ignore($"Staged module not found at '{m_moduleDir}'");
+        // The module under test is this build's own, laid out in a folder of the test's own: the
+        // shared staging folder is never changed, nothing else that lies in it is loaded, and a
+        // module another build left there is a failure that names it (VerifyRigModules).
+        m_controllersPath = VerifyRigModules.Stage("module-load", VerifyRigModules.CONTROLLER);
+        m_moduleDir = Path.Combine(m_controllersPath, VerifyRigModules.VERIFY);
 
         // The binding is staged by the build (ControllerModuleAssembly); its absence is a
         // staging regression, not a missing prerequisite.
         Assert.That(File.Exists(Path.Combine(m_moduleDir, $"{WASMTIME_ASSEMBLY}.dll")), Is.True,
             $"{WASMTIME_ASSEMBLY}.dll must be staged into verify.module by the controller build");
 
+        // The native library is the packaged one: the data asset the module's own manifest
+        // declares for this platform, fetched from the release it names, held to the manifest's
+        // size and SHA-256 and unpacked where the manifest says. A manifest that declares none is
+        // a package that ships without it, and fails here.
         var rid = RuntimeInformation.RuntimeIdentifier;
-        var binNative = Path.Combine(AppContext.BaseDirectory, "runtimes", rid, "native");
-        if (!Directory.Exists(binNative))
-            Assert.Ignore($"No native wasmtime for '{rid}' in the test bin ('{binNative}')");
+        var natives = VerifyPackagedAssets.Declared(m_moduleDir, rid, NATIVES_FOLDER);
+        Assert.That(natives, Is.Not.Empty,
+            $"verify.module's manifest declares no native engine library for '{rid}': a package made from it ships without one");
 
-        m_nativeDir = Path.Combine(m_moduleDir, "runtimes", rid, "native");
-        CopyTree(binNative, m_nativeDir);
+        foreach (var asset in natives)
+        {
+            try
+            {
+                m_nativeDir = VerifyPackagedAssets.Resolve(asset, m_moduleDir, VerifyPackagedAssets.CacheFolder(solutionRoot));
+            }
+            catch (HttpRequestException exception)
+            {
+                var reason = $"the packaged native library '{asset.Id}' could not be fetched from {VerifyPackagedAssets.Url(asset)}: {exception.Message}";
+                if (VerifyRigModules.OnTheBuildServer)
+                    Assert.Fail(reason);
+
+                Assert.Ignore(reason);
+            }
+        }
+
+        Assert.That(Directory.GetFiles(Path.Combine(m_moduleDir, "runtimes", rid, "native")), Is.Not.Empty,
+            "the packaged asset holds the library where the module's dependency file looks for it");
 
         m_wasmDir = Path.Combine(m_moduleDir, "wasm");
         CopyTree(fixtureRuntimes, m_wasmDir);
@@ -140,10 +161,9 @@ public class VerifyModuleLoadTests
 
         Environment.SetEnvironmentVariable(RUNTIMES_OVERRIDE_ENV, m_savedOverride);
 
-        // The language runtimes are plain files; the native library may stay mapped into
-        // this process after the context unloads, so its removal is best-effort.
-        TryDelete(m_wasmDir);
-        TryDelete(m_nativeDir);
+        // The folder is the test's own; the native library may stay mapped into this process
+        // after the context unloads, so its removal is best-effort.
+        VerifyRigModules.TryDelete(m_controllersPath);
     }
 
     #endregion
