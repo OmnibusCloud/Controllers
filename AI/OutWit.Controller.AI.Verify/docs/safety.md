@@ -113,8 +113,10 @@ change:
   a host built like the client ends as a crash and leaves the host running. On a machine that
   enforces the processor's stack protection that is the proof that the client survives under
   it; on a machine that does not, that one test is reported as skipped and says the proof
-  did not run there. The way crashes are caught under the protection is run on every machine
-  all the same, by asking for it.
+  did not run there. The Windows run of the build server is where the proof is made for
+  every change, so there the test fails instead of being skipped if the protection is not
+  enforced. The way crashes are caught under the protection is run on every machine all the
+  same, by asking for it.
 - `VerifyTrapModeTests`: the same programs give the same verdict, output and cost whichever
   of the two ways a crash is caught in.
 - `VerifyHostileKitTests`: the fifteen hostile tasks that are run on the test fleet, each

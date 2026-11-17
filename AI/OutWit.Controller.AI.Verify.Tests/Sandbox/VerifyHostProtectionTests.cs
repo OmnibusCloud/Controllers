@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using OutWit.Controller.AI.Verify.Tests.Mock;
 
 namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
 
@@ -13,8 +14,11 @@ namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
 /// Whether that executable really runs under shadow stacks depends on the machine: the
 /// processor and the system must enforce them. Where they do not, the proof of survival under
 /// stack protection does not run, and its test says so by being skipped with that reason
-/// rather than passing (audit finding V:M-7). The explicit-trap mode itself is asked for in a
-/// test of its own, so it is exercised on every machine.
+/// rather than passing (audit finding V:M-7). On the build server a Windows run without them
+/// fails with that reason instead: that run is where the proof is made, and a runner that stops
+/// enforcing shadow stacks must not go unseen (<see cref="VerifyStackProtectionProof"/>). The
+/// explicit-trap mode itself is asked for in a test of its own, so it is exercised on every
+/// machine.
 /// </para>
 /// </summary>
 [TestFixture]
@@ -52,18 +56,26 @@ public sealed class VerifyHostProtectionTests
         // protection is not killed by a guest's trap. It is a proof only where the process really
         // runs under that protection. The test above passes with it off as well, and used to be
         // the only one: on a machine without it nothing said that the proof had not run.
-        if (!OperatingSystem.IsWindows())
-            Assert.Ignore("hardware-enforced stack protection (CET shadow stacks) is Windows': the proof does not run on this system");
-
         var run = RunHost();
         TestContext.Out.WriteLine(run.Output);
 
-        if (!run.Output.Contains(SHADOW_STACKS_ON))
-        {
+        var shadowStacks = run.Output.Contains(SHADOW_STACKS_ON);
+        if (!shadowStacks)
             Assert.That(run.Output, Does.Contain(SHADOW_STACKS_OFF), run.Output);
-            Assert.Ignore("the trap host ran WITHOUT shadow stacks on this machine (its processor or its system does not enforce them): " +
-                          "that a host under hardware stack protection survives a guest's trap was NOT proven here. " +
-                          "The explicit-trap mode such a host runs in is still exercised (ExplicitTrapsGiveTheVerdictsOfHardwareTrapsTest).");
+
+        // Where the proof cannot run it is skipped with its reason, except on the build server's
+        // Windows: that run is where the proof is made, so there it fails with the reason.
+        var proof = VerifyStackProtectionProof.Of(OperatingSystem.IsWindows(), shadowStacks, VerifyRigModules.OnTheBuildServer);
+        switch (proof)
+        {
+            case VerifyProofRun.LostOnTheBuildServer:
+                Assert.Fail(VerifyStackProtectionProof.Reason(proof)!);
+                break;
+
+            case VerifyProofRun.NotOnThisSystem:
+            case VerifyProofRun.NotOnThisMachine:
+                Assert.Ignore(VerifyStackProtectionProof.Reason(proof)!);
+                break;
         }
 
         Assert.That(run.Output, Does.Contain(TRAPS_EXPLICIT), "a host with shadow stacks takes traps as explicit checks");
@@ -71,12 +83,50 @@ public sealed class VerifyHostProtectionTests
     }
 
     [Test]
+    public void M7OnTheBuildServerAWindowsRunWithoutShadowStacksIsAFailureTest()
+    {
+        // The build server's Windows run is the one place the proof is made for every change. A
+        // runner image that stopped enforcing shadow stacks used to turn the proof into one more
+        // skipped test there, and nothing failed.
+        var proof = VerifyStackProtectionProof.Of(windows: true, shadowStacks: false, onTheBuildServer: true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(proof, Is.EqualTo(VerifyProofRun.LostOnTheBuildServer));
+            Assert.That(VerifyStackProtectionProof.Reason(proof), Does.Contain("WITHOUT shadow stacks").And.Contain("NOT proven").And.Contain("a failure and not a skip"));
+        });
+    }
+
+    [Test]
+    public void M7TheProofIsSkippedWithItsReasonWhereItCannotRunTest()
+    {
+        Assert.Multiple(() =>
+        {
+            // A developer's Windows that does not enforce shadow stacks: skipped, and says why.
+            Assert.That(VerifyStackProtectionProof.Of(windows: true, shadowStacks: false, onTheBuildServer: false), Is.EqualTo(VerifyProofRun.NotOnThisMachine));
+            Assert.That(VerifyStackProtectionProof.Reason(VerifyProofRun.NotOnThisMachine), Does.Contain("WITHOUT shadow stacks").And.Contain("NOT proven"));
+            Assert.That(VerifyStackProtectionProof.Reason(VerifyProofRun.NotOnThisMachine), Does.Not.Contain("build server"), "a developer is not told of the build server");
+
+            // Linux and macOS have no shadow stacks: skipped everywhere, the build server included.
+            foreach (var onTheBuildServer in new[] { false, true })
+            foreach (var shadowStacks in new[] { false, true })
+                Assert.That(VerifyStackProtectionProof.Of(windows: false, shadowStacks, onTheBuildServer), Is.EqualTo(VerifyProofRun.NotOnThisSystem));
+            Assert.That(VerifyStackProtectionProof.Reason(VerifyProofRun.NotOnThisSystem), Does.Contain("does not run on this system"));
+
+            // Under shadow stacks the proof runs, wherever that is.
+            foreach (var onTheBuildServer in new[] { false, true })
+                Assert.That(VerifyStackProtectionProof.Of(windows: true, shadowStacks: true, onTheBuildServer), Is.EqualTo(VerifyProofRun.Runs));
+            Assert.That(VerifyStackProtectionProof.Reason(VerifyProofRun.Runs), Is.Null);
+        });
+    }
+
+    [Test]
     public void M7ExplicitTrapsGiveTheVerdictsOfHardwareTrapsTest()
     {
-        // The mode a host under stack protection runs in, asked for on any machine: the build
-        // server's Windows may not enforce shadow stacks, and the explicit checks would never run
-        // there. The same four guests, the same verdicts, words and fuel as in the mode the
-        // process picks for itself.
+        // The mode a host under stack protection runs in, asked for on any machine: one that does
+        // not enforce shadow stacks (a developer's, and every Linux and macOS) would never run the
+        // explicit checks otherwise. The same four guests, the same verdicts, words and fuel as in
+        // the mode the process picks for itself.
         var chosen = RunHost();
         var forced = RunHost("--explicit-traps");
         TestContext.Out.WriteLine(chosen.Output);
