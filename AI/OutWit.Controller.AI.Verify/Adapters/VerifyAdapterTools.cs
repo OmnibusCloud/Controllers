@@ -1,18 +1,17 @@
 using System.Collections;
-using Microsoft.Extensions.DependencyInjection;
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Settlement;
 using OutWit.Engine.Data.Utils;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Verify.Adapters;
 
-/// <summary>What the host-side adapters share: reading their collections from the job's variables, and the folder of the server's working files.</summary>
+/// <summary>What the host-side adapters share: reading their collections from the job's variables, opening a taskset, and handing a document of a ledger out as a blob.</summary>
 internal static class VerifyAdapterTools
 {
     #region Constants
 
-    private const string SCOPE_LABEL = "verify-settle";
-    private const string FALLBACK_FOLDER = "witai_verify_settle";
+    private const int READ_BUFFER_BYTES = 128 * 1024;
 
     #endregion
 
@@ -65,16 +64,34 @@ internal static class VerifyAdapterTools
         return blobId;
     }
 
-    /// <summary>
-    /// The folder the server's working files of a settling go to: a scope of the host's temp
-    /// storage when it has one, a folder in the operating system's temp path otherwise.
-    /// </summary>
-    /// <param name="services">The host's services.</param>
-    /// <returns>The folder.</returns>
-    public static string WorkFolder(IServiceProvider services)
+    /// <summary>Opens a taskset blob's local file to be read from its start to its end, once.</summary>
+    /// <param name="path">The blob's local path.</param>
+    /// <returns>The stream; the caller disposes it.</returns>
+    public static FileStream OpenTaskset(string path)
     {
-        var storage = services.GetService<IWitTempStorage>();
-        return storage != null ? storage.CreateScope(SCOPE_LABEL) : Path.Combine(Path.GetTempPath(), FALLBACK_FOLDER);
+        return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, READ_BUFFER_BYTES, FileOptions.SequentialScan);
+    }
+
+    /// <summary>
+    /// Stores one document of a ledger as a blob of its own. The document goes from the ledger
+    /// to a file and from the file to the blob store, never through memory as a whole: a report
+    /// has a record a task, and the outputs are as large as the run.
+    /// </summary>
+    /// <param name="blobs">The host's blob service.</param>
+    /// <param name="services">The host's services: the document's file is made in a working folder of this call's own.</param>
+    /// <param name="ledgerPath">The ledger's local file.</param>
+    /// <param name="section">Which document of the ledger.</param>
+    /// <param name="blobName">The file name the blob is stored under.</param>
+    /// <returns>The blob's id.</returns>
+    /// <exception cref="InvalidDataException">The file is not a ledger.</exception>
+    public static async Task<Guid> UploadDocumentAsync(IWitBlobService blobs, IServiceProvider services, string ledgerPath, int section, string blobName)
+    {
+        using var work = new VerifyWorkFolder(services);
+
+        var path = Path.Combine(work.Path, blobName);
+        VerifyLedger.CopyTo(ledgerPath, section, path);
+
+        return await blobs.UploadFileAsync(path);
     }
 
     private static IEnumerable Items(IWitVariablesCollection pool, IWitReference? reference, string name)

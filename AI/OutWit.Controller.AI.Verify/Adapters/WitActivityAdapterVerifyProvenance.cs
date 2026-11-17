@@ -21,10 +21,11 @@ internal sealed class WitActivityAdapterVerifyProvenance : WitActivityAdapterFun
 
     #region Constructors
 
-    public WitActivityAdapterVerifyProvenance(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
+    public WitActivityAdapterVerifyProvenance(IWitProcessingManager processingManager, IWitBlobService blobService, IServiceProvider services, ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        Services = services;
     }
 
     #endregion
@@ -34,7 +35,7 @@ internal sealed class WitActivityAdapterVerifyProvenance : WitActivityAdapterFun
     protected override async Task Process(WitActivityVerifyProvenance activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
         var ledgerPath = await BlobService.GetLocalPathAsync(VerifyAdapterTools.Blob(pool, activity.Ledger, "Ledger"));
-        var blobId = await BlobService.UploadBytesAsync(VerifyLedger.Read(ledgerPath, VerifyLedger.PROVENANCE), BLOB_NAME);
+        var blobId = await VerifyAdapterTools.UploadDocumentAsync(BlobService, Services, ledgerPath, VerifyLedger.PROVENANCE, BLOB_NAME);
 
         if (!pool.TrySetValue(activity.ReturnReference, blobId))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
@@ -68,6 +69,8 @@ internal sealed class WitActivityAdapterVerifyProvenance : WitActivityAdapterFun
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IServiceProvider Services { get; }
 
     #endregion
 }

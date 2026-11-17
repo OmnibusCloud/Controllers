@@ -11,10 +11,30 @@ Every number on this page was measured, in the controller's tests or on a test f
 [README](../README.md) explains how things work inside; [safety.md](safety.md) is the same
 sandbox told for the people who lend their computers.
 
-Version described: **Verify 0.13.0** (with Verify.Model 0.4.0 and Verify.Scripts 0.6.0), for the
-test server. 0.11.3 is proven on a six-node test fleet (Windows, Linux, macOS), and the fleet
-figures on this page (scale, medians, pool rate) were measured before 0.13.0. None of these
-versions is on nuget.org or on the live network.
+Version described: **Verify 0.14.0** (with Verify.Model 0.4.0 and Verify.Scripts 0.6.0), for the
+test server. 0.13.0 is proven on a five-node test fleet (Windows and Linux; 0.11.3 on six nodes
+with macOS), and the fleet figures on this page (scale, medians, pool rate) were measured before
+0.13.0. None of these versions is on nuget.org or on the live network.
+
+What 0.14.0 changed for an application:
+
+- **A taskset is held to its schema, exactly.** A line with a field the schema does not have (a
+  misspelt `expected_stdout` is one), a field or a source name given twice, a value of another
+  type (a suite that is not an array, a `null`), a number outside its range (a limit of 0), a
+  NUL character in a program or an argument, or text that is not valid Unicode is refused, by
+  the field's name. Before, such a line ran with the field ignored. The same holds for a
+  checker spec (section 4).
+- **A runtime id is matched to the letter.** `PYTHON-3.14.6` is an unknown runtime.
+- **New bounds on a taskset.** A line of 64 MiB, 1,024 sources, 1,024 arguments and 1,024
+  cases a task, 4,194,304 tasks a taskset (sections 4 and 9).
+- **The preflight's answer is bounded.** At most 32 messages of a kind, of 240 characters each,
+  with one line that says how many more there are (section 3).
+- **A new document version.** `verify-capabilities/3`: the capabilities document carries these
+  bounds as numbers, in a section of their own, `taskset` (section 3). Every field of
+  `verify-capabilities/2` is there with the name and the meaning it had; an application that
+  holds the document to its `schema` tag takes the new tag.
+- **Nothing else moved.** A taskset the schema allowed is cut into the same packages and gives
+  the same documents as under 0.13.0; no fuel figure and no verdict changed.
 
 What 0.13.0 changed for an application:
 
@@ -150,19 +170,26 @@ hand them out from the ledger. The [README](../README.md) shows the scripts as t
 ### Before a run
 
 `VerifyPreflight` reads the taskset and answers without running anything:
-- `WellFormed`, `TaskCount`, `BatchCount`;
-- `RuntimeIds` and `UnknownRuntimeIds`;
+- `WellFormed`, `TaskCount` (the lines that are tasks), `BatchCount`;
+- `RuntimeIds` and `UnknownRuntimeIds`: the ids the taskset names, an unknown one cut to 64
+  characters and shown in plain characters only; at most 32 unknown ids are listed;
 - `EstimatedInputBytes`;
-- `Messages`: line errors (a source name that is not portable is one, by the name), the limits
-  and the batch size that will be clamped, a task whose text is over 8 MiB (by its index), one
-  message when the taskset or the options set a wall time, and one for every unknown runtime.
+- `Messages`: line errors (`line 7: unknown field 'suite[0].expected_stdoutt'`; a source name
+  that is not portable is one, by the name), one message for every listed unknown runtime, one
+  when the taskset or the options set a wall time, the limits and the batch size that will be
+  clamped, and a task whose text is over 8 MiB.
 
-`WellFormed` is false for everything `Verify.Split` would refuse the taskset for: a line that
-does not parse, a source name outside the portable set, an unknown runtime id, a task that is
-too large, an empty taskset.
+The answer is bounded whatever the taskset: at most 32 messages of each kind (line errors,
+clamped limits, tasks that cannot be planned), each at most 240 characters, and after them one
+line such as `and 9968 more malformed line(s) not shown`. A preflight never returns more than
+134 messages.
+
+`WellFormed` is false for everything `Verify.Split` would refuse the taskset for: a line the
+schema does not allow, a source name outside the portable set, an unknown runtime id, a task
+that is too large, more tasks than a taskset may have, an empty taskset.
 
 `VerifyRuntimeDiagnostics` returns the `capabilities` document (schema
-[`verify-capabilities.schema.json`](verify-capabilities.schema.json), `verify-capabilities/2`).
+[`verify-capabilities.schema.json`](verify-capabilities.schema.json), `verify-capabilities/3`).
 It is what an application's runtime picker, limit fields and capacity line need:
 
 | Field | What it holds |
@@ -174,7 +201,27 @@ It is what an application's runtime picker, limit fields and capacity line need:
 | `sources` | the source-name rule: `name_pattern`, `max_name_bytes`, `max_depth` (section 4) |
 | `modules` | what a task's own module is held to: `max_bytes`, `max_nesting`, `compile_fuel_per_byte` (section 9) |
 | `packages` | how a run is cut: `target` count; `max_tasks`, `max_bytes` and `max_output_bytes` per package; `max_batch_tasks` and `max_batch_output_bytes` per batch (section 11) |
+| `taskset` | what a taskset may hold and what a preflight answers (the table below; sections 4 and 9) |
 | `pool` | the fleet as totals: `nodes`, `measured` (nodes with a benchmark), `workers`, `rate` (reference tasks per second). No node is ever named |
+
+The `taskset` section is new in `verify-capabilities/3`. It holds the bounds of what the server
+reads from a lab, so an application reads them from the document and carries no copy of its
+own. In this version they are:
+
+| Field of `taskset` | Value | What it bounds |
+|---|---|---|
+| `max_line_bytes` | 67,108,864 | the bytes of one line of a taskset (64 MiB), and of a checker spec |
+| `max_tasks` | 4,194,304 | the tasks of a taskset |
+| `max_sources` | 1,024 | the source files of a task |
+| `max_args` | 1,024 | the arguments of a task, and of a case |
+| `max_suite_cases` | 1,024 | the cases of a suite |
+| `max_preflight_messages` | 134 | the messages of a preflight's answer, whatever the taskset |
+| `max_preflight_messages_per_kind` | 32 | the messages of one kind a preflight shows before the line for the rest |
+| `max_preflight_message_length` | 240 | the characters of one message of a preflight |
+| `max_preflight_unknown_runtimes` | 32 | the unknown runtime ids a preflight lists |
+
+A taskset outside the first five is refused (section 4). The most text a task may have is
+`packages.max_bytes`.
 
 ### While it runs
 
@@ -186,20 +233,41 @@ The job's progress is these counts. Verdicts come at the end, when the report is
 
 ## 4. The taskset
 
-JSON lines: one task per line, no enclosing array. Schema:
+JSON lines: one task per line, no enclosing array, UTF-8. Schema:
 [`verify-taskset.schema.json`](verify-taskset.schema.json).
 
 | Field | Required | Meaning |
 |---|---|---|
-| `index` | no | the task's index in every output; defaults to the line's ordinal |
-| `runtime` | yes | a runtime id (section 8); a taskset that names an unknown id is refused when it is split |
-| `entry` | no | the file to run; defaults to the first source |
-| `sources` | yes | file name → content. The names must be portable (below). What is done with the files depends on the runtime (below) |
-| `args` | no | arguments after the entry |
-| `stdin` | no | standard input of a run without a suite |
-| `seed` | no | the seed of the sandbox's random source; default 0 |
-| `suite` | no | test cases: `stdin`, `args` (appended to the task's), `expected_stdout` (exact), `expected_exit` (default 0) |
-| `limits` | no | `fuel`, `memory`, `stdout_bytes`, `stderr_bytes`; clamped to the ceilings. `wall_ms` is still accepted and is not a limit (section 9) |
+| `index` | no | the task's index in every output, 0 to 2,147,483,647; defaults to the line's ordinal. One task an index |
+| `runtime` | yes | a runtime id (section 8), to the letter; a taskset that names an unknown id is refused when it is split |
+| `entry` | no | the file to run, one of the source names; defaults to the first source |
+| `sources` | yes | file name → content, at most 1,024 files, no NUL character in a content. The names must be portable (below). What is done with the files depends on the runtime (below) |
+| `args` | no | arguments after the entry, at most 1,024, none with a NUL character |
+| `stdin` | no | standard input of a run without a suite; any text |
+| `seed` | no | the seed of the sandbox's random source, a 64-bit integer; default 0 |
+| `suite` | no | at most 1,024 test cases: `stdin`, `args` (appended to the task's), `expected_stdout` (exact), `expected_exit` (default 0) |
+| `limits` | no | `fuel`, `memory`, `stdout_bytes`, `stderr_bytes`, each 1 or more; clamped to the ceilings. `wall_ms` is deprecated: still accepted, and not a limit (section 9) |
+
+The controller accepts exactly what the schema allows. A line is refused, by the name of what
+is wrong, when it has:
+
+- a field the schema does not have, at any level: `unknown field 'limitz'`,
+  `unknown field 'suite[0].expected_stdoutt'`. A misspelt expectation can never be dropped
+  and turn a test into a pass;
+- a field given twice (`field 'sources' is given twice`), or two sources of one name;
+- a value of another type: `'suite' must be an array of cases`, `'stdin' must be a string`
+  (a `null` is another type), `'limits.fuel' must be an integer`. An integer may be written
+  any way a schema takes for one (`5`, `5.0`, `5e9`);
+- a number outside its range: `'limits.fuel' must be 1 or more`, `'index' must be 0 or more`;
+- a NUL character (U+0000) in a source, an argument or the entry: a program is handed to its
+  interpreter as a C string, and a NUL would cut it there. In `stdin` and `expected_stdout` a
+  NUL is data;
+- text that is not valid Unicode (half of a surrogate pair written as an escape, bytes that
+  are not UTF-8);
+- more than 1,024 sources, arguments or cases; a line over 64 MiB; text over 8 MiB.
+
+A taskset has at most 4,194,304 tasks. A message names a field of the lab's own only in plain
+characters and cut to 64 of them.
 
 How a runtime takes the sources:
 
@@ -240,7 +308,7 @@ Examples, one line each:
 
 `VerifyGenerateAndCheck` takes two inputs.
 - **The generators:** an ordinary taskset whose outputs are the candidates.
-- **The checker spec** (schema [`verify-checker.schema.json`](verify-checker.schema.json)): one task, without an index or a suite, plus `expected_stdout` and `expected_exit`.
+- **The checker spec** (schema [`verify-checker.schema.json`](verify-checker.schema.json)): one task, without an index, a seed, a stdin or a suite, plus `expected_stdout` and `expected_exit`. It is held to its schema as a taskset line is: a misspelt `expected_stdout` fails the job by its name (it used to leave "exit code 0" as the whole rule, and every candidate passed).
 
 How it runs:
 - The generators run once each. They are not sampled (nothing of theirs is compared), but a generator without a verdict is sent out once more. Their run is settled into a ledger of its own.
@@ -422,10 +490,21 @@ document's `notes`.
 | A module a task brings (`wasi`) | 8 MiB | | `CompileError` |
 | Blocks nested in one function of such a module, or of a built C/C++ program | 2,048 | | `CompileError` |
 | The product of a C/C++ build step | 64 MiB | | `CompileError` |
+| Cases of a suite | | 1,024 | the taskset is refused |
+| Sources of a task | | 1,024 | the taskset is refused |
+| Arguments of a task, and of a case | | 1,024 | the taskset is refused |
+| Text of a task (sources and their names, arguments, inputs, expected outputs) | | 8 MiB (characters) | the taskset is refused |
+| A line of a taskset | | 64 MiB | the taskset is refused |
+| Tasks of a taskset | | 4,194,304 | the taskset is refused |
 
 A task's own `limits` override the defaults field by field. Anything above a ceiling is clamped
-and named in the preflight's messages. A node clamps again, whatever the package says: a lab
+and named in the preflight's messages. A node clamps again, whatever the package says: a run
 cannot get more than the ceilings.
+
+The limits are a run's, and a task with a suite runs once a case. So the most work one task can
+ask of a node is its limits times its cases: up to 1,024 runs of up to 240e9 fuel each, and the
+task's one stdout cap for all of them. A node refuses a package with a task of more cases,
+sources or arguments than the table allows, whoever made the package.
 
 ### Fuel and time
 
@@ -445,8 +524,9 @@ cannot get more than the ceilings.
   quarter of the reference rate). That is 50 s for the default budget and 490 s for the
   largest. A run the backstop ends is a fault of the node, not a verdict: the task is sent out
   once more, and if no node does better it is `NoResult` with reason `wall_clock`.
-- **`limits.wall_ms`** (in a task and in the options' default limits) is still accepted and is
-  not a limit. It has no default and no ceiling, and the preflight says so with one message.
+- **`limits.wall_ms`** (in a task and in the options' default limits) is deprecated: it is
+  still accepted and is not a limit. It has no default and no ceiling, and the preflight says so
+  with one message. The schema marks it `deprecated`.
 
 ### Output
 
@@ -489,10 +569,12 @@ What a program can reach:
 - **Randomness:** a stream seeded by the task. Every seed has a stream of its own. Seed 0, the default, keeps the stream it always had; the stream of every other seed changed in 0.13.0 (seeds 2k and 2k+1 used to share one).
 - **Environment:** empty, but for what pins the interpreter.
 
-In a host with hardware-enforced stack protection (a .NET 9+ executable on Windows), every trap
-is an explicit check, so a guest's crash never takes the host down. Elsewhere traps are
-hardware faults, which is faster. The verdicts, the outputs and the fuel are the same either
-way.
+In a host whose process runs under hardware-enforced stack protection (a .NET 9+ executable on
+a Windows machine that enforces shadow stacks), every trap is an explicit check, so a guest's
+crash never takes the host down. Elsewhere traps are hardware faults the engine catches, which
+is faster. The verdicts, the outputs and the fuel are the same either way: the controller's
+tests run the same programs in both modes in one process and compare every field of their
+results (`VerifyTrapModeTests`).
 
 The sandbox runs only on the engine it was built and tested with: the .NET binding the controller
 was compiled against, and the native library pinned by its SHA-256 for the platform (section
@@ -593,11 +675,22 @@ task's three copies are the majority, and win.
 
 ## 11. Scale, delivery and the nodes
 
-- **Nothing that grows with the taskset travels in a message.**
+- **Tasks and results travel as blobs, end to end.**
   - The server cuts the run into packages, about a thousand for a large run when the caps below allow it. Each package is stored as a compressed blob.
   - A node is told which packages are its share and downloads them over the blob channel, in chunks that resume after a break. It uploads each package's results as a blob.
   - Hashes are checked both ways.
   - `Verify.ExecutePackage` is the one way work reaches a node. The single-task activity `Verify.Execute` is removed.
+  - An activity's parameters and its return value are references: a blob's id, or a package reference of about 230 bytes (a result's about 145). The one thing in a message that still grows with a run is the list of those references, one a package: `Grid.ForEach` fans out over a collection. It is a small part of a per cent of the taskset, and it is bounded by the taskset's bounds: the most tasks a taskset may have are about 9,200 packages at the default output caps, 2 MB of references. The bound is loose at the far edge (section 14).
+- **Nothing that grows with the taskset is read whole into memory.**
+  - The server reads a taskset a line at a time. Its tasks wait in working files of the server's own (about the size of the taskset, deleted when the packages are stored) and are stored a package at a time. A preflight keeps nothing.
+  - The repair and dispute rounds and the check tasks of generate-and-check are made the same way, a package at a time.
+  - The four documents are written to files as they are made and handed out file to blob. The server keeps a small record a task (its index, and for each execution what is compared), never a task's text, its outputs or a document.
+- **Measured (0.14.0, the controller's load test, the server and three nodes in one process on a development desktop):** 100,000 tasks of 2 KiB each, a taskset of 202 MiB, a twentieth of the packages run twice.
+  - What was live on the managed heap (read after a full collection, four times a second) rose by 2 MiB at the most while the taskset was split and by 45 MiB over the whole run; the heap as it stood, garbage included, by 20 MiB and 65 MiB; the process's working set peaked at 356 MiB. The run took three to five minutes there and under a minute on the build server's Linux machine.
+  - 1,562 task packages (0.93 MB of blobs) and 1,641 result packages (1.04 MB).
+  - The largest message to a node, its whole share: 547 references, 126,357 bytes. The largest single request: 231 bytes. All three shares together: 379,071 bytes; what the nodes returned: 237,945 bytes.
+  - The job's variables: the list of task packages 360,822 bytes, the list of result packages 237,945 bytes, everything else a few words.
+  - The documents, as blobs: report 9.4 MB, outputs 15.4 MB, provenance 7.8 MB, integrity 0.6 MB.
 - **Caps that are caps.**
   - A batch holds 32 tasks by default, 4,096 at most. It is also cut where its tasks' text reaches 8 MiB (characters) or their output caps together reach 64 MiB. A task counts for twice its stdout cap plus its stderr cap.
   - A package holds at most 4,096 tasks, 8 MiB of task text and 256 MiB of output caps. At the default caps a task counts for 576 KiB, so a batch holds at most 113 such tasks and a package 455: a run of more than about 455,000 tasks at the default caps is cut into more than a thousand packages (a million into about 2,200). Tasks with smaller output caps make larger packages.
@@ -611,6 +704,7 @@ task's three copies are the majority, and win.
 - **Measured (before 0.13.0):**
   - a million small tasks left the server as 1,116 package blobs, 3 MB in all (at the default output caps the same run is now about 2,200 packages);
   - a node behind an 8 kbit/s link finished its share of a 100,000-task run before the run's last node did.
+  - The scale runs on the fleet have not been repeated since 0.13.0 changed the fuel rules and the package caps.
 - **One plan, one send.**
   - Each node gets a share by its benchmark rate (the reference batch `verify-task@mixed-v2`: one Python program and one QuickJS program per worker thread).
   - A run therefore ends when its slowest share ends.
@@ -640,11 +734,24 @@ Under `AI/OutWit.Controller.AI.Verify.Live/demo/`, each kit has:
 Short demo tasksets, one per runtime (`tasksets/*-demo.jsonl`), cover ten passing programs, a
 wrong answer, a crash and a timeout for each language.
 
+`tasksets/hostile.jsonl` is the hostile taskset of the fleet proofs, with the verdict every
+node must give each of its fifteen tasks beside it (`tasksets/hostile.expected.tsv`): a flood
+of output from a script and from a module, a module priced above its fuel before it is
+compiled and one refused for its nesting, wild pointers handed to the host, loops without end,
+a sleep of a hundred seconds, a fill of 250 MiB without end, a program that prints what it can
+read about its files, and controls between them. Both files are written by code
+(`VerifyHostileKit` in the controller's tests) and the tests run the taskset through the
+sandbox and hold every verdict. Three things the kit shows that are easy to expect otherwise:
+a script is handed to its interpreter as a string, so there is no `m.py` to open (the library
+`/lib/python314.zip`, `/lib` and `/` are there); a sleep returns at once and moves the run's
+own clock; a bulk memory fill and a call into the host cost fuel by the bytes they move, so no
+task of the kit is ended by a node's wall clock.
+
 ## 13. Versions and what a deployment carries
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 0.13.0 | `OutWit.Controller.AI.Verify` (GitHub Packages; nuget.org at 1.0.0) |
+| The controller | 0.14.0 | `OutWit.Controller.AI.Verify` (GitHub Packages; nuget.org at 1.0.0) |
 | The model and the scripts | 0.4.0 and 0.6.0 | `OutWit.Controller.AI.Verify.Model`, `OutWit.Controller.AI.Verify.Scripts` |
 | The engine | wasmtime long-term line 48: the .NET binding 48.0.2 over the native library 48.0.8, pinned by SHA-256 | natives per platform, release `wasmtime-v48.0.8` (about 8 MB each; the bytes `verify-v0.6.0` carried) |
 | The language runtimes | as in section 8 | `verify-wasm.zip`, release `verify-v0.10.0` (68.7 MB) |
@@ -654,14 +761,17 @@ How a deployment uses them:
 - **The server.** Its build fetches the archives by hash and packs one zip per platform for the nodes. A node downloads it once per controller version.
 - **One controller version a job.** A task package names the version that made it; a node on another version refuses it, and the server refuses a result made by another version, engine or runtime bytes.
 - **The first use of a runtime in a node process** compiles its module (the 75 MB LLVM compiler takes about 15 s). The process keeps the compiled module.
-- **Licences** travel inside each archive.
-- **Rebuilding:** `verify-assets` rebuilds every archive from pinned downloads, byte for byte.
+- **Licences** of the runtimes travel inside each archive (the list is not yet complete for what the interpreters link statically).
+- **Rebuilding:** `verify-assets` rebuilds the runtime set, the files inside the archives, from pinned downloads, byte for byte; the catalog pins every one of those files. The archives themselves are packed once and pinned by their SHA-256 in the controller's project file.
 
 ## 14. Known limits
 
 - Not in this wave: PHP (deferred) and Lean (it needs WebAssembly exceptions and gigabytes of library).
-- Not offered to a program: network, threads, processes, writable files, a second memory, more than 2 GiB of memory, more than 240e9 units of fuel (two minutes of a busy loop at the reference rate).
-- A task that was not sampled rests on one machine (`single_execution` in the integrity document).
+- Not offered to a program: network, threads, processes, writable files, a second memory, more than 2 GiB of memory, more than 240e9 units of fuel a run (two minutes of a busy loop at the reference rate).
+- The limits are a run's, and a task with a suite runs once a case: one task can ask a node for 1,024 runs at the fuel ceiling (section 9).
+- The list of package references a job carries grows with the run, one reference of about 230 bytes a package. At the default output caps the largest taskset is about 2 MB of them. The controller bounds the tasks of a taskset, not its packages: 4,194,304 tasks that each ask for the stdout ceiling would be cut into about 280,000 packages, a list of 64 MB, and are not refused.
+- The scale runs on the fleet (a million tasks) were measured before 0.13.0 and have not been repeated since.
+- A task that was not sampled rests on one machine (`single_execution` in the integrity document). So does a task that was sent out once more after a node's fault.
 - The server cannot see which machine returned an answer. A liar can keep a dispute from being resolved (the task stays `Disputed`); it cannot make its answer the accepted one, except when the honest copies of a disputed task were all lost (section 10).
 - The price of compiling a task's own module is an estimate fitted to measurements, not a proof about every module. A compile, once started, cannot be interrupted, and one expensive compile runs at a time in a node's process (section 9).
 - Fuel bounds work, not time: a run of slow instructions can take four times as long as its budget lasts at the reference rate, and ten seconds more, before a node's backstop ends it (section 9).

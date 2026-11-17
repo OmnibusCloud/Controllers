@@ -1,0 +1,15 @@
+0	Pass	control: prints one line
+1	OutputExceeded	V:C-1 stdout without end from a script
+2	OutputExceeded	V:C-1 48 writes of 64 MiB to stdout (174 bytes)
+3	Timeout	V:C-2 2000 locals in 2000 nested loops (11.7 s of compile before): priced above the default fuel (13927 bytes)
+4	CompileError	V:C-2 4000 loops nested: over the nesting limit (27929 bytes)
+5	RuntimeError	V:H-3 random_get into a wild pointer: exits with the errno it was answered (162 bytes)
+6	RuntimeError	V:H-3 clock_time_get into a wild pointer (172 bytes)
+7	Timeout	fuel: a loop without end (87 bytes)
+8	Pass	V:H-6 a file's times, device and links say nothing of the node
+9	Timeout	fuel: a busy loop in a script
+10	Pass	a sleep of 100 s takes none of the node's time
+11	Pass	control: the task after the sleeper
+12	Fail	V:H-6 the file numbers are the same on two machines (fails its suite by design: agreement is the proof)
+13	Timeout	R-7 fills 250 MiB without end: priced by the bytes it moves, the fuel ends it (86 bytes)
+14	Pass	control: the task after the one the clock ended

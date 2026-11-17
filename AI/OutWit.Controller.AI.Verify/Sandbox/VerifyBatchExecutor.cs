@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
+using OutWit.Controller.AI.Verify.Tasksets;
 
 namespace OutWit.Controller.AI.Verify.Sandbox;
 
@@ -111,6 +112,14 @@ public static class VerifyBatchExecutor
         if (batch.Tasks.Count > MAX_BATCH_TASKS)
             throw new VerifyBatchRefusedException($"a batch holds {batch.Tasks.Count} tasks; a node takes no more than {MAX_BATCH_TASKS}", null);
 
+        // What a taskset may hold is what a node takes, whoever made the batch: a task runs once
+        // a case and every source is a file, so their numbers are bounded here as well.
+        foreach (var task in batch.Tasks)
+        {
+            if (!IsWithinTaskBounds(task))
+                throw new VerifyBatchRefusedException("a task of the batch has more sources, arguments or cases than a node takes", null);
+        }
+
         var runtime = VerifyRuntimeCatalog.Resolve(runtimesRoot, batch.RuntimeId, out var reason, out var detail);
         if (runtime == null)
             throw new VerifyBatchRefusedException($"runtime '{Shown(batch.RuntimeId)}' cannot be used on this node: {reason}", detail);
@@ -121,6 +130,28 @@ public static class VerifyBatchExecutor
             throw new VerifyBatchRefusedException($"runtime '{Shown(batch.RuntimeId)}' is pinned to other bytes by the controller that made the batch", null);
 
         return runtime;
+    }
+
+    /// <summary>
+    /// Whether a task has no more sources, arguments and cases than a taskset may give one
+    /// (<see cref="VerifyTasksetLimits"/>).
+    /// </summary>
+    /// <param name="task">The task.</param>
+    /// <returns>False for a task no honest server sends.</returns>
+    public static bool IsWithinTaskBounds(VerifyTaskData task)
+    {
+        if (task.Sources == null || task.Args == null)
+            return false;
+
+        if (task.Sources.Count > VerifyTasksetLimits.MAX_SOURCES || task.Args.Count > VerifyTasksetLimits.MAX_ARGS)
+            return false;
+
+        var cases = task.Suite?.Cases;
+        if (cases == null)
+            return task.Suite == null;
+
+        return cases.Count <= VerifyTasksetLimits.MAX_SUITE_CASES
+               && cases.All(item => item?.Args != null && item.Args.Count <= VerifyTasksetLimits.MAX_ARGS);
     }
 
     /// <summary>

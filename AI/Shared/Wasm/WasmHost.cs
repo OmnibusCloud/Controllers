@@ -80,11 +80,26 @@ internal sealed class WasmHost : IDisposable
     /// </param>
     /// <exception cref="InvalidOperationException">The loaded binding is not the one built against, the native library is not the pinned one or none was found, or the binding lacks what the engine settings need.</exception>
     public WasmHost(bool parallelCompilation)
+        : this(parallelCompilation, explicitTraps: false)
+    {
+    }
+
+    /// <summary>
+    /// Creates a host and says how its engine takes a guest's trap.
+    /// </summary>
+    /// <param name="parallelCompilation">Whether the engine compiles a module's functions on several threads of its own.</param>
+    /// <param name="explicitTraps">
+    /// True to make every trap an explicit check whatever the process, as a host with hardware
+    /// stack protection has them by itself; false leaves the choice to the process. The verdicts,
+    /// the outputs and the fuel are the same either way; the checks cost speed.
+    /// </param>
+    /// <exception cref="InvalidOperationException">The loaded binding is not the one built against, the native library is not the pinned one or none was found, or the binding lacks what the engine settings need.</exception>
+    public WasmHost(bool parallelCompilation, bool explicitTraps)
     {
         WasmHostBinding.ThrowIfUnavailable();
         WasmHostNativeLibrary.EnsureRegistered();
 
-        m_engine = CreateEngine(parallelCompilation, out m_explicitTraps);
+        m_engine = CreateEngine(parallelCompilation, explicitTraps, out m_explicitTraps);
         m_compiledCodeKey = CompiledCodeKeyOf(WasmHostNatives.Sha256Of(WasmHostNativeLibrary.LoadedPath!) ?? "", m_explicitTraps);
         m_shim = new WasmHostShim(m_engine);
 
@@ -105,9 +120,9 @@ internal sealed class WasmHost : IDisposable
     /// looked up after the guard has passed, not when the constructor is compiled.
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static WasmEngine CreateEngine(bool parallelCompilation, out bool explicitTraps)
+    private static WasmEngine CreateEngine(bool parallelCompilation, bool forceExplicitTraps, out bool explicitTraps)
     {
-        return new WasmEngine(WasmHostEngineConfig.Create(parallelCompilation, out explicitTraps));
+        return new WasmEngine(WasmHostEngineConfig.Create(parallelCompilation, forceExplicitTraps, out explicitTraps));
     }
 
     #endregion

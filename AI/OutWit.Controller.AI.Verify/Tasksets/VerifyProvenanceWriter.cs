@@ -20,6 +20,8 @@ internal static class VerifyProvenanceWriter
     /// <summary>The document's schema tag.</summary>
     public const string SCHEMA = "verify-provenance/2";
 
+    private const int FLUSH_BYTES = 128 * 1024;
+
     #endregion
 
     #region Functions
@@ -30,6 +32,19 @@ internal static class VerifyProvenanceWriter
     /// <param name="rounds">The rounds of the run, in the order they ran.</param>
     /// <returns>The JSON document bytes.</returns>
     public static byte[] Write(IEnumerable<VerifyRound> rounds)
+    {
+        using var stream = new MemoryStream();
+        Write(stream, rounds);
+        return stream.ToArray();
+    }
+
+    /// <summary>
+    /// Writes the accepted batches of a run to a stream as UTF-8 JSON: the document has a record
+    /// a task, so it goes out as it is made.
+    /// </summary>
+    /// <param name="stream">The document.</param>
+    /// <param name="rounds">The rounds of the run, in the order they ran.</param>
+    public static void Write(Stream stream, IEnumerable<VerifyRound> rounds)
     {
         var entries = rounds
             .SelectMany(round => round.Accepted.SelectMany(package => package.Batches.Select(batch => (Round: round.Name, Batch: batch))))
@@ -42,21 +57,22 @@ internal static class VerifyProvenanceWriter
             .ThenBy(entry => entry.Batch.Executions.Sum(execution => (long)execution.WallMs))
             .ToList();
 
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
+        using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false });
+
+        writer.WriteStartObject();
+        writer.WriteString("schema", SCHEMA);
+
+        writer.WriteStartArray("batches");
+        foreach (var (round, batch, _) in entries)
         {
-            writer.WriteStartObject();
-            writer.WriteString("schema", SCHEMA);
+            WriteBatch(writer, round, batch);
 
-            writer.WriteStartArray("batches");
-            foreach (var (round, batch, _) in entries)
-                WriteBatch(writer, round, batch);
-            writer.WriteEndArray();
-
-            writer.WriteEndObject();
+            if (writer.BytesPending >= FLUSH_BYTES)
+                writer.Flush();
         }
+        writer.WriteEndArray();
 
-        return stream.ToArray();
+        writer.WriteEndObject();
     }
 
     private static void WriteBatch(Utf8JsonWriter writer, string round, VerifyAcceptedBatch batch)

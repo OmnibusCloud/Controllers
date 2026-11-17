@@ -32,43 +32,14 @@ internal sealed class WitActivityAdapterVerifyPreflight : WitActivityAdapterFunc
         pool.TryGetValue(activity.Options, out VerifyOptionsData? options);
 
         var tasksetPath = await BlobService.GetLocalPathAsync(tasksetBlobId);
-        var jsonl = await File.ReadAllTextAsync(tasksetPath);
 
-        var parsed = VerifyTasksetParser.Parse(jsonl);
-        var report = new VerifyPreflightData
-        {
-            WellFormed = parsed.Errors.Count == 0 && parsed.Tasks.Count > 0,
-            TaskCount = parsed.Tasks.Count,
-            EstimatedInputBytes = parsed.Tasks.Sum(task => (long)task.Sources.Sum(s => s.Content.Length)),
-            Messages = [.. parsed.Errors]
-        };
+        // One pass over the taskset, a line at a time, nothing kept: what it says is counts and
+        // a bounded number of bounded messages, whatever the taskset's size.
+        VerifyTasksetScan scan;
+        await using (var taskset = VerifyAdapterTools.OpenTaskset(tasksetPath))
+            scan = VerifyTasksetScanner.Scan(taskset, options, null);
 
-        if (parsed.Tasks.Count == 0 && parsed.Errors.Count == 0)
-            report.Messages.Add("Taskset is empty.");
-
-        var runtimeIds = parsed.Tasks.Select(task => task.RuntimeId).Distinct(StringComparer.Ordinal).ToList();
-        report.RuntimeIds = runtimeIds;
-        report.UnknownRuntimeIds = VerifyTasksetChecks.UnknownRuntimes(parsed.Tasks);
-        foreach (var unknown in report.UnknownRuntimeIds)
-            report.Messages.Add($"runtime '{unknown}' is not known to this build: the taskset would be refused.");
-
-        if (VerifyTasksetChecks.SetsWallTime(parsed.Tasks, options))
-            report.Messages.Add(VerifyTasksetChecks.WALL_TIME_NOTE);
-
-        if (parsed.Tasks.Count > 0)
-        {
-            var plan = VerifyTasksetPlanner.Plan(parsed.Tasks, options);
-            report.BatchCount = plan.Batches.Count;
-            report.Messages.AddRange(plan.Notes);
-            report.Messages.AddRange(plan.Errors);
-
-            // What Split would refuse is not well formed.
-            if (plan.Errors.Count > 0)
-                report.WellFormed = false;
-        }
-
-        if (report.UnknownRuntimeIds.Count > 0)
-            report.WellFormed = false;
+        var report = VerifyPreflightReport.Of(scan);
 
         if (!pool.TrySetValue(activity.ReturnReference, report))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");

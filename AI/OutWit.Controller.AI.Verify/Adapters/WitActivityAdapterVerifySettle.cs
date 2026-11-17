@@ -19,7 +19,7 @@ internal sealed class WitActivityAdapterVerifySettle : WitActivityAdapterFunctio
         : base(processingManager, logger)
     {
         BlobService = blobService;
-        WorkFolder = VerifyAdapterTools.WorkFolder(services);
+        Services = services;
     }
 
     #endregion
@@ -38,7 +38,8 @@ internal sealed class WitActivityAdapterVerifySettle : WitActivityAdapterFunctio
             ? null
             : (VerifyAdapterTools.TaskPackages(pool, activity.Disputes, "Disputes"), VerifyAdapterTools.ResultPackages(pool, activity.Settled, "Settled"));
 
-        var (ledgerPath, summary) = await VerifySettlement.SettleAsync(fanOut, repair, dispute, BlobService, WorkFolder);
+        using var work = new VerifyWorkFolder(Services);
+        var (ledgerPath, summary) = await VerifySettlement.SettleAsync(fanOut, repair, dispute, BlobService, work.Path);
         try
         {
             Logger.LogInformation(
@@ -91,7 +92,7 @@ internal sealed class WitActivityAdapterVerifySettle : WitActivityAdapterFunctio
 
     private IWitBlobService BlobService { get; }
 
-    private string WorkFolder { get; }
+    private IServiceProvider Services { get; }
 
     #endregion
 }

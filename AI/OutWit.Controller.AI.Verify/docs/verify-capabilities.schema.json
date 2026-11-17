@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-capabilities.schema.json",
   "title": "Verify capabilities",
-  "description": "The capabilities blob of VerifyRuntimeDiagnostics: what a submitter can know before a run. It takes no taskset. Nodes run the same module as the host (the platform admits no other version to the work), so the runtimes listed are the pool's.",
+  "description": "The capabilities blob of VerifyRuntimeDiagnostics: what a submitter can know before a run. It takes no taskset. Nodes run the same module as the host (the platform admits no other version to the work), so the runtimes listed are the pool's. An application reads its limits here instead of carrying copies of them. verify-capabilities/3 added the taskset section; every field of verify-capabilities/2 is there with the name and the meaning it had.",
   "type": "object",
-  "required": ["schema", "controller", "wasmtime", "benchmark_unit", "runtimes", "defaults", "ceilings", "time", "sources", "modules", "packages"],
+  "required": ["schema", "controller", "wasmtime", "benchmark_unit", "runtimes", "defaults", "ceilings", "time", "sources", "modules", "packages", "taskset"],
   "additionalProperties": false,
   "properties": {
-    "schema": { "type": "string", "const": "verify-capabilities/2" },
+    "schema": { "type": "string", "const": "verify-capabilities/3" },
     "controller": { "type": "string", "description": "The controller's version." },
     "wasmtime": { "type": "string", "description": "The engine the sandbox runs on: the version of the wasmtime .NET binding and of the native library under it, e.g. \"48.0.2.0 (native 48.0.8)\". A native library that is not one the controller ships is \"unpinned\" with the start of its SHA-256." },
     "benchmark_unit": { "type": "string", "description": "The unit of the pool's rate: tasks of the reference workload per second." },
@@ -97,6 +97,23 @@
         "max_output_bytes": { "type": "integer", "description": "The most output the tasks of one package may keep together, by their caps: a task counts for twice its stdout cap plus its stderr cap." },
         "max_batch_tasks": { "type": "integer", "description": "The most tasks one batch holds; a larger batch size in the options is clamped to it." },
         "max_batch_output_bytes": { "type": "integer", "description": "The most output the tasks of one batch may keep together, by their caps; a batch is cut where they reach it." }
+      }
+    },
+    "taskset": {
+      "type": "object",
+      "description": "What a taskset may hold, and what a preflight answers: the bounds of what the server reads from a lab. A taskset outside the first five is refused whole when it is split, by the line and the name of what is too many or too long, and the preflight says so beforehand. The most text one task may have is packages.max_bytes. A node refuses a package with a task of more sources, arguments or cases than these, whoever made the package.",
+      "required": ["max_line_bytes", "max_tasks", "max_sources", "max_args", "max_suite_cases", "max_preflight_messages", "max_preflight_messages_per_kind", "max_preflight_message_length", "max_preflight_unknown_runtimes"],
+      "additionalProperties": false,
+      "properties": {
+        "max_line_bytes": { "type": "integer", "description": "The most bytes one line of a taskset (one task as JSON) may have; also the most a checker spec may have." },
+        "max_tasks": { "type": "integer", "description": "The most tasks one taskset may have." },
+        "max_sources": { "type": "integer", "description": "The most source files one task may have." },
+        "max_args": { "type": "integer", "description": "The most arguments a task may have, and a case of its suite besides them." },
+        "max_suite_cases": { "type": "integer", "description": "The most cases a suite may have. A task runs once a case, each run under the task's limits." },
+        "max_preflight_messages": { "type": "integer", "description": "The most messages a preflight's answer has, whatever the taskset." },
+        "max_preflight_messages_per_kind": { "type": "integer", "description": "The most messages of one kind (malformed lines, clamped limits, tasks that cannot be planned) a preflight shows; after them one line says how many more there are." },
+        "max_preflight_message_length": { "type": "integer", "description": "The most characters one message of a preflight has." },
+        "max_preflight_unknown_runtimes": { "type": "integer", "description": "The most unknown runtime ids a preflight lists; one line says that there are more." }
       }
     },
     "pool": {

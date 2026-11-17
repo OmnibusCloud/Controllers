@@ -180,8 +180,7 @@ internal sealed class VerifySettleRig : IDisposable
         var reading = VerifySettlement.ReadMainAsync(issued, returned, Blobs);
         await (Task)reading;
 
-        var batches = await VerifySettlement.RepairBatchesAsync(reading.Result, Blobs);
-        return batches.Count == 0 ? [] : await VerifyTaskPackages.PublishAsync(batches, Blobs, NullLogger.Instance, "test");
+        return await VerifySettlement.PublishRepairsAsync(reading.Result, Blobs);
     }
 
     /// <summary>The tasks of a first fan-out whose executions disagree, published for a dispute round.</summary>
@@ -190,8 +189,7 @@ internal sealed class VerifySettleRig : IDisposable
         var reading = VerifySettlement.ReadMainAsync(issued, returned, Blobs);
         await (Task)reading;
 
-        var batches = await VerifySettlement.DisputeBatchesAsync(reading.Result, Blobs);
-        return batches.Count == 0 ? [] : await VerifyTaskPackages.PublishAsync(batches, Blobs, NullLogger.Instance, "test");
+        return await VerifySettlement.PublishDisputesAsync(reading.Result, Blobs);
     }
 
     #endregion

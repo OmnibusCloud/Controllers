@@ -6,10 +6,19 @@ run-name: "AI Verify: ${{ github.event.pull_request.title || github.ref_name }}"
 # runtime set (built from its pins by verify-assets, so nothing is Assert.Ignore'd here),
 # the worker pool and the benchmark, the taskset pipelines, every bundled script end to
 # end through the engine on in-process nodes, and the module self-containment proof.
-# Load tests (Category=Load) are not part of the sweep.
+# Load tests (Category=Load) are not part of the sweep: they run once a week and on request
+# (the "load" input of a manual run), on Linux, as a job of their own. A schedule runs on the
+# repository's default branch only; on another branch the load job is run by hand.
 
 on:
   workflow_dispatch:
+    inputs:
+      load:
+        description: 'Also run the load tests (Category=Load)'
+        type: boolean
+        default: false
+  schedule:
+    - cron: '17 3 * * 1'
   pull_request:
     paths:
       - 'AI/**'
@@ -37,7 +46,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, macos-15, windows-2022]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -90,6 +99,15 @@ jobs:
           bash AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh AI/OutWit.Controller.AI.Verify.Tests/@Data/natives
           grep -h "wasmtime [0-9]" AI/OutWit.Controller.AI.Verify.Tests/@Data/natives/win-x64/NOTICE.txt
 
+      # The module-load proof runs on the packaged engine library: the data asset the module's
+      # manifest declares for this platform, fetched from its release by the test and held to the
+      # manifest's size and SHA-256. The archive is kept between runs.
+      - name: Cache the packaged engine library
+        uses: actions/cache@v4
+        with:
+          path: AI/OutWit.Controller.AI.Verify.Tests/@Data/.assets
+          key: verify-packaged-assets-${{ runner.os }}-${{ hashFiles('AI/OutWit.Controller.AI.Verify/OutWit.Controller.AI.Verify.csproj') }}
+
       - name: Build
         shell: bash
         run: dotnet build AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj -c Release
@@ -112,6 +130,9 @@ jobs:
             if command -v sha256sum > /dev/null; then sha256sum "$bin"; else shasum -a 256 "$bin"; fi
           done
 
+      # A skipped test is named with its reason in the log. The proof of survival under hardware
+      # stack protection is skipped on Linux and macOS, which have none; a Windows runner that
+      # does not enforce it fails that test with the reason, it does not skip it.
       - name: Verify
         run: dotnet test AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj -c Release --no-build --filter Category!=Load --logger "console;verbosity=normal"
 
@@ -184,3 +205,47 @@ jobs:
           cmp -s "AI/OutWit.Controller.AI.Verify.Tests/@Data/natives/$rid/$lib" "$bin" || { echo "::error::the Corpus test output does not hold the pinned $rid/$lib"; exit 1; }
           if [ "$RUNNER_OS" = "macOS" ]; then codesign --verify --verbose "$bin"; fi
           dotnet test AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj -c Release --no-build --filter "Category!=Load" --logger "console;verbosity=normal"
+
+  # The load tests (Category=Load): a thousand tasks at the machine's degree, thousands of runs
+  # with bounded memory, the module cache under hundreds of modules, a hundred thousand lines
+  # through the parser and every writer, thousands of tasks through VerifyRun, and a hundred
+  # thousand tasks from a 200 MiB taskset through VerifyRun with the memory and every payload
+  # measured and held to bounds (VerifyScaleLoadTests). Once a week, and on request.
+  load:
+    if: github.event_name == 'schedule' || inputs.load
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache the runtime downloads
+        uses: actions/cache@v4
+        with:
+          path: AI/OutWit.Controller.AI.Verify.Tests/@Data/@Downloads
+          key: verify-runtime-downloads-${{ hashFiles('AI/OutWit.Controller.AI.Verify.Assets/AssetPins.cs') }}
+
+      - name: Build the runtime set
+        shell: bash
+        run: |
+          dotnet run --project AI/OutWit.Controller.AI.Verify.Assets/OutWit.Controller.AI.Verify.Assets.csproj -c Release -- build AI/OutWit.Controller.AI.Verify.Tests/@Data/runtimes --clean
+
+      - name: Cache the engine downloads
+        uses: actions/cache@v4
+        with:
+          path: AI/OutWit.Controller.AI.Verify.Tests/@Data/natives/.downloads
+          key: verify-engine-natives-${{ hashFiles('AI/OutWit.Controller.AI.Verify.Assets/toolchain/pins.env') }}
+
+      - name: The pinned engine library
+        shell: bash
+        run: bash AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh AI/OutWit.Controller.AI.Verify.Tests/@Data/natives
+
+      - name: Build
+        shell: bash
+        run: dotnet build AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj -c Release
+
+      - name: Load
+        run: dotnet test AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj -c Release --no-build --filter Category=Load --logger "console;verbosity=detailed"

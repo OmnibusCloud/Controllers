@@ -137,7 +137,7 @@ public static class VerifyRuntimeCatalog
         "ce89a7facc82bc2249bb9ed3fac69f1bccbe43c47ec026e40ebe46a8b21f65a5");
 
     private static readonly IReadOnlyDictionary<string, VerifyRuntimeDescriptor> s_known =
-        new Dictionary<string, VerifyRuntimeDescriptor>(StringComparer.OrdinalIgnoreCase)
+        new Dictionary<string, VerifyRuntimeDescriptor>(StringComparer.Ordinal)
         {
             [PYTHON_3_14_6] = new()
             {

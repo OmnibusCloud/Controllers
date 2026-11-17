@@ -1,14 +1,15 @@
-using System.Text.Json;
+using System.Text;
 using OutWit.Controller.AI.Verify.Model;
 
 namespace OutWit.Controller.AI.Verify.Tasksets;
 
 /// <summary>
 /// The checker of a generate-and-check run: one program that reads a candidate on stdin and
-/// says whether it holds. Authored as a single taskset line (runtime, entry, sources, args,
-/// limits — the same vocabulary as a task) plus the verdict rule at the top level:
+/// says whether it holds. Authored as one JSON object (runtime, entry, sources, args, limits —
+/// the same vocabulary as a task) plus the verdict rule at the top level:
 /// <c>expected_stdout</c> (optional; when absent only the exit code counts) and
-/// <c>expected_exit</c> (default 0).
+/// <c>expected_exit</c> (default 0). It is held to its schema (docs/verify-checker.schema.json)
+/// exactly as a taskset line is to its own: a field the schema does not have is refused by name.
 /// </summary>
 /// <param name="RuntimeId">The checker's runtime.</param>
 /// <param name="EntryPoint">The checker's entry file.</param>
@@ -26,39 +27,53 @@ public sealed record VerifyCheckerSpec(
     int ExpectedExitCode,
     VerifyLimitsData? Limits)
 {
-    #region Constants
-
-    private const string EXPECTED_STDOUT = "expected_stdout";
-    private const string EXPECTED_EXIT = "expected_exit";
-
-    #endregion
-
     #region Functions
 
     /// <summary>
     /// Parses a checker spec document.
     /// </summary>
-    /// <param name="json">One JSON object (a taskset line with the verdict rule at the top level).</param>
+    /// <param name="json">One JSON object (a task's fields with the verdict rule at the top level).</param>
     /// <returns>The spec.</returns>
-    /// <exception cref="FormatException">The document is not a valid task line.</exception>
+    /// <exception cref="FormatException">The document is not a checker spec the schema allows.</exception>
     public static VerifyCheckerSpec Parse(string json)
     {
-        var parsed = VerifyTasksetParser.Parse(json);
-        if (parsed.Errors.Count > 0 || parsed.Tasks.Count != 1)
-            throw new FormatException($"checker spec must be one task line: {string.Join("; ", parsed.Errors)}");
+        return Parse(Encoding.UTF8.GetBytes(json));
+    }
 
-        var task = parsed.Tasks[0];
+    /// <summary>
+    /// Parses a checker spec document from its bytes.
+    /// </summary>
+    /// <param name="utf8">One JSON object, UTF-8, with or without a byte-order mark.</param>
+    /// <returns>The spec.</returns>
+    /// <exception cref="FormatException">The document is not a checker spec the schema allows.</exception>
+    public static VerifyCheckerSpec Parse(ReadOnlySpan<byte> utf8)
+    {
+        if (utf8.StartsWith(Encoding.UTF8.Preamble))
+            utf8 = utf8[Encoding.UTF8.Preamble.Length..];
 
-        using var document = JsonDocument.Parse(json);
-        var root = document.RootElement;
-        var expectedStdout = root.TryGetProperty(EXPECTED_STDOUT, out var stdoutElement) && stdoutElement.ValueKind == JsonValueKind.String
-            ? stdoutElement.GetString()
-            : null;
-        var expectedExit = root.TryGetProperty(EXPECTED_EXIT, out var exitElement) && exitElement.ValueKind == JsonValueKind.Number
-            ? exitElement.GetInt32()
-            : 0;
+        try
+        {
+            return VerifyTasksetParser.ParseChecker(utf8);
+        }
+        catch (FormatException exception)
+        {
+            throw new FormatException($"the checker spec is not one the schema allows: {exception.Message}");
+        }
+    }
 
-        return new VerifyCheckerSpec(task.RuntimeId, task.EntryPoint, task.Sources, task.Args, expectedStdout, expectedExit, task.Limits);
+    /// <summary>
+    /// Reads a checker spec from a file, refusing one larger than a task's line may be before it
+    /// is read.
+    /// </summary>
+    /// <param name="path">The file.</param>
+    /// <returns>The spec.</returns>
+    /// <exception cref="FormatException">The file is too large, or is not a checker spec the schema allows.</exception>
+    public static async Task<VerifyCheckerSpec> ReadAsync(string path)
+    {
+        if (new FileInfo(path).Length > VerifyTasksetLimits.MAX_LINE_BYTES)
+            throw new FormatException($"the checker spec is longer than {VerifyTasksetLimits.MAX_LINE_BYTES} bytes");
+
+        return Parse(await File.ReadAllBytesAsync(path));
     }
 
     #endregion

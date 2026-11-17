@@ -41,11 +41,21 @@ public static class VerifyTasksetChecks
     /// <returns>True when one does.</returns>
     public static bool SetsWallTime(IEnumerable<VerifyTaskData> tasks, VerifyOptionsData? options)
     {
-        return options?.DefaultLimits is { WallTimeMs: > 0 } || tasks.Any(task => task.Limits is { WallTimeMs: > 0 });
+        return SetsWallTime(options) || tasks.Any(task => task.Limits is { WallTimeMs: > 0 });
+    }
+
+    /// <summary>Whether a run's options set a wall time, which is no limit any more.</summary>
+    /// <param name="options">The run's options, or null.</param>
+    /// <returns>True when they do.</returns>
+    public static bool SetsWallTime(VerifyOptionsData? options)
+    {
+        return options?.DefaultLimits is { WallTimeMs: > 0 };
     }
 
     /// <summary>A runtime id as a message may show it: bounded, and only the characters an id has.</summary>
-    private static string Shown(string id)
+    /// <param name="id">The id as a task names it.</param>
+    /// <returns>The id cut to a length, with anything but letters, digits, a dot, a dash and an underscore as '?'.</returns>
+    public static string Shown(string id)
     {
         var shown = id.Length > MAX_SHOWN_ID_LENGTH ? id[..MAX_SHOWN_ID_LENGTH] : id;
         return string.Concat(shown.Select(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '?'));

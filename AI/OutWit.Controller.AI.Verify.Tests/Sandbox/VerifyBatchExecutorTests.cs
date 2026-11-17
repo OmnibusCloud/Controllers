@@ -155,5 +155,42 @@ public sealed class VerifyBatchExecutorTests : VerifySandboxTestBase
         });
     }
 
+    [Test]
+    public void M2ANodeRefusesATaskOutsideTheBoundsOfATasksetTest()
+    {
+        // A task runs once a case and every source is a file: what Split refuses a taskset for,
+        // a node refuses a package for, whoever made the package. One case, source or argument
+        // past the bound is enough; a task at the bounds is taken.
+        const int most = OutWit.Controller.AI.Verify.Tasksets.VerifyTasksetLimits.MAX_SUITE_CASES;
+
+        VerifyTaskBatchData Batch(Action<VerifyTaskData> change)
+        {
+            var task = JsTask("console.log(1)");
+            change(task);
+            return new VerifyTaskBatchData { RuntimeId = VerifyRuntimeCatalog.QUICKJS_0_15_1, Tasks = [JsTask("console.log(2)", 1), task] };
+        }
+
+        var cases = Batch(task => task.Suite = new VerifySuiteData { Cases = Enumerable.Range(0, most + 1).Select(_ => new VerifySuiteCaseData()).ToList() });
+        var sources = Batch(task => task.Sources = Enumerable.Range(0, most + 1).Select(index => new VerifySourceFileData { Name = $"f{index}", Content = "" }).ToList());
+        var arguments = Batch(task => task.Args = Enumerable.Repeat("a", most + 1).ToList());
+        var caseArguments = Batch(task => task.Suite = new VerifySuiteData { Cases = [new VerifySuiteCaseData { Args = Enumerable.Repeat("a", most + 1).ToList() }] });
+        var atTheBounds = Batch(task =>
+        {
+            task.Args = Enumerable.Repeat("a", most).ToList();
+            task.Suite = new VerifySuiteData { Cases = Enumerable.Range(0, most).Select(_ => new VerifySuiteCaseData()).ToList() };
+        });
+
+        Assert.Multiple(() =>
+        {
+            foreach (var batch in new[] { cases, sources, arguments, caseArguments })
+            {
+                Assert.That(() => VerifyBatchExecutor.EnsureRunnable(RuntimesRoot, batch),
+                    Throws.TypeOf<VerifyBatchRefusedException>().With.Message.EqualTo("a task of the batch has more sources, arguments or cases than a node takes"));
+            }
+
+            Assert.That(() => VerifyBatchExecutor.EnsureRunnable(RuntimesRoot, atTheBounds), Throws.Nothing);
+        });
+    }
+
     #endregion
 }

@@ -89,11 +89,26 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// </param>
     /// <exception cref="InvalidOperationException">The loaded wasmtime binding is not the one this controller was built against (the message names both versions), the native library is not the pinned one or none was found (the message names both hashes), or the binding cannot configure the engine.</exception>
     public VerifyWasmSandbox(string? ioDirectory)
+        : this(ioDirectory, explicitTraps: false)
     {
-        m_host = new WasmHost();
+    }
+
+    /// <summary>
+    /// Creates a sandbox and says how its engines take a guest's trap.
+    /// </summary>
+    /// <param name="ioDirectory">The folder the files of running tasks are written to, or null for a new one in the operating system's temp path.</param>
+    /// <param name="explicitTraps">
+    /// True to make every trap an explicit check whatever the process, as a host with hardware
+    /// stack protection has them by itself; false leaves the choice to the process. A task's
+    /// verdict, outputs and fuel are the same either way.
+    /// </param>
+    /// <exception cref="InvalidOperationException">The loaded wasmtime binding is not the one this controller was built against, the native library is not the pinned one or none was found, or the binding cannot configure the engine.</exception>
+    public VerifyWasmSandbox(string? ioDirectory, bool explicitTraps)
+    {
+        m_host = new WasmHost(parallelCompilation: true, explicitTraps);
         try
         {
-            m_taskHost = new WasmHost(parallelCompilation: false);
+            m_taskHost = new WasmHost(parallelCompilation: false, explicitTraps);
         }
         catch
         {

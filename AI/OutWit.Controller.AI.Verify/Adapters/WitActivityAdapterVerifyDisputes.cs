@@ -32,13 +32,10 @@ internal sealed class WitActivityAdapterVerifyDisputes : WitActivityAdapterFunct
 
         // Executions that disagree are not chosen between: the task runs three more times.
         var main = await VerifySettlement.ReadMainAsync(issued, returned, BlobService);
-        var batches = await VerifySettlement.DisputeBatchesAsync(main, BlobService);
+        var packages = await VerifySettlement.PublishDisputesAsync(main, BlobService);
 
-        Logger.LogInformation("Verify.Disputes: {Tasks} task(s) whose executions disagree run three more times", batches.Sum(batch => batch.Tasks.Count));
-
-        var packages = batches.Count == 0
-            ? []
-            : await VerifyTaskPackages.PublishAsync(batches, BlobService, Logger, "Verify.Disputes");
+        Logger.LogInformation("Verify.Disputes: {Tasks} task(s) whose executions disagree run three more times in {Packages} package(s)",
+            packages.Sum(package => (long)package.TaskCount), packages.Count);
 
         if (!pool.TrySetCollection(activity.ReturnReference, packages))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");

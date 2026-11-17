@@ -21,10 +21,11 @@ internal sealed class WitActivityAdapterVerifyCollect : WitActivityAdapterFuncti
 
     #region Constructors
 
-    public WitActivityAdapterVerifyCollect(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
+    public WitActivityAdapterVerifyCollect(IWitProcessingManager processingManager, IWitBlobService blobService, IServiceProvider services, ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        Services = services;
     }
 
     #endregion
@@ -35,8 +36,9 @@ internal sealed class WitActivityAdapterVerifyCollect : WitActivityAdapterFuncti
     {
         var ledgerPath = await BlobService.GetLocalPathAsync(VerifyAdapterTools.Blob(pool, activity.Ledger, "Ledger"));
 
-        // The report was written when the run was settled; it is handed out here as it is.
-        var reportBlobId = await BlobService.UploadBytesAsync(VerifyLedger.Read(ledgerPath, VerifyLedger.REPORT), BLOB_NAME);
+        // The report was written when the run was settled; it is handed out here as it is, from
+        // the ledger to a file to the blob store: it has a record a task.
+        var reportBlobId = await VerifyAdapterTools.UploadDocumentAsync(BlobService, Services, ledgerPath, VerifyLedger.REPORT, BLOB_NAME);
 
         if (!pool.TrySetValue(activity.ReturnReference, reportBlobId))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
@@ -71,6 +73,8 @@ internal sealed class WitActivityAdapterVerifyCollect : WitActivityAdapterFuncti
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IServiceProvider Services { get; }
 
     #endregion
 }

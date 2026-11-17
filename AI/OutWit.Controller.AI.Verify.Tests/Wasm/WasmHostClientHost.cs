@@ -27,7 +27,6 @@ internal static class WasmHostClientHost
     private const string CARRIER = "OutWit.Controller.AI.Verify.Tests.Carrier";
     private const string CARRIER_TYPE = "OutWit.Controller.AI.Verify.Tests.Carrier.CarrierProbe";
     private const string CARRIER_METHOD = "Run";
-    private const string CI_ENV = "GITHUB_ACTIONS";
     private const int TIMEOUT_MS = 180_000;
 
     #endregion
@@ -41,11 +40,13 @@ internal static class WasmHostClientHost
         var staged = Path.Combine(ControllersFolder(), VERIFY_MODULE);
         if (!File.Exists(Path.Combine(staged, BINDING_FILE)))
         {
-            if (string.Equals(Environment.GetEnvironmentVariable(CI_ENV), "true", StringComparison.OrdinalIgnoreCase))
-                Assert.Fail($"no staged {VERIFY_MODULE} at '{staged}'");
-
-            Assert.Ignore($"Staged module not found at '{staged}'");
+            Mock.VerifyRigModules.Missing($"no staged {VERIFY_MODULE} at '{staged}'");
         }
+
+        // A module another build left is never the one that gets tested.
+        var problem = Mock.VerifyRigModules.Problem(ControllersFolder(), VERIFY_MODULE, Mock.VerifyRigModules.SolutionRoot(), TestContext.CurrentContext.TestDirectory);
+        if (problem != null)
+            Assert.Fail(problem);
 
         return staged;
     }
@@ -172,17 +173,11 @@ internal static class WasmHostClientHost
 
     private static string ControllersFolder()
     {
-        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
-        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "OutWit.slnx")))
-            directory = directory.Parent;
-        if (directory == null)
-            Assert.Ignore("Solution root not found");
+        var staged = Mock.VerifyRigModules.StagedRoot();
+        if (staged == null)
+            Mock.VerifyRigModules.Missing("Solution root not found");
 
-        var configuration = typeof(WasmHostClientHost).Assembly
-            .GetCustomAttributes(typeof(AssemblyConfigurationAttribute), false)
-            .OfType<AssemblyConfigurationAttribute>()
-            .FirstOrDefault()?.Configuration ?? "Debug";
-        return Path.Combine(directory!.FullName, "@Controllers", configuration);
+        return staged!;
     }
 
     private static string AiRoot()

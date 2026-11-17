@@ -8,7 +8,8 @@ namespace OutWit.Controller.AI.Verify.Settlement;
 /// returned. The activities that hand a document to the job take it out of here; none of them
 /// reads a node's result again, and none decides anything. The format is the server's alone: an
 /// eight-byte header, then each document as an eight-byte length and its bytes, the outputs
-/// last, since they can be as large as the run.
+/// last. Every document grows with the run (the report and the provenance have a record a
+/// task), so each is written from a file and handed out to a file, never through memory.
 /// </summary>
 internal static class VerifyLedger
 {
@@ -40,31 +41,28 @@ internal static class VerifyLedger
 
     #region Functions
 
-    /// <summary>Writes a ledger.</summary>
+    /// <summary>Writes a ledger from the files its documents were written to: every document is copied, none is held.</summary>
     /// <param name="path">The file to write (made new).</param>
-    /// <param name="report">The verdict report.</param>
-    /// <param name="provenance">The provenance document.</param>
-    /// <param name="integrity">The integrity document.</param>
+    /// <param name="reportPath">The file holding the verdict report.</param>
+    /// <param name="provenancePath">The file holding the provenance document.</param>
+    /// <param name="integrityPath">The file holding the integrity document.</param>
     /// <param name="outputsPath">The file holding the outputs.</param>
-    public static void Write(string path, byte[] report, byte[] provenance, byte[] integrity, string outputsPath)
+    public static void Write(string path, string reportPath, string provenancePath, string integrityPath, string outputsPath)
     {
-        using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+        using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, COPY_BUFFER_BYTES);
         file.Write(MAGIC);
         file.WriteByte(VERSION);
         file.Write([0, 0, 0]);
 
-        foreach (var document in new[] { report, provenance, integrity })
+        foreach (var documentPath in new[] { reportPath, provenancePath, integrityPath, outputsPath })
         {
+            using var document = new FileStream(documentPath, FileMode.Open, FileAccess.Read, FileShare.Read, COPY_BUFFER_BYTES, FileOptions.SequentialScan);
             WriteLength(file, document.Length);
-            file.Write(document);
+            document.CopyTo(file, COPY_BUFFER_BYTES);
         }
-
-        using var outputs = new FileStream(outputsPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        WriteLength(file, outputs.Length);
-        outputs.CopyTo(file, COPY_BUFFER_BYTES);
     }
 
-    /// <summary>Reads one of the small documents of a ledger.</summary>
+    /// <summary>Reads one document of a ledger into memory: for a document that is known to be small, and for tests.</summary>
     /// <param name="path">The ledger's local file.</param>
     /// <param name="section">Which document: <see cref="REPORT"/>, <see cref="PROVENANCE"/> or <see cref="INTEGRITY"/>.</param>
     /// <returns>The document's bytes.</returns>
