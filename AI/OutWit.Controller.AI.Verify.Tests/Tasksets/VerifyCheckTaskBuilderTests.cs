@@ -26,7 +26,7 @@ public sealed class VerifyCheckTaskBuilderTests
             new() { TaskIndex = 2, Verdict = VerifyVerdict.Pass, Stdout = "two\n" }
         };
 
-        var plan = VerifyCheckTaskBuilder.Build(candidates, CHECKER);
+        var plan = VerifyCheckTaskBuilder.Build(candidates.Select(VerifyCandidate.Of), CHECKER);
 
         Assert.That(plan.Skipped, Is.Empty);
         Assert.That(plan.Tasks.Select(task => task.TaskIndex), Is.EqualTo(new[] { 2, 5 }));
@@ -57,7 +57,7 @@ public sealed class VerifyCheckTaskBuilderTests
             new() { TaskIndex = 3, Verdict = VerifyVerdict.Pass, Stdout = "ok\n" }
         };
 
-        var plan = VerifyCheckTaskBuilder.Build(candidates, CHECKER);
+        var plan = VerifyCheckTaskBuilder.Build(candidates.Select(VerifyCandidate.Of), CHECKER);
 
         Assert.Multiple(() =>
         {
@@ -78,7 +78,7 @@ public sealed class VerifyCheckTaskBuilderTests
             new() { TaskIndex = 1, Verdict = VerifyVerdict.Pass, Stdout = "b\n" }
         };
 
-        var plan = VerifyCheckTaskBuilder.Build(candidates, CHECKER);
+        var plan = VerifyCheckTaskBuilder.Build(candidates.Select(VerifyCandidate.Of), CHECKER);
 
         Assert.That(plan.Tasks[0].Sources[0], Is.Not.SameAs(plan.Tasks[1].Sources[0]));
         Assert.That(plan.Tasks[0].Sources[0], Is.Not.SameAs(CHECKER.Sources[0]));

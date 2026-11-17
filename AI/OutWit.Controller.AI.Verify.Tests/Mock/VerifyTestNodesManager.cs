@@ -62,6 +62,8 @@ internal sealed class VerifyTestNodesManager : IWitNodesManager
         var allVariables = new List<IWitVariable>();
         IWitProcessingStatus? lastStatus = null;
 
+        Shares++;
+
         if (canRunInParallelOnClient)
         {
             ParallelShares++;
@@ -97,6 +99,9 @@ internal sealed class VerifyTestNodesManager : IWitNodesManager
     #region Properties
 
     public IReadOnlyList<IWitEngineActivityNode> CompatibleNodes { get; }
+
+    /// <summary>Shares given to a node since the manager was created.</summary>
+    public int Shares { get; private set; }
 
     /// <summary>Shares started all at once since the manager was created.</summary>
     public int ParallelShares { get; private set; }

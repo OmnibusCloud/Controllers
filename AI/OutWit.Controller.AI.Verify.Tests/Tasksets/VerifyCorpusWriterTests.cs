@@ -106,6 +106,6 @@ public sealed class VerifyCorpusWriterTests
     [Test]
     public void EmptyRunIsAnEmptyCorpusTest()
     {
-        Assert.That(VerifyCorpusWriter.Write([]), Is.Empty);
+        Assert.That(VerifyCorpusWriter.Write(new List<VerifyResultData>()), Is.Empty);
     }
 }

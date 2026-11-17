@@ -8,10 +8,9 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: the result packages of all executions → the integrity document (the executions of
-/// every task that ran more than once paired, the nodes of each side, agreement on verdict,
-/// exit, outputs and cases; pairs that met on one node counted, not compared; the mismatch
-/// rate) as a blob.
+/// Host-side: the ledger of a settled run (Verify.Settle) → its integrity document as a blob of its own. The
+/// document was written when the run was settled; nothing is decided here and no node's result
+/// is read.
 /// </summary>
 [Activity("Verify.Integrity")]
 [MemoryPackable]
@@ -21,7 +20,7 @@ public sealed partial class WitActivityVerifyIntegrity : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Results}";
+        return $"{Ledger}";
     }
 
     #endregion
@@ -38,14 +37,14 @@ public sealed partial class WitActivityVerifyIntegrity : WitActivityFunction
             return false;
 
         return base.Is(activity, tolerance)
-               && Results.Check(activity.Results);
+               && Ledger.Check(activity.Ledger);
     }
 
     protected override WitActivityVerifyIntegrity InnerClone()
     {
         return new WitActivityVerifyIntegrity
         {
-            Results = Results?.Clone() as IWitReference
+            Ledger = Ledger?.Clone() as IWitReference
         };
     }
 
@@ -53,9 +52,9 @@ public sealed partial class WitActivityVerifyIntegrity : WitActivityFunction
 
     #region Properties
 
-    /// <summary>Reference to the 'Results' argument of the activity.</summary>
+    /// <summary>Reference to the 'Ledger' argument of the activity.</summary>
     [MemoryPackAllowSerialize]
-    public IWitReference? Results { get; init; }
+    public IWitReference? Ledger { get; init; }
 
     #endregion
 }

@@ -307,10 +307,9 @@ public static class Program
             var range = tasks.Count == 0 ? "[]" : tasks.Count == 1 ? $"[{tasks[0]}]" : $"[{tasks[0]}..{tasks[^1]}] ({tasks.Count})";
             var platform = batch.TryGetProperty("runtime_target", out var p) ? p.GetString() : "?";
             var runtime = batch.TryGetProperty("runtime", out var r) ? r.GetString() : "?";
-            var degree = batch.TryGetProperty("degree", out var d) ? d.GetInt32() : 0;
-            var wall = batch.TryGetProperty("wall_ms", out var w) ? w.GetInt32() : 0;
+            var round = batch.TryGetProperty("round", out var n) ? n.GetString() : "?";
             var fuel = batch.TryGetProperty("fuel", out var f) ? f.GetInt64() : 0;
-            Console.WriteLine($"    batch {platform,-11} {runtime,-16} degree {degree,2}  tasks {range}  {wall} ms  fuel {fuel:N0}");
+            Console.WriteLine($"    batch {platform,-11} {runtime,-16} {round,-7} tasks {range}  fuel {fuel:N0}");
         }
     }
 
@@ -319,6 +318,13 @@ public static class Program
         using var document = JsonDocument.Parse(integrity);
         var summary = document.RootElement.GetProperty("summary");
         var sampled = summary.GetProperty("sampled").GetInt32();
+
+        // What the server did with what the nodes returned: all zeros in a run without lying or failing nodes.
+        Console.WriteLine($"  settled: {summary.GetProperty("single_execution").GetInt32()} on one execution, {summary.GetProperty("agreed").GetInt32()} agreed; " +
+                          $"refused packages {summary.GetProperty("rejected_results").GetInt32()}, repairs {summary.GetProperty("repairs").GetInt32()}, " +
+                          $"no result {summary.GetProperty("no_result").GetInt32()}, disputes {summary.GetProperty("disputes").GetInt32()} " +
+                          $"(resolved {summary.GetProperty("disputes_resolved").GetInt32()})");
+
         if (sampled == 0)
         {
             Console.WriteLine("  integrity: no sampling");

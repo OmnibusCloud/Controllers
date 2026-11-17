@@ -59,7 +59,7 @@ public abstract class VerifyScriptTestBase
             configureServices: services =>
             {
                 services.AddSingleton<IWitBlobService>(BlobService);
-                services.AddSingleton<IWitNodesManager>(new VerifyTestNodesManager(WitEngineNodeSdk.Instance));
+                services.AddSingleton(CreateNodesManager(WitEngineNodeSdk.Instance));
             });
     }
 
@@ -74,6 +74,14 @@ public abstract class VerifyScriptTestBase
     #endregion
 
     #region Tools
+
+    /// <summary>The rig's nodes: three honest ones, unless a fixture brings its own.</summary>
+    /// <param name="node">The in-process node every one of them runs on.</param>
+    /// <returns>The nodes manager the engine fans out through.</returns>
+    protected virtual IWitNodesManager CreateNodesManager(IWitEngineNode node)
+    {
+        return new VerifyTestNodesManager(node);
+    }
 
     /// <summary>Reads a bundled script by file name, or ignores the fixture when it is missing.</summary>
     protected string LoadScript(string fileName)

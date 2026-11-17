@@ -8,9 +8,9 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: result packages → a provenance document (which node ran which tasks, with which
-/// wasmtime and runtime module, at which degree) as a blob. The verdict report stays free of
-/// node identity; this is where it lives. Any run doubles as a fleet inventory through it.
+/// Host-side: the ledger of a settled run (Verify.Settle) → its provenance document as a blob of its own. The
+/// document was written when the run was settled; nothing is decided here and no node's result
+/// is read.
 /// </summary>
 [Activity("Verify.Provenance")]
 [MemoryPackable]
@@ -20,7 +20,7 @@ public sealed partial class WitActivityVerifyProvenance : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Results}";
+        return $"{Ledger}";
     }
 
     #endregion
@@ -37,14 +37,14 @@ public sealed partial class WitActivityVerifyProvenance : WitActivityFunction
             return false;
 
         return base.Is(activity, tolerance)
-               && Results.Check(activity.Results);
+               && Ledger.Check(activity.Ledger);
     }
 
     protected override WitActivityVerifyProvenance InnerClone()
     {
         return new WitActivityVerifyProvenance
         {
-            Results = Results?.Clone() as IWitReference
+            Ledger = Ledger?.Clone() as IWitReference
         };
     }
 
@@ -52,9 +52,9 @@ public sealed partial class WitActivityVerifyProvenance : WitActivityFunction
 
     #region Properties
 
-    /// <summary>Reference to the 'Results' argument of the activity.</summary>
+    /// <summary>Reference to the 'Ledger' argument of the activity.</summary>
     [MemoryPackAllowSerialize]
-    public IWitReference? Results { get; init; }
+    public IWitReference? Ledger { get; init; }
 
     #endregion
 }

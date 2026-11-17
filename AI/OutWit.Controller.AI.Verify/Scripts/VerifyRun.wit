@@ -8,8 +8,21 @@ Job:VerifyRun(Blob:taskset, VerifyOptions:opts)
     VerifyResultPackageCollection:results = Grid.ForEach(package in packages, checked)
         => Verify.ExecutePackage(package);
 
-    Blob:report = Verify.Collect(results, opts);
-    Blob:outputs = Verify.CollectOutputs(results, opts);
-    Blob:provenance = Verify.Provenance(results);
-    Blob:integrity = Verify.Integrity(results);
+    ~ A task without a verdict (no answer the server accepts, or a fault of the node that ran it) goes out once more. ~
+    VerifyTaskPackageCollection:repairs = Verify.Repairs(packages, results);
+    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs)
+        => Verify.ExecutePackage(package);
+
+    ~ A task whose executions disagree runs three more times, on different machines. ~
+    VerifyTaskPackageCollection:disputes = Verify.Disputes(packages, results);
+    ProcessingOptions:thrice = Grid.Replicas(3);
+    VerifyResultPackageCollection:settled = Grid.ForEach(package in disputes, thrice)
+        => Verify.ExecutePackage(package);
+
+    Blob:ledger = Verify.Settle(packages, results, repairs, repaired, disputes, settled);
+
+    Blob:report = Verify.Collect(ledger, opts);
+    Blob:outputs = Verify.CollectOutputs(ledger, opts);
+    Blob:provenance = Verify.Provenance(ledger);
+    Blob:integrity = Verify.Integrity(ledger);
 }
