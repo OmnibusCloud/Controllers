@@ -369,9 +369,11 @@ public sealed class CorpusRoundSourceBlobsM5Tests
     [Test]
     public async Task M5TheLedgerOfALongRunHoldsCountsNotShardsTest()
     {
-        // 20,000 shards in packages of 20, each result with its statistics: tens of megabytes of
-        // results on disk. The ledger is built, read twice more for its documents, and what it
-        // keeps is a few kilobytes of counts.
+        // 20,000 shards in packages of 20, each result with its statistics: megabytes of results
+        // on disk. The ledger is built, read twice more for its documents, and keeps none of what
+        // it judged: every shard and result it handed over is gone once nobody else holds it.
+        // (The collector's own figures are printed, not asserted: they move by megabytes from one
+        // platform to the next.)
         const int shards = 20_000;
         var pipeline = CorpusTestRun.Labelled();
         var packages = new List<CorpusTaskPackageData>();
@@ -398,14 +400,20 @@ public sealed class CorpusRoundSourceBlobsM5Tests
         CorpusIntegrityWriter.Write(ledger, integrity);
         var after = GC.GetTotalMemory(forceFullCollection: true) - before;
 
-        TestContext.Out.WriteLine($"{shards} shards: results {resultBytes} bytes as values; the ledger holds {held} bytes, {after} after the documents; report {report.Length} bytes, integrity {integrity.Length} bytes");
+        var (handed, seen) = Handed(ledger);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        TestContext.Out.WriteLine($"{shards} shards: results {resultBytes} bytes as values; the ledger holds about {held} bytes, {after} after the documents; report {report.Length} bytes, integrity {integrity.Length} bytes");
 
         Assert.Multiple(() =>
         {
             Assert.That(ledger.Shards, Has.Count.EqualTo(shards));
             Assert.That(resultBytes, Is.GreaterThan(4_000_000));
-            Assert.That(held, Is.LessThan(2_000_000), "the ledger holds references and counts, not the run");
-            Assert.That(after, Is.LessThan(2_000_000), "writing the documents left nothing behind");
+            Assert.That(seen, Is.EqualTo(shards), "every shard was handed over");
+            Assert.That(handed, Has.Count.EqualTo(2 * (shards / 1000)));
+            Assert.That(handed.Count(reference => reference.IsAlive), Is.Zero, "the ledger keeps no shard and no result it judged: counts and references only");
             Assert.That(report.Length, Is.GreaterThan(10_000_000), "the report itself is long, and went to its stream as it was written");
             Assert.That(report.LargestWrite, Is.LessThan(1 << 20), "no write of the report is the report");
         });
@@ -416,6 +424,27 @@ public sealed class CorpusRoundSourceBlobsM5Tests
     #endregion
 
     #region Tools
+
+    /// <summary>
+    /// Reads the run once and keeps weak references to every thousandth shard and to its accepted
+    /// result: what is still alive after a collection is what something other than this method holds.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static (List<WeakReference> Handed, int Seen) Handed(CorpusLedger ledger)
+    {
+        var handed = new List<WeakReference>();
+        var seen = 0;
+        foreach (var shard in ledger.Shards)
+        {
+            if (seen++ % 1000 == 0)
+            {
+                handed.Add(new WeakReference(shard));
+                handed.Add(new WeakReference(shard.Accepted));
+            }
+        }
+
+        return (handed, seen);
+    }
 
     private CorpusResultPackageData Answer(CorpusTaskPackageData package, params CorpusResultData[] results)
     {

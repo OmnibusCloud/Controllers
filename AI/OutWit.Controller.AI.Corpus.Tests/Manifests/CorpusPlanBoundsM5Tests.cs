@@ -178,10 +178,22 @@ public sealed class CorpusPlanBoundsM5Tests
         var held = GC.GetTotalMemory(forceFullCollection: true) - before;
         var issued = CorpusTaskPlanner.Issue(plan, "0.5.0").Take(3).ToList();
 
+        // The figure is printed, not asserted: the collector's own answer moves by megabytes from
+        // one platform to the next. What is asserted is the thing itself: a task is made when it
+        // is asked for, and the plan keeps none.
+        TestContext.Out.WriteLine($"50,000 shards: the plan holds about {held} bytes beside the manifest (at the audit's 509 bytes a task, 25 MB)");
+
+        var last = plan.Tasks[49_999];
+        var lastAgain = plan.Tasks[49_999];
+        var firstOnes = plan.Tasks.Take(3).ToList();
+        var firstOnesAgain = plan.Tasks.Take(3).ToList();
+
         Assert.Multiple(() =>
         {
             Assert.That(plan.Tasks, Has.Count.EqualTo(50_000));
-            Assert.That(held, Is.LessThan(50_000 * 64), "a plan holds no task of its own: at the audit's 509 bytes a task this plan was 25 MB");
+            Assert.That(plan.Tasks, Is.Not.InstanceOf<List<CorpusTaskData>>().And.Not.InstanceOf<CorpusTaskData[]>(), "a view over the manifest, not a list of tasks");
+            Assert.That(lastAgain, Is.Not.SameAs(last), "a task is made when it is asked for, and is not kept");
+            Assert.That(firstOnes.Zip(firstOnesAgain, ReferenceEquals), Is.All.False, "nor when the tasks are read in order");
             Assert.That(plan.Tasks[49_999].TaskIndex, Is.EqualTo(49_999));
             Assert.That(plan.Tasks[49_999].Source, Is.SameAs(manifest.Sources[49_999]), "a task is the manifest's own entry");
             Assert.That(plan.Tasks[7].Pipeline, Is.SameAs(plan.Pipeline));
