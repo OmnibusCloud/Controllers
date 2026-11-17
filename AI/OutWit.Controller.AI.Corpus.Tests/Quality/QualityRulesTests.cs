@@ -40,19 +40,27 @@ public sealed class QualityRulesTests
         var asSpaced = QualityFilter.Judge(chinese, QualityRules.Spaced);
         var asUnspaced = QualityFilter.Judge(chinese, LanguageRuleSet.Witlid1.For("zho"));
 
+        // L-7: two questions, held apart, so the assertion is about the second answer being the
+        // first one's object (the rules of a language are built once, not per document).
+        var english = LanguageRuleSet.Witlid1.For("eng");
+        var englishAgain = LanguageRuleSet.Witlid1.For("eng");
+        var japanese = LanguageRuleSet.Witlid1.For("jpn");
+        var japaneseAgain = LanguageRuleSet.Witlid1.For("jpn");
+
         Assert.Multiple(() =>
         {
             Assert.That(asSpaced.Passed, Is.False, "a space-split sees three giant words");
             Assert.That(asUnspaced.Passed, Is.True, string.Join(", ", asUnspaced.FailedRules));
             Assert.That(asUnspaced.Measures["words"], Is.GreaterThan(100));
-            Assert.That(LanguageRuleSet.Witlid1.For("eng"), Is.SameAs(LanguageRuleSet.Witlid1.For("eng")));
+            Assert.That(englishAgain, Is.SameAs(english), "one object per language");
+            Assert.That(english, Is.Not.SameAs(QualityRules.Spaced), "and not the script's: English has stop words");
             Assert.That(LanguageRuleSet.Witlid1.For(""), Is.SameAs(QualityRules.Spaced));
             Assert.That(LanguageRuleSet.Witlid1.For("yue"), Is.SameAs(QualityRules.Unspaced), "no stop-word list: the script's rules as they are");
             Assert.That(LanguageRuleSet.Witlid1.For("deu").MaxDuplicateNgramCharRatio, Is.SameAs(QualityRules.Spaced.MaxDuplicateNgramCharRatio));
             Assert.That(LanguageRuleSet.Witlid1.For("zho").CountsLetters, Is.True);
             Assert.That(LanguageRuleSet.Witlid1.For("zho").MaxDuplicateNgramCharRatio, Is.SameAs(QualityRules.Unspaced.MaxDuplicateNgramCharRatio));
             Assert.That(LanguageRuleSet.Witlid1.For("jpn").MaxDuplicateNgramCharRatio, Is.SameAs(JAPANESE.MaxDuplicateNgramCharRatio));
-            Assert.That(LanguageRuleSet.Witlid1.For("jpn"), Is.SameAs(LanguageRuleSet.Witlid1.For("jpn")));
+            Assert.That(japaneseAgain, Is.SameAs(japanese), "one object per language");
         });
     }
 

@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using OutWit.Controller.AI.Corpus.Warc;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Warc;
@@ -18,6 +19,9 @@ public sealed class WarcReaderTests
 
     private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
     private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
+
+    /// <summary>SHA-256 over every record of the golden WET shard, target URI then payload, in file order.</summary>
+    private const string WET_RECORDS_SHA256 = "a2a34e35d6bab251db8ae971bb441f9d3acdcbd6f6fb834e1868df57e9dda2a3";
 
     #endregion
 
@@ -70,11 +74,14 @@ public sealed class WarcReaderTests
     }
 
     [Test]
-    public void TwoReadsOfAShardGiveTheSameBytesTest()
+    public void L7TheRecordsOfAShardAreTheSameBytesOnEveryMachineTest()
     {
-        static string Digest(string path)
+        // Audit finding L-7: this test compared a read with a second read in the same process,
+        // which cannot differ. The records of the golden shard are pinned instead, so the three
+        // platforms of the build server are held to one value, and the same file handed over a
+        // few bytes at a time must read to it too: a record does not depend on how the bytes arrive.
+        static string Digest(WarcReader reader)
         {
-            using var reader = WarcReader.Open(path);
             using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             foreach (var record in reader.ReadRecords())
             {
@@ -85,7 +92,14 @@ public sealed class WarcReaderTests
             return Convert.ToHexStringLower(sha.GetHashAndReset());
         }
 
-        Assert.That(Digest(Fixture(WET_FIXTURE)), Is.EqualTo(Digest(Fixture(WET_FIXTURE))));
+        using var whole = WarcReader.Open(Fixture(WET_FIXTURE));
+        using var trickled = new WarcReader(new TrickleStream(File.ReadAllBytes(Fixture(WET_FIXTURE)), 4099, seekable: true));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Digest(whole), Is.EqualTo(WET_RECORDS_SHA256));
+            Assert.That(Digest(trickled), Is.EqualTo(WET_RECORDS_SHA256), "4,099 bytes at a time");
+        });
     }
 
     #endregion

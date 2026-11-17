@@ -22,6 +22,9 @@ public sealed class LanguagePackTests
     private const string PACK_FIXTURE = "language-pack-cc-2026-43-16.bin";
     private const string WITLID1_FIXTURE = "language-model-cc-2026-43-16.bin";
 
+    /// <summary>SHA-256 over the reference pack's answers for the sentences below: label, runner-up, nearest profile, distance in ppm and the two flags of each.</summary>
+    private const string ANSWERS_SHA256 = "647711cd88a7270f7133f3d5840d9084e15146cb9ad42b4ce899cba5a6a75bbc";
+
     /// <summary>One paragraph per supported language (the same as the WITLID1 model's tests).</summary>
     private static readonly Dictionary<string, string> SUPPORTED = new()
     {
@@ -212,14 +215,31 @@ public sealed class LanguagePackTests
     }
 
     [Test]
-    public void IdentificationWithThePackIsDeterministicTest()
+    public void L7IdentificationWithThePackIsTheSameOnEveryMachineTest()
     {
+        // Audit finding L-7: this test compared an answer with a second answer in the same
+        // process, which cannot differ. Every answer's whole numbers are pinned instead (the
+        // label, the nearest profile, the distance in parts per million, the two flags), so the
+        // three platforms of the build server are held to one value; and a second identifier
+        // over a pack read again from its bytes must give them too.
         var identifier = new LanguageIdentifier(m_pack);
+        var again = new LanguageIdentifier(LanguageModel.FromBytes(m_pack.ToBytes()));
+
+        static string Answers(LanguageIdentifier identifier)
+        {
+            var lines = SUPPORTED.Concat(UNSUPPORTED).Select(pair =>
+            {
+                var guess = identifier.Identify(pair.Value);
+                return $"{pair.Key}:{guess.Code}:{guess.RunnerUp}:{guess.Nearest}:{guess.DistancePpm}:{(guess.IsUnsupported ? 1 : 0)}:{(guess.PastLimit ? 1 : 0)}";
+            });
+
+            return Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(string.Join("\n", lines))));
+        }
 
         Assert.Multiple(() =>
         {
-            foreach (var text in SUPPORTED.Values.Concat(UNSUPPORTED.Values))
-                Assert.That(identifier.Identify(text), Is.EqualTo(identifier.Identify(text)));
+            Assert.That(Answers(identifier), Is.EqualTo(ANSWERS_SHA256));
+            Assert.That(Answers(again), Is.EqualTo(ANSWERS_SHA256), "the pack read again from its own bytes");
         });
     }
 

@@ -83,7 +83,7 @@ public sealed class CorpusRuntimeDiagnosticsTests
         Assert.Multiple(() =>
         {
             Assert.That(verified, Is.True, $"the stage set composes to {sha256}: a stage changed its product (move the benchmark's pin and its unit with it) or the PDF stage's contract changed (a new limit: move the stage set's pin with it)");
-            Assert.That(CorpusStageSet.PINNED_SHA256, Is.EqualTo(CorpusStageSet.Compose(CorpusBenchmark.EXPECTED_CONTENT_SHA256)), "the pin is the benchmark's reference product with this PDF stage");
+            Assert.That(CorpusStageSet.Compose(CorpusBenchmark.EXPECTED_CONTENT_SHA256), Is.EqualTo(CorpusStageSet.PINNED_SHA256), "the pin is the benchmark's reference product with this PDF stage");
         });
     }
 
