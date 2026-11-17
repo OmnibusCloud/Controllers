@@ -197,7 +197,7 @@ public sealed class VerifyLyingNodesTests : VerifyScriptTestBase
     {
         // The liar answers every package it holds, and the first package of each batch twice: a
         // second result package of its own making, sent under that package's return variable.
-        // Grid keeps one value for each return variable a node's tasks asked for (Grid 1.2.2), so
+        // Grid keeps one value for each return variable a node's tasks asked for (Grid 1.3.0), so
         // the server receives what an honest run returns. Without that rule the sampled package
         // would have three answers where two were asked for, and its tasks would go to a dispute.
         m_nodes.Second = honest => ForgeAsync(honest, _ => { });

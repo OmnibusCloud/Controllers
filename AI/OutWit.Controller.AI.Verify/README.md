@@ -377,7 +377,7 @@ the `pairs`, and the `disputes`: for each, `index`, `first_copies`, `copies`,
 
 The known limit: the server sees results, not machines. Reading answers as
 machines rests on the platform holding a node to one result for each package it
-was given; the controller cannot check that itself. Grid 1.2.2 and later hold a
+was given; the controller cannot check that itself. Grid 1.3.0 and later hold a
 node to it: of what a node's batch returns they keep one value at most for each
 return variable its tasks asked for. By the controller alone,
 whatever a node returns: a node answers only for packages it was given; in the
@@ -392,7 +392,7 @@ result, as many are left out as the other packages of the round are short of,
 and if the result no longer leads by two the task stays `Disputed`
 (`surplus_copies`). With one lying node among the copies, a result accepted
 from a dispute was then returned by an honest machine. Where a node is not held
-to it (a Grid older than 1.2.2), a second answer can take the place of a copy that did not come back, and
+to it (a Grid older than 1.3.0), a second answer can take the place of a copy that did not come back, and
 the controller cannot tell that from two machines outvoting a third. One lying
 node can keep a dispute from being resolved, and so can answers that fail to
 come back (in a pool of fewer than three machines a round with more than one

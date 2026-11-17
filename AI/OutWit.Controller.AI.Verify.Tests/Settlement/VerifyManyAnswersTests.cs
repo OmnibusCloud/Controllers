@@ -12,7 +12,7 @@ namespace OutWit.Controller.AI.Verify.Tests.Settlement;
 /// <para>
 /// The two tests named PlatformDependency pin what the controller cannot tell apart alone: a
 /// second answer that fills the place of an answer nobody gave. They hand the settlement such
-/// answers directly, as a Grid older than 1.2.2 would. Grid 1.2.2 and later keep one value at
+/// answers directly, as a Grid older than 1.3.0 would. Grid 1.3.0 and later keep one value at
 /// most for each return variable a node's tasks asked for, so the second answer does not reach
 /// the server (VerifyLyingNodesTests.ASecondAnswerForOnePackageNeverReachesTheServerTest runs
 /// that through the engine).

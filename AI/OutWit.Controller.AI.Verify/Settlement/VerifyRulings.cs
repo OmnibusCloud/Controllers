@@ -17,7 +17,7 @@ namespace OutWit.Controller.AI.Verify.Settlement;
 /// </list>
 /// <para>
 /// <b>A dependency on the platform.</b> The server sees results, not machines. Counting values
-/// as machines rests on the platform: Grid 1.2.2 and later keep, of what a node's batch returns,
+/// as machines rests on the platform: Grid 1.3.0 and later keep, of what a node's batch returns,
 /// one value at most for each return variable its tasks asked for. With an older Grid a node
 /// could return several values for one task and this ruling would count them as machines. The
 /// controller cannot check that itself. Held to it, a node that answers one package of a round
@@ -98,7 +98,7 @@ internal static class VerifyRulings
     /// <summary>
     /// For every task package of a dispute round, the most of its answers that may be a second
     /// answer of one machine, where the platform holds a node to one result for each package it
-    /// was given (Grid 1.2.2 and later; a dependency: see the class). Every package of the round was asked for in
+    /// was given (Grid 1.3.0 and later; a dependency: see the class). Every package of the round was asked for in
     /// <see cref="DISPUTE_COPIES"/> copies, so the answers a node can then spend on a package
     /// beyond its own are the answers the other packages of the round are short of.
     /// </summary>
