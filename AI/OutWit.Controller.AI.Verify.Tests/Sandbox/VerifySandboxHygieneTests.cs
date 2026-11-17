@@ -87,6 +87,10 @@ public sealed class VerifySandboxHygieneTests : VerifySandboxTestBase
         try
         {
             var before = sandbox.Execute(Python, task, VerifySandboxDefaults.Resolve(null, null));
+
+            // The sweep comes on an idle node: what the last run left is deleted by then (in the
+            // background, so the test waits for it here instead of meeting it half-way).
+            Assert.That(OutWit.Controller.AI.Wasm.WasmHostDiscard.Drain(TimeSpan.FromSeconds(30)), Is.True, "the cleanup of the runs ends");
             Directory.Delete(Path.GetDirectoryName(given)!, recursive: true);
             var after = sandbox.Execute(Python, task, VerifySandboxDefaults.Resolve(null, null));
 
