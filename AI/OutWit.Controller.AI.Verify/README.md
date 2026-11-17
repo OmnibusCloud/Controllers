@@ -969,9 +969,7 @@ names and no other (`VerifyRigModules`): a module of another controller in the
 shared staging folder is not loaded, and a module that is not byte for byte
 this build's fails the rig by name. The proof that a host under hardware stack
 protection survives a guest's trap runs only on a machine that enforces that
-protection. Elsewhere its test is skipped and says so, with one exception: on
-the build server a Windows run that does not enforce it fails with that
-reason, because that run is where the proof is made for every change.
+protection; elsewhere its test is skipped and says so.
 
 Load tests (`Category=Load`, not in the sweep; the `AI Verify` workflow runs
 them once a week and on request): a thousand tasks at the
