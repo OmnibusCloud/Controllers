@@ -324,11 +324,11 @@ public static class Program
                               ? $"; signatures compared {signatures.GetInt32()}, signature mismatches {summary.GetProperty("signature_mismatches").GetInt32()}"
                               : ""));
 
-        // corpus-integrity/5: what was dropped on arrival, what was sent out again, what three machines settled.
+        // corpus-integrity/5: what was dropped, what was sent out again, how each dispute ended.
         if (summary.TryGetProperty("rejected_results", out var rejected))
         {
             var reasons = root.TryGetProperty("rejected", out var byReason)
-                ? string.Join(", ", byReason.EnumerateObject().Select(reason => $"{reason.Name} {reason.Value.GetInt32()}"))
+                ? string.Join(", ", byReason.EnumerateObject().Where(reason => reason.Value.GetInt32() > 0).Select(reason => $"{reason.Name} {reason.Value.GetInt32()}"))
                 : "";
             Console.WriteLine($"             rejected results {rejected.GetInt32()}{(reasons.Length > 0 ? $" ({reasons})" : "")}; node faults {summary.GetProperty("node_faults").GetInt32()}, " +
                               $"repairs {summary.GetProperty("repairs").GetInt32()} (repaired {summary.GetProperty("repaired").GetInt32()}), no result {summary.GetProperty("no_result").GetInt32()}; " +

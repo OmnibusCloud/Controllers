@@ -9,8 +9,8 @@ namespace OutWit.Controller.AI.Corpus.Activities;
 
 /// <summary>
 /// Host-side: the integrity document of a run (a JSON blob) — the pairs of the first round
-/// compared, the disputes and how three machines settled them, the shards without a result, the
-/// values dropped on arrival.
+/// compared, the disputes and how each ended, the shards without a result, the values dropped,
+/// by reason.
 /// </summary>
 [Activity("Corpus.Integrity")]
 [MemoryPackable]

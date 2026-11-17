@@ -169,7 +169,7 @@ public sealed class CorpusResultCheckH3Tests
 
                 var ledger = CorpusTestRun.Ledger(tasks, [result]);
 
-                Assert.That(ledger.Rejected.Keys, Is.EqualTo(new[] { CorpusLedger.REJECTED_INCONSISTENT }), name);
+                Assert.That(ledger.Rejected.Keys, Is.EqualTo(new[] { CorpusLedger.REJECTED_CONTENT }), name);
             }
         });
     }

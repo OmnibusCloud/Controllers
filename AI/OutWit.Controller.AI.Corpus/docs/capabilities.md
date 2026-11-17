@@ -182,7 +182,7 @@ the module's diagnostics and the `capabilities` document (schema
 | `signatures` | the default MinHash parameters and the bytes of one document's signature |
 | `drop_rules` | every drop rule with the stage that applies it, in the order a document meets them |
 | `casing` | the Unicode version and the hash of the lower-case table the language and signature stages use (section 9) |
-| `trust` | the copies a sampled shard runs in (2), the machines of a dispute (3) and its quorum (2); the outcomes `Disputed` and `NoResult` with the reasons of the latter; and every fixed word a document may carry in place of a text: `verdict_codes` per verdict, `fault_codes`, `rejection_reasons`, `batch_refusals`, `dedup_exclusions` (sections 7 and 9) |
+| `trust` | the copies a sampled shard runs in (2), the machines of a dispute (3) and its quorum (2); the outcomes `Disputed` and `NoResult` with the reasons of the latter; and every fixed word a document may carry in place of a text: `verdict_codes` per verdict, `fault_codes`, `rejection_reasons`, `dispute_outcomes`, `batch_refusals`, `dedup_exclusions` (sections 7 and 9) |
 | `products` | each product's file, schema and the output modes that keep it |
 | `storage` | the measured ratios of the storage estimate, the deployment's headroom and retention window when stated |
 | `pool` | the fleet as totals: `nodes`, `measured`, `workers` (when every measured node reports its degree), `rate` (MB of WET per second). No node is ever named |
@@ -497,7 +497,7 @@ never a text:
 | `PipelineUnavailable` | the pipeline identifies languages and names no model, or the model is not one the controller reads within its limits | `no_language_model`, `language_model_refused` |
 | `Failed` | a task that is no task (no source, no pipeline, parameters no pipeline may have) | `task_invalid` |
 | `Disputed` | the shard's copies disagreed and three machines did not settle it (section 9); no product, out of the counters | "" |
-| `NoResult` | no machine returned a result that could be accepted, the repair round included; `reason` is `node_fault`, `rejected` or `missing` | "" |
+| `NoResult` | no machine returned a result that could be accepted, the repair round included; `reason` is `node_fault` (a machine that held the shard returned it as a fault of its own) or `no_answer` (nothing that was accepted came back: nothing at all, or only values that were dropped) | "" |
 
 A node's own trouble is not a verdict. A node that cannot take a batch at all — another controller
 version than the job's, no PDF sandbox for a WARC shard that needs one, no room on its disk —
@@ -620,10 +620,17 @@ Integrity — what the server accepts from a node, and what a run does when node
   task and comes back in the result; a later round gives it a new one. The server accepts a result
   only under a ticket of this job and round, for that ticket's shard, from its own controller
   version, in the shape an honest node gives, and consistent with its task. Anything else is
-  dropped and counted by reason (`rejected_results`; the integrity document's `rejected`:
-  `not_a_result`, `unknown_ticket`, `malformed`, `foreign_task`, `version`, `inconsistent`). A
-  malformed result fails that result, never the run. A node knows only its own tickets, so it
-  cannot answer for a shard it never had; a ticket is never written into a document.
+  dropped and counted by reason (`rejected_results`; the integrity document's `rejected`, every
+  reason written, 0 included): `unknown_ticket` (under no ticket of this job and round),
+  `unreadable` (no result, or not shaped as an honest node shapes one), `version` (another
+  controller version than the server's), `content` (not what its task asked for: another shard's
+  index or URL under this ticket, or at odds with the task's pipeline), `surplus` (more values
+  under one ticket than its round takes; see *Two machines, not two values*). The words are the
+  Verify controller's. Its `duplicate` (one results blob returned twice) has no counterpart in
+  Corpus: a result is the value itself, not a reference to a blob of results, and two equal values
+  under one ticket are two values. A value that is dropped fails that value, never the run. A node
+  knows only its own tickets, so it cannot answer for a shard it never had; a ticket is never
+  written into a document.
 - **Sampling.** `SamplingRate` runs that share of the shards twice, in the same fan-out as the
   rest. The platform picks the shards at random and keeps the two executions on different
   machines, so a node cannot tell whether its shard is being checked. A shard that is not sampled
@@ -644,24 +651,47 @@ Integrity — what the server accepts from a node, and what a run does when node
   lowest content hash). Copies that disagree are run again on three machines; the result returned
   by the most of them, two at least and with no tie, is accepted, and otherwise the shard is
   `Disputed`: named in the report, out of the counters and the products. The integrity document's
-  `disputes` lists what the three returned.
+  `disputes` lists what the three returned and how each dispute ended (`outcome`, beside
+  `first_copies`, `copies` and `agreeing`): `resolved`; `no_majority` (no result was returned by
+  more copies than any other, and by two at least); `too_few_copies` (fewer than two copies came
+  back with a verdict); `surplus_copies` (below).
 - **Repairs.** A shard a node returned as a fault of its own, or returned nothing acceptable for,
-  is sent out once more; still without a result it is `NoResult` with its reason. The integrity
-  document's `no_result` lists them with the fault codes met.
+  is sent out once more; still without a result it is `NoResult` with its reason (`node_fault` or
+  `no_answer`). The integrity document's `no_result` lists them with the fault codes met.
+- **Two machines, not two values.** The server sees values, not machines: the platform keeps the
+  copies of a shard on different machines and hands over what they returned without saying which
+  task each value answered, and the copies of a shard carry one ticket. Counting values as
+  machines rests on the platform: Grid 1.3.0 and later keep, of what a node's batch returns, one
+  value at most for each return variable its tasks asked for. With an older Grid a node could
+  return several values for one task and this ruling would count them as machines. A machine can
+  still spend a slot it holds on another ticket it holds, which leaves that one a value short, so:
+  - in the first round more than two values under a ticket send the shard to a dispute;
+  - in the repair round (one machine, one value) more than one value under the ticket means none
+    is taken: each is counted as `surplus` and the shard is `NoResult`;
+  - in the dispute round more than three values under the ticket mean none is taken: each is
+    counted as `surplus` and the dispute ends as `too_few_copies`. Otherwise the leading result
+    must have been returned by two machines: of its values, as many as the other shards of the
+    round are short of their three may be one machine's second, and do not count; when what is
+    left is not two, or not more than the next result has, the dispute ends as `surplus_copies`.
+
+  With one lying machine among the copies, whatever the others lose, a result accepted in a
+  dispute was returned by an honest machine; three machines that agree still settle their shard
+  when another shard of the round lost a copy.
 - **Cost.** A run that goes well runs no extra round. A disputed shard is fetched again by up to
   three machines, a repaired one once more; the preflight says so beside the traffic estimate,
   which does not include them.
 - Under statistics and hashes only the copies are compared exactly the same way: the signatures
   are made and hashed on the node, not kept.
 - With one machine available nothing runs twice. A dispute needs two machines that return the
-  same: a pool of two settles one only when both now agree, and a pool of one never does.
-- **The limit.** The platform tells a controller nothing about which machine returned which copy,
-  and the two copies of a sampled shard carry one ticket, so one machine holding two tasks of a
-  round can answer one of them twice. Such a surplus cannot win (a shard with more answers than
-  were asked for is disputed, and a dispute with more answers than three is `Disputed`), but it
-  can deny a result; and a machine that holds a sampled shard's copy and a shard of its own can
-  spend the copy's answer on its own shard, which then shows `executions: 2` that are one
-  machine's. Closing both needs a ticket per copy from the platform.
+  same: a pool of one never settles one, and a pool of two settles one only when both now agree
+  and it is the only dispute of the run (with two disputed shards each is a value short of its
+  three, and two values under a ticket may then be one machine's: `surplus_copies`).
+- **The limit.** A machine can spend a slot it holds on another ticket it holds. Such a second
+  answer cannot win, but it can deny a result (four values end a dispute as `too_few_copies`; a
+  round short of values elsewhere can end two against one as `surplus_copies`); and a machine
+  that holds a sampled shard's copy and a shard of its own can spend the copy's slot on its own
+  shard, which then shows `executions: 2` that are one machine's. Closing both needs a ticket per
+  copy from the platform.
 
 On the test fleet every sampled pair has agreed, Windows against Linux and macOS, the PDF
 stage's included.
@@ -718,7 +748,7 @@ stage's included.
 | MinHash | 1 to 1,024 hashes, 1 to 32 shingle words, bands dividing the hashes |
 | dedup | 4,000,000 documents at 128 hashes (512 million signature values, about 4 GB; fewer documents with more hashes), asked of the report before a blob is read; a report of 256 MiB at most; 100,000 clusters listed |
 | sampling | 0 to 1; one copy per sampled shard, on another machine; three machines for a disputed shard |
-| a result from a node | bounded strings, hashes of 64 hexadecimal digits, a code of the fixed list, counters that add up; anything else is dropped (`malformed`) |
+| a result from a node | bounded strings, hashes of 64 hexadecimal digits, a code of the fixed list, counters that add up; anything else is dropped (`unreadable`) |
 
 ## 12. What a lab sees and what never leaves the node
 
@@ -793,8 +823,8 @@ One wasmtime binding loads per client process: Corpus and Verify carry the same 
   and still returns `report` and `integrity`. Inside it are two more fan-outs (`repaired`,
   `resolved`), empty in a run that goes well.
 - **New outcomes in the report.** `verdict` may be `Disputed` or `NoResult` (with `reason`:
-  `node_fault`, `rejected`, `missing`); such a shard has `stats: null` and no product. Every shard
-  of the manifest is in the report, whatever came back.
+  `node_fault` or `no_answer`); such a shard has `stats: null` and no product. Every shard of the
+  manifest is in the report, whatever came back.
 - **New fields.** Per shard `executions` and, when there were any, `faults`; in the summary
   `single_execution`, `rejected_results`, `repairs`, `disputes`, `disputes_resolved`. In the
   preflight `NodeDiskBytesPerShard` and two more messages. In the diagnostics
@@ -808,8 +838,11 @@ One wasmtime binding loads per client process: Corpus and Verify carry the same 
   `pdf_shard_fuel` (all in the `extract` stage of the funnel).
 - **New schema versions:** `corpus-report/3`, `corpus-integrity/5`, `corpus-dedup/2`,
   `corpus-capabilities/2`. The integrity document's pairs keep their shape and gain `kind` and
-  `code` per side; `disputes`, `no_result` and `rejected` are new. The dedup document gains
-  `excluded`.
+  `code` per side; `disputes` (each with its `outcome`), `no_result` and `rejected` are new. The
+  dedup document gains `excluded`. The words of `rejected`, of a `NoResult` reason and of a
+  dispute's `outcome` are the ones the Verify controller uses.
+- **The platform it needs.** Grid 1.3.0 or later: the ruling counts values as machines, and that
+  Grid keeps one value at most for each return variable a node's tasks asked for (section 9).
 - **Refusals a lab may meet:** a language pack over 16 MiB or past the pack limits (at the
   preflight, by name); a WET record over 8 MiB is skipped (it was 64 MiB); `Corpus.Dedup` refuses a
   report that names one blob twice and leaves out a shard whose blob is not the one the report
@@ -824,9 +857,9 @@ One wasmtime binding loads per client process: Corpus and Verify carry the same 
 
 - The near-duplicate merge runs on the server after a run, over at most 4,000,000 documents; there
   is no figure "so far" during a run.
-- A shard that is not sampled is checked by nobody, and one machine holding two tasks of a round
-  can answer one of them twice: it can deny a result, or make its own unsampled shard look
-  checked (section 9).
+- A shard that is not sampled is checked by nobody, and a machine can spend a slot it holds on
+  another ticket it holds: it can deny a result, or make its own unsampled shard look checked
+  (section 9).
 - The pre-scan counts an element that is closed by the next tag without an end tag of its own
   (`<p>`, `<li>`, `<td>`, `<option>`) as nesting: a page with more than 512 of them in a row drops
   as `html_refused`, as in every release so far. The parser's own budget would let such a page

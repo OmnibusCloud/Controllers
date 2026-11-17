@@ -107,7 +107,7 @@ public sealed class CorpusLedgerC1Tests
         Assert.Multiple(() =>
         {
             Assert.That(ledger.Shards.Single().Accepted, Is.SameAs(honest));
-            Assert.That(ledger.Rejected.Keys, Is.EqualTo(new[] { CorpusLedger.REJECTED_MALFORMED }));
+            Assert.That(ledger.Rejected.Keys, Is.EqualTo(new[] { CorpusLedger.REJECTED_UNREADABLE }));
         });
     }
 
@@ -138,9 +138,9 @@ public sealed class CorpusLedgerC1Tests
             Assert.That(shards[2].GetProperty("content_sha256").GetString(), Is.EqualTo(CorpusTestRun.Hash('c')));
             Assert.That(shards[2].GetProperty("stats").GetProperty("documents_out").GetInt32(), Is.EqualTo(5));
             Assert.That(shards[4].GetProperty("verdict").GetString(), Is.EqualTo(CorpusReportWriter.VERDICT_NO_RESULT), "the liar's own shard has no result, and the report says so");
-            Assert.That(shards[4].GetProperty("reason").GetString(), Is.EqualTo(CorpusLedger.NO_RESULT_REJECTED));
+            Assert.That(shards[4].GetProperty("reason").GetString(), Is.EqualTo(CorpusLedger.NO_RESULT_NO_ANSWER));
             Assert.That(text, Does.Not.Contain("attacker.example"));
-            Assert.That(ledger.Rejected, Is.EqualTo(new Dictionary<string, int> { [CorpusLedger.REJECTED_FOREIGN_TASK] = 1 }));
+            Assert.That(ledger.Rejected, Is.EqualTo(new Dictionary<string, int> { [CorpusLedger.REJECTED_CONTENT] = 1 }));
             Assert.That(ledger.RepairTasks().Select(task => task.TaskIndex), Is.EqualTo(new[] { 4 }), "and it is sent out once more");
         });
     }
@@ -159,9 +159,9 @@ public sealed class CorpusLedgerC1Tests
         Assert.Multiple(() =>
         {
             Assert.That(ledger.Rejected[CorpusLedger.REJECTED_UNKNOWN_TICKET], Is.EqualTo(2));
-            Assert.That(ledger.Rejected[CorpusLedger.REJECTED_NOT_A_RESULT], Is.EqualTo(2));
+            Assert.That(ledger.Rejected[CorpusLedger.REJECTED_UNREADABLE], Is.EqualTo(2));
             Assert.That(ledger.RejectedResults, Is.EqualTo(4));
-            Assert.That(ledger.Shards.Last().Reason, Is.EqualTo(CorpusLedger.NO_RESULT_MISSING));
+            Assert.That(ledger.Shards.Last().Reason, Is.EqualTo(CorpusLedger.NO_RESULT_NO_ANSWER));
         });
     }
 
@@ -227,11 +227,11 @@ public sealed class CorpusLedgerC1Tests
         });
     }
 
-    [TestCase("a0")]
-    [TestCase("a0b")]
-    [TestCase("a")]
-    [TestCase("")]
-    public void C1WithoutAMajorityOfTwoTheShardIsDisputedTest(string answers)
+    [TestCase("a0", CorpusLedger.DISPUTE_NO_MAJORITY)]
+    [TestCase("a0b", CorpusLedger.DISPUTE_NO_MAJORITY)]
+    [TestCase("a", CorpusLedger.DISPUTE_TOO_FEW_COPIES)]
+    [TestCase("", CorpusLedger.DISPUTE_TOO_FEW_COPIES)]
+    public void C1WithoutAMajorityOfTwoTheShardIsDisputedTest(string answers, string outcome)
     {
         // A tie, three different answers, one answer, none: no result returned by the most
         // machines, two at least.
@@ -241,10 +241,13 @@ public sealed class CorpusLedgerC1Tests
 
         var ledger = CorpusTestRun.Ledger(tasks, first, ([], []), (disputes, answers.Select(content => (object?)CorpusTestRun.Completed(disputes[0], content))));
         using var report = JsonDocument.Parse(CorpusReportWriter.Write(ledger));
+        using var integrity = JsonDocument.Parse(CorpusIntegrityWriter.Write(ledger));
         var shard = report.RootElement.GetProperty("shards")[0];
 
         Assert.Multiple(() =>
         {
+            Assert.That(integrity.RootElement.GetProperty("disputes")[0].GetProperty("outcome").GetString(), Is.EqualTo(outcome));
+            Assert.That(integrity.RootElement.GetProperty("disputes")[0].GetProperty("copies").GetInt32(), Is.EqualTo(answers.Length));
             Assert.That(shard.GetProperty("verdict").GetString(), Is.EqualTo(CorpusReportWriter.VERDICT_DISPUTED));
             Assert.That(shard.GetProperty("text_blob").GetString(), Is.Empty, "a disputed shard has no product");
             Assert.That(shard.GetProperty("stats").ValueKind, Is.EqualTo(JsonValueKind.Null));
@@ -265,40 +268,6 @@ public sealed class CorpusLedgerC1Tests
             (disputes, [CorpusTestRun.Fault(disputes[0]), CorpusTestRun.Completed(disputes[0], 'a'), CorpusTestRun.Completed(disputes[0], 'a')]));
 
         Assert.That(ledger.Shards.Single().Accepted!.ContentSha256, Is.EqualTo(CorpusTestRun.Hash('a')));
-    }
-
-    [Test]
-    public void C1OneMachineAnsweringTwiceDoesNotMakeAMajorityTest()
-    {
-        // Two disputed shards on two machines: the liar gives up its copy of shard 1 to answer
-        // shard 0 twice. Shard 0 then has more answers than shard 1, and is not settled.
-        var tasks = CorpusTestRun.Tasks(2);
-        var first = new object?[]
-        {
-            CorpusTestRun.Completed(tasks[0], 'a'), CorpusTestRun.Completed(tasks[0], '0'),
-            CorpusTestRun.Completed(tasks[1], 'b'), CorpusTestRun.Completed(tasks[1], '0')
-        };
-        var disputes = CorpusTestRun.Ledger(tasks, first).DisputeTasks();
-
-        var ledger = CorpusTestRun.Ledger(tasks, first, ([], []), (disputes,
-        [
-            CorpusTestRun.Completed(disputes[0], 'a'), CorpusTestRun.Completed(disputes[0], '0'), CorpusTestRun.Completed(disputes[0], '0'),
-            CorpusTestRun.Completed(disputes[1], 'b')
-        ]));
-
-        Assert.That(ledger.Shards.Select(shard => shard.Outcome), Is.All.EqualTo(CorpusShardOutcome.Disputed));
-    }
-
-    [Test]
-    public void C1MoreAnswersThanMachinesAreNoMajorityTest()
-    {
-        var tasks = CorpusTestRun.Tasks(1);
-        var first = new object?[] { CorpusTestRun.Completed(tasks[0], 'a'), CorpusTestRun.Completed(tasks[0], '0') };
-        var disputes = CorpusTestRun.Ledger(tasks, first).DisputeTasks();
-
-        var ledger = CorpusTestRun.Ledger(tasks, first, ([], []), (disputes, Enumerable.Repeat('0', 4).Select(content => (object?)CorpusTestRun.Completed(disputes[0], content))));
-
-        Assert.That(ledger.Shards.Single().Outcome, Is.EqualTo(CorpusShardOutcome.Disputed));
     }
 
     [Test]
@@ -392,18 +361,6 @@ public sealed class CorpusLedgerC1Tests
         });
     }
 
-    [Test]
-    public void C1TwoAnswersToARepairAreADisputeTest()
-    {
-        var tasks = CorpusTestRun.Tasks(1);
-        var first = new object?[] { CorpusTestRun.Fault(tasks[0]) };
-        var repairs = CorpusTestRun.Ledger(tasks, first).RepairTasks();
-
-        var ledger = CorpusTestRun.Ledger(tasks, first, (repairs, [CorpusTestRun.Completed(repairs[0], '0'), CorpusTestRun.Completed(repairs[0], '0')]));
-
-        Assert.That(ledger.DisputeTasks().Select(task => task.TaskIndex), Is.EqualTo(new[] { 0 }));
-    }
-
     #endregion
 
     #region Documents
@@ -424,7 +381,8 @@ public sealed class CorpusLedgerC1Tests
         {
             foreach (var task in tasks.Concat(repairs).Concat(disputes))
                 Assert.That(documents, Does.Not.Contain(task.Ticket));
-            Assert.That(documents, Does.Not.Contain("ticket"));
+            // The one place the word stands is the name of a rejection reason, written with its count.
+            Assert.That(documents.Replace($"\"{CorpusLedger.REJECTED_UNKNOWN_TICKET}\"", ""), Does.Not.Contain("ticket"));
         });
     }
 

@@ -198,6 +198,7 @@ public static class CorpusCapabilitiesWriter
         WriteStrings(writer, "outcomes", [CorpusReportWriter.VERDICT_DISPUTED, CorpusReportWriter.VERDICT_NO_RESULT]);
         WriteStrings(writer, "no_result_reasons", CorpusLedger.NO_RESULT_REASONS);
         WriteStrings(writer, "rejection_reasons", CorpusLedger.REJECTION_REASONS);
+        WriteStrings(writer, "dispute_outcomes", CorpusLedger.DISPUTE_OUTCOMES);
         WriteStrings(writer, "fault_codes", CorpusResultCodes.FAULTS);
 
         writer.WriteStartObject("verdict_codes");

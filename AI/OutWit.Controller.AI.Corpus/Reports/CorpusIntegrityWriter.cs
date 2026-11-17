@@ -16,11 +16,15 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// dropped value) is counted, not compared (<c>incomplete</c>). The platform keeps the two on
 /// different machines, and the document does not say which.</item>
 /// <item><b>disputes</b>: every shard whose copies disagreed, what three machines returned for it
-/// and whether the most of them, two at least and without a tie, returned the same.</item>
+/// and how it ended (<c>outcome</c>): <c>resolved</c> (the most of them, two at least and without
+/// a tie, returned the same), <c>no_majority</c>, <c>too_few_copies</c> or
+/// <c>surplus_copies</c>.</item>
 /// <item><b>no_result</b>: every shard no machine returned an acceptable result for, with the
 /// fixed reason and the fault codes the nodes gave.</item>
-/// <item><b>rejected</b>: the values dropped on arrival, by reason: no ticket of this job and
-/// round, another shard's index, another controller version, a shape no honest node gives.</item>
+/// <item><b>rejected</b>: the values dropped, by reason: no ticket of this job and round
+/// (<c>unknown_ticket</c>), no result or a shape no honest node gives (<c>unreadable</c>), another
+/// controller version (<c>version</c>), not what its task asked for (<c>content</c>), more values
+/// under one ticket than a round takes (<c>surplus</c>). Every reason is written, 0 included.</item>
 /// </list>
 /// A shard in none of these lists was run once, and its result is one machine's word
 /// (<c>single_execution</c> says how many). Schema <c>corpus-integrity/5</c>; <c>/4</c> let a
@@ -43,12 +47,6 @@ public static class CorpusIntegrityWriter
 
     /// <summary>A compared pair's signatures: neither side made any (the pipeline does not sign); nothing to compare.</summary>
     public const string SIGNATURES_NONE = "none";
-
-    /// <summary>A dispute the most machines settled.</summary>
-    public const string DISPUTE_RESOLVED = "resolved";
-
-    /// <summary>A dispute that stayed open: the shard is <c>Disputed</c> in the report.</summary>
-    public const string DISPUTE_DISPUTED = "disputed";
 
     private const string KIND_EXECUTION = "execution";
     private const string KIND_FAULT = "fault";
@@ -99,8 +97,8 @@ public static class CorpusIntegrityWriter
             writer.WriteEndObject();
 
             writer.WriteStartObject("rejected");
-            foreach (var (reason, count) in ledger.Rejected)
-                writer.WriteNumber(reason, count);
+            foreach (var reason in CorpusLedger.REJECTION_REASONS)
+                writer.WriteNumber(reason, ledger.Rejected.GetValueOrDefault(reason));
             writer.WriteEndObject();
 
             writer.WriteStartArray("pairs");
@@ -184,8 +182,10 @@ public static class CorpusIntegrityWriter
 
         writer.WriteStartObject();
         writer.WriteNumber("index", shard.Index);
-        writer.WriteString("outcome", resolved ? DISPUTE_RESOLVED : DISPUTE_DISPUTED);
-        writer.WriteNumber("executions", resolved ? shard.Copies : 0);
+        writer.WriteNumber("first_copies", shard.First.Count(entry => entry.Kind == CorpusLedgerEntryKind.Execution));
+        writer.WriteNumber("copies", shard.Dispute.Count(entry => entry.Kind == CorpusLedgerEntryKind.Execution));
+        writer.WriteNumber("agreeing", shard.DisputeAgreeing);
+        writer.WriteString("outcome", shard.DisputeOutcome);
         writer.WriteStartArray("results");
         foreach (var entry in shard.Dispute)
             WriteSide(writer, null, entry);

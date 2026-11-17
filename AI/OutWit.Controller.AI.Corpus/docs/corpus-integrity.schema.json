@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-integrity.schema.json",
   "title": "Corpus integrity",
-  "description": "The integrity blob of CorpusProcess.wit, written from the server's own account of the run: what the results rest on and everything that did not go the plain way. pairs: the share of shards (CorpusOptions.SamplingRate) that came back twice in the first round, their two results compared on everything an honest node cannot vary (verdict, content hash, the hash of the signatures, document counts, drop and language histograms, the PDF counts). disputes: the shards whose copies disagreed, what up to three machines returned for each, and whether the most of them, two at least and without a tie, returned the same. no_result: the shards no machine returned an acceptable result for. rejected: the values dropped on arrival, by reason. A shard in none of these was run once and its result is one machine's word (single_execution). The platform keeps the copies of a shard on different machines and the document does not say which; it cannot see a machine that holds two shards and answers one of them twice (where that makes more answers than were sent out, the shard is held back). Version 5: version 4 let a result opt out of the comparison by the version it claimed, and chose the execution that stood for a shard by its own content hash.",
+  "description": "The integrity blob of CorpusProcess.wit, written from the server's own account of the run: what the results rest on and everything that did not go the plain way. pairs: the share of shards (CorpusOptions.SamplingRate) that came back twice in the first round, their two results compared on everything an honest node cannot vary (verdict, content hash, the hash of the signatures, document counts, drop and language histograms, the PDF counts). disputes: the shards whose copies disagreed, what up to three machines returned for each, and how each ended (outcome). no_result: the shards no machine returned an acceptable result for. rejected: the values dropped, by reason. A shard in none of these was run once and its result is one machine's word (single_execution). The platform keeps the copies of a shard on different machines and the document does not say which. The server sees values, not machines: a ticket with more values than its round asked for settles nothing, and in the dispute round a value counts towards two machines only as far as it cannot be the second answer of a machine that left another shard of the round short (outcome surplus_copies). Counting values as machines rests on the platform: Grid 1.3.0 and later keep, of what a node's batch returns, one value at most for each return variable its tasks asked for. With an older Grid a node could return several values for one task and this ruling would count them as machines. Version 5: version 4 let a result opt out of the comparison by the version it claimed, and chose the execution that stood for a shard by its own content hash.",
   "type": "object",
   "required": ["schema", "controller", "summary", "rejected", "pairs", "disputes", "no_result"],
   "additionalProperties": false,
@@ -24,8 +24,8 @@
         "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." },
         "signatures_compared": { "type": "integer", "description": "Compared pairs whose sides made signatures, compared by their hashes (0 when the pipeline does not sign)." },
         "signature_mismatches": { "type": "integer", "description": "Compared pairs whose signatures differ (each also counted in mismatches, with signatures among its differences)." },
-        "rejected_results": { "type": "integer", "description": "Values dropped on arrival over every round; rejected has them by reason." },
-        "node_faults": { "type": "integer", "description": "Results returned as a fault of the node, over every round." },
+        "rejected_results": { "type": "integer", "description": "Values dropped over every round; rejected has them by reason." },
+        "node_faults": { "type": "integer", "description": "Results returned as a fault of the node, over every round (not the ones dropped as surplus)." },
         "repairs": { "type": "integer", "description": "Shards sent out once more: the first round left them without a result." },
         "repaired": { "type": "integer", "description": "Of those, the ones the second try gave a result." },
         "no_result": { "type": "integer", "description": "Shards that ended without a result (NoResult in the report)." },
@@ -36,15 +36,15 @@
     },
     "rejected": {
       "type": "object",
-      "description": "The dropped values by reason: not_a_result (no result at all), unknown_ticket (under no ticket of this job and round: another job's, another round's, a shard the node was not given), malformed (not shaped as an honest node shapes a result), foreign_task (the ticket is one shard's, the index or URL another's), version (another controller version than the server's), inconsistent (at odds with its task: output mode, MinHash parameters, blobs, byte cap, languages).",
+      "description": "The dropped values by reason; every reason is written, 0 included. unknown_ticket: under no ticket of this job and round (another job's, another round's, a shard the node was not given, or none). unreadable: no result at all, or not shaped as an honest node shapes one. version: another controller version than the server's. content: not what its task asked for (the ticket is one shard's and the index or URL another's, or at odds with the task's pipeline: output mode, MinHash parameters, blobs, byte cap, languages). surplus: more values under one ticket than its round takes, in the repair round (more than one) or the dispute round (more than three); none of them is taken, and each that would have been is counted here.",
+      "required": ["unknown_ticket", "unreadable", "version", "content", "surplus"],
       "additionalProperties": false,
       "properties": {
-        "not_a_result": { "type": "integer" },
         "unknown_ticket": { "type": "integer" },
-        "malformed": { "type": "integer" },
-        "foreign_task": { "type": "integer" },
+        "unreadable": { "type": "integer" },
         "version": { "type": "integer" },
-        "inconsistent": { "type": "integer" }
+        "content": { "type": "integer" },
+        "surplus": { "type": "integer" }
       }
     },
     "pairs": {
@@ -58,7 +58,7 @@
           "index": { "type": "integer" },
           "primary": { "$ref": "#/$defs/side" },
           "replica": { "$ref": "#/$defs/side" },
-          "results": { "type": "integer", "description": "Present when more than two came back: more answers than the round sent out (one machine answered twice); the shard goes to the dispute round." },
+          "results": { "type": "integer", "description": "Present when more than two came back: more values than the round asked for (a machine spent the slot of another task on this ticket); the shard goes to the dispute round." },
           "compared": { "type": "boolean" },
           "incomplete": { "type": "boolean", "description": "Present and true when a side is no result (a node fault, a dropped value)." },
           "match": { "type": "boolean", "description": "Present when compared." },
@@ -73,12 +73,14 @@
       "description": "One record per shard whose copies disagreed, ordered by index.",
       "items": {
         "type": "object",
-        "required": ["index", "outcome", "executions", "results"],
+        "required": ["index", "first_copies", "copies", "agreeing", "outcome", "results"],
         "additionalProperties": false,
         "properties": {
           "index": { "type": "integer" },
-          "outcome": { "type": "string", "enum": ["resolved", "disputed"], "description": "resolved: one result was returned by the most machines, two at least, without a tie, and it is the shard's. disputed: no such result (fewer than two machines agreed, a tie, more answers than machines, or the dispute round did not run); the shard is Disputed in the report." },
-          "executions": { "type": "integer", "description": "The machines that returned the accepted result; 0 when disputed." },
+          "first_copies": { "type": "integer", "description": "The results with a verdict the first round returned for the shard." },
+          "copies": { "type": "integer", "description": "The results with a verdict the dispute round returned for it; 0 when more than three values came back (none is taken) or the round did not run." },
+          "agreeing": { "type": "integer", "description": "The most of those that agree with one another; when resolved, the results the accepted one rests on (executions in the report)." },
+          "outcome": { "type": "string", "enum": ["resolved", "no_majority", "too_few_copies", "surplus_copies"], "description": "resolved: one result was returned by the most machines, two at least, without a tie, and it is the shard's. The others leave the shard Disputed in the report. no_majority: no result was returned by more copies than any other, and by two at least. too_few_copies: fewer than two copies came back with a verdict (the round did not run, or more than three values came back and none was taken). surplus_copies: the leading result does not lead by two machines once the values that may be one machine's second are left out; as many of them may be as the other shards of the dispute round are short of their three." },
           "results": { "type": "array", "items": { "$ref": "#/$defs/side" }, "description": "What came back in the dispute round, in the order the platform handed it over." },
           "accepted": { "$ref": "#/$defs/side", "description": "Present when resolved: the accepted result." }
         }
@@ -93,7 +95,7 @@
         "additionalProperties": false,
         "properties": {
           "index": { "type": "integer" },
-          "reason": { "type": "string", "enum": ["node_fault", "rejected", "missing"], "description": "node_fault: every machine that held the shard returned it as a fault of its own. rejected: everything returned for it was dropped. missing: nothing came back under its tickets." },
+          "reason": { "type": "string", "enum": ["node_fault", "no_answer"], "description": "node_fault: a machine that held the shard returned it as a fault of its own. no_answer: nothing that was accepted came back for it (nothing at all, or only values that were dropped)." },
           "faults": { "type": "array", "items": { "$ref": "#/$defs/fault" }, "description": "The fault codes the nodes gave for the shard, each once." }
         }
       }

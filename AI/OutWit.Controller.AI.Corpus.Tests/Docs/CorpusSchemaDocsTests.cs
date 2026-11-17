@@ -140,7 +140,12 @@ public sealed class CorpusSchemaDocsTests
         var disputes = before.DisputeTasks();
         withPdf.Ticket = repairs[0].Ticket;
         var ledger = CorpusTestRun.Ledger(tasks, first, (repairs, [withPdf, CorpusTestRun.Fault(repairs[1], "network")]),
-            (disputes, [CorpusTestRun.Completed(disputes[0]), CorpusTestRun.Completed(disputes[0]), CorpusTestRun.Completed(disputes[1]), CorpusTestRun.Completed(disputes[1], '0')]));
+            (disputes,
+            [
+                // Three values for each shard: a round that is short of them settles nothing by two.
+                CorpusTestRun.Completed(disputes[0]), CorpusTestRun.Completed(disputes[0]), CorpusTestRun.Completed(disputes[0]),
+                CorpusTestRun.Completed(disputes[1]), CorpusTestRun.Completed(disputes[1], '0'), CorpusTestRun.Fault(disputes[1], "network")
+            ]));
 
         using var report = JsonDocument.Parse(CorpusReportWriter.Write(ledger));
         var shard = report.RootElement.GetProperty("shards")[0];

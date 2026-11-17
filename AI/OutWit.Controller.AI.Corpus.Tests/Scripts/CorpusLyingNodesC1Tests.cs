@@ -12,7 +12,9 @@ namespace OutWit.Controller.AI.Corpus.Tests.Scripts;
 /// which one lies. Whatever it does to the results it returns — another version, another shard's
 /// index, an empty or a forged content hash, other signatures, a shape no honest node gives, no
 /// answer at all — the run completes, the honest product stands or the shard is named as having
-/// none, and the report and the integrity document say what happened.
+/// none, and the report and the integrity document say what happened. The nodes sit below the real
+/// Grid controller, so a node that returns more values than its tasks asked for meets Grid's own
+/// rule first.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -57,6 +59,7 @@ public sealed class CorpusLyingNodesC1Tests : CorpusScriptTestBase
     public void Honest()
     {
         NodesManager.Tamper = null;
+        NodesManager.Twice = null;
     }
 
     #endregion
@@ -132,7 +135,7 @@ public sealed class CorpusLyingNodesC1Tests : CorpusScriptTestBase
             Assert.That(text, Does.Not.Contain("attacker.example"));
             Assert.That(summary.GetProperty("rejected_results").GetInt32(), Is.GreaterThan(0));
             Assert.That(summary.GetProperty("repairs").GetInt32(), Is.EqualTo(summary.GetProperty("rejected_results").GetInt32()));
-            Assert.That(run.Integrity.RootElement.GetProperty("rejected").GetProperty("foreign_task").GetInt32(), Is.EqualTo(summary.GetProperty("rejected_results").GetInt32()));
+            Assert.That(run.Integrity.RootElement.GetProperty("rejected").GetProperty("content").GetInt32(), Is.EqualTo(summary.GetProperty("rejected_results").GetInt32()));
         });
     }
 
@@ -170,7 +173,7 @@ public sealed class CorpusLyingNodesC1Tests : CorpusScriptTestBase
         {
             Assert.That(run.Status.Result, Is.EqualTo(WitProcessingResult.Completed), run.Status.ToString());
             Assert.That(run.Contents, Is.All.EqualTo(m_honestContent), "the empty hash sorted first and stood for the shard; now it is not a result");
-            Assert.That(run.Integrity.RootElement.GetProperty("rejected").GetProperty("malformed").GetInt32(), Is.GreaterThan(0));
+            Assert.That(run.Integrity.RootElement.GetProperty("rejected").GetProperty("unreadable").GetInt32(), Is.GreaterThan(0));
             Assert.That(run.Integrity.RootElement.GetProperty("summary").GetProperty("disputes").GetInt32(), Is.Zero);
         });
     }
@@ -222,7 +225,7 @@ public sealed class CorpusLyingNodesC1Tests : CorpusScriptTestBase
             Assert.That(summary.GetProperty("tasks").GetInt32(), Is.EqualTo(SHARDS));
             Assert.That(run.Verdicts, Is.All.EqualTo("Completed"), "the shards whose results were dropped were sent out once more");
             Assert.That(summary.GetProperty("rejected_results").GetInt32(), Is.GreaterThan(0));
-            Assert.That(run.Integrity.RootElement.GetProperty("rejected").GetProperty("malformed").GetInt32(), Is.EqualTo(summary.GetProperty("rejected_results").GetInt32()));
+            Assert.That(run.Integrity.RootElement.GetProperty("rejected").GetProperty("unreadable").GetInt32(), Is.EqualTo(summary.GetProperty("rejected_results").GetInt32()));
         });
     }
 
@@ -243,13 +246,48 @@ public sealed class CorpusLyingNodesC1Tests : CorpusScriptTestBase
             Assert.That(run.Status.Result, Is.EqualTo(WitProcessingResult.Completed), run.Status.ToString());
             Assert.That(shards, Has.Count.EqualTo(SHARDS));
             Assert.That(run.Verdicts, Is.EqualTo(new[] { "Completed", "Completed", "NoResult", "Completed" }));
-            Assert.That(shards[2].GetProperty("reason").GetString(), Is.EqualTo("missing"));
+            Assert.That(shards[2].GetProperty("reason").GetString(), Is.EqualTo("no_answer"));
             Assert.That(shards[2].GetProperty("text_blob").GetString(), Is.Empty);
             Assert.That(shards[2].GetProperty("url").GetString(), Is.EqualTo(Origin.ShardUrl(WET_FIXTURE)), "the URL is the task's");
             Assert.That(run.Integrity.RootElement.GetProperty("summary").GetProperty("no_result").GetInt32(), Is.EqualTo(1));
             Assert.That(run.Integrity.RootElement.GetProperty("no_result")[0].GetProperty("index").GetInt32(), Is.EqualTo(2));
             Assert.That(run.Integrity.RootElement.GetProperty("rejected").GetProperty("unknown_ticket").GetInt32(), Is.EqualTo(2), "the first answer and the second");
             Assert.That(run.Report.RootElement.GetProperty("summary").GetProperty("repairs").GetInt32(), Is.EqualTo(1), "it was sent out once more first");
+        });
+    }
+
+    [Test]
+    public async Task ASecondValueForOneTaskIsLeftOutByGridAndCausesNoDisputeTest()
+    {
+        // One node returns the first shard it completes twice and answers every other task it
+        // was given: its call hands Grid one value more than its tasks asked for. Grid 1.3.0
+        // keeps one value for each return variable that was asked for and leaves the second out,
+        // so the server sees one value per task. Every shard is sampled here: a third value under
+        // a ticket would have sent its shard to a dispute (the ledger's own tests hold that).
+        var liar = NodesManager.CompatibleNodes[0].NodeId;
+        var answered = 0;
+        var values = NodesManager.ValuesReturned;
+        var surplus = NodesManager.SurplusReturned;
+        NodesManager.Twice = (nodeId, result) => nodeId == liar && result.Verdict == CorpusShardVerdict.Completed && Interlocked.Exchange(ref answered, 1) == 0;
+
+        using var run = await RunAsync(1.0, null);
+        var summary = run.Integrity.RootElement.GetProperty("summary");
+        var executions = run.Variables("executions").OfType<CorpusResultData>().ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(NodesManager.SurplusReturned - surplus, Is.EqualTo(1), "the node did return a second value");
+            Assert.That(NodesManager.ValuesReturned - values, Is.EqualTo(2 * SHARDS + 1), "one more than the tasks of the run");
+            Assert.That(executions, Has.Count.EqualTo(2 * SHARDS), "one value per task reached the server: Grid left the second out");
+            Assert.That(executions.GroupBy(result => result.Ticket).Select(copies => copies.Count()), Is.All.EqualTo(2), "a shard and its copy under every ticket, no third");
+            Assert.That(run.Status.Result, Is.EqualTo(WitProcessingResult.Completed), Describe(run.Status));
+            Assert.That(run.Verdicts, Is.All.EqualTo("Completed"));
+            Assert.That(run.Contents, Is.All.EqualTo(m_honestContent));
+            Assert.That(run.Executions, Is.All.EqualTo(2));
+            Assert.That(summary.GetProperty("disputes").GetInt32(), Is.Zero, "the second value caused no dispute");
+            Assert.That(summary.GetProperty("rejected_results").GetInt32(), Is.Zero, "and never reached the ledger");
+            Assert.That(summary.GetProperty("repairs").GetInt32(), Is.Zero);
+            Assert.That(run.Variables("disputes"), Is.Empty);
         });
     }
 

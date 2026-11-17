@@ -80,8 +80,9 @@ public sealed class CorpusCapabilitiesTrustTests
             Assert.That(trust.GetProperty("dispute_copies").GetInt32(), Is.EqualTo(3));
             Assert.That(trust.GetProperty("dispute_quorum").GetInt32(), Is.EqualTo(2));
             Assert.That(Strings(trust.GetProperty("outcomes")), Is.EqualTo(new[] { "Disputed", "NoResult" }));
-            Assert.That(Strings(trust.GetProperty("no_result_reasons")), Is.EqualTo(new[] { "node_fault", "rejected", "missing" }));
-            Assert.That(Strings(trust.GetProperty("rejection_reasons")), Is.EqualTo(CorpusLedger.REJECTION_REASONS));
+            Assert.That(Strings(trust.GetProperty("no_result_reasons")), Is.EqualTo(new[] { "node_fault", "no_answer" }));
+            Assert.That(Strings(trust.GetProperty("rejection_reasons")), Is.EqualTo(new[] { "unknown_ticket", "unreadable", "version", "content", "surplus" }));
+            Assert.That(Strings(trust.GetProperty("dispute_outcomes")), Is.EqualTo(new[] { "resolved", "no_majority", "too_few_copies", "surplus_copies" }));
             Assert.That(Strings(trust.GetProperty("batch_refusals")), Is.EqualTo(new[] { "version", "pdf_sandbox", "disk_space", "disk", "internal" }));
             Assert.That(Strings(trust.GetProperty("dedup_exclusions")), Is.EqualTo(CorpusDedupExclusion.REASONS));
         });

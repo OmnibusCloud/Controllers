@@ -172,7 +172,7 @@ public sealed class CorpusReportWriterTests
         {
             Assert.That(document.RootElement.GetProperty("summary").GetProperty("tasks").GetInt32(), Is.EqualTo(2));
             Assert.That(missing.GetProperty("verdict").GetString(), Is.EqualTo("NoResult"));
-            Assert.That(missing.GetProperty("reason").GetString(), Is.EqualTo("missing"));
+            Assert.That(missing.GetProperty("reason").GetString(), Is.EqualTo("no_answer"));
             Assert.That(missing.GetProperty("executions").GetInt32(), Is.Zero);
             Assert.That(missing.GetProperty("url").GetString(), Is.EqualTo(tasks[0].Source!.Url));
         });

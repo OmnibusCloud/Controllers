@@ -313,7 +313,11 @@ public sealed class CorpusIntegrityWriterTests
             Assert.That(summary.GetProperty("repaired").GetInt32(), Is.EqualTo(1));
             Assert.That(summary.GetProperty("no_result").GetInt32(), Is.EqualTo(1));
             Assert.That(summary.GetProperty("rejected_results").GetInt32(), Is.EqualTo(2));
-            Assert.That(document.RootElement.GetProperty("disputes").EnumerateArray().Select(dispute => dispute.GetProperty("outcome").GetString()), Is.EqualTo(new[] { "resolved", "disputed" }));
+            Assert.That(document.RootElement.GetProperty("disputes").EnumerateArray().Select(dispute => dispute.GetProperty("outcome").GetString()), Is.EqualTo(new[] { "resolved", "no_majority" }));
+            Assert.That(document.RootElement.GetProperty("disputes").EnumerateArray().Select(dispute => dispute.GetProperty("first_copies").GetInt32()), Is.All.EqualTo(2));
+            Assert.That(document.RootElement.GetProperty("disputes").EnumerateArray().Select(dispute => dispute.GetProperty("copies").GetInt32()), Is.EqualTo(new[] { 3, 2 }), "a node fault is no copy");
+            Assert.That(document.RootElement.GetProperty("disputes").EnumerateArray().Select(dispute => dispute.GetProperty("agreeing").GetInt32()), Is.EqualTo(new[] { 2, 1 }));
+            Assert.That(document.RootElement.GetProperty("rejected").EnumerateObject().Select(reason => reason.Name), Is.EqualTo(CorpusLedger.REJECTION_REASONS), "every reason is written, 0 included");
             Assert.That(document.RootElement.GetProperty("disputes")[0].GetProperty("accepted").GetProperty("signatures_sha256").GetString(), Is.EqualTo(CorpusTestRun.Hash('b')));
             Assert.That(document.RootElement.GetProperty("no_result")[0].GetProperty("index").GetInt32(), Is.EqualTo(5));
             Assert.That(document.RootElement.GetProperty("no_result")[0].GetProperty("faults").EnumerateArray().Select(fault => fault.GetString()), Is.EqualTo(new[] { "upload" }));

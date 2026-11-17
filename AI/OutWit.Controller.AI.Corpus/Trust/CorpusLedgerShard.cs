@@ -46,6 +46,12 @@ public sealed class CorpusLedgerShard
     /// <summary>Whether the shard's copies disagreed (or more came back than were sent out): it is to be run on three machines.</summary>
     public bool NeedsDispute { get; internal set; }
 
+    /// <summary>How the shard's dispute ended: one of <see cref="CorpusLedger.DISPUTE_OUTCOMES"/>; "" for a shard that had none.</summary>
+    public string DisputeOutcome { get; internal set; } = "";
+
+    /// <summary>The most executions of the dispute round that agreed with one another; 0 when none came back with a verdict.</summary>
+    public int DisputeAgreeing { get; internal set; }
+
     /// <summary>Whether the repair round held a task for the shard.</summary>
     public bool SentToRepair { get; internal set; }
 
@@ -58,7 +64,7 @@ public sealed class CorpusLedgerShard
     /// <summary>The accepted result; null unless <see cref="Outcome"/> is <see cref="CorpusShardOutcome.Accepted"/>.</summary>
     public CorpusResultData? Accepted { get; internal set; }
 
-    /// <summary>How many results the accepted one rests on: 1 is one machine's word, 2 a pair that agreed, 2 or 3 a majority of the dispute round; 0 when nothing was accepted.</summary>
+    /// <summary>How many results the accepted one rests on: 1 is one machine's word, 2 a pair that agreed, 2 or 3 the agreeing executions of the dispute round; 0 when nothing was accepted.</summary>
     public int Copies { get; internal set; }
 
     /// <summary>Why there is no result: one of <see cref="CorpusLedger.NO_RESULT_REASONS"/>; "" otherwise.</summary>

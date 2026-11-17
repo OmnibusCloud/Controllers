@@ -46,7 +46,7 @@ and the PDF stage proven on the fleet.
 | `Corpus.Collect` | host | `(tasks, executions, repairs, repaired, disputes, resolved, CorpusOptions) → Blob report` | the job report from the server's own account of the run (see *Trust and integrity*): every shard of the task list in task order with its accepted result, `Disputed` or `NoResult`, the aggregate counters over the accepted results and the run's funnel, what the run kept and the MinHash parameters of its signatures |
 | `Corpus.SamplingRate` | host | `(CorpusOptions) → Double` | `SamplingRate` clamped to 0..1, the share of the shards `Grid.Replicas` runs twice |
 | `Corpus.Dedup` | host | `(Blob report, CorpusOptions) → Blob dedup` | the near-duplicate merge over the signature blobs a report names: LSH over the MinHash signatures (the run's band layout, 16 bands of 8 by default), a candidate pair joins a cluster at a Jaccard estimate of `DedupThreshold` (0.8 by default), the lowest document of a cluster is kept; per shard a keep mask, plus the clusters. The report's document counts are added up before any blob is read and a run past the capacity is refused there; each blob is held to the length, the header and the hash the report states for it, and a shard whose blob fails one is left out and named (`excluded`). A run without signatures (statistics and hashes only, or `sign` off), a report that names one blob twice and a run whose signatures were made with different MinHash parameters are refused by name |
-| `Corpus.Integrity` | host | `(tasks, executions, repairs, repaired, disputes, resolved) → Blob integrity` | the integrity document from the same account: the pairs compared, the values dropped on arrival by reason, the disputes with what three machines returned, the shards without a result |
+| `Corpus.Integrity` | host | `(tasks, executions, repairs, repaired, disputes, resolved) → Blob integrity` | the integrity document from the same account: the pairs compared, the values dropped by reason, the disputes with what three machines returned and how each ended, the shards without a result |
 | `Corpus.RuntimeDiagnostics` | host | `() → CorpusRuntimeDiagnostics` | what the module of the answering process carries (see *Diagnostics and capabilities*) |
 | `Corpus.Capabilities` | host | `() → Blob capabilities` | what an application can know before a run, as a JSON document (`docs/corpus-capabilities.schema.json`) |
 
@@ -579,11 +579,23 @@ node gives (bounded strings, hashes that are hashes, counters that add up, a
 code of the fixed list, no product beside a verdict that has none), and
 consistent with the task (its output mode, its MinHash parameters). Anything
 else is dropped and counted by reason (`rejected_results`; `rejected` in the
-integrity document: `not_a_result`, `unknown_ticket`, `malformed`,
-`foreign_task`, `version`, `inconsistent`) — it fails that value, never the
-run. A node knows only the tickets it was given, so it cannot answer for a shard
-it never had, and the report's shards, indexes and URLs are the server's task
-list, whatever came back. A ticket is never written into a document.
+integrity document) — it fails that value, never the run:
+
+| Reason | The value |
+|---|---|
+| `unknown_ticket` | is under no ticket of this job and round: another job's, another round's, a shard the node was not given, or none |
+| `unreadable` | is no result, or is not shaped as an honest node shapes one |
+| `version` | claims another controller version than the server's |
+| `content` | does not hold what its task asked for: the ticket is one shard's and the index or URL another's, or it is at odds with the task's pipeline |
+| `surplus` | is one of more values under one ticket than its round takes (*Two machines, not two values* below) |
+
+The words are the ones the Verify controller uses. Its `duplicate` (one results
+blob returned twice) has no counterpart here: a Corpus result is the value
+itself, not a reference to a blob of results, and two equal values under one
+ticket are two values. A node knows only the tickets it was given, so it cannot
+answer for a shard it never had, and the report's shards, indexes and URLs are
+the server's task list, whatever came back. A ticket is never written into a
+document.
 
 **One controller version per job.** The task carries the server's controller
 version; a node on another version refuses its batch before doing anything, and
@@ -601,9 +613,12 @@ counts, the drop and language histograms (the drops with the languages of the
 `language_unsupported` ones), the PDF stage's counts; not times, bytes or fuel —
 are accepted. Copies that disagree are a **dispute**: the shard is run again on
 three machines (`Grid.Replicas(3)`), and the result returned by the most of
-them, two at least and with no tie, is accepted; with fewer than two machines
-agreeing, a tie, or more answers than were asked for, the shard is **`Disputed`** —
-named in the report, out of the counters and the products. Signatures that
+them, two at least and with no tie, is accepted (`resolved`); otherwise the
+shard is **`Disputed`** — named in the report, out of the counters and the
+products — and the integrity document says how the dispute ended (`outcome`):
+`no_majority` (no result was returned by more copies than any other, and by two
+at least), `too_few_copies` (fewer than two copies came back with a verdict) or
+`surplus_copies` (*Two machines, not two values* below). Signatures that
 differ while the text agrees are a dispute like any other (`signatures` among
 the differences, counted in `signature_mismatches`), and the near-duplicate
 merge checks each blob against the hash that was compared (see `Corpus.Dedup`).
@@ -615,9 +630,10 @@ twice.
 or a node fault (`disk`, `disk_space`, `network`, `language_model`,
 `pdf_sandbox`, `pdf_backstop`, `upload`, `memory`, `internal`). A fault answers
 nothing: the shard is sent out once more (the repair round), and a shard still
-without a result is **`NoResult`** with a reason — `node_fault` (every machine
-returned it as a fault of its own), `rejected` (what came back was dropped) or
-`missing` (nothing came back). An origin that answers with a status is the
+without a result is **`NoResult`** with a reason — `node_fault` (a machine that
+held it returned it as a fault of its own) or `no_answer` (nothing that was
+accepted came back: nothing at all, or only values that were dropped). An origin
+that answers with a status is the
 shard's verdict (`FetchFailed`, `http_404`); an origin that does not answer this
 node is the node's fault (`network`), because the node cannot tell its link from
 the origin.
@@ -627,25 +643,56 @@ the origin.
 shard that came back twice, its two results compared, or `incomplete` when a
 side is no result (a fault, a dropped value); a pair whose sides made no
 signature (`sign` off) says so (`"signatures": "none"`); `disputes` — what three
-machines returned and whether it was settled; `no_result`; `rejected` by reason;
-and the summary's counters (`sampled`, `compared`, `mismatches`,
+machines returned and how each ended (`outcome`, with `first_copies`, `copies`
+and `agreeing`); `no_result`; `rejected` by reason, every reason written, 0
+included; and the summary's counters (`sampled`, `compared`, `mismatches`,
 `signature_mismatches`, `rejected_results`, `node_faults`, `repairs`, `repaired`,
 `no_result`, `disputes`, `disputes_resolved`, `disputed`, `single_execution`).
 The mismatch rate is over the compared pairs. No document says which machine ran
 what.
 
-**What this does not close.** The platform tells a controller nothing about
-which machine returned which copy, and the two copies of a sampled shard carry
-one ticket. One machine that was given two tasks of a round can therefore answer
-one of them twice. Two things follow, and both are stated here rather than
-hidden:
+**Two machines, not two values.** The server sees values, not machines: the
+platform keeps the copies of a shard on different machines and hands over what
+they returned, without saying which task each value answered; the copies of a
+shard carry one ticket. Counting values as machines rests on the platform: Grid
+1.3.0 and later keep, of what a node's batch returns, one value at most for each
+return variable its tasks asked for. With an older Grid a node could return
+several values for one task and this ruling would count them as machines.
 
-- *It can deny a result.* A shard with more answers than were asked for goes to
-  a dispute, and a dispute with more answers than three, or with more than the
-  round's other shards have, is `Disputed` rather than settled: the surplus
+So a machine cannot add values. It can still spend a slot it holds on another
+ticket it holds — answer shard X in the slot of shard Y — which leaves Y a value
+short. The rounds are ruled with that in mind:
+
+- *The first round.* More than two values under a ticket send the shard to a
+  dispute, as copies that disagree do.
+- *The repair round* asks one machine for one value. With more than one under
+  the ticket none is taken: each is counted as `surplus`, and the shard is
+  `NoResult`. It does not go on to a dispute.
+- *The dispute round* asks three machines. With more than three values under the
+  ticket none is taken: each is counted as `surplus`, and the dispute ends as
+  `too_few_copies`. Otherwise the leading result must have been returned by two
+  machines: of its values, as many as the *other* shards of the round are short
+  of their three may be one machine's second, and do not count. When what is
+  left is not two, or not more than the next result has, the dispute ends as
+  `surplus_copies`.
+
+With one lying machine among the copies, whatever the others lose, a result that
+is accepted in a dispute was returned by an honest machine; and three machines
+that agree still settle their shard when another shard of the round lost a copy.
+A small pool pays for it: with two machines every disputed shard is a value
+short of its three, so one dispute in a run is still settled by the two copies
+that came back, and two or more are not.
+
+**What this does not close.** A machine can spend a slot it holds on another
+ticket it holds. Two things follow, and both are stated here rather than hidden:
+
+- *It can deny a result.* A machine that holds a copy of a disputed shard and
+  another ticket of the round can answer the disputed shard twice: four values
+  end the dispute as `too_few_copies`, and a round that is short of values
+  elsewhere can end two against one as `surplus_copies`. The second answer
   cannot win, but the shard has no product.
 - *It can make its own word look checked.* A machine that holds the copy of a
-  sampled shard and a shard of its own can spend the copy's answer on its own
+  sampled shard and a shard of its own can spend the copy's slot on its own
   shard: that shard then shows two agreeing executions which are one machine's
   (`executions: 2`), and the sampled shard is left with its one honest result.
   The forged result would have stood anyway — its shard was not sampled — but
