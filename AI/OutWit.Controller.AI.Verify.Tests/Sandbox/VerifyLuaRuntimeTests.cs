@@ -376,6 +376,7 @@ public sealed class VerifyLuaRuntimeTests : VerifySandboxTestBase
                 var passed = sandbox.Execute(Lua, LuaTask("print(io.read('n'))", suite: suite), VerifySandboxDefaults.Resolve(null, null));
                 var crashed = sandbox.Execute(Lua, LuaTask("error('x')"), VerifySandboxDefaults.Resolve(null, null));
 
+                Assert.That(OutWit.Controller.AI.Wasm.WasmHostDiscard.Drain(TimeSpan.FromSeconds(30)), Is.True, "the cleanup of the runs ends");
                 Assert.Multiple(() =>
                 {
                     Assert.That(passed.Verdict, Is.EqualTo(VerifyVerdict.Pass), passed.Stderr);

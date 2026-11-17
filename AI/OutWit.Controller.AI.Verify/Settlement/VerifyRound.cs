@@ -79,7 +79,8 @@ internal sealed class VerifyRound
 
     /// <summary>
     /// How many result references came back under each ticket of the round, taken or refused.
-    /// A node returns one reference for each package it was given, whatever it puts into it.
+    /// Reading them as machines rests on the platform holding a node to one reference for each
+    /// package it was given, which the controller cannot check (<see cref="VerifyRulings"/>).
     /// </summary>
     public Dictionary<string, int> Returned { get; } = new(StringComparer.Ordinal);
 

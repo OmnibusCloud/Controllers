@@ -558,26 +558,35 @@ under rules.
 - **One machine.** A task that was not sampled rests on one machine. The integrity document
   counts those tasks (`single_execution`).
 
-The known limit: the server sees results, not machines. What it can count on is that a node
-returns one result for each package it was given. So a node that holds two packages of one
-fan-out can answer one of them twice, and then the other is short of its answer. What the
-server does about it:
+The known limit: the server sees results, not machines. Reading answers as machines rests on
+the platform holding a node to one result for each package it was given; the controller cannot
+check that itself. What the controller does alone, whatever a node returns:
 
+- a node answers only for packages it was given (tickets);
 - in the first fan-out, more answers than the two asked for send the package's tasks to a
   dispute;
 - in the repair and dispute rounds, a package with more answers than were asked for has none of
   them taken;
-- in the dispute round, an answer counts towards "two machines" only as far as it cannot be one
-  machine's second: of the answers for the leading result, as many are left out as the other
-  packages of the round are short of. If the result no longer leads by two, the task stays
-  `Disputed` (outcome `surplus_copies`);
-- a starved package is repaired, or its tasks are reported as `NoResult`.
+- so a node does not win a dispute in which all three copies came back: a second answer of its
+  own is one too many, and the task stays `Disputed`.
 
-So one lying node can keep a dispute from being resolved, and so can answers that fail to come
+What rests on the platform:
+
+- where a node is held to one result a package, a node that answers one package of a round
+  twice has left another short of its answer. In the dispute round an answer then counts towards
+  "two machines" only as far as it cannot be one machine's second: of the answers for the
+  leading result, as many are left out as the other packages of the round are short of. If the
+  result no longer leads by two, the task stays `Disputed` (outcome `surplus_copies`). With one
+  lying node among the copies, a result accepted from a dispute was then returned by an honest
+  machine;
+- where a node is not held to it, a second answer can take the place of a copy that did not
+  come back, and the controller cannot tell that from two machines outvoting a third;
+- a package that was not sampled rests on the machine that ran it either way.
+
+One lying node can keep a dispute from being resolved, and so can answers that fail to come
 back: in a round that is short of answers (a pool of fewer than three machines, with more than
-one package in dispute), nothing is settled by two answers. It cannot make its answer the
-accepted one: a result is accepted from a dispute only when an honest machine returned it. Two
-lying nodes that hold two of a task's three copies are the majority, and win.
+one package in dispute), nothing is settled by two answers. Two lying nodes that hold two of a
+task's three copies are the majority, and win.
 
 ## 11. Scale, delivery and the nodes
 
@@ -608,7 +617,7 @@ lying nodes that hold two of a task's three copies are the majority, and win.
   - batches run on dedicated threads below normal priority;
   - at most `min(cores, usable RAM / memory per task, MaxDegree)` run at once, 16 by default. The usable RAM is three quarters of the memory that is free when the batch starts. For C/C++ tasks the compiler's 1 GiB a step counts as the memory per task when it is the larger;
   - compiling a task's own module, or a program built from C/C++, takes the worker's thread only. The first use of a runtime in a process compiles that runtime's own module on the engine's threads, once;
-  - a program's output never reaches the disk. Everything else a run writes (a run's input, a task's sources, the compiler's products, a result package until it is uploaded) lives in the client's own folders and is deleted when its task or its package is done.
+  - a program's output never reaches the disk. Everything else a run writes (a run's input, a task's sources, the compiler's products, a result package until it is uploaded) lives in the client's own folders. A run's and a task's files are deleted in the background soon after it ends, off its own path: a real-time file scanner can hold a delete for a long time. A result package is deleted when it is uploaded.
 - **Pool rate.** The six-node test fleet scores about 54 reference tasks per second (`capabilities.pool.rate`), measured before 0.13.0.
 
 ## 12. Demo kits

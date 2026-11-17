@@ -15,12 +15,27 @@ namespace OutWit.Controller.AI.Verify.Settlement;
 /// machines, and the result is the one that the most of those three returned, at least two,
 /// with no tie; otherwise the task is disputed.</item>
 /// </list>
-/// The server sees results, not machines. What it can count on is that a node returns one result
-/// for each package it was given: a node that answers one package of a round twice has left
-/// another package of that round without its answer. So in a dispute round an answer counts
-/// towards "two machines" only as far as it cannot be such a second answer
-/// (<see cref="Borrowable"/>). With one lying node among the copies, whatever the others lose,
-/// the result that is accepted was returned by an honest machine.
+/// <para>
+/// <b>A dependency on the platform.</b> The server sees results, not machines. Counting answers
+/// as machines rests on a property the controller cannot check itself and does not assume to be
+/// enforced: that a node returns one result for each package it was given. Where the platform
+/// holds a node to that, a node that answers one package of a round twice has left another
+/// package of that round without its answer, so in a dispute round an answer counts towards
+/// "two machines" only as far as it cannot be such a second answer (<see cref="Borrowable"/>):
+/// with one lying node among the copies, whatever the others lose, the result that is accepted
+/// was returned by an honest machine.
+/// </para>
+/// <para>
+/// What holds by the controller alone, whatever the platform lets a node return: a node answers
+/// only for packages it was given (tickets); a package with more answers than were asked for is
+/// never settled by counting them (the first fan-out sends its tasks to a dispute, the repair
+/// and the dispute round take none of its answers); so a node does not win a dispute in which
+/// all three copies came back. What needs the platform: when a copy of a disputed package did
+/// not come back, a second answer of one node can take its place, and the controller alone
+/// cannot tell that from two machines outvoting a third. A package that was not sampled rests
+/// on the machine that ran it either way; a second answer to it only makes the count of
+/// executions say two.
+/// </para>
 /// </summary>
 internal static class VerifyRulings
 {
@@ -81,10 +96,10 @@ internal static class VerifyRulings
 
     /// <summary>
     /// For every task package of a dispute round, the most of its answers that may be a second
-    /// answer of one machine. Every package of the round was asked for in
-    /// <see cref="DISPUTE_COPIES"/> copies and a node returns one result for each package it was
-    /// given, so the answers a node can spend on a package beyond its own are the answers the
-    /// other packages of the round are short of.
+    /// answer of one machine, where the platform holds a node to one result for each package it
+    /// was given (a dependency: see the class). Every package of the round was asked for in
+    /// <see cref="DISPUTE_COPIES"/> copies, so the answers a node can then spend on a package
+    /// beyond its own are the answers the other packages of the round are short of.
     /// </summary>
     /// <param name="dispute">The dispute round.</param>
     /// <returns>By ticket: the answers the other packages of the round are short of, together.</returns>

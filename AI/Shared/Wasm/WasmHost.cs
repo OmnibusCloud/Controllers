@@ -221,10 +221,10 @@ internal sealed class WasmHost : IDisposable
             if (!storeDisposed)
                 store.Dispose(); // releases wasmtime's handles on the stdio files
             syscalls?.Dispose();
-            TryDelete(stdoutPath);
-            TryDelete(stderrPath);
+            Discard(stdoutPath, request.DiscardInBackground);
+            Discard(stderrPath, request.DiscardInBackground);
             if (stdinPath != null)
-                TryDelete(stdinPath);
+                Discard(stdinPath, request.DiscardInBackground);
         }
     }
 
@@ -353,6 +353,15 @@ internal sealed class WasmHost : IDisposable
         {
             return 0;
         }
+    }
+
+    /// <summary>A capture file of a run that is over: deleted here, or handed over when the run asks for that.</summary>
+    private static void Discard(string path, bool inBackground)
+    {
+        if (inBackground)
+            WasmHostDiscard.Path(path);
+        else
+            TryDelete(path);
     }
 
     private static void TryDelete(string path)

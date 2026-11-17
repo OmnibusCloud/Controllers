@@ -55,6 +55,15 @@ internal sealed class WasmHostRunRequest
     /// </summary>
     public required int WallMs { get; init; }
 
+    /// <summary>
+    /// Whether the files the run leaves in <see cref="CaptureDirectory"/> (its stdin and the two
+    /// redirect files) are deleted in the background (<see cref="WasmHostDiscard"/>) instead of
+    /// on the run's own path. Off by default: the files are gone when the run returns. On, they
+    /// are gone soon after, and a machine whose file scanner holds a delete does not pay for it
+    /// in every run.
+    /// </summary>
+    public bool DiscardInBackground { get; init; }
+
     /// <summary>The seed of the guest's <c>random_get</c> stream.</summary>
     public long RandomSeed { get; init; }
 

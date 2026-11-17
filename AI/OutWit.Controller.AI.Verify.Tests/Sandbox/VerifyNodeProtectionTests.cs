@@ -544,6 +544,9 @@ public sealed class VerifyNodeProtectionTests : VerifySandboxTestBase
     /// <summary>The most bytes a folder held at any moment while an action ran, as seen every few milliseconds.</summary>
     private static long PeakFolderBytes(string folder, Action action)
     {
+        // What earlier runs left is deleted in the background: it is not this action's.
+        OutWit.Controller.AI.Wasm.WasmHostDiscard.Drain(TimeSpan.FromSeconds(30));
+
         long peak = 0;
         using var done = new ManualResetEventSlim(false);
         var watcher = new Thread(() =>

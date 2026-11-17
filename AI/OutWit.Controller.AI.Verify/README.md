@@ -375,22 +375,27 @@ the `pairs`, and the `disputes`: for each, `index`, `first_copies`, `copies`,
 `agreeing` and an `outcome` (`resolved`, `no_majority`, `too_few_copies`,
 `surplus_copies`).
 
-The known limit: the server sees results, not machines. What it can count on is
-that a node returns one result for each package it was given, so a node that
-holds two packages of one fan-out can answer one of them twice, and then the
-other is short of its answer. In the first fan-out more answers than the two
-asked for send the package's tasks to a dispute. In the repair and dispute
-rounds a package with more answers than were asked for has none of them taken.
-In the dispute round an answer counts towards "two machines" only as far as it
-cannot be one machine's second: of the answers for the leading result, as many
-are left out as the other packages of the round are short of, and if the result
-no longer leads by two the task stays `Disputed` (`surplus_copies`). A starved
-package is repaired or reported. So one lying node can keep a dispute from
-being resolved, and so can answers that fail to come back (in a pool of fewer
-than three machines a round with more than one package in dispute settles
-nothing); it cannot make its answer the accepted one, because a result is
-accepted from a dispute only when an honest machine returned it. Two lying
-nodes that hold two of a task's three copies are the majority, and win.
+The known limit: the server sees results, not machines. Reading answers as
+machines rests on the platform holding a node to one result for each package it
+was given; the controller cannot check that itself. By the controller alone,
+whatever a node returns: a node answers only for packages it was given; in the
+first fan-out more answers than the two asked for send the package's tasks to a
+dispute; in the repair and dispute rounds a package with more answers than were
+asked for has none of them taken; so a node does not win a dispute in which all
+three copies came back. Where the platform holds a node to one result a
+package, a node that answers one package twice has left another short of its
+answer, and in the dispute round an answer counts towards "two machines" only
+as far as it cannot be one machine's second: of the answers for the leading
+result, as many are left out as the other packages of the round are short of,
+and if the result no longer leads by two the task stays `Disputed`
+(`surplus_copies`). With one lying node among the copies, a result accepted
+from a dispute was then returned by an honest machine. Where a node is not held
+to it, a second answer can take the place of a copy that did not come back, and
+the controller cannot tell that from two machines outvoting a third. One lying
+node can keep a dispute from being resolved, and so can answers that fail to
+come back (in a pool of fewer than three machines a round with more than one
+package in dispute settles nothing). Two lying nodes that hold two of a task's
+three copies are the majority, and win.
 
 ## Determinism
 
@@ -535,11 +540,13 @@ controller's, pinned) on the engine's threads, once.
 The compiler has a budget of its own: 100,000 million units of fuel for all the
 steps of a build and 1 GiB of memory a step, and its product (an object file,
 the program) is capped at 64 MiB at the write. Its objects and the program are
-files in the client's own folder and are deleted when the task ends.
+files in the client's own folder and are deleted after the task ends.
 
 A program's output never reaches the disk. What a run needs on disk — the file
 a run's input is given through, a Lua or C/C++ task's sources, the compiler's
-products, deleted when the task ends, and a result package until it is uploaded
+products, all deleted in the background soon after the run or the task ends (off
+its own path: a real-time file scanner can hold a delete for a long time), and
+a result package until it is uploaded
 — lives in the client's own temp folder, and the task packages in the client's
 blob cache: nothing of a task is written anywhere else on the machine.
 
@@ -736,7 +743,7 @@ instance of the module: `clang -cc1` for every `.c` (C17) and every `.cc`, `.cpp
 (C++20), then `wasm-ld`. Nothing is writable for the tools: a step writes its product to
 stdout (the object, then the program module), the sandbox puts each object into a fresh
 read-only folder, and the next step reads it there. A product is capped at 64 MiB at the
-write; the objects and the program are files in the client's own folder, deleted when the
+write; the objects and the program are files in the client's own folder, deleted after the
 task ends. The command lines are fixed in the controller (`-O2`), the sources are written as
 files as for Lua (the same names; headers sit beside the sources, and a header is found
 under the exact name it has and under no other), and all the steps of a task share one

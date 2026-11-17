@@ -66,7 +66,8 @@ internal sealed class VerifyToolRunner
             StdoutLimitBytes = productLimitBytes,
             StopAtStdoutLimit = true,
             StderrLimitBytes = diagnosticsLimitBytes,
-            ChargeHostCalls = true
+            ChargeHostCalls = true,
+            DiscardInBackground = true
         });
 
         // A budget stop reports the whole budget, as a program's does.

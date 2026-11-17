@@ -48,7 +48,7 @@ What a program has inside the box:
   instructions for all the steps of a build and 1 GB of memory a step. It can read only
   the task's sources and the language's own library. What it produces (the object files
   and the program) is written to files in the client's own folder, each cut at 64 MB at
-  the write, and deleted when the task ends.
+  the write, and deleted after the task ends.
 - **Turning a module into machine code.** A program built from C or C++, and a module a
   lab compiled itself, is turned into machine code on your computer before it runs. That
   work takes the one thread of the worker that runs the task, so it stays within the
@@ -63,7 +63,8 @@ What a program has inside the box:
 - **Disk.** A program's output never reaches the disk. What does: the files a program's
   input and a task's sources are given through, the compiler's products, and a package
   of results until it is uploaded. All of it is kept in the client's own folders and
-  deleted when its task or its package is done. The task packages your computer
+  deleted soon after its task or its package is done (a task's files in the background,
+  so that a file scanner that holds a delete does not hold up the work). The task packages your computer
   downloads are kept in the client's own cache. Nothing is written anywhere else.
 - **Network.** The client downloads the tasks and uploads the results. The programs
   themselves send and receive nothing. A transfer has a time to finish in (two minutes

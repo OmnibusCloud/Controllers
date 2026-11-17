@@ -51,6 +51,9 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     #region Fields
 
+    // How long closing the sandbox waits for the files of its runs to be deleted.
+    private static readonly TimeSpan CLEANUP_WAIT = TimeSpan.FromSeconds(5);
+
     private readonly WasmHost m_host;
     private readonly WasmHost m_taskHost;
     private readonly string m_ioDir;
@@ -190,7 +193,8 @@ public sealed class VerifyWasmSandbox : IDisposable
         }
         finally
         {
-            TryDeleteDirectory(sourceRoot);
+            // Off the task's path: a file scanner can hold a delete for a long time.
+            WasmHostDiscard.Path(sourceRoot);
         }
     }
 
@@ -213,7 +217,7 @@ public sealed class VerifyWasmSandbox : IDisposable
         }
         finally
         {
-            TryDeleteDirectory(workDir);
+            WasmHostDiscard.Path(workDir);
         }
     }
 
@@ -336,6 +340,7 @@ public sealed class VerifyWasmSandbox : IDisposable
             StopAtStdoutLimit = true,
             StderrLimitBytes = limits.StderrLimitBytes,
             ChargeHostCalls = true,
+            DiscardInBackground = true,
             OutOfMemory = LooksLikeOutOfMemory
         });
 
@@ -440,19 +445,6 @@ public sealed class VerifyWasmSandbox : IDisposable
         };
     }
 
-    private static void TryDeleteDirectory(string path)
-    {
-        try
-        {
-            if (Directory.Exists(path))
-                Directory.Delete(path, recursive: true);
-        }
-        catch
-        {
-            // a task's sources in the working folder; best-effort, the folder goes on Dispose
-        }
-    }
-
     #endregion
 
     #region IDisposable
@@ -476,6 +468,10 @@ public sealed class VerifyWasmSandbox : IDisposable
         m_taskHost.Dispose();
         m_host.Dispose();
 
+        // What the runs handed over to be deleted is under this folder: let that end first, so
+        // that the two do not meet in it.
+        WasmHostDiscard.Drain(CLEANUP_WAIT);
+
         try
         {
             if (Directory.Exists(m_ioDir))
@@ -491,7 +487,10 @@ public sealed class VerifyWasmSandbox : IDisposable
 
     #region Properties
 
-    /// <summary>The folder the files of running tasks live in; empty between runs, gone after Dispose.</summary>
+    /// <summary>
+    /// The folder the files of running tasks live in; gone after Dispose. What a run leaves in
+    /// it is deleted in the background, so it is empty soon after a run, not at its return.
+    /// </summary>
     public string IoDirectory => m_ioDir;
 
     /// <summary>
