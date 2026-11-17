@@ -58,22 +58,37 @@ internal sealed class VerifyLyingNodesManager : IWitNodesManager
     private async Task<IReadOnlyList<IWitVariable>> Returned(Guid nodeId, IReadOnlyList<IWitVariable> variables)
     {
         var lie = Lie;
-        if (lie == null || nodeId != Liar)
+        var second = Second;
+        if ((lie == null && second == null) || nodeId != Liar)
             return variables;
 
-        var returned = new List<IWitVariable>(variables.Count);
+        var returned = new List<IWitVariable>(variables.Count + 1);
+        IWitVariable? extra = null;
         foreach (var variable in variables)
         {
             if (variable.Value is VerifyResultPackageData honest)
             {
-                Lies++;
-                returned.Add(new WitVariableVerifyResultPackage(variable.Name, await lie(honest)));
+                // One more answer for the first package of the batch, under that package's own
+                // return variable; every package still gets its answer.
+                if (second != null && extra == null)
+                {
+                    SecondAnswers++;
+                    extra = new WitVariableVerifyResultPackage(variable.Name, await second(honest));
+                }
+
+                if (lie != null)
+                {
+                    Lies++;
+                    returned.Add(new WitVariableVerifyResultPackage(variable.Name, await lie(honest)));
+                    continue;
+                }
             }
-            else
-            {
-                returned.Add(variable);
-            }
+
+            returned.Add(variable);
         }
+
+        if (extra != null)
+            returned.Add(extra);
 
         return returned;
     }
@@ -88,8 +103,18 @@ internal sealed class VerifyLyingNodesManager : IWitNodesManager
     /// <summary>The node that lies.</summary>
     public Guid Liar => m_inner.CompatibleNodes[0].NodeId;
 
+    /// <summary>
+    /// What the liar returns as one more answer for the first package of each of its batches, made
+    /// from the honest reference; null for no second answer. The value goes to Grid as a node
+    /// would send it: under the return variable of a task the node holds.
+    /// </summary>
+    public Func<VerifyResultPackageData, Task<VerifyResultPackageData>>? Second { get; set; }
+
     /// <summary>The result packages the liar replaced since the manager was made or the count was reset.</summary>
     public int Lies { get; set; }
+
+    /// <summary>The second answers the liar sent since the manager was made or the count was reset.</summary>
+    public int SecondAnswers { get; set; }
 
     #endregion
 }

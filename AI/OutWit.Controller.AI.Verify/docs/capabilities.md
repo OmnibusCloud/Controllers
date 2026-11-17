@@ -560,7 +560,9 @@ under rules.
 
 The known limit: the server sees results, not machines. Reading answers as machines rests on
 the platform holding a node to one result for each package it was given; the controller cannot
-check that itself. What the controller does alone, whatever a node returns:
+check that itself. Grid 1.2.2 and later hold a node to it: of what a node's batch returns they
+keep one value at most for each return variable its tasks asked for. What the controller does
+alone, whatever a node returns:
 
 - a node answers only for packages it was given (tickets);
 - in the first fan-out, more answers than the two asked for send the package's tasks to a
@@ -579,8 +581,9 @@ What rests on the platform:
   result no longer leads by two, the task stays `Disputed` (outcome `surplus_copies`). With one
   lying node among the copies, a result accepted from a dispute was then returned by an honest
   machine;
-- where a node is not held to it, a second answer can take the place of a copy that did not
-  come back, and the controller cannot tell that from two machines outvoting a third;
+- where a node is not held to it (a Grid older than 1.2.2), a second answer can take the place
+  of a copy that did not come back, and the controller cannot tell that from two machines
+  outvoting a third;
 - a package that was not sampled rests on the machine that ran it either way.
 
 One lying node can keep a dispute from being resolved, and so can answers that fail to come

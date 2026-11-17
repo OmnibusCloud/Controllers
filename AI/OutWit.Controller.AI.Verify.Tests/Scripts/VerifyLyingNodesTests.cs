@@ -61,6 +61,8 @@ public sealed class VerifyLyingNodesTests : VerifyScriptTestBase
     {
         m_nodes.Lie = null;
         m_nodes.Lies = 0;
+        m_nodes.Second = null;
+        m_nodes.SecondAnswers = 0;
     }
 
     #endregion
@@ -187,6 +189,62 @@ public sealed class VerifyLyingNodesTests : VerifyScriptTestBase
             Assert.That(run.Rejected(VerifyRoundIntake.DUPLICATE) + run.Rejected(VerifyRoundIntake.UNKNOWN_TICKET), Is.GreaterThan(0),
                 "the same blob again in one fan-out is a duplicate; carried into a later one it is under a ticket that fan-out never gave");
             Assert.That(run.Summary("rejected_results"), Is.GreaterThan(0));
+        });
+    }
+
+    [Test]
+    public async Task ASecondAnswerForOnePackageNeverReachesTheServerTest()
+    {
+        // The liar answers every package it holds, and the first package of each batch twice: a
+        // second result package of its own making, sent under that package's return variable.
+        // Grid keeps one value for each return variable a node's tasks asked for (Grid 1.2.2), so
+        // the server receives what an honest run returns. Without that rule the sampled package
+        // would have three answers where two were asked for, and its tasks would go to a dispute.
+        m_nodes.Second = honest => ForgeAsync(honest, _ => { });
+
+        var run = await RunAsync(sampling: 1.0);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(m_nodes.SecondAnswers, Is.GreaterThan(0));
+            AssertHonestVerdicts(run);
+            Assert.That(run.Summary("rejected_results"), Is.Zero, "no answer too many came to be refused");
+            Assert.That(run.Summary("disputes"), Is.Zero, "no package had more answers than were asked for");
+            Assert.That(run.Integrity("sampled"), Is.EqualTo(TASKS));
+            Assert.That(run.Integrity("mismatches"), Is.Zero);
+            Assert.That(run.Integrity("repairs"), Is.Zero);
+        });
+    }
+
+    [Test]
+    public async Task ASecondAnswerThatLiesIsLeftOutAndTheFirstStandsTest()
+    {
+        // The same, with a second answer that says Pass for everything. It is the value that
+        // comes second under its return variable, and it is the one left out.
+        m_nodes.Second = honest => ForgeAsync(honest, batches =>
+        {
+            foreach (var result in batches.SelectMany(batch => batch.Results))
+            {
+                result.Verdict = VerifyVerdict.Pass;
+                result.ExitCode = 0;
+                result.Stdout = "";
+                foreach (var item in result.CaseResults)
+                {
+                    item.Passed = true;
+                    item.Verdict = VerifyVerdict.Pass;
+                    item.ActualStdout = "";
+                }
+            }
+        });
+
+        var run = await RunAsync(sampling: 1.0);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(m_nodes.SecondAnswers, Is.GreaterThan(0));
+            AssertHonestVerdicts(run);
+            Assert.That(run.Summary("disputes"), Is.Zero);
+            Assert.That(run.Summary("rejected_results"), Is.Zero);
         });
     }
 

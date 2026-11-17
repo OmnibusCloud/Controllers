@@ -11,9 +11,11 @@ namespace OutWit.Controller.AI.Verify.Tests.Settlement;
 /// for: where the second answer makes one too many, nothing is settled by counting.
 /// <para>
 /// The two tests named PlatformDependency pin what the controller cannot tell apart alone: a
-/// second answer that fills the place of an answer nobody gave. They hold as long as the rulings
-/// are what they are; closing them needs the platform to hold a node to one result for each
-/// package it was given.
+/// second answer that fills the place of an answer nobody gave. They hand the settlement such
+/// answers directly, as a Grid older than 1.2.2 would. Grid 1.2.2 and later keep one value at
+/// most for each return variable a node's tasks asked for, so the second answer does not reach
+/// the server (VerifyLyingNodesTests.ASecondAnswerForOnePackageNeverReachesTheServerTest runs
+/// that through the engine).
 /// </para>
 /// </summary>
 [TestFixture]
