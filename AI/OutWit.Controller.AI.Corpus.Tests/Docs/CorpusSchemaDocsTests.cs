@@ -76,7 +76,7 @@ public sealed class CorpusSchemaDocsTests
     {
         // The check itself: a missing required field, an unknown one and a wrong type are named.
         using var schema = Load("corpus-capabilities.schema.json");
-        using var broken = JsonDocument.Parse("""{"schema":"corpus-capabilities/1","controller":1,"surprise":true}""");
+        using var broken = JsonDocument.Parse("""{"schema":"corpus-capabilities/2","controller":1,"surprise":true}""");
 
         var problems = CorpusSchemaCheck.Validate(schema.RootElement, broken.RootElement);
 

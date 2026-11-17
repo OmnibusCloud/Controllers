@@ -2,11 +2,12 @@
 
     python check.py <report.json> [<integrity.json>]
 
-Prints the funnel, the drops by stage, the languages kept and the languages lost, then one line
-per shard that differs from the kit's list (verdict, content hash, signatures hash, document
-counts), the kit's identities (the SHA-256 of the lines "index:content_sha256", and of the lines
-"index:signatures_sha256", in index order) and, with the integrity document, the pairs. Exits 1
-when a shard differs or the report kept text.
+Prints the funnel, the drops by stage, the languages kept and the languages lost, what the
+results rest on (corpus-report/3: shards that one machine alone answered for, values the server
+dropped, repairs, disputes), then one line per shard that differs from the kit's list (verdict,
+content hash, signatures hash, document counts), the kit's identities (the SHA-256 of the lines
+"index:content_sha256", and of the lines "index:signatures_sha256", in index order) and, with the
+integrity document, its counters. Exits 1 when a shard differs or the report kept text.
 """
 
 import hashlib
@@ -57,6 +58,9 @@ def main(argv):
     print('languages  : ' + ', '.join(f'{name} {count:,}' for name, count in languages))
     lost = sorted(summary.get('unsupported_languages', {}).items(), key=lambda item: (-item[1], item[0]))
     print('not kept   : ' + ', '.join(f'{name} {count:,}' for name, count in lost[:10]) + (f' (+{len(lost) - 10} more)' if len(lost) > 10 else ''))
+    if 'single_execution' in summary:
+        print(f"trust      : {summary['single_execution']} shard(s) rest on one execution; rejected results {summary['rejected_results']},"
+              f" repairs {summary['repairs']}, disputes {summary['disputes']} (resolved {summary['disputes_resolved']})")
 
     unexpected = 0
     kept_text = 0
@@ -76,7 +80,9 @@ def main(argv):
             problems.append('not in the kit')
         else:
             if shard['verdict'] != 'Completed':
-                problems.append(f"verdict {shard['verdict']}: {shard['error']}")
+                why = shard.get('reason') or shard['error']
+                faults = shard.get('faults')
+                problems.append(f"verdict {shard['verdict']}: {why}" + (f" (node faults: {', '.join(faults)})" if faults else ''))
             else:
                 if shard['content_sha256'] != want['content_sha256']:
                     problems.append(f"content {shard['content_sha256'][:12]}… instead of {want['content_sha256'][:12]}…")
@@ -105,8 +111,11 @@ def main(argv):
             integrity = json.load(handle)
         totals = integrity['summary']
         print(f"integrity  : {integrity['schema']}, sampled {totals['sampled']}, compared {totals['compared']},"
-              f" version skew {totals['version_skew']}, incomplete {totals['incomplete']}, mismatches {totals['mismatches']}"
+              f" incomplete {totals['incomplete']}, mismatches {totals['mismatches']}"
               f" (signatures compared {totals.get('signatures_compared', 0)}, signature mismatches {totals.get('signature_mismatches', 0)})")
+        if 'rejected_results' in totals:
+            print(f"             rejected results {totals['rejected_results']}, node faults {totals['node_faults']}, repairs {totals['repairs']},"
+                  f" no result {totals['no_result']}, disputes {totals['disputes']} (resolved {totals['disputes_resolved']})")
 
     return 1 if unexpected or kept_text else 0
 

@@ -21,6 +21,9 @@ public sealed class ShardBatchRefusedException : Exception
     /// <summary>The node's disk has less room than a shard of the batch needs.</summary>
     public const string DISK_SPACE = "disk_space";
 
+    /// <summary>Every reason a node refuses a batch for, before it does any of its work.</summary>
+    public static readonly IReadOnlyList<string> CODES = [VERSION, PDF_SANDBOX, DISK_SPACE];
+
     #endregion
 
     #region Constructors

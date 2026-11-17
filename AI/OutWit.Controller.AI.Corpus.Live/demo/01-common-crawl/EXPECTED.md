@@ -1,15 +1,17 @@
 # 01 · Common Crawl: the expected result
 
-Measured locally with Corpus 0.3.0: the 24 files of `manifest.json` (their SHA-256 checked against
-the manifest) through the stage pipeline of the controller, the manifest's pipeline and the
-reference language pack `cc-2026-43-16`. A shard's product is a function of its bytes and the
+Measured locally with Corpus 0.3.0 and measured again with 0.4.0, which gives the same 24 content
+hashes, signatures hashes and counters (the stages' diagnostics test `DemoKitPinsDiagnosticsTests`
+runs the files against `shards.tsv`): the 24 files of `manifest.json` (their SHA-256 checked
+against the manifest) through the stage pipeline of the controller, the manifest's pipeline and
+the reference language pack `cc-2026-43-16`. A shard's product is a function of its bytes and the
 pipeline, so these numbers are the fleet's: the same content hashes and counters on any node and
 platform. What only a fleet can measure is marked *fleet*, to be filled in from the first walk.
 
 ## The report
 
 ```
-report     : corpus-report/2, controller 0.3.0, output stats_and_hashes
+report     : corpus-report/3, controller 0.4.0, output stats_and_hashes
 shards     : 24 (Completed 24)
 fetched    : 1,584,054,229 bytes; the product would be 448,706,065 bytes compressed
 funnel     : records 515,379 > extracted 515,355 > language 453,528 > lines 427,293 > quality 273,891 = out 273,891
@@ -17,6 +19,7 @@ dropped    : extract 0, language 61,827, lines 26,235, quality 153,402
 drops      : min_words 63,219, language_unsupported 58,953, no_prose_lines 26,235, duplicate_ngram_chars_5 20,251, alphabetic_words 14,169, duplicate_lines 13,712, ellipsis_lines 11,753, duplicate_line_chars 8,762
 languages  : eng 128,566, rus 20,244, deu 18,794, spa 17,019, fra 16,052, jpn 13,963, zho 13,294, ita 8,826, por 8,696, pol 6,368, nld 5,987, tur 4,051, ces 3,450, vie 3,386, ukr 2,870, fas 2,325
 not kept   : ind 7,111, past_limit:eng 5,357, kor 4,188, swe 3,898, ara 3,444, ron 3,337, ell 2,884, dan 2,836, hun 2,678, hrv 2,399 (+30 more)
+trust      : 18 shard(s) rest on one execution; rejected results 0, repairs 0, disputes 0 (resolved 0)
 identity   : c4b6253029af5202747e284bdeca9c368ee57593eff27c3017f9eb50d9f4aa72
 signatures : f661f7a925d0160d190009d78673f7a27befb111b2841e00473dd36fcfd4fbb7
 shards the kit does not expect: 0
@@ -34,6 +37,9 @@ shards the kit does not expect: 0
   5-word shingles) are made and hashed on the nodes and never leave them.
 - `bytes_produced` is what the text product measured on the nodes before it was deleted with the
   task: 28.3 % of the bytes fetched.
+- The `trust` line at `--sampling 0.25`: the 18 shards the sampling did not pick rest on one
+  machine's word; a run that goes well drops, repairs and disputes nothing. (Without sampling the
+  line reads 24.)
 
 ## The preflight
 
@@ -41,6 +47,8 @@ shards the kit does not expect: 0
 |---|---|
 | Shards | 24, well-formed |
 | Traffic at `--sampling 0.25` | 1,993,119,664 bytes: every shard once (1,584,054,229, the manifest's sizes) and the second fetch of the 6 largest shards, sampled for integrity (409,065,435); the line `Contributor traffic estimate 1993119664 bytes: every shard once (1584054229) and the second fetch of the 6 largest shard(s), sampled for integrity (409065435).` |
+| What the traffic line leaves out | `Not in the traffic estimate: a sampled shard whose two copies disagree is fetched again by up to 3 machines (a dispute: at most 6 shard(s) here), and a shard a node returns as a fault of its own is fetched once more (a repair).` |
+| Node disk | 171,242,293 bytes free for each shard a node holds (the largest shard, 69,422,286 bytes, half of it again for its products, 64 MiB); a node holds its degree and 2 more at a time: 1,712,422,930 bytes for a node of degree 8 |
 | Server storage | 702,300 bytes at `--sampling 0.25`: the report and the integrity document (84,992), the manifest and the pack (617,308). The same run with `"output": "full"`: 1,231,056,545 bytes (1.15 GiB) |
 | Notes | `output stats_and_hashes: … Corpus.Dedup cannot run over this run` and the storage line `no text and no signatures (output stats_and_hashes: they stay on the nodes)` |
 | Busiest node's share, nodes planned | *fleet* (a percentage and a count) |
@@ -53,7 +61,7 @@ shards the kit does not expect: 0
 | Content hashes | the 24 of `shards.tsv`, identity `c4b62530…f9eb50d9f4aa72` | the same |
 | Signatures hashes | the 24 of `shards.tsv`, identity `f661f7a9…cfd4fbb7` | the same |
 | Text and signature blobs | none (the signatures are made and hashed on the nodes: their hashes are in `shards.tsv`) | none |
-| Integrity at `--sampling 0.25` (`corpus-integrity/4`) | 6 shards run twice, *fleet*: 6 compared, 6 with their signatures compared, 0 mismatches expected | the same |
+| Integrity at `--sampling 0.25` (`corpus-integrity/5`) | 6 shards run twice, *fleet*: 6 compared, 6 with their signatures compared, 0 mismatches expected; rejected results 0, node faults 0, repairs 0, no result 0, disputes 0 expected of an honest fleet with a working link | the same |
 | Wall time | *fleet* (about 50 s of processing at the test fleet's 30.6 MB/s of WET, plus the fetch) | *fleet* |
 | `corpus-live dedup` | refused: "The run kept statistics and hashes only (pipeline output "stats_and_hashes"): it has no signatures, …" | — |
 
@@ -83,6 +91,8 @@ shards do:
 
 - The wall time, which shards the sampling picks, the busiest share, and the platforms and
   degrees in the report (`runtime_target`, `degree`, `fetch_ms`, `process_ms`, `wait_ms`).
+- A node that fails on a shard (its disk, its link, an upload): the shard is sent out once more
+  and the counters `node_faults` and `repairs` say so; the content hashes do not move.
 - Nothing else: the content hashes, the counters and the funnel are the same on any fleet. They
   change only when a stage changes, that is, with a controller release that says so, or with
   another language pack.

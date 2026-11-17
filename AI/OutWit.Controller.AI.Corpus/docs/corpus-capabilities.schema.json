@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-capabilities.schema.json",
   "title": "Corpus capabilities",
-  "description": "The capabilities blob of CorpusRuntimeDiagnostics (Corpus.Capabilities): what an application can know before a run. It takes no manifest. Nodes run the same controller version as the host (the platform admits no other version to the work), so the stages, parsers and limits listed are the pool's. No node is named.",
+  "description": "The capabilities blob of CorpusRuntimeDiagnostics (Corpus.Capabilities): what an application can know before a run. It takes no manifest. Nodes run the same controller version as the host (a node on another version refuses its batch, and a result that claims another version is dropped), so the stages, parsers and limits listed are the pool's. No node is named. Version 2: version 1 and the limits a hostile shard meets, the case table, and trust (what a result rests on, and every fixed word a document carries in place of a text).",
   "type": "object",
-  "required": ["schema", "controller", "benchmark_unit", "stages", "parsers", "language_model", "formats", "origins", "defaults", "ceilings", "pipeline", "pdf", "signatures", "drop_rules", "products", "storage"],
+  "required": ["schema", "controller", "benchmark_unit", "stages", "parsers", "language_model", "formats", "origins", "defaults", "ceilings", "pipeline", "pdf", "signatures", "drop_rules", "casing", "trust", "products", "storage"],
   "additionalProperties": false,
   "properties": {
-    "schema": { "type": "string", "const": "corpus-capabilities/1" },
+    "schema": { "type": "string", "const": "corpus-capabilities/2" },
     "controller": { "type": "string", "description": "The controller's version. The stages are built into the controller: one version, one stage set." },
     "benchmark_unit": { "type": "string", "description": "The unit of the pool's rate: megabytes of Common Crawl WET per second." },
     "stages": {
@@ -65,28 +65,36 @@
     "defaults": {
       "type": "object",
       "description": "What applies when the options leave a value unset (0).",
-      "required": ["max_shard_bytes", "sampling_rate", "dedup_threshold", "downloads_per_node", "memory_per_shard_bytes"],
+      "required": ["max_shard_bytes", "sampling_rate", "dedup_threshold", "downloads_per_node", "memory_per_shard_bytes", "shards_held_beyond_degree"],
       "additionalProperties": false,
       "properties": {
         "max_shard_bytes": { "type": "integer" },
         "sampling_rate": { "type": "number" },
         "dedup_threshold": { "type": "number" },
         "downloads_per_node": { "type": "integer", "description": "Shards a node downloads at once, whatever its degree." },
-        "memory_per_shard_bytes": { "type": "integer", "description": "Memory a node budgets per shard in flight; with its cores it bounds the node's degree." }
+        "memory_per_shard_bytes": { "type": "integer", "description": "Memory a node budgets per shard in flight; with its cores it bounds the node's degree." },
+        "shards_held_beyond_degree": { "type": "integer", "description": "The shards a node holds fetched and waiting beyond the ones it processes at once (its degree): a node's disk carries its degree and this many more shards at a time, never its whole share." }
       }
     },
     "ceilings": {
       "type": "object",
       "description": "The most a job may ask for, and the limits a hostile input meets.",
-      "required": ["max_shard_bytes", "sampling_rate", "record_bytes", "html_chars", "html_nesting", "html_tags", "size_probes", "dedup_documents", "dedup_clusters_listed"],
+      "required": ["max_shard_bytes", "sampling_rate", "record_bytes", "wet_record_bytes", "unpack_ratio", "unpacked_bytes_min", "unpacked_bytes_max", "html_chars", "html_decode_bytes", "html_nesting", "html_tags", "html_elements", "language_model_bytes", "size_probes", "dedup_documents", "dedup_clusters_listed"],
       "additionalProperties": false,
       "properties": {
         "max_shard_bytes": { "type": "integer", "description": "A shard on the wire; the options can only lower it." },
         "sampling_rate": { "type": "number" },
-        "record_bytes": { "type": "integer", "description": "A larger WARC record is skipped and counted." },
-        "html_chars": { "type": "integer" },
-        "html_nesting": { "type": "integer" },
-        "html_tags": { "type": "integer" },
+        "record_bytes": { "type": "integer", "description": "A larger record of a WARC shard is skipped and counted (record_oversized)." },
+        "wet_record_bytes": { "type": "integer", "description": "A larger record of a WET shard is skipped and counted (record_oversized): a page's text, never a file." },
+        "unpack_ratio": { "type": "integer", "description": "A shard may unpack to this many times its size on the wire, within the two bounds below; past it the shard is Oversized (oversized_unpacked) on every node." },
+        "unpacked_bytes_min": { "type": "integer", "description": "What the smallest shard may unpack to." },
+        "unpacked_bytes_max": { "type": "integer", "description": "What no shard may unpack past." },
+        "html_chars": { "type": "integer", "description": "The characters of a page that are parsed; the rest is cut." },
+        "html_decode_bytes": { "type": "integer", "description": "The bytes of a response body that are decoded: enough for html_chars in any encoding." },
+        "html_nesting": { "type": "integer", "description": "No element of the parser's tree may sit this deep (html_refused by the pre-scan, html_too_complex by the parser)." },
+        "html_tags": { "type": "integer", "description": "The tags the pre-scan lets a page carry (html_refused)." },
+        "html_elements": { "type": "integer", "description": "The elements the parser's tree may hold for one page, the ones the parser makes without a tag included (html_too_complex)." },
+        "language_model_bytes": { "type": "integer", "description": "A larger language model or pack is refused before it is read." },
         "size_probes": { "type": "integer", "description": "Sources the server asks the origin for a size per preflight; the rest are estimated at the mean." },
         "dedup_documents": { "type": "integer", "description": "Documents one Corpus.Dedup holds in memory." },
         "dedup_clusters_listed": { "type": "integer" }
@@ -162,7 +170,7 @@
     "pdf": {
       "type": "object",
       "description": "The PDF stage (pipeline switch extract_pdf, WARC shards only): a response that is a PDF becomes text in the controller's own wasm sandbox, then page-range documents that go through the stages after it like a page of HTML. Every value here is part of the stage set's fingerprint.",
-      "required": ["stage", "formats", "extractor", "module_sha256", "engine", "available", "fuel", "fuel_after_instantiation", "memory_bytes", "input_bytes", "text_bytes", "document_words", "document_id", "running_lines", "drops"],
+      "required": ["stage", "formats", "extractor", "module_sha256", "engine", "available", "fuel", "fuel_after_instantiation", "shard_fuel", "memory_bytes", "input_bytes", "text_bytes", "document_words", "document_id", "running_lines", "drops"],
       "additionalProperties": false,
       "properties": {
         "stage": { "type": "string", "const": "extract_pdf" },
@@ -173,6 +181,7 @@
         "available": { "type": "boolean", "description": "Whether the host's process can run the stage. A node that cannot does not make the product of a shard that holds a PDF: the shard fails there as a fault of the node and runs on another; a shard without a PDF runs on it." },
         "fuel": { "type": "integer", "description": "The fuel one PDF may burn, counted from the guest's _start." },
         "fuel_after_instantiation": { "type": "boolean", "description": "The budget is given after the module is instantiated, so it does not depend on the platform." },
+        "shard_fuel": { "type": "integer", "description": "The fuel all the PDFs of one shard may burn together; a PDF met after it is spent is not run and drops as pdf_shard_fuel." },
         "memory_bytes": { "type": "integer", "description": "The cap of the module's linear memory." },
         "input_bytes": { "type": "integer", "description": "The largest PDF the stage runs." },
         "text_bytes": { "type": "integer", "description": "The most text one PDF may give (more: pdf_oversized)." },
@@ -216,6 +225,35 @@
           "name": { "type": "string" },
           "stage": { "type": "string", "enum": ["extract", "language", "lines", "quality"] }
         }
+      }
+    },
+    "casing": {
+      "type": "object",
+      "description": "The case handling that reaches a product (the language n-grams, the MinHash tokens): a table inside the controller, the same on every node whatever globalization library its system has. Names and phrases of ASCII are compared as ASCII.",
+      "required": ["unicode", "mapping", "table_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "unicode": { "type": "string", "description": "The Unicode version the table was generated from." },
+        "mapping": { "type": "string", "description": "simple_lowercase: UnicodeData.txt's Simple_Lowercase_Mapping, U+0130 kept as it is." },
+        "table_sha256": { "type": "string", "description": "The table's hash; a part of the stage set's fingerprint." }
+      }
+    },
+    "trust": {
+      "type": "object",
+      "description": "What a result rests on and how a run answers a node that lies or fails. A task carries a ticket only its node knows; the server accepts a result only under a ticket of that job and round, for that shard, from its own controller version, in a shape an honest node gives. Copies that agree are accepted; copies that disagree are run again on three machines; a shard no machine returned a result for is sent out once more.",
+      "required": ["copies", "dispute_copies", "dispute_quorum", "outcomes", "no_result_reasons", "rejection_reasons", "fault_codes", "verdict_codes", "batch_refusals", "dedup_exclusions"],
+      "additionalProperties": false,
+      "properties": {
+        "copies": { "type": "integer", "description": "The executions of a sampled shard, on different machines. A shard that is not sampled rests on one machine's word (single_execution in the report and the integrity document)." },
+        "dispute_copies": { "type": "integer", "description": "The machines a disputed shard is run on again." },
+        "dispute_quorum": { "type": "integer", "description": "The machines that must return the same result, and more of them than any other result has, for a dispute to be settled." },
+        "outcomes": { "type": "array", "items": { "type": "string" }, "description": "The report's two verdicts that are no node's: Disputed and NoResult." },
+        "no_result_reasons": { "type": "array", "items": { "type": "string" }, "description": "Why a shard has no result: every machine returned it as a fault of its own (node_fault), what came back was dropped (rejected), or nothing came back (missing)." },
+        "rejection_reasons": { "type": "array", "items": { "type": "string" }, "description": "Why a returned value was dropped on arrival (the integrity document's rejected)." },
+        "fault_codes": { "type": "array", "items": { "type": "string" }, "description": "The codes of a node's own faults (the report's faults): never a verdict on the shard, never a text." },
+        "verdict_codes": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } }, "description": "Per verdict, the codes its error may hold beside the empty one. http_NNN stands for the origin's HTTP status." },
+        "batch_refusals": { "type": "array", "items": { "type": "string" }, "description": "Why a node refuses a whole batch before it does any of it; the platform moves the work to another node." },
+        "dedup_exclusions": { "type": "array", "items": { "type": "string" }, "description": "Why Corpus.Dedup leaves a shard out of the merge (the dedup document's excluded)." }
       }
     },
     "products": {

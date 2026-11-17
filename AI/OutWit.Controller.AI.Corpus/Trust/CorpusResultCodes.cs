@@ -33,6 +33,9 @@ public static class CorpusResultCodes
     /// <summary>FetchFailed: the origin answered with an HTTP status that is not a success; the three digits follow (<c>http_404</c>).</summary>
     public const string HTTP_PREFIX = "http_";
 
+    /// <summary>How the HTTP codes are written in a list of codes: the three digits are the origin's status.</summary>
+    public const string HTTP_PATTERN = "http_NNN";
+
     /// <summary>FetchFailed: the fetched bytes do not hash to the SHA-256 the manifest published.</summary>
     public const string HASH_MISMATCH = "hash_mismatch";
 
@@ -118,6 +121,22 @@ public static class CorpusResultCodes
     public static string Http(int status)
     {
         return HTTP_PREFIX + Math.Clamp(status, 100, 599).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The codes a result of a verdict may carry beside the empty one, in ordinal order; <see cref="HTTP_PATTERN"/> stands for the origin's HTTP statuses.</summary>
+    /// <param name="verdict">The verdict.</param>
+    /// <returns>The codes; empty for a verdict that carries none.</returns>
+    public static IReadOnlyList<string> CodesOf(CorpusShardVerdict verdict)
+    {
+        if (!BY_VERDICT.TryGetValue(verdict, out var codes))
+            return [];
+
+        var list = codes.Where(code => code.Length > 0).ToList();
+        if (verdict == CorpusShardVerdict.FetchFailed)
+            list.Add(HTTP_PATTERN);
+
+        list.Sort(StringComparer.Ordinal);
+        return list;
     }
 
     /// <summary>Whether a code is one a result of the given verdict may carry.</summary>

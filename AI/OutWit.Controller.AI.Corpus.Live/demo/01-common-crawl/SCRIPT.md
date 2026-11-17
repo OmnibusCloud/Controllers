@@ -14,7 +14,8 @@ reproduces.
 
 - `manifest.json`: the pipeline (the reference pack pinned by its hash, every stage at its
   default, `"output": "stats_and_hashes"`) and the 24 shards with their sizes and SHA-256, so
-  the traffic line is exact and a node that receives other bytes says `FetchFailed` instead of
+  the traffic line is exact and a node that receives other bytes says `FetchFailed`
+  (`hash_mismatch`) instead of
   computing on them. Shards 0 to 19 are files 00020 to 00039 of segment 1791170053823.21 (the test
   fleet's acceptance set), shard 20 file 00000 of the same segment, shards 21 to 23 file 00500 of
   segments 1791170054112.6, 1791170054429.52 and 1791170055137.36.
@@ -45,7 +46,11 @@ bin/Release/net10.0/corpus-live dedup demo-out/cc/report-1.json
    run is the report, the integrity document and the inputs: about 0.7 MB instead of the 1.15 GiB
    the same run would leave with its text. The line "output stats_and_hashes: … Corpus.Dedup
    cannot run over this run" says why. The work split line gives the busiest node's share of the
-   work at this fleet, as a percentage: no node is named.
+   work at this fleet, as a percentage: no node is named. Two more lines say what a contributor
+   should know: what the traffic estimate leaves out (a sampled shard whose two copies disagree is
+   fetched again by up to three machines, a shard a node returns as a fault of its own once more)
+   and the disk a node needs (it holds its degree and two more shards at a time, 171,242,293 bytes
+   free for each: the largest shard, its products and a margin).
 2. **The run.** Each node fetches its shards straight from Common Crawl; the progress shows the
    delivery, then the shards processed. A quarter of the shards run a second time on another
    machine.
@@ -53,12 +58,17 @@ bin/Release/net10.0/corpus-live dedup demo-out/cc/report-1.json
    leave at the language stage (58,953 of them in languages the pack does not support: Indonesian,
    Korean, Swedish, Arabic, Romanian lead), 26,235 have no line of prose, 153,402 fail the quality
    rules, and 273,891 documents in 16 languages would be the corpus: 449 MB of compressed text that
-   was never kept. Every `text_blob` and `signatures_blob` is empty.
+   was never kept. Every `text_blob` and `signatures_blob` is empty. The `trust` line says what
+   the numbers rest on: 18 shards on one machine's word (the ones the sampling did not pick), and
+   nothing dropped, repaired or disputed in a run that went well.
 4. **The identity.** `shards the kit does not expect: 0`: every shard's content hash and
    signatures hash are the ones in `shards.tsv`, measured on another machine. The two runs give the
    same hashes (`content : all 2 run(s) give the same content hashes`), and the integrity line
-   (`corpus-integrity/4`) counts the sampled pairs that agree across machines, on the text and on
-   the signatures (`signatures compared 6, signature mismatches 0`).
+   (`corpus-integrity/5`) counts the sampled pairs that agree across machines, on the text and on
+   the signatures (`signatures compared 6, signature mismatches 0`), with a second line for what a
+   lying or failing node would have caused: `rejected results 0, node faults 0, repairs 0, no
+   result 0, disputes 0`. A shard no node answered for would still be in the report, as
+   `NoResult` with its reason; two copies that disagree would have been run on three machines.
 5. **Dedup is refused**, by name: the run kept no signatures. The same manifest with
    `"output": "full"` gives the same 24 content hashes, the text, the signatures, and a merge
    that finds 18,610 near-duplicates in 8,858 clusters.
