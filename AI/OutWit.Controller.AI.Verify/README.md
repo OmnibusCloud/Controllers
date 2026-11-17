@@ -17,7 +17,9 @@ the version proven on the test fleet. Not yet released to nuget.org or the live 
   at the preflight and at the split. A runtime id is matched to the letter.
 - What the server reads from a lab is bounded where it is read: a line (64 MiB), the sources,
   arguments and cases of a task (1,024 each), the tasks of a taskset (4,194,304), and what a
-  preflight answers (32 messages of a kind, 240 characters each).
+  preflight answers (32 messages of a kind, 240 characters each). The capabilities document
+  carries these bounds as numbers, in a section of their own (`taskset`), and is
+  `verify-capabilities/3` for it; nothing it had changed name or meaning.
 - Nothing that grows with the taskset is read whole into memory: a taskset is read a line at
   a time and stored a package at a time, and the documents are written to files as they are
   made. A run of 100,000 tasks from a 202 MiB taskset held 45 MiB at the most on the managed
@@ -72,7 +74,7 @@ verifiable by construction: code passes its test suite or it does not.
 | `Verify.Integrity` | host | the ledger → the integrity document (the pairs of executions of the first fan-out and whether they agree on verdict, exit, outputs and cases; every dispute and how it ended; the counts of refused result packages, repairs and tasks without a result) |
 | `Verify.Preflight` | host | counts, runtimes referenced, unknown runtimes, size estimate, ceiling notes, and whether `Verify.Split` would refuse the taskset — before anything runs. One pass over the taskset, nothing kept; the answer is bounded whatever the taskset (32 messages of a kind, 240 characters each, and a line for the rest) |
 | `Verify.RuntimeDiagnostics` | host | wasmtime version (the native library is loaded to prove it), runtime target, per-runtime availability and hash — of the server's module; a node's module is exercised by `Verify.ExecutePackage` and described by the provenance |
-| `Verify.Capabilities` | host | what a submitter can know before a run, as a document: the controller's version, the runtimes it carries, the defaults and ceilings, how fuel relates to time, the source-name rule, what a task's own module is held to, the caps on packages and batches, and the pool as totals (nodes, concurrent sandboxes, reference tasks per second; no node named) |
+| `Verify.Capabilities` | host | what a submitter can know before a run, as a document: the controller's version, the runtimes it carries, the defaults and ceilings, how fuel relates to time, the source-name rule, what a task's own module is held to, the caps on packages and batches, the bounds of a taskset and of what a preflight answers (`taskset`: `max_line_bytes`, `max_tasks`, `max_sources`, `max_args`, `max_suite_cases`, `max_preflight_messages`, `max_preflight_messages_per_kind`, `max_preflight_message_length`, `max_preflight_unknown_runtimes`), and the pool as totals (nodes, concurrent sandboxes, reference tasks per second; no node named) |
 
 ## Scripts
 
@@ -301,7 +303,7 @@ results; the SDK only moves blobs and submits scripts.
 | checker spec (one object) | [`verify-checker.schema.json`](docs/verify-checker.schema.json) | in |
 | verdict report (`verify-report/2`) | [`verify-report.schema.json`](docs/verify-report.schema.json) | out |
 | outputs of a run, corpus of a generation (JSON lines) | [`verify-corpus.schema.json`](docs/verify-corpus.schema.json) | out |
-| capabilities (`verify-capabilities/2`) | [`verify-capabilities.schema.json`](docs/verify-capabilities.schema.json) | out |
+| capabilities (`verify-capabilities/3`) | [`verify-capabilities.schema.json`](docs/verify-capabilities.schema.json) | out |
 | provenance (`verify-provenance/2`) | [`verify-provenance.schema.json`](docs/verify-provenance.schema.json) | out |
 | integrity (`verify-integrity/2`) | [`verify-integrity.schema.json`](docs/verify-integrity.schema.json) | out |
 

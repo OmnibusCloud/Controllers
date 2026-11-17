@@ -10,15 +10,20 @@ namespace OutWit.Controller.AI.Verify.Runtimes;
 /// The capabilities document: what a submitter can know before a run. The controller's
 /// version, the runtimes this version carries (a node runs the same module: the platform
 /// admits no other version to the work), the defaults and the ceilings a taskset is held to,
-/// and the pool as totals. A JSON document like every other output, so an application reads
-/// it without the controller's types.
+/// the bounds of a taskset itself and of what a preflight answers, and the pool as totals. A
+/// JSON document like every other output, so an application reads it without the controller's
+/// types, and reads its limits here instead of carrying copies of them.
+/// <para>
+/// <c>verify-capabilities/3</c> added the <c>taskset</c> section; every field of
+/// <c>verify-capabilities/2</c> is there with the name and the meaning it had.
+/// </para>
 /// </summary>
 public static class VerifyCapabilitiesWriter
 {
     #region Constants
 
     /// <summary>The document's schema tag.</summary>
-    public const string SCHEMA = "verify-capabilities/2";
+    public const string SCHEMA = "verify-capabilities/3";
 
     #endregion
 
@@ -95,6 +100,20 @@ public static class VerifyCapabilitiesWriter
             writer.WriteNumber("max_output_bytes", VerifyPackagePlanner.MAX_PACKAGE_OUTPUT_BYTES);
             writer.WriteNumber("max_batch_tasks", VerifyBatchExecutor.MAX_BATCH_TASKS);
             writer.WriteNumber("max_batch_output_bytes", VerifyTasksetPlanner.MAX_BATCH_OUTPUT_BYTES);
+            writer.WriteEndObject();
+
+            // What the server reads from a lab is bounded where it is read: a taskset outside
+            // these is refused when it is split, and a preflight answers within the last four.
+            writer.WriteStartObject("taskset");
+            writer.WriteNumber("max_line_bytes", VerifyTasksetLimits.MAX_LINE_BYTES);
+            writer.WriteNumber("max_tasks", VerifyTasksetLimits.MAX_TASKS);
+            writer.WriteNumber("max_sources", VerifyTasksetLimits.MAX_SOURCES);
+            writer.WriteNumber("max_args", VerifyTasksetLimits.MAX_ARGS);
+            writer.WriteNumber("max_suite_cases", VerifyTasksetLimits.MAX_SUITE_CASES);
+            writer.WriteNumber("max_preflight_messages", VerifyPreflightReport.MaxMessages);
+            writer.WriteNumber("max_preflight_messages_per_kind", VerifyTasksetLimits.MAX_MESSAGES);
+            writer.WriteNumber("max_preflight_message_length", VerifyTasksetLimits.MAX_MESSAGE_LENGTH);
+            writer.WriteNumber("max_preflight_unknown_runtimes", VerifyTasksetLimits.MAX_LISTED_RUNTIMES);
             writer.WriteEndObject();
 
             if (pool != null)

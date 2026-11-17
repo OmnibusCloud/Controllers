@@ -29,6 +29,10 @@ What 0.14.0 changed for an application:
   cases a task, 4,194,304 tasks a taskset (sections 4 and 9).
 - **The preflight's answer is bounded.** At most 32 messages of a kind, of 240 characters each,
   with one line that says how many more there are (section 3).
+- **A new document version.** `verify-capabilities/3`: the capabilities document carries these
+  bounds as numbers, in a section of their own, `taskset` (section 3). Every field of
+  `verify-capabilities/2` is there with the name and the meaning it had; an application that
+  holds the document to its `schema` tag takes the new tag.
 - **Nothing else moved.** A taskset the schema allowed is cut into the same packages and gives
   the same documents as under 0.13.0; no fuel figure and no verdict changed.
 
@@ -185,7 +189,7 @@ schema does not allow, a source name outside the portable set, an unknown runtim
 that is too large, more tasks than a taskset may have, an empty taskset.
 
 `VerifyRuntimeDiagnostics` returns the `capabilities` document (schema
-[`verify-capabilities.schema.json`](verify-capabilities.schema.json), `verify-capabilities/2`).
+[`verify-capabilities.schema.json`](verify-capabilities.schema.json), `verify-capabilities/3`).
 It is what an application's runtime picker, limit fields and capacity line need:
 
 | Field | What it holds |
@@ -197,7 +201,27 @@ It is what an application's runtime picker, limit fields and capacity line need:
 | `sources` | the source-name rule: `name_pattern`, `max_name_bytes`, `max_depth` (section 4) |
 | `modules` | what a task's own module is held to: `max_bytes`, `max_nesting`, `compile_fuel_per_byte` (section 9) |
 | `packages` | how a run is cut: `target` count; `max_tasks`, `max_bytes` and `max_output_bytes` per package; `max_batch_tasks` and `max_batch_output_bytes` per batch (section 11) |
+| `taskset` | what a taskset may hold and what a preflight answers (the table below; sections 4 and 9) |
 | `pool` | the fleet as totals: `nodes`, `measured` (nodes with a benchmark), `workers`, `rate` (reference tasks per second). No node is ever named |
+
+The `taskset` section is new in `verify-capabilities/3`. It holds the bounds of what the server
+reads from a lab, so an application reads them from the document and carries no copy of its
+own. In this version they are:
+
+| Field of `taskset` | Value | What it bounds |
+|---|---|---|
+| `max_line_bytes` | 67,108,864 | the bytes of one line of a taskset (64 MiB), and of a checker spec |
+| `max_tasks` | 4,194,304 | the tasks of a taskset |
+| `max_sources` | 1,024 | the source files of a task |
+| `max_args` | 1,024 | the arguments of a task, and of a case |
+| `max_suite_cases` | 1,024 | the cases of a suite |
+| `max_preflight_messages` | 134 | the messages of a preflight's answer, whatever the taskset |
+| `max_preflight_messages_per_kind` | 32 | the messages of one kind a preflight shows before the line for the rest |
+| `max_preflight_message_length` | 240 | the characters of one message of a preflight |
+| `max_preflight_unknown_runtimes` | 32 | the unknown runtime ids a preflight lists |
+
+A taskset outside the first five is refused (section 4). The most text a task may have is
+`packages.max_bytes`.
 
 ### While it runs
 

@@ -137,6 +137,11 @@ public sealed class VerifySchemaDocsTests
             Assert.That(PropertyNames(root.GetProperty("time")), Is.EquivalentTo(PropertyNames(properties.GetProperty("time").GetProperty("properties"))));
             Assert.That(PropertyNames(root.GetProperty("sources")), Is.EquivalentTo(PropertyNames(properties.GetProperty("sources").GetProperty("properties"))));
             Assert.That(PropertyNames(root.GetProperty("modules")), Is.EquivalentTo(PropertyNames(properties.GetProperty("modules").GetProperty("properties"))));
+            Assert.That(PropertyNames(root.GetProperty("taskset")), Is.EquivalentTo(PropertyNames(properties.GetProperty("taskset").GetProperty("properties"))));
+            Assert.That(properties.GetProperty("taskset").GetProperty("required").EnumerateArray().Select(name => name.GetString()), Is.EquivalentTo(PropertyNames(root.GetProperty("taskset"))),
+                "the document always carries every bound: none is optional");
+            Assert.That(schema.RootElement.GetProperty("required").EnumerateArray().Select(name => name.GetString()), Is.EquivalentTo(PropertyNames(root).Where(name => name != "pool")),
+                "every section but the pool is always there");
             Assert.That(properties.GetProperty("schema").GetProperty("const").GetString(), Is.EqualTo(OutWit.Controller.AI.Verify.Runtimes.VerifyCapabilitiesWriter.SCHEMA));
             Assert.That(PropertyNames(root.GetProperty("pool")), Is.EquivalentTo(PropertyNames(properties.GetProperty("pool").GetProperty("properties"))));
             Assert.That(properties.GetProperty("schema").GetProperty("const").GetString(), Is.EqualTo(root.GetProperty("schema").GetString()));

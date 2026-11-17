@@ -2,6 +2,7 @@ using System.Text.Json;
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
 using OutWit.Controller.AI.Verify.Sandbox;
+using OutWit.Controller.AI.Verify.Tasksets;
 using OutWit.Engine.Data.Benchmark;
 using OutWit.Engine.Interfaces;
 
@@ -111,6 +112,59 @@ public sealed class VerifyCapabilitiesTests
             Assert.That(root.GetProperty("pool").GetProperty("measured").GetInt32(), Is.EqualTo(5));
             Assert.That(root.GetProperty("pool").GetProperty("workers").GetInt32(), Is.EqualTo(76));
             Assert.That(root.GetProperty("pool").GetProperty("rate").GetDouble(), Is.EqualTo(57.346));
+        });
+    }
+
+    [Test]
+    public void B2TheDocumentCarriesTheBoundsOfATasksetAndOfAPreflightTest()
+    {
+        // Hardening batch B, item B2: the bounds on what the server reads from a lab were in the
+        // schema's prose and in the code only, so an application had to carry copies of them.
+        // They are a section of the document, and the document is a new version for it.
+        using var document = JsonDocument.Parse(VerifyCapabilitiesWriter.Write(new VerifyRuntimeDiagnosticsData(), null));
+        var root = document.RootElement;
+
+        Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo("verify-capabilities/3"));
+        Assert.That(root.TryGetProperty("taskset", out var taskset), Is.True, "the bounds of a taskset are a section of the document");
+        Assert.That(taskset.EnumerateObject().Select(field => (field.Name, field.Value.GetInt64())), Is.EqualTo(new (string, long)[]
+        {
+            ("max_line_bytes", VerifyTasksetLimits.MAX_LINE_BYTES),
+            ("max_tasks", VerifyTasksetLimits.MAX_TASKS),
+            ("max_sources", VerifyTasksetLimits.MAX_SOURCES),
+            ("max_args", VerifyTasksetLimits.MAX_ARGS),
+            ("max_suite_cases", VerifyTasksetLimits.MAX_SUITE_CASES),
+            ("max_preflight_messages", VerifyPreflightReport.MaxMessages),
+            ("max_preflight_messages_per_kind", VerifyTasksetLimits.MAX_MESSAGES),
+            ("max_preflight_message_length", VerifyTasksetLimits.MAX_MESSAGE_LENGTH),
+            ("max_preflight_unknown_runtimes", VerifyTasksetLimits.MAX_LISTED_RUNTIMES)
+        }));
+    }
+
+    [Test]
+    public void B2EveryFieldOfTheSecondVersionIsStillThereTest()
+    {
+        // The third version adds a section and takes nothing away: an application written for
+        // verify-capabilities/2 finds every field it read, under the name it had.
+        var diagnostics = new VerifyRuntimeDiagnosticsData
+        {
+            Runtimes = [new VerifyRuntimeInfoData { RuntimeId = VerifyRuntimeCatalog.PYTHON_3_14_6_NUMPY_2_5_4, Sha256 = "aa", Available = true }]
+        };
+
+        using var document = JsonDocument.Parse(VerifyCapabilitiesWriter.Write(diagnostics, new VerifyPoolSummary(1, 1, 1, 1)));
+        var root = document.RootElement;
+        string[] Names(JsonElement element) => element.EnumerateObject().Select(field => field.Name).ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Names(root), Is.SupersetOf(new[] { "schema", "controller", "wasmtime", "benchmark_unit", "runtimes", "defaults", "ceilings", "time", "sources", "modules", "packages", "pool" }));
+            Assert.That(Names(root.GetProperty("runtimes")[0]), Is.EqualTo(new[] { "id", "language", "sha256", "available", "notes" }));
+            Assert.That(Names(root.GetProperty("defaults")), Is.EqualTo(new[] { "batch_size", "max_degree", "fuel", "memory_bytes", "stdout_bytes", "stderr_bytes" }));
+            Assert.That(Names(root.GetProperty("ceilings")), Is.EqualTo(new[] { "fuel", "memory_bytes", "stdout_bytes", "stderr_bytes" }));
+            Assert.That(Names(root.GetProperty("time")), Is.EqualTo(new[] { "reference_fuel_per_second", "backstop_base_ms", "backstop_fuel_per_second" }));
+            Assert.That(Names(root.GetProperty("sources")), Is.EqualTo(new[] { "name_pattern", "max_name_bytes", "max_depth" }));
+            Assert.That(Names(root.GetProperty("modules")), Is.EqualTo(new[] { "max_bytes", "max_nesting", "compile_fuel_per_byte" }));
+            Assert.That(Names(root.GetProperty("packages")), Is.EqualTo(new[] { "target", "max_tasks", "max_bytes", "max_output_bytes", "max_batch_tasks", "max_batch_output_bytes" }));
+            Assert.That(Names(root.GetProperty("pool")), Is.EqualTo(new[] { "nodes", "measured", "workers", "rate" }));
         });
     }
 

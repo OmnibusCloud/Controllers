@@ -1,6 +1,9 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using OutWit.Controller.AI.Verify.Delivery;
+using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Runtimes;
 using OutWit.Controller.AI.Verify.Sandbox;
 using OutWit.Controller.AI.Verify.Tasksets;
 
@@ -22,6 +25,8 @@ public sealed class VerifyDocNumbersTests
     private const string CAPABILITIES = "docs/capabilities.md";
     private const string TASKSET_SCHEMA = "docs/verify-taskset.schema.json";
     private const string CHECKER_SCHEMA = "docs/verify-checker.schema.json";
+    private const string CAPABILITIES_SCHEMA = "docs/verify-capabilities.schema.json";
+    private const string TASKSET_SECTION = "taskset";
     private const string CONTROLLER_PROJECT = "OutWit.Controller.AI.Verify.csproj";
     private const string MODEL_PROJECT = "../OutWit.Controller.AI.Verify.Model/OutWit.Controller.AI.Verify.Model.csproj";
     private const string SCRIPTS_PROJECT = "../OutWit.Controller.AI.Verify.Scripts/OutWit.Controller.AI.Verify.Scripts.csproj";
@@ -54,6 +59,52 @@ public sealed class VerifyDocNumbersTests
 
         Assert.That(VerifyPackageTransfer.TRANSFER_BASE_TIME, Is.EqualTo(TimeSpan.FromMinutes(2)), "the documents write this number as a word: two minutes");
         Assert.That(missing, Is.Empty, "a document no longer states what the code holds:\n" + string.Join("\n", missing));
+    }
+
+    [Test]
+    public void B4TheDocumentsStateTheBoundsTheCapabilitiesDocumentCarriesTest()
+    {
+        // The bounds of a taskset and of a preflight's answer are in three places: the code's
+        // constants, the capabilities document a deployment returns, and the pages that describe
+        // it. The document is held to the constants, and the pages to the document: every field
+        // of its section with the number it carries, and the version of the document itself.
+        var bounds = new (string Field, long Value)[]
+        {
+            ("max_line_bytes", VerifyTasksetLimits.MAX_LINE_BYTES),
+            ("max_tasks", VerifyTasksetLimits.MAX_TASKS),
+            ("max_sources", VerifyTasksetLimits.MAX_SOURCES),
+            ("max_args", VerifyTasksetLimits.MAX_ARGS),
+            ("max_suite_cases", VerifyTasksetLimits.MAX_SUITE_CASES),
+            ("max_preflight_messages", VerifyPreflightReport.MaxMessages),
+            ("max_preflight_messages_per_kind", VerifyTasksetLimits.MAX_MESSAGES),
+            ("max_preflight_message_length", VerifyTasksetLimits.MAX_MESSAGE_LENGTH),
+            ("max_preflight_unknown_runtimes", VerifyTasksetLimits.MAX_LISTED_RUNTIMES)
+        };
+
+        using var written = JsonDocument.Parse(VerifyCapabilitiesWriter.Write(new VerifyRuntimeDiagnosticsData(), null));
+        var carried = written.RootElement.GetProperty(TASKSET_SECTION).EnumerateObject().Select(field => (field.Name, field.Value.GetInt64())).ToList();
+        var capabilities = Flat(Load(CAPABILITIES));
+        var readme = Flat(Load(README));
+        var schema = Flat(Load(CAPABILITIES_SCHEMA));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(carried, Is.EqualTo(bounds), "the capabilities document carries the code's bounds");
+
+            foreach (var (field, value) in carried)
+            {
+                Assert.That(capabilities, Does.Contain($"| `{field}` | {Count(value)} |"), $"{CAPABILITIES} states {TASKSET_SECTION}.{field} with the number the document carries");
+                Assert.That(readme, Does.Contain($"`{field}`"), $"{README} names {TASKSET_SECTION}.{field}");
+                Assert.That(schema, Does.Contain($"\"{field}\": {{ \"type\": \"integer\""), $"{CAPABILITIES_SCHEMA} has {TASKSET_SECTION}.{field}");
+            }
+
+            Assert.That(capabilities, Does.Contain($"| `max_line_bytes` | {Count(VerifyTasksetLimits.MAX_LINE_BYTES)} | the bytes of one line of a taskset ({Size(VerifyTasksetLimits.MAX_LINE_BYTES)})"));
+            Assert.That(capabilities, Does.Contain($"[`verify-capabilities.schema.json`](verify-capabilities.schema.json), `{VerifyCapabilitiesWriter.SCHEMA}`)"));
+            Assert.That(capabilities, Does.Contain($"The `{TASKSET_SECTION}` section is new in `{VerifyCapabilitiesWriter.SCHEMA}`."));
+            Assert.That(capabilities, Does.Contain($"**A new document version.** `{VerifyCapabilitiesWriter.SCHEMA}`"));
+            Assert.That(readme, Does.Contain($"| capabilities (`{VerifyCapabilitiesWriter.SCHEMA}`) |"));
+            Assert.That(readme, Does.Contain($"in a section of their own (`{TASKSET_SECTION}`), and is `{VerifyCapabilitiesWriter.SCHEMA}` for it"));
+        });
     }
 
     [Test]
