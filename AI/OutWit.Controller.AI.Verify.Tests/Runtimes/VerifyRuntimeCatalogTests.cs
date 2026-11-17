@@ -24,7 +24,7 @@ public sealed class VerifyRuntimeCatalogTests
         var resolved = VerifyRuntimeCatalog.Resolve(Path.GetTempPath(), "cobol-1959", out var reason);
 
         Assert.That(resolved, Is.Null);
-        Assert.That(reason, Does.Contain("unknown runtime id"));
+        Assert.That(reason, Is.EqualTo(VerifyRuntimeCatalog.UNKNOWN_RUNTIME));
     }
 
     [Test]
@@ -37,7 +37,7 @@ public sealed class VerifyRuntimeCatalogTests
             var resolved = VerifyRuntimeCatalog.Resolve(emptyRoot, VerifyRuntimeCatalog.QUICKJS_0_15_1, out var reason);
 
             Assert.That(resolved, Is.Null);
-            Assert.That(reason, Does.Contain("not found"));
+            Assert.That(reason, Is.EqualTo("the runtime's module is missing"));
         }
         finally
         {

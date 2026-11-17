@@ -301,7 +301,7 @@ public sealed class VerifyWasiRuntimeTests
             Assert.That(reason, Is.Null);
             Assert.That(resolved!.Descriptor.TaskSupplied, Is.True);
             Assert.That(python, Is.Null);
-            Assert.That(pythonReason, Does.Contain("root"));
+            Assert.That(pythonReason, Is.EqualTo("the runtimes are not installed"));
         });
     }
 

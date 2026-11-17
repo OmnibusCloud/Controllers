@@ -1,14 +1,22 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using OutWit.Controller.AI.Wasm;
 
 namespace OutWit.Controller.AI.Verify.Runtimes;
 
 /// <summary>
 /// The node-side runtime registry: the known (pinned) runtime set, resolved against a
 /// runtimes root directory with content-hash verification of the module, of every layer
-/// and of every library tree. Verification results are memoized per absolute path for the
-/// process lifetime — runtime files are immutable by contract (they are hash-pinned), so
-/// one check per process is enough.
+/// and of every library tree. A check that passed is remembered per absolute path for the
+/// process lifetime: runtime files are immutable by contract (they are hash-pinned), so one
+/// good check per process is enough. A check that failed is not remembered: a file hashed while
+/// its archive was still being unpacked is good a moment later, and a node must not go on
+/// refusing work for the rest of its life because of that moment.
+/// <para>
+/// A reason this class gives for a runtime that does not resolve is fixed words without a path:
+/// it may travel. Where on the node the trouble is goes into the detail, which is for the
+/// node's own log only.
+/// </para>
 /// </summary>
 public static class VerifyRuntimeCatalog
 {
@@ -78,6 +86,9 @@ public static class VerifyRuntimeCatalog
     private const string TYPESCRIPT_DIR = "typescript-sucrase-3.35.1";
 
     private const string CLANG_DIR = "clang-22.1.0";
+
+    /// <summary>The reason of a runtime id the catalog does not have.</summary>
+    public const string UNKNOWN_RUNTIME = "the runtime id is not known to this controller";
 
     #endregion
 
@@ -246,7 +257,9 @@ public static class VerifyRuntimeCatalog
             }
         };
 
-    private static readonly ConcurrentDictionary<string, bool> s_hashChecks = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, bool> s_verified = new(StringComparer.Ordinal);
+
+    private static readonly ConcurrentDictionary<string, WasmHostNames> s_names = new(StringComparer.Ordinal);
 
     #endregion
 
@@ -266,20 +279,35 @@ public static class VerifyRuntimeCatalog
     /// <summary>
     /// Resolves a runtime id to verified on-disk paths. Returns null (with a reason)
     /// when the id is unknown, the runtimes root is missing, files are missing, or the
-    /// module fails its hash pin — all of which map to the RuntimeUnavailable verdict,
-    /// never to an exception. A task-supplied runtime needs nothing on disk and resolves
+    /// module fails its hash pin. A task-supplied runtime needs nothing on disk and resolves
     /// without a root.
     /// </summary>
     /// <param name="runtimesRoot">The runtimes root, or null when the node has none.</param>
     /// <param name="runtimeId">The runtime id a task names.</param>
-    /// <param name="unavailableReason">Why the runtime is unavailable, when it is.</param>
+    /// <param name="unavailableReason">Why the runtime is unavailable, when it is: fixed words, no path.</param>
     /// <returns>The resolved runtime, or null.</returns>
     public static VerifyResolvedRuntime? Resolve(string? runtimesRoot, string runtimeId, out string? unavailableReason)
     {
+        return Resolve(runtimesRoot, runtimeId, out unavailableReason, out _);
+    }
+
+    /// <summary>
+    /// Resolves a runtime id to verified on-disk paths, and says where on the node the trouble
+    /// is when there is some.
+    /// </summary>
+    /// <param name="runtimesRoot">The runtimes root, or null when the node has none.</param>
+    /// <param name="runtimeId">The runtime id a task names.</param>
+    /// <param name="unavailableReason">Why the runtime is unavailable, when it is: fixed words, no path.</param>
+    /// <param name="nodeDetail">The file or folder the reason is about, for the node's own log; never sent anywhere.</param>
+    /// <returns>The resolved runtime, or null.</returns>
+    public static VerifyResolvedRuntime? Resolve(string? runtimesRoot, string runtimeId, out string? unavailableReason, out string? nodeDetail)
+    {
+        nodeDetail = null;
+
         var descriptor = Find(runtimeId);
         if (descriptor == null)
         {
-            unavailableReason = $"unknown runtime id '{runtimeId}' (known: {string.Join(", ", KnownIds)})";
+            unavailableReason = UNKNOWN_RUNTIME;
             return null;
         }
 
@@ -291,14 +319,15 @@ public static class VerifyRuntimeCatalog
 
         if (runtimesRoot == null)
         {
-            unavailableReason = $"runtimes root not found (set {VerifyRuntimeLocator.OverrideEnvVar} or stage the runtime archive)";
+            unavailableReason = "the runtimes are not installed";
             return null;
         }
 
         var modulePath = Path.GetFullPath(Path.Combine(runtimesRoot, descriptor.ModulePath));
         if (!File.Exists(modulePath))
         {
-            unavailableReason = $"runtime module not found at '{modulePath}'";
+            unavailableReason = "the runtime's module is missing";
+            nodeDetail = modulePath;
             return null;
         }
 
@@ -307,13 +336,15 @@ public static class VerifyRuntimeCatalog
             : Path.GetFullPath(Path.Combine(runtimesRoot, descriptor.RootDir));
         if (rootPath != null && !Directory.Exists(rootPath))
         {
-            unavailableReason = $"runtime root not found at '{rootPath}'";
+            unavailableReason = "the runtime's folder is missing";
+            nodeDetail = rootPath;
             return null;
         }
 
-        if (!s_hashChecks.GetOrAdd(modulePath, path => HashMatches(path, descriptor.Sha256)))
+        if (!Verified(modulePath, path => HashMatches(path, descriptor.Sha256)))
         {
-            unavailableReason = $"runtime module at '{modulePath}' failed its SHA-256 pin";
+            unavailableReason = "the runtime's module failed its SHA-256 pin";
+            nodeDetail = modulePath;
             return null;
         }
 
@@ -322,13 +353,15 @@ public static class VerifyRuntimeCatalog
             var layerPath = Path.GetFullPath(Path.Combine(runtimesRoot, layer.Path));
             if (!File.Exists(layerPath))
             {
-                unavailableReason = $"runtime layer not found at '{layerPath}'";
+                unavailableReason = "a layer of the runtime is missing";
+                nodeDetail = layerPath;
                 return null;
             }
 
-            if (!s_hashChecks.GetOrAdd(layerPath, path => HashMatches(path, layer.Sha256)))
+            if (!Verified(layerPath, path => HashMatches(path, layer.Sha256)))
             {
-                unavailableReason = $"runtime layer at '{layerPath}' failed its SHA-256 pin";
+                unavailableReason = "a layer of the runtime failed its SHA-256 pin";
+                nodeDetail = layerPath;
                 return null;
             }
         }
@@ -338,26 +371,83 @@ public static class VerifyRuntimeCatalog
             var treePath = Path.GetFullPath(Path.Combine(runtimesRoot, tree.Path));
             if (!Directory.Exists(treePath))
             {
-                unavailableReason = $"runtime library not found at '{treePath}'";
+                unavailableReason = "the runtime's library is missing";
+                nodeDetail = treePath;
                 return null;
             }
 
-            if (!s_hashChecks.GetOrAdd(treePath, path => TreeMatches(path, tree.Sha256)))
+            if (!Verified(treePath, path => TreeMatches(path, tree.Sha256)))
             {
-                unavailableReason = $"runtime library at '{treePath}' failed its SHA-256 pin (a file was changed, added or removed)";
+                unavailableReason = "the runtime's library failed its SHA-256 pin (a file was changed, added or removed)";
+                nodeDetail = treePath;
                 return null;
             }
         }
 
         unavailableReason = null;
-        return new VerifyResolvedRuntime(descriptor, modulePath, rootPath);
+        return new VerifyResolvedRuntime(descriptor, modulePath, rootPath) { RootNames = rootPath == null ? null : NamesOf(runtimesRoot, rootPath, descriptor) };
+    }
+
+    /// <summary>
+    /// The names a guest may reach in a runtime's folder: its pinned layers and every file of its
+    /// pinned library trees, by their paths relative to the folder. Nothing else that may lie in
+    /// the folder exists for a guest. Read once a folder: what is pinned does not change.
+    /// </summary>
+    private static WasmHostNames NamesOf(string runtimesRoot, string rootPath, VerifyRuntimeDescriptor descriptor)
+    {
+        return s_names.GetOrAdd($"{rootPath}|{descriptor.Id}", _ =>
+        {
+            var files = new List<string>();
+
+            foreach (var layer in descriptor.Layers)
+                AddIfInside(files, rootPath, Path.GetFullPath(Path.Combine(runtimesRoot, layer.Path)));
+
+            foreach (var tree in descriptor.Trees)
+            {
+                var treePath = Path.GetFullPath(Path.Combine(runtimesRoot, tree.Path));
+                foreach (var file in Directory.EnumerateFiles(treePath, "*", SearchOption.AllDirectories))
+                    AddIfInside(files, rootPath, file);
+            }
+
+            return new WasmHostNames(files);
+        });
+    }
+
+    private static void AddIfInside(List<string> files, string rootPath, string file)
+    {
+        var relative = Path.GetRelativePath(rootPath, file);
+        if (Path.IsPathRooted(relative) || relative.StartsWith("..", StringComparison.Ordinal))
+            return;
+
+        files.Add(relative.Replace(Path.DirectorySeparatorChar, '/'));
+    }
+
+    /// <summary>Checks a path, remembering a check that passed and nothing else.</summary>
+    private static bool Verified(string path, Func<string, bool> check)
+    {
+        if (s_verified.ContainsKey(path))
+            return true;
+
+        if (!check(path))
+            return false;
+
+        s_verified[path] = true;
+        return true;
     }
 
     private static bool HashMatches(string path, string expectedSha256)
     {
-        using var stream = File.OpenRead(path);
-        var actual = Convert.ToHexStringLower(SHA256.HashData(stream));
-        return actual == expectedSha256;
+        try
+        {
+            using var stream = File.OpenRead(path);
+            var actual = Convert.ToHexStringLower(SHA256.HashData(stream));
+            return actual == expectedSha256;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A file that cannot be read now (still being written) cannot be vouched for now.
+            return false;
+        }
     }
 
     private static bool TreeMatches(string path, string expectedSha256)
@@ -380,4 +470,11 @@ public static class VerifyRuntimeCatalog
 /// A runtime that passed resolution: descriptor plus verified absolute paths (both empty
 /// for a task-supplied runtime).
 /// </summary>
-public sealed record VerifyResolvedRuntime(VerifyRuntimeDescriptor Descriptor, string ModulePath, string? RootPath);
+/// <param name="Descriptor">The pinned runtime.</param>
+/// <param name="ModulePath">The module file, verified.</param>
+/// <param name="RootPath">The folder a guest sees as its root, or null when the runtime has none.</param>
+public sealed record VerifyResolvedRuntime(VerifyRuntimeDescriptor Descriptor, string ModulePath, string? RootPath)
+{
+    /// <summary>The names a guest may reach in the root folder: the pinned files and nothing else. Null when the runtime has no folder.</summary>
+    internal WasmHostNames? RootNames { get; init; }
+}

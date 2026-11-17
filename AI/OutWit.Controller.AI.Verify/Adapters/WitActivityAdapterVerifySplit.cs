@@ -40,9 +40,18 @@ internal sealed class WitActivityAdapterVerifySplit : WitActivityAdapterFunction
         if (parsed.Tasks.Count == 0)
             throw new InvalidOperationException("Taskset is empty.");
 
+        // A runtime this controller does not know has no node that could run it: the taskset is
+        // refused here, by the runtime's name, and no node is asked.
+        var unknown = VerifyTasksetChecks.UnknownRuntimes(parsed.Tasks);
+        if (unknown.Count > 0)
+            throw new InvalidOperationException($"Taskset names {unknown.Count} runtime(s) this controller does not have: {string.Join(", ", unknown.Take(5))}");
+
         var plan = VerifyTasksetPlanner.Plan(parsed.Tasks, options);
         foreach (var note in plan.Notes)
             Logger.LogInformation("Verify.Split: {Note}", note);
+
+        if (plan.Errors.Count > 0)
+            throw new InvalidOperationException($"Taskset has {plan.Errors.Count} task(s) that cannot be planned: {string.Join("; ", plan.Errors.Take(5))}");
 
         // The tasks leave the host as blobs; the collection Grid.ForEach fans out is references.
         var packages = await VerifyTaskPackages.PublishAsync(plan.Batches, BlobService, Logger, "Verify.Split");

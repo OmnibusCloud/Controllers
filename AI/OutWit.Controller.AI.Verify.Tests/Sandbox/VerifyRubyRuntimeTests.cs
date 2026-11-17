@@ -274,7 +274,7 @@ public sealed class VerifyRubyRuntimeTests : VerifySandboxTestBase
     public void AnHoursSleepHoldsNoWorkerTest()
     {
         var started = DateTime.UtcNow;
-        var result = Run(Ruby, RubyTask("sleep 3600\nputs Time.now.to_i"), new VerifyLimitsData { WallTimeMs = 2_000 });
+        var result = Run(Ruby, RubyTask("sleep 3600\nputs Time.now.to_i"));
         var elapsed = DateTime.UtcNow - started;
 
         Assert.Multiple(() =>
@@ -402,7 +402,7 @@ public sealed class VerifyRubyRuntimeTests : VerifySandboxTestBase
             Assert.Multiple(() =>
             {
                 Assert.That(resolved, Is.Null);
-                Assert.That(reason, Does.Contain("not found"));
+                Assert.That(reason, Does.Contain("missing"));
             });
         }
         finally

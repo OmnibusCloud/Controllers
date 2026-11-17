@@ -1,6 +1,7 @@
 using System.Text.Json;
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
+using OutWit.Controller.AI.Verify.Sandbox;
 
 namespace OutWit.Controller.AI.Verify.Tasksets;
 
@@ -85,6 +86,11 @@ public static class VerifyTasksetParser
 
         if (sources.Count == 0)
             throw new FormatException("missing or empty 'sources'");
+
+        // A name must mean the same file on every node: the portable set only, whatever the runtime.
+        var nameProblem = VerifySourceNames.Problem(sources);
+        if (nameProblem != null)
+            throw new FormatException(nameProblem);
 
         var entry = GetString(root, "entry") ?? sources[0].Name;
         if (sources.All(s => s.Name != entry))

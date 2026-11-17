@@ -10,7 +10,8 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// built the same way for every node so a program sees the same world everywhere. The root is
 /// the runtime's library, or for Lua the task's own sources as files; elsewhere the sources
 /// travel inline (or are the module). No guest file system is writable: the strongest
-/// containment posture, and no state survives a run.
+/// containment posture, and no state survives a run. A folder is seen through the table of its
+/// names, so a lookup means the same on every node's file system.
 /// </summary>
 internal static class VerifyGuestWiring
 {
@@ -51,19 +52,42 @@ internal static class VerifyGuestWiring
     }
 
     /// <summary>
-    /// The folders the guest sees: at most one, read-only, as "/".
+    /// The folders the guest sees: at most one, read-only, as "/", and only the names of its
+    /// table exist in it.
     /// </summary>
     /// <param name="runtime">The resolved runtime.</param>
-    /// <param name="sourceRoot">The folder holding the task's sources as files when the runtime takes them so (Lua), else null.</param>
+    /// <param name="sources">The folder holding the task's sources as files when the runtime takes them so (Lua), else null.</param>
     /// <returns>The preopened folders, in order.</returns>
-    public static IReadOnlyList<WasmHostPreopen> Preopens(VerifyResolvedRuntime runtime, string? sourceRoot)
+    public static IReadOnlyList<WasmHostPreopen> Preopens(VerifyResolvedRuntime runtime, WasmHostPreopen? sources)
     {
         // The runtime root (the interpreter's library layers), read-only as "/"; for a runtime
         // whose file system is the task (Lua), the folder of its sources instead.
         if (runtime.Descriptor.SourcesAsRoot)
-            return sourceRoot != null ? [new WasmHostPreopen(sourceRoot, GUEST_ROOT)] : [];
+            return sources != null ? [sources] : [];
 
-        return runtime.RootPath != null ? [new WasmHostPreopen(runtime.RootPath, GUEST_ROOT)] : [];
+        return runtime.RootPath != null ? [Root(runtime, runtime.RootPath, GUEST_ROOT)] : [];
+    }
+
+    /// <summary>
+    /// A runtime's own folder as a guest sees it under a path: read-only, the pinned names only.
+    /// </summary>
+    /// <param name="runtime">The resolved runtime.</param>
+    /// <param name="hostPath">The folder on the node.</param>
+    /// <param name="guestPath">The path the guest sees it under.</param>
+    /// <returns>The folder.</returns>
+    public static WasmHostPreopen Root(VerifyResolvedRuntime runtime, string hostPath, string guestPath)
+    {
+        // A runtime resolved by other means than the catalog (a test's own layout) is read as it lies.
+        return new WasmHostPreopen(hostPath, guestPath, Names: runtime.RootNames ?? WasmHostNames.OfFolder(hostPath));
+    }
+
+    /// <summary>A task's sources as the guest's "/".</summary>
+    /// <param name="hostPath">The folder the sources were written to.</param>
+    /// <param name="names">The table of their names.</param>
+    /// <returns>The folder.</returns>
+    public static WasmHostPreopen Sources(string hostPath, WasmHostNames names)
+    {
+        return new WasmHostPreopen(hostPath, GUEST_ROOT, Names: names);
     }
 
     /// <summary>
