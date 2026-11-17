@@ -42,42 +42,43 @@ public static class VerifyPackagePlanner
     /// <returns>The packages, each a run of consecutive batches; a batch is never split.</returns>
     public static List<List<VerifyTaskBatchData>> Plan(IReadOnlyList<VerifyTaskBatchData> batches)
     {
-        var totalTasks = batches.Sum(batch => (long)batch.Tasks.Count);
-        var tasksPerPackage = (int)Math.Clamp((totalTasks + TARGET_PACKAGES - 1) / TARGET_PACKAGES, 1, MAX_PACKAGE_TASKS);
+        var meter = new VerifyPackageMeter(batches.Sum(batch => (long)batch.Tasks.Count));
 
         var packages = new List<List<VerifyTaskBatchData>>();
         var current = new List<VerifyTaskBatchData>();
-        var currentTasks = 0;
-        long currentBytes = 0;
-        long currentOutput = 0;
 
         foreach (var batch in batches)
         {
             var batchBytes = EstimateBytes(batch);
             var batchOutput = OutputBytes(batch);
 
-            if (current.Count > 0
-                && (currentTasks + batch.Tasks.Count > tasksPerPackage
-                    || currentBytes + batchBytes > MAX_PACKAGE_BYTES
-                    || currentOutput + batchOutput > MAX_PACKAGE_OUTPUT_BYTES))
+            if (!meter.Fits(batch.Tasks.Count, batchBytes, batchOutput))
             {
                 packages.Add(current);
                 current = [];
-                currentTasks = 0;
-                currentBytes = 0;
-                currentOutput = 0;
+                meter.Reset();
             }
 
             current.Add(batch);
-            currentTasks += batch.Tasks.Count;
-            currentBytes += batchBytes;
-            currentOutput += batchOutput;
+            meter.Add(batch.Tasks.Count, batchBytes, batchOutput);
         }
 
         if (current.Count > 0)
             packages.Add(current);
 
         return packages;
+    }
+
+    /// <summary>
+    /// The tasks a package of a run aims for: one batch a package while the run is small, about
+    /// <see cref="TARGET_PACKAGES"/> packages once it is large, and never more than
+    /// <see cref="MAX_PACKAGE_TASKS"/> a package.
+    /// </summary>
+    /// <param name="totalTasks">The tasks of the whole run.</param>
+    /// <returns>The most tasks a package holds before the next batch starts another.</returns>
+    public static int TasksPerPackage(long totalTasks)
+    {
+        return (int)Math.Clamp((totalTasks + TARGET_PACKAGES - 1) / TARGET_PACKAGES, 1, MAX_PACKAGE_TASKS);
     }
 
     /// <summary>The text a batch carries, in characters: sources, arguments, inputs and expected outputs.</summary>

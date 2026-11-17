@@ -21,10 +21,11 @@ internal sealed class WitActivityAdapterVerifyIntegrity : WitActivityAdapterFunc
 
     #region Constructors
 
-    public WitActivityAdapterVerifyIntegrity(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
+    public WitActivityAdapterVerifyIntegrity(IWitProcessingManager processingManager, IWitBlobService blobService, IServiceProvider services, ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        Services = services;
     }
 
     #endregion
@@ -34,7 +35,7 @@ internal sealed class WitActivityAdapterVerifyIntegrity : WitActivityAdapterFunc
     protected override async Task Process(WitActivityVerifyIntegrity activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
         var ledgerPath = await BlobService.GetLocalPathAsync(VerifyAdapterTools.Blob(pool, activity.Ledger, "Ledger"));
-        var blobId = await BlobService.UploadBytesAsync(VerifyLedger.Read(ledgerPath, VerifyLedger.INTEGRITY), BLOB_NAME);
+        var blobId = await VerifyAdapterTools.UploadDocumentAsync(BlobService, VerifyAdapterTools.WorkFolder(Services), ledgerPath, VerifyLedger.INTEGRITY, BLOB_NAME);
 
         if (!pool.TrySetValue(activity.ReturnReference, blobId))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
@@ -68,6 +69,8 @@ internal sealed class WitActivityAdapterVerifyIntegrity : WitActivityAdapterFunc
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IServiceProvider Services { get; }
 
     #endregion
 }

@@ -25,7 +25,7 @@ internal sealed class WitActivityAdapterVerifyCollectOutputs : WitActivityAdapte
         : base(processingManager, logger)
     {
         BlobService = blobService;
-        WorkFolder = VerifyAdapterTools.WorkFolder(services);
+        Services = services;
     }
 
     #endregion
@@ -38,29 +38,10 @@ internal sealed class WitActivityAdapterVerifyCollectOutputs : WitActivityAdapte
 
         // The outputs can be as large as the run: they go from the ledger to a file and from the
         // file to the blob store, never through memory as a whole.
-        var folder = Path.Combine(WorkFolder, Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(folder);
-        try
-        {
-            var outputsPath = Path.Combine(folder, BLOB_NAME);
-            VerifyLedger.CopyTo(ledgerPath, VerifyLedger.OUTPUTS, outputsPath);
+        var blobId = await VerifyAdapterTools.UploadDocumentAsync(BlobService, VerifyAdapterTools.WorkFolder(Services), ledgerPath, VerifyLedger.OUTPUTS, BLOB_NAME);
 
-            var blobId = await BlobService.UploadFileAsync(outputsPath);
-
-            if (!pool.TrySetValue(activity.ReturnReference, blobId))
-                throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
-        }
-        finally
-        {
-            try
-            {
-                Directory.Delete(folder, recursive: true);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                // a working folder of the server's own
-            }
-        }
+        if (!pool.TrySetValue(activity.ReturnReference, blobId))
+            throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
     }
 
     #endregion
@@ -93,7 +74,7 @@ internal sealed class WitActivityAdapterVerifyCollectOutputs : WitActivityAdapte
 
     private IWitBlobService BlobService { get; }
 
-    private string WorkFolder { get; }
+    private IServiceProvider Services { get; }
 
     #endregion
 }

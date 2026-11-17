@@ -32,14 +32,10 @@ internal sealed class WitActivityAdapterVerifyRepairs : WitActivityAdapterFuncti
 
         // What came back is taken in under its tickets; what has no verdict yet goes out once more.
         var main = await VerifySettlement.ReadMainAsync(issued, returned, BlobService);
-        var batches = await VerifySettlement.RepairBatchesAsync(main, BlobService);
+        var packages = await VerifySettlement.PublishRepairsAsync(main, BlobService);
 
-        Logger.LogInformation("Verify.Repairs: {Tasks} task(s) without a verdict go out once more; {Rejected} of {Returned} result package(s) refused",
-            batches.Sum(batch => batch.Tasks.Count), main.RejectedTotal, returned.Count);
-
-        var packages = batches.Count == 0
-            ? []
-            : await VerifyTaskPackages.PublishAsync(batches, BlobService, Logger, "Verify.Repairs");
+        Logger.LogInformation("Verify.Repairs: {Tasks} task(s) without a verdict go out once more in {Packages} package(s); {Rejected} of {Returned} result package(s) refused",
+            packages.Sum(package => (long)package.TaskCount), packages.Count, main.RejectedTotal, returned.Count);
 
         if (!pool.TrySetCollection(activity.ReturnReference, packages))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");

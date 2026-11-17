@@ -12,12 +12,19 @@ namespace OutWit.Controller.AI.Verify.Adapters;
 
 internal sealed class WitActivityAdapterVerifySplit : WitActivityAdapterFunction<WitActivityVerifySplit>
 {
+    #region Constants
+
+    private const int SHOWN_PROBLEMS = 5;
+
+    #endregion
+
     #region Constructors
 
-    public WitActivityAdapterVerifySplit(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
+    public WitActivityAdapterVerifySplit(IWitProcessingManager processingManager, IWitBlobService blobService, IServiceProvider services, ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        Services = services;
     }
 
     #endregion
@@ -32,29 +39,34 @@ internal sealed class WitActivityAdapterVerifySplit : WitActivityAdapterFunction
         pool.TryGetValue(activity.Options, out VerifyOptionsData? options);
 
         var tasksetPath = await BlobService.GetLocalPathAsync(tasksetBlobId);
-        var jsonl = await File.ReadAllTextAsync(tasksetPath);
 
-        var parsed = VerifyTasksetParser.Parse(jsonl);
-        if (parsed.Errors.Count > 0)
-            throw new InvalidOperationException($"Taskset has {parsed.Errors.Count} malformed line(s): {string.Join("; ", parsed.Errors.Take(5))}");
-        if (parsed.Tasks.Count == 0)
+        // The taskset is read a line at a time and its tasks wait in working files of the
+        // server's own until their packages are stored: memory holds a task, a batch and a
+        // package, whatever the taskset's size.
+        using var spool = new VerifyTaskSpool(Path.Combine(VerifyAdapterTools.WorkFolder(Services), Guid.NewGuid().ToString("N")));
+
+        VerifyTasksetScan scan;
+        await using (var taskset = VerifyAdapterTools.OpenTaskset(tasksetPath))
+            scan = VerifyTasksetScanner.Scan(taskset, options, spool);
+
+        if (scan.Errors.Count > 0)
+            throw new InvalidOperationException($"Taskset has {scan.Errors.Count} malformed line(s): {string.Join("; ", scan.Errors.Shown.Take(SHOWN_PROBLEMS))}");
+        if (scan.Tasks == 0)
             throw new InvalidOperationException("Taskset is empty.");
 
         // A runtime this controller does not know has no node that could run it: the taskset is
         // refused here, by the runtime's name, and no node is asked.
-        var unknown = VerifyTasksetChecks.UnknownRuntimes(parsed.Tasks);
-        if (unknown.Count > 0)
-            throw new InvalidOperationException($"Taskset names {unknown.Count} runtime(s) this controller does not have: {string.Join(", ", unknown.Take(5))}");
+        if (scan.UnknownTasks > 0)
+            throw new InvalidOperationException($"Taskset names runtime(s) this controller does not have: {string.Join(", ", scan.UnknownRuntimeIds.Take(SHOWN_PROBLEMS))}");
 
-        var plan = VerifyTasksetPlanner.Plan(parsed.Tasks, options);
-        foreach (var note in plan.Notes)
+        foreach (var note in scan.Notes.ToList(VerifyTasksetScan.NOTES))
             Logger.LogInformation("Verify.Split: {Note}", note);
 
-        if (plan.Errors.Count > 0)
-            throw new InvalidOperationException($"Taskset has {plan.Errors.Count} task(s) that cannot be planned: {string.Join("; ", plan.Errors.Take(5))}");
+        if (scan.PlanErrors.Count > 0)
+            throw new InvalidOperationException($"Taskset has {scan.PlanErrors.Count} task(s) that cannot be planned: {string.Join("; ", scan.PlanErrors.Shown.Take(SHOWN_PROBLEMS))}");
 
         // The tasks leave the host as blobs; the collection Grid.ForEach fans out is references.
-        var packages = await VerifyTaskPackages.PublishAsync(plan.Batches, BlobService, Logger, "Verify.Split");
+        var packages = await VerifyTaskPackages.PublishAsync(spool, options, BlobService, Logger, "Verify.Split");
 
         if (!pool.TrySetCollection(activity.ReturnReference, packages))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
@@ -95,6 +107,8 @@ internal sealed class WitActivityAdapterVerifySplit : WitActivityAdapterFunction
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private IServiceProvider Services { get; }
 
     #endregion
 }

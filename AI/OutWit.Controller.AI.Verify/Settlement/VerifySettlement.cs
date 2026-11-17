@@ -12,15 +12,20 @@ namespace OutWit.Controller.AI.Verify.Settlement;
 /// disagreed, in three copies). Every result package is taken in under its ticket and checked
 /// (<see cref="VerifyRoundIntake"/>), every task is ruled on (<see cref="VerifyRulings"/>), and
 /// the four documents are written into one ledger (<see cref="VerifyLedger"/>). The results are
-/// read once, a batch at a time, and kept in a spool file while the documents are written: the
-/// server's memory holds a record per execution, not the outputs.
+/// read once, a batch at a time, and kept in a spool file while the documents are written, and
+/// every document goes to a file as it is written: the server's memory holds a record per
+/// execution, never the outputs and never a document.
 /// </summary>
 internal static class VerifySettlement
 {
     #region Constants
 
     private const string OUTPUTS_EXTENSION = ".outputs";
+    private const string REPORT_EXTENSION = ".report";
+    private const string PROVENANCE_EXTENSION = ".provenance";
+    private const string INTEGRITY_EXTENSION = ".integrity";
     private const string LEDGER_EXTENSION = ".wvl";
+    private const int WRITE_BUFFER_BYTES = 128 * 1024;
 
     #endregion
 
@@ -38,14 +43,14 @@ internal static class VerifySettlement
     }
 
     /// <summary>
-    /// The tasks of the first fan-out that have no verdict, as batches to send out once more:
-    /// those of the packages no accepted result answers, and those every accepted execution
-    /// reported as a fault of its node.
+    /// Stores the tasks of the first fan-out that have no verdict as packages to send out once
+    /// more: those of the packages no accepted result answers, and those every accepted
+    /// execution reported as a fault of its node.
     /// </summary>
     /// <param name="main">The first fan-out.</param>
     /// <param name="blobs">The host's blob service.</param>
-    /// <returns>The batches; empty when every task has a verdict.</returns>
-    public static Task<List<VerifyTaskBatchData>> RepairBatchesAsync(VerifyRound main, IWitBlobService blobs)
+    /// <returns>The references; empty when every task has a verdict.</returns>
+    public static Task<List<VerifyTaskPackageData>> PublishRepairsAsync(VerifyRound main, IWitBlobService blobs)
     {
         var wanted = new Dictionary<string, HashSet<int>?>(StringComparer.Ordinal);
 
@@ -58,16 +63,17 @@ internal static class VerifySettlement
                 Want(wanted, unit.Ticket, index);
         }
 
-        return SelectAsync(main.Issued, wanted, blobs);
+        return PublishAsync(main.Issued, wanted, blobs);
     }
 
     /// <summary>
-    /// The tasks of the first fan-out whose executions disagree, as batches to run three more times.
+    /// Stores the tasks of the first fan-out whose executions disagree as packages to run three
+    /// more times.
     /// </summary>
     /// <param name="main">The first fan-out.</param>
     /// <param name="blobs">The host's blob service.</param>
-    /// <returns>The batches; empty when nothing is disputed.</returns>
-    public static Task<List<VerifyTaskBatchData>> DisputeBatchesAsync(VerifyRound main, IWitBlobService blobs)
+    /// <returns>The references; empty when nothing is disputed.</returns>
+    public static Task<List<VerifyTaskPackageData>> PublishDisputesAsync(VerifyRound main, IWitBlobService blobs)
     {
         var wanted = new Dictionary<string, HashSet<int>?>(StringComparer.Ordinal);
 
@@ -77,7 +83,7 @@ internal static class VerifySettlement
                 Want(wanted, unit.Ticket, index);
         }
 
-        return SelectAsync(main.Issued, wanted, blobs);
+        return PublishAsync(main.Issued, wanted, blobs);
     }
 
     /// <summary>
@@ -106,7 +112,7 @@ internal static class VerifySettlement
             : null;
 
         // Every task of the run: those an accepted package holds, and those of the packages
-        // nothing answered (read from the server's own task blobs).
+        // nothing answered (read from the server's own task blobs, a package at a time).
         var indices = new SortedSet<int>(main.UnitOf.Keys);
         foreach (var unit in main.Unanswered)
         {
@@ -121,36 +127,45 @@ internal static class VerifySettlement
         var summary = Summarize(rulings, rounds);
         var facts = Facts(indices, rulings, main, rounds);
 
-        var outputsPath = Path.Combine(workFolder, $"verify-settle-{Guid.NewGuid():N}{OUTPUTS_EXTENSION}");
-        var ledgerPath = Path.Combine(workFolder, $"verify-settle-{Guid.NewGuid():N}{LEDGER_EXTENSION}");
+        var stem = Path.Combine(workFolder, $"verify-settle-{Guid.NewGuid():N}");
+        var outputsPath = stem + OUTPUTS_EXTENSION;
+        var reportPath = stem + REPORT_EXTENSION;
+        var provenancePath = stem + PROVENANCE_EXTENSION;
+        var integrityPath = stem + INTEGRITY_EXTENSION;
+        var ledgerPath = stem + LEDGER_EXTENSION;
         try
         {
-            byte[] report;
-            using (var reportStream = new MemoryStream())
+            using (var report = Create(reportPath))
+            using (var outputs = Create(outputsPath))
+            using (var writer = new Utf8JsonWriter(report, new JsonWriterOptions { Indented = false }))
             {
-                using (var outputs = new FileStream(outputsPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                using (var writer = new Utf8JsonWriter(reportStream, new JsonWriterOptions { Indented = false }))
+                VerifyReportWriter.WriteHead(writer, summary);
+
+                // One task at a time: its accepted result comes out of the spool, goes into
+                // both documents, and is let go.
+                foreach (var ruling in rulings)
                 {
-                    VerifyReportWriter.WriteHead(writer, summary);
+                    var task = new VerifySettledTask(ruling.Index, ruling.Verdict, ruling.ExitCode, ruling.Reason,
+                        ruling.Accepted == null ? null : spool.Read(ruling.Accepted));
 
-                    // One task at a time: its accepted result comes out of the spool, goes into
-                    // both documents, and is let go.
-                    foreach (var ruling in rulings)
-                    {
-                        var task = new VerifySettledTask(ruling.Index, ruling.Verdict, ruling.ExitCode, ruling.Reason,
-                            ruling.Accepted == null ? null : spool.Read(ruling.Accepted));
+                    VerifyReportWriter.WriteTask(writer, task);
+                    VerifyCorpusWriter.WriteLine(outputs, task);
 
-                        VerifyReportWriter.WriteTask(writer, task);
-                        VerifyCorpusWriter.WriteLine(outputs, task);
-                    }
-
-                    VerifyReportWriter.WriteTail(writer);
+                    // What the writer holds goes to the file as it fills, not at the end.
+                    if (writer.BytesPending >= WRITE_BUFFER_BYTES)
+                        writer.Flush();
                 }
 
-                report = reportStream.ToArray();
+                VerifyReportWriter.WriteTail(writer);
             }
 
-            VerifyLedger.Write(ledgerPath, report, VerifyProvenanceWriter.Write(rounds), VerifyIntegrityWriter.Write(facts), outputsPath);
+            using (var provenance = Create(provenancePath))
+                VerifyProvenanceWriter.Write(provenance, rounds);
+
+            using (var integrity = Create(integrityPath))
+                VerifyIntegrityWriter.Write(integrity, facts);
+
+            VerifyLedger.Write(ledgerPath, reportPath, provenancePath, integrityPath, outputsPath);
             return (ledgerPath, summary);
         }
         catch
@@ -161,6 +176,9 @@ internal static class VerifySettlement
         finally
         {
             TryDelete(outputsPath);
+            TryDelete(reportPath);
+            TryDelete(provenancePath);
+            TryDelete(integrityPath);
         }
     }
 
@@ -177,6 +195,11 @@ internal static class VerifySettlement
         {
             // a working file of the server's own
         }
+    }
+
+    private static FileStream Create(string path)
+    {
+        return new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, WRITE_BUFFER_BYTES);
     }
 
     private static VerifySettlementSummary Summarize(IReadOnlyList<VerifyRuling> rulings, IReadOnlyList<VerifyRound> rounds)
@@ -236,12 +259,26 @@ internal static class VerifySettlement
     }
 
     /// <summary>
-    /// The wanted tasks of the wanted packages, in the batches they came in: read from the
-    /// server's own task blobs, the packages in the order they were given out.
+    /// Stores the wanted tasks of the wanted packages, in the batches they came in, as packages
+    /// of their own: read from the server's own task blobs a package at a time, in the order the
+    /// packages were given out, and stored as each new package fills. The tasks of a round are
+    /// never together in memory, even when the round is the whole run (a fleet that answered
+    /// nothing).
     /// </summary>
-    private static async Task<List<VerifyTaskBatchData>> SelectAsync(IReadOnlyList<VerifyTaskPackageData> issued, Dictionary<string, HashSet<int>?> wanted, IWitBlobService blobs)
+    private static async Task<List<VerifyTaskPackageData>> PublishAsync(IReadOnlyList<VerifyTaskPackageData> issued, Dictionary<string, HashSet<int>?> wanted, IWitBlobService blobs)
     {
-        var batches = new List<VerifyTaskBatchData>();
+        // How many tasks go out decides how the packages are cut; the references say it.
+        long total = 0;
+        foreach (var unit in issued)
+        {
+            if (wanted.TryGetValue(unit.Ticket, out var indices))
+                total += indices?.Count ?? unit.TaskCount;
+        }
+
+        if (total == 0)
+            return [];
+
+        var publisher = new VerifyPackagePublisher(total, blobs);
 
         foreach (var unit in issued)
         {
@@ -254,7 +291,7 @@ internal static class VerifySettlement
                 if (tasks.Count == 0)
                     continue;
 
-                batches.Add(new VerifyTaskBatchData
+                await publisher.AddAsync(new VerifyTaskBatchData
                 {
                     RuntimeId = batch.RuntimeId,
                     DefaultLimits = batch.DefaultLimits,
@@ -265,7 +302,7 @@ internal static class VerifySettlement
             }
         }
 
-        return batches;
+        return await publisher.CompleteAsync();
     }
 
     #endregion

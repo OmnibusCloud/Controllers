@@ -12,6 +12,13 @@ namespace OutWit.Controller.AI.Verify.Adapters;
 
 internal sealed class WitActivityAdapterVerifyMakeCheckTasks : WitActivityAdapterFunction<WitActivityVerifyMakeCheckTasks>
 {
+    #region Constants
+
+    private const string SKIPPED = "candidate(s) without a check";
+    private const int SHOWN_PROBLEMS = 5;
+
+    #endregion
+
     #region Constructors
 
     public WitActivityAdapterVerifyMakeCheckTasks(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
@@ -33,38 +40,102 @@ internal sealed class WitActivityAdapterVerifyMakeCheckTasks : WitActivityAdapte
 
         pool.TryGetValue(activity.Options, out VerifyOptionsData? options);
 
-        // One settled result a generator: what is checked is what the corpus holds.
-        var candidates = VerifyCheckTaskBuilder.ReadCandidates(await BlobService.GetLocalPathAsync(ledgerBlobId));
-
-        var checkerPath = await BlobService.GetLocalPathAsync(checkerBlobId);
-        var checker = VerifyCheckerSpec.Parse(await File.ReadAllTextAsync(checkerPath));
+        var ledgerPath = await BlobService.GetLocalPathAsync(ledgerBlobId);
+        var checker = await VerifyCheckerSpec.ReadAsync(await BlobService.GetLocalPathAsync(checkerBlobId));
 
         // As for a taskset: a runtime this controller does not know has no node that could run it.
         var unknown = VerifyTasksetChecks.UnknownRuntimes([new VerifyTaskData { RuntimeId = checker.RuntimeId }]);
         if (unknown.Count > 0)
             throw new InvalidOperationException($"The checker names a runtime this controller does not have: {unknown[0]}");
 
-        var plan = VerifyCheckTaskBuilder.Build(candidates, checker);
-        foreach (var note in plan.Skipped)
+        // One settled result a generator: what is checked is what the corpus holds. The
+        // candidates are read from the ledger one at a time, twice: once to count the checks (the
+        // count decides how the packages are cut), once to make them. A candidate is as large as
+        // a task's output may be, and a run has as many as it has tasks.
+        var candidates = 0;
+        var checks = 0;
+        var skipped = new VerifyMessageList();
+        var notes = new VerifyMessageList();
+        var unplanned = new VerifyMessageList();
+        var clamped = new List<string>();
+
+        foreach (var candidate in VerifyCheckTaskBuilder.ReadCandidates(ledgerPath))
+        {
+            candidates++;
+
+            var task = VerifyCheckTaskBuilder.CheckTask(candidate, checker, out var why);
+            if (task == null)
+            {
+                skipped.Add($"candidate {candidate.Index}: {why}");
+                continue;
+            }
+
+            clamped.Clear();
+            var error = VerifyTasksetPlanner.Admit(task, options?.DefaultLimits, clamped, out _, out _);
+            notes.AddRange(clamped);
+            if (error != null)
+                unplanned.Add(error);
+            else
+                checks++;
+        }
+
+        foreach (var note in skipped.ToList(SKIPPED))
             Logger.LogInformation("Verify.MakeCheckTasks: skipped {Note}", note);
 
-        if (plan.Tasks.Count == 0)
-            throw new InvalidOperationException($"No candidate produced a checkable output ({candidates.Count} candidate(s), {plan.Skipped.Count} skipped).");
+        if (checks == 0 && unplanned.Count == 0)
+            throw new InvalidOperationException($"No candidate produced a checkable output ({candidates} candidate(s), {skipped.Count} skipped).");
 
-        Logger.LogInformation("Verify.MakeCheckTasks: {Checks} check task(s) from {Candidates} candidate(s), {Skipped} skipped",
-            plan.Tasks.Count, candidates.Count, plan.Skipped.Count);
+        Logger.LogInformation("Verify.MakeCheckTasks: {Checks} check task(s) from {Candidates} candidate(s), {Skipped} skipped", checks, candidates, skipped.Count);
 
-        var batches = VerifyTasksetPlanner.Plan(plan.Tasks, options);
-        foreach (var note in batches.Notes)
+        foreach (var note in notes.ToList(VerifyTasksetScan.NOTES))
             Logger.LogInformation("Verify.MakeCheckTasks: {Note}", note);
 
-        if (batches.Errors.Count > 0)
-            throw new InvalidOperationException($"{batches.Errors.Count} check task(s) cannot be planned: {string.Join("; ", batches.Errors.Take(5))}");
+        // Refused as a taskset is: one check that cannot be planned fails the activity, by its
+        // index, before anything is stored.
+        if (unplanned.Count > 0)
+            throw new InvalidOperationException($"{unplanned.Count} check task(s) cannot be planned: {string.Join("; ", unplanned.Shown.Take(SHOWN_PROBLEMS))}");
 
-        var packages = await VerifyTaskPackages.PublishAsync(batches.Batches, BlobService, Logger, "Verify.MakeCheckTasks");
+        var packages = await PublishAsync(ledgerPath, checker, checks, options);
 
         if (!pool.TrySetCollection(activity.ReturnReference, packages))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+    }
+
+    /// <summary>
+    /// Makes the check tasks one at a time and stores them a package at a time: the checks of a
+    /// run are never together in memory.
+    /// </summary>
+    private async Task<List<VerifyTaskPackageData>> PublishAsync(string ledgerPath, VerifyCheckerSpec checker, int checks, VerifyOptionsData? options)
+    {
+        var publisher = new VerifyPackagePublisher(checks, BlobService);
+        var cutter = new VerifyBatchCutter(checker.RuntimeId, options, VerifyTasksetPlanner.BatchSize(options, out var sizeNote));
+        if (sizeNote != null)
+            Logger.LogInformation("Verify.MakeCheckTasks: {Note}", sizeNote);
+
+        var clamped = new List<string>();
+        foreach (var candidate in VerifyCheckTaskBuilder.ReadCandidates(ledgerPath))
+        {
+            var task = VerifyCheckTaskBuilder.CheckTask(candidate, checker, out _);
+            if (task == null)
+                continue;
+
+            // Every check was admitted when the candidates were counted; here its limits are set.
+            clamped.Clear();
+            if (VerifyTasksetPlanner.Admit(task, options?.DefaultLimits, clamped, out var bytes, out var output) != null)
+                continue;
+
+            if (cutter.Add(task, bytes, output) is { } closed)
+                await publisher.AddAsync(closed);
+        }
+
+        if (cutter.Finish() is { } last)
+            await publisher.AddAsync(last);
+
+        var packages = await publisher.CompleteAsync();
+        Logger.LogInformation("Verify.MakeCheckTasks: {Tasks} task(s) in {Batches} batch(es) stored as {Packages} package blob(s), {Bytes} bytes",
+            publisher.Tasks, publisher.Batches, packages.Count, publisher.Bytes);
+
+        return packages;
     }
 
     #endregion

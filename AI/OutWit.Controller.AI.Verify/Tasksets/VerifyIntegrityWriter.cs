@@ -20,6 +20,8 @@ internal static class VerifyIntegrityWriter
     /// <summary>The document's schema tag.</summary>
     public const string SCHEMA = "verify-integrity/2";
 
+    private const int FLUSH_BYTES = 128 * 1024;
+
     #endregion
 
     #region Functions
@@ -31,10 +33,22 @@ internal static class VerifyIntegrityWriter
     /// <returns>The JSON document bytes.</returns>
     public static byte[] Write(VerifyIntegrityFacts facts)
     {
+        using var stream = new MemoryStream();
+        Write(stream, facts);
+        return stream.ToArray();
+    }
+
+    /// <summary>
+    /// Writes the facts of a settled run to a stream as UTF-8 JSON: the document has a record a
+    /// sampled task, so it goes out as it is made.
+    /// </summary>
+    /// <param name="stream">The document.</param>
+    /// <param name="facts">The facts.</param>
+    public static void Write(Stream stream, VerifyIntegrityFacts facts)
+    {
         var mismatches = facts.Pairs.Count(pair => pair.Differs.Count > 0);
         var resolved = facts.Disputes.Count(dispute => dispute.Resolved);
 
-        using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
         {
             writer.WriteStartObject();
@@ -62,7 +76,12 @@ internal static class VerifyIntegrityWriter
 
             writer.WriteStartArray("pairs");
             foreach (var pair in facts.Pairs)
+            {
                 WritePair(writer, pair);
+
+                if (writer.BytesPending >= FLUSH_BYTES)
+                    writer.Flush();
+            }
             writer.WriteEndArray();
 
             writer.WriteStartArray("disputes");
@@ -80,8 +99,6 @@ internal static class VerifyIntegrityWriter
 
             writer.WriteEndObject();
         }
-
-        return stream.ToArray();
     }
 
     private static void WritePair(Utf8JsonWriter writer, VerifyPairRecord pair)

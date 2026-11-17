@@ -18,7 +18,7 @@ public static class VerifyCheckTaskBuilder
     #region Functions
 
     /// <summary>
-    /// Builds the check tasks for a set of candidates.
+    /// Builds the check tasks for a set of candidates that are in memory.
     /// </summary>
     /// <param name="candidates">The settled generator results, one a task.</param>
     /// <param name="checker">The checker spec.</param>
@@ -30,67 +30,83 @@ public static class VerifyCheckTaskBuilder
 
         foreach (var candidate in candidates.OrderBy(result => result.Index))
         {
-            if (candidate.Verdict != VerifyVerdict.Pass)
-            {
-                skipped.Add($"candidate {candidate.Index}: {candidate.Verdict}");
-                continue;
-            }
-
-            if (candidate.StdoutTruncated)
-            {
-                skipped.Add($"candidate {candidate.Index}: output truncated");
-                continue;
-            }
-
-            if (candidate.Stdout.Length == 0)
-            {
-                skipped.Add($"candidate {candidate.Index}: empty output");
-                continue;
-            }
-
-            tasks.Add(new VerifyTaskData
-            {
-                TaskIndex = candidate.Index,
-                RuntimeId = checker.RuntimeId,
-                EntryPoint = checker.EntryPoint,
-                Sources = checker.Sources.Select(source => source.Clone()).ToList(),
-                Args = checker.Args.ToList(),
-                Stdin = candidate.Stdout,
-                Limits = checker.Limits?.Clone(),
-                Suite = new VerifySuiteData
-                {
-                    Cases =
-                    [
-                        new VerifySuiteCaseData
-                        {
-                            Stdin = candidate.Stdout,
-                            ExpectedStdout = checker.ExpectedStdout,
-                            ExpectedExitCode = checker.ExpectedExitCode
-                        }
-                    ]
-                }
-            });
+            var task = CheckTask(candidate, checker, out var why);
+            if (task == null)
+                skipped.Add($"candidate {candidate.Index}: {why}");
+            else
+                tasks.Add(task);
         }
 
         return new VerifyCheckPlan(tasks, skipped);
     }
 
     /// <summary>
-    /// Reads the candidates of a generator run from its ledger: the outputs, one settled task a line.
+    /// The check task of one candidate: the checker run with the candidate's output on stdin,
+    /// under the candidate's index.
+    /// </summary>
+    /// <param name="candidate">The settled generator result.</param>
+    /// <param name="checker">The checker spec.</param>
+    /// <param name="skipped">Why the candidate has no check, when it has none.</param>
+    /// <returns>The task, or null for a candidate without a usable output.</returns>
+    public static VerifyTaskData? CheckTask(VerifyCandidate candidate, VerifyCheckerSpec checker, out string? skipped)
+    {
+        skipped = Unusable(candidate);
+        if (skipped != null)
+            return null;
+
+        return new VerifyTaskData
+        {
+            TaskIndex = candidate.Index,
+            RuntimeId = checker.RuntimeId,
+            EntryPoint = checker.EntryPoint,
+            Sources = checker.Sources.Select(source => source.Clone()).ToList(),
+            Args = checker.Args.ToList(),
+            Stdin = candidate.Stdout,
+            Limits = checker.Limits?.Clone(),
+            Suite = new VerifySuiteData
+            {
+                Cases =
+                [
+                    new VerifySuiteCaseData
+                    {
+                        Stdin = candidate.Stdout,
+                        ExpectedStdout = checker.ExpectedStdout,
+                        ExpectedExitCode = checker.ExpectedExitCode
+                    }
+                ]
+            }
+        };
+    }
+
+    /// <summary>Why a candidate has no check: it did not pass, its output was cut, or it printed nothing.</summary>
+    /// <param name="candidate">The settled generator result.</param>
+    /// <returns>The reason, or null for a candidate that is checked.</returns>
+    public static string? Unusable(VerifyCandidate candidate)
+    {
+        if (candidate.Verdict != VerifyVerdict.Pass)
+            return candidate.Verdict.ToString();
+
+        if (candidate.StdoutTruncated)
+            return "output truncated";
+
+        return candidate.Stdout.Length == 0 ? "empty output" : null;
+    }
+
+    /// <summary>
+    /// Reads the candidates of a generator run from its ledger: the outputs, one settled task a
+    /// line, in the ledger's order (by index). One candidate is held at a time: the outputs of a
+    /// run are as large as the run.
     /// </summary>
     /// <param name="ledgerPath">The ledger's local file.</param>
-    /// <returns>The candidates, in the ledger's order (by index).</returns>
+    /// <returns>The candidates, read as they are asked for.</returns>
     /// <exception cref="InvalidDataException">The file is not a ledger.</exception>
-    public static List<VerifyCandidate> ReadCandidates(string ledgerPath)
+    public static IEnumerable<VerifyCandidate> ReadCandidates(string ledgerPath)
     {
-        var candidates = new List<VerifyCandidate>();
-
-        using var outputs = VerifyLedger.Open(ledgerPath, VerifyLedger.OUTPUTS, out var length);
-        var end = outputs.Position + length;
+        using var outputs = VerifyLedger.Open(ledgerPath, VerifyLedger.OUTPUTS, out _);
         using var reader = new StreamReader(outputs, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), detectEncodingFromByteOrderMarks: false);
 
         // The outputs are the ledger's last document: its lines run to the end of the file.
-        while (outputs.Position <= end && reader.ReadLine() is { } line)
+        while (reader.ReadLine() is { } line)
         {
             if (line.Length == 0)
                 continue;
@@ -98,20 +114,13 @@ public static class VerifyCheckTaskBuilder
             using var document = JsonDocument.Parse(line);
             var root = document.RootElement;
 
-            candidates.Add(new VerifyCandidate(
+            yield return new VerifyCandidate(
                 root.GetProperty("index").GetInt32(),
                 Enum.Parse<VerifyVerdict>(root.GetProperty("verdict").GetString() ?? ""),
                 root.GetProperty("stdout").GetString() ?? "",
-                root.TryGetProperty("stdout_truncated", out var truncated) && truncated.ValueKind == JsonValueKind.True));
+                root.TryGetProperty("stdout_truncated", out var truncated) && truncated.ValueKind == JsonValueKind.True);
         }
-
-        return candidates;
     }
 
     #endregion
 }
-
-/// <summary>The check tasks and the candidates that produced none.</summary>
-/// <param name="Tasks">Check tasks ordered by index.</param>
-/// <param name="Skipped">One note per candidate without a check task.</param>
-public sealed record VerifyCheckPlan(List<VerifyTaskData> Tasks, List<string> Skipped);

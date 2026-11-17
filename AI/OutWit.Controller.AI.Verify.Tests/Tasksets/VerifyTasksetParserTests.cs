@@ -6,7 +6,8 @@ namespace OutWit.Controller.AI.Verify.Tests.Tasksets;
 /// <summary>
 /// The taskset parser at its edges: every malformed shape is one collected error naming its
 /// line, never an exception; indices are unique and non-negative; editors' habits (a BOM,
-/// CRLF) do not count as errors; limits below one fall back to the defaults.
+/// CRLF) do not count as errors; a field of the wrong type or a limit below one is refused
+/// (the schema's own rules: <see cref="VerifyTasksetSchemaTests"/>).
 /// </summary>
 [TestFixture]
 public sealed class VerifyTasksetParserTests
@@ -85,16 +86,21 @@ public sealed class VerifyTasksetParserTests
     }
 
     [Test]
-    public void LimitsBelowOneFallBackToTheDefaultsTest()
+    public void LimitsBelowOneAreRefusedAndAWallTimeIsCarriedTest()
     {
-        var parsed = VerifyTasksetParser.Parse("""{"runtime":"python-3.14.6","sources":{"m.py":"print(1)"},"limits":{"fuel":-5,"memory":0,"wall_ms":2500}}""");
+        // Before 0.14.0 a limit of 0 or less fell back to the default without a word; the schema
+        // says a limit is 1 or more, and the parser now holds a taskset to it (V:M-4).
+        var refused = VerifyTasksetParser.Parse("""{"runtime":"python-3.14.6","sources":{"m.py":"print(1)"},"limits":{"fuel":-5,"memory":0,"wall_ms":2500}}""");
+        Assert.That(refused.Errors, Is.EqualTo(new[] { "line 1: 'limits.fuel' must be 1 or more" }));
+
+        var parsed = VerifyTasksetParser.Parse("""{"runtime":"python-3.14.6","sources":{"m.py":"print(1)"},"limits":{"wall_ms":2500}}""");
         var limits = VerifySandboxDefaultsFor(parsed.Tasks[0]);
 
         Assert.Multiple(() =>
         {
-            Assert.That(limits.FuelBudget, Is.EqualTo(OutWit.Controller.AI.Verify.Sandbox.VerifySandboxDefaults.DEFAULT_FUEL_BUDGET));
+            Assert.That(limits.FuelBudget, Is.EqualTo(OutWit.Controller.AI.Verify.Sandbox.VerifySandboxDefaults.DEFAULT_FUEL_BUDGET), "a limit that is not given takes the default");
             Assert.That(limits.MemoryBytes, Is.EqualTo(OutWit.Controller.AI.Verify.Sandbox.VerifySandboxDefaults.DEFAULT_MEMORY_BYTES));
-            Assert.That(limits.WallTimeMs, Is.EqualTo(2500));
+            Assert.That(limits.WallTimeMs, Is.EqualTo(2500), "wall_ms is accepted and carried; it is not a limit");
         });
     }
 
@@ -109,19 +115,16 @@ public sealed class VerifyTasksetParserTests
     }
 
     [Test]
-    public void OptionalFieldsOfTheWrongTypeAreIgnoredTest()
+    public void OptionalFieldsOfTheWrongTypeAreRefusedTest()
     {
+        // Before 0.14.0 every one of these was ignored and the task ran with the field's default
+        // (V:M-4): the first of them is now the line's error.
         var parsed = VerifyTasksetParser.Parse("""{"runtime":"python-3.14.6","sources":{"m.py":"print(1)"},"stdin":7,"args":"x","seed":"s","suite":{},"limits":[]}""");
 
-        Assert.That(parsed.Errors, Is.Empty);
-        var task = parsed.Tasks[0];
         Assert.Multiple(() =>
         {
-            Assert.That(task.Stdin, Is.Null);
-            Assert.That(task.Args, Is.Empty);
-            Assert.That(task.RandomSeed, Is.Zero);
-            Assert.That(task.Suite, Is.Null);
-            Assert.That(task.Limits, Is.Null);
+            Assert.That(parsed.Tasks, Is.Empty);
+            Assert.That(parsed.Errors, Is.EqualTo(new[] { "line 1: 'stdin' must be a string" }));
         });
     }
 
