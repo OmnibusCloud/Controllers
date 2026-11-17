@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -83,11 +84,7 @@ internal static class VerifyRigModules
         var staged = StagedRoot();
         if (staged == null || modules.Any(module => !File.Exists(Path.Combine(staged, module, MANIFEST))))
         {
-            var reason = $"the build staged no {string.Join(", ", modules)} under '{staged}'";
-            if (OnTheBuildServer)
-                Assert.Fail(reason);
-
-            Assert.Ignore(reason);
+            Missing($"the build staged no {string.Join(", ", modules)} under '{staged}'");
         }
 
         var folder = Path.Combine(TestContext.CurrentContext.TestDirectory, RIG_FOLDER, name);
@@ -187,6 +184,21 @@ internal static class VerifyRigModules
             directory = directory.Parent;
 
         return directory?.FullName;
+    }
+
+    /// <summary>
+    /// Ends a fixture or a test for a prerequisite it does not have: skipped on a developer's
+    /// machine, where the prerequisite is opt-in; a failure on the build server, where it is
+    /// always there and its absence would otherwise hide every test behind it.
+    /// </summary>
+    /// <param name="reason">What is missing.</param>
+    [DoesNotReturn]
+    public static void Missing(string reason)
+    {
+        if (OnTheBuildServer)
+            Assert.Fail(reason);
+
+        Assert.Ignore(reason);
     }
 
     /// <summary>Removes a folder of a rig; best-effort (a library loaded from it stays mapped while the process lives).</summary>

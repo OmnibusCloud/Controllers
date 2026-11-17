@@ -40,10 +40,7 @@ internal static class WasmHostClientHost
         var staged = Path.Combine(ControllersFolder(), VERIFY_MODULE);
         if (!File.Exists(Path.Combine(staged, BINDING_FILE)))
         {
-            if (Mock.VerifyRigModules.OnTheBuildServer)
-                Assert.Fail($"no staged {VERIFY_MODULE} at '{staged}'");
-
-            Assert.Ignore($"Staged module not found at '{staged}'");
+            Mock.VerifyRigModules.Missing($"no staged {VERIFY_MODULE} at '{staged}'");
         }
 
         // A module another build left is never the one that gets tested.
@@ -178,7 +175,7 @@ internal static class WasmHostClientHost
     {
         var staged = Mock.VerifyRigModules.StagedRoot();
         if (staged == null)
-            Assert.Ignore("Solution root not found");
+            Mock.VerifyRigModules.Missing("Solution root not found");
 
         return staged!;
     }

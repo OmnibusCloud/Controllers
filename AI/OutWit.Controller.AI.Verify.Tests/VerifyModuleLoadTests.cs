@@ -96,7 +96,7 @@ public class VerifyModuleLoadTests
 
         var solutionRoot = FindSolutionRoot();
         if (solutionRoot == null)
-            Assert.Ignore("Solution root not found");
+            VerifyRigModules.Missing("Solution root not found");
 
         var fixtureRuntimes = Path.Combine(solutionRoot, "AI", "OutWit.Controller.AI.Verify.Tests", "@Data", "runtimes");
         if (!Directory.Exists(Path.Combine(fixtureRuntimes, "python-3.14.6")) ||
@@ -104,7 +104,7 @@ public class VerifyModuleLoadTests
             !Directory.Exists(Path.Combine(fixtureRuntimes, "ruby-3.4.1")) ||
             !Directory.Exists(Path.Combine(fixtureRuntimes, "lua-5.4.8")) ||
             !Directory.Exists(Path.Combine(fixtureRuntimes, "python-3.14.6-numpy-2.5.4")))
-            Assert.Ignore($"Pinned runtimes not found under '{fixtureRuntimes}' — run verify-assets build @Data/runtimes to opt in.");
+            VerifyRigModules.Missing($"Pinned runtimes not found under '{fixtureRuntimes}' — run verify-assets build @Data/runtimes to opt in.");
 
         // The module under test is this build's own, laid out in a folder of the test's own: the
         // shared staging folder is never changed, nothing else that lies in it is loaded, and a
@@ -135,10 +135,7 @@ public class VerifyModuleLoadTests
             catch (HttpRequestException exception)
             {
                 var reason = $"the packaged native library '{asset.Id}' could not be fetched from {VerifyPackagedAssets.Url(asset)}: {exception.Message}";
-                if (VerifyRigModules.OnTheBuildServer)
-                    Assert.Fail(reason);
-
-                Assert.Ignore(reason);
+                VerifyRigModules.Missing(reason);
             }
         }
 

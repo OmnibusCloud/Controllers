@@ -29,13 +29,13 @@ public abstract class VerifyScriptTestBase
     {
         var solutionRoot = FindSolutionRoot();
         if (solutionRoot == null)
-            Assert.Ignore("Solution root not found");
+            VerifyRigModules.Missing("Solution root not found");
 
         SolutionRoot = solutionRoot;
 
         var runtimesRoot = Path.Combine(solutionRoot, "AI", "OutWit.Controller.AI.Verify.Tests", "@Data", "runtimes");
         if (VerifyRuntimeCatalog.Resolve(runtimesRoot, VerifyRuntimeCatalog.PYTHON_3_14_6, out _) == null)
-            Assert.Ignore($"Pinned runtimes not resolvable under '{runtimesRoot}' — run verify-assets build @Data/runtimes to opt in.");
+            VerifyRigModules.Missing($"Pinned runtimes not resolvable under '{runtimesRoot}' — run verify-assets build @Data/runtimes to opt in.");
 
         // The in-process nodes read this to locate the runtime archive.
         Environment.SetEnvironmentVariable(VerifyRuntimeLocator.OverrideEnvVar, runtimesRoot);
@@ -90,7 +90,7 @@ public abstract class VerifyScriptTestBase
     {
         var path = Path.Combine(SolutionRoot, "AI", "OutWit.Controller.AI.Verify", "Scripts", fileName);
         if (!File.Exists(path))
-            Assert.Ignore($"{fileName} not found at {path}");
+            VerifyRigModules.Missing($"{fileName} not found at {path}");
 
         return File.ReadAllText(path);
     }

@@ -34,11 +34,7 @@ public sealed class VerifyRigModulesTests
         m_solutionRoot = VerifyRigModules.SolutionRoot();
         if (staged == null || VerifyRigModules.SCRIPTS.Any(module => !Directory.Exists(Path.Combine(staged, module))))
         {
-            var reason = $"the build staged no modules under '{staged}'";
-            if (VerifyRigModules.OnTheBuildServer)
-                Assert.Fail(reason);
-
-            Assert.Ignore(reason);
+            VerifyRigModules.Missing($"the build staged no modules under '{staged}'");
         }
 
         // A staging folder of the test's own: this build's modules, to be spoilt at will.
