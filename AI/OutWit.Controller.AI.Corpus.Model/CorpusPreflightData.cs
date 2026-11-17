@@ -37,7 +37,8 @@ public sealed partial class CorpusPreflightData : ModelBase
                && StorageHeadroomBytes.Is(other.StorageHeadroomBytes)
                && StorageRetentionDays.Is(other.StorageRetentionDays)
                && BusiestNodeShare.Is(other.BusiestNodeShare, tolerance)
-               && PlannedNodes.Is(other.PlannedNodes);
+               && PlannedNodes.Is(other.PlannedNodes)
+               && NodeDiskBytesPerShard.Is(other.NodeDiskBytesPerShard);
     }
 
     /// <summary>Deep copy.</summary>
@@ -56,7 +57,8 @@ public sealed partial class CorpusPreflightData : ModelBase
             StorageHeadroomBytes = StorageHeadroomBytes,
             StorageRetentionDays = StorageRetentionDays,
             BusiestNodeShare = BusiestNodeShare,
-            PlannedNodes = PlannedNodes
+            PlannedNodes = PlannedNodes,
+            NodeDiskBytesPerShard = NodeDiskBytesPerShard
         };
     }
 
@@ -124,6 +126,16 @@ public sealed partial class CorpusPreflightData : ModelBase
     [ToString]
     [MemoryPackOrder(10)]
     public int PlannedNodes { get; set; }
+
+    /// <summary>
+    /// The disk a node needs free for each shard it holds at a time: the run's largest shard (the
+    /// cap when no size is known), its products and a margin. A node holds at most its degree
+    /// (the shards it processes at once) and two more, never its whole share; a node without room
+    /// for a shard refuses its batch. 0 = not known (a manifest without sources).
+    /// </summary>
+    [ToString]
+    [MemoryPackOrder(11)]
+    public long NodeDiskBytesPerShard { get; set; }
 
     #endregion
 }

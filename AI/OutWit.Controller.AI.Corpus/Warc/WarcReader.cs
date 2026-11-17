@@ -20,6 +20,9 @@ public sealed class WarcReader : IDisposable
     private const string VERSION_PREFIX = "WARC/";
     private const string CONTENT_LENGTH = "Content-Length";
     private const int MAX_HEADER_BYTES = 64 * 1024;
+
+    /// <summary>How far the reader goes between two looks at the ceiling and the token.</summary>
+    private const int WATCH_BYTES = 4096;
     private static readonly byte[] GZIP_MAGIC = [0x1F, 0x8B];
 
     #endregion
@@ -29,7 +32,11 @@ public sealed class WarcReader : IDisposable
     private readonly Stream m_stream;
     private readonly bool m_ownsStream;
     private readonly int m_maxRecordBytes;
+    private readonly long m_maxUnpackedBytes;
+    private readonly CancellationToken m_cancellationToken;
+    private readonly List<byte> m_line = new(128);
     private long m_offset;
+    private long m_checkedAt;
     private int m_skippedOversized;
     private bool m_truncated;
 
@@ -43,10 +50,14 @@ public sealed class WarcReader : IDisposable
     /// <param name="stream">The raw file stream (seekable or not).</param>
     /// <param name="maxRecordBytes">The payload cap per record.</param>
     /// <param name="ownsStream">Whether disposing the reader disposes the stream.</param>
-    public WarcReader(Stream stream, int maxRecordBytes = DEFAULT_MAX_RECORD_BYTES, bool ownsStream = true)
+    /// <param name="maxUnpackedBytes">The most bytes the file may unpack to (0 = no ceiling): a few hundred kilobytes of gzip can hold hundreds of megabytes of nothing, which the reader would otherwise walk to the end.</param>
+    /// <param name="cancellationToken">Looked at while reading, inside a record as between records: a reader walking a long run of blank lines or skipping a large record stops when its job is cancelled.</param>
+    public WarcReader(Stream stream, int maxRecordBytes = DEFAULT_MAX_RECORD_BYTES, bool ownsStream = true, long maxUnpackedBytes = 0, CancellationToken cancellationToken = default)
     {
         m_maxRecordBytes = maxRecordBytes;
         m_ownsStream = ownsStream;
+        m_maxUnpackedBytes = maxUnpackedBytes;
+        m_cancellationToken = cancellationToken;
 
         var buffered = new BufferedStream(stream, 1 << 16);
         m_stream = IsGzip(buffered) ? new GZipStream(buffered, CompressionMode.Decompress) : buffered;
@@ -130,7 +141,7 @@ public sealed class WarcReader : IDisposable
                 var value = line[(colon + 1)..].Trim();
                 headers.Add(new KeyValuePair<string, string>(name, value));
 
-                if (string.Equals(name, CONTENT_LENGTH, StringComparison.OrdinalIgnoreCase))
+                if (Text.Casing.CorpusCasing.EqualsIgnoreAsciiCase(name, CONTENT_LENGTH))
                 {
                     if (!long.TryParse(value, out contentLength) || contentLength < 0)
                         throw new WarcFormatException($"bad Content-Length '{Clip(value)}' at offset {recordOffset}");
@@ -139,6 +150,8 @@ public sealed class WarcReader : IDisposable
 
             if (contentLength < 0)
                 throw new WarcFormatException($"record without Content-Length at offset {recordOffset}");
+
+            Reserve(contentLength);
 
             if (contentLength > m_maxRecordBytes)
             {
@@ -166,7 +179,9 @@ public sealed class WarcReader : IDisposable
 
     private string? ReadLine()
     {
-        var buffer = new List<byte>(128);
+        // One buffer for every line: a shard may hold millions of them, the blank ones included.
+        var buffer = m_line;
+        buffer.Clear();
         while (true)
         {
             var b = m_stream.ReadByte();
@@ -178,6 +193,7 @@ public sealed class WarcReader : IDisposable
             }
 
             m_offset++;
+            Watch();
             if (b == '\n')
                 break;
 
@@ -202,10 +218,35 @@ public sealed class WarcReader : IDisposable
                 return false;
 
             read += n;
+            m_offset += n;
+            Watch();
         }
 
-        m_offset += read;
         return true;
+    }
+
+    /// <summary>
+    /// Holds the bytes read so far to the ceiling, exactly (the same byte ends the file on every
+    /// node, however the decompressor hands its bytes over), and looks at the token every few
+    /// kilobytes. Called after every advance of the offset.
+    /// </summary>
+    private void Watch()
+    {
+        if (m_maxUnpackedBytes > 0 && m_offset > m_maxUnpackedBytes)
+            throw new Shards.ShardUnpackedOversizedException(m_maxUnpackedBytes);
+
+        if (m_offset - m_checkedAt < WATCH_BYTES)
+            return;
+
+        m_checkedAt = m_offset;
+        m_cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    /// <summary>A payload of a stated length that would pass the ceiling is refused before a byte of it is read.</summary>
+    private void Reserve(long count)
+    {
+        if (m_maxUnpackedBytes > 0 && count > m_maxUnpackedBytes - m_offset)
+            throw new Shards.ShardUnpackedOversizedException(m_maxUnpackedBytes);
     }
 
     private bool Skip(long count)
@@ -220,6 +261,7 @@ public sealed class WarcReader : IDisposable
 
             remaining -= n;
             m_offset += n;
+            Watch();
         }
 
         return true;

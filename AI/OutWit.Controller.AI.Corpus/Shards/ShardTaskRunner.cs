@@ -29,7 +29,8 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// A node holds only a few shards on disk at a time: a task takes a place in the node's window
 /// (<see cref="FETCH_AHEAD"/> beyond the shards it processes at once) before it fetches and gives
 /// it back when its work folder can go, so a share of hundreds of shards never sits on the disk
-/// together.
+/// together. The shard and its products are deleted before the place is given back; the rest of
+/// the folder goes with the caller's scope.
 /// </summary>
 public static class ShardTaskRunner
 {
@@ -253,7 +254,7 @@ public static class ShardTaskRunner
             ShardProduct product;
             try
             {
-                product = await Task.Run(() => Process(task, model, pdfStage ?? new ShardPdfStage(workDirectory), shardPath, textPath, signaturesPath, cancellationToken), cancellationToken);
+                product = await ShardWorker.RunAsync(() => Process(task, model, pdfStage ?? new ShardPdfStage(workDirectory), shardPath, textPath, signaturesPath, cancellationToken));
             }
             catch (WarcFormatException)
             {
@@ -316,6 +317,11 @@ public static class ShardTaskRunner
         }
         finally
         {
+            // The shard's place in the window is its place on the disk: the shard and its
+            // products go before the place is given to the next one.
+            TryDelete(shardPath);
+            TryDelete(textPath);
+            TryDelete(signaturesPath);
             WINDOW.Release();
         }
     }
@@ -329,18 +335,21 @@ public static class ShardTaskRunner
         using var text = new FileStream(textPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 1 << 20);
         using var signatures = new FileStream(signaturesPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 1 << 16);
 
-        // A worker is often a desktop: the minutes of CPU a shard takes run below the owner's
-        // foreground work, the way the solvers run their processes below normal priority.
-        var thread = Thread.CurrentThread;
-        var priority = thread.Priority;
+        // On the shard's own thread (ShardWorker): below normal priority, the PDF sandbox's guest
+        // code included, which runs on the thread that calls it when that thread can hold it.
+        return processor.Process(shard, task.Source!.Format, text, signatures, cancellationToken);
+    }
+
+    private static void TryDelete(string path)
+    {
         try
         {
-            thread.Priority = ThreadPriority.BelowNormal;
-            return processor.Process(shard, task.Source!.Format, text, signatures, cancellationToken);
+            if (File.Exists(path))
+                File.Delete(path);
         }
-        finally
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            thread.Priority = priority;
+            // It goes with the task's folder.
         }
     }
 

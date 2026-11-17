@@ -105,6 +105,13 @@ public sealed class ShardStatsBuilder
         m_pdf.Fuel += Math.Max(0, fuel);
     }
 
+    /// <summary>The fuel the shard's PDFs have burned so far.</summary>
+    /// <returns>The fuel.</returns>
+    public long PdfFuelSpent()
+    {
+        return m_pdf.Fuel;
+    }
+
     /// <summary>Counts one PDF that gave documents.</summary>
     /// <param name="pages">Its pages.</param>
     /// <param name="documents">The page-range documents it gave.</param>

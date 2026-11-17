@@ -39,6 +39,10 @@ public sealed record CorpusLanguageModelFacts(string Format, string Name, IReadO
     /// <returns>The facts.</returns>
     public static CorpusLanguageModelFacts Load(string path)
     {
+        // The size is asked before the file is read: a model past the limit is refused by name.
+        if (new FileInfo(path).Length > LanguageModelLimits.MAX_BYTES)
+            return new CorpusLanguageModelFacts("", "", [], 0, $"the language model is larger than {LanguageModelLimits.MAX_BYTES} bytes");
+
         return Read(File.ReadAllBytes(path));
     }
 

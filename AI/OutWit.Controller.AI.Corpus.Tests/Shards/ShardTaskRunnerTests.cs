@@ -56,8 +56,7 @@ public sealed class ShardTaskRunnerTests
     {
         m_origin.Dispose();
         m_servedOrigins.ForEach(origin => origin.Dispose());
-        if (Directory.Exists(m_root))
-            Directory.Delete(m_root, recursive: true);
+        CorpusTestFolders.Delete(m_root);
     }
 
     #endregion
@@ -312,9 +311,10 @@ public sealed class ShardTaskRunnerTests
             Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.Completed), result.Error);
             Assert.That(result.Stats!.Pdf!.In, Is.EqualTo(PdfWarcFixture.PDF_CANDIDATES));
             Assert.That(result.Stats.Pdf.Extracted, Is.GreaterThan(0));
-            Assert.That(Directory.GetDirectories(work).Select(Path.GetFileName), Is.SupersetOf(new[] { "pdf-in", "pdf-out", "pdf-io" }), "the PDFs' folders are the task's own");
-            Assert.That(Directory.EnumerateFiles(Path.Combine(work, "pdf-out"), "*", SearchOption.AllDirectories), Is.Empty, "each run's output is gone after it");
-            Assert.That(Directory.EnumerateFiles(Path.Combine(work, "pdf-in")), Is.Empty);
+            Assert.That(Directory.GetDirectories(work).Select(Path.GetFileName), Is.EqualTo(new[] { "pdf" }), "the PDFs' folders are the task's own");
+            Assert.That(ShardCleanup.Drain(TimeSpan.FromMinutes(1)), Is.True, "each run's folder is taken away off the shard's path");
+            Assert.That(Directory.EnumerateFileSystemEntries(Path.Combine(work, "pdf")), Is.Empty, "each run's input and output are gone after it");
+            Assert.That(Directory.EnumerateFiles(work), Is.Empty, "the shard and its products went before the task gave its place on the disk back");
         });
     }
 

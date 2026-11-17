@@ -35,6 +35,22 @@ public static class ShardDisk
         return (Math.Max(1, degree) + (long)ShardTaskRunner.FETCH_AHEAD) * Needed(largestShardBytes);
     }
 
+    /// <summary>The preflight's line on the disk a node needs for a run.</summary>
+    /// <param name="largestShardBytes">The run's largest shard; 0 or less when no size is known.</param>
+    /// <param name="capBytes">The cap a shard is held to on the wire.</param>
+    /// <returns>For example "Node disk: a node holds at most its degree and 2 more shards at a time ...".</returns>
+    public static string Describe(long largestShardBytes, long capBytes)
+    {
+        var known = largestShardBytes > 0;
+        var perShard = Needed(known ? largestShardBytes : capBytes);
+        const int exampleDegree = 8;
+
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"Node disk: a node holds at most its degree and {ShardTaskRunner.FETCH_AHEAD} more shards at a time (its degree is the shards it processes at once: one per core, within its memory), never its whole share. " +
+            $"Each held shard needs {perShard} bytes free ({(known ? $"the largest shard, {largestShardBytes} bytes" : $"no shard size is known: the cap, {capBytes} bytes")}, its products and a margin): " +
+            $"{NeededByNode(known ? largestShardBytes : capBytes, exampleDegree)} bytes for a node of degree {exampleDegree}. A node without room for a shard refuses its batch and the platform moves the work.");
+    }
+
     /// <summary>The free bytes of the volume that holds a folder.</summary>
     /// <param name="directory">The folder (it need not exist yet).</param>
     /// <returns>The free bytes, or -1 when the volume does not say.</returns>

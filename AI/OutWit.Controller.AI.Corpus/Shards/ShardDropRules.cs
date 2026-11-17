@@ -48,10 +48,14 @@ public static class ShardDropRules
     {
         var rules = new List<(string, string)>
         {
+            (ShardProcessor.DROP_RECORD_OVERSIZED, STAGE_EXTRACT),
             (ShardProcessor.DROP_HTTP_UNPARSABLE, STAGE_EXTRACT),
             (ShardProcessor.DROP_HTTP_STATUS, STAGE_EXTRACT),
             (ShardProcessor.DROP_NOT_HTML, STAGE_EXTRACT),
+            (ShardProcessor.DROP_UNSUPPORTED_CHARSET, STAGE_EXTRACT),
             (ShardProcessor.DROP_HTML_REFUSED, STAGE_EXTRACT),
+            (ShardProcessor.DROP_HTML_TOO_COMPLEX, STAGE_EXTRACT),
+            (ShardProcessor.DROP_HTML_ERROR, STAGE_EXTRACT),
             (ShardProcessor.DROP_EMPTY_TEXT, STAGE_EXTRACT)
         };
 

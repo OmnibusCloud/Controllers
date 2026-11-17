@@ -24,6 +24,8 @@ public sealed class LanguageProfile
     /// <param name="grams">The n-grams in frequency order, most frequent first.</param>
     public LanguageProfile(string code, IReadOnlyList<string> grams)
     {
+        // Sized by the n-grams that are there (a reader holds their number to its limits first),
+        // never by a count a file states.
         Code = code;
         Grams = grams;
         m_ranks = new Dictionary<string, int>(grams.Count, StringComparer.Ordinal);

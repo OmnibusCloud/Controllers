@@ -106,8 +106,7 @@ public sealed class PdfSandboxHostileTests
     [OneTimeTearDown]
     public void TearDown()
     {
-        if (m_work != null && Directory.Exists(m_work))
-            Directory.Delete(m_work, recursive: true);
+        CorpusTestFolders.Delete(m_work);
     }
 
     #endregion

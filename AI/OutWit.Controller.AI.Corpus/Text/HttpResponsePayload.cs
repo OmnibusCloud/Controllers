@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using OutWit.Controller.AI.Corpus.Text.Casing;
 
 namespace OutWit.Controller.AI.Corpus.Text;
 
@@ -13,8 +14,17 @@ public sealed partial class HttpResponsePayload
 {
     #region Constants
 
+    /// <summary>
+    /// The most bytes of a body that are decoded: an HTML page is read for its first 4 Mi
+    /// characters (<see cref="HtmlTextExtractor.MAX_HTML_CHARS"/>), which no charset writes in
+    /// more than four bytes each. A record may hold 64 MiB; decoding all of it would make a
+    /// string of twice that to throw most of it away.
+    /// </summary>
+    public const int MAX_DECODE_BYTES = 4 * HtmlTextExtractor.MAX_HTML_CHARS;
+
     private const int META_SNIFF_BYTES = 4096;
     private const string CONTENT_TYPE = "Content-Type";
+    private const int UTF7_CODE_PAGE = 65000;
 
     #endregion
 
@@ -82,7 +92,7 @@ public sealed partial class HttpResponsePayload
     {
         foreach (var (key, value) in Headers)
         {
-            if (string.Equals(key, name, StringComparison.OrdinalIgnoreCase))
+            if (CorpusCasing.EqualsIgnoreAsciiCase(key, name))
                 return value;
         }
 
@@ -91,13 +101,40 @@ public sealed partial class HttpResponsePayload
 
     /// <summary>
     /// Decodes the body as text: the header charset, else a meta charset in the first kilobytes,
-    /// else UTF-8. Undecodable bytes become U+FFFD, never an exception.
+    /// else UTF-8. Undecodable bytes become U+FFFD, never an exception. A page whose charset has
+    /// a name the platform knows and does not decode (UTF-7, which .NET refuses) has no text: it
+    /// is one page, and it must not cost the shard that holds it.
     /// </summary>
+    /// <param name="text">The body text (its first <see cref="MAX_DECODE_BYTES"/> bytes: more than an HTML page is read for); "" when the charset is unsupported.</param>
+    /// <returns>False when the page names a charset that cannot be decoded.</returns>
+    public bool TryDecodeBody(out string text)
+    {
+        text = "";
+
+        var encoding = ResolveEncoding(Charset, out var unsupported);
+        if (encoding == null && !unsupported)
+            encoding = ResolveEncoding(SniffMetaCharset(), out unsupported);
+        if (unsupported)
+            return false;
+
+        var body = Body.Span[..Math.Min(Body.Length, MAX_DECODE_BYTES)];
+        try
+        {
+            text = (encoding ?? s_utf8).GetString(body);
+            return true;
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or InvalidOperationException)
+        {
+            // A decoder that gives up on these bytes: the page's charset is not one that reads them.
+            return false;
+        }
+    }
+
+    /// <summary>Decodes the body as text like <see cref="TryDecodeBody"/>; "" for a page whose charset cannot be decoded.</summary>
     /// <returns>The body text.</returns>
     public string DecodeBody()
     {
-        var encoding = ResolveEncoding(Charset) ?? ResolveEncoding(SniffMetaCharset()) ?? s_utf8;
-        return encoding.GetString(Body.Span);
+        return TryDecodeBody(out var text) ? text : "";
     }
 
     private string? SniffMetaCharset()
@@ -107,22 +144,40 @@ public sealed partial class HttpResponsePayload
         return meta.Success ? meta.Groups[1].Value : null;
     }
 
-    private static Encoding? ResolveEncoding(string? charset)
+    /// <summary>
+    /// The encoding of a charset name. Three answers: an encoding; none, for no name or a name
+    /// nobody knows (the next source is asked, as before); or unsupported, for a name the
+    /// platform knows and refuses to decode. The answer is the same on every node: the names and
+    /// the tables are the runtime's own, and UTF-7 is refused whatever the host's switch says.
+    /// </summary>
+    private static Encoding? ResolveEncoding(string? charset, out bool unsupported)
     {
+        unsupported = false;
         if (string.IsNullOrWhiteSpace(charset))
             return null;
 
         var name = charset.Trim().Trim('"', '\'');
-        if (name.Equals("utf8", StringComparison.OrdinalIgnoreCase) || name.Equals("utf-8", StringComparison.OrdinalIgnoreCase))
+        if (CorpusCasing.EqualsIgnoreAsciiCase(name, "utf8") || CorpusCasing.EqualsIgnoreAsciiCase(name, "utf-8"))
             return s_utf8;
 
         try
         {
             // Decoder fallback: replacement, so a wrong label degrades the text instead of failing the document.
-            return Encoding.GetEncoding(name, EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback);
+            var encoding = Encoding.GetEncoding(name, EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback);
+            if (encoding.CodePage != UTF7_CODE_PAGE)
+                return encoding;
+
+            // A host may switch UTF-7 back on; the product must not depend on it.
+            unsupported = true;
+            return null;
         }
         catch (ArgumentException)
         {
+            return null;
+        }
+        catch (Exception exception) when (exception is NotSupportedException or InvalidOperationException)
+        {
+            unsupported = true;
             return null;
         }
     }
@@ -141,10 +196,10 @@ public sealed partial class HttpResponsePayload
         return lf;
     }
 
-    [GeneratedRegex("""<meta[^>]+charset\s*=\s*["']?\s*([A-Za-z0-9_\-:.]+)""", RegexOptions.IgnoreCase)]
+    [GeneratedRegex("""<meta[^>]+charset\s*=\s*["']?\s*([A-Za-z0-9_\-:.]+)""", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex MetaCharset();
 
-    [GeneratedRegex(@"charset\s*=\s*([^;\s]+)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"charset\s*=\s*([^;\s]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex HeaderCharset();
 
     #endregion
@@ -173,7 +228,7 @@ public sealed partial class HttpResponsePayload
                 return "";
 
             var semicolon = contentType.IndexOf(';');
-            return (semicolon >= 0 ? contentType[..semicolon] : contentType).Trim().ToLowerInvariant();
+            return CorpusCasing.ToLowerAscii((semicolon >= 0 ? contentType[..semicolon] : contentType).Trim());
         }
     }
 

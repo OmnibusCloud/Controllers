@@ -41,6 +41,16 @@ public static class PdfStageLimits
     /// </summary>
     public const long FUEL = 80_000_000_000;
 
+    /// <summary>
+    /// The fuel all the PDFs of one shard may burn together: a hundred full budgets. The 221 PDFs
+    /// of one Common Crawl WARC file burn 6·10¹¹ together (seven and a half budgets), so no crawl
+    /// file comes near; a shard made of documents that each burn their whole budget would otherwise
+    /// cost a node one budget per document without end (a gigabyte of 5.7 KB ones: 180,000 of
+    /// them). A PDF met after the shard's fuel is spent is not run and drops as
+    /// <c>pdf_shard_fuel</c>: fuel is the same on every node, and so is the PDF it runs out at.
+    /// </summary>
+    public const long SHARD_FUEL = 100 * FUEL;
+
     /// <summary>The cap of the module's linear memory: a grow past it is refused, and the module ends by its own hand.</summary>
     public const long MEMORY_BYTES = 1L << 30;
 
@@ -85,7 +95,7 @@ public static class PdfStageLimits
     /// the stage set's fingerprint.
     /// </summary>
     public static readonly string DESCRIPTOR = string.Create(CultureInfo.InvariantCulture,
-        $"pdftext sha256={MODULE_SHA256}; engine=wasmtime {WasmHostBinding.BUILT_AGAINST}; fuel={FUEL} after instantiation; memory={MEMORY_BYTES}; " +
+        $"pdftext sha256={MODULE_SHA256}; engine=wasmtime {WasmHostBinding.BUILT_AGAINST}; fuel={FUEL} after instantiation; shard_fuel={SHARD_FUEL}; memory={MEMORY_BYTES}; " +
         $"seed={RANDOM_SEED}; input={MAX_INPUT_BYTES}; text={MAX_TEXT_BYTES}; document_words={DOCUMENT_WORDS} at page boundaries, a longer page cut at a line; " +
         $"running_lines=on {RUNNING_LINE_MIN_PAGES}+ pages, on half the pages or more, digits folded; " +
         $"hyphens=a lower-case Cyrillic or Greek word broken at a line end rejoined (Latin is pdf_oxide's)");

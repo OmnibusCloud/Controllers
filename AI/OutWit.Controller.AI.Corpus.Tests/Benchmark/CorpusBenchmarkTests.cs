@@ -103,13 +103,35 @@ public sealed class CorpusBenchmarkTests
 
     [TestCase(4, 8L * 1024 * 1024 * 1024, 4)]
     [TestCase(32, 64L * 1024 * 1024 * 1024, 32)]
-    [TestCase(16, 1L * 1024 * 1024 * 1024, 4)]
+    [TestCase(16, 1L * 1024 * 1024 * 1024, 2)]
+    [TestCase(64, 16L * 1024 * 1024 * 1024, 32)]
     [TestCase(8, 100L * 1024 * 1024, 1)]
     [TestCase(0, 0, 1)]
     [TestCase(6, 0, 6)]
     public void DegreeFollowsCoresAndMemoryTest(int cores, long memory, int expected)
     {
         Assert.That(ShardDegree.For(cores, memory), Is.EqualTo(expected));
+    }
+
+    [TestCase(64, 16L * 1024 * 1024 * 1024)]
+    [TestCase(8, 8L * 1024 * 1024 * 1024)]
+    [TestCase(4, 4L * 1024 * 1024 * 1024)]
+    [TestCase(96, 512L * 1024 * 1024 * 1024)]
+    public void L3ShardsAndPdfsShareOneMemoryBudgetTest(int cores, long memory)
+    {
+        // The audit's reading: 64 cores with 16 GB gave 64 shards (16 GB) and 8 PDFs (8 GB), each
+        // counted against the whole. Now shards have half and PDFs a quarter.
+        const long pdfMemory = 1L << 30;
+        var shards = ShardDegree.For(cores, memory) * ShardDegree.MEMORY_PER_SHARD;
+        var pdfs = ShardDegree.PdfSlots(pdfMemory, memory, cores) * pdfMemory;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(shards, Is.LessThanOrEqualTo(memory / 2));
+            Assert.That(pdfs, Is.LessThanOrEqualTo(Math.Max(pdfMemory, memory / 4)), "one PDF runs even where a quarter is less than its ceiling");
+            Assert.That(shards + pdfs, Is.LessThanOrEqualTo(memory), "the two budgets together fit the machine");
+            Assert.That(OutWit.Controller.AI.Corpus.Pdf.PdfSandbox.Slots(pdfMemory, memory, cores), Is.EqualTo(ShardDegree.PdfSlots(pdfMemory, memory, cores)), "one budget, asked in one place");
+        });
     }
 
     #endregion

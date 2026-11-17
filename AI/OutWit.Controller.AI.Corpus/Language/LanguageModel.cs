@@ -97,8 +97,12 @@ public sealed class LanguageModel
     /// </summary>
     /// <param name="path">The file.</param>
     /// <returns>The model.</returns>
+    /// <exception cref="FormatException">The file is no model this controller reads, or a model past its limits (its size is asked before it is read).</exception>
     public static LanguageModel Load(string path)
     {
+        if (new FileInfo(path).Length > LanguageModelLimits.MAX_BYTES)
+            throw new FormatException($"the language model is larger than {LanguageModelLimits.MAX_BYTES} bytes");
+
         return FromBytes(File.ReadAllBytes(path));
     }
 

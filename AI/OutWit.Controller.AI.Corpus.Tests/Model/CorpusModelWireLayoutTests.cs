@@ -40,7 +40,7 @@ public sealed class CorpusModelWireLayoutTests
     [TestCase(typeof(CorpusShardStatsData), 12)]
     [TestCase(typeof(CorpusResultData), 17)]
     [TestCase(typeof(CorpusOptionsData), 4)]
-    [TestCase(typeof(CorpusPreflightData), 11)]
+    [TestCase(typeof(CorpusPreflightData), 12)]
     [TestCase(typeof(CorpusRuntimeDiagnosticsData), 16)]
     [TestCase(typeof(CorpusPdfStatsData), 8)]
     [TestCase(typeof(CorpusMinHashData), 3)]

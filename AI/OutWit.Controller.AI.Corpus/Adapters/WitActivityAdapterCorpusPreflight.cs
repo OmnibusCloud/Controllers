@@ -68,7 +68,15 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
         var traffic = CorpusTrafficEstimate.Of(sizes, options?.SamplingRate ?? 0);
         report.EstimatedTrafficBytes = traffic.TotalBytes;
         if (manifest.Sources.Count > 0)
+        {
             report.Messages.Add(traffic.Describe());
+            report.Messages.Add(traffic.DescribeRounds());
+
+            // The disk a node needs: it holds a few shards at a time, never its whole share.
+            var largest = sizes.Count > 0 ? Math.Min(Math.Max(0, sizes.Max()), CorpusTaskPlanner.ShardCap(options)) : 0;
+            report.NodeDiskBytesPerShard = ShardDisk.Needed(largest > 0 ? largest : CorpusTaskPlanner.ShardCap(options));
+            report.Messages.Add(ShardDisk.Describe(largest, CorpusTaskPlanner.ShardCap(options)));
+        }
 
         // What the job leaves on the server, from the same sizes, against the deployment's headroom.
         if (manifest.Sources.Count > 0)

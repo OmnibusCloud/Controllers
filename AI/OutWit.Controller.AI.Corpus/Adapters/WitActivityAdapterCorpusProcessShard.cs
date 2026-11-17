@@ -80,7 +80,10 @@ internal sealed class WitActivityAdapterCorpusProcessShard : WitActivityAdapterF
         }
         finally
         {
-            TryDeleteScope(scope, task.TaskIndex);
+            // Not on the result's path: a delete can wait on the node's file system far longer
+            // than the work took (ShardCleanup). The shard and its products are gone already.
+            var index = task.TaskIndex;
+            ShardCleanup.Schedule(() => TryDeleteScope(scope, index));
         }
     }
 
