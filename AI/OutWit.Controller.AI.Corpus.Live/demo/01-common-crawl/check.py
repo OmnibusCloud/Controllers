@@ -3,7 +3,7 @@
     python check.py <report.json> [<integrity.json>]
 
 Prints the funnel, the drops by stage, the languages kept and the languages lost, what the
-results rest on (corpus-report/3: shards that one machine alone answered for, values the server
+results rest on (corpus-report/4: shards that one machine alone answered for, values the server
 dropped, repairs, disputes), then one line per shard that differs from the kit's list (verdict,
 content hash, signatures hash, document counts), the kit's identities (the SHA-256 of the lines
 "index:content_sha256", and of the lines "index:signatures_sha256", in index order) and, with the
