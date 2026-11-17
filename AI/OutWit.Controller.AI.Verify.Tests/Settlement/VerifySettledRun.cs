@@ -28,6 +28,14 @@ internal sealed record VerifySettledRun(VerifySettlementSummary Summary, string 
         return document.RootElement.GetProperty("summary").GetProperty(name).GetInt32();
     }
 
+    /// <summary>How every dispute of the integrity document ended, by task.</summary>
+    public Dictionary<int, string> DisputeOutcomes()
+    {
+        using var document = JsonDocument.Parse(Integrity);
+        return document.RootElement.GetProperty("disputes").EnumerateArray()
+            .ToDictionary(dispute => dispute.GetProperty("index").GetInt32(), dispute => dispute.GetProperty("outcome").GetString()!);
+    }
+
     /// <summary>How many result packages the integrity document says were refused for a reason.</summary>
     public int Rejected(string reason)
     {

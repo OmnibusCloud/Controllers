@@ -307,7 +307,7 @@ program's own stdout and stderr are the program's and stay as they are.
 | `MemoryExceeded` | the program's allocator was refused memory | Python's `MemoryError`, Lua's "not enough memory", C++'s `bad_alloc` |
 | `OutputExceeded` | stdout passed its cap; the write that passed it ended the run | printing in a loop; a suite whose cases together print more than the task's cap |
 | `NoResult` | no node gave a verdict, also when the task was sent out once more. It says nothing about the program. The documents carry a `reason` | `wall_clock`: a node's backstop ended the run; `node_fault`: a node could not run it; `no_answer`: nothing the server accepts came back |
-| `Disputed` | the executions disagreed, and three more on different machines did not give one answer from at least two of them. Not a pass; no outputs | copies that keep disagreeing; copies of the dispute round that did not come back; a package of the dispute round with more answers than the round's packages commonly have (section 10) |
+| `Disputed` | the executions disagreed, and three more on different machines did not give one answer from at least two of them. Not a pass; no outputs | copies that keep disagreeing; copies of the dispute round that did not come back; a lead that could be one machine answering twice (section 10) |
 | `RuntimeUnavailable` | not produced since 0.13.0; the name stays so that documents of earlier runs can be read | |
 
 What became of `RuntimeUnavailable`: an unknown runtime id refuses the taskset when it is split.
@@ -558,18 +558,26 @@ under rules.
 - **One machine.** A task that was not sampled rests on one machine. The integrity document
   counts those tasks (`single_execution`).
 
-The known limit: the server cannot see which machine returned an answer. A node that holds two
-packages of one fan-out can answer one of them twice and leave the other unanswered. What the
+The known limit: the server sees results, not machines. What it can count on is that a node
+returns one result for each package it was given. So a node that holds two packages of one
+fan-out can answer one of them twice, and then the other is short of its answer. What the
 server does about it:
 
 - in the first fan-out, more answers than the two asked for send the package's tasks to a
   dispute;
-- in the dispute round, a package with more answers than the round's packages commonly have is
-  not settled by counting: its tasks stay `Disputed` (outcome `surplus_copies`);
+- in the repair and dispute rounds, a package with more answers than were asked for has none of
+  them taken;
+- in the dispute round, an answer counts towards "two machines" only as far as it cannot be one
+  machine's second: of the answers for the leading result, as many are left out as the other
+  packages of the round are short of. If the result no longer leads by two, the task stays
+  `Disputed` (outcome `surplus_copies`);
 - a starved package is repaired, or its tasks are reported as `NoResult`.
 
-So a liar can keep a dispute from being resolved. It cannot make its answer the accepted one,
-except when the honest copies of a disputed task were all lost.
+So one lying node can keep a dispute from being resolved, and so can answers that fail to come
+back: in a round that is short of answers (a pool of fewer than three machines, with more than
+one package in dispute), nothing is settled by two answers. It cannot make its answer the
+accepted one: a result is accepted from a dispute only when an honest machine returned it. Two
+lying nodes that hold two of a task's three copies are the majority, and win.
 
 ## 11. Scale, delivery and the nodes
 

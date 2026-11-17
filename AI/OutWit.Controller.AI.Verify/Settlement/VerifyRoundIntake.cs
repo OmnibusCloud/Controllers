@@ -96,6 +96,8 @@ internal static class VerifyRoundIntake
                 continue;
             }
 
+            round.Returned[unit.Ticket] = round.Returned.GetValueOrDefault(unit.Ticket) + 1;
+
             // The same reference returned twice (a node that answers two of its packages with one
             // blob). Two blobs with the same bytes are not told apart from two honest machines
             // whose answers happen to be equal to the byte, and are both taken.

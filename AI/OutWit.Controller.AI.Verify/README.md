@@ -375,14 +375,22 @@ the `pairs`, and the `disputes`: for each, `index`, `first_copies`, `copies`,
 `agreeing` and an `outcome` (`resolved`, `no_majority`, `too_few_copies`,
 `surplus_copies`).
 
-The known limit: the server cannot see which machine returned an answer. A node
-that holds two packages of one fan-out can answer one of them twice and leave
-the other unanswered. In the dispute round a package with more answers than the
-round's packages commonly have is not settled by counting (its tasks stay
-`Disputed`); in the first fan-out more answers than the two asked for send the
-package's tasks to a dispute; a starved package is repaired or reported. A liar
-can so keep a dispute from being resolved; it cannot make its answer the
-accepted one, except when the honest copies of a disputed task were all lost.
+The known limit: the server sees results, not machines. What it can count on is
+that a node returns one result for each package it was given, so a node that
+holds two packages of one fan-out can answer one of them twice, and then the
+other is short of its answer. In the first fan-out more answers than the two
+asked for send the package's tasks to a dispute. In the repair and dispute
+rounds a package with more answers than were asked for has none of them taken.
+In the dispute round an answer counts towards "two machines" only as far as it
+cannot be one machine's second: of the answers for the leading result, as many
+are left out as the other packages of the round are short of, and if the result
+no longer leads by two the task stays `Disputed` (`surplus_copies`). A starved
+package is repaired or reported. So one lying node can keep a dispute from
+being resolved, and so can answers that fail to come back (in a pool of fewer
+than three machines a round with more than one package in dispute settles
+nothing); it cannot make its answer the accepted one, because a result is
+accepted from a dispute only when an honest machine returned it. Two lying
+nodes that hold two of a task's three copies are the majority, and win.
 
 ## Determinism
 

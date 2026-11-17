@@ -114,8 +114,8 @@ internal static class VerifySettlement
                 indices.Add(task.TaskIndex);
         }
 
-        var crowded = settled == null ? new HashSet<string>(StringComparer.Ordinal) : VerifyRulings.Crowded(settled);
-        var rulings = indices.Select(index => VerifyRulings.Rule(index, main, repaired, settled, crowded)).ToList();
+        var borrowable = settled == null ? new Dictionary<string, int>(StringComparer.Ordinal) : VerifyRulings.Borrowable(settled);
+        var rulings = indices.Select(index => VerifyRulings.Rule(index, main, repaired, settled, borrowable)).ToList();
         var rounds = new[] { main, repaired, settled }.OfType<VerifyRound>().ToList();
 
         var summary = Summarize(rulings, rounds);

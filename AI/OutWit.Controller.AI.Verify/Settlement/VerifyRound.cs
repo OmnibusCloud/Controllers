@@ -77,6 +77,12 @@ internal sealed class VerifyRound
     /// </summary>
     public HashSet<string> Surplus { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// How many result references came back under each ticket of the round, taken or refused.
+    /// A node returns one reference for each package it was given, whatever it puts into it.
+    /// </summary>
+    public Dictionary<string, int> Returned { get; } = new(StringComparer.Ordinal);
+
     /// <summary>The result packages refused, all reasons together.</summary>
     public int RejectedTotal => Rejected.Values.Sum();
 

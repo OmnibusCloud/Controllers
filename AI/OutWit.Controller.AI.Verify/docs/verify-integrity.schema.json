@@ -77,7 +77,7 @@
           "outcome": {
             "type": "string",
             "enum": ["resolved", "no_majority", "too_few_copies", "surplus_copies"],
-            "description": "resolved: one result came from at least two copies and from more than any other; it is the task's. Otherwise the task is Disputed. no_majority: no result came from two copies and from more than any other. too_few_copies: fewer than two copies came back with a verdict. surplus_copies: the task's package got more answers than the round's packages commonly did, so one machine may have answered twice and nothing is settled by counting."
+            "description": "resolved: one result came from at least two copies and from more than any other; it is the task's. Otherwise the task is Disputed. no_majority: no result came from two copies and from more than any other. too_few_copies: fewer than two copies came back with a verdict. surplus_copies: one result leads, but not by two machines once the answers that may be one machine's second are left out (as many as the other packages of the round are short of)."
           }
         }
       }

@@ -321,10 +321,11 @@ public sealed class VerifyTrustBoundaryTests
     }
 
     [Test]
-    public async Task H2InADisputeAPackageWithMoreAnswersThanTheOthersIsNotSettledByCountingTest()
+    public async Task H2ASecondAnswerOfOneMachineDoesNotWinADisputeTest()
     {
-        // Two machines, two disputed packages, three copies asked: each package gets two answers.
-        // The liar spends its answer to the second package on the first: three for one, one for the other.
+        // Three machines and one liar. One honest copy of the first package does not come back,
+        // and the liar spends its answer to the second package on the first: two forged answers
+        // against one honest one, in a package that has its three answers like any other.
         var issued = await m_rig.PublishAsync(VerifySettleRig.Batch(0), VerifySettleRig.Batch(1), VerifySettleRig.Batch(2));
         var first = new List<VerifyResultPackageData>();
         foreach (var package in issued)
@@ -339,6 +340,42 @@ public sealed class VerifyTrustBoundaryTests
         var votes = new[]
         {
             await m_rig.AnswerAsync(disputes[0], Fail), await m_rig.AnswerAsync(disputes[0], Pass, Vary(1)), await m_rig.AnswerAsync(disputes[0], Pass, Vary(2)),
+            await m_rig.AnswerAsync(disputes[1], Fail), await m_rig.AnswerAsync(disputes[1], Fail, Vary(3)),
+            await m_rig.AnswerAsync(disputes[2], Fail), await m_rig.AnswerAsync(disputes[2], Fail, Vary(4)), await m_rig.AnswerAsync(disputes[2], Fail, Vary(5))
+        };
+
+        var settled = await m_rig.SettleAsync((issued, first), ([], []), (disputes, votes));
+        var outcomes = settled.DisputeOutcomes();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(settled.Verdicts()[0], Is.EqualTo("Disputed"), "two answers for Pass are not two machines: the round is one answer short elsewhere");
+            Assert.That(outcomes[0], Is.EqualTo(VerifyRulings.SURPLUS_COPIES));
+            Assert.That(settled.Verdicts()[1], Is.EqualTo("Fail"), "the package that is short itself cannot have been given an answer to spare");
+            Assert.That(settled.Verdicts()[2], Is.EqualTo("Fail"), "three that agree are two machines even with one left out");
+            Assert.That(outcomes[1], Is.EqualTo(VerifyRulings.RESOLVED));
+            Assert.That(outcomes[2], Is.EqualTo(VerifyRulings.RESOLVED));
+        });
+    }
+
+    [Test]
+    public async Task H2WithAnswersMissingAcrossARoundNothingIsSettledByTwoTest()
+    {
+        // Two machines, three disputed packages, three copies asked: no package can have its
+        // three. The liar spends its answer to the second package on the first.
+        var issued = await m_rig.PublishAsync(VerifySettleRig.Batch(0), VerifySettleRig.Batch(1), VerifySettleRig.Batch(2));
+        var first = new List<VerifyResultPackageData>();
+        foreach (var package in issued)
+        {
+            first.Add(await m_rig.AnswerAsync(package, Fail));
+            first.Add(await m_rig.AnswerAsync(package, Pass));
+        }
+
+        var disputes = await m_rig.DisputesAsync(issued, first);
+
+        var votes = new[]
+        {
+            await m_rig.AnswerAsync(disputes[0], Fail), await m_rig.AnswerAsync(disputes[0], Pass, Vary(1)), await m_rig.AnswerAsync(disputes[0], Pass, Vary(2)),
             await m_rig.AnswerAsync(disputes[1], Fail),
             await m_rig.AnswerAsync(disputes[2], Fail), await m_rig.AnswerAsync(disputes[2], Fail, Vary(3))
         };
@@ -349,8 +386,23 @@ public sealed class VerifyTrustBoundaryTests
         {
             Assert.That(settled.Verdicts()[0], Is.EqualTo("Disputed"), "two forged answers against one honest one do not win");
             Assert.That(settled.Verdicts()[1], Is.EqualTo("Disputed"), "one answer is not two machines");
-            Assert.That(settled.Verdicts()[2], Is.EqualTo("Fail"), "the package the liar left alone is settled by its two honest copies");
+            Assert.That(settled.Verdicts()[2], Is.EqualTo("Disputed"), "two that agree may be one machine twice while the round is short of answers elsewhere");
+            Assert.That(settled.ReportCount("pass"), Is.Zero);
         });
+    }
+
+    [Test]
+    public async Task H2OneDisputedPackageIsSettledByTheTwoCopiesThatCameBackTest()
+    {
+        // A round of one package has no other package to take an answer from.
+        var issued = await m_rig.PublishAsync(VerifySettleRig.Batch(0));
+        var first = new[] { await m_rig.AnswerAsync(issued[0], Fail), await m_rig.AnswerAsync(issued[0], Pass) };
+        var disputes = await m_rig.DisputesAsync(issued, first);
+
+        var votes = new[] { await m_rig.AnswerAsync(disputes[0], Fail), await m_rig.AnswerAsync(disputes[0], Fail, Vary(1)) };
+        var settled = await m_rig.SettleAsync((issued, first), ([], []), (disputes, votes));
+
+        Assert.That(settled.Verdicts()[0], Is.EqualTo("Fail"));
     }
 
     #endregion

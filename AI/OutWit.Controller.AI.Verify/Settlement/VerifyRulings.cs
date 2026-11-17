@@ -15,6 +15,12 @@ namespace OutWit.Controller.AI.Verify.Settlement;
 /// machines, and the result is the one that the most of those three returned, at least two,
 /// with no tie; otherwise the task is disputed.</item>
 /// </list>
+/// The server sees results, not machines. What it can count on is that a node returns one result
+/// for each package it was given: a node that answers one package of a round twice has left
+/// another package of that round without its answer. So in a dispute round an answer counts
+/// towards "two machines" only as far as it cannot be such a second answer
+/// (<see cref="Borrowable"/>). With one lying node among the copies, whatever the others lose,
+/// the result that is accepted was returned by an honest machine.
 /// </summary>
 internal static class VerifyRulings
 {
@@ -38,7 +44,10 @@ internal static class VerifyRulings
     /// <summary>A dispute for which fewer than two copies came back with a verdict.</summary>
     public const string TOO_FEW_COPIES = "too_few_copies";
 
-    /// <summary>A dispute for which more copies came back than for the others: one machine may have answered twice.</summary>
+    /// <summary>
+    /// A dispute whose leading result does not lead by two machines once the answers that may be
+    /// one machine's second are left out: other packages of the round are short of answers.
+    /// </summary>
     public const string SURPLUS_COPIES = "surplus_copies";
 
     #endregion
@@ -71,29 +80,22 @@ internal static class VerifyRulings
     }
 
     /// <summary>
-    /// The task packages of a dispute round that got more answers than the round's packages
-    /// commonly did. Every package of the round is sent in the same number of copies, so one with
-    /// more answers than the others has one that is not a machine's first (a node that holds two
-    /// packages can spend its answer to one on the other): nothing is settled by counting there.
-    /// "Commonly" is the median of the packages' answers, the lower one of two: a node that
-    /// moves answers gives to one package what it takes from another, so the packages it gave to
-    /// are never the lower half.
+    /// For every task package of a dispute round, the most of its answers that may be a second
+    /// answer of one machine. Every package of the round was asked for in
+    /// <see cref="DISPUTE_COPIES"/> copies and a node returns one result for each package it was
+    /// given, so the answers a node can spend on a package beyond its own are the answers the
+    /// other packages of the round are short of.
     /// </summary>
     /// <param name="dispute">The dispute round.</param>
-    /// <returns>The tickets of those packages.</returns>
-    public static HashSet<string> Crowded(VerifyRound dispute)
+    /// <returns>By ticket: the answers the other packages of the round are short of, together.</returns>
+    public static Dictionary<string, int> Borrowable(VerifyRound dispute)
     {
-        var copies = dispute.Issued
-            .Select(unit => (unit.Ticket, Copies: dispute.Copies(unit.Ticket)))
-            .Where(unit => unit.Copies > 0)
-            .OrderBy(unit => unit.Copies)
-            .ToList();
+        var missing = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var unit in dispute.Issued)
+            missing[unit.Ticket] = Math.Max(0, DISPUTE_COPIES - dispute.Returned.GetValueOrDefault(unit.Ticket));
 
-        if (copies.Count == 0)
-            return new HashSet<string>(StringComparer.Ordinal);
-
-        var common = copies[(copies.Count - 1) / 2].Copies;
-        return copies.Where(unit => unit.Copies > common).Select(unit => unit.Ticket).ToHashSet(StringComparer.Ordinal);
+        var total = missing.Values.Sum();
+        return missing.ToDictionary(pair => pair.Key, pair => total - pair.Value, StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -103,9 +105,9 @@ internal static class VerifyRulings
     /// <param name="main">The first fan-out.</param>
     /// <param name="repair">The repair round, or null when the script ran none.</param>
     /// <param name="dispute">The dispute round, or null when the script ran none.</param>
-    /// <param name="crowded">The dispute round's packages with more answers than the others (<see cref="Crowded"/>).</param>
+    /// <param name="borrowable">For the dispute round's packages, the answers that may be a machine's second (<see cref="Borrowable"/>).</param>
     /// <returns>The ruling.</returns>
-    public static VerifyRuling Rule(int index, VerifyRound main, VerifyRound? repair, VerifyRound? dispute, IReadOnlySet<string> crowded)
+    public static VerifyRuling Rule(int index, VerifyRound main, VerifyRound? repair, VerifyRound? dispute, IReadOnlyDictionary<string, int> borrowable)
     {
         var verdicts = main.Verdicts(index);
 
@@ -120,18 +122,15 @@ internal static class VerifyRulings
         if (!IsDisputed(main, index))
             return VerifyRuling.Accept(index, verdicts[0], verdicts.Count, repaired: false);
 
-        return Settle(index, verdicts.Count, dispute, crowded);
+        return Settle(index, verdicts.Count, dispute, borrowable);
     }
 
-    private static VerifyRuling Settle(int index, int firstCopies, VerifyRound? dispute, IReadOnlySet<string> crowded)
+    private static VerifyRuling Settle(int index, int firstCopies, VerifyRound? dispute, IReadOnlyDictionary<string, int> borrowable)
     {
         if (dispute == null || !dispute.UnitOf.TryGetValue(index, out var unit))
             return VerifyRuling.Dispute(index, firstCopies, 0, 0, TOO_FEW_COPIES);
 
         var votes = dispute.Verdicts(index);
-        if (crowded.Contains(unit.Ticket))
-            return VerifyRuling.Dispute(index, firstCopies, votes.Count, 0, SURPLUS_COPIES);
-
         if (votes.Count < MAJORITY)
             return VerifyRuling.Dispute(index, firstCopies, votes.Count, votes.Count, TOO_FEW_COPIES);
 
@@ -150,9 +149,16 @@ internal static class VerifyRulings
         var most = groups[0].Count;
         var next = groups.Count > 1 ? groups[1].Count : 0;
 
-        return most >= MAJORITY && most > next
+        if (most < MAJORITY || most <= next)
+            return VerifyRuling.Dispute(index, firstCopies, votes.Count, most, NO_MAJORITY);
+
+        // Two machines must have returned the leading result. Of its answers, as many as the
+        // other packages of the round are short of may be one machine's second, and do not count.
+        var machines = most - borrowable.GetValueOrDefault(unit.Ticket);
+
+        return machines >= MAJORITY && machines > next
             ? VerifyRuling.Accept(index, groups[0][0], most, repaired: false, new VerifyDisputeRecord(index, firstCopies, votes.Count, most, RESOLVED))
-            : VerifyRuling.Dispute(index, firstCopies, votes.Count, most, NO_MAJORITY);
+            : VerifyRuling.Dispute(index, firstCopies, votes.Count, most, SURPLUS_COPIES);
     }
 
     /// <summary>
