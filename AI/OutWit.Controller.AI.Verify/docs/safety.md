@@ -1,8 +1,10 @@
 # What Verify runs on your computer
 
 For someone who lends a computer to the network and wants to know what the Verify
-controller does with it. Everything on this page is something the code does and a test
-checks; the last section says where the protection ends.
+controller does with it. Every number on this page is the code's own, and a test fails when
+the two part. What the sandbox does and refuses in the first three sections is run by the
+tests listed under "How to check this yourself". What is an estimate, what rests on something
+outside this controller, and what no test here can show is in the last two sections.
 
 ## What it is asked to do
 
@@ -21,7 +23,7 @@ What a program has inside the box:
 
 | | |
 |---|---|
-| Processor | a fixed budget of instructions: 20 thousand million by default, never more than 240 thousand million. The default is about 10 seconds of a plain busy loop on a slow machine, the largest two minutes of one. When the budget runs out the program is stopped. What the sandbox does at a program's request (reading a file, printing, making random bytes) is paid from the same budget, one unit a byte |
+| Processor | a fixed budget of instructions for every run: 20 thousand million by default, never more than 240 thousand million. The default is about 10 seconds of a plain busy loop on a slow machine, the largest two minutes of one. When the budget runs out the program is stopped. What the sandbox does at a program's request (reading a file, printing, making random bytes) is paid from the same budget, one unit a byte. A task that comes with test cases is run once for each case, 1,024 cases at most, and every run has the budget |
 | A run that drags | the budget counts work, not time, and some work is slow. So your computer also keeps a clock of its own on every run and ends it after 50 seconds for the default budget, a little over 8 minutes for the largest. That stop is your computer's own and says nothing about the program: the task is sent out once more, and if no computer does better it is reported as having no result |
 | Memory | 256 MB by default (never more than 2 GB), one block of it. Asking for more fails inside the program |
 | Files | only the language's own library, or the task's own files, read-only, and only under the exact names they have. It cannot write, change, delete or rename a file, and cannot list a folder. What it can read about a file says nothing of your computer: the file's times and its disk read as zero, and its file number follows from its name inside the sandbox |
@@ -32,7 +34,7 @@ What a program has inside the box:
 | Randomness | not yours: a sequence fixed by the task |
 | Your environment | none: no user name, no paths, no variables |
 | Output | what a task prints is kept up to a cap: 256 KB by default, never more than 8 MB, for all its test cases together. A byte past the cap is never stored, in memory or on disk, and the write that passes the cap ends the run. Error output past its own cap (64 KB by default, never more than 1 MB) is dropped and the run goes on |
-| A crash | ends the program, and only the program: the sandbox catches every crash (a bad pointer, a stack overflow, an `abort`). A bad pointer handed to the sandbox itself is answered with an error code inside the program. On Windows the client runs with the processor's stack protection switched on, and a crash is still caught as an ordinary check, so the client keeps running and keeps the protection |
+| A crash | ends the program, and only the program: the sandbox catches every crash (a bad pointer, a stack overflow, an `abort`). A bad pointer handed to the sandbox itself is answered with an error code inside the program. On a Windows computer whose processor and system enforce stack protection, the client runs with it switched on, and a crash is still caught as an ordinary check, so the client keeps running and keeps the protection |
 
 ## What it takes from the machine
 
@@ -72,7 +74,8 @@ What a program has inside the box:
   the others.
 - **What your computer refuses.** It checks a package before it runs any of it. A package
   made by another version of the controller, one larger than a package may be (4,096
-  tasks at most), or one for a language whose files are missing or are not the pinned
+  tasks at most), one with a task of more files, arguments or test cases than a task may
+  have (1,024 of each), or one for a language whose files are missing or are not the pinned
   ones is refused whole, and the network gives it to another computer.
 
 ## What leaves your computer
@@ -107,8 +110,15 @@ change:
 - `VerifySandboxHygieneTests`: nothing is left on the disk after a run.
 - `VerifyHostProtectionTests`: a program that crashes in each way a program can (an
   unreachable instruction, a bad memory access, a division by zero, a stack overflow) inside
-  a host built like the client, with the processor's stack protection on, ends as a crash
-  and leaves the host running.
+  a host built like the client ends as a crash and leaves the host running. On a machine that
+  enforces the processor's stack protection that is the proof that the client survives under
+  it; on a machine that does not, that one test is reported as skipped and says the proof
+  did not run there. The way crashes are caught under the protection is run on every machine
+  all the same, by asking for it.
+- `VerifyTrapModeTests`: the same programs give the same verdict, output and cost whichever
+  of the two ways a crash is caught in.
+- `VerifyHostileKitTests`: the fifteen hostile tasks that are run on the test fleet, each
+  with the verdict it must get.
 - `VerifyClangRuntimeTests`: a C or C++ build leaves nothing behind, and the program it
   builds sees no file system.
 - `WasmHostNativeResolutionTests`: in a host loaded like the client, an engine library that is
@@ -116,6 +126,47 @@ change:
   or with another one, loaded first, does not stop the sandbox.
 
 `dotnet test AI/OutWit.Controller.AI.Verify.Tests` runs them on your machine.
+
+## What an answer rests on
+
+Your computer's answers are checked, and so are everybody else's. This is what the
+network does with them, and how far it goes.
+
+- **An answer counts only for the work that was given.** Every package of tasks goes out
+  with a ticket, 16 random bytes, and comes back with it. The server accepts an answer only
+  under a ticket it gave out for that package, made by the same version of the controller
+  and of the engine, for exactly the package's tasks. Anything else is dropped and counted.
+- **A share of the work is done twice,** on two different computers that cannot tell they
+  are being checked. The server never chooses between two answers. Answers that agree are
+  accepted. Answers that disagree send the task out three more times, and the result that
+  at least two of those three computers return, with no tie, is accepted. Otherwise the
+  task is reported as disputed and counts as no result.
+- **A computer's own trouble is never a verdict.** A task a computer could not run (its
+  clock ended it, a disk was full) is sent out once more, and if nobody does better it is
+  reported as having no result.
+
+Where that ends:
+
+- **Work that is not done twice rests on one computer.** How large the share is that is
+  done twice is the lab's to set, and it may be none. A task that was not checked, and a
+  task that was sent out once more after a computer's fault, has the answer of the one
+  computer that ran it. The documents of a run say how many tasks those are.
+- **Counting computers rests on the platform.** The server sees answers, not computers. It
+  reads three answers as three computers because the platform keeps the copies of a package
+  on different computers and, from Grid 1.3.0 on, takes at most one answer from a computer
+  for each package it was given. With an older Grid a computer that answers twice can take
+  the place of one that did not answer. What the controller does alone, whatever it is
+  sent: an answer under a ticket that was not given is dropped, and more answers than were
+  asked for are never taken as agreement.
+- **Two computers that tell the same lie about a task are the majority** wherever they hold
+  two of its three copies. One computer that lies can keep a disputed task from being
+  settled; it cannot make its answer the accepted one while the other copies come back.
+- **A run's clock is your computer's own stop, not the program's.** It is sized from the
+  budget (50 seconds for the default budget, a little over 8 minutes for the largest), it
+  gives no verdict, and a task it ended is sent out once more. On the test fleet no task
+  of the hostile kit has reached it: a sleep takes no time, and what a program asks of the
+  sandbox is paid from its budget by the byte. A run of slow instructions on a slow
+  computer could reach it. That it works is shown by a test that shortens it.
 
 ## Where the protection ends
 
@@ -133,14 +184,19 @@ change:
 - **A program can use what it is given.** For as long as it runs it can keep a core busy
   and fill its memory. That is the work, not an escape.
 - **The limits are the lab's to set, up to a ceiling.** A lab can ask for up to
-  240 thousand million instructions and 2 GB a program; it cannot ask for more. Your
-  computer holds every batch to the ceilings itself, whatever the batch says.
+  240 thousand million instructions and 2 GB for a run; it cannot ask for more. Your
+  computer holds every batch to the ceilings itself, whatever the batch says. The limits
+  are a run's, and a task with test cases is run once for each: one task can keep a core
+  busy for as many runs as it has cases, 1,024 at most.
 - **The budget bounds work, not time.** How long an instruction takes depends on what the
   program does: a loop of additions burns several thousand million a second, a chain of
   square roots or of cache misses a few hundred million. The clock your computer keeps on
   every run is what bounds the time.
-- **The price of a module is an estimate.** It is fitted to measurements, not proved for
-  every module. Turning a module into machine code cannot be interrupted once it has
-  started; the expensive ones run one at a time in the client's process.
+- **The price of a module is an estimate, and this part is only partly closed.** The price
+  is fitted to measurements, not proved for every module: a shape nobody measured could be
+  priced too low. Turning a module into machine code cannot be interrupted once it has
+  started, and the clock your computer keeps on a run does not cover it; the expensive ones
+  run one at a time in the client's process. The memory that work takes is the client's
+  own, not the program's 2 GB.
 - **This page is about the Verify controller.** Other controllers the client runs have
   their own rules.

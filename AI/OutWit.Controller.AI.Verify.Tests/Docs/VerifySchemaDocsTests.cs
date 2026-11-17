@@ -199,7 +199,7 @@ public sealed class VerifySchemaDocsTests
     {
         var root = FindSolutionRoot();
         if (root == null)
-            Assert.Ignore("Solution root not found");
+            Mock.VerifyRigModules.Missing("Solution root not found");
 
         var path = Path.Combine(root, "AI", "OutWit.Controller.AI.Verify", "docs", fileName);
         Assert.That(File.Exists(path), Is.True, $"schema missing: {path}");

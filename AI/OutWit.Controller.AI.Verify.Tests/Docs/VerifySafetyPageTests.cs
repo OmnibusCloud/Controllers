@@ -31,7 +31,11 @@ public sealed class VerifySafetyPageTests
         nameof(Sandbox.VerifyWasiRuntimeTests),
         nameof(Sandbox.VerifySandboxHygieneTests),
         nameof(Wasm.WasmHostNativeResolutionTests),
-        nameof(Sandbox.VerifyNodeProtectionTests)
+        nameof(Sandbox.VerifyNodeProtectionTests),
+        nameof(Sandbox.VerifyHostProtectionTests),
+        nameof(Sandbox.VerifyClangRuntimeTests),
+        nameof(Sandbox.VerifyTrapModeTests),
+        nameof(Sandbox.VerifyHostileKitTests)
     ];
 
     #endregion
@@ -55,9 +59,25 @@ public sealed class VerifySafetyPageTests
             Assert.That(page, Does.Contain($"{VerifySandboxDefaults.DEFAULT_STDOUT_LIMIT_BYTES / KIBIBYTE} KB by default"));
             Assert.That(page, Does.Contain($"never more than {VerifyLimitCeilings.MAX_STDOUT_LIMIT_BYTES / MEBIBYTE} MB"));
             Assert.That(page, Does.Contain($"{VerifySandboxDegree.DEFAULT_MAX_DEGREE} at most"));
-            Assert.That(page, Does.Contain($"and {VerifyLimitCeilings.MAX_MEMORY_BYTES / GIBIBYTE} GB a program"));
+            Assert.That(page, Does.Contain($"and {VerifyLimitCeilings.MAX_MEMORY_BYTES / GIBIBYTE} GB for a run"));
             Assert.That(page, Does.Contain($"{VerifyClangBuild.STEP_MEMORY_BYTES / GIBIBYTE} GB of memory a step"));
             Assert.That(page, Does.Contain($"{VerifyClangBuild.PRODUCT_LIMIT_BYTES / MEBIBYTE} MB"));
+
+            // What a task may hold, and what a node refuses a package for.
+            var cases = OutWit.Controller.AI.Verify.Tasksets.VerifyTasksetLimits.MAX_SUITE_CASES.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+            Assert.That(OutWit.Controller.AI.Verify.Tasksets.VerifyTasksetLimits.MAX_SOURCES, Is.EqualTo(OutWit.Controller.AI.Verify.Tasksets.VerifyTasksetLimits.MAX_SUITE_CASES), "the page says one number for files, arguments and cases");
+            Assert.That(OutWit.Controller.AI.Verify.Tasksets.VerifyTasksetLimits.MAX_ARGS, Is.EqualTo(OutWit.Controller.AI.Verify.Tasksets.VerifyTasksetLimits.MAX_SUITE_CASES));
+            Assert.That(page, Does.Contain($"is run once for each case, {cases} cases at most, and every run has the budget"));
+            Assert.That(page, Does.Contain($"({cases} of each)"));
+            Assert.That(page, Does.Contain($"as many runs as it has cases, {cases} at most"));
+            Assert.That(page, Does.Contain($"({OutWit.Controller.AI.Verify.Delivery.VerifyPackagePlanner.MAX_PACKAGE_TASKS.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)}"));
+
+            // The clock, where the page states it a second time.
+            Assert.That(page, Does.Contain($"({VerifyBackstop.WallMs(VerifySandboxDefaults.DEFAULT_FUEL_BUDGET) / 1000} seconds for the default budget, a little over {VerifyBackstop.WallMs(VerifyLimitCeilings.MAX_FUEL_BUDGET) / 60_000} minutes for the largest)"));
+
+            // A transfer's time, and a ticket's size.
+            Assert.That(page, Does.Contain($"at {OutWit.Controller.AI.Verify.Delivery.VerifyPackageTransfer.TRANSFER_SLOWEST_BYTES_PER_SECOND / KIBIBYTE} KB a second"));
+            Assert.That(page, Does.Contain($"{OutWit.Controller.AI.Verify.Delivery.VerifyTickets.TICKET_BYTES} random bytes"));
         });
     }
 
@@ -105,7 +125,7 @@ public sealed class VerifySafetyPageTests
     {
         var root = FindSolutionRoot();
         if (root == null)
-            Assert.Ignore("Solution root not found");
+            Mock.VerifyRigModules.Missing("Solution root not found");
 
         var path = Path.GetFullPath(Path.Combine(root, "AI", "OutWit.Controller.AI.Verify", "docs", relativePath));
         Assert.That(File.Exists(path), Is.True, $"missing: {path}");

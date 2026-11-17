@@ -7,9 +7,24 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking — generation and verification are the
 same activity with different programs.
 
-**Status: 0.13.0 (Verify.Model 0.4.0, Verify.Scripts 0.6.0) — for the test server; 0.11.3 is
+**Status: 0.14.0 (Verify.Model 0.4.0, Verify.Scripts 0.6.0) — for the test server; 0.13.0 is
 the version proven on the test fleet. Not yet released to nuget.org or the live network.**
-0.13.0 is a hardening release. What it changed:
+0.14.0 is the second hardening release. What it changed:
+
+- A taskset is held to its schema, exactly: a field the schema does not have (a misspelt
+  `expected_stdout`), a field given twice, a value of another type, a number outside its
+  range, a NUL in a program or an argument and text that is not Unicode are refused by name,
+  at the preflight and at the split. A runtime id is matched to the letter.
+- What the server reads from a lab is bounded where it is read: a line (64 MiB), the sources,
+  arguments and cases of a task (1,024 each), the tasks of a taskset (4,194,304), and what a
+  preflight answers (32 messages of a kind, 240 characters each).
+- Nothing that grows with the taskset is read whole into memory: a taskset is read a line at
+  a time and stored a package at a time, and the documents are written to files as they are
+  made. A run of 100,000 tasks from a 202 MiB taskset raised the managed heap by 66 MiB.
+- A taskset the schema allowed is cut into the same packages and gives the same documents as
+  under 0.13.0.
+
+0.13.0 was the first hardening release. What it changed:
 
 - Fuel is the one budget of a run's work. `Timeout` means out of fuel; the wall clock is a
   node's own backstop and gives no verdict. A call into the host costs fuel by the bytes it
@@ -43,7 +58,7 @@ verifiable by construction: code passes its test suite or it does not.
 
 | Activity | Where | Role |
 |---|---|---|
-| `Verify.Split` | host | taskset (JSON lines) + options → batches, grouped by runtime, limits clamped to the ceilings; the batches are grouped into packages, each stored as a blob with a ticket of its own, and what the activity returns is the references. A taskset with a line that does not parse, a source name that is not portable, an unknown runtime id or a task whose text is over 8 MiB is refused |
+| `Verify.Split` | host | taskset (JSON lines) + options → batches, grouped by runtime, limits clamped to the ceilings; the batches are grouped into packages, each stored as a blob with a ticket of its own, and what the activity returns is the references. The taskset is read a line at a time, its tasks wait in working files of the server's own, and the packages are stored one at a time. A taskset with a line the schema does not allow (an unknown field, a field given twice, a value of another type, a number outside its range), a source name that is not portable, an unknown runtime id, a task whose text is over 8 MiB or more tasks than a taskset may have is refused, by name |
 | `Verify.ExecutePackage` | node | the primitive, and the one way work reaches a node. The node checks the package before it runs any of it and refuses it whole when it cannot run it (another controller version, a package or batch larger than a node takes, a runtime it lacks or has other bytes of). It downloads the package blob and runs its batches — one compiled runtime module per batch, the tasks executed concurrently in isolated stores under fuel and memory limits clamped to the ceilings — writes the results to a file batch by batch and uploads the file as a blob; progress of the delivery and of the work; batch provenance |
 | `Verify.Repairs` | host | the task packages of a fan-out + what it returned → the tasks that have no verdict yet (no accepted answer, or only a fault of the node that ran them), as task packages to send out once more |
 | `Verify.Disputes` | host | the task packages of a fan-out + what it returned → the tasks whose executions disagree, as task packages for three copies (`Grid.Replicas(3)`) |
@@ -54,7 +69,7 @@ verifiable by construction: code passes its test suite or it does not.
 | `Verify.Provenance` | host | the ledger → the provenance document (which tasks ran together, in which round, on which platform, with which wasmtime, controller and runtime module, and what each task cost: fuel, peak memory, wall time; never which machine, and nothing a machine could be measured by) |
 | `Verify.SamplingRate` | host | options → `SamplingRate` clamped to 0..1, the share of the packages `Grid.Replicas` runs twice |
 | `Verify.Integrity` | host | the ledger → the integrity document (the pairs of executions of the first fan-out and whether they agree on verdict, exit, outputs and cases; every dispute and how it ended; the counts of refused result packages, repairs and tasks without a result) |
-| `Verify.Preflight` | host | counts, runtimes referenced, unknown runtimes, size estimate, ceiling notes, and whether `Verify.Split` would refuse the taskset — before anything runs |
+| `Verify.Preflight` | host | counts, runtimes referenced, unknown runtimes, size estimate, ceiling notes, and whether `Verify.Split` would refuse the taskset — before anything runs. One pass over the taskset, nothing kept; the answer is bounded whatever the taskset (32 messages of a kind, 240 characters each, and a line for the rest) |
 | `Verify.RuntimeDiagnostics` | host | wasmtime version (the native library is loaded to prove it), runtime target, per-runtime availability and hash — of the server's module; a node's module is exercised by `Verify.ExecutePackage` and described by the provenance |
 | `Verify.Capabilities` | host | what a submitter can know before a run, as a document: the controller's version, the runtimes it carries, the defaults and ceilings, how fuel relates to time, the source-name rule, what a task's own module is held to, the caps on packages and batches, and the pool as totals (nodes, concurrent sandboxes, reference tasks per second; no node named) |
 
@@ -205,16 +220,36 @@ corpus holds.
 
 ## How tasks and results travel
 
-Nothing that grows with the taskset travels inside a message. `Verify.Split`
+Tasks and results travel as blobs, end to end. `Verify.Split`
 groups the batches into packages and stores each package as a blob; the
 collection `Grid.ForEach` places on nodes is a list of references (blob id,
-hash, size, task count). A node is told which packages are its share, downloads
+hash, size, task count, ticket). A node is told which packages are its share, downloads
 exactly those over the blob channel — in chunks, resumed after a break — and
 returns each package's results as a blob of its own; the host reads the result
-blobs when it settles the run. The message that assigns a node its share
-of a million tasks is a few hundred references. `Verify.ExecutePackage` is the
+blobs when it settles the run. `Verify.ExecutePackage` is the
 one way work reaches a node: the single-task activity `Verify.Execute` is
 removed.
+
+An activity's parameters and its return value are references: a blob's id, or a
+package reference of about 230 bytes (a result's about 145). The one thing in a
+message that still grows with a run is the list of those references, one a
+package, because `Grid.ForEach` fans out over a collection. Nothing that grows
+with the taskset is read whole into memory either: the server reads a taskset a
+line at a time (a preflight keeps nothing; a split keeps the tasks in working
+files about the size of the taskset until their packages are stored), makes the
+repair and dispute rounds and the check tasks a package at a time, and writes
+the four documents to files as they are made. It keeps a small record a task,
+never a task's text, its outputs or a document.
+
+Measured by the controller's load test (0.14.0; the server and three nodes in
+one process on a development desktop): 100,000 tasks of 2 KiB each, a taskset of
+202 MiB, a twentieth of the packages run twice, 190 s. The managed heap rose by
+20 MiB at the most while the taskset was split and by 66 MiB over the whole run
+(working set 362 MiB at its highest). The run was 1,562 task packages and 1,641
+result packages, about a megabyte of blobs each way. The largest message to a
+node, its whole share of 547 packages, was 126,357 bytes; the largest single
+request 231 bytes. The job's two lists of references were 360,822 and 237,945
+bytes; every other variable a few words.
 
 A package is one batch while a run is small, so the split between nodes stays
 as fine as the batches. A large run is cut into about a thousand packages
@@ -274,6 +309,19 @@ A minimal taskset — one code-vs-tests task and one plain run:
 {"index":1,"runtime":"quickjs-0.15.1","entry":"m.js","sources":{"m.js":"console.log(6*7)"}}
 ```
 
+The controller accepts exactly what the taskset schema allows, and refuses a
+line by the name of what is wrong with it: a field the schema does not have, at
+any level (`unknown field 'suite[0].expected_stdoutt'`: a misspelt expectation
+can never be dropped and turn a test into a pass); a field or a source name
+given twice; a value of another type (`'suite' must be an array of cases`; a
+`null` is another type); a number outside its range (`'limits.fuel' must be 1
+or more`); a NUL character in a source, an argument or the entry (a program is
+handed to its interpreter as a C string; in `stdin` and `expected_stdout` a NUL
+is data); text that is not valid Unicode; more than 1,024 sources, arguments or
+cases; a line over 64 MiB. A taskset has at most 4,194,304 tasks. A checker
+spec is held to its schema the same way. `limits.wall_ms` is deprecated: it is
+accepted and is not a limit.
+
 Source names must be portable, for every runtime, and a taskset with another
 name is refused where it is split and reported by the preflight, by name. The
 rule: the characters `A-Z a-z 0-9 . _ - +`, folders separated by `/`; at most
@@ -303,7 +351,10 @@ given, its exact `expected_stdout`. A crash is not an exit: `expected_exit: -1`
 does not pass on one. A case that is met passes whatever the program wrote to
 stderr: words like "out of memory" there no longer turn a met case into
 `MemoryExceeded`. The cases of a suite share the task's stdout cap; a case that
-prints after the cap is spent keeps nothing and is `OutputExceeded`.
+prints after the cap is spent keeps nothing and is `OutputExceeded`. A task runs
+once a case, each run under the task's fuel and memory limits, and a suite has
+at most 1,024 cases: the most work one task can ask of a node is its limits
+times its cases.
 
 What the documents say of a run that did not go well: a `NoResult` or a
 `Disputed` task is in the report (never left out, never a pass; `pass_rate` is
@@ -469,7 +520,7 @@ each edge:
 | Wall time | no limit of the task's: `limits.wall_ms` is still accepted and is not a limit (the preflight says so with one message). A node keeps a backstop of its own, 10 s plus the time the fuel budget lasts at 500 million units a second: 50 s for the default budget, 490 s for the largest | no verdict: a fault of the node. The task is sent out once more, and is `NoResult` with reason `wall_clock` if no node does better |
 | Memory | one linear memory of 32-bit addresses: 256 MiB by default, 2 GiB at most | the allocator refuses inside the program: `MemoryExceeded`; an access outside the memory is a crash: `RuntimeError` |
 | Call stack | 8 MiB of the engine's native stack, as on Linux (the engine's default is 512 KiB), on threads made to hold it | `RuntimeError`, `wasm trap: call stack exhausted`; the interpreters stop a deep recursion themselves before that |
-| Traps | every trap (an unreachable, an access outside the memory, a division by zero, a stack overflow) is an explicit check, not a hardware fault | the host stays up: a process with hardware-enforced stack protection (CET, on by default for .NET 9+ executables on Windows) is not killed by a guest's trap |
+| Traps | a trap (an unreachable, an access outside the memory, a division by zero, a stack overflow) is an explicit check in a host whose process runs under hardware-enforced stack protection (CET shadow stacks: a .NET 9+ executable on a Windows machine that enforces them), and a hardware fault the engine catches in any other | the host stays up either way: a process under stack protection is not killed by a guest's trap. The verdicts, the outputs and the fuel are the same in both modes; `VerifyTrapModeTests` runs the same programs in both and compares them |
 | Tables | 1,048,576 elements a table, eight tables | growth is refused |
 | Output | stdout: 256 KiB by default, 8 MiB at most, for a task with all the cases of its suite. stderr: 64 KiB by default, 1 MiB at most. Both are capped at the write: a byte past the cap is never stored, in memory or on disk | the write that takes stdout past its cap ends the run: `OutputExceeded`. stderr past its cap is dropped and flagged (`stderr_truncated`), and the run goes on |
 | Files | the runtime's own library, read-only; for Lua the task's own sources, read-only; a raw `wasi` module and a C/C++ program have none. Only the exact names of the folder's table exist | writing, creating, truncating, removing and renaming are refused; a lookup under another spelling finds nothing |
@@ -670,8 +721,10 @@ writable: `np.save` and `np.load` work on `io.BytesIO`. `numpy.testing` is there
 suite is not.
 
 `OutWit.Controller.AI.Verify.Assets` (`verify-assets build <dir>`) rebuilds
-the whole set from pinned downloads, byte for byte, and prints the hashes the
-catalog pins.
+the whole set of runtime files from pinned downloads, byte for byte, and prints
+the hashes the catalog pins. (It builds the files, not the release archives
+that carry them: an archive is packed once and pinned by its SHA-256 in the
+controller's project file.)
 
 Ruby loads its library from files, not from one archive, so the library is a
 tree: 1,142 files, cut unchanged out of the release archive (the standard
@@ -814,6 +867,11 @@ verify.module/
 
 Two load modes meet this layout. An isolated plugin load context (the server,
 the module-load test) resolves the library through the module's `deps.json`.
+The module-load test runs on the packaged library: it takes the native asset
+the module's own manifest declares for the platform from its release, holds it
+to the manifest's size and SHA-256 and unpacks it where the manifest says, so a
+manifest without the library fails the test (the language runtimes of that test
+are still laid out by `verify-assets`, not taken from their archives).
 The cloud client loads controllers into the shared load context, where that
 file is never read and a P/Invoke probes only the application folder and the
 module root, and where the binding loads once, from the folder of whichever
@@ -851,7 +909,7 @@ the native library of its newest patch, 48.0.8, taken unchanged from the engine'
 release archives (`toolchain/natives.sh` of the asset tool, pinned by the digests the
 release states; the build server runs the tests on the same library on each platform).
 A patch of the line changes neither an output nor a unit of fuel; a major release would
-change fuel, so the fleet stays on one line. Licences travel inside the asset archives
+change fuel, so the fleet stays on one line. Licences travel inside the asset archives (the list is not yet complete for what the interpreters link statically)
 (wasmtime: Apache-2.0 WITH LLVM-exception; CPython: PSF; QuickJS-NG: MIT;
 Ruby and its bundled gems: Ruby's own terms or BSD-2-Clause; the ruby.wasm
 port: MIT; Lua: MIT; sucrase and the six packages bundled with it: MIT, Apache-2.0 and
@@ -868,9 +926,12 @@ can call it as a doctor-style check.
 
 ## Tests
 
-`OutWit.Controller.AI.Verify.Tests`: wire-layout guards, the schema guards and
-the safety page's numbers against the code's constants,
-the parser at its edges, the sandbox verdict, adversarial, hygiene, raw-WASI,
+`OutWit.Controller.AI.Verify.Tests`: the wire-layout guard (every member's
+order, name, type and default, and the bytes of an image), the schema guards
+(the parser takes every field a schema lists and no other, and every number's
+range), the numbers of this file, of the capabilities document and of the
+safety page against the code's constants,
+the parser at its edges and at its bounds, the sandbox verdict, adversarial, hygiene, raw-WASI,
 Python-layer, numpy, Ruby, Lua, QuickJS, TypeScript and C/C++ suites, node
 protection (`VerifyNodeProtectionTests`) and the price of a module's shape,
 the same result on every node (`VerifySameResultTests`: file names, file
@@ -879,7 +940,9 @@ tree hash, the worker pool (cancellation
 included) and the
 benchmark, the taskset, sampling and integrity pipelines, the caps of the plan,
 the server's intake and rulings (`VerifyTrustBoundaryTests`) and whole runs
-against lying nodes (`VerifyLyingNodesTests`), a scan of every document of
+against lying nodes (`VerifyLyingNodesTests`), the two trap modes compared
+(`VerifyTrapModeTests`), the hostile taskset of the fleet proofs held to its
+verdicts (`VerifyHostileKitTests`), a scan of every document of
 hostile and failed runs for anything of a node (`VerifyAnonymityTests`), the
 package format,
 plan, transfer (a link that drops and comes back included) and the share's
@@ -896,11 +959,19 @@ build (`AI/Shared/WasmHostPinnedNatives.targets`). The sandbox suites need the p
 (`verify-assets build OutWit.Controller.AI.Verify.Tests/@Data/runtimes`;
 `@Data/` is gitignored) and Assert.Ignore without it; the `AI Verify` workflow
 builds the set and runs everything on Linux, macOS and Windows, where a runtime
-that does not resolve is a failure, not a skip.
+that does not resolve is a failure, not a skip. A rig loads the modules it
+names and no other (`VerifyRigModules`): a module of another controller in the
+shared staging folder is not loaded, and a module that is not byte for byte
+this build's fails the rig by name. The proof that a host under hardware stack
+protection survives a guest's trap runs only on a machine that enforces that
+protection; elsewhere its test is skipped and says so.
 
-Load tests (`Category=Load`, not in the sweep): a thousand tasks at the
+Load tests (`Category=Load`, not in the sweep; the `AI Verify` workflow runs
+them once a week and on request): a thousand tasks at the
 machine's degree, thousands of runs with bounded memory, hundreds of distinct
 raw modules against the bounded module cache, a hundred thousand lines
 through the parser and the planner and a hundred thousand results through
-every writer, and thousands of tasks through `VerifyRun` with sampling on
-the in-process nodes — `dotnet test --filter Category=Load`.
+every writer, thousands of tasks through `VerifyRun` with sampling on
+the in-process nodes, and a hundred thousand tasks from a 200 MiB taskset
+through `VerifyRun` with the memory and every payload measured
+(`VerifyScaleLoadTests`) — `dotnet test --filter Category=Load`.
