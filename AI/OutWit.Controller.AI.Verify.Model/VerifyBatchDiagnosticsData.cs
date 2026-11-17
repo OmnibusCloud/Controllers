@@ -6,10 +6,11 @@ using OutWit.Common.Values;
 namespace OutWit.Controller.AI.Verify.Model;
 
 /// <summary>
-/// What a node reports about itself with every result batch: which node ran the chunk, with
-/// which wasmtime and runtime module, at which degree and for how long. It rides next to the
-/// results so that provenance survives a failed run and the fleet's inventory is a by-product
-/// of any run; it stays out of the verdict report, which must not depend on where a task ran.
+/// What a node reports with every result batch: the kind of system it is, and with which
+/// engine, controller and runtime module it ran the batch. It says nothing of which machine
+/// that is, nor of how the machine ran the batch: the members that could are kept for the wire
+/// layout and leave a node empty. It rides next to the results so that provenance survives a
+/// failed run; it stays out of the verdict report, which must not depend on where a task ran.
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only.
@@ -90,7 +91,10 @@ public sealed partial class VerifyBatchDiagnosticsData : ModelBase
     [MemoryPackOrder(6)]
     public string RuntimeSha256 { get; set; } = "";
 
-    /// <summary>Concurrent sandboxes the batch ran at.</summary>
+    /// <summary>
+    /// Concurrent sandboxes the batch ran at. Known on the node only: a result package carries 0
+    /// (with the memory cap, the degree gives a node's cores and free memory).
+    /// </summary>
     [ToString]
     [MemoryPackOrder(7)]
     public int Degree { get; set; }
@@ -100,7 +104,7 @@ public sealed partial class VerifyBatchDiagnosticsData : ModelBase
     [MemoryPackOrder(8)]
     public int TaskCount { get; set; }
 
-    /// <summary>Wall time of the whole batch on the node.</summary>
+    /// <summary>Wall time of the whole batch on the node. Known on the node only: a result package carries 0.</summary>
     [ToString]
     [MemoryPackOrder(9)]
     public int WallMs { get; set; }

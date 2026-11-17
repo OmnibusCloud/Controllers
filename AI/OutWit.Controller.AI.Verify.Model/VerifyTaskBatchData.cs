@@ -33,7 +33,8 @@ public sealed partial class VerifyTaskBatchData : ModelBase
 
         return RuntimeId.Is(other.RuntimeId)
                && DefaultLimits.Check(other.DefaultLimits)
-               && MaxDegree.Is(other.MaxDegree);
+               && MaxDegree.Is(other.MaxDegree)
+               && RuntimeSha256.Is(other.RuntimeSha256);
     }
 
     public override VerifyTaskBatchData Clone()
@@ -43,7 +44,8 @@ public sealed partial class VerifyTaskBatchData : ModelBase
             RuntimeId = RuntimeId,
             DefaultLimits = DefaultLimits?.Clone(),
             Tasks = Tasks.Select(t => t.Clone()).ToList(),
-            MaxDegree = MaxDegree
+            MaxDegree = MaxDegree,
+            RuntimeSha256 = RuntimeSha256
         };
     }
 
@@ -70,6 +72,13 @@ public sealed partial class VerifyTaskBatchData : ModelBase
     [ToString]
     [MemoryPackOrder(3)]
     public int MaxDegree { get; set; }
+
+    /// <summary>
+    /// The SHA-256 the server's controller pins the runtime's module to (empty for the raw WASI
+    /// runtime, which has none). A node whose own pin is another refuses the package.
+    /// </summary>
+    [MemoryPackOrder(4)]
+    public string RuntimeSha256 { get; set; } = "";
 
     #endregion
 }

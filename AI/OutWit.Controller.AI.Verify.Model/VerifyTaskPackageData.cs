@@ -30,7 +30,10 @@ public sealed partial class VerifyTaskPackageData : ModelBase
                && Sha256.Is(other.Sha256)
                && SizeBytes.Is(other.SizeBytes)
                && TaskCount.Is(other.TaskCount)
-               && BatchCount.Is(other.BatchCount);
+               && BatchCount.Is(other.BatchCount)
+               && Ticket.Is(other.Ticket)
+               && RequiredControllerVersion.Is(other.RequiredControllerVersion)
+               && IndexDigest.Is(other.IndexDigest);
     }
 
     /// <summary>Deep copy.</summary>
@@ -43,7 +46,10 @@ public sealed partial class VerifyTaskPackageData : ModelBase
             Sha256 = Sha256,
             SizeBytes = SizeBytes,
             TaskCount = TaskCount,
-            BatchCount = BatchCount
+            BatchCount = BatchCount,
+            Ticket = Ticket,
+            RequiredControllerVersion = RequiredControllerVersion,
+            IndexDigest = IndexDigest
         };
     }
 
@@ -74,6 +80,30 @@ public sealed partial class VerifyTaskPackageData : ModelBase
     [ToString]
     [MemoryPackOrder(4)]
     public int BatchCount { get; set; }
+
+    /// <summary>
+    /// The package's ticket: 16 random bytes as 32 lower-case hex characters, made when the
+    /// package is. It travels to the node with the package and comes back in the result; the
+    /// server accepts a result only under a ticket it gave out. A node knows the tickets of its
+    /// own packages only. Never written to a document.
+    /// </summary>
+    [MemoryPackOrder(5)]
+    public string Ticket { get; set; } = "";
+
+    /// <summary>
+    /// The version of the controller that made the package. A node on another version refuses
+    /// the package before it does anything, and the work goes to another node.
+    /// </summary>
+    [ToString]
+    [MemoryPackOrder(6)]
+    public string RequiredControllerVersion { get; set; } = "";
+
+    /// <summary>
+    /// SHA-256 over the indices of the package's tasks in ascending order (each as four bytes,
+    /// low byte first), lowercase hex: what a result must answer, no task more and none less.
+    /// </summary>
+    [MemoryPackOrder(7)]
+    public string IndexDigest { get; set; } = "";
 
     #endregion
 }
