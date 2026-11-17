@@ -97,8 +97,9 @@ public sealed partial class CorpusPreflightData : ModelBase
 
     /// <summary>
     /// What the contributors' links will carry, down and up: <see cref="EstimatedFetchBytes"/>,
-    /// <see cref="EstimatedUploadBytes"/> and <see cref="RetryAllowanceBytes"/> together. Up to
-    /// Corpus 0.4.0 this was the fetches alone.
+    /// <see cref="EstimatedUploadBytes"/> and <see cref="RetryAllowanceBytes"/> together, and the
+    /// language model once for each of <see cref="PlannedNodes"/> when the host knows its pool
+    /// (the preflight's line names that part). Up to Corpus 0.4.0 this was the fetches alone.
     /// </summary>
     [ToString]
     [MemoryPackOrder(4)]
