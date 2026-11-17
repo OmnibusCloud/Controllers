@@ -249,3 +249,16 @@ jobs:
 
       - name: Load
         run: dotnet test AI/OutWit.Controller.AI.Verify.Tests/OutWit.Controller.AI.Verify.Tests.csproj -c Release --no-build --filter Category=Load --logger "console;verbosity=detailed"
+
+      # The Corpus load tests: shards through the node-side task at the machine's degree, and
+      # twenty thousand shards from a loopback origin through CorpusProcess in the engine rig, with
+      # the memory and every payload measured and held to bounds (CorpusPackageLoadTests). The
+      # rig's host stops a job at 300 seconds, so the size is one a hosted runner finishes well
+      # inside that; a hundred thousand is run by hand (WITAI_CORPUS_LOAD_SHARDS).
+      - name: Corpus load
+        shell: bash
+        env:
+          WITAI_CORPUS_LOAD_SHARDS: '20000'
+        run: |
+          dotnet build AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj -c Release
+          dotnet test AI/OutWit.Controller.AI.Corpus.Tests/OutWit.Controller.AI.Corpus.Tests.csproj -c Release --no-build --filter Category=Load --logger "console;verbosity=detailed"
