@@ -44,7 +44,7 @@ public static class ShardBatchGuard
     {
         ThrowIfJobRefused(jobId);
 
-        var refusal = Refusal(task, ControllerBuildInfo.VERSION, () => PdfSandboxHost.Problem, () => ShardDisk.HasRoom(workDirectory, ShardBytes(task)));
+        var refusal = Check(task, ControllerBuildInfo.VERSION, () => PdfSandboxHost.Problem, () => ShardDisk.HasRoom(workDirectory, ShardBytes(task)));
         if (refusal == null)
             return;
 
@@ -91,6 +91,48 @@ public static class ShardBatchGuard
             return new ShardBatchRefusedException(ShardBatchRefusedException.DISK_SPACE, "This node's disk has no room for a shard of the batch: another node takes the batch.");
 
         return null;
+    }
+
+    /// <summary>
+    /// <see cref="Refusal"/>, and a refusal too when the node fails while it asks itself (a sandbox
+    /// whose library does not load in a way nobody foresaw): the failure's own text would reach
+    /// the lab as the job's message, so it stays here and the batch is refused in fixed words.
+    /// </summary>
+    /// <param name="task">The task.</param>
+    /// <param name="ownVersion">This node's controller version.</param>
+    /// <param name="pdfProblem">Says why this node has no PDF sandbox, or null when it has one.</param>
+    /// <param name="hasRoom">Says whether the disk has room for the shard.</param>
+    /// <returns>The refusal, or null.</returns>
+    internal static ShardBatchRefusedException? Check(CorpusTaskData task, string ownVersion, Func<string?> pdfProblem, Func<bool> hasRoom)
+    {
+        try
+        {
+            return Refusal(task, ownVersion, pdfProblem, hasRoom);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return new ShardBatchRefusedException(ShardBatchRefusedException.INTERNAL, "This node failed before it could start the batch: another node takes the batch.");
+        }
+    }
+
+    /// <summary>
+    /// Makes the folder a task works in. A node that cannot refuses its batch in fixed words: the
+    /// failure's own text names the node's folders, and what leaves the activity is shown to the lab.
+    /// </summary>
+    /// <param name="storage">The host's temp storage.</param>
+    /// <param name="label">The scope's label.</param>
+    /// <returns>The folder.</returns>
+    /// <exception cref="ShardBatchRefusedException">The folder could not be made.</exception>
+    public static string CreateScope(OutWit.Engine.Interfaces.IWitTempStorage storage, string label)
+    {
+        try
+        {
+            return storage.CreateScope(label);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new ShardBatchRefusedException(ShardBatchRefusedException.DISK, "This node cannot make its work folder: another node takes the batch.");
+        }
     }
 
     /// <summary>Forgets every remembered refusal (tests).</summary>

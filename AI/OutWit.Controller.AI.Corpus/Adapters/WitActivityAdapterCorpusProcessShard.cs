@@ -44,8 +44,17 @@ internal sealed class WitActivityAdapterCorpusProcessShard : WitActivityAdapterF
         var jobId = status.JobId;
 
         // The scope is unique to this execution, not to the shard: a later round of the job may
-        // bring the same shard to this node again.
-        var scope = TempStorage.CreateScope($"corpus-{jobId:N}-{task.TaskIndex}-{Guid.NewGuid():N}");
+        // bring the same shard to this node again. A node that cannot make it refuses the batch.
+        string scope;
+        try
+        {
+            scope = ShardBatchGuard.CreateScope(TempStorage, $"corpus-{jobId:N}-{task.TaskIndex}-{Guid.NewGuid():N}");
+        }
+        catch (ShardBatchRefusedException exception)
+        {
+            Logger.LogWarning("Corpus.ProcessShard {Index}: the batch is refused ({Code}).", task.TaskIndex, exception.Code);
+            throw;
+        }
 
         try
         {

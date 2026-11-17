@@ -502,7 +502,8 @@ never a text:
 A node's own trouble is not a verdict. A node that cannot take a batch at all — another controller
 version than the job's, no PDF sandbox for a WARC shard that needs one, no room on its disk —
 refuses the batch before it fetches anything (`trust.batch_refusals`: `version`, `pdf_sandbox`,
-`disk_space`), and the platform gives the batch to another node. A fault met while working on a
+`disk_space`, and `disk` or `internal` for a node that cannot make its work folder or fails while
+it checks itself), and the platform gives the batch to another node. A fault met while working on a
 shard returns that shard unanswered with a code (`trust.fault_codes`), and the node's other shards
 are not lost with it:
 
@@ -652,8 +653,8 @@ Integrity — what the server accepts from a node, and what a run does when node
   which does not include them.
 - Under statistics and hashes only the copies are compared exactly the same way: the signatures
   are made and hashed on the node, not kept.
-- With one machine available nothing runs twice; with fewer than three, a dispute cannot be
-  settled and the shard is `Disputed`.
+- With one machine available nothing runs twice. A dispute needs two machines that return the
+  same: a pool of two settles one only when both now agree, and a pool of one never does.
 - **The limit.** The platform tells a controller nothing about which machine returned which copy,
   and the two copies of a sampled shard carry one ticket, so one machine holding two tasks of a
   round can answer one of them twice. Such a surplus cannot win (a shard with more answers than
@@ -727,7 +728,9 @@ them is dropped), the integrity document names no machine, the capabilities coun
 the preflight's busiest share is a share. Progress reaches the server per node, as counts.
 
 No text written by a node reaches a lab. A result's `error` is a code of the fixed list in the
-capabilities (`trust`); a node fault is a code; a batch refusal is one of three fixed sentences.
+capabilities (`trust`); a node fault is a code; a batch refusal is one of five fixed sentences,
+and no failure's own words are thrown out of a node's activity (what a node throws is the job's
+message).
 A message of a node's file system or HTTP stack — which names paths, accounts and hosts — stays
 in the node's own log, and there as the kind of the failure and its system code. The diagnostics
 say how many hosts the server's operator lists beside the public origins, not which. A test

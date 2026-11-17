@@ -242,7 +242,8 @@ public sealed partial class CorpusLeakA5Tests : CorpusScriptTestBase
             ShardBatchGuard.Refusal(new CorpusTaskData { RequiredControllerVersion = "9.9.9" }, "0.4.0", () => null, () => true),
             ShardBatchGuard.Refusal(new CorpusTaskData { RequiredControllerVersion = $"{Path.GetTempPath()}{PLANTED}" }, "0.4.0", () => null, () => true),
             ShardBatchGuard.Refusal(Warc(), "0.4.0", () => $"the module at {Path.GetTempPath()} is missing for {Environment.UserName}", () => true),
-            ShardBatchGuard.Refusal(Warc(), "0.4.0", () => null, () => false)
+            ShardBatchGuard.Refusal(Warc(), "0.4.0", () => null, () => false),
+            ShardBatchGuard.Check(Warc(), "0.4.0", () => throw new IOException($"Access to the path '{Path.GetTempPath()}{PLANTED}' is denied for {Environment.UserName}."), () => true)
         }.Select(refusal => refusal == null ? "" : $"{refusal.Code}: {refusal.Message}"));
     }
 

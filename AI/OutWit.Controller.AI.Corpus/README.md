@@ -601,8 +601,8 @@ counts, the drop and language histograms (the drops with the languages of the
 `language_unsupported` ones), the PDF stage's counts; not times, bytes or fuel —
 are accepted. Copies that disagree are a **dispute**: the shard is run again on
 three machines (`Grid.Replicas(3)`), and the result returned by the most of
-them, two at least and with no tie, is accepted; with fewer machines, no
-majority, or more answers than were asked for, the shard is **`Disputed`** —
+them, two at least and with no tie, is accepted; with fewer than two machines
+agreeing, a tie, or more answers than were asked for, the shard is **`Disputed`** —
 named in the report, out of the counters and the products. Signatures that
 differ while the text agrees are a dispute like any other (`signatures` among
 the differences, counted in `signature_mismatches`), and the near-duplicate
@@ -893,8 +893,11 @@ admits no other to the work):
 - **What a node says.** A result's `error` is a code of a fixed list, and the
   node's log has the kind of a failure and its system code, never its message:
   a message of the file system or the HTTP stack names paths and hosts. A batch
-  refusal is one of three fixed sentences. Nothing a node writes reaches a lab
-  as text.
+  refusal is one of five fixed sentences (another version, no PDF sandbox, no
+  room on the disk, a work folder that cannot be made, a failure while the node
+  checked itself), and no failure's own words are thrown out of the node's
+  activity: what a node throws is the job's message. Nothing a node writes
+  reaches a lab as text.
 - **Progress.** The node reports its share, not one shard, about twice a
   second through the host's activity progress sink: first the delivery
   (`receiving shards: 3/12, 512.3/1888.0 MB; 1/12 processed`), then the work

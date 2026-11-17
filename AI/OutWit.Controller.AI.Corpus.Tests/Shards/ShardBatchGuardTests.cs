@@ -125,6 +125,45 @@ public sealed class ShardBatchGuardTests
     }
 
     [Test]
+    public void M1ANodeThatCannotMakeItsWorkFolderRefusesInFixedWordsTest()
+    {
+        // Whatever a node throws out of the activity is the job's message for the lab: the file
+        // system's own words name the node's folders and its account.
+        var storage = new FailingStorage(new UnauthorizedAccessException(@"Access to the path 'C:\Users\someone\temp\corpus-1' is denied."));
+
+        var refusal = Assert.Throws<ShardBatchRefusedException>(() => ShardBatchGuard.CreateScope(storage, "corpus-1"))!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(refusal.Code, Is.EqualTo(ShardBatchRefusedException.DISK));
+            Assert.That(refusal.Message, Is.EqualTo("This node cannot make its work folder: another node takes the batch."));
+            Assert.That(refusal.InnerException, Is.Null, "nothing of the failure travels with it");
+            Assert.That(ShardBatchGuard.CreateScope(new FailingStorage(null), "corpus-1"), Is.EqualTo("made:corpus-1"));
+        });
+    }
+
+    [Test]
+    public void M1ANodeThatFailsWhileItChecksItselfRefusesInFixedWordsTest()
+    {
+        var task = CorpusTestRun.Task(0);
+        task.Source!.Format = CorpusSourceFormat.Warc;
+        task.Pipeline!.ExtractPdf = true;
+
+        var sandbox = ShardBatchGuard.Check(task, CorpusTestRun.VERSION, () => throw new TypeLoadException(@"Could not load type 'X' from C:\Users\someone\client\Wasmtime.Dotnet.dll"), () => true)!;
+        var disk = ShardBatchGuard.Check(CorpusTestRun.Task(0), CorpusTestRun.VERSION, () => null, () => throw new IOException(@"The device D:\ is not ready."))!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sandbox.Code, Is.EqualTo(ShardBatchRefusedException.INTERNAL));
+            Assert.That(sandbox.Message, Is.EqualTo("This node failed before it could start the batch: another node takes the batch."));
+            Assert.That(disk.Code, Is.EqualTo(ShardBatchRefusedException.INTERNAL));
+            Assert.That(disk.Message, Is.EqualTo(sandbox.Message));
+            Assert.That(ShardBatchGuard.Check(CorpusTestRun.Task(0), CorpusTestRun.VERSION, () => null, () => true), Is.Null, "a node that is well refuses nothing");
+            Assert.That(ShardBatchRefusedException.CODES, Is.EqualTo(new[] { "version", "pdf_sandbox", "disk_space", "disk", "internal" }));
+        });
+    }
+
+    [Test]
     public void ShardDiskNeedsTheShardItsProductsAndAMarginTest()
     {
         var here = Path.Combine(Path.GetTempPath(), $"witai_corpus_disk_{Guid.NewGuid():N}", "not", "made", "yet");
@@ -139,6 +178,34 @@ public sealed class ShardBatchGuardTests
             Assert.That(ShardDisk.HasRoom(here, long.MaxValue / 4), Is.False);
             Assert.That(ShardDisk.HasRoom(here, 0), Is.True, "a shard of unknown size is not judged");
         });
+    }
+
+    #endregion
+
+    #region Types
+
+    /// <summary>A host's temp storage that cannot make a scope (or can, for the other half of the test).</summary>
+    private sealed class FailingStorage(Exception? failure) : OutWit.Engine.Interfaces.IWitTempStorage
+    {
+        public string RootPath => "";
+
+        public string CreateScope(string label)
+        {
+            return failure == null ? $"made:{label}" : throw failure;
+        }
+
+        public string CreateTempFile(string? extension = null)
+        {
+            throw new NotSupportedException();
+        }
+
+        public void DeleteScope(string scopePath)
+        {
+        }
+
+        public void DeleteFile(string path)
+        {
+        }
     }
 
     #endregion
