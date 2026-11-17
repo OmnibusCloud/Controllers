@@ -1,4 +1,3 @@
-using System.Collections;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Activities;
 using OutWit.Controller.AI.Verify.Model;
@@ -27,20 +26,23 @@ internal sealed class WitActivityAdapterVerifyMakeCheckTasks : WitActivityAdapte
 
     protected override async Task Process(WitActivityVerifyMakeCheckTasks activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        if (!pool.TryGetObject(activity.Candidates, out var candidatesObject) || candidatesObject is not IEnumerable candidatesEnumerable)
-            throw new InvalidOperationException("Failed to get parameter 'Candidates'.");
+        var ledgerBlobId = VerifyAdapterTools.Blob(pool, activity.Candidates, "Candidates");
 
         if (!pool.TryGetValue(activity.Checker, out Guid checkerBlobId) || checkerBlobId == Guid.Empty)
             throw new InvalidOperationException("Failed to get parameter 'Checker'.");
 
         pool.TryGetValue(activity.Options, out VerifyOptionsData? options);
 
-        var candidates = (await VerifyResultPackages.LoadAsync(candidatesEnumerable, BlobService))
-            .SelectMany(batch => batch.Results)
-            .ToList();
+        // One settled result a generator: what is checked is what the corpus holds.
+        var candidates = VerifyCheckTaskBuilder.ReadCandidates(await BlobService.GetLocalPathAsync(ledgerBlobId));
 
         var checkerPath = await BlobService.GetLocalPathAsync(checkerBlobId);
         var checker = VerifyCheckerSpec.Parse(await File.ReadAllTextAsync(checkerPath));
+
+        // As for a taskset: a runtime this controller does not know has no node that could run it.
+        var unknown = VerifyTasksetChecks.UnknownRuntimes([new VerifyTaskData { RuntimeId = checker.RuntimeId }]);
+        if (unknown.Count > 0)
+            throw new InvalidOperationException($"The checker names a runtime this controller does not have: {unknown[0]}");
 
         var plan = VerifyCheckTaskBuilder.Build(candidates, checker);
         foreach (var note in plan.Skipped)
@@ -55,6 +57,9 @@ internal sealed class WitActivityAdapterVerifyMakeCheckTasks : WitActivityAdapte
         var batches = VerifyTasksetPlanner.Plan(plan.Tasks, options);
         foreach (var note in batches.Notes)
             Logger.LogInformation("Verify.MakeCheckTasks: {Note}", note);
+
+        if (batches.Errors.Count > 0)
+            throw new InvalidOperationException($"{batches.Errors.Count} check task(s) cannot be planned: {string.Join("; ", batches.Errors.Take(5))}");
 
         var packages = await VerifyTaskPackages.PublishAsync(batches.Batches, BlobService, Logger, "Verify.MakeCheckTasks");
 

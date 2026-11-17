@@ -57,12 +57,18 @@ public sealed partial class VerifyLimitsData : ModelBase
     [MemoryPackOrder(1)]
     public long MemoryBytes { get; set; }
 
-    /// <summary>Wall-clock cap in milliseconds, enforced via epoch interruption.</summary>
+    /// <summary>
+    /// Not a limit since 0.13.0: the wall clock ends no run with a verdict, and a node sizes its
+    /// own backstop from the fuel budget. Kept for the wire layout and for tasksets that still set it.
+    /// </summary>
     [ToString]
     [MemoryPackOrder(2)]
     public int WallTimeMs { get; set; }
 
-    /// <summary>Stdout cap in bytes; exceeding it yields the OutputExceeded verdict.</summary>
+    /// <summary>
+    /// Stdout cap in bytes for the whole task (the cases of a suite share it); the write that
+    /// passes it ends the run with the OutputExceeded verdict.
+    /// </summary>
     [MemoryPackOrder(3)]
     public int StdoutLimitBytes { get; set; }
 

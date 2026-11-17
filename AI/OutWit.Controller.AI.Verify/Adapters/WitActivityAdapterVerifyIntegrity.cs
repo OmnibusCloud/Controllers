@@ -1,8 +1,8 @@
-using System.Collections;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Activities;
-using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Delivery;
+using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Settlement;
 using OutWit.Controller.AI.Verify.Tasksets;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -33,11 +33,8 @@ internal sealed class WitActivityAdapterVerifyIntegrity : WitActivityAdapterFunc
 
     protected override async Task Process(WitActivityVerifyIntegrity activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        if (!pool.TryGetObject(activity.Results, out var resultsObject) || resultsObject is not IEnumerable resultsEnumerable)
-            throw new InvalidOperationException("Failed to get parameter 'Results'.");
-
-        var bytes = VerifyIntegrityWriter.Write(await VerifyResultPackages.LoadAsync(resultsEnumerable, BlobService));
-        var blobId = await BlobService.UploadBytesAsync(bytes, BLOB_NAME);
+        var ledgerPath = await BlobService.GetLocalPathAsync(VerifyAdapterTools.Blob(pool, activity.Ledger, "Ledger"));
+        var blobId = await BlobService.UploadBytesAsync(VerifyLedger.Read(ledgerPath, VerifyLedger.INTEGRITY), BLOB_NAME);
 
         if (!pool.TrySetValue(activity.ReturnReference, blobId))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
@@ -54,12 +51,9 @@ internal sealed class WitActivityAdapterVerifyIntegrity : WitActivityAdapterFunc
             if (parameters.Length != 1)
                 throw new ArgumentException($"Expected 1 parameter(s), got {parameters.Length}.");
 
-            if (parameters[0] is not IWitReference results)
-                throw new ArgumentException("Parameter 'Results' must be a variable reference.");
-
             return new WitActivityVerifyIntegrity
             {
-                Results = results
+                Ledger = VerifyAdapterTools.Reference(parameters, 0, "Ledger")
             };
         }
         catch (Exception e)

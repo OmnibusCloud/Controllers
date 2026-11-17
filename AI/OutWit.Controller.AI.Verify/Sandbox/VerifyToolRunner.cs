@@ -1,26 +1,19 @@
 using OutWit.Controller.AI.Wasm;
-using Wasmtime;
 using WasmModule = Wasmtime.Module;
 
 namespace OutWit.Controller.AI.Verify.Sandbox;
 
 /// <summary>
 /// Runs a tool module the sandbox uses on a task's behalf (the compiler and the linker of the
-/// C/C++ runtime) in a store of its own, under the same envelope as a program: fuel, an epoch
-/// deadline, the memory and table caps (<see cref="WasmHostLimits"/>), the deterministic linker,
-/// read-only folders only. Its stdout is its product (an object, a module), written straight to
-/// a file; its stderr is the diagnostics a task's author reads. As for a program, the budget is
-/// given once the tool is instantiated: the copy of its data segments, which only some platforms
-/// pay fuel for, is not in it, so a build at the edge of its budget ends the same way everywhere.
+/// C/C++ runtime) as the host runs any guest: a store of its own, fuel given once the tool is
+/// instantiated, an epoch deadline, the memory and table caps, the deterministic clock, folders
+/// with tables of names only, and calls into the host that cost fuel a byte. Its stdout is its
+/// product (an object, a module), written to a file and capped at the write: a tool cannot fill
+/// a disk any more than a program can. Its stderr is the diagnostics a task's author reads, kept
+/// in memory up to their cap.
 /// </summary>
 internal sealed class VerifyToolRunner
 {
-    #region Constants
-
-    private const string START_EXPORT = "_start";
-
-    #endregion
-
     #region Fields
 
     private readonly WasmHost m_host;
@@ -30,9 +23,9 @@ internal sealed class VerifyToolRunner
     #region Constructors
 
     /// <summary>
-    /// A runner over the sandbox's host.
+    /// A runner over a host.
     /// </summary>
-    /// <param name="host">The host whose engine every store shares (fuel and epoch on).</param>
+    /// <param name="host">The host the tool modules are compiled on.</param>
     public VerifyToolRunner(WasmHost host)
     {
         m_host = host;
@@ -47,56 +40,39 @@ internal sealed class VerifyToolRunner
     /// </summary>
     /// <param name="module">The tool's compiled module.</param>
     /// <param name="argv">argv, argv[0] included.</param>
-    /// <param name="folders">Host folders preopened read-only, with the guest path of each.</param>
-    /// <param name="stdoutPath">The file the tool's stdout goes to.</param>
-    /// <param name="stderrPath">The file the tool's stderr goes to.</param>
+    /// <param name="folders">The folders the tool sees, read-only, each with its table of names.</param>
+    /// <param name="productPath">The file the tool's stdout goes to.</param>
+    /// <param name="productLimitBytes">The most bytes the product may have; the write that passes it ends the run.</param>
+    /// <param name="diagnosticsLimitBytes">How much of the tool's stderr is kept.</param>
+    /// <param name="captureDirectory">The folder the run's own files live in while it runs.</param>
     /// <param name="fuel">The fuel the run may use.</param>
-    /// <param name="wallMs">The wall time the run may take.</param>
+    /// <param name="wallMs">The wall-clock backstop of the run.</param>
     /// <param name="memoryBytes">The cap of the tool's linear memory.</param>
     /// <returns>How the run ended and what it cost.</returns>
-    public VerifyToolOutcome Run(WasmModule module, IReadOnlyList<string> argv, IReadOnlyList<(string Host, string Guest)> folders,
-        string stdoutPath, string stderrPath, long fuel, int wallMs, long memoryBytes)
+    /// <exception cref="IOException">The product file cannot be written (a fault of the node).</exception>
+    public VerifyToolOutcome Run(WasmModule module, IReadOnlyList<string> argv, IReadOnlyList<WasmHostPreopen> folders,
+        string productPath, int productLimitBytes, int diagnosticsLimitBytes, string captureDirectory, long fuel, int wallMs, long memoryBytes)
     {
-        var wasi = new WasiConfiguration().WithArgs(argv).WithStandardOutput(stdoutPath).WithStandardError(stderrPath);
-        foreach (var (host, guest) in folders)
-            wasi = wasi.WithPreopenedDirectory(host, guest, false);
-
-        var started = DateTime.UtcNow;
-        using var store = new Store(m_host.Engine);
-        store.SetWasiConfiguration(wasi);
-        WasmHostLimits.Apply(store, fuel, memoryBytes, wallMs);
-        store.Fuel = (ulong)WasmHostLimits.InstantiationFuel(fuel, memoryBytes);
-
-        // A tool takes no randomness; the seed only keeps the linker's stream fixed.
-        using var linker = WasmHostLinker.Create(m_host.Engine, 0);
-
-        var (exitCode, trap) = WasmHostGuestThread.Run(() => Invoke(linker, store, module, fuel));
-
-        var used = trap is TrapCode.OutOfFuel ? fuel : Math.Max(0, Math.Max(1, fuel) - (long)Math.Min(store.Fuel, long.MaxValue));
-        return new VerifyToolOutcome(exitCode, trap, used, (int)(DateTime.UtcNow - started).TotalMilliseconds);
-    }
-
-    private static (int ExitCode, TrapCode? Trap) Invoke(Linker linker, Store store, WasmModule module, long fuel)
-    {
-        try
+        var outcome = m_host.Run(module, new WasmHostRunRequest
         {
-            var instance = linker.Instantiate(store, module);
+            Argv = argv,
+            Preopens = folders,
+            CaptureDirectory = captureDirectory,
+            Fuel = fuel,
+            FuelAfterInstantiation = true,
+            MemoryBytes = memoryBytes,
+            WallMs = wallMs,
+            StdoutFile = productPath,
+            StdoutLimitBytes = productLimitBytes,
+            StopAtStdoutLimit = true,
+            StderrLimitBytes = diagnosticsLimitBytes,
+            ChargeHostCalls = true,
+            DiscardInBackground = true
+        });
 
-            // The budget again, now that the data segments are in place.
-            store.Fuel = (ulong)Math.Max(1, fuel);
-
-            var start = instance.GetAction(START_EXPORT) ?? throw new InvalidOperationException($"the tool exports no {START_EXPORT}");
-            start();
-            return (0, null);
-        }
-        catch (WasmtimeException exception) when (exception.ExitCode is { } code)
-        {
-            return (code, null);
-        }
-        catch (TrapException exception)
-        {
-            return (-1, exception.Type);
-        }
+        // A budget stop reports the whole budget, as a program's does.
+        var used = outcome.Verdict == WasmHostVerdict.OutOfFuel ? fuel : outcome.FuelConsumed;
+        return new VerifyToolOutcome(outcome.Verdict, outcome.ExitCode, outcome.Trap, used, outcome.WallMs, outcome.Fault == null ? outcome.Stderr : "");
     }
 
     #endregion

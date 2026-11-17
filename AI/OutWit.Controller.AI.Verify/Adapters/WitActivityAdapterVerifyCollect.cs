@@ -1,8 +1,8 @@
-using System.Collections;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Activities;
-using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Delivery;
+using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Settlement;
 using OutWit.Controller.AI.Verify.Tasksets;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -13,6 +13,12 @@ namespace OutWit.Controller.AI.Verify.Adapters;
 
 internal sealed class WitActivityAdapterVerifyCollect : WitActivityAdapterFunction<WitActivityVerifyCollect>
 {
+    #region Constants
+
+    private const string BLOB_NAME = "verify-report.json";
+
+    #endregion
+
     #region Constructors
 
     public WitActivityAdapterVerifyCollect(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
@@ -27,17 +33,10 @@ internal sealed class WitActivityAdapterVerifyCollect : WitActivityAdapterFuncti
 
     protected override async Task Process(WitActivityVerifyCollect activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        if (!pool.TryGetObject(activity.Results, out var resultsObject) || resultsObject is not IEnumerable resultsEnumerable)
-            throw new InvalidOperationException("Failed to get parameter 'Results'.");
+        var ledgerPath = await BlobService.GetLocalPathAsync(VerifyAdapterTools.Blob(pool, activity.Ledger, "Ledger"));
 
-        // Grid.ForEach returns the packages in completion order, as references; the results
-        // behind them carry their own TaskIndex, so read, flatten and let the report writer re-key.
-        var results = (await VerifyResultPackages.LoadAsync(resultsEnumerable, BlobService))
-            .SelectMany(batch => batch.Results)
-            .ToList();
-
-        var reportBytes = VerifyReportWriter.Write(results);
-        var reportBlobId = await BlobService.UploadBytesAsync(reportBytes, "verify-report.json");
+        // The report was written when the run was settled; it is handed out here as it is.
+        var reportBlobId = await BlobService.UploadBytesAsync(VerifyLedger.Read(ledgerPath, VerifyLedger.REPORT), BLOB_NAME);
 
         if (!pool.TrySetValue(activity.ReturnReference, reportBlobId))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
@@ -54,16 +53,10 @@ internal sealed class WitActivityAdapterVerifyCollect : WitActivityAdapterFuncti
             if (parameters.Length != 2)
                 throw new ArgumentException($"Expected 2 parameter(s), got {parameters.Length}.");
 
-            if (parameters[0] is not IWitReference results)
-                throw new ArgumentException("Parameter 'Results' must be a variable reference.");
-
-            if (parameters[1] is not IWitReference options)
-                throw new ArgumentException("Parameter 'Options' must be a variable reference.");
-
             return new WitActivityVerifyCollect
             {
-                Results = results,
-                Options = options
+                Ledger = VerifyAdapterTools.Reference(parameters, 0, "Ledger"),
+                Options = VerifyAdapterTools.Reference(parameters, 1, "Options")
             };
         }
         catch (Exception e)

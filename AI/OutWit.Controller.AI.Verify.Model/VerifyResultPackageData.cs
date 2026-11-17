@@ -29,7 +29,8 @@ public sealed partial class VerifyResultPackageData : ModelBase
                && Sha256.Is(other.Sha256)
                && SizeBytes.Is(other.SizeBytes)
                && TaskCount.Is(other.TaskCount)
-               && BatchCount.Is(other.BatchCount);
+               && BatchCount.Is(other.BatchCount)
+               && Ticket.Is(other.Ticket);
     }
 
     /// <summary>Deep copy.</summary>
@@ -42,7 +43,8 @@ public sealed partial class VerifyResultPackageData : ModelBase
             Sha256 = Sha256,
             SizeBytes = SizeBytes,
             TaskCount = TaskCount,
-            BatchCount = BatchCount
+            BatchCount = BatchCount,
+            Ticket = Ticket
         };
     }
 
@@ -73,6 +75,13 @@ public sealed partial class VerifyResultPackageData : ModelBase
     [ToString]
     [MemoryPackOrder(4)]
     public int BatchCount { get; set; }
+
+    /// <summary>
+    /// The ticket of the task package these results answer, as the node was given it
+    /// (<see cref="VerifyTaskPackageData.Ticket"/>). Never written to a document.
+    /// </summary>
+    [MemoryPackOrder(5)]
+    public string Ticket { get; set; } = "";
 
     #endregion
 }

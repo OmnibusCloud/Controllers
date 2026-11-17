@@ -58,12 +58,17 @@ public sealed class VerifyFuelAccountingTests
         var withData = Run(DATA_BYTES, 1_000_000_000);
         var withoutData = Run(0, 1_000_000_000);
 
+        // What a task's module costs to compile is in its fuel, by the module's size; what is
+        // compared is what running it costs.
+        var ranWithData = withData.FuelConsumed - Price(DATA_BYTES);
+        var ranWithoutData = withoutData.FuelConsumed - Price(0);
+
         Assert.Multiple(() =>
         {
             Assert.That(withData.Verdict, Is.EqualTo(VerifyVerdict.Pass), withData.Stderr);
             Assert.That(withoutData.Verdict, Is.EqualTo(VerifyVerdict.Pass), withoutData.Stderr);
-            Assert.That(withData.FuelConsumed, Is.EqualTo(withoutData.FuelConsumed), "a megabyte of data segments costs the program nothing, on every platform");
-            Assert.That(withData.FuelConsumed, Is.GreaterThan(LOOP).And.LessThan(100 * LOOP), "the loop is what is counted");
+            Assert.That(ranWithData, Is.EqualTo(ranWithoutData), "copying a megabyte of data segments at the start costs the program nothing, on every platform");
+            Assert.That(ranWithData, Is.GreaterThan(LOOP).And.LessThan(100 * LOOP), "the loop is what is counted");
         });
     }
 
@@ -84,7 +89,7 @@ public sealed class VerifyFuelAccountingTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Timeout));
-            Assert.That(result.FuelConsumed, Is.EqualTo(LOOP / 2), "a budget stop reports its whole budget");
+            Assert.That(result.FuelConsumed, Is.EqualTo(Price(DATA_BYTES) + LOOP / 2), "a budget stop reports its whole budget");
         });
     }
 
@@ -92,6 +97,13 @@ public sealed class VerifyFuelAccountingTests
 
     #region Tools
 
+    /// <summary>What compiling the module costs the task.</summary>
+    private static long Price(int dataBytes)
+    {
+        return VerifyModuleShape.Scan(Module(dataBytes)).CompileFuel;
+    }
+
+    /// <summary>Runs the module with a budget of so much fuel for the run itself, on top of what its compile costs.</summary>
     private VerifyResultData Run(int dataBytes, long fuel)
     {
         var task = new VerifyTaskData
@@ -101,7 +113,7 @@ public sealed class VerifyFuelAccountingTests
             Sources = [new VerifySourceFileData { Name = "data.wasm", Content = Convert.ToBase64String(Module(dataBytes)) }]
         };
 
-        return m_sandbox.Execute(m_wasi, task, VerifySandboxDefaults.Resolve(new VerifyLimitsData { FuelBudget = fuel }, null));
+        return m_sandbox.Execute(m_wasi, task, VerifySandboxDefaults.Resolve(new VerifyLimitsData { FuelBudget = Price(dataBytes) + fuel }, null));
     }
 
     /// <summary>A module with one active data segment of so many bytes and a <c>_start</c> that counts to <see cref="LOOP"/>.</summary>

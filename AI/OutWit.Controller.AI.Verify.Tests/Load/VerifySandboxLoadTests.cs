@@ -53,6 +53,7 @@ public sealed class VerifySandboxLoadTests : VerifySandboxTestBase
         {
             Assert.That(result.Results.All(r => r.Verdict == VerifyVerdict.Pass), Is.True);
             Assert.That(rate, Is.GreaterThan(MIN_TASKS_PER_SECOND));
+            Assert.That(OutWit.Controller.AI.Wasm.WasmHostDiscard.Drain(TimeSpan.FromSeconds(30)), Is.True, "the cleanup of the runs ends");
             Assert.That(Directory.GetFiles(Sandbox.IoDirectory), Is.Empty);
         });
     }
@@ -76,6 +77,7 @@ public sealed class VerifySandboxLoadTests : VerifySandboxTestBase
         {
             Assert.That(managedAfter - managedBefore, Is.LessThan(MAX_MANAGED_GROWTH_BYTES));
             Assert.That(workingSetAfter - workingSetBefore, Is.LessThan(MAX_WORKING_SET_GROWTH_BYTES));
+            Assert.That(OutWit.Controller.AI.Wasm.WasmHostDiscard.Drain(TimeSpan.FromSeconds(30)), Is.True, "the cleanup of the runs ends");
             Assert.That(Directory.GetFiles(Sandbox.IoDirectory), Is.Empty);
         });
     }

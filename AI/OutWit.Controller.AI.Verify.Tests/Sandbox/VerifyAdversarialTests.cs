@@ -121,11 +121,11 @@ public sealed class VerifyAdversarialTests : VerifySandboxTestBase
     }
 
     [Test]
-    public void BusyComputeIsBoundedByWallClockTest()
+    public void BusyComputeIsBoundedByItsFuelTest()
     {
-        // A program that never yields and burns fuel slowly is still stopped by the epoch deadline.
+        // A program that never yields is stopped when its fuel is spent, the same on every node.
         var result = Run(Python, PythonTask("x = 0\nwhile True:\n    x += 1\n"),
-            new VerifyLimitsData { FuelBudget = 500_000_000_000, WallTimeMs = 400 });
+            new VerifyLimitsData { FuelBudget = 3_000_000_000 });
 
         Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Timeout));
     }
@@ -168,7 +168,7 @@ public sealed class VerifyAdversarialTests : VerifySandboxTestBase
         // costs nothing, and the clock reads an hour later.
         var started = DateTime.UtcNow;
         var result = Run(Python, PythonTask("import time\nbefore = time.time()\ntime.sleep(3600)\nprint(before, time.time(), time.monotonic())"),
-            new VerifyLimitsData { WallTimeMs = 2_000 });
+            new VerifyLimitsData());
         var elapsed = DateTime.UtcNow - started;
 
         Assert.Multiple(() =>

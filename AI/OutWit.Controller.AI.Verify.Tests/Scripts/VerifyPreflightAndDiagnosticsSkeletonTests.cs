@@ -108,7 +108,7 @@ public sealed class VerifyPreflightAndDiagnosticsSkeletonTests : VerifyScriptTes
         var root = capabilities.RootElement;
         Assert.Multiple(() =>
         {
-            Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo("verify-capabilities/1"));
+            Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo(VerifyCapabilitiesWriter.SCHEMA));
             Assert.That(root.GetProperty("controller").GetString(), Is.Not.Empty);
             Assert.That(root.GetProperty("runtimes").EnumerateArray().Select(r => r.GetProperty("id").GetString()), Is.EquivalentTo(VerifyRuntimeCatalog.KnownIds));
             Assert.That(root.GetProperty("runtimes").EnumerateArray().All(r => r.GetProperty("available").GetBoolean()), Is.True);

@@ -5,13 +5,27 @@ using OutWit.Controller.AI.Verify.Runtimes;
 namespace OutWit.Controller.AI.Verify.Sandbox;
 
 /// <summary>
-/// Runs one task batch on a node: resolves the batch's runtime, picks the degree (cores, memory,
-/// the batch's cap), executes the tasks on the below-normal worker pool, and returns one verdict
-/// per task plus the batch's provenance. A missing runtime is a per-task RuntimeUnavailable
-/// verdict, never an exception — the chunk always comes back.
+/// Runs one task batch on a node: resolves the batch's runtime, picks the degree (cores, the
+/// memory that is free, the batch's cap), executes the tasks on the below-normal worker pool,
+/// and returns one result per task plus the batch's provenance.
+/// <para>
+/// What the node can know before it starts is checked before it starts
+/// (<see cref="EnsureRunnable"/>): a runtime it does not have, or has other bytes of, refuses the
+/// batch whole, so the work goes to another node and nothing is lost or reported as a verdict.
+/// What goes wrong for one task while the batch runs is that task's result without a verdict
+/// (<see cref="VerifyVerdict.NoResult"/>). The limits a task runs under are clamped to the
+/// ceilings here, whatever the batch says: a node holds itself to them.
+/// </para>
 /// </summary>
 public static class VerifyBatchExecutor
 {
+    #region Constants
+
+    /// <summary>The most tasks a batch may hold: a node takes no larger one.</summary>
+    public const int MAX_BATCH_TASKS = 4096;
+
+    #endregion
+
     #region Functions
 
     /// <summary>
@@ -21,6 +35,7 @@ public static class VerifyBatchExecutor
     /// <param name="runtimesRoot">The language runtime root, or null when none was found.</param>
     /// <param name="batch">The batch.</param>
     /// <returns>One result per task plus the batch diagnostics.</returns>
+    /// <exception cref="VerifyBatchRefusedException">This node cannot run the batch: its runtime is missing or is not the pinned one, or the batch is larger than a node takes.</exception>
     public static VerifyResultBatchData Execute(VerifyWasmSandbox sandbox, string? runtimesRoot, VerifyTaskBatchData batch)
     {
         return Execute(sandbox, runtimesRoot, batch, null);
@@ -34,6 +49,7 @@ public static class VerifyBatchExecutor
     /// <param name="batch">The batch.</param>
     /// <param name="progress">Called after each task with (completed, total), from the worker that finished it.</param>
     /// <returns>One result per task plus the batch diagnostics.</returns>
+    /// <exception cref="VerifyBatchRefusedException">This node cannot run the batch: its runtime is missing or is not the pinned one, or the batch is larger than a node takes.</exception>
     public static VerifyResultBatchData Execute(VerifyWasmSandbox sandbox, string? runtimesRoot, VerifyTaskBatchData batch, Action<int, int>? progress)
     {
         return Execute(sandbox, runtimesRoot, batch, progress, CancellationToken.None);
@@ -46,75 +62,88 @@ public static class VerifyBatchExecutor
     /// <param name="runtimesRoot">The language runtime root, or null when none was found.</param>
     /// <param name="batch">The batch.</param>
     /// <param name="progress">Called after each task with (completed, total), from the worker that finished it.</param>
-    /// <param name="cancellationToken">The job's token: no further task starts once cancelled, a running one ends within its wall limit.</param>
+    /// <param name="cancellationToken">The job's token: no further task starts once cancelled, a running one ends within its budget.</param>
+    /// <param name="onNodeFault">Told the task and what failed on the node when a task has no verdict for that; for the node's own log.</param>
     /// <returns>One result per task plus the batch diagnostics.</returns>
     /// <exception cref="OperationCanceledException">The job was cancelled before the batch finished.</exception>
-    public static VerifyResultBatchData Execute(VerifyWasmSandbox sandbox, string? runtimesRoot, VerifyTaskBatchData batch, Action<int, int>? progress, CancellationToken cancellationToken)
+    /// <exception cref="VerifyBatchRefusedException">This node cannot run the batch: its runtime is missing or is not the pinned one, or the batch is larger than a node takes.</exception>
+    public static VerifyResultBatchData Execute(VerifyWasmSandbox sandbox, string? runtimesRoot, VerifyTaskBatchData batch, Action<int, int>? progress,
+        CancellationToken cancellationToken, Action<int, Exception>? onNodeFault = null)
     {
         var stopwatch = Stopwatch.StartNew();
+        var runtime = EnsureRunnable(runtimesRoot, batch);
         var results = new VerifyResultData[batch.Tasks.Count];
 
-        // A missing root is one more unavailable reason (the raw WASI runtime needs none).
-        var runtime = VerifyRuntimeCatalog.Resolve(runtimesRoot, batch.RuntimeId, out var reason);
-        if (runtime == null)
-        {
-            FillUnavailable(results, batch, reason ?? $"runtime '{batch.RuntimeId}' unavailable");
-            return Finish(results, batch, null, 0, stopwatch);
-        }
-
-        var perTaskMemoryCap = MaxMemoryCap(batch);
-        var degree = VerifySandboxDegree.ForCurrentMachine(perTaskMemoryCap, batch.MaxDegree);
+        var degree = VerifySandboxDegree.ForCurrentMachine(MemoryPerTask(batch, runtime), batch.MaxDegree);
         var completed = 0;
 
         VerifyWorkerPool.Run(batch.Tasks.Count, degree,
             i =>
             {
                 var task = batch.Tasks[i];
-                var limits = VerifySandboxDefaults.Resolve(task.Limits, batch.DefaultLimits);
-                results[i] = sandbox.Execute(runtime, task, limits, cancellationToken);
+                var limits = VerifyLimitCeilings.Effective(task.Limits, batch.DefaultLimits);
+                results[i] = sandbox.Execute(runtime, task, limits, cancellationToken, fault => onNodeFault?.Invoke(task.TaskIndex, fault));
             },
             _ => progress?.Invoke(Interlocked.Increment(ref completed), batch.Tasks.Count),
             cancellationToken);
 
-        return Finish(results, batch, runtime, degree, stopwatch);
-    }
-
-    private static VerifyResultBatchData Finish(VerifyResultData[] results, VerifyTaskBatchData batch, VerifyResolvedRuntime? runtime, int degree, Stopwatch stopwatch)
-    {
         stopwatch.Stop();
         var wallMs = (int)Math.Min(int.MaxValue, stopwatch.ElapsedMilliseconds);
 
         return new VerifyResultBatchData
         {
             Results = results.ToList(),
-            Diagnostics = VerifyBatchDiagnosticsBuilder.Build(batch.RuntimeId, runtime, degree, results.Length, wallMs)
+            Diagnostics = VerifyBatchDiagnosticsBuilder.Build(runtime.Descriptor.Id, runtime, degree, results.Length, wallMs)
         };
     }
 
-    private static long MaxMemoryCap(VerifyTaskBatchData batch)
+    /// <summary>
+    /// Checks what this node can know about a batch before running any of it: the runtime is one
+    /// it has, with the bytes the server's controller pins, and the batch is no larger than a node
+    /// takes.
+    /// </summary>
+    /// <param name="runtimesRoot">The language runtime root, or null when none was found.</param>
+    /// <param name="batch">The batch.</param>
+    /// <returns>The batch's runtime, resolved.</returns>
+    /// <exception cref="VerifyBatchRefusedException">This node cannot run the batch; the message is fixed words without a path.</exception>
+    public static VerifyResolvedRuntime EnsureRunnable(string? runtimesRoot, VerifyTaskBatchData batch)
+    {
+        if (batch.Tasks.Count > MAX_BATCH_TASKS)
+            throw new VerifyBatchRefusedException($"a batch holds {batch.Tasks.Count} tasks; a node takes no more than {MAX_BATCH_TASKS}", null);
+
+        var runtime = VerifyRuntimeCatalog.Resolve(runtimesRoot, batch.RuntimeId, out var reason, out var detail);
+        if (runtime == null)
+            throw new VerifyBatchRefusedException($"runtime '{Shown(batch.RuntimeId)}' cannot be used on this node: {reason}", detail);
+
+        // One controller version a job means one set of runtime bytes; a batch that names other
+        // bytes was made by a controller this node is not.
+        if (batch.RuntimeSha256.Length > 0 && !string.Equals(batch.RuntimeSha256, runtime.Descriptor.Sha256, StringComparison.Ordinal))
+            throw new VerifyBatchRefusedException($"runtime '{Shown(batch.RuntimeId)}' is pinned to other bytes by the controller that made the batch", null);
+
+        return runtime;
+    }
+
+    /// <summary>
+    /// The most memory one task of the batch may take while it runs: its own cap, or the cap of
+    /// the compiler's steps when the batch is of the C/C++ runtime and that is the larger.
+    /// </summary>
+    internal static long MemoryPerTask(VerifyTaskBatchData batch, VerifyResolvedRuntime runtime)
     {
         long cap = 0;
         foreach (var task in batch.Tasks)
-        {
-            var limits = VerifySandboxDefaults.Resolve(task.Limits, batch.DefaultLimits);
-            cap = Math.Max(cap, limits.MemoryBytes);
-        }
+            cap = Math.Max(cap, VerifyLimitCeilings.Effective(task.Limits, batch.DefaultLimits).MemoryBytes);
 
-        return cap > 0 ? cap : VerifySandboxDefaults.DEFAULT_MEMORY_BYTES;
+        if (cap <= 0)
+            cap = VerifySandboxDefaults.DEFAULT_MEMORY_BYTES;
+
+        return runtime.Descriptor.Language == VerifyRuntimeLanguage.C ? Math.Max(cap, VerifyClangBuild.STEP_MEMORY_BYTES) : cap;
     }
 
-    private static void FillUnavailable(VerifyResultData[] results, VerifyTaskBatchData batch, string reason)
+    /// <summary>A runtime id as a message may show it: bounded, and only the characters an id has.</summary>
+    private static string Shown(string runtimeId)
     {
-        for (var i = 0; i < results.Length; i++)
-        {
-            results[i] = new VerifyResultData
-            {
-                TaskIndex = batch.Tasks[i].TaskIndex,
-                Verdict = VerifyVerdict.RuntimeUnavailable,
-                ExitCode = -1,
-                Stderr = reason
-            };
-        }
+        var shown = runtimeId.Length > 64 ? runtimeId[..64] : runtimeId;
+        return string.Concat(shown.Select(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '?'));
     }
 
     #endregion

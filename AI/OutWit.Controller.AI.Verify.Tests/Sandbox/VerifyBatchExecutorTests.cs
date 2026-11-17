@@ -1,4 +1,5 @@
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Runtimes;
 using OutWit.Controller.AI.Verify.Sandbox;
 
 namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
@@ -116,4 +117,43 @@ public sealed class VerifyBatchExecutorTests : VerifySandboxTestBase
         var distinctOutputs = result.Results.Select(r => r.Stdout).Distinct().Count();
         Assert.That(distinctOutputs, Is.EqualTo(1), "all identical tasks must produce identical output");
     }
+
+    #region M-3 Tests
+
+    [Test]
+    public void M3TheDegreeCountsTheMemoryThatIsFreeTest()
+    {
+        const long gibibyte = 1L << 30;
+
+        // 64 GiB of which 60 are taken: three quarters of the 4 that are free hold twelve programs
+        // of 256 MiB. Three quarters of the total would have said sixteen.
+        var free = VerifySandboxDegree.FreeRamBytes(64 * gibibyte, 60 * gibibyte);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(free, Is.EqualTo(4 * gibibyte));
+            Assert.That(VerifySandboxDegree.Compute(32, (long)(free * VerifySandboxDegree.DEFAULT_RAM_HEADROOM), VerifySandboxDefaults.DEFAULT_MEMORY_BYTES), Is.EqualTo(12));
+            Assert.That(VerifySandboxDegree.FreeRamBytes(64 * gibibyte, 0), Is.EqualTo(64 * gibibyte), "a load that is not known leaves the total");
+            Assert.That(VerifySandboxDegree.FreeRamBytes(64 * gibibyte, 70 * gibibyte), Is.EqualTo(1), "nothing free: one program at a time");
+            Assert.That(VerifySandboxDegree.Compute(32, 1, VerifySandboxDefaults.DEFAULT_MEMORY_BYTES), Is.EqualTo(1));
+            Assert.That(VerifySandboxDegree.ForCurrentMachine(VerifySandboxDefaults.DEFAULT_MEMORY_BYTES), Is.InRange(1, VerifySandboxDegree.DEFAULT_MAX_DEGREE));
+        });
+    }
+
+    [Test]
+    public void M3ATaskOfTheCompilerRuntimeCountsForItsCompilersMemoryTest()
+    {
+        // C tasks with a memory cap of 16 MiB ran sixteen at once; each compile step may take 1 GiB.
+        var small = new VerifyLimitsData { MemoryBytes = 16 << 20 };
+        var c = new VerifyTaskBatchData { RuntimeId = VerifyRuntimeCatalog.CLANG_22_1_0, DefaultLimits = small, Tasks = [new VerifyTaskData()] };
+        var python = new VerifyTaskBatchData { RuntimeId = VerifyRuntimeCatalog.PYTHON_3_14_6, DefaultLimits = small, Tasks = [new VerifyTaskData()] };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(VerifyBatchExecutor.MemoryPerTask(c, Clang), Is.EqualTo(VerifyClangBuild.STEP_MEMORY_BYTES));
+            Assert.That(VerifyBatchExecutor.MemoryPerTask(python, Python), Is.EqualTo(16 << 20));
+        });
+    }
+
+    #endregion
 }

@@ -1,50 +1,81 @@
 using System.Text.Json;
 using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Settlement;
 
 namespace OutWit.Controller.AI.Verify.Tasksets;
 
 /// <summary>
-/// Writes the integrity document of a run: every task executed more than once, its executions
-/// paired, and whether they agree on everything an honest node cannot vary (verdict, exit code,
-/// outputs, per-case outcomes). The platform keeps the executions of one batch on different
-/// machines, and the document does not say which. The mismatch rate is over the pairs; a
-/// mismatch names the fields that differ so an operator can look.
+/// Writes the integrity document of a run: what the server did with what the nodes returned.
+/// Every task executed more than once in the first fan-out, its executions paired and whether
+/// they agree on everything an honest node cannot vary (verdict, exit code, outputs, per-case
+/// outcomes); every dispute and how three more executions settled it; and the counts: the result
+/// packages refused and why, the tasks sent out once more, the tasks left without a result, and
+/// how many tasks rest on one execution because they were not sampled. The platform keeps the
+/// executions of one batch on different machines, and the document does not say which.
 /// </summary>
-public static class VerifyIntegrityWriter
+internal static class VerifyIntegrityWriter
 {
+    #region Constants
+
+    /// <summary>The document's schema tag.</summary>
+    public const string SCHEMA = "verify-integrity/2";
+
+    #endregion
+
     #region Functions
 
     /// <summary>
-    /// Serializes the pairs as UTF-8 JSON.
+    /// Serializes the facts of a settled run as UTF-8 JSON.
     /// </summary>
-    /// <param name="executions">The result batches of all executions, any order; a task executed once makes no pair.</param>
+    /// <param name="facts">The facts.</param>
     /// <returns>The JSON document bytes.</returns>
-    public static byte[] Write(IReadOnlyList<VerifyResultBatchData> executions)
+    public static byte[] Write(VerifyIntegrityFacts facts)
     {
-        var pairs = executions
-            .SelectMany(batch => batch.Results)
-            .GroupBy(result => result.TaskIndex)
-            .OrderBy(task => task.Key)
-            .SelectMany(PairsOf)
-            .ToList();
-
-        var mismatches = pairs.Count(pair => !pair.Match);
+        var mismatches = facts.Pairs.Count(pair => pair.Differs.Count > 0);
+        var resolved = facts.Disputes.Count(dispute => dispute.Resolved);
 
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
         {
             writer.WriteStartObject();
+            writer.WriteString("schema", SCHEMA);
 
             writer.WriteStartObject("summary");
-            writer.WriteNumber("sampled", pairs.Count);
-            writer.WriteNumber("compared", pairs.Count);
+            writer.WriteNumber("tasks", facts.Tasks);
+            writer.WriteNumber("sampled", facts.Pairs.Count);
+            writer.WriteNumber("compared", facts.Pairs.Count);
             writer.WriteNumber("mismatches", mismatches);
-            writer.WriteNumber("mismatch_rate", pairs.Count == 0 ? 0.0 : (double)mismatches / pairs.Count);
+            writer.WriteNumber("mismatch_rate", facts.Pairs.Count == 0 ? 0.0 : (double)mismatches / facts.Pairs.Count);
+            writer.WriteNumber("agreed", facts.Agreed);
+            writer.WriteNumber("single_execution", facts.SingleExecution);
+            writer.WriteNumber("disputes", facts.Disputes.Count);
+            writer.WriteNumber("disputes_resolved", resolved);
+            writer.WriteNumber("disputed", facts.Disputes.Count - resolved);
+            writer.WriteNumber("repairs", facts.Repairs);
+            writer.WriteNumber("no_result", facts.NoResult);
+            writer.WriteNumber("rejected_results", facts.Rejected.Values.Sum());
+            writer.WriteStartObject("rejected");
+            foreach (var reason in VerifyRoundIntake.REASONS)
+                writer.WriteNumber(reason, facts.Rejected.GetValueOrDefault(reason));
+            writer.WriteEndObject();
             writer.WriteEndObject();
 
             writer.WriteStartArray("pairs");
-            foreach (var pair in pairs)
+            foreach (var pair in facts.Pairs)
                 WritePair(writer, pair);
+            writer.WriteEndArray();
+
+            writer.WriteStartArray("disputes");
+            foreach (var dispute in facts.Disputes)
+            {
+                writer.WriteStartObject();
+                writer.WriteNumber("index", dispute.Index);
+                writer.WriteNumber("first_copies", dispute.FirstCopies);
+                writer.WriteNumber("copies", dispute.Copies);
+                writer.WriteNumber("agreeing", dispute.Agreeing);
+                writer.WriteString("outcome", dispute.Outcome);
+                writer.WriteEndObject();
+            }
             writer.WriteEndArray();
 
             writer.WriteEndObject();
@@ -53,49 +84,18 @@ public static class VerifyIntegrityWriter
         return stream.ToArray();
     }
 
-    private static IEnumerable<PairRecord> PairsOf(IGrouping<int, VerifyResultData> task)
-    {
-        var ranked = VerifyExecutions.InRuleOrder(task).ToList();
-
-        return ranked.Skip(1).Select(replica => Pair(task.Key, ranked[0], replica));
-    }
-
-    private static PairRecord Pair(int index, VerifyResultData primary, VerifyResultData replica)
-    {
-        var differing = Differences(primary, replica);
-        return new PairRecord(index, primary, replica, differing.Count == 0, differing);
-    }
-
-    private static List<string> Differences(VerifyResultData primary, VerifyResultData replica)
-    {
-        var fields = new List<string>();
-        if (primary.Verdict != replica.Verdict)
-            fields.Add("verdict");
-        if (primary.ExitCode != replica.ExitCode)
-            fields.Add("exit");
-        if (primary.Stdout != replica.Stdout || primary.StdoutTruncated != replica.StdoutTruncated)
-            fields.Add("stdout");
-        if (primary.Stderr != replica.Stderr || primary.StderrTruncated != replica.StderrTruncated)
-            fields.Add("stderr");
-        if (primary.CaseResults.Count != replica.CaseResults.Count
-            || primary.CaseResults.Where((c, i) => !c.Is(replica.CaseResults[i])).Any())
-            fields.Add("cases");
-
-        return fields;
-    }
-
-    private static void WritePair(Utf8JsonWriter writer, PairRecord pair)
+    private static void WritePair(Utf8JsonWriter writer, VerifyPairRecord pair)
     {
         writer.WriteStartObject();
         writer.WriteNumber("index", pair.Index);
         WriteSide(writer, "primary", pair.Primary);
         WriteSide(writer, "replica", pair.Replica);
         writer.WriteBoolean("compared", true);
-        writer.WriteBoolean("match", pair.Match);
-        if (!pair.Match)
+        writer.WriteBoolean("match", pair.Differs.Count == 0);
+        if (pair.Differs.Count > 0)
         {
             writer.WriteStartArray("differs");
-            foreach (var field in pair.Differing)
+            foreach (var field in pair.Differs)
                 writer.WriteStringValue(field);
             writer.WriteEndArray();
         }
@@ -103,20 +103,13 @@ public static class VerifyIntegrityWriter
         writer.WriteEndObject();
     }
 
-    private static void WriteSide(Utf8JsonWriter writer, string name, VerifyResultData result)
+    private static void WriteSide(Utf8JsonWriter writer, string name, VerifyExecution execution)
     {
         writer.WriteStartObject(name);
-        writer.WriteString("verdict", result.Verdict.ToString());
-        writer.WriteNumber("exit", result.ExitCode);
+        writer.WriteString("verdict", execution.Verdict.ToString());
+        writer.WriteNumber("exit", execution.ExitCode);
         writer.WriteEndObject();
     }
-
-    #endregion
-
-    #region Types
-
-    /// <summary>Two executions of one task and the fields they disagree on.</summary>
-    private sealed record PairRecord(int Index, VerifyResultData Primary, VerifyResultData Replica, bool Match, List<string> Differing);
 
     #endregion
 }

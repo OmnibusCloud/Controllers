@@ -8,8 +8,9 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: read the result packages the nodes uploaded and gather their batches into a
-/// single verdict report blob (aggregates + one record per task).
+/// Host-side: the ledger of a settled run (Verify.Settle) → its verdict report as a blob of its own. The
+/// document was written when the run was settled; nothing is decided here and no node's result
+/// is read.
 /// </summary>
 [Activity("Verify.Collect")]
 [MemoryPackable]
@@ -19,7 +20,7 @@ public sealed partial class WitActivityVerifyCollect : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Results}, {Options}";
+        return $"{Ledger}, {Options}";
     }
 
     #endregion
@@ -36,7 +37,7 @@ public sealed partial class WitActivityVerifyCollect : WitActivityFunction
             return false;
 
         return base.Is(activity, tolerance)
-               && Results.Check(activity.Results)
+               && Ledger.Check(activity.Ledger)
                && Options.Check(activity.Options);
     }
 
@@ -44,7 +45,7 @@ public sealed partial class WitActivityVerifyCollect : WitActivityFunction
     {
         return new WitActivityVerifyCollect
         {
-            Results = Results?.Clone() as IWitReference,
+            Ledger = Ledger?.Clone() as IWitReference,
             Options = Options?.Clone() as IWitReference
         };
     }
@@ -53,9 +54,9 @@ public sealed partial class WitActivityVerifyCollect : WitActivityFunction
 
     #region Properties
 
-    /// <summary>Reference to the 'Results' argument of the activity.</summary>
+    /// <summary>Reference to the 'Ledger' argument of the activity.</summary>
     [MemoryPackAllowSerialize]
-    public IWitReference? Results { get; init; }
+    public IWitReference? Ledger { get; init; }
 
     /// <summary>Reference to the 'Options' argument of the activity.</summary>
     [MemoryPackAllowSerialize]

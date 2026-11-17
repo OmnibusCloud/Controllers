@@ -26,6 +26,8 @@ public sealed class VerifySandboxHygieneTests : VerifySandboxTestBase
             Run(Python, PythonTask("raise SystemExit(3)"));
         }
 
+        // The files are deleted off the run's path (a file scanner can hold a delete): soon, not at the return.
+        Assert.That(OutWit.Controller.AI.Wasm.WasmHostDiscard.Drain(TimeSpan.FromSeconds(30)), Is.True, "the cleanup of the runs ends");
         Assert.That(Directory.GetFiles(Sandbox.IoDirectory), Is.Empty, "every run deletes its stdin/stdout/stderr files");
     }
 
@@ -54,6 +56,7 @@ public sealed class VerifySandboxHygieneTests : VerifySandboxTestBase
         {
             var result = sandbox.Execute(Python, PythonTask("print(input())", suite: new VerifySuiteData { Cases = [new VerifySuiteCaseData { Stdin = "7\n", ExpectedStdout = "7\n" }] }),
                 VerifySandboxDefaults.Resolve(null, null));
+            Assert.That(OutWit.Controller.AI.Wasm.WasmHostDiscard.Drain(TimeSpan.FromSeconds(30)), Is.True, "the cleanup of the runs ends");
 
             Assert.Multiple(() =>
             {
@@ -84,6 +87,10 @@ public sealed class VerifySandboxHygieneTests : VerifySandboxTestBase
         try
         {
             var before = sandbox.Execute(Python, task, VerifySandboxDefaults.Resolve(null, null));
+
+            // The sweep comes on an idle node: what the last run left is deleted by then (in the
+            // background, so the test waits for it here instead of meeting it half-way).
+            Assert.That(OutWit.Controller.AI.Wasm.WasmHostDiscard.Drain(TimeSpan.FromSeconds(30)), Is.True, "the cleanup of the runs ends");
             Directory.Delete(Path.GetDirectoryName(given)!, recursive: true);
             var after = sandbox.Execute(Python, task, VerifySandboxDefaults.Resolve(null, null));
 

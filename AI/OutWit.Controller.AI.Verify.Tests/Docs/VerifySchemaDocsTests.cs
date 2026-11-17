@@ -78,8 +78,12 @@ public sealed class VerifySchemaDocsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(summary, Is.EquivalentTo(new[] { "total", "pass", "pass_rate", "verdicts" }));
-            Assert.That(result, Is.EquivalentTo(new[] { "index", "verdict", "exit", "cases" }));
+            Assert.That(PropertyNames(root), Is.EquivalentTo(new[] { "schema", "summary", "results" }));
+            Assert.That(root.GetProperty("schema").GetProperty("const").GetString(), Is.EqualTo(OutWit.Controller.AI.Verify.Tasksets.VerifyReportWriter.SCHEMA));
+            Assert.That(summary, Is.EquivalentTo(new[] { "total", "pass", "pass_rate", "verdicts", "rejected_results", "disputes", "disputes_resolved" }));
+            Assert.That(result, Is.EquivalentTo(new[] { "index", "verdict", "exit", "reason", "cases" }));
+            Assert.That(root.GetProperty("results").GetProperty("items").GetProperty("properties").GetProperty("reason").GetProperty("enum").EnumerateArray().Select(code => code.GetString()),
+                Is.EqualTo(OutWit.Controller.AI.Verify.Model.VerifyFault.ALL), "the reason codes of a task without a result are a fixed list");
             Assert.That(verdicts, Is.EquivalentTo(Enum.GetNames<OutWit.Controller.AI.Verify.Model.VerifyVerdict>()));
         });
     }
@@ -97,11 +101,13 @@ public sealed class VerifySchemaDocsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(corpusProperties, Is.EquivalentTo(new[] { "index", "verdict", "exit", "stdout", "stdout_truncated", "stderr", "stderr_truncated", "cases" }));
+            Assert.That(corpusProperties, Is.EquivalentTo(new[] { "index", "verdict", "exit", "reason", "stdout", "stdout_truncated", "stderr", "stderr_truncated", "cases" }));
             Assert.That(PropertyNames(corpus.RootElement.GetProperty("properties").GetProperty("cases").GetProperty("items").GetProperty("properties")),
                 Is.EquivalentTo(new[] { "case", "passed", "verdict", "exit", "stdout" }));
-            Assert.That(batchProperties, Is.EquivalentTo(new[] { "runtime_target", "wasmtime", "controller", "runtime", "runtime_sha256", "degree", "wall_ms", "fuel", "tasks", "metrics" }));
-            Assert.That(metricProperties, Is.EquivalentTo(new[] { "index", "fuel", "peak_memory", "wall_ms" }));
+            Assert.That(batchProperties, Is.EquivalentTo(new[] { "round", "runtime_target", "wasmtime", "controller", "runtime", "runtime_sha256", "fuel", "tasks", "metrics" }),
+                "nothing a node could be measured by: no degree, no wall time of the batch");
+            Assert.That(metricProperties, Is.EquivalentTo(new[] { "index", "fuel", "peak_memory", "wall_ms", "fault" }));
+            Assert.That(provenance.RootElement.GetProperty("properties").GetProperty("schema").GetProperty("const").GetString(), Is.EqualTo("verify-provenance/2"));
         });
     }
 
@@ -128,6 +134,10 @@ public sealed class VerifySchemaDocsTests
             Assert.That(PropertyNames(root.GetProperty("defaults")), Is.EquivalentTo(PropertyNames(properties.GetProperty("defaults").GetProperty("properties"))));
             Assert.That(PropertyNames(root.GetProperty("ceilings")), Is.EquivalentTo(PropertyNames(properties.GetProperty("ceilings").GetProperty("properties"))));
             Assert.That(PropertyNames(root.GetProperty("packages")), Is.EquivalentTo(PropertyNames(properties.GetProperty("packages").GetProperty("properties"))));
+            Assert.That(PropertyNames(root.GetProperty("time")), Is.EquivalentTo(PropertyNames(properties.GetProperty("time").GetProperty("properties"))));
+            Assert.That(PropertyNames(root.GetProperty("sources")), Is.EquivalentTo(PropertyNames(properties.GetProperty("sources").GetProperty("properties"))));
+            Assert.That(PropertyNames(root.GetProperty("modules")), Is.EquivalentTo(PropertyNames(properties.GetProperty("modules").GetProperty("properties"))));
+            Assert.That(properties.GetProperty("schema").GetProperty("const").GetString(), Is.EqualTo(OutWit.Controller.AI.Verify.Runtimes.VerifyCapabilitiesWriter.SCHEMA));
             Assert.That(PropertyNames(root.GetProperty("pool")), Is.EquivalentTo(PropertyNames(properties.GetProperty("pool").GetProperty("properties"))));
             Assert.That(properties.GetProperty("schema").GetProperty("const").GetString(), Is.EqualTo(root.GetProperty("schema").GetString()));
         });
@@ -144,9 +154,40 @@ public sealed class VerifySchemaDocsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(summary, Is.EquivalentTo(new[] { "sampled", "compared", "mismatches", "mismatch_rate" }));
+            Assert.That(PropertyNames(root), Is.EquivalentTo(new[] { "schema", "summary", "pairs", "disputes" }));
+            Assert.That(root.GetProperty("schema").GetProperty("const").GetString(), Is.EqualTo("verify-integrity/2"));
+            Assert.That(summary, Is.EquivalentTo(new[]
+            {
+                "tasks", "sampled", "compared", "mismatches", "mismatch_rate", "agreed", "single_execution",
+                "disputes", "disputes_resolved", "disputed", "repairs", "no_result", "rejected_results", "rejected"
+            }));
+            Assert.That(PropertyNames(root.GetProperty("summary").GetProperty("properties").GetProperty("rejected").GetProperty("properties")),
+                Is.EqualTo(OutWit.Controller.AI.Verify.Settlement.VerifyRoundIntake.REASONS), "the reasons a result package is refused for are a fixed list");
             Assert.That(pair, Is.EquivalentTo(new[] { "index", "primary", "replica", "compared", "match", "differs" }));
+            Assert.That(PropertyNames(root.GetProperty("disputes").GetProperty("items").GetProperty("properties")),
+                Is.EquivalentTo(new[] { "index", "first_copies", "copies", "agreeing", "outcome" }));
+            Assert.That(root.GetProperty("disputes").GetProperty("items").GetProperty("properties").GetProperty("outcome").GetProperty("enum").EnumerateArray().Select(outcome => outcome.GetString()),
+                Is.EquivalentTo(new[]
+                {
+                    OutWit.Controller.AI.Verify.Settlement.VerifyRulings.RESOLVED, OutWit.Controller.AI.Verify.Settlement.VerifyRulings.NO_MAJORITY,
+                    OutWit.Controller.AI.Verify.Settlement.VerifyRulings.TOO_FEW_COPIES, OutWit.Controller.AI.Verify.Settlement.VerifyRulings.SURPLUS_COPIES
+                }));
             Assert.That(side, Is.EquivalentTo(new[] { "verdict", "exit" }));
+        });
+    }
+
+    [Test]
+    public void TasksetSchemaHoldsSourceNamesToThePortableSetTest()
+    {
+        // Finding H-7: a source name must mean the same file on every node. The rule the parser
+        // enforces is in the schema, as the pattern and the length the code has.
+        using var document = Load("verify-taskset.schema.json");
+        var names = document.RootElement.GetProperty("properties").GetProperty("sources").GetProperty("propertyNames");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(names.GetProperty("pattern").GetString(), Is.EqualTo(OutWit.Controller.AI.Verify.Sandbox.VerifySourceNames.PATTERN));
+            Assert.That(names.GetProperty("maxLength").GetInt32(), Is.EqualTo(OutWit.Controller.AI.Verify.Sandbox.VerifySourceNames.MAX_NAME_BYTES));
         });
     }
 

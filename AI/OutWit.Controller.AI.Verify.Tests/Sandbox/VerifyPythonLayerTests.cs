@@ -185,7 +185,7 @@ public sealed class VerifyPythonLayerTests : VerifySandboxTestBase
             {
                 Assert.That(stdlibOnly, Is.Not.Null);
                 Assert.That(withSympy, Is.Null);
-                Assert.That(reason, Does.Contain("layer not found").And.Contain("sympy-1.14.0.zip"));
+                Assert.That(reason, Is.EqualTo("a layer of the runtime is missing"));
             });
         }
         finally

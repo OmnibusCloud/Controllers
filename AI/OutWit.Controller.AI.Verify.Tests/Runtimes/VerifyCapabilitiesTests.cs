@@ -97,7 +97,7 @@ public sealed class VerifyCapabilitiesTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo("verify-capabilities/1"));
+            Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo(VerifyCapabilitiesWriter.SCHEMA));
             Assert.That(root.GetProperty("controller").GetString(), Does.Match("^[0-9]+[.][0-9]+[.][0-9]+"));
             Assert.That(root.GetProperty("wasmtime").GetString(), Is.EqualTo("48.0.2.0"));
             Assert.That(root.GetProperty("benchmark_unit").GetString(), Is.EqualTo(VerifyBenchmark.UNIT));

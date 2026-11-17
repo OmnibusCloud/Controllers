@@ -5,7 +5,14 @@ Job:VerifyGenerateAndCheck(Blob:generators, Blob:checker, VerifyOptions:opts)
     VerifyResultPackageCollection:candidates = Grid.ForEach(package in generatorPackages)
         => Verify.ExecutePackage(package);
 
-    VerifyTaskPackageCollection:checkPackages = Verify.MakeCheckTasks(candidates, checker, opts);
+    ~ A generator without a verdict goes out once more. The generators run once each: nothing of theirs is compared. ~
+    VerifyTaskPackageCollection:generatorRepairs = Verify.Repairs(generatorPackages, candidates);
+    VerifyResultPackageCollection:generatorRepaired = Grid.ForEach(package in generatorRepairs)
+        => Verify.ExecutePackage(package);
+
+    Blob:generated = Verify.Settle(generatorPackages, candidates, generatorRepairs, generatorRepaired);
+
+    VerifyTaskPackageCollection:checkPackages = Verify.MakeCheckTasks(generated, checker, opts);
 
     Double:rate = Verify.SamplingRate(opts);
     ProcessingOptions:checked = Grid.Replicas(2, rate);
@@ -13,8 +20,21 @@ Job:VerifyGenerateAndCheck(Blob:generators, Blob:checker, VerifyOptions:opts)
     VerifyResultPackageCollection:verdicts = Grid.ForEach(package in checkPackages, checked)
         => Verify.ExecutePackage(package);
 
-    Blob:report = Verify.Collect(verdicts, opts);
-    Blob:corpus = Verify.CollectOutputs(candidates, opts);
-    Blob:provenance = Verify.Provenance(verdicts);
-    Blob:integrity = Verify.Integrity(verdicts);
+    ~ A check without a verdict goes out once more. ~
+    VerifyTaskPackageCollection:repairs = Verify.Repairs(checkPackages, verdicts);
+    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs)
+        => Verify.ExecutePackage(package);
+
+    ~ A check whose executions disagree runs three more times, on different machines. ~
+    VerifyTaskPackageCollection:disputes = Verify.Disputes(checkPackages, verdicts);
+    ProcessingOptions:thrice = Grid.Replicas(3);
+    VerifyResultPackageCollection:settled = Grid.ForEach(package in disputes, thrice)
+        => Verify.ExecutePackage(package);
+
+    Blob:ledger = Verify.Settle(checkPackages, verdicts, repairs, repaired, disputes, settled);
+
+    Blob:report = Verify.Collect(ledger, opts);
+    Blob:corpus = Verify.CollectOutputs(generated, opts);
+    Blob:provenance = Verify.Provenance(ledger);
+    Blob:integrity = Verify.Integrity(ledger);
 }

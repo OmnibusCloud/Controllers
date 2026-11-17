@@ -38,7 +38,8 @@ public sealed partial class VerifyResultData : ModelBase
                && Stdout.Is(other.Stdout)
                && StdoutTruncated.Is(other.StdoutTruncated)
                && Stderr.Is(other.Stderr)
-               && StderrTruncated.Is(other.StderrTruncated);
+               && StderrTruncated.Is(other.StderrTruncated)
+               && Fault.Is(other.Fault);
     }
 
     #endregion
@@ -70,7 +71,8 @@ public sealed partial class VerifyResultData : ModelBase
             CaseResults = CaseResults.Select(c => c.Clone()).ToList(),
             FuelConsumed = FuelConsumed,
             PeakMemoryBytes = PeakMemoryBytes,
-            WallMs = WallMs
+            WallMs = WallMs,
+            Fault = Fault
         };
     }
 
@@ -125,6 +127,15 @@ public sealed partial class VerifyResultData : ModelBase
     /// <summary>Wall-clock milliseconds across the task's runs.</summary>
     [MemoryPackOrder(10)]
     public int WallMs { get; set; }
+
+    /// <summary>
+    /// Empty for a verdict. Otherwise the reason code (<see cref="VerifyFault"/>) of a task the node
+    /// could not run to an end of its own; the verdict is then <see cref="VerifyVerdict.NoResult"/>
+    /// and the result says nothing about the program.
+    /// </summary>
+    [ToString]
+    [MemoryPackOrder(11)]
+    public string Fault { get; set; } = "";
 
     #endregion
 }

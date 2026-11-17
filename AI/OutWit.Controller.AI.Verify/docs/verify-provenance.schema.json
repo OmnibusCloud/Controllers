@@ -2,40 +2,41 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-provenance.schema.json",
   "title": "Verify provenance",
-  "description": "The provenance blob of every Verify script: which tasks ran together, on which platform, with which wasmtime and runtime module, at which degree, and what each task cost (fuel, peak memory, wall time). It does not say which machine ran what. A record, not an identity (fuel drifts between hosts, wall times vary).",
+  "description": "The provenance blob of every Verify script: which tasks ran together, in which round, on which platform, with which wasmtime, controller and runtime module, and what each task cost (fuel, peak memory, wall time). It does not say which machine ran what, and it says nothing a machine could be measured by: not how many programs a node ran at once and not how long a batch took as a whole (with the memory cap and the degree the lab's to choose, a node's cores and memory could be read off them). A record, not an identity (fuel drifts between hosts, wall times vary).",
   "type": "object",
-  "required": ["batches"],
+  "required": ["schema", "batches"],
   "additionalProperties": false,
   "properties": {
+    "schema": { "type": "string", "const": "verify-provenance/2" },
     "batches": {
       "type": "array",
-      "description": "One entry per execution of a batch, ordered by first task index; a batch that ran twice has two.",
+      "description": "One entry per accepted execution of a batch, ordered by first task index; a batch that ran twice has two. Only what the server accepted is here: a result package it refused leaves no entry.",
       "items": {
         "type": "object",
-        "required": ["fuel", "tasks", "metrics"],
+        "required": ["round", "runtime_target", "wasmtime", "controller", "runtime", "runtime_sha256", "fuel", "tasks", "metrics"],
         "additionalProperties": false,
         "properties": {
+          "round": { "type": "string", "enum": ["main", "repair", "dispute"], "description": "The fan-out the batch ran in: main (the first one), repair (tasks without a verdict, sent out once more) or dispute (tasks whose executions disagreed, in three copies)." },
           "runtime_target": { "type": "string", "description": "OS and architecture, e.g. linux-x64." },
-          "wasmtime": { "type": "string", "description": "The engine that ran the batch: the version of the wasmtime .NET binding and of the native library under it, e.g. \"48.0.2.0 (native 48.0.8)\". A native library that is not one the controller ships is \"unpinned\" with the start of its SHA-256." },
-          "controller": { "type": "string", "description": "The controller version that ran the batch." },
-          "runtime": { "type": "string" },
-          "runtime_sha256": { "type": "string" },
-          "degree": { "type": "integer", "description": "Concurrent sandboxes the batch ran at." },
-          "wall_ms": { "type": "integer", "description": "Wall time of the whole batch on the node." },
+          "wasmtime": { "type": "string", "description": "The engine that ran the batch: the version of the wasmtime .NET binding and of the native library under it, e.g. \"48.0.2.0 (native 48.0.8)\". It is the server's own: a result made on another engine is refused." },
+          "controller": { "type": "string", "description": "The controller version that ran the batch. It is the server's own: one controller version a job." },
+          "runtime": { "type": "string", "description": "The runtime id of the batch's tasks." },
+          "runtime_sha256": { "type": "string", "description": "The pinned hash of the runtime module; empty for the raw wasi runtime." },
           "fuel": { "type": "integer", "description": "Fuel the batch's tasks consumed in total." },
           "tasks": { "type": "array", "items": { "type": "integer" }, "description": "Task indices of the batch, ascending." },
           "metrics": {
             "type": "array",
-            "description": "One record per task of the batch, in the order of `tasks`: what the task cost on this node. Fuel is reproducible on a host (the cap for a Timeout) but drifts between hosts for CPython tasks; wall time is hardware.",
+            "description": "One record per task of the batch, in the order of `tasks`: what the task cost on this node. Fuel is reproducible on a host (the budget for a Timeout) but drifts between hosts for CPython tasks; wall time is hardware.",
             "items": {
               "type": "object",
               "required": ["index", "fuel", "peak_memory", "wall_ms"],
               "additionalProperties": false,
               "properties": {
                 "index": { "type": "integer" },
-                "fuel": { "type": "integer" },
+                "fuel": { "type": "integer", "description": "Instructions, the bytes its calls into the host moved and, for a module the task brought or the compiler built, the price of compiling it." },
                 "peak_memory": { "type": "integer", "description": "Peak linear memory in bytes." },
-                "wall_ms": { "type": "integer" }
+                "wall_ms": { "type": "integer" },
+                "fault": { "type": "string", "enum": ["wall_clock", "node_fault"], "description": "Present only for a task the node could not run to an end of its own: the node's reason code. Such an execution is no verdict." }
               }
             }
           }

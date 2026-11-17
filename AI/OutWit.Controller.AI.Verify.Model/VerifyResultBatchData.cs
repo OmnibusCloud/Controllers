@@ -27,7 +27,8 @@ public sealed partial class VerifyResultBatchData : ModelBase
                 return false;
         }
 
-        return Diagnostics.Check(other.Diagnostics);
+        return Diagnostics.Check(other.Diagnostics)
+               && Ticket.Is(other.Ticket);
     }
 
     public override VerifyResultBatchData Clone()
@@ -35,7 +36,8 @@ public sealed partial class VerifyResultBatchData : ModelBase
         return new VerifyResultBatchData
         {
             Results = Results.Select(r => r.Clone()).ToList(),
-            Diagnostics = Diagnostics?.Clone()
+            Diagnostics = Diagnostics?.Clone(),
+            Ticket = Ticket
         };
     }
 
@@ -52,6 +54,13 @@ public sealed partial class VerifyResultBatchData : ModelBase
     [MemoryPackAllowSerialize]
     [MemoryPackOrder(1)]
     public VerifyBatchDiagnosticsData? Diagnostics { get; set; }
+
+    /// <summary>
+    /// The ticket of the task package this batch answers (<see cref="VerifyTaskPackageData.Ticket"/>):
+    /// the content of a result names the package it is for. Never written to a document.
+    /// </summary>
+    [MemoryPackOrder(2)]
+    public string Ticket { get; set; } = "";
 
     #endregion
 }

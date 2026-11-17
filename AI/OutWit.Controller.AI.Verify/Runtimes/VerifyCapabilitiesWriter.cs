@@ -18,7 +18,7 @@ public static class VerifyCapabilitiesWriter
     #region Constants
 
     /// <summary>The document's schema tag.</summary>
-    public const string SCHEMA = "verify-capabilities/1";
+    public const string SCHEMA = "verify-capabilities/2";
 
     #endregion
 
@@ -57,7 +57,6 @@ public static class VerifyCapabilitiesWriter
             writer.WriteNumber("max_degree", VerifySandboxDegree.DEFAULT_MAX_DEGREE);
             writer.WriteNumber("fuel", VerifySandboxDefaults.DEFAULT_FUEL_BUDGET);
             writer.WriteNumber("memory_bytes", VerifySandboxDefaults.DEFAULT_MEMORY_BYTES);
-            writer.WriteNumber("wall_ms", VerifySandboxDefaults.DEFAULT_WALL_TIME_MS);
             writer.WriteNumber("stdout_bytes", VerifySandboxDefaults.DEFAULT_STDOUT_LIMIT_BYTES);
             writer.WriteNumber("stderr_bytes", VerifySandboxDefaults.DEFAULT_STDERR_LIMIT_BYTES);
             writer.WriteEndObject();
@@ -65,15 +64,37 @@ public static class VerifyCapabilitiesWriter
             writer.WriteStartObject("ceilings");
             writer.WriteNumber("fuel", VerifyLimitCeilings.MAX_FUEL_BUDGET);
             writer.WriteNumber("memory_bytes", VerifyLimitCeilings.MAX_MEMORY_BYTES);
-            writer.WriteNumber("wall_ms", VerifyLimitCeilings.MAX_WALL_TIME_MS);
             writer.WriteNumber("stdout_bytes", VerifyLimitCeilings.MAX_STDOUT_LIMIT_BYTES);
             writer.WriteNumber("stderr_bytes", VerifyLimitCeilings.MAX_STDERR_LIMIT_BYTES);
+            writer.WriteEndObject();
+
+            // Fuel is the one budget of a run's work; the clock is a node's own backstop.
+            writer.WriteStartObject("time");
+            writer.WriteNumber("reference_fuel_per_second", VerifySandboxDefaults.REFERENCE_FUEL_PER_SECOND);
+            writer.WriteNumber("backstop_base_ms", VerifyBackstop.BASE_MS);
+            writer.WriteNumber("backstop_fuel_per_second", VerifyBackstop.SLOWEST_FUEL_PER_SECOND);
+            writer.WriteEndObject();
+
+            writer.WriteStartObject("sources");
+            writer.WriteString("name_pattern", VerifySourceNames.PATTERN);
+            writer.WriteNumber("max_name_bytes", VerifySourceNames.MAX_NAME_BYTES);
+            writer.WriteNumber("max_depth", VerifySourceNames.MAX_DEPTH);
+            writer.WriteEndObject();
+
+            // What a module a task brings (the raw WASI runtime) or the compiler builds is held to.
+            writer.WriteStartObject("modules");
+            writer.WriteNumber("max_bytes", VerifyWasmSandbox.MAX_TASK_MODULE_BYTES);
+            writer.WriteNumber("max_nesting", VerifyModuleShape.MAX_NESTING);
+            writer.WriteNumber("compile_fuel_per_byte", VerifyModuleShape.COMPILE_FUEL_PER_BYTE);
             writer.WriteEndObject();
 
             writer.WriteStartObject("packages");
             writer.WriteNumber("target", VerifyPackagePlanner.TARGET_PACKAGES);
             writer.WriteNumber("max_tasks", VerifyPackagePlanner.MAX_PACKAGE_TASKS);
             writer.WriteNumber("max_bytes", VerifyPackagePlanner.MAX_PACKAGE_BYTES);
+            writer.WriteNumber("max_output_bytes", VerifyPackagePlanner.MAX_PACKAGE_OUTPUT_BYTES);
+            writer.WriteNumber("max_batch_tasks", VerifyBatchExecutor.MAX_BATCH_TASKS);
+            writer.WriteNumber("max_batch_output_bytes", VerifyTasksetPlanner.MAX_BATCH_OUTPUT_BYTES);
             writer.WriteEndObject();
 
             if (pool != null)

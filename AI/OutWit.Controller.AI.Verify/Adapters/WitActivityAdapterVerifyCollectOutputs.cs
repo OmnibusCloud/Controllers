@@ -1,8 +1,8 @@
-using System.Collections;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Verify.Activities;
-using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Delivery;
+using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Settlement;
 using OutWit.Controller.AI.Verify.Tasksets;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -21,10 +21,11 @@ internal sealed class WitActivityAdapterVerifyCollectOutputs : WitActivityAdapte
 
     #region Constructors
 
-    public WitActivityAdapterVerifyCollectOutputs(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
+    public WitActivityAdapterVerifyCollectOutputs(IWitProcessingManager processingManager, IWitBlobService blobService, IServiceProvider services, ILogger logger)
         : base(processingManager, logger)
     {
         BlobService = blobService;
+        WorkFolder = VerifyAdapterTools.WorkFolder(services);
     }
 
     #endregion
@@ -33,18 +34,33 @@ internal sealed class WitActivityAdapterVerifyCollectOutputs : WitActivityAdapte
 
     protected override async Task Process(WitActivityVerifyCollectOutputs activity, IWitVariablesCollection pool, IWitActivityStatus? activityStatus, WitProcessingStatus status)
     {
-        if (!pool.TryGetObject(activity.Results, out var resultsObject) || resultsObject is not IEnumerable resultsEnumerable)
-            throw new InvalidOperationException("Failed to get parameter 'Results'.");
+        var ledgerPath = await BlobService.GetLocalPathAsync(VerifyAdapterTools.Blob(pool, activity.Ledger, "Ledger"));
 
-        var results = (await VerifyResultPackages.LoadAsync(resultsEnumerable, BlobService))
-            .SelectMany(batch => batch.Results)
-            .ToList();
+        // The outputs can be as large as the run: they go from the ledger to a file and from the
+        // file to the blob store, never through memory as a whole.
+        var folder = Path.Combine(WorkFolder, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var outputsPath = Path.Combine(folder, BLOB_NAME);
+            VerifyLedger.CopyTo(ledgerPath, VerifyLedger.OUTPUTS, outputsPath);
 
-        var bytes = VerifyCorpusWriter.Write(results);
-        var blobId = await BlobService.UploadBytesAsync(bytes, BLOB_NAME);
+            var blobId = await BlobService.UploadFileAsync(outputsPath);
 
-        if (!pool.TrySetValue(activity.ReturnReference, blobId))
-            throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+            if (!pool.TrySetValue(activity.ReturnReference, blobId))
+                throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // a working folder of the server's own
+            }
+        }
     }
 
     #endregion
@@ -58,16 +74,10 @@ internal sealed class WitActivityAdapterVerifyCollectOutputs : WitActivityAdapte
             if (parameters.Length != 2)
                 throw new ArgumentException($"Expected 2 parameter(s), got {parameters.Length}.");
 
-            if (parameters[0] is not IWitReference results)
-                throw new ArgumentException("Parameter 'Results' must be a variable reference.");
-
-            if (parameters[1] is not IWitReference options)
-                throw new ArgumentException("Parameter 'Options' must be a variable reference.");
-
             return new WitActivityVerifyCollectOutputs
             {
-                Results = results,
-                Options = options
+                Ledger = VerifyAdapterTools.Reference(parameters, 0, "Ledger"),
+                Options = VerifyAdapterTools.Reference(parameters, 1, "Options")
             };
         }
         catch (Exception e)
@@ -82,6 +92,8 @@ internal sealed class WitActivityAdapterVerifyCollectOutputs : WitActivityAdapte
     #region Properties
 
     private IWitBlobService BlobService { get; }
+
+    private string WorkFolder { get; }
 
     #endregion
 }

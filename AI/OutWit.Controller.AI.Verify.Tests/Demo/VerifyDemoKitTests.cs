@@ -95,7 +95,7 @@ public sealed class VerifyDemoKitTests : VerifySandboxTestBase
             .ToDictionary(fields => int.Parse(fields[0]), fields => (Name: $"{fields[1]}/{fields[2]}/{fields[3]}", Generation: fields[4], Check: fields[5]));
 
         var generated = parsed.Tasks.Select(task => Run(RuntimeOf(task), task)).ToList();
-        var plan = VerifyCheckTaskBuilder.Build(generated, checker);
+        var plan = VerifyCheckTaskBuilder.Build(generated.Select(VerifyCandidate.Of), checker);
         var checks = plan.Tasks.ToDictionary(task => task.TaskIndex, task => Run(RuntimeOf(task), task));
 
         var wrong = new List<string>();

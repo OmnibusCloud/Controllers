@@ -27,13 +27,13 @@ public sealed class VerifyHelloFuelTests : VerifySandboxTestBase
 
     #region Tests
 
-    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6_NUMPY_2_5_4, "m.py", "import numpy; print(numpy.__version__)", 24_917_573L)]
-    [TestCase(VerifyRuntimeCatalog.QUICKJS_0_15_1, "m.js", "console.log('hello')", 2_359_031L)]
-    [TestCase(VerifyRuntimeCatalog.RUBY_3_4_1, "m.rb", "puts 'hello'", 153_866_679L)]
-    [TestCase(VerifyRuntimeCatalog.LUA_5_4_8, "m.lua", "print('hello')", 571_410L)]
-    [TestCase(VerifyRuntimeCatalog.TYPESCRIPT_SUCRASE_3_35_1, "m.ts", "const x: string = 'hello';\nconsole.log(x);", 333_147_484L)]
-    [TestCase(VerifyRuntimeCatalog.CLANG_22_1_0, "m.c", "#include <stdio.h>\nint main(void) { puts(\"hello\"); return 0; }\n", 710L)]
-    [TestCase(VerifyRuntimeCatalog.WASI, "hello.wasm", global::OutWit.Controller.AI.Verify.Sandbox.VerifySelfCheck.HELLO_WASM_BASE64, 6L)]
+    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6_NUMPY_2_5_4, "m.py", "import numpy; print(numpy.__version__)", 24_920_091L)]
+    [TestCase(VerifyRuntimeCatalog.QUICKJS_0_15_1, "m.js", "console.log('hello')", 2_359_037L)]
+    [TestCase(VerifyRuntimeCatalog.RUBY_3_4_1, "m.rb", "puts 'hello'", 153_868_237L)]
+    [TestCase(VerifyRuntimeCatalog.LUA_5_4_8, "m.lua", "print('hello')", 571_435L)]
+    [TestCase(VerifyRuntimeCatalog.TYPESCRIPT_SUCRASE_3_35_1, "m.ts", "const x: string = 'hello';\nconsole.log(x);", 333_353_693L)]
+    [TestCase(VerifyRuntimeCatalog.CLANG_22_1_0, "m.c", "#include <stdio.h>\nint main(void) { puts(\"hello\"); return 0; }\n", 8_314_372L)]
+    [TestCase(VerifyRuntimeCatalog.WASI, "hello.wasm", global::OutWit.Controller.AI.Verify.Sandbox.VerifySelfCheck.HELLO_WASM_BASE64, 458_764L)]
     public void AHelloCostsOnePinnedFuelEverywhereTest(string runtimeId, string entry, string source, long fuel)
     {
         var result = Hello(runtimeId, entry, source);
@@ -45,8 +45,8 @@ public sealed class VerifyHelloFuelTests : VerifySandboxTestBase
         });
     }
 
-    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6, "m.py", "print('hello')", 121_262_306L, 3_170_305L)]
-    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6_SYMPY_1_14_0, "m.py", "import sympy; print(sympy.__version__)", 3_058_460_132L, 3_170_305L)]
+    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6, "m.py", "print('hello')", 122_363_490L, 3_170_305L)]
+    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6_SYMPY_1_14_0, "m.py", "import sympy; print(sympy.__version__)", 3_205_340_541L, 3_170_305L)]
     public void ACPythonHelloCostsItsPinnedFuelWithinTheFileDriftTest(string runtimeId, string entry, string source, long fuel, long instantiation)
     {
         var result = Hello(runtimeId, entry, source);

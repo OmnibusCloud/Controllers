@@ -3,6 +3,12 @@
 Measured on a six-node test fleet (Windows x64 and Linux x64) with Verify 0.8.0, the commands of
 `SCRIPT.md` as they stand.
 
+**With Verify 0.13.0** the verdicts below are unchanged: a test of the controller runs every
+row of this kit in the sandbox (`VerifyDemoKitTests`). The report gained a `schema` tag and
+three counters, and fuel now counts the bytes a program reads and prints, so the sizes and
+SHA-256 values in the table of the run are those of the version named above. They are measured
+again when the kit is next walked on a fleet.
+
 ## The rewards table
 
 ```
@@ -39,7 +45,7 @@ verdicts the kit does not expect: 0
 ## What may differ on another fleet
 
 - The wall time, which packages the sampling picks, and the provenance (which platforms ran
-  what, at which degree). None of them is in the report or the outputs.
+  what). None of them is in the report or the outputs.
 - The report and the outputs are the same bytes on any fleet. They change only when a verdict,
   an exit code or a program's output changes, that is, when a runtime module changes; the
   controller's release notes name every such change.

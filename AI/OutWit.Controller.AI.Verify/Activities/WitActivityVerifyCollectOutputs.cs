@@ -8,10 +8,9 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: result packages → the outputs (one JSON line per task: verdict, exit, stdout,
-/// stderr, and the outcome and stdout of every case of a suite) as a blob. In VerifyRun it is
-/// the sandbox log next to the verdict report; in VerifyGenerate it is the product, the corpus;
-/// VerifyGenerateAndCheck keeps it next to the check report so that skipped candidates stay visible.
+/// Host-side: the ledger of a settled run (Verify.Settle) → its outputs (one JSON line a task) as a blob of its own. The
+/// document was written when the run was settled; nothing is decided here and no node's result
+/// is read.
 /// </summary>
 [Activity("Verify.CollectOutputs")]
 [MemoryPackable]
@@ -21,7 +20,7 @@ public sealed partial class WitActivityVerifyCollectOutputs : WitActivityFunctio
 
     protected override string InnerString()
     {
-        return $"{Results}, {Options}";
+        return $"{Ledger}, {Options}";
     }
 
     #endregion
@@ -38,7 +37,7 @@ public sealed partial class WitActivityVerifyCollectOutputs : WitActivityFunctio
             return false;
 
         return base.Is(activity, tolerance)
-               && Results.Check(activity.Results)
+               && Ledger.Check(activity.Ledger)
                && Options.Check(activity.Options);
     }
 
@@ -46,7 +45,7 @@ public sealed partial class WitActivityVerifyCollectOutputs : WitActivityFunctio
     {
         return new WitActivityVerifyCollectOutputs
         {
-            Results = Results?.Clone() as IWitReference,
+            Ledger = Ledger?.Clone() as IWitReference,
             Options = Options?.Clone() as IWitReference
         };
     }
@@ -55,9 +54,9 @@ public sealed partial class WitActivityVerifyCollectOutputs : WitActivityFunctio
 
     #region Properties
 
-    /// <summary>Reference to the 'Results' argument of the activity.</summary>
+    /// <summary>Reference to the 'Ledger' argument of the activity.</summary>
     [MemoryPackAllowSerialize]
-    public IWitReference? Results { get; init; }
+    public IWitReference? Ledger { get; init; }
 
     /// <summary>Reference to the 'Options' argument of the activity.</summary>
     [MemoryPackAllowSerialize]

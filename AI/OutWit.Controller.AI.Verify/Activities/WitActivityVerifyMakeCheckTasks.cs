@@ -8,10 +8,10 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Verify.Activities;
 
 /// <summary>
-/// Host-side: generator result packages + a checker spec blob → check task packages, one check per
-/// candidate that passed with output, under the candidate's index. The check tasks are stored as
-/// package blobs, like the tasks of Verify.Split; the second fan-out of VerifyGenerateAndCheck
-/// starts from the references this returns.
+/// Host-side: the ledger of a settled generator run (Verify.Settle) and a checker → the task
+/// packages of the checks. Every generator task has one settled result in the ledger; each that
+/// passed with output becomes one run of the checker with that output on stdin, under the
+/// generator's task index.
 /// </summary>
 [Activity("Verify.MakeCheckTasks")]
 [MemoryPackable]

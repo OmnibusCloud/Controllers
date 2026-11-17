@@ -1,44 +1,56 @@
 using System.Text.Json;
-using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Settlement;
 
 namespace OutWit.Controller.AI.Verify.Tasksets;
 
 /// <summary>
-/// Writes the provenance document of a run: one entry per execution of a batch (the platform,
-/// wasmtime, controller, runtime module and hash, degree, wall time, the task indices it covered
-/// and each task's metrics — fuel, peak memory, wall time). It does not say which machine ran
-/// what. Batches are ordered by their first task index and the entries do not depend on the
-/// order the batches came back in; the metrics make it a record, not an identity — the verdict
-/// report is the identity.
+/// Writes the provenance document of a run: one entry per accepted execution of a batch (the
+/// round it ran in, the platform, the engine, the controller, the runtime module and its hash,
+/// the task indices it covered and each task's metrics — fuel, peak memory, wall time). It does
+/// not say which machine ran what, and it says nothing a machine could be measured by: not how
+/// many programs a node ran at once (a lab that sets the memory cap and the degree could read a
+/// node's cores and memory off that number) and not how long a batch took as a whole. The
+/// entries follow from their content, not from the order the batches came back in; the metrics
+/// make the document a record, not an identity — the verdict report is the identity.
 /// </summary>
-public static class VerifyProvenanceWriter
+internal static class VerifyProvenanceWriter
 {
+    #region Constants
+
+    /// <summary>The document's schema tag.</summary>
+    public const string SCHEMA = "verify-provenance/2";
+
+    #endregion
+
     #region Functions
 
     /// <summary>
-    /// Serializes the batches' diagnostics as UTF-8 JSON.
+    /// Serializes the accepted batches of a run as UTF-8 JSON.
     /// </summary>
-    /// <param name="batches">The result batches of one run, in any order.</param>
+    /// <param name="rounds">The rounds of the run, in the order they ran.</param>
     /// <returns>The JSON document bytes.</returns>
-    public static byte[] Write(IReadOnlyList<VerifyResultBatchData> batches)
+    public static byte[] Write(IEnumerable<VerifyRound> rounds)
     {
-        var ordered = batches
-            .Select(batch => (Batch: batch, First: batch.Results.Count == 0 ? int.MaxValue : batch.Results.Min(r => r.TaskIndex)))
+        var entries = rounds
+            .SelectMany(round => round.Accepted.SelectMany(package => package.Batches.Select(batch => (Round: round.Name, Batch: batch))))
+            .Where(entry => entry.Batch.Executions.Count > 0)
+            .Select(entry => (entry.Round, entry.Batch, First: entry.Batch.Executions.Min(execution => execution.Index)))
             .OrderBy(entry => entry.First)
-            .ThenBy(entry => entry.Batch.Diagnostics?.RuntimeTarget ?? "", StringComparer.Ordinal)
-            .ThenBy(entry => entry.Batch.Diagnostics?.WallMs ?? 0)
-            .ThenBy(entry => entry.Batch.Results.Sum(result => result.FuelConsumed))
-            .Select(entry => entry.Batch)
+            .ThenBy(entry => entry.Round, StringComparer.Ordinal)
+            .ThenBy(entry => entry.Batch.Diagnostics.RuntimeTarget ?? "", StringComparer.Ordinal)
+            .ThenBy(entry => entry.Batch.Executions.Sum(execution => execution.Fuel))
+            .ThenBy(entry => entry.Batch.Executions.Sum(execution => (long)execution.WallMs))
             .ToList();
 
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
         {
             writer.WriteStartObject();
+            writer.WriteString("schema", SCHEMA);
 
             writer.WriteStartArray("batches");
-            foreach (var batch in ordered)
-                WriteBatch(writer, batch);
+            foreach (var (round, batch, _) in entries)
+                WriteBatch(writer, round, batch);
             writer.WriteEndArray();
 
             writer.WriteEndObject();
@@ -47,39 +59,36 @@ public static class VerifyProvenanceWriter
         return stream.ToArray();
     }
 
-    private static void WriteBatch(Utf8JsonWriter writer, VerifyResultBatchData batch)
+    private static void WriteBatch(Utf8JsonWriter writer, string round, VerifyAcceptedBatch batch)
     {
         var diagnostics = batch.Diagnostics;
-        var results = batch.Results.OrderBy(result => result.TaskIndex).ToList();
+        var executions = batch.Executions.OrderBy(execution => execution.Index).ToList();
 
         writer.WriteStartObject();
-        if (diagnostics != null)
-        {
-            writer.WriteString("runtime_target", diagnostics.RuntimeTarget);
-            writer.WriteString("wasmtime", diagnostics.WasmtimeVersion);
-            writer.WriteString("controller", diagnostics.ControllerVersion);
-            writer.WriteString("runtime", diagnostics.RuntimeId);
-            writer.WriteString("runtime_sha256", diagnostics.RuntimeSha256);
-            writer.WriteNumber("degree", diagnostics.Degree);
-            writer.WriteNumber("wall_ms", diagnostics.WallMs);
-        }
-
-        writer.WriteNumber("fuel", results.Sum(result => result.FuelConsumed));
+        writer.WriteString("round", round);
+        writer.WriteString("runtime_target", diagnostics.RuntimeTarget);
+        writer.WriteString("wasmtime", diagnostics.WasmtimeVersion);
+        writer.WriteString("controller", diagnostics.ControllerVersion);
+        writer.WriteString("runtime", diagnostics.RuntimeId);
+        writer.WriteString("runtime_sha256", diagnostics.RuntimeSha256);
+        writer.WriteNumber("fuel", executions.Sum(execution => execution.Fuel));
 
         writer.WriteStartArray("tasks");
-        foreach (var result in results)
-            writer.WriteNumberValue(result.TaskIndex);
+        foreach (var execution in executions)
+            writer.WriteNumberValue(execution.Index);
         writer.WriteEndArray();
 
         // The per-task metrics: what a run cost, never what it computed (that is the report's).
         writer.WriteStartArray("metrics");
-        foreach (var result in results)
+        foreach (var execution in executions)
         {
             writer.WriteStartObject();
-            writer.WriteNumber("index", result.TaskIndex);
-            writer.WriteNumber("fuel", result.FuelConsumed);
-            writer.WriteNumber("peak_memory", result.PeakMemoryBytes);
-            writer.WriteNumber("wall_ms", result.WallMs);
+            writer.WriteNumber("index", execution.Index);
+            writer.WriteNumber("fuel", execution.Fuel);
+            writer.WriteNumber("peak_memory", execution.PeakMemory);
+            writer.WriteNumber("wall_ms", execution.WallMs);
+            if (!execution.HasVerdict)
+                writer.WriteString("fault", execution.Fault);
             writer.WriteEndObject();
         }
         writer.WriteEndArray();

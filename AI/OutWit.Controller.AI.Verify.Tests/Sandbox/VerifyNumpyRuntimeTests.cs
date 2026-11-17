@@ -378,7 +378,7 @@ public sealed class VerifyNumpyRuntimeTests : VerifySandboxTestBase
             Assert.Multiple(() =>
             {
                 Assert.That(resolved, Is.Null);
-                Assert.That(reason, Does.Contain(NUMPY_LAYER).And.Contain("SHA-256"));
+                Assert.That(reason, Is.EqualTo("a layer of the runtime failed its SHA-256 pin"));
             });
         }
         finally

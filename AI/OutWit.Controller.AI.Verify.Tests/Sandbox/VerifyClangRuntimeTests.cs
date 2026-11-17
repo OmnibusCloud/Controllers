@@ -356,6 +356,7 @@ public sealed class VerifyClangRuntimeTests : VerifySandboxTestBase
             {
                 var built = sandbox.Execute(Clang, CTask("int main(void) { return 0; }\n"), VerifySandboxDefaults.Resolve(null, null));
                 var failed = sandbox.Execute(Clang, CTask("int main(void) { return x; }\n"), VerifySandboxDefaults.Resolve(null, null));
+                Assert.That(OutWit.Controller.AI.Wasm.WasmHostDiscard.Drain(TimeSpan.FromSeconds(30)), Is.True, "the cleanup of the runs ends");
 
                 Assert.Multiple(() =>
                 {

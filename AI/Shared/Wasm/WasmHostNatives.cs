@@ -81,8 +81,9 @@ internal static class WasmHostNatives
     }
 
     /// <summary>
-    /// The SHA-256 of a file, computed once a path and process (a library is some tens of
-    /// megabytes, and the runtime asks a resolver once for every P/Invoke it binds).
+    /// The SHA-256 of a file, computed once a path and process when it is a pinned library's (a
+    /// library is some tens of megabytes, and the runtime asks a resolver once for every P/Invoke
+    /// it binds), and again at every ask while it is not.
     /// </summary>
     /// <param name="path">The file.</param>
     /// <returns>Lower-case hex, or null when the file cannot be read.</returns>
@@ -95,7 +96,12 @@ internal static class WasmHostNatives
         {
             using var stream = File.OpenRead(path);
             var hash = Convert.ToHexStringLower(SHA256.HashData(stream));
-            HASHES[path] = hash;
+
+            // Only a pinned hash is remembered: a file hashed while it was still being unpacked
+            // is another file a moment later, and must be looked at again.
+            if (PINNED.Values.Contains(hash, StringComparer.Ordinal))
+                HASHES[path] = hash;
+
             return hash;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

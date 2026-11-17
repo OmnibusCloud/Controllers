@@ -48,16 +48,27 @@ internal sealed class WitActivityAdapterVerifyPreflight : WitActivityAdapterFunc
 
         var runtimeIds = parsed.Tasks.Select(task => task.RuntimeId).Distinct(StringComparer.Ordinal).ToList();
         report.RuntimeIds = runtimeIds;
-        report.UnknownRuntimeIds = runtimeIds.Where(id => VerifyRuntimeCatalog.Find(id) == null).ToList();
+        report.UnknownRuntimeIds = VerifyTasksetChecks.UnknownRuntimes(parsed.Tasks);
         foreach (var unknown in report.UnknownRuntimeIds)
-            report.Messages.Add($"runtime '{unknown}' is not known to this build.");
+            report.Messages.Add($"runtime '{unknown}' is not known to this build: the taskset would be refused.");
+
+        if (VerifyTasksetChecks.SetsWallTime(parsed.Tasks, options))
+            report.Messages.Add(VerifyTasksetChecks.WALL_TIME_NOTE);
 
         if (parsed.Tasks.Count > 0)
         {
             var plan = VerifyTasksetPlanner.Plan(parsed.Tasks, options);
             report.BatchCount = plan.Batches.Count;
             report.Messages.AddRange(plan.Notes);
+            report.Messages.AddRange(plan.Errors);
+
+            // What Split would refuse is not well formed.
+            if (plan.Errors.Count > 0)
+                report.WellFormed = false;
         }
+
+        if (report.UnknownRuntimeIds.Count > 0)
+            report.WellFormed = false;
 
         if (!pool.TrySetValue(activity.ReturnReference, report))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");

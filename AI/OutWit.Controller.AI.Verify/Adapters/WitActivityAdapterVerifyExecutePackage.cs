@@ -15,6 +15,16 @@ namespace OutWit.Controller.AI.Verify.Adapters;
 
 internal sealed class WitActivityAdapterVerifyExecutePackage : WitActivityAdapterFunction<WitActivityVerifyExecutePackage>
 {
+    #region Constants
+
+    /// <summary>
+    /// What a failure of the node's own says to whoever reads the job's status: fixed words. What
+    /// happened is in the node's log; an exception's own text can name a folder of the node.
+    /// </summary>
+    private const string NODE_FAILURE = "Verify: this node could not run the package for a reason of its own (its log says which)";
+
+    #endregion
+
     #region Fields
 
     /// <summary>
@@ -46,44 +56,79 @@ internal sealed class WitActivityAdapterVerifyExecutePackage : WitActivityAdapte
         if (!pool.TryGetValue(activity.Package, out VerifyTaskPackageData? package) || package == null)
             throw new InvalidOperationException("Failed to get parameter 'Package'.");
 
-        if (package.TasksBlobId == Guid.Empty)
-            throw new InvalidOperationException("The package names no task blob.");
-
         // The job's token: a cancelled job leaves the queue at once and stops a running batch at
         // the next task boundary instead of burning the rest of the share on the node.
         var cancellationToken = ProcessingManager.CancellationToken(status.JobId);
-        var progress = VerifyDeliveryProgress.Enter(status.JobId, package, VerifyActivityProgressReporter.Create(ProcessingManager, status.JobId), Logger);
+
+        VerifyResultPackageData result;
+        try
+        {
+            VerifyPackageRunner.EnsureAcceptable(package);
+            result = await Run(package, status.JobId, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (VerifyBatchRefusedException refused)
+        {
+            // This node cannot do the package and knew it before it ran any of it: the platform
+            // gives it to another node. The reason travels; where on the node it lies does not.
+            Logger.LogWarning("Verify: this node refuses a package: {Reason} {Detail}", refused.Message, refused.NodeDetail ?? "");
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Verify: a package failed on this node");
+            throw new InvalidOperationException(NODE_FAILURE);
+        }
+
+        if (!pool.TrySetValue(activity.ReturnReference, result))
+            throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+    }
+
+    private async Task<VerifyResultPackageData> Run(VerifyTaskPackageData package, Guid jobId, CancellationToken cancellationToken)
+    {
+        var progress = VerifyDeliveryProgress.Enter(jobId, package, VerifyActivityProgressReporter.Create(ProcessingManager, jobId), Logger);
+        string? resultsPath = null;
 
         try
         {
             var path = await VerifyPackageTransfer.FetchAsync(BlobService, package, Logger, cancellationToken);
             progress.Received(package);
 
-            List<VerifyResultBatchData> results;
+            VerifyWrittenResults written;
 
             await EXECUTION.WaitAsync(cancellationToken);
             try
             {
                 var batches = await VerifyPackageTransfer.ReadTasksAsync(BlobService, package, path, Logger, cancellationToken);
-                results = await Task.Run(() => Execute(batches, progress, cancellationToken), cancellationToken);
+                var runtimesRoot = VerifyRuntimeLocator.Locate();
+
+                written = await Task.Run(
+                    () => VerifyPackageRunner.Run(package, batches, () => VerifySandboxHost.Instance, runtimesRoot, progress.TaskDone, Logger, cancellationToken),
+                    cancellationToken);
+                resultsPath = written.Path;
             }
             finally
             {
                 EXECUTION.Release();
             }
 
-            var result = await VerifyPackageTransfer.UploadResultsAsync(BlobService, results, Logger, cancellationToken);
-
-            if (!pool.TrySetValue(activity.ReturnReference, result))
-                throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+            return await VerifyPackageTransfer.UploadResultsAsync(BlobService, written.Path, package.Ticket, written.Results, written.Batches, Logger, cancellationToken);
         }
         finally
         {
+            VerifyPackageRunner.TryDelete(resultsPath);
             progress.Leave();
         }
     }
 
-    /// <summary>Measures this node's throughput on the reference workload; a node without runtimes or with a failing sandbox reports the default (unranked) score.</summary>
+    /// <summary>
+    /// Measures this node's throughput on the reference workload; a node without runtimes, with
+    /// one that does not pass its pin, or with a failing sandbox reports the default (unranked)
+    /// score: it would refuse the packages it was given, so it should not be given a share.
+    /// </summary>
     /// <param name="options">The engine's benchmark options.</param>
     /// <param name="cancellationToken">Cancels the measurement.</param>
     /// <returns>The rate in tasks per second at the node's degree.</returns>
@@ -95,6 +140,16 @@ internal sealed class WitActivityAdapterVerifyExecutePackage : WitActivityAdapte
             // No language runtimes on this node: report the default (unranked) score instead of
             // failing the registration, the CalculiX precedent for a missing solver.
             Logger.LogWarning("Verify.ExecutePackage benchmark: language runtimes not found - reporting the default score.");
+            return WitBenchmarkResult.Default;
+        }
+
+        // The reference workload runs two runtimes; a share may bring any of them.
+        foreach (var runtimeId in VerifyRuntimeCatalog.KnownIds)
+        {
+            if (VerifyRuntimeCatalog.Resolve(runtimesRoot, runtimeId, out var reason, out var detail) != null)
+                continue;
+
+            Logger.LogWarning("Verify.ExecutePackage benchmark: runtime {Runtime} cannot be used on this node ({Reason} {Detail}) - reporting the default score.", runtimeId, reason, detail ?? "");
             return WitBenchmarkResult.Default;
         }
 
@@ -127,24 +182,6 @@ internal sealed class WitActivityAdapterVerifyExecutePackage : WitActivityAdapte
         return pool.TryGetValue(activity.Package, out VerifyTaskPackageData? package) && package != null
             ? Math.Max(1, package.TaskCount)
             : 1.0;
-    }
-
-    #endregion
-
-    #region Tools
-
-    private static List<VerifyResultBatchData> Execute(IReadOnlyList<VerifyTaskBatchData> batches, VerifyDeliveryProgress progress, CancellationToken cancellationToken)
-    {
-        var runtimesRoot = VerifyRuntimeLocator.Locate();
-        var results = new List<VerifyResultBatchData>(batches.Count);
-
-        foreach (var batch in batches)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            results.Add(VerifyBatchExecutor.Execute(VerifySandboxHost.Instance, runtimesRoot, batch, (_, _) => progress.TaskDone(), cancellationToken));
-        }
-
-        return results;
     }
 
     #endregion

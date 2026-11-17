@@ -6,6 +6,8 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// Process-wide sandbox, shared by every Verify node activity so a runtime module is
 /// compiled once per process (the expensive step) and reused across batches — the same
 /// singleton-adapter caching discipline the other controllers use for heavy state.
+/// A sandbox that could not be made is tried again at the next use: what kept it from starting
+/// (a library that was still being unpacked) need not last as long as the process does.
 /// </summary>
 public static class VerifySandboxHost
 {
@@ -17,7 +19,9 @@ public static class VerifySandboxHost
 
     #region Fields
 
-    private static readonly Lazy<VerifyWasmSandbox> s_instance = new(Create);
+    private static readonly object s_lock = new();
+
+    private static VerifyWasmSandbox? s_instance;
 
     private static IWitTempStorage? s_tempStorage;
 
@@ -52,8 +56,22 @@ public static class VerifySandboxHost
 
     #region Properties
 
-    /// <summary>The process-wide sandbox, created on first use.</summary>
-    public static VerifyWasmSandbox Instance => s_instance.Value;
+    /// <summary>The process-wide sandbox, created on first use and, when that failed, at the next one.</summary>
+    /// <exception cref="InvalidOperationException">The sandbox cannot start: the message says why, in fixed words.</exception>
+    public static VerifyWasmSandbox Instance
+    {
+        get
+        {
+            var instance = Volatile.Read(ref s_instance);
+            if (instance != null)
+                return instance;
+
+            lock (s_lock)
+            {
+                return s_instance ??= Create();
+            }
+        }
+    }
 
     #endregion
 }

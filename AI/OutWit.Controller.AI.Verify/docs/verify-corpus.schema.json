@@ -2,21 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-corpus.schema.json",
   "title": "Verify outputs line",
-  "description": "One line of the outputs blob of VerifyRun and of the corpus blob of VerifyGenerate and VerifyGenerateAndCheck (the candidates): JSON lines, one object per task, ordered by index, outputs verbatim. Byte-identical for a taskset.",
+  "description": "One line of the outputs blob of VerifyRun and of the corpus blob of VerifyGenerate and VerifyGenerateAndCheck (the candidates): JSON lines, one object per task, ordered by index, outputs verbatim. Byte-identical for a taskset, as long as every node did its work and told the truth. A task the nodes could not settle (NoResult, Disputed) has a line too, with empty stdout and stderr.",
   "type": "object",
   "required": ["index", "verdict", "exit", "stdout", "stderr"],
   "additionalProperties": false,
   "properties": {
     "index": { "type": "integer" },
-    "verdict": { "type": "string" },
-    "exit": { "type": "integer" },
-    "stdout": { "type": "string" },
-    "stdout_truncated": { "type": "boolean", "const": true, "description": "Present only when stdout hit its cap." },
+    "verdict": { "type": "string", "description": "A verdict name of the report (verify-report.schema.json), NoResult and Disputed included." },
+    "exit": { "type": "integer", "description": "Exit code; -1 for a task without an accepted result." },
+    "reason": {
+      "type": "string",
+      "enum": ["wall_clock", "node_fault", "no_answer"],
+      "description": "Present only for NoResult: why the task has no result, as in the report."
+    },
+    "stdout": { "type": "string", "description": "What the program printed, up to the task's stdout cap. For a task with a suite, the last case's stdout." },
+    "stdout_truncated": { "type": "boolean", "const": true, "description": "Present only when stdout hit its cap. Nothing past the cap is kept: the write that passes it ends the run." },
     "stderr": { "type": "string" },
-    "stderr_truncated": { "type": "boolean", "const": true, "description": "Present only when stderr hit its cap." },
+    "stderr_truncated": { "type": "boolean", "const": true, "description": "Present only when stderr hit its cap. What came after was dropped, and the run went on." },
     "cases": {
       "type": "array",
-      "description": "Present when the task has a suite: one entry per case, in suite order. The task's own stdout is then empty; each case has its own.",
+      "description": "Present when the task has a suite: one entry per case, in suite order, each with its own stdout. The task's own stdout is then the last case's.",
       "items": {
         "type": "object",
         "required": ["case", "passed", "verdict", "exit", "stdout"],
@@ -26,7 +31,7 @@
           "passed": { "type": "boolean" },
           "verdict": { "type": "string" },
           "exit": { "type": "integer" },
-          "stdout": { "type": "string", "description": "What the program printed in this case, capped by the task's stdout limit." }
+          "stdout": { "type": "string", "description": "What the program printed in this case. The cases of a task share its stdout cap: a case keeps what the cases before it left, and one that prints after the cap is spent keeps nothing and is OutputExceeded." }
         }
       }
     }
