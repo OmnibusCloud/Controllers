@@ -15,6 +15,7 @@ internal sealed class WitActivityAdapterVerifySplit : WitActivityAdapterFunction
     #region Constants
 
     private const int SHOWN_PROBLEMS = 5;
+    private const string SPOOL_FOLDER = "tasks";
 
     #endregion
 
@@ -43,7 +44,8 @@ internal sealed class WitActivityAdapterVerifySplit : WitActivityAdapterFunction
         // The taskset is read a line at a time and its tasks wait in working files of the
         // server's own until their packages are stored: memory holds a task, a batch and a
         // package, whatever the taskset's size.
-        using var spool = new VerifyTaskSpool(Path.Combine(VerifyAdapterTools.WorkFolder(Services), Guid.NewGuid().ToString("N")));
+        using var work = new VerifyWorkFolder(Services);
+        using var spool = new VerifyTaskSpool(Path.Combine(work.Path, SPOOL_FOLDER));
 
         VerifyTasksetScan scan;
         await using (var taskset = VerifyAdapterTools.OpenTaskset(tasksetPath))

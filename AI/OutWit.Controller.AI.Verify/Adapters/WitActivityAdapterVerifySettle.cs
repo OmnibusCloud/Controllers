@@ -38,7 +38,8 @@ internal sealed class WitActivityAdapterVerifySettle : WitActivityAdapterFunctio
             ? null
             : (VerifyAdapterTools.TaskPackages(pool, activity.Disputes, "Disputes"), VerifyAdapterTools.ResultPackages(pool, activity.Settled, "Settled"));
 
-        var (ledgerPath, summary) = await VerifySettlement.SettleAsync(fanOut, repair, dispute, BlobService, VerifyAdapterTools.WorkFolder(Services));
+        using var work = new VerifyWorkFolder(Services);
+        var (ledgerPath, summary) = await VerifySettlement.SettleAsync(fanOut, repair, dispute, BlobService, work.Path);
         try
         {
             Logger.LogInformation(

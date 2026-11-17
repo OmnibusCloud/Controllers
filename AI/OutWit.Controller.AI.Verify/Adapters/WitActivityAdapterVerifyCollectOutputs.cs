@@ -38,7 +38,7 @@ internal sealed class WitActivityAdapterVerifyCollectOutputs : WitActivityAdapte
 
         // The outputs can be as large as the run: they go from the ledger to a file and from the
         // file to the blob store, never through memory as a whole.
-        var blobId = await VerifyAdapterTools.UploadDocumentAsync(BlobService, VerifyAdapterTools.WorkFolder(Services), ledgerPath, VerifyLedger.OUTPUTS, BLOB_NAME);
+        var blobId = await VerifyAdapterTools.UploadDocumentAsync(BlobService, Services, ledgerPath, VerifyLedger.OUTPUTS, BLOB_NAME);
 
         if (!pool.TrySetValue(activity.ReturnReference, blobId))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");

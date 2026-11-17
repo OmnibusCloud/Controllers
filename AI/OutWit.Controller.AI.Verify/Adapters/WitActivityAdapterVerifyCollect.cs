@@ -38,7 +38,7 @@ internal sealed class WitActivityAdapterVerifyCollect : WitActivityAdapterFuncti
 
         // The report was written when the run was settled; it is handed out here as it is, from
         // the ledger to a file to the blob store: it has a record a task.
-        var reportBlobId = await VerifyAdapterTools.UploadDocumentAsync(BlobService, VerifyAdapterTools.WorkFolder(Services), ledgerPath, VerifyLedger.REPORT, BLOB_NAME);
+        var reportBlobId = await VerifyAdapterTools.UploadDocumentAsync(BlobService, Services, ledgerPath, VerifyLedger.REPORT, BLOB_NAME);
 
         if (!pool.TrySetValue(activity.ReturnReference, reportBlobId))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
