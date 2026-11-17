@@ -662,7 +662,7 @@ task's three copies are the majority, and win.
   - The repair and dispute rounds and the check tasks of generate-and-check are made the same way, a package at a time.
   - The four documents are written to files as they are made and handed out file to blob. The server keeps a small record a task (its index, and for each execution what is compared), never a task's text, its outputs or a document.
 - **Measured (0.14.0, the controller's load test, the server and three nodes in one process on a development desktop):** 100,000 tasks of 2 KiB each, a taskset of 202 MiB, a twentieth of the packages run twice.
-  - It ran in 190 s. The managed heap rose by 20 MiB at the most while the taskset was split and by 66 MiB over the whole run; the process's working set peaked at 362 MiB.
+  - What was live on the managed heap (read after a full collection, four times a second) rose by 2 MiB at the most while the taskset was split and by 45 MiB over the whole run; the heap as it stood, garbage included, by 20 MiB and 65 MiB; the process's working set peaked at 356 MiB. The run took three to five minutes there and under a minute on the build server's Linux machine.
   - 1,562 task packages (0.93 MB of blobs) and 1,641 result packages (1.04 MB).
   - The largest message to a node, its whole share: 547 references, 126,357 bytes. The largest single request: 231 bytes. All three shares together: 379,071 bytes; what the nodes returned: 237,945 bytes.
   - The job's variables: the list of task packages 360,822 bytes, the list of result packages 237,945 bytes, everything else a few words.

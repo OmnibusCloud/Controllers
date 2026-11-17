@@ -20,7 +20,8 @@ the version proven on the test fleet. Not yet released to nuget.org or the live 
   preflight answers (32 messages of a kind, 240 characters each).
 - Nothing that grows with the taskset is read whole into memory: a taskset is read a line at
   a time and stored a package at a time, and the documents are written to files as they are
-  made. A run of 100,000 tasks from a 202 MiB taskset raised the managed heap by 66 MiB.
+  made. A run of 100,000 tasks from a 202 MiB taskset held 45 MiB at the most on the managed
+  heap, server and nodes together.
 - A taskset the schema allowed is cut into the same packages and gives the same documents as
   under 0.13.0.
 
@@ -243,9 +244,11 @@ never a task's text, its outputs or a document.
 
 Measured by the controller's load test (0.14.0; the server and three nodes in
 one process on a development desktop): 100,000 tasks of 2 KiB each, a taskset of
-202 MiB, a twentieth of the packages run twice, 190 s. The managed heap rose by
-20 MiB at the most while the taskset was split and by 66 MiB over the whole run
-(working set 362 MiB at its highest). The run was 1,562 task packages and 1,641
+202 MiB, a twentieth of the packages run twice. What was live on the managed
+heap (read after a full collection, four times a second) rose by 2 MiB at the
+most while the taskset was split and by 45 MiB over the whole run; the heap as
+it stood, garbage included, by 20 MiB and 65 MiB; the working set was 356 MiB
+at its highest. The run was 1,562 task packages and 1,641
 result packages, about a megabyte of blobs each way. The largest message to a
 node, its whole share of 547 packages, was 126,357 bytes; the largest single
 request 231 bytes. The job's two lists of references were 360,822 and 237,945

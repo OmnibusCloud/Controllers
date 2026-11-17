@@ -17,9 +17,12 @@ namespace OutWit.Controller.AI.Verify.Tests.Load;
 /// <item>The taskset is 200 MiB and is never in memory: it is made as it is written to its blob.</item>
 /// <item>What a share carries to a node and what a node returns is measured on the door of the
 /// rig's nodes (<see cref="VerifyMeasuringNodesManager"/>), as the bytes it has on the wire.</item>
-/// <item>The managed heap and the process's working set are sampled every few milliseconds for
-/// the whole run. The rig holds the server and three nodes in one process, so the high-water
-/// mark is an upper bound for either side.</item>
+/// <item>The managed heap and the process's working set are read for the whole run
+/// (<see cref="VerifyMemoryMeter"/>): the heap as it stands every few milliseconds, and what is
+/// live after a full collection four times a second. The first is an upper bound that follows
+/// the collector's mood on the machine; the second is what the run holds, and what the bounds
+/// are put on. The rig holds the server and three nodes in one process, so the high-water mark
+/// is an upper bound for either side.</item>
 /// </list>
 /// The one thing that still grows with the taskset in a message is the list of package
 /// references a job carries (Grid.ForEach fans out over a collection): one reference a package,
@@ -37,16 +40,19 @@ public sealed class VerifyScaleLoadTests : VerifyScriptTestBase
     private const int BATCH_SIZE = 64;
     private const double SAMPLING = 0.05;
     private const int SAMPLE_EVERY_MS = 10;
+    private const int LIVE_EVERY_MS = 250;
 
     private const long KIBIBYTE = 1024;
     private const long MEBIBYTE = 1024 * KIBIBYTE;
 
     // The bounds the run is held to. A reference to a package is some two hundred bytes on the
-    // wire; the split of a 200 MiB taskset may keep a line, a batch and a package; the whole
-    // process, server and nodes together, stays far below the taskset it works through twice.
+    // wire. Of a 200 MiB taskset the split may hold a line, a batch, a package and a bit an
+    // index (2 MiB were measured); the whole process, server and nodes together, a record a
+    // task and an execution and the results of a batch (45 MiB were measured). Both are bounds
+    // on what is live, with room for another machine's habits and far under the taskset.
     private const long MAX_REFERENCE_BYTES = 320;
-    private const long MAX_SPLIT_HEAP_BYTES = 128 * MEBIBYTE;
-    private const long MAX_RUN_HEAP_BYTES = 512 * MEBIBYTE;
+    private const long MAX_SPLIT_LIVE_BYTES = 32 * MEBIBYTE;
+    private const long MAX_RUN_LIVE_BYTES = 128 * MEBIBYTE;
     private const int PLATFORM_VALUE_BYTES = 64;
 
     #endregion
@@ -96,7 +102,7 @@ public sealed class VerifyScaleLoadTests : VerifyScriptTestBase
         using var process = Process.GetCurrentProcess();
         var workingSetBefore = process.WorkingSet64;
 
-        using var meter = new VerifyMemoryMeter(SAMPLE_EVERY_MS, () => m_nodes.FirstShareAt != null);
+        using var meter = new VerifyMemoryMeter(SAMPLE_EVERY_MS, LIVE_EVERY_MS, () => m_nodes.FirstShareAt != null);
         var clock = Stopwatch.StartNew();
         var status = await Engine.ScheduleAndWaitAsync(job, tasksetBlob, new VerifyOptionsData { BatchSize = BATCH_SIZE, SamplingRate = SAMPLING });
         clock.Stop();
@@ -128,15 +134,17 @@ public sealed class VerifyScaleLoadTests : VerifyScriptTestBase
         var summary = report.RootElement.GetProperty("summary");
         var sampled = integrity.RootElement.GetProperty("summary");
 
-        var splitHeap = meter.PeakHeapBeforeMark - heapBefore;
-        var runHeap = meter.PeakHeap - heapBefore;
+        var splitLive = meter.PeakLiveBeforeMark - heapBefore;
+        var runLive = meter.PeakLive - heapBefore;
 
         TestContext.Out.WriteLine($"""
             {TASKS} tasks ({tasksetBytes / MEBIBYTE} MiB of taskset) in batches of {BATCH_SIZE}, sampling {SAMPLING}: {clock.Elapsed.TotalSeconds:F1} s end to end, {TASKS / clock.Elapsed.TotalSeconds:F0} tasks/s
-            memory, the server and three nodes in one process:
-              managed heap, high-water mark while the taskset was split: {splitHeap / MEBIBYTE} MiB above the start ({meter.PeakHeapBeforeMark / MEBIBYTE} MiB)
-              managed heap, high-water mark of the whole run:            {runHeap / MEBIBYTE} MiB above the start ({meter.PeakHeap / MEBIBYTE} MiB)
-              working set, high-water mark of the whole run:             {meter.PeakWorkingSet / MEBIBYTE} MiB ({workingSetBefore / MEBIBYTE} MiB at the start), {meter.Samples} samples
+            memory, the server and three nodes in one process ({heapBefore / MEBIBYTE} MiB live at the start):
+              live on the managed heap, high-water mark while the taskset was split: {splitLive / MEBIBYTE} MiB above the start
+              live on the managed heap, high-water mark of the whole run:            {runLive / MEBIBYTE} MiB above the start ({meter.LiveSamples} readings after a full collection)
+              managed heap as it stood, garbage included, while the taskset was split: {(meter.PeakHeapBeforeMark - heapBefore) / MEBIBYTE} MiB above the start
+              managed heap as it stood, garbage included, over the whole run:          {(meter.PeakHeap - heapBefore) / MEBIBYTE} MiB above the start ({meter.Samples} readings)
+              working set, high-water mark of the whole run:                           {meter.PeakWorkingSet / MEBIBYTE} MiB ({workingSetBefore / MEBIBYTE} MiB at the start)
             what travels in messages:
               to nodes:   {m_nodes.Shares} shares, {m_nodes.Requests} requests, {m_nodes.SentBytes} bytes in all; the largest share {m_nodes.LargestShareBytes} bytes in {m_nodes.LargestShareRequests} requests; the largest request {m_nodes.LargestRequestBytes} bytes
               from nodes: {m_nodes.ReturnedBytes} bytes in all; the largest return of a share {m_nodes.LargestReturnBytes} bytes
@@ -173,10 +181,12 @@ public sealed class VerifyScaleLoadTests : VerifyScriptTestBase
                 "everything else a job carries is a few words");
             Assert.That(packages.Bytes + results.Bytes, Is.LessThan(tasksetBytes / 100), "the references are a small part of a per cent of the taskset");
 
-            // Nothing of the taskset is read whole: the split of 200 MiB keeps a line, a batch and
-            // a package, and the whole run stays far below the taskset.
-            Assert.That(splitHeap, Is.LessThan(MAX_SPLIT_HEAP_BYTES), "the managed heap while the taskset is split");
-            Assert.That(runHeap, Is.LessThan(MAX_RUN_HEAP_BYTES), "the managed heap of the whole run, server and nodes together");
+            // Nothing of the taskset is read whole: of 200 MiB the split holds a line, a batch and
+            // a package, and the whole run a record a task. (As one string the taskset alone is
+            // 400 MiB live.)
+            Assert.That(splitLive, Is.LessThan(MAX_SPLIT_LIVE_BYTES), "what is live while the taskset is split");
+            Assert.That(runLive, Is.LessThan(MAX_RUN_LIVE_BYTES), "what is live over the whole run, server and nodes together");
+            Assert.That(meter.LiveSamples, Is.GreaterThan(20), "the run was measured, not glanced at");
         });
     }
 
