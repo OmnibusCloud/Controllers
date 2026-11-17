@@ -45,7 +45,8 @@ public sealed class CorpusRuntimeDiagnosticsTests
             Assert.That(diagnostics.LanguageModelFormat, Is.EqualTo("WITLID2"), "the format of the reference language pack");
             Assert.That(diagnostics.ReferenceLanguageModelSha256, Is.EqualTo(CorpusReferenceLanguageModel.SHA256));
             Assert.That(diagnostics.PublicOrigins, Is.EqualTo(new[] { "data.commoncrawl.org" }));
-            Assert.That(diagnostics.MachineOrigins, Is.EqualTo(new[] { "data.lab.example", "mirror.lab.example" }));
+            Assert.That(diagnostics.MachineOrigins, Is.Empty, "the operator's own host names are not returned to whoever runs the diagnostics");
+            Assert.That(diagnostics.MachineOriginCount, Is.EqualTo(2), "how many, not which");
             Assert.That(diagnostics.MaxShardBytes, Is.EqualTo(1L << 30));
             Assert.That(diagnostics.DownloadsPerNode, Is.EqualTo(2));
             Assert.That(diagnostics.MemoryPerShardBytes, Is.EqualTo(256L * 1024 * 1024));
@@ -71,6 +72,7 @@ public sealed class CorpusRuntimeDiagnosticsTests
         var diagnostics = CorpusRuntimeDiagnosticsBuilder.Build(ShardOriginPolicy.Parse(null));
 
         Assert.That(diagnostics.MachineOrigins, Is.Empty);
+        Assert.That(diagnostics.MachineOriginCount, Is.Zero);
     }
 
     [Test]

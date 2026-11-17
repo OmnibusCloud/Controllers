@@ -236,7 +236,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
             {
                 Assert.That(warcStatus.Result, Is.EqualTo(WitProcessingResult.Failed), warcStatus.ToString());
                 Assert.That(fetches, Is.EqualTo(1), "the server's size probe and nothing else: no node fetched a byte of a batch it could not finish");
-                Assert.That(warcStatus.ToString(), Does.Not.Contain("no sandbox in this test"), "what leaves a node is a fixed sentence, not the reason's text");
+                Assert.That(Describe(warcStatus), Does.Not.Contain("no sandbox in this test"), "what leaves a node is a fixed sentence, not the reason's text");
                 Assert.That(wetStatus.Result, Is.EqualTo(WitProcessingResult.Completed), wetStatus.ToString());
             });
         }

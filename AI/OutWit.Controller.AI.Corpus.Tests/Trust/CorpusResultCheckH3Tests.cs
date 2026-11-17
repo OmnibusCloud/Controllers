@@ -34,6 +34,9 @@ public sealed class CorpusResultCheckH3Tests
         ("null source URL", result => result.SourceUrl = null!),
         ("null runtime target", result => result.RuntimeTarget = null!),
         ("null node name", result => result.NodeName = null!),
+        ("a node name, which no result carries", result => result.NodeName = "contributors-laptop"),
+        ("a megabyte of node name", result => result.NodeName = new string('n', 1 << 20)),
+        ("a node id, which no result carries", result => result.NodeId = Guid.NewGuid()),
         ("null statistics", result => result.Stats = null),
         ("a drop rule nobody has", result => result.Stats!.Drops = [Count("made_up_rule", 1)]),
         ("a language that is no code", result => result.Stats!.Languages = [Count("C:\\Users\\someone", 5)]),
@@ -58,6 +61,7 @@ public sealed class CorpusResultCheckH3Tests
         ("a megabyte of URL", result => result.SourceUrl = new string('u', 1 << 20)),
         ("a PDF count below zero", result => result.Stats!.Pdf = new CorpusPdfStatsData { In = 1, Pages = -1 }),
         ("more PDFs extracted than met", result => result.Stats!.Pdf = new CorpusPdfStatsData { In = 1, Extracted = 2 }),
+        ("more PDF fuel than a shard may burn", result => result.Stats!.Pdf = new CorpusPdfStatsData { In = 1, Fuel = OutWit.Controller.AI.Corpus.Pdf.PdfStageLimits.SHARD_FUEL + OutWit.Controller.AI.Corpus.Pdf.PdfStageLimits.FUEL + 1 }),
         ("signatures without parameters", result => result.SignaturesSha256 = CorpusTestRun.Hash('b')),
         ("MinHash parameters nobody can use", result => { result.MinHash = new CorpusMinHashData { Hashes = 100, ShingleWords = 5, Bands = 16 }; result.SignaturesSha256 = CorpusTestRun.Hash('b'); }),
         ("a ticket that is no ticket", result => result.Ticket = "DEADBEEF")

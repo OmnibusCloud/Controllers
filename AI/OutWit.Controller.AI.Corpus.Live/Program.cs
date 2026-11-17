@@ -231,7 +231,7 @@ public static class Program
         Console.WriteLine($"  stages      : {string.Join(" > ", d.Stages)}; fingerprint {d.StageSetSha256[..Math.Min(12, d.StageSetSha256.Length)]}… {(d.StagesVerified ? "verified" : "DIFFERS FROM THE PIN")}");
         Console.WriteLine($"  parsers     : {d.HtmlParser}; {d.Compressor}");
         Console.WriteLine($"  language    : {d.LanguageModelFormat}, reference model {d.ReferenceLanguageModelSha256[..Math.Min(12, d.ReferenceLanguageModelSha256.Length)]}…");
-        Console.WriteLine($"  origins     : {string.Join(", ", d.PublicOrigins)}" + (d.MachineOrigins.Count > 0 ? $"; the server's operator lists {string.Join(", ", d.MachineOrigins)}" : ""));
+        Console.WriteLine($"  origins     : {string.Join(", ", d.PublicOrigins)}" + (d.MachineOriginCount > 0 ? $"; the server's operator lists {d.MachineOriginCount} more" : ""));
         Console.WriteLine($"  caps        : shard {d.MaxShardBytes / BYTES_PER_MIB:F0} MB, {d.DownloadsPerNode} download(s) per node, {d.MemoryPerShardBytes / BYTES_PER_MIB:F0} MB per shard in flight");
 
         var capabilities = (await handle.WaitAsync<Guid?>(CAPABILITIES, pollInterval: POLL_INTERVAL)).Result;
@@ -290,14 +290,22 @@ public static class Program
         if (summary.TryGetProperty("output", out var output))
             Console.WriteLine($"             output: {output.GetString()}");
 
+        // What the results rest on (corpus-report/3): how many shards one machine alone answered
+        // for, and everything that did not go the plain way.
+        if (summary.TryGetProperty("single_execution", out var single))
+            Console.WriteLine($"             trust: {single.GetInt32()} shard(s) rest on one execution; rejected results {summary.GetProperty("rejected_results").GetInt32()}, " +
+                              $"repairs {summary.GetProperty("repairs").GetInt32()}, disputes {summary.GetProperty("disputes").GetInt32()} (resolved {summary.GetProperty("disputes_resolved").GetInt32()})");
+
         var hashes = new List<string>();
         foreach (var shard in root.GetProperty("shards").EnumerateArray())
         {
             var stats = shard.GetProperty("stats");
             var line = stats.ValueKind == JsonValueKind.Null
-                ? shard.GetProperty("error").GetString()
+                ? (shard.TryGetProperty("reason", out var reason) ? reason.GetString() : shard.GetProperty("error").GetString())
                 : $"{stats.GetProperty("documents_out").GetInt32()} docs, {stats.GetProperty("bytes_fetched").GetInt64() / (1024.0 * 1024.0):F1} MB, fetch {stats.GetProperty("fetch_ms").GetInt32() / 1000.0:F1} s, process {stats.GetProperty("process_ms").GetInt32() / 1000.0:F1} s" +
                   (stats.TryGetProperty("wait_ms", out var wait) ? $", wait {wait.GetInt32() / 1000.0:F1} s" : "");
+            if (shard.TryGetProperty("faults", out var faults))
+                line += $" (node faults: {string.Join(", ", faults.EnumerateArray().Select(fault => fault.GetString()))})";
             Console.WriteLine($"    [{shard.GetProperty("index").GetInt32(),3}] {shard.GetProperty("verdict").GetString(),-19} {line}");
             hashes.Add($"{shard.GetProperty("index").GetInt32()}:{shard.GetProperty("content_sha256").GetString()}");
         }
@@ -309,24 +317,55 @@ public static class Program
     {
         using var document = JsonDocument.Parse(bytes);
         var summary = document.RootElement.GetProperty("summary");
-        Console.WriteLine($"  integrity: {document.RootElement.GetProperty("schema").GetString()}, sampled {summary.GetProperty("sampled").GetInt32()}, compared {summary.GetProperty("compared").GetInt32()}, " +
-                          $"version skew {summary.GetProperty("version_skew").GetInt32()}, " +
+        var root = document.RootElement;
+        Console.WriteLine($"  integrity: {root.GetProperty("schema").GetString()}, sampled {summary.GetProperty("sampled").GetInt32()}, compared {summary.GetProperty("compared").GetInt32()}, " +
                           $"incomplete {(summary.TryGetProperty("incomplete", out var incomplete) ? incomplete.GetInt32() : 0)}, mismatches {summary.GetProperty("mismatches").GetInt32()}" +
                           (summary.TryGetProperty("signatures_compared", out var signatures)
                               ? $"; signatures compared {signatures.GetInt32()}, signature mismatches {summary.GetProperty("signature_mismatches").GetInt32()}"
                               : ""));
 
-        foreach (var pair in document.RootElement.GetProperty("pairs").EnumerateArray())
+        // corpus-integrity/5: what was dropped on arrival, what was sent out again, what three machines settled.
+        if (summary.TryGetProperty("rejected_results", out var rejected))
         {
-            var outcome = pair.TryGetProperty("incomplete", out var unfinished) && unfinished.GetBoolean()
-                ? $"incomplete (a side did not finish: {pair.GetProperty("primary").GetProperty("verdict").GetString()} / {pair.GetProperty("replica").GetProperty("verdict").GetString()})"
-                : !pair.GetProperty("compared").GetBoolean()
-                    ? "version skew"
-                    : pair.GetProperty("match").GetBoolean()
-                        ? "match" + (pair.TryGetProperty("signatures", out var signed) && signed.GetString() == "none" ? " (no signatures made)" : "")
-                        : $"MISMATCH ({string.Join(",", pair.GetProperty("differs").EnumerateArray().Select(d => d.GetString()))})";
-            Console.WriteLine($"    [{pair.GetProperty("index").GetInt32(),3}] {outcome}");
+            var reasons = root.TryGetProperty("rejected", out var byReason)
+                ? string.Join(", ", byReason.EnumerateObject().Select(reason => $"{reason.Name} {reason.Value.GetInt32()}"))
+                : "";
+            Console.WriteLine($"             rejected results {rejected.GetInt32()}{(reasons.Length > 0 ? $" ({reasons})" : "")}; node faults {summary.GetProperty("node_faults").GetInt32()}, " +
+                              $"repairs {summary.GetProperty("repairs").GetInt32()} (repaired {summary.GetProperty("repaired").GetInt32()}), no result {summary.GetProperty("no_result").GetInt32()}; " +
+                              $"disputes {summary.GetProperty("disputes").GetInt32()} (resolved {summary.GetProperty("disputes_resolved").GetInt32()}, disputed {summary.GetProperty("disputed").GetInt32()})");
         }
+
+        foreach (var pair in root.GetProperty("pairs").EnumerateArray())
+        {
+            var outcome = !pair.GetProperty("compared").GetBoolean()
+                ? $"incomplete (a side is no result: {Side(pair.GetProperty("primary"))} / {Side(pair.GetProperty("replica"))})"
+                : pair.GetProperty("match").GetBoolean()
+                    ? "match" + (pair.TryGetProperty("signatures", out var signed) && signed.GetString() == "none" ? " (no signatures made)" : "")
+                    : $"MISMATCH ({string.Join(",", pair.GetProperty("differs").EnumerateArray().Select(d => d.GetString()))})";
+            Console.WriteLine($"    [{pair.GetProperty("index").GetInt32(),3}] {outcome}{(pair.TryGetProperty("dispute", out _) ? " -> dispute" : "")}");
+        }
+
+        if (root.TryGetProperty("disputes", out var disputes))
+        {
+            foreach (var dispute in disputes.EnumerateArray())
+                Console.WriteLine($"    [{dispute.GetProperty("index").GetInt32(),3}] dispute {dispute.GetProperty("outcome").GetString()}: {string.Join(" / ", dispute.GetProperty("results").EnumerateArray().Select(Side))}");
+        }
+
+        if (root.TryGetProperty("no_result", out var unanswered))
+        {
+            foreach (var shard in unanswered.EnumerateArray())
+                Console.WriteLine($"    [{shard.GetProperty("index").GetInt32(),3}] no result ({shard.GetProperty("reason").GetString()}): {string.Join(", ", shard.GetProperty("faults").EnumerateArray().Select(fault => fault.GetString()))}");
+        }
+    }
+
+    /// <summary>One returned value of a shard as the integrity document states it: a verdict with the head of its content hash, or the code of a fault or a rejection.</summary>
+    private static string Side(JsonElement side)
+    {
+        if (side.TryGetProperty("kind", out var kind) && kind.GetString() != "execution")
+            return $"{kind.GetString()} {side.GetProperty("code").GetString()}";
+
+        var hash = side.GetProperty("content_sha256").GetString() ?? "";
+        return $"{side.GetProperty("verdict").GetString()}{(hash.Length >= 8 ? $" {hash[..8]}" : "")}";
     }
 
     private static async Task SaveAsync(RunOptions options, string name, byte[] bytes)

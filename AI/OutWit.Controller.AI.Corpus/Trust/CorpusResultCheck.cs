@@ -50,7 +50,8 @@ public static class CorpusResultCheck
             || !Enum.IsDefined(result.Output)
             || result.TaskIndex < 0
             || result.Degree is < 0 or > MAX_DEGREE
-            || result.NodeName == null
+            || result.NodeId != Guid.Empty
+            || result.NodeName is not { Length: 0 }
             || result.SourceUrl == null || result.SourceUrl.Length > MAX_URL_CHARS
             || !CorpusText.IsName(result.ControllerVersion, MAX_LABEL_CHARS, VERSION_MARKS)
             || !CorpusText.IsName(result.RuntimeTarget, MAX_LABEL_CHARS, TARGET_MARKS, allowEmpty: true)
@@ -130,7 +131,9 @@ public static class CorpusResultCheck
     {
         return pdf.In > 0 && pdf.Truncated >= 0 && pdf.Truncated <= pdf.In
                && pdf.Extracted >= 0 && pdf.Extracted <= pdf.In
-               && pdf.Pages >= 0 && pdf.Documents >= 0 && pdf.PagesCut >= 0 && pdf.RunningLines >= 0 && pdf.Fuel >= 0;
+               && pdf.Pages >= 0 && pdf.Documents >= 0 && pdf.PagesCut >= 0 && pdf.RunningLines >= 0
+               // A shard's PDFs stop being run once their fuel together is spent: no honest sum passes it by a whole budget.
+               && pdf.Fuel >= 0 && pdf.Fuel <= Pdf.PdfStageLimits.SHARD_FUEL + Pdf.PdfStageLimits.FUEL;
     }
 
     /// <summary>A list of named counts as the node's statistics builder writes one: names known, in ordinal order (so none twice), counts above zero.</summary>
