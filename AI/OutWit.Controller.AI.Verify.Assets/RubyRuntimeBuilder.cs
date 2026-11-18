@@ -76,7 +76,7 @@ internal static class RubyRuntimeBuilder
             }
             else if (path.StartsWith(LIBRARY_PREFIX, StringComparison.Ordinal))
             {
-                Write(entry, Path.Combine(treeDir, Local(path)));
+                Write(entry, ArchivePaths.Under(treeDir, path));
                 libraryFiles++;
             }
             else if (path.StartsWith(GEMS_PREFIX, StringComparison.Ordinal))
@@ -93,7 +93,7 @@ internal static class RubyRuntimeBuilder
                 var inGem = inGems[(slash + 1)..];
                 if (inGem.StartsWith("lib/", StringComparison.Ordinal))
                 {
-                    Write(entry, Path.Combine(treeDir, Local(path)));
+                    Write(entry, ArchivePaths.Under(treeDir, path));
                     gemFiles++;
                 }
                 else if (GEM_LICENCE_FILES.Contains(inGem, StringComparer.Ordinal))
@@ -110,11 +110,6 @@ internal static class RubyRuntimeBuilder
 
         licences.Sort(StringComparer.Ordinal);
         return new RubyRuntimeSummary(libraryFiles, gemFiles, licences);
-    }
-
-    private static string Local(string archivePath)
-    {
-        return archivePath.Replace('/', Path.DirectorySeparatorChar);
     }
 
     private static void Write(TarEntry entry, string destination)

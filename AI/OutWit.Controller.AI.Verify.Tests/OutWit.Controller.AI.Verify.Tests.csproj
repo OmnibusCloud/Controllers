@@ -29,6 +29,11 @@
                       ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
+  <!-- The asset tool: the tests hold what it refuses of an archive it unpacks (VerifyAssetArchiveTests). -->
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify.Assets\OutWit.Controller.AI.Verify.Assets.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <ExcludedControllerModule Include="render.module" />
     <ExcludedControllerModule Include="renderdcc.module" />

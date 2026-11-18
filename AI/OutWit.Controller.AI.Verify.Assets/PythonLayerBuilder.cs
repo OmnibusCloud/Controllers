@@ -107,7 +107,14 @@ internal static class PythonLayerBuilder
         Console.WriteLine($"  compiled {compiled} modules with the pinned interpreter ({warnings} compiler message line(s))");
     }
 
-    private static void ExtractPackage(string wheel, string package, string destination)
+    /// <summary>
+    /// Unpacks one package's files out of a wheel.
+    /// </summary>
+    /// <param name="wheel">The wheel.</param>
+    /// <param name="package">The package's folder inside the wheel.</param>
+    /// <param name="destination">The folder to unpack into.</param>
+    /// <exception cref="InvalidDataException">The wheel holds an entry that names a place outside the folder.</exception>
+    internal static void ExtractPackage(string wheel, string package, string destination)
     {
         using var archive = ZipFile.OpenRead(wheel);
         var prefix = package + "/";
@@ -116,7 +123,7 @@ internal static class PythonLayerBuilder
             if (!entry.FullName.StartsWith(prefix, StringComparison.Ordinal) || entry.FullName.EndsWith('/'))
                 continue;
 
-            var target = Path.Combine(destination, entry.FullName.Replace('/', Path.DirectorySeparatorChar));
+            var target = ArchivePaths.Under(destination, entry.FullName);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             entry.ExtractToFile(target, overwrite: true);
         }
