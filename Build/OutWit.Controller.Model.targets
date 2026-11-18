@@ -28,6 +28,19 @@
           DestinationFolder="$(ControllerModuleOutputDir)"
           SkipUnchangedFiles="true"
           OverwriteReadOnlyFiles="true" />
+    <ItemGroup>
+      <ControllerStagedFile Include="@(ModelModuleFile->'$(ControllerModuleOutputDir)%(Filename)%(Extension)')" />
+    </ItemGroup>
   </Target>
+
+  <!-- The build's account of what it staged (see OutWit.Controller.Staging.targets): the
+       controller's zip and package are made from the records, so what this project puts into
+       a module is recorded here, and a file it stops staging is removed by its next build.
+       A Model that stages into another module as well adds those files to ControllerStagedFile
+       in a target that runs BeforeTargets="ControllerRecordStaged". -->
+  <PropertyGroup>
+    <ControllerStagingTarget>ModelPostBuild</ControllerStagingTarget>
+  </PropertyGroup>
+  <Import Project="$(MSBuildThisFileDirectory)OutWit.Controller.Staging.targets" />
 
 </Project>

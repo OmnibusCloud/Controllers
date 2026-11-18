@@ -921,12 +921,19 @@ library per platform in the .NET layout its `deps.json` describes:
 ```
 verify.module/
   OutWit.Controller.AI.Verify.dll, .deps.json, controller.json
-  OutWit.Controller.AI.Verify.Model.dll
+  OutWit.Controller.AI.Verify.Model.dll, .deps.json
   Wasmtime.Dotnet.dll                      staged by the build
+  THIRD-PARTY-NOTICES.txt                  the notice of that one assembly
   runtimes/<rid>/native/                   wasmtime, one data asset per RID
   wasm/                                    the language runtime modules, one data asset
   wasm/python-3.14.6-numpy-2.5.4/          the numpy runtime, a data asset of its own
 ```
+
+The first four lines are the module: the seven files the build stages, and the only ones the
+package ships under `content/module/`. The build keeps a record of what it staged and makes
+the package, the module's zip and the manifest's content digest from that record, not from
+whatever the staging folder holds: a copy of the natives or of a runtime kept there for local
+runs stays where it is and is not packed. The three folders reach a node as data assets.
 
 Two load modes meet this layout. An isolated plugin load context (the server,
 the module-load test) resolves the library through the module's `deps.json`.
@@ -1065,10 +1072,16 @@ stacks off`, and a release is cut from a commit whose Windows job states the
 first.
 
 What the controller hands on and what guards its way to a node have tests of
-their own: `VerifyRedistributedFilesTests` (the module, the package's
-`content/module`, each runtime folder and each native library folder against
-a pinned list of files, and every file against its folder's notices),
-`VerifyAssetArchiveTests` (the asset tool refuses an archive entry that names
+their own: `VerifyRedistributedFilesTests` (the module as the build recorded
+it, its zip, the package's `content/module`, each runtime folder and each
+native library folder against a pinned list of files, and every file against
+its folder's notices), `VerifyBindingNoticeTests` (what the module's notices
+say of `Wasmtime.Dotnet.dll`, line by line, against the package the build
+restored and the file the module carries), `ControllerStagingTests` (the
+shared build files on a solution of their own: a build records what it
+stages, removes only what it staged itself and no longer does, and packs what
+it recorded, so a file put into a module folder by hand is neither lost nor
+shipped), `VerifyAssetArchiveTests` (the asset tool refuses an archive entry that names
 a place outside its folder), `VerifySupplyChainTests` (the workflows and the
 build files, read as text: modules compared with a rebuild before a merge,
 archives held to their pins, actions by commit, no floating version, a

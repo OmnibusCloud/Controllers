@@ -29,6 +29,7 @@ public sealed class VerifyRedistributedFilesTests
     private const string PACKAGE_MODULE = "content/module/";
     private const string THIRD_PARTY_ASSEMBLY = "Wasmtime.Dotnet.dll";
     private const string RELEASE_SCHEME = "gh-release://";
+    private const string RECORDS_FOLDER = ".staged";
 
     // The module: what the build stages and the package ships under content/module/.
     private static readonly string[] MODULE =
@@ -98,12 +99,53 @@ public sealed class VerifyRedistributedFilesTests
     {
         var module = StagedModule();
 
-        // Its own files: what an earlier run left in a folder of it is not the module (the
-        // package test below is where such a folder would be noticed).
-        var files = Directory.GetFiles(module).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
+        // The module is what the build's records say it staged (Build/OutWit.Controller.Staging.targets):
+        // the zip and the package are made from that list. A file somebody put into the folder
+        // is not the module and does not ship, so it is not looked for here.
+        var records = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(module)!)!, RECORDS_FOLDER, VerifyRigModules.Configuration);
+        Assert.That(Directory.Exists(records), Is.True, $"the build's records of what it staged at '{records}'");
 
-        Assert.That(files, Is.EqualTo(MODULE.Order(StringComparer.Ordinal)),
-            "the module's files are not the pinned ones: a file that is added goes onto the list here and, when it is another's work, into the module's THIRD-PARTY-NOTICES.txt");
+        var staged = Directory.GetFiles(records, "*.txt")
+            .SelectMany(File.ReadAllLines)
+            .Where(line => line.StartsWith(VerifyRigModules.VERIFY + "/", StringComparison.Ordinal))
+            .Select(line => line.Split('\t')[0][(VerifyRigModules.VERIFY.Length + 1)..])
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(staged, Is.EqualTo(MODULE.Order(StringComparer.Ordinal)),
+                "the files the build staged into the module are not the pinned ones: a file that is added goes onto the list here and, when it is another's work, into the module's THIRD-PARTY-NOTICES.txt");
+
+            foreach (var file in staged)
+                Assert.That(File.Exists(Path.Combine(module, file)), Is.True, $"{file} is recorded as staged and is not in the module");
+        });
+    }
+
+    [Test]
+    public void M9TheZipHoldsThePinnedFilesOfTheModuleTest()
+    {
+        // The module's zip (a server's seed in local set-ups) is made from the same records.
+        // Beyond them it holds only what lies under a folder one of the declared data assets
+        // extracts to, where a copy for local runs may be kept.
+        var zip = Path.Combine(SolutionRoot(), "@Zips", VerifyRigModules.Configuration, "verify.zip");
+        Assert.That(File.Exists(zip), Is.True, $"the build makes the module's zip at '{zip}'");
+
+        var assetFolders = XDocument.Load(Path.Combine(SolutionRoot(), "AI", PROJECT_FOLDER, PROJECT_FOLDER + ".csproj"))
+            .Descendants("ControllerDataAsset").Select(asset => ((string?)asset.Element("ExtractTo") ?? "").Trim('/') + "/").Distinct().ToArray();
+
+        using var archive = ZipFile.OpenRead(zip);
+        var own = archive.Entries.Select(entry => entry.FullName)
+            .Where(name => !assetFolders.Any(folder => name.StartsWith(folder, StringComparison.Ordinal)))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(assetFolders, Is.EquivalentTo(new[] { "runtimes/win-x64/native/", "runtimes/linux-x64/native/", "runtimes/osx-arm64/native/", "wasm/", "wasm/python-3.14.6-numpy-2.5.4/" }),
+                "the folders the controller's data assets extract to");
+            Assert.That(own, Is.EqualTo(MODULE.Order(StringComparer.Ordinal)), "the zip does not hold exactly the module's pinned files");
+        });
     }
 
     [Test]
@@ -129,8 +171,9 @@ public sealed class VerifyRedistributedFilesTests
     public void M9ThePackageShipsThePinnedFilesOfTheModuleTest()
     {
         // The package is made by a Release build; what it ships under content/module/ is what a
-        // server unpacks and a node is sent. A folder left in the staged module by an earlier
-        // run (natives, runtimes) would be packed with it.
+        // server unpacks and a node is sent: the files the build's records list, whatever else
+        // lies in the staged folder (natives or runtimes an earlier run left there used to be
+        // packed with the module).
         var project = Path.Combine(SolutionRoot(), "AI", PROJECT_FOLDER);
         var version = (string?)XDocument.Load(Path.Combine(project, PROJECT_FOLDER + ".csproj")).Descendants("Version").FirstOrDefault();
         var package = Path.Combine(project, "bin", VerifyRigModules.Configuration, $"{PROJECT_FOLDER}.{version}.nupkg");
@@ -149,9 +192,7 @@ public sealed class VerifyRedistributedFilesTests
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        Assert.That(shipped, Is.EqualTo(MODULE.Order(StringComparer.Ordinal)),
-            "the package does not ship exactly the module's pinned files. A file under a folder (runtimes/, wasm/) was left in the staged module " +
-            "by an earlier run and packed with it: delete that folder of the staged module and build again");
+        Assert.That(shipped, Is.EqualTo(MODULE.Order(StringComparer.Ordinal)), "the package does not ship exactly the module's pinned files");
 
         using var packed = zip.GetEntry(PACKAGE_MODULE + NOTICES)!.Open();
         Assert.That(Sha256(packed), Is.EqualTo(Sha256(Path.Combine(project, NOTICES))), "the package ships the committed notices");

@@ -1,0 +1,70 @@
+<!--
+    Build/OutWit.Controller.Staging.targets
+    Imported by OutWit.Controller.targets and OutWit.Controller.Model.targets: every project
+    that stages files into a controller module ($(SolutionDir)@Controllers/<Cfg>/<name>.module/).
+
+    A module folder is written by several projects (the controller, its Model, sometimes the
+    Model of another controller) and is also where people keep things they put there by hand:
+    a copy of Blender or of ParaView for local runs, a file to try. The build does not own the
+    folder, so it keeps an account of its own part of it:
+
+      1. A project records what its build staged, in @Controllers/.staged/<Cfg>/<project>.txt
+         (outside the module folders, so the record is never part of a module).
+      2. The next build of that project removes from the modules only what its record lists
+         and it no longer stages: an assembly that was renamed, a resource that was deleted.
+         A file that no record lists is never removed, whoever put it there.
+      3. A module is, for everything that leaves the machine, the files the records list. The
+         content digest, the zip and the package (OutWit.Controller.targets) are made from that
+         list and not from the folder, so a file that merely lies there cannot ship.
+
+    How a target stages more files: it copies them, adds every DESTINATION to the item
+    ControllerStagedFile, and runs BeforeTargets="ControllerRecordStaged". A target that copies
+    into a module without that is not recorded: its files stay where they are and are left
+    out of the zip and the package.
+
+    The importing file sets ControllerStagingTarget (the target after which the record is
+    written) and, for a controller, ControllerRecordModuleDir (its own module folder).
+-->
+<Project>
+
+  <UsingTask TaskName="OutWit.Controller.Build.RecordControllerStagedFiles" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <Task>
+      <Code Type="Class" Language="cs" Source="$(MSBuildThisFileDirectory)OutWit.Controller.StagedFiles.cs" />
+    </Task>
+  </UsingTask>
+
+  <PropertyGroup>
+    <ControllerModulesRoot>$(SolutionDir)@Controllers\$(Configuration)\</ControllerModulesRoot>
+    <ControllerStagedRecordsDir>$(SolutionDir)@Controllers\.staged\$(Configuration)\</ControllerStagedRecordsDir>
+  </PropertyGroup>
+
+  <!-- Writes this project's record, removes what its last build staged and nobody stages now,
+       and (for a controller) returns the module's files:
+         ControllerModuleStagedFile     every file of the module by the records, with the
+                                        metadata ModulePath (its path inside the module);
+         ControllerModulePackedFile     the same without Resources/, which the package leaves out;
+         ControllerModuleDataAssetFile  what lies under a folder a declared data asset extracts
+                                        to (ExtractTo) and no record lists: a copy for local
+                                        runs. The zip keeps it, as it always did; the package
+                                        never carries a data asset. -->
+  <Target Name="ControllerRecordStaged" AfterTargets="$(ControllerStagingTarget)">
+    <ItemGroup>
+      <_ControllerProjectReferenceAssembly Include="@(ReferencePath)" Condition="'%(ReferencePath.ReferenceSourceTarget)' == 'ProjectReference'" />
+      <_ControllerDataAssetFolder Include="%(ControllerDataAsset.ExtractTo)" Condition="'%(ControllerDataAsset.Identity)' != ''" />
+    </ItemGroup>
+    <RecordControllerStagedFiles Staged="@(ControllerStagedFile)"
+                                 ModulesRoot="$(ControllerModulesRoot)"
+                                 RecordsDirectory="$(ControllerStagedRecordsDir)"
+                                 Project="$(MSBuildProjectFullPath)"
+                                 ModuleDirectory="$(ControllerRecordModuleDir)"
+                                 DataAssetFolders="@(_ControllerDataAssetFolder)"
+                                 PackExcludedFolders="Resources"
+                                 ProjectReferenceAssemblies="@(_ControllerProjectReferenceAssembly)">
+      <Output TaskParameter="Removed" ItemName="ControllerUnstagedFile" />
+      <Output TaskParameter="ModuleFiles" ItemName="ControllerModuleStagedFile" />
+      <Output TaskParameter="PackedFiles" ItemName="ControllerModulePackedFile" />
+      <Output TaskParameter="DataAssetFiles" ItemName="ControllerModuleDataAssetFile" />
+    </RecordControllerStagedFiles>
+  </Target>
+
+</Project>

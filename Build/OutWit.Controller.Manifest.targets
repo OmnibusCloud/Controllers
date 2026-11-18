@@ -116,10 +116,13 @@
        main assembly, a companion Model's assembly (staged by its own project first, it is a
        ProjectReference), Resources/. Runs before the zip and before the nupkg collects the
        module. The digest leaves out Resources/ because the nupkg does; WitCloud computes the
-       same value over the archive it seeds and warns when the two differ. -->
+       same value over the archive it seeds and warns when the two differ. It is taken over
+       the files the package ships (ControllerModulePackedFile, from the build's records of
+       what it staged), so a file that merely lies in the folder is no part of it. -->
   <Target Name="ControllerStampManifest"
           AfterTargets="ControllerPostBuild;ControllerStageSourceResources"
           BeforeTargets="ControllerPackZip;ControllerPackModuleContents"
+          DependsOnTargets="ControllerRecordStaged"
           Condition="Exists('$(ControllerModuleOutputDir)controller.json')">
     <Exec Command="git rev-parse --short=10 HEAD" ConsoleToMSBuild="true" ContinueOnError="true" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low" WorkingDirectory="$(MSBuildProjectDirectory)">
       <Output TaskParameter="ConsoleOutput" PropertyName="_ControllerGitCommit" />
@@ -137,6 +140,8 @@
     <StampControllerManifest ModuleDirectory="$(ControllerModuleOutputDir)"
                              ManifestFile="$(ControllerModuleOutputDir)controller.json"
                              Build="$(ControllerBuildStamp)"
+                             Files="@(ControllerModulePackedFile)"
+                             ListedFilesOnly="true"
                              ExcludedFolders="Resources">
       <Output TaskParameter="ContentDigest" PropertyName="ControllerContentDigest" />
     </StampControllerManifest>
