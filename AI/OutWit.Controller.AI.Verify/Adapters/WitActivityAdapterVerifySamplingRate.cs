@@ -13,7 +13,7 @@ internal sealed class WitActivityAdapterVerifySamplingRate : WitActivityAdapterF
     #region Constructors
 
     public WitActivityAdapterVerifySamplingRate(IWitProcessingManager processingManager, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, VerifyLoggerGuarded.Wrap(logger))
     {
     }
 

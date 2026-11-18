@@ -22,7 +22,7 @@ internal sealed class WitActivityAdapterVerifyCollectOutputs : WitActivityAdapte
     #region Constructors
 
     public WitActivityAdapterVerifyCollectOutputs(IWitProcessingManager processingManager, IWitBlobService blobService, IServiceProvider services, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, VerifyLoggerGuarded.Wrap(logger))
     {
         BlobService = blobService;
         Services = services;
