@@ -195,8 +195,22 @@ public sealed class CorpusModuleNoticesM7Tests
         {
             Assert.That(entries.Keys.Order(StringComparer.Ordinal), Is.EqualTo(files), $"{what} holds the module's files and no other");
             foreach (var file in files.Where(entries.ContainsKey))
-                Assert.That(Sha256(Read(entries[file])), Is.EqualTo(Sha256(File.ReadAllBytes(Path.Combine(Module, file)))), $"{what}: {file} is the staged one (an archive of an older build would differ)");
+            {
+                // The manifest is stamped with the time of every staging (a pack stages again): it is
+                // held to what it says of the content, every other file to its bytes.
+                if (file == MANIFEST)
+                    Assert.That(ContentDigest(Read(entries[file])), Is.EqualTo(ContentDigest(File.ReadAllBytes(Path.Combine(Module, file)))), $"{what}: the manifest names the staged module's content");
+                else
+                    Assert.That(Sha256(Read(entries[file])), Is.EqualTo(Sha256(File.ReadAllBytes(Path.Combine(Module, file)))), $"{what}: {file} is the staged one (an archive of an older build would differ)");
+            }
         });
+    }
+
+    /// <summary>The content digest and the version a manifest states: the identity of a module's build.</summary>
+    private static string ContentDigest(byte[] manifest)
+    {
+        using var document = JsonDocument.Parse(manifest);
+        return $"{document.RootElement.GetProperty("version").GetString()} {document.RootElement.GetProperty("contentDigest").GetString()}";
     }
 
     private static List<string> Files(string folder)
