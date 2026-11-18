@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Diagnostics;
 using System.Text;
 using OutWit.Controller.AI.Corpus.Benchmark;
@@ -45,9 +46,9 @@ public sealed class CorpusScalingDiagnosticsTests
     [Test]
     public void PrintRealStageProfileTest()
     {
-        var fixtures = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures");
-        var golden = File.ReadAllBytes(Path.Combine(fixtures, "cc-main-2026-43-00000-head.warc.wet.gz"));
-        var model = OutWit.Controller.AI.Corpus.Language.LanguageModel.Load(Path.Combine(fixtures, "language-pack-cc-2026-43-16.bin"));
+        // The profile of real pages: the head of a real WET file, fetched by range.
+        var golden = File.ReadAllBytes(CorpusFixtures.PathOf(CorpusFixtures.CRAWL_WET));
+        var model = OutWit.Controller.AI.Corpus.Language.LanguageModel.Load(CorpusFixtures.PathOf(CorpusFixtures.PACK));
         var identifier = new OutWit.Controller.AI.Corpus.Language.LanguageIdentifier(model);
 
         var records = new List<string>();

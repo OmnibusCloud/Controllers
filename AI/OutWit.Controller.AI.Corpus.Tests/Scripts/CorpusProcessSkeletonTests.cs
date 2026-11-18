@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Text.Json;
 using OutWit.Controller.AI.Corpus.Compression;
 using OutWit.Controller.AI.Corpus.Language;
@@ -12,7 +13,7 @@ namespace OutWit.Controller.AI.Corpus.Tests.Scripts;
 /// <summary>
 /// The distributed gate: the bundled CorpusProcess.wit through the engine (Corpus.Split →
 /// Grid.ForEach ⇒ Corpus.ProcessShard → Corpus.Collect, blob transport, mock in-process nodes,
-/// a loopback origin) turns the golden shards into products whose content hashes equal a direct
+/// a loopback origin) turns the generated shards into products whose content hashes equal a direct
 /// run's — the Pattern U pipeline end to end; and CorpusPreflight.wit reports a manifest's health.
 /// </summary>
 [TestFixture]
@@ -21,9 +22,9 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string WARC_FIXTURE = CorpusFixtures.WARC;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
 
     #endregion
 
@@ -66,7 +67,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
     }
 
     [Test]
-    public async Task GoldenShardsFlowThroughTheEngineTest()
+    public async Task TheShardsFlowThroughTheEngineTest()
     {
         var manifestBlob = await UploadAsync(Manifest(WET_FIXTURE, WARC_FIXTURE), "manifest.json");
 
@@ -92,15 +93,15 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
         var tasks = TasksOf(job.Variables["tasks"].Value).OrderBy(t => t.TaskIndex).ToList();
         Assert.That(tasks.Select(t => t.Source!.SizeBytes), Is.EqualTo(new[]
         {
-            new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length,
-            new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WARC_FIXTURE)).Length
+            new FileInfo(CorpusFixtures.PathOf(WET_FIXTURE)).Length,
+            new FileInfo(CorpusFixtures.PathOf(WARC_FIXTURE)).Length
         }));
 
         // The identity: each shard's content hash through the engine equals a direct run's.
-        var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", MODEL_FIXTURE));
+        var model = LanguageModel.Load(CorpusFixtures.PathOf(MODEL_FIXTURE));
         foreach (var (fixture, format, index) in new[] { (WET_FIXTURE, CorpusSourceFormat.Wet, 0), (WARC_FIXTURE, CorpusSourceFormat.Warc, 1) })
         {
-            using var shard = File.OpenRead(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", fixture));
+            using var shard = File.OpenRead(CorpusFixtures.PathOf(fixture));
             var direct = new ShardProcessor(new CorpusPipelineData { Version = "e2e-v1" }, model).Process(shard, format, new MemoryStream(), new MemoryStream());
 
             var reported = shards.Single(s => s.GetProperty("index").GetInt32() == index);
@@ -268,7 +269,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
     {
         // A truncated pack: Split refuses the job before a task exists (no node ever answers
         // PipelineUnavailable for it), and Preflight names the reason.
-        var pack = await File.ReadAllBytesAsync(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", MODEL_FIXTURE));
+        var pack = await File.ReadAllBytesAsync(CorpusFixtures.PathOf(MODEL_FIXTURE));
         var broken = await BlobService.UploadBytesAsync(pack[..(pack.Length / 2)], "broken-pack.bin");
         var manifest = await UploadAsync(Manifest(WET_FIXTURE), "manifest.json");
         var before = Origin.Requests;
@@ -310,7 +311,7 @@ public sealed class CorpusProcessSkeletonTests : CorpusScriptTestBase
             Assert.That(goodStatus.Result, Is.EqualTo(WitProcessingResult.Completed));
             Assert.That(goodReport.WellFormed, Is.True, string.Join(" | ", goodReport.Messages));
             Assert.That(goodReport.TaskCount, Is.EqualTo(1));
-            Assert.That(goodReport.EstimatedFetchBytes, Is.EqualTo(new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length), "a source without a size is probed at the origin");
+            Assert.That(goodReport.EstimatedFetchBytes, Is.EqualTo(new FileInfo(CorpusFixtures.PathOf(WET_FIXTURE)).Length), "a source without a size is probed at the origin");
             Assert.That(goodReport.UnsizedSources, Is.Zero, "the origin's answer is the shard's size from then on");
             Assert.That(goodReport.Messages, Has.Some.Contains("1 source(s) without a size answered"));
 

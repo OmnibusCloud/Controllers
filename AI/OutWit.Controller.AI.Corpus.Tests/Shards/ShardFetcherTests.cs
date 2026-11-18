@@ -15,7 +15,7 @@ public sealed class ShardFetcherTests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
 
     #endregion
 
@@ -32,7 +32,7 @@ public sealed class ShardFetcherTests
     [OneTimeSetUp]
     public void Setup()
     {
-        m_origin = new CorpusTestOrigin(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures"));
+        m_origin = new CorpusTestOrigin(CorpusFixtures.Folder);
         m_fetcher = new ShardFetcher(ShardFetchPolicy.Immediate, CorpusTestOrigin.Policy);
         m_directory = Path.Combine(Path.GetTempPath(), $"witai_corpus_fetch_{Guid.NewGuid():N}");
         Directory.CreateDirectory(m_directory);
@@ -54,7 +54,7 @@ public sealed class ShardFetcherTests
     public async Task RedirectInsideTheAllowlistIsFollowedTest()
     {
         var destination = Path.Combine(m_directory, "hop.gz");
-        var expected = new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length;
+        var expected = new FileInfo(CorpusFixtures.PathOf(WET_FIXTURE)).Length;
 
         // A relative and an absolute redirect, one after the other.
         var url = m_origin.HopUrl(m_origin.HopUrl($"/shards/{WET_FIXTURE}"));
@@ -130,7 +130,7 @@ public sealed class ShardFetcherTests
     public async Task ShardArrivesWholeTest()
     {
         var destination = Path.Combine(m_directory, "whole.gz");
-        var expected = await File.ReadAllBytesAsync(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE));
+        var expected = await File.ReadAllBytesAsync(CorpusFixtures.PathOf(WET_FIXTURE));
 
         var fetched = await m_fetcher.FetchAsync(new Uri(m_origin.ShardUrl(WET_FIXTURE)), destination, 0, CancellationToken.None);
 
@@ -145,7 +145,7 @@ public sealed class ShardFetcherTests
     public async Task TheCallerIsToldHowMuchHasArrivedTest()
     {
         var destination = Path.Combine(m_directory, "progress.gz");
-        var expected = new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length;
+        var expected = new FileInfo(CorpusFixtures.PathOf(WET_FIXTURE)).Length;
         var seen = new List<long>();
         var uri = new Uri(m_origin.ShardUrl(WET_FIXTURE));
 
@@ -164,7 +164,7 @@ public sealed class ShardFetcherTests
     public async Task AResumedFetchReportsFromWhereItContinuesTest()
     {
         var destination = Path.Combine(m_directory, "progress-resumed.gz");
-        var expected = new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length;
+        var expected = new FileInfo(CorpusFixtures.PathOf(WET_FIXTURE)).Length;
         var seen = new List<long>();
         var uri = new Uri(m_origin.CutUrl(WET_FIXTURE, 300_000));
 
@@ -200,7 +200,7 @@ public sealed class ShardFetcherTests
         var before = m_origin.Requests;
         var ranges = m_origin.RangeRequests;
         var destination = Path.Combine(m_directory, "resumed.gz");
-        var expected = await File.ReadAllBytesAsync(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE));
+        var expected = await File.ReadAllBytesAsync(CorpusFixtures.PathOf(WET_FIXTURE));
 
         var fetched = await m_fetcher.FetchAsync(new Uri(m_origin.CutUrl(WET_FIXTURE, 300_000)), destination, 0, CancellationToken.None);
 

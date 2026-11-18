@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Security.Cryptography;
 using OutWit.Controller.AI.Corpus.Diagnostics;
 using OutWit.Controller.AI.Corpus.Language;
@@ -19,8 +20,8 @@ public sealed class LanguagePackTests
 {
     #region Constants
 
-    private const string PACK_FIXTURE = "language-pack-cc-2026-43-16.bin";
-    private const string WITLID1_FIXTURE = "language-model-cc-2026-43-16.bin";
+    private const string PACK_FIXTURE = CorpusFixtures.PACK;
+    private const string WITLID1_FIXTURE = CorpusFixtures.WITLID1;
 
     /// <summary>SHA-256 over the reference pack's answers for the sentences below: label, runner-up, nearest profile, distance in ppm and the two flags of each.</summary>
     private const string ANSWERS_SHA256 = "647711cd88a7270f7133f3d5840d9084e15146cb9ad42b4ce899cba5a6a75bbc";
@@ -258,7 +259,7 @@ public sealed class LanguagePackTests
 
     private static string Fixture(string name)
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
+        return CorpusFixtures.PathOf(name);
     }
 
     #endregion

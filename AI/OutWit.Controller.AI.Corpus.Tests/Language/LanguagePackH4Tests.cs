@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Text;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Manifests;
@@ -16,8 +17,8 @@ public sealed class LanguagePackH4Tests
 {
     #region Constants
 
-    private const string PACK_FIXTURE = "language-pack-cc-2026-43-16.bin";
-    private const string MODEL_FIXTURE = "language-model-cc-2026-43-16.bin";
+    private const string PACK_FIXTURE = CorpusFixtures.PACK;
+    private const string MODEL_FIXTURE = CorpusFixtures.WITLID1;
 
     #endregion
 
@@ -275,7 +276,7 @@ public sealed class LanguagePackH4Tests
 
     private static string Fixtures()
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures");
+        return CorpusFixtures.Folder;
     }
 
     #endregion

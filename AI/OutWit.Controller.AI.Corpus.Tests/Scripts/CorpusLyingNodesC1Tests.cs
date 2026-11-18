@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Collections;
 using System.Text;
 using System.Text.Json;
@@ -22,8 +23,8 @@ public sealed class CorpusLyingNodesC1Tests : CorpusScriptTestBase
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
     private const int SHARDS = 4;
 
     private static readonly string FORGED_HASH = new('0', 64);
@@ -47,7 +48,7 @@ public sealed class CorpusLyingNodesC1Tests : CorpusScriptTestBase
         m_script = LoadScript("CorpusProcess.wit");
         m_modelBlob = await UploadFixtureAsync(MODEL_FIXTURE);
 
-        // Four listings of one golden shard: four tasks with one honest product.
+        // Four listings of one generated shard: four tasks with one honest product.
         m_manifestBlob = await UploadAsync(Manifest(Enumerable.Repeat(WET_FIXTURE, SHARDS).ToArray()), "manifest.json");
 
         var honest = await RunAsync(0, null);

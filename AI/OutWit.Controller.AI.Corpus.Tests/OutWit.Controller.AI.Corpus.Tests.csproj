@@ -40,12 +40,18 @@
     <PackageReference Include="Wasmtime" Version="48.0.2" />
   </ItemGroup>
 
-  <!-- Golden shards: the first complete gzip members of one Common Crawl WET and one WARC
-       file (CC-MAIN-2026-43, segment 1791170053823.21, file 00000), 1.5 MB each, committed;
-       and the language model corpus-assets trained from two WET files of the same crawl. -->
+  <!-- The fixtures. The two shards (*.gz) are generated: Mock/CrawlSynth writes them from the
+       text of Fixtures/synth (written for these tests), and a test holds the committed files to
+       the generator. No record of a real crawl is in the repository: the tests that need real
+       crawl data fetch it by range when they run and check it against the hashes of
+       crawl-heads.json (Mock/CorpusCrawlHeads; kept in @Data/crawl, gitignored). The two
+       language models (*.bin) are the ones corpus-assets built from WET files of
+       CC-MAIN-2026-43: n-gram profiles and rule data, no text of a page. -->
   <ItemGroup>
     <None Update="Fixtures\*.gz" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\*.bin" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\synth\*.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- The pinned native wasmtime library in place of the package's copy (the wasm host refuses any other). -->

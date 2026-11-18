@@ -8,9 +8,10 @@ using OutWit.Controller.AI.Corpus.Tests.Mock;
 namespace OutWit.Controller.AI.Corpus.Tests.Signatures;
 
 /// <summary>
-/// The MinHash parameters as pipeline knobs: the golden shards' signatures blobs under the
-/// default pipeline are pinned to the bytes Corpus 0.2.1 wrote, and the parameters left out,
-/// written out at their defaults, or with another band layout, change none of them; the text
+/// The MinHash parameters as pipeline knobs: the shards' signatures blobs under the default
+/// pipeline are pinned (the heads of a real crawl, the cases of the category <c>Crawl</c>, to
+/// the bytes Corpus 0.2.1 wrote), and the parameters left out, written out at their defaults,
+/// or with another band layout, change none of them; the text
 /// product does not depend on them; other parameters make a <c>WITSIG2</c> blob that says how it
 /// was made, its signatures the first functions of the same family; a value out of its range is
 /// refused by name.
@@ -20,15 +21,18 @@ public sealed class MinHashParametersTests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string WARC_FIXTURE = CorpusFixtures.WARC;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
 
-    /// <summary>The golden WET shard's signatures blob as Corpus 0.2.1 wrote it (211 documents, 216,076 bytes).</summary>
-    private const string GOLDEN_WET_SIGNATURES = "aa77d782313aba066db3054d44013b5c6d4b8b9a7004a90893acb963f93a1add";
+    /// <summary>The generated WET shard's signatures blob under the default pipeline (345 documents, 353,292 bytes).</summary>
+    private const string GOLDEN_WET_SIGNATURES = "017e539b07f36abe6ff9f5fd7ff7566825668b1697c6500f742c610146819ab9";
 
-    /// <summary>The golden WET shard's text product (the pin of <c>ShardProcessorTests</c>).</summary>
-    private const string GOLDEN_WET_PRODUCT = "5fd9af0b09764d3b017cf15c1338b56271faf9f0e857efa653c4dc71a2d3e74b";
+    /// <summary>The generated WET shard's text product (the pin of <c>ShardProcessorTests</c>).</summary>
+    private const string GOLDEN_WET_PRODUCT = "1a8e1ecb509fa6bb2174de5ef411261952c11d1e51debf68e098fb3eccb5c2cd";
+
+    /// <summary>The signatures blob of the head of a real WET file as Corpus 0.2.1 wrote it (211 documents, 216,076 bytes).</summary>
+    private const string CRAWL_WET_SIGNATURES = "aa77d782313aba066db3054d44013b5c6d4b8b9a7004a90893acb963f93a1add";
 
     private const string ARTICLE =
         "The committee reviewed the annual report in detail and approved the budget for the coming year. " +
@@ -55,9 +59,11 @@ public sealed class MinHashParametersTests
 
     #region Pin Tests
 
-    /// <summary>The signatures blobs of the golden shards under the default pipeline, as Corpus 0.2.1 wrote them.</summary>
+    /// <summary>The signatures blobs of the shards under the default pipeline; those of the real heads as Corpus 0.2.1 wrote them.</summary>
     [TestCase(WET_FIXTURE, CorpusSourceFormat.Wet, GOLDEN_WET_SIGNATURES)]
-    [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc, "e41a88f35141c9840f07f9decfb2f64c6bedf35e31eb09cc7e042d2f8bde998b")]
+    [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc, "2f8dc4897c5b861b2169f356701fad7fb4c4637c4f8b66676c2851856f6ad213")]
+    [TestCase(CorpusFixtures.CRAWL_WET, CorpusSourceFormat.Wet, CRAWL_WET_SIGNATURES, Category = CorpusFixtures.CRAWL)]
+    [TestCase(CorpusFixtures.CRAWL_WARC, CorpusSourceFormat.Warc, "e41a88f35141c9840f07f9decfb2f64c6bedf35e31eb09cc7e042d2f8bde998b", Category = CorpusFixtures.CRAWL)]
     public void GoldenSignaturesBlobIsPinnedTest(string fixture, CorpusSourceFormat format, string expected)
     {
         var (product, signatures) = Run(fixture, format, new CorpusPipelineData { Version = "test-v1" });
@@ -70,7 +76,7 @@ public sealed class MinHashParametersTests
         });
     }
 
-    /// <summary>The defaults written out, and another band layout (the merge's business, not the blob's), give the bytes of 0.2.1.</summary>
+    /// <summary>The defaults written out, and another band layout (the merge's business, not the blob's), give the pinned bytes.</summary>
     [TestCase(128, 5, 16)]
     [TestCase(0, 0, 0)]
     [TestCase(128, 5, 8)]
@@ -233,7 +239,7 @@ public sealed class MinHashParametersTests
 
     private static string Fixture(string name)
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
+        return CorpusFixtures.PathOf(name);
     }
 
     #endregion

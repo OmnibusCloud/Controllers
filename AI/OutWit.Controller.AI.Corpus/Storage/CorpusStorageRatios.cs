@@ -15,13 +15,16 @@ namespace OutWit.Controller.AI.Corpus.Storage;
 /// one machine (the same run under 0.1.13 gave exactly the fleet's products, shard by shard),
 /// left 399,862,409 bytes of text (0.3014 of the input; per shard 0.2822 to 0.3160) and
 /// 240,165 documents (189.8 per MiB; per shard 180.6 to 196.3), the language stage off a
-/// little less; four more full shards of other segments stayed inside both ranges. The golden
-/// WET head (1.5 MB) reaches 0.3528 of text with the language stage off, inside the row before
-/// its margin. Every other row is the golden shards (1.5 MB of WET, 1.5 MB of WARC) with the
-/// language stage on and off, the larger of the two. WARC has only the golden shard behind it.
+/// little less; four more full shards of other segments stayed inside both ranges. The two
+/// crawl heads are the first 1.5 MB of one WET file and of the WARC file it was converted from
+/// (CC-MAIN-2026-43, segment 1791170053823.21, file 00000; the tests fetch them by range and
+/// hold them to a hash, they are not in the repository). The WET head reaches 0.3528 of text
+/// with the language stage off, inside the row before its margin. Every other row is the two
+/// heads with the language stage on and off, the larger of the two. WARC has only its head
+/// behind it.
 /// </para>
 /// <para>
-/// Re-measured for 0.2.0 with the PDF stage on (2026-11-14): the golden WARC head, whose one PDF
+/// Re-measured for 0.2.0 with the PDF stage on (2026-11-14): the WARC head, whose one PDF
 /// now gives a document, reaches at most 0.0731 / 0.0861 / 0.0999 / 0.1450 of text per byte and
 /// 39.3 / 63.8 / 44.2 / 79.3 documents per MiB (the four WARC rows' settings, the language stage
 /// on or off, the larger), each inside its row with the margin; the whole WARC file 00000 of
@@ -29,8 +32,8 @@ namespace OutWit.Controller.AI.Corpus.Storage;
 /// quarter of the head's. The WARC rows stand.
 /// </para>
 /// <para>
-/// A change to a stage that makes products larger shows in the guard test over the golden
-/// shards (<c>CorpusStorageRatiosTests</c>): the table moves with it.
+/// A change to a stage that makes products larger shows in the guard test over the two crawl
+/// heads (<c>CorpusStorageRatiosTests</c>): the table moves with it.
 /// </para>
 /// </summary>
 public static class CorpusStorageRatios

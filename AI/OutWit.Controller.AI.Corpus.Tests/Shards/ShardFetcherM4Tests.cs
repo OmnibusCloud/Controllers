@@ -16,7 +16,7 @@ public sealed class ShardFetcherM4Tests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
 
     #endregion
 
@@ -212,7 +212,7 @@ public sealed class ShardFetcherM4Tests
 
     private static string Fixtures()
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures");
+        return CorpusFixtures.Folder;
     }
 
     #endregion

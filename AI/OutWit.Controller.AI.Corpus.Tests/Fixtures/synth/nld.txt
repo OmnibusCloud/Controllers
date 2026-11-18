@@ -1,0 +1,42 @@
+# Dutch. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Startpagina
+Nieuws
+Agenda
+Contact
+Over ons
+Openingstijden
+Marktdagen
+Weer
+[sentence]
+De bibliotheek gaat op maandag om negen uur open en sluit om zeven uur in de avond.
+De bakker op de hoek bakt elke ochtend vers brood voor de hele buurt.
+In het voorjaar bloeien de appelbomen langs de oude landweg.
+De veerboot vaart bij goed weer elke twintig minuten over de rivier.
+Na de lange winter zijn de paden in het park opnieuw aangelegd.
+De gemeenteraad heeft besloten de brug volgend jaar te vernieuwen.
+Op de markt verkopen de boeren groenten, kaas en honing uit de streek.
+De kinderen van de basisschool bezoeken vandaag het kleine museum aan de haven.
+Door de zware regen is de tunnel bij het station afgesloten.
+De klokkenmaker repareert al veertig jaar de klok van de kerk.
+In de herfst vegen de buren samen de bladeren van de stoep.
+De nieuwe buslijn verbindt het dorp met de stad en met het ziekenhuis.
+Op zaterdag geeft het jeugdkoor een concert in het dorpshuis.
+De boswachter laat de bezoekers de oudste eiken van het bos zien.
+Veel inwoners gaan met de fiets naar hun werk, omdat de straten smal zijn.
+De brandweer oefent elke maand aan de oever van het meer.
+In de werkplaats achter het gemeentehuis worden oude meubels zorgvuldig hersteld.
+De dokter heeft zijn praktijk verhuisd naar het huis naast de apotheek.
+Tijdens de vakantie blijft het zwembad tot laat in de avond open.
+De tuinvrouw plant rozen en lavendel voor de ingang van het station.
+Een nieuw fietspad loopt nu van het marktplein naar de molen.
+De postbode kent alle gezinnen in de straten van zijn wijk.
+In de avond komen de schakers bij elkaar in de leeszaal van de bibliotheek.
+Het water van de fontein wordt regelmatig door de gezondheidsdienst gecontroleerd.
+De juf legt de leerlingen uit hoe je een landkaart leest.
+In de winter ruimt de gemeente de sneeuw eerst van de hoofdstraten.
+De visser brengt zijn vangst vroeg in de ochtend naar de haven.
+De bewoners van de oude stad willen graag meer banken en bomen.
+Op de heuvel boven de stad staat een oude watertoren van baksteen.
+De vereniging zoekt vrijwilligers die bij het zomerfeest willen helpen.

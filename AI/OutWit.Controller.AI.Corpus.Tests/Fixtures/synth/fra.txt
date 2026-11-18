@@ -1,0 +1,42 @@
+# French. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Accueil
+Actualités
+Agenda
+Contact
+À propos
+Horaires
+Jours de marché
+Météo
+[sentence]
+La bibliothèque municipale ouvre le lundi à neuf heures et ferme à dix-neuf heures.
+Le boulanger du coin prépare chaque matin du pain frais pour tout le quartier.
+Au printemps, les pommiers fleurissent le long de la vieille route.
+Le bac traverse la rivière toutes les vingt minutes quand le temps est calme.
+Après le long hiver, les allées du parc ont été refaites.
+Le conseil municipal a décidé de rénover le pont l'année prochaine.
+Au marché, les fermiers vendent des légumes, du fromage et du miel de la région.
+Les élèves de l'école primaire visitent aujourd'hui le petit musée du port.
+À cause de la forte pluie, le passage sous la gare est fermé.
+L'horloger répare depuis quarante ans l'horloge de l'église.
+En automne, les voisins ramassent ensemble les feuilles sur les trottoirs.
+La nouvelle ligne de bus relie le village à la ville et à l'hôpital.
+Samedi, la chorale des jeunes donnera un concert dans la salle des fêtes.
+Le garde forestier montre aux visiteurs les plus vieux chênes de la forêt.
+Beaucoup d'habitants vont au travail à vélo parce que les rues sont étroites.
+Les pompiers s'entraînent chaque mois au bord du lac.
+Dans l'atelier derrière la mairie, on restaure avec soin de vieux meubles.
+Le médecin a installé son cabinet dans la maison à côté de la pharmacie.
+Pendant les vacances, la piscine reste ouverte jusqu'à la fin de la soirée.
+La jardinière plante des roses et de la lavande devant l'entrée de la gare.
+Une nouvelle piste cyclable mène maintenant de la place du marché au moulin.
+Le facteur connaît toutes les familles des rues de son secteur.
+Le soir, les joueurs d'échecs se retrouvent dans la salle de lecture.
+L'eau de la fontaine est contrôlée régulièrement par le service de santé.
+L'institutrice explique aux enfants comment lire une carte.
+En hiver, la commune dégage d'abord la neige des rues principales.
+Le pêcheur apporte sa pêche au port très tôt le matin.
+Les habitants de la vieille ville souhaitent plus de bancs et plus d'arbres.
+Sur la colline au-dessus de la ville se dresse un ancien château d'eau en brique.
+L'association cherche des bénévoles pour aider pendant la fête d'été.

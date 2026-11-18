@@ -1,0 +1,42 @@
+# Portuguese. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Início
+Notícias
+Agenda
+Contacto
+Quem somos
+Horários
+Dias de mercado
+O tempo
+[sentence]
+A biblioteca municipal abre na segunda-feira às nove horas e fecha às sete da noite.
+O padeiro da esquina prepara todas as manhãs pão fresco para o bairro inteiro.
+Na primavera, as macieiras florescem ao longo da velha estrada.
+A balsa atravessa o rio de vinte em vinte minutos quando o tempo está bom.
+Depois do longo inverno, os caminhos do parque foram arranjados.
+A câmara municipal decidiu renovar a ponte no próximo ano.
+No mercado, os agricultores vendem legumes, queijo e mel da região.
+Os alunos da escola visitam hoje o pequeno museu do porto.
+Por causa da chuva forte, a passagem debaixo da estação está fechada.
+O relojoeiro conserta há quarenta anos o relógio da igreja.
+No outono, os vizinhos apanham juntos as folhas dos passeios.
+A nova linha de autocarro liga a aldeia à cidade e ao hospital.
+No sábado haverá um concerto do coro juvenil no salão da aldeia.
+O guarda florestal mostra aos visitantes os carvalhos mais velhos da floresta.
+Muitos moradores vão para o trabalho de bicicleta porque as ruas são estreitas.
+Os bombeiros fazem exercícios todos os meses na margem do lago.
+Na oficina atrás da câmara, os móveis antigos são restaurados com cuidado.
+O médico mudou o seu consultório para a casa ao lado da farmácia.
+Durante as férias, a piscina fica aberta até à noite.
+A jardineira planta rosas e alfazema em frente à entrada da estação.
+Uma nova ciclovia vai agora da praça do mercado até ao moinho.
+O carteiro conhece todas as famílias das ruas da sua zona.
+À noite, os jogadores de xadrez encontram-se na sala de leitura.
+A água da fonte é analisada regularmente pelo serviço de saúde.
+A professora explica às crianças como se lê um mapa.
+No inverno, o município limpa primeiro a neve das ruas principais.
+O pescador leva o seu peixe ao porto muito cedo de manhã.
+Os moradores da cidade velha desejam mais bancos e mais árvores.
+Na colina acima da cidade ergue-se um velho depósito de água em tijolo.
+A associação procura voluntários para ajudar na festa de verão.

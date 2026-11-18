@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Text;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Text;
@@ -7,16 +8,18 @@ namespace OutWit.Controller.AI.Corpus.Tests.Language;
 
 /// <summary>
 /// The identifier counts and ranks n-grams packed into 64-bit keys; the trainer, the model
-/// format and the reference semantics use strings. On every document of the golden shard the
-/// two forms give the same counts, the same ranking and the same guess.
+/// format and the reference semantics use strings. On every document of the generated shard,
+/// and of the head of a real WET file (the cases of the category <c>Crawl</c>), the two forms
+/// give the same counts, the same ranking and the same guess.
 /// </summary>
 [TestFixture]
 public sealed class LanguagePackedParityTests
 {
-    [Test]
-    public void PackedCountsAndRankingEqualTheStringFormTest()
+    [TestCase(CorpusFixtures.WET)]
+    [TestCase(CorpusFixtures.CRAWL_WET, Category = CorpusFixtures.CRAWL)]
+    public void PackedCountsAndRankingEqualTheStringFormTest(string fixture)
     {
-        foreach (var text in Documents())
+        foreach (var text in Documents(fixture))
         {
             var strings = new Dictionary<string, long>(StringComparer.Ordinal);
             var packed = new Dictionary<ulong, long>();
@@ -32,15 +35,16 @@ public sealed class LanguagePackedParityTests
         }
     }
 
-    [Test]
-    public void PackedGuessEqualsTheStringFormGuessTest()
+    [TestCase(CorpusFixtures.WET)]
+    [TestCase(CorpusFixtures.CRAWL_WET, Category = CorpusFixtures.CRAWL)]
+    public void PackedGuessEqualsTheStringFormGuessTest(string fixture)
     {
-        var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-pack-cc-2026-43-16.bin"));
+        var model = LanguageModel.Load(CorpusFixtures.PathOf(CorpusFixtures.PACK));
         var identifier = new LanguageIdentifier(model);
         var maxRank = model.Profiles.Max(profile => profile.Grams.Count);
 
         var compared = 0;
-        foreach (var text in Documents())
+        foreach (var text in Documents(fixture))
         {
             Assert.That(identifier.Identify(text), Is.EqualTo(StringFormGuess(model, maxRank, text)));
             compared++;
@@ -107,9 +111,9 @@ public sealed class LanguagePackedParityTests
         return new LanguageGuess(best!, second, margin) { Nearest = best!, DistancePpm = distancePpm };
     }
 
-    private static IEnumerable<string> Documents()
+    private static IEnumerable<string> Documents(string fixture)
     {
-        using var reader = WarcReader.Open(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "cc-main-2026-43-00000-head.warc.wet.gz"));
+        using var reader = WarcReader.Open(CorpusFixtures.PathOf(fixture));
         foreach (var record in reader.ReadRecords().Where(r => r.Type == "conversion"))
             yield return HtmlTextExtractor.CollapseLines(Encoding.UTF8.GetString(record.Payload.Span));
     }

@@ -1,0 +1,20 @@
+{
+  "note": "Real crawl data the tests fetch when they run: for each head a file of Common Crawl, a byte range of it and the SHA-256 of that range. Nothing of the content is here. A head is the first complete gzip members of its file: the WET file's text conversions, and the captures of the WARC file they were converted from.",
+  "origin": "https://data.commoncrawl.org/",
+  "heads": [
+    {
+      "name": "cc-main-2026-43-00000-head.warc.wet.gz",
+      "path": "crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/wet/CC-MAIN-20261005105623-20261005135623-00000.warc.wet.gz",
+      "offset": 0,
+      "length": 1487720,
+      "sha256": "4266dbac075d83d8e0f8d810d9089642c09b91fbd80d819dff4be5ccee96b008"
+    },
+    {
+      "name": "cc-main-2026-43-00000-head.warc.gz",
+      "path": "crawl-data/CC-MAIN-2026-43/segments/1791170053823.21/warc/CC-MAIN-20261005105623-20261005135623-00000.warc.gz",
+      "offset": 0,
+      "length": 1494715,
+      "sha256": "debe64ddb3d3b3b2e5a9da3d0f286a47385651cca94facd2c0dfc20fe09c1f16"
+    }
+  ]
+}
