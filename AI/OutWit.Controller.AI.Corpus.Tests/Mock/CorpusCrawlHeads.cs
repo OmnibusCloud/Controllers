@@ -34,9 +34,17 @@ public static class CorpusCrawlHeads
     private const string CI_ENV = "GITHUB_ACTIONS";
     private const string PROJECT_FILE = "OutWit.Controller.AI.Corpus.Tests.csproj";
     private const string USER_AGENT = "corpus-tests/1.0";
-    private const int ATTEMPTS = 3;
+
+    /// <summary>
+    /// Tries of one range. The origin answers 503 ("slow down") when many ask at once, as the
+    /// build server's runners do; it wants the asker to wait longer each time.
+    /// </summary>
+    private const int ATTEMPTS = 7;
 
     private static readonly TimeSpan TIMEOUT = TimeSpan.FromSeconds(90);
+
+    /// <summary>The longest pause between two tries, whatever the origin asks for.</summary>
+    private static readonly TimeSpan MAX_PAUSE = TimeSpan.FromSeconds(60);
 
     #endregion
 
@@ -109,7 +117,7 @@ public static class CorpusCrawlHeads
         return (target, "", false);
     }
 
-    /// <summary>One range of one file, tried a few times with a growing pause.</summary>
+    /// <summary>One range of one file, tried several times with a pause that doubles (2 s to 60 s, or what the origin asks for).</summary>
     private static (byte[]? Bytes, string Reason) Fetch(Uri uri, long offset, long length)
     {
         var reason = "";
@@ -117,6 +125,7 @@ public static class CorpusCrawlHeads
 
         for (var attempt = 1; attempt <= ATTEMPTS; attempt++)
         {
+            TimeSpan? asked = null;
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, uri);
@@ -137,6 +146,7 @@ public static class CorpusCrawlHeads
                 else
                 {
                     reason = $"the origin answered {(int)response.StatusCode}.";
+                    asked = response.Headers.RetryAfter?.Delta;
                 }
             }
             catch (Exception exception) when (exception is HttpRequestException or IOException or TaskCanceledException or OperationCanceledException)
@@ -146,10 +156,13 @@ public static class CorpusCrawlHeads
             }
 
             if (attempt < ATTEMPTS)
-                Thread.Sleep(TimeSpan.FromSeconds(attempt * attempt));
+            {
+                var pause = asked ?? TimeSpan.FromSeconds(1 << attempt);
+                Thread.Sleep(pause < MAX_PAUSE ? pause : MAX_PAUSE);
+            }
         }
 
-        return (null, reason);
+        return (null, $"{reason} ({ATTEMPTS} tries)");
     }
 
     private static string? DefaultFolder()
