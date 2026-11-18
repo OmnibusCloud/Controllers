@@ -233,6 +233,26 @@ public sealed class VerifySupplyChainTests
         });
     }
 
+    [Test]
+    public void L9TheRustCompilerIsPinnedByItsBytesTest()
+    {
+        // The compiler was installed by its version number through rustup: whatever rustup
+        // fetched under that number was run. It is now two archives the Rust project
+        // publishes, each held to its SHA-256 like every other download of the build.
+        var pins = ReadRepository($"{TOOLCHAIN}/pins.env");
+        var script = ReadRepository($"{TOOLCHAIN}/build.sh");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(pins, Does.Match("(?m)^RUSTC_SHA256=[0-9a-f]{64}$"), "the compiler's archive is pinned");
+            Assert.That(pins, Does.Match("(?m)^RUST_STD_WASI_SHA256=[0-9a-f]{64}$"), "the standard library's archive is pinned");
+            Assert.That(script, Does.Contain("fetch \"$RUSTC_URL\" \"$RUSTC_SHA256\""));
+            Assert.That(script, Does.Contain("fetch \"$RUST_STD_WASI_URL\" \"$RUST_STD_WASI_SHA256\""));
+            Assert.That(script, Does.Contain("\"$RUST/bin/rustc\" --target wasm32-wasip1"), "the pinned compiler is the one that is run");
+            Assert.That(script, Does.Not.Contain("rustup"), "and no compiler is installed by the build machine under a version number");
+        });
+    }
+
     #endregion
 
     #region Tools

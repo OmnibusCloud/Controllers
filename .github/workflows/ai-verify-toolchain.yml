@@ -65,7 +65,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/work2"
-          cp "$RUNNER_TEMP/work/wasi-sdk.tar.gz" "$RUNNER_TEMP/work/lua.tar.gz" "$RUNNER_TEMP/work/binaryen.tar.gz" "$RUNNER_TEMP/work/quickjs.tar.gz" "$RUNNER_TEMP/work2/"
+          cp "$RUNNER_TEMP/work/wasi-sdk.tar.gz" "$RUNNER_TEMP/work/lua.tar.gz" "$RUNNER_TEMP/work/binaryen.tar.gz" "$RUNNER_TEMP/work/quickjs.tar.gz" "$RUNNER_TEMP/work/rustc.tar.xz" "$RUNNER_TEMP/work/rust-std-wasi.tar.xz" "$RUNNER_TEMP/work2/"
           bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out2" "$RUNNER_TEMP/work2" > "$RUNNER_TEMP/build2.log" 2>&1 || { cat "$RUNNER_TEMP/build2.log"; exit 1; }
           for module in "$RUNNER_TEMP"/out/*.wasm "$RUNNER_TEMP"/out/*.js "$RUNNER_TEMP"/out/LICENSE-*.txt; do
             name="$(basename "$module")"
