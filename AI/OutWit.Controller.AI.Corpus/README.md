@@ -1098,7 +1098,9 @@ admits no other to the work):
   record, and the whole shard was `Malformed` (`not_warc`): 63 of 5,000
   evenly spaced cuts of the head of a real WET file. The last line of a file
   that has no line feed is the line the cut went through, and is the
-  truncated tail whatever is left of it. A line that has its line feed and is
+  truncated tail whatever is left of it: a carriage return alone after a
+  record too, which used to pass for the end of a whole file. A line that has
+  its line feed and is
   malformed is `Malformed` as before, and so is a last line where a record
   should start that is no beginning of a version line: a body that is no WARC
   is not a truncated WARC. What a reader cannot see is a file that stops

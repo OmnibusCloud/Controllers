@@ -324,7 +324,9 @@ file that has no line feed is the line the cut went through and is not judged as
 line that has its line feed and is malformed is `Malformed`, and so is a last line where a
 record should start that is no beginning of `WARC/` (a body that is no WARC is not a truncated
 WARC). Up to 0.5.0 a file that stopped inside a header line was `Malformed`: 63 of 5,000 evenly
-spaced cuts of the head of a real WET file. A file that stops exactly between two records is a
+spaced cuts of the head of a real WET file; and one that stopped between the carriage return
+and the line feed of a blank line after a record passed for a whole file, where it is truncated
+now. A file that stops exactly between two records is a
 shorter whole file, and nothing in it says so: packed, the gzip frame between two members and
 the first bytes of the next unpack to nothing, which is 2 to 4 % of the places a cut can fall in
 a real file. A shard may unpack to 32 times its
@@ -950,8 +952,10 @@ beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
   `FetchFailed` (`body_truncated`) when it did not. On a real WET file that is one cut in
   eighty. A report
   that counted such a shard under `Malformed` counts it under `Completed` or `FetchFailed`;
-  no code is new. A line that has its line feed and is malformed, and a body that is no WARC at
-  all, are `Malformed` as before (section 5).
+  no code is new. By the same reading a file that stops between the carriage return and the
+  line feed of a blank line after a record is truncated; it was `Completed` without the code,
+  also when its body had no stated end. A line that has its line feed and is malformed, and a
+  body that is no WARC at all, are `Malformed` as before (section 5).
 - **The module is twelve files, not eight:** the four texts above travel in it. A deployment
   that lists or counts the files of a module, or pins the module's content digest, sees them.
 - **A node's log cannot fail a package.** On a client that hands controllers a logger that is
