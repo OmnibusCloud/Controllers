@@ -7,9 +7,36 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking — generation and verification are the
 same activity with different programs.
 
-**Status: 0.14.0 (Verify.Model 0.4.0, Verify.Scripts 0.6.0) — for the test server; 0.13.0 is
+**Status: 0.15.0 (Verify.Model 0.4.0, Verify.Scripts 0.6.0) — for the test server; 0.14.0 is
 the version proven on the test fleet. Not yet released to nuget.org or the live network.**
-0.14.0 is the second hardening release. What it changed:
+0.15.0 is the third hardening release: what the controller hands on of other people's work,
+and what stands between a change and what a node is sent. A run is what it was under 0.14.0:
+the same verdicts, fuel and reports, and documents that differ only in the controller version
+they name. What it changed:
+
+- Every folder a node is sent has a `THIRD-PARTY-NOTICES.txt`: each language runtime's
+  folder, the folder of the native engine library, and the module. It lists the third-party
+  software in the folder, what is linked statically into its module included (expat,
+  libmpdec, HACL\* and mimalloc in CPython; OpenSSL, libyaml and zlib in Ruby; wasi-libc with
+  musl and cloudlibc in every interpreter; the Rust crates of the engine), and gives the
+  terms of each part. The files are written by a tool from pinned sources, never from
+  memory, and a job fails when a committed file is not what the tool writes.
+- The archives a node is sent are packed the same way every time, and a job rebuilds each
+  from its pins and fails when it is not the archive the project file pins by SHA-256 and
+  size. The numpy runtime's archive is held to its pin by the workflow that builds it, and
+  carries the patches numpy is built with.
+- The committed runtime modules are compared with a rebuild on a pull request, before a
+  merge. Every action of every workflow is named by its commit. A download without a pin
+  stops a toolchain build before anything of it is unpacked. The Rust compiler of the
+  toolchain is two archives held to their SHA-256.
+- A logging call never decides what becomes of a package: every line the controller logs on
+  a node goes through one lock, and an exception of the host's logger goes no further. (A
+  cloud client up to 2.2.5 gives a controller a log that cannot take two lines at once.)
+- A Windows run of the tests states in one line of its log whether the proof of survival
+  under hardware stack protection ran: `stack-protection proof: shadow stacks on` or
+  `stack-protection proof: shadow stacks off`.
+
+0.14.0 was the second hardening release. What it changed:
 
 - A taskset is held to its schema, exactly: a field the schema does not have (a misspelt
   `expected_stdout`), a field given twice, a value of another type, a number outside its
@@ -619,7 +646,16 @@ Nothing of a node's own words reaches a lab. A runtime that cannot be used, a
 transfer that failed, a disk that is full are fixed words or reason codes
 without a path, an account name or an exception's text; the detail goes to the
 node's own log. (Before 0.13.0 a missing runtime file put the node's full local
-path, with the account name, into a task's stderr.) The program's own stdout
+path, with the account name, into a task's stderr.) The log itself cannot change
+that: everything the controller logs on a node goes through one wrapper
+(`VerifyLoggerGuarded`) that lets one thread at a time into the host's logger
+and keeps an exception of the logger's own to itself. A line the logger refused
+is lost; the package it was about completes, or fails with the fixed words.
+(Cloud clients up to 2.2.5 gave a controller an in-memory list without a lock
+as its logger; under a share of several packages it threw, and when it threw
+inside the engine's own catch block its exception was what the server was told.
+The engine's adapter base logs through the logger its constructor was given, so
+every adapter hands it the guarded one.) The program's own stdout
 and stderr are the program's and stay. Every accepted batch is in the
 provenance with its round, runtime target, wasmtime and controller versions,
 runtime and module hash, and what each task cost; the degree and the batch's
@@ -727,9 +763,31 @@ suite is not.
 
 `OutWit.Controller.AI.Verify.Assets` (`verify-assets build <dir>`) rebuilds
 the whole set of runtime files from pinned downloads, byte for byte, and prints
-the hashes the catalog pins. (It builds the files, not the release archives
-that carry them: an archive is packed once and pinned by its SHA-256 in the
-controller's project file.)
+the hashes the catalog pins. Its `toolchain/archives.sh` packs the release
+archives from that set and from the native libraries: the entries in a fixed
+order with fixed times and modes, compressed by zlib at level 9, so the same
+files give the same archive. What "byte for byte" is said of, and what checks it:
+
+- **the files** of the runtime set: the catalog pins every module and layer by
+  SHA-256 and the two library trees by a tree hash; the tests build the set on
+  three platforms at every change, and a node checks the pins before it runs a
+  task;
+- **the four archives** `archives.sh` packs (`verify-wasm.zip` and one of the
+  native library for each platform): the `AI Verify archives` workflow builds
+  them again at every change of the asset tool, of a notices file or of a pin,
+  and fails when one is not the archive the controller's project file pins by
+  SHA-256 and size;
+- **the numpy runtime's archive**: its workflow builds it twice in folders of
+  different names, compares the two, and fails unless the result is the pinned
+  archive;
+- **the modules the toolchain builds** (`lua.wasm`, `qjs.wasm`, `sucrase.js`,
+  the fixtures): built twice and compared with the committed copies, on a pull
+  request and after a merge.
+
+An archive's bytes also depend on the compressor: the pins hold for zlib
+(1.2.12, 1.3 and 1.3.1 were seen to give the same bytes). With another
+compressor in its place the archive would unpack to the same files and the job
+would say that its hash is another.
 
 Ruby loads its library from files, not from one archive, so the library is a
 tree: 1,142 files, cut unchanged out of the release archive (the standard
@@ -863,12 +921,19 @@ library per platform in the .NET layout its `deps.json` describes:
 ```
 verify.module/
   OutWit.Controller.AI.Verify.dll, .deps.json, controller.json
-  OutWit.Controller.AI.Verify.Model.dll
+  OutWit.Controller.AI.Verify.Model.dll, .deps.json
   Wasmtime.Dotnet.dll                      staged by the build
+  THIRD-PARTY-NOTICES.txt                  the notice of that one assembly
   runtimes/<rid>/native/                   wasmtime, one data asset per RID
   wasm/                                    the language runtime modules, one data asset
   wasm/python-3.14.6-numpy-2.5.4/          the numpy runtime, a data asset of its own
 ```
+
+The first four lines are the module: the seven files the build stages, and the only ones the
+package ships under `content/module/`. The build keeps a record of what it staged and makes
+the package, the module's zip and the manifest's content digest from that record, not from
+whatever the staging folder holds: a copy of the natives or of a runtime kept there for local
+runs stays where it is and is not packed. The three folders reach a node as data assets.
 
 Two load modes meet this layout. An isolated plugin load context (the server,
 the module-load test) resolves the library through the module's `deps.json`.
@@ -876,7 +941,9 @@ The module-load test runs on the packaged library: it takes the native asset
 the module's own manifest declares for the platform from its release, holds it
 to the manifest's size and SHA-256 and unpacks it where the manifest says, so a
 manifest without the library fails the test (the language runtimes of that test
-are still laid out by `verify-assets`, not taken from their archives).
+are laid out by `verify-assets`, not taken from their archives; that the
+archives are that layout packed, byte for byte, is what the `AI Verify archives`
+workflow holds).
 The cloud client loads controllers into the shared load context, where that
 file is never read and a P/Invoke probes only the application folder and the
 module root, and where the binding loads once, from the folder of whichever
@@ -907,22 +974,50 @@ nothing keeps compiled code past its process.
 
 The natives and the runtime modules are Tier-2 data assets (`ControllerDataAsset`),
 fetched by consumers at build time from releases of this repository and verified by
-hash: the natives from `wasmtime-v48.0.8` (the asset every controller that carries the
-host references), the runtimes from `verify-v<version>`; the nupkg itself stays small. The engine is the
+hash: the natives from `wasmtime-v48.0.8-2` (the libraries of `wasmtime-v48.0.8`, byte for
+byte, packed again with their third-party notices), the runtimes from `verify-v<version>`; the nupkg itself stays small. The engine is the
 long-term line 48 of wasmtime: the .NET binding 48.0.2 (the `Wasmtime` package) over
 the native library of its newest patch, 48.0.8, taken unchanged from the engine's own
 release archives (`toolchain/natives.sh` of the asset tool, pinned by the digests the
 release states; the build server runs the tests on the same library on each platform).
 A patch of the line changes neither an output nor a unit of fuel; a major release would
-change fuel, so the fleet stays on one line. Licences travel inside the asset archives (the list is not yet complete for what the interpreters link statically)
-(wasmtime: Apache-2.0 WITH LLVM-exception; CPython: PSF; QuickJS-NG: MIT;
-Ruby and its bundled gems: Ruby's own terms or BSD-2-Clause; the ruby.wasm
-port: MIT; Lua: MIT; sucrase and the six packages bundled with it: MIT, Apache-2.0 and
-others, each named in the licence file beside the bundle; LLVM, clang, lld, libc++ and YoWASP's build: Apache-2.0, LLVM's WITH LLVM-exception;
+change fuel, so the fleet stays on one line.
+
+Licences travel with what they are about. Every folder of an asset archive, and the module
+itself, has a `THIRD-PARTY-NOTICES.txt`: the third-party software in the folder, what is
+linked statically into its module included, and the terms of each part, as a text in the
+file or as a licence file beside it that the file names. The files are written by
+`toolchain/notices` of the asset tool from pinned sources (an address and the SHA-256 its
+bytes must have, or an archive the toolchain already pins); no text is written from memory.
+They are committed, and the `AI Verify archives` workflow fails when a committed file is not
+what the tool writes. `VerifyRedistributedFilesTests` holds the module, the package, each
+runtime folder and each native library folder to a pinned list of files, and every file of a
+folder to its notices: a file that is added without a notice fails there by its name. What
+the lists rest on, and where they end:
+
+- what a module links statically was read from the module (its strings and its compiler's
+  mark) and from the build that made it; the list of the engine's Rust crates (164 of
+  others) was read from the engine's own vendored source archive by following manifests,
+  features and platforms from its C API library, not by asking the compiler, so a crate
+  can be listed of which the linker kept nothing;
+- the Rust standard library's own account of the parts it took from others
+  (`COPYRIGHT-library.html` of a Rust release) is pointed to, not reproduced;
+- a crate whose package carries no licence text (three of the engine's) is listed with the
+  licence its manifest states.
+
+In short, and the notices files are what counts
+(wasmtime and its .NET binding: Apache-2.0 WITH LLVM-exception, the Rust standard library
+and the engine's crates under their own terms, mostly MIT or Apache-2.0; CPython: PSF, with
+expat, HACL\* and mimalloc: MIT, libmpdec: BSD-2-Clause; QuickJS-NG: MIT;
+Ruby and its bundled gems: Ruby's own terms or BSD-2-Clause, with OpenSSL: Apache-2.0,
+libyaml: MIT, zlib: Zlib, wasi-vfs: Apache-2.0 WITH LLVM-exception; the ruby.wasm
+port: MIT; Lua: MIT, with Binaryen: Apache-2.0; sucrase and the six packages bundled with it: MIT, Apache-2.0 and
+others, each named in the licence file beside the bundle, with esbuild: MIT; LLVM, clang, lld, libc++, compiler-rt and YoWASP's build: Apache-2.0, LLVM's WITH LLVM-exception;
 wasi-libc: Apache-2.0 WITH LLVM-exception, Apache-2.0 or MIT, with cloudlibc's BSD-2-Clause
 and musl's MIT inside; numpy: BSD-3-Clause with 0BSD, MIT, Zlib and CC0-1.0 parts, each named in
-`LICENSE-numpy.txt`; the numpy build's recipes and two numpy patches adapted from wasi-python:
-Apache-2.0, `LICENSE-wasi-python.txt`).
+`LICENSE-numpy.txt`, and Dragon4: MIT; the numpy build's recipes and two numpy patches adapted from wasi-python:
+Apache-2.0, `LICENSE-wasi-python.txt`; the patches themselves are in the archive, and its
+`BUILD.txt` names them).
 
 `VerifySelfCheck.Run()` reports, from inside a loaded module, where the binding
 and the runtimes resolved from and whether one task per runtime ran — the
@@ -969,7 +1064,30 @@ names and no other (`VerifyRigModules`): a module of another controller in the
 shared staging folder is not loaded, and a module that is not byte for byte
 this build's fails the rig by name. The proof that a host under hardware stack
 protection survives a guest's trap runs only on a machine that enforces that
-protection; elsewhere its test is skipped and says so.
+protection; elsewhere its test is skipped and says so. Nothing fails for that
+(the build server's Windows machines are not one kind); instead a Windows run
+states which case it was in one line of its log and of the job's summary,
+`stack-protection proof: shadow stacks on` or `stack-protection proof: shadow
+stacks off`, and a release is cut from a commit whose Windows job states the
+first.
+
+What the controller hands on and what guards its way to a node have tests of
+their own: `VerifyRedistributedFilesTests` (the module as the build recorded
+it, its zip, the package's `content/module`, each runtime folder and each
+native library folder against a pinned list of files, and every file against
+its folder's notices), `VerifyBindingNoticeTests` (what the module's notices
+say of `Wasmtime.Dotnet.dll`, line by line, against the package the build
+restored and the file the module carries), `ControllerStagingTests` (the
+shared build files on a solution of their own: a build records what it
+stages, removes only what it staged itself and no longer does, and packs what
+it recorded, so a file put into a module folder by hand is neither lost nor
+shipped), `VerifyAssetArchiveTests` (the asset tool refuses an archive entry that names
+a place outside its folder), `VerifySupplyChainTests` (the workflows and the
+build files, read as text: modules compared with a rebuild before a merge,
+archives held to their pins, actions by commit, no floating version, a
+download without a pin stops a build), and `VerifyLoggerGuardedTests` with
+`VerifyLoggerFateTests` (a host's logger that throws, or that cannot take two
+lines at once, does not decide a package's fate).
 
 Load tests (`Category=Load`, not in the sweep; the `AI Verify` workflow runs
 them once a week and on request): a thousand tasks at the

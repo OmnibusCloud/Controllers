@@ -40,7 +40,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Build b runs the scripts from a copy in another folder, with its work folder at
       # another depth: if any path reached the module, the two builds would differ.
@@ -62,7 +62,7 @@ jobs:
           # 3 = built, but a download has no pin yet: the module is still published.
           [ "$code" -eq 0 ] || [ "$code" -eq 3 ] || exit "$code"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pdftext-build-${{ matrix.name }}
           path: ${{ runner.temp }}/out
@@ -79,7 +79,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: pdftext-build-*
           path: builds
@@ -105,7 +105,7 @@ jobs:
           done
 
       - name: Publish the data asset
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: corpus-pdftext-wasm
           path: |
@@ -120,9 +120,9 @@ jobs:
     env:
       TESTS: AI/OutWit.Controller.AI.Corpus.Assets/toolchain/tests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: pdftext-build-a
           path: ${{ runner.temp }}/module
@@ -171,7 +171,7 @@ jobs:
           exit $code
 
       - name: Cache the Common Crawl PDFs
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/cc
           key: corpus-cc-pdfs-${{ hashFiles('AI/OutWit.Controller.AI.Corpus.Assets/toolchain/tests/cc-pdfs.json') }}
@@ -192,7 +192,7 @@ jobs:
 
       # Verdicts, page counts, text hashes and fuel per document; no text of a third-party
       # document leaves the runner.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: pdftext-contract-tests

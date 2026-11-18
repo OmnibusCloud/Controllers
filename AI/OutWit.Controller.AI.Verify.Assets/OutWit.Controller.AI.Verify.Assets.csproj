@@ -6,7 +6,8 @@
        Python bytecode with the pinned interpreter itself and writing the layers as
        deterministic zips, so the set is reproducible byte for byte and its hashes go
        into the runtime catalog. A developer tool, not a package: never packed or
-       published. outwit-assets-pack then cuts the release archive from the folder. -->
+       published. toolchain/archives.sh then packs the release archives from the folder,
+       the same bytes every time, and holds them to the controller's pins. -->
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -23,8 +24,16 @@
     <PackageReference Include="Wasmtime" Version="48.0.2" />
   </ItemGroup>
 
+  <!-- The Verify tests hold what the tool refuses of an archive it unpacks (an entry that
+       names a place outside its folder). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="OutWit.Controller.AI.Verify.Tests" />
+  </ItemGroup>
+
   <!-- The modules the controller's toolchain builds (toolchain/build.sh; the toolchain job
-       checks the committed copies are what the sources build to), shipped as they are. -->
+       checks the committed copies are what the sources build to), shipped as they are, and
+       every folder's third-party notices (toolchain/notices writes them from pinned sources;
+       the same job holds the committed files to what that tool writes). -->
   <ItemGroup>
     <None Include="modules\**" CopyToOutputDirectory="PreserveNewest" LinkBase="modules" />
   </ItemGroup>

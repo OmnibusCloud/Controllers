@@ -4,7 +4,13 @@
 # page states). Lays them out the way the controller's data assets carry them:
 #
 #   <out>/win-x64/wasmtime.dll          <out>/linux-x64/libwasmtime.so
-#   <out>/osx-arm64/libwasmtime.dylib   and in each: LICENSE-wasmtime.txt, NOTICE.txt
+#   <out>/osx-arm64/libwasmtime.dylib   and in each: LICENSE-wasmtime.txt, NOTICE.txt,
+#                                       THIRD-PARTY-NOTICES.txt
+#
+# THIRD-PARTY-NOTICES.txt is what is linked into the library and its terms: the Rust standard
+# library and the crates the engine is built from. It is a committed file
+# (modules/wasmtime-<version>/), written by toolchain/notices from the engine's own source
+# archive and held to what that tool writes by the toolchain job; it is copied as it is.
 #
 # Usage: natives.sh <out-dir> [<download-dir>]
 # The .NET binding (the Wasmtime package) stays at its own version; within the engine's
@@ -40,6 +46,9 @@ NATIVES="win-x64|$WASMTIME_NATIVE_WIN_X64_URL|$WASMTIME_NATIVE_WIN_X64_SHA256|li
 linux-x64|$WASMTIME_NATIVE_LINUX_X64_URL|$WASMTIME_NATIVE_LINUX_X64_SHA256|lib/libwasmtime.so|libwasmtime.so
 osx-arm64|$WASMTIME_NATIVE_OSX_ARM64_URL|$WASMTIME_NATIVE_OSX_ARM64_SHA256|lib/libwasmtime.dylib|libwasmtime.dylib"
 
+NOTICES="$HERE/../modules/wasmtime-$WASMTIME_NATIVE_VERSION/THIRD-PARTY-NOTICES.txt"
+[ -f "$NOTICES" ] || { echo "no third-party notices at $NOTICES (toolchain/notices writes them)"; exit 1; }
+
 echo "== wasmtime $WASMTIME_NATIVE_VERSION, native libraries"
 while IFS='|' read -r rid url pin inner name; do
   archive="$DOWNLOADS/$(basename "$url")"
@@ -68,15 +77,19 @@ while IFS='|' read -r rid url pin inner name; do
   [ -s "$dir/$name" ] || { echo "EMPTY $rid/$name"; exit 1; }
 
   cat > "$dir/NOTICE.txt" <<EOF
-Native wasmtime library for the OmnibusCloud Verify controller.
+Native wasmtime library for the OmnibusCloud controllers.
 
 wasmtime $WASMTIME_NATIVE_VERSION (the long-term line 48), taken unchanged ($inner) from
 $url
 (SHA-256 of the archive $pin).
 https://github.com/bytecodealliance/wasmtime, Apache-2.0 WITH LLVM-exception:
-see LICENSE-wasmtime.txt. The .NET binding next to the controller is the Wasmtime
-package (wasmtime-dotnet, Apache-2.0).
+see LICENSE-wasmtime.txt. What is linked into the library (the Rust standard library and
+the crates the engine is built from) and the terms of each part: THIRD-PARTY-NOTICES.txt.
+The .NET binding next to a controller is the Wasmtime package (wasmtime-dotnet,
+Apache-2.0 WITH LLVM-exception); the controller's module has its notice.
 EOF
+
+  cp "$NOTICES" "$dir/THIRD-PARTY-NOTICES.txt"
 
   echo "  $rid/$name  $(sha "$dir/$name")  $(wc -c < "$dir/$name" | tr -d ' ') bytes"
 done <<< "$NATIVES"

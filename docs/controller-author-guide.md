@@ -843,8 +843,30 @@ The shared MSBuild logic runs in this order at every controller build:
 4. **`ControllerPostBuild`** (AfterTargets=`PostBuildEvent`) — copies the controller's DLL + `.deps.json` + `controller.json` + any locale-resource DLLs into `$(SolutionDir)@Controllers/$(Configuration)/<name>.module/`.
 5. **`ControllerStageSourceResources`** (AfterTargets=`ControllerPostBuild`) — copies `<csproj>/Resources/**` into `<module>/Resources/`. Skipped silently when the folder doesn't exist.
 6. **Companion `ModelPostBuild`** in the `.Model` csproj — copies the Model DLL into the SAME `<module>` directory.
-7. **`ControllerPackZip`** (AfterTargets=`ControllerPostBuild`) — zips `$(ControllerModuleOutputDir)` into `$(SolutionDir)@Zips/$(Configuration)/<name>.zip`. The zip is used by the OmnibusCloud server's BlobCacheService.
-8. **`ControllerPackModuleContents`** (runs during `dotnet pack`) — packages the staged module (minus `Resources/`) into the nupkg's `content/module/` + writes an empty `lib/<tfm>/_._` marker so NuGet considers the package framework-compatible.
+7. **`ControllerRecordStaged`** (`Build/OutWit.Controller.Staging.targets`, after the staging targets of every project that stages) — writes the project's record of what it staged to `$(SolutionDir)@Controllers/.staged/$(Configuration)/<project>.txt`, outside the module folders, and removes from the modules what the project's previous record lists and this build no longer stages (only while the file still has the bytes that build put there). For the controller's project it also returns the module's files: what the records of all projects list under `<module>/`.
+8. **`ControllerStampManifest`** — writes the build stamp and the content digest into the staged `controller.json`. The digest is taken over the files the package ships.
+9. **`ControllerPackZip`** (AfterTargets=`ControllerPostBuild`) — zips the module into `$(SolutionDir)@Zips/$(Configuration)/<name>.zip`: the recorded files, and what lies under a folder one of the controller's data assets extracts to (`ExtractTo`), where a copy for local runs may be kept. The zip is used by the OmnibusCloud server's BlobCacheService.
+10. **`ControllerPackModuleContents`** (runs during `dotnet pack`) — packages the recorded files of the module (minus `Resources/`) into the nupkg's `content/module/` + writes an empty `lib/<tfm>/_._` marker so NuGet considers the package framework-compatible.
+
+#### A module folder is not the build's alone
+
+The staged module folder is written by several projects and is also where prerequisites are kept by hand (a copy of Blender under `render.module/blender/`, of ParaView under `paraview.module/paraview/`). So the build never cleans it and never packs it as a folder:
+
+- **It removes only what it can show it put there**: a file its own previous record lists, that it no longer stages, and that still has the recorded bytes. A file no record lists is never touched.
+- **What ships is what was recorded.** A file that merely lies in the folder is in no package and no digest, and in the zip only when it lies under a declared data asset's folder.
+- **A target of your own that copies into a module** must say so, or its files are left out of the zip and the package: add every destination to the item `ControllerStagedFile` and run `BeforeTargets="ControllerRecordStaged"`.
+
+  ```xml
+  <Target Name="StageMyExtras" AfterTargets="ControllerPostBuild" BeforeTargets="ControllerRecordStaged">
+    <Copy SourceFiles="@(MyExtra)" DestinationFolder="$(ControllerModuleOutputDir)" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <ControllerStagedFile Include="@(MyExtra->'$(ControllerModuleOutputDir)%(Filename)%(Extension)')" />
+    </ItemGroup>
+  </Target>
+  ```
+
+- **After pulling this change**, build the solution once (or each project that stages): until a project has written its record, what it staged earlier is on disk but in no zip and no package. The build fails rather than ship a module without the assembly of a project the controller references.
+- The records belong to the folder they describe: delete `@Controllers/.staged/` only together with the modules.
 
 Final on-disk layout after a Release build of the full solution:
 

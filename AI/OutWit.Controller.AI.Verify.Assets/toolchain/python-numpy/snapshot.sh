@@ -9,8 +9,9 @@
 #   verify-python-numpy.zip      the controller's data asset for the runtime folder
 #                                python-3.14.6-numpy-2.5.4/: the snapshot as python.wasm, the
 #                                plain module as python-plain.wasm (for debugging), the two
-#                                layers the snapshot was made with under lib/, the licences and
-#                                BUILD.txt; a deflated zip with fixed times and order
+#                                layers the snapshot was made with under lib/, the licences,
+#                                the third-party notices, BUILD.txt and the patches it names;
+#                                a deflated zip with fixed times and order
 #
 # The reactor's link is CPython's own link of python.wasm, read with make -n, with
 # Programs/python.o replaced by pynp_snapshot.o, -mexec-model=reactor, and --wrap for the four
@@ -90,5 +91,13 @@ cp "$OUT/python-numpy.wasm" "$A/python-plain.wasm"
 cp "$OUT/python314.zip" "$OUT/$NUMPY_ZIP" "$A/lib/"
 cp "$OUT"/LICENSE-*.txt "$A/"
 cp "$OUT/build-info.txt" "$A/BUILD.txt"
+# The folder's third-party notices: the committed file, which toolchain/notices writes from
+# pinned sources and the toolchain job holds to what that tool writes. And the patches numpy was
+# built with, as they are: BUILD.txt names them by their hashes.
+NOTICES="$HERE/../../modules/python-$CPYTHON_VERSION-numpy-$NUMPY_VERSION/THIRD-PARTY-NOTICES.txt"
+[ -f "$NOTICES" ] || fail /dev/null "no notices file at $NOTICES"
+cp "$NOTICES" "$A/THIRD-PARTY-NOTICES.txt"
+mkdir -p "$A/patches"
+cp "$HERE"/patches/*.patch "$A/patches/"
 python3 -I "$HERE/layers.py" asset "$A" "$OUT/verify-python-numpy.zip"
 ( cd "$OUT" && sha256sum verify-python-numpy.zip && ls -l verify-python-numpy.zip | awk '{ print $5, $9 }' )

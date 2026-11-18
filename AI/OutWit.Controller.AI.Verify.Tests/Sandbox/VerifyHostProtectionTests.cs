@@ -16,6 +16,12 @@ namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
 /// rather than passing (audit finding V:M-7). The explicit-trap mode itself is asked for in a
 /// test of its own, so it is exercised on every machine.
 /// </para>
+/// <para>
+/// Nothing fails a Windows run for a machine without shadow stacks: the build server's Windows
+/// runners are not one kind of machine. What a run owes instead is to say which case it was, in
+/// one line of its log that a release check can look for (<see cref="ProofLine"/>): a release is
+/// cut from a commit whose Windows job says <c>stack-protection proof: shadow stacks on</c>.
+/// </para>
 /// </summary>
 [TestFixture]
 public sealed class VerifyHostProtectionTests
@@ -28,6 +34,16 @@ public sealed class VerifyHostProtectionTests
     private const string SHADOW_STACKS_ON = "shadow stacks on";
     private const string SHADOW_STACKS_OFF = "shadow stacks off";
     private const string TRAPS_EXPLICIT = "traps explicit";
+
+    private const string PROOF_LINE = "stack-protection proof: ";
+
+    // Worded so that a search for "shadow stacks on" does not find it: the reason used to read
+    // "WITHOUT shadow stacks on this machine", and a run without them answered such a search.
+    private const string NOT_PROVEN =
+        "the trap host ran WITHOUT shadow stacks: this machine (its processor or its system) does not enforce them, " +
+        "and that a host under hardware stack protection survives a guest's trap was NOT proven here. " +
+        "The explicit-trap mode such a host runs in is still exercised (M7ExplicitTrapsGiveTheVerdictsOfHardwareTrapsTest).";
+    private const string SUMMARY_ENV = "GITHUB_STEP_SUMMARY";
 
     private const int IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS = 20;
     private const int IMAGE_DLLCHARACTERISTICS_EX_CET_COMPAT = 0x1;
@@ -58,16 +74,32 @@ public sealed class VerifyHostProtectionTests
         var run = RunHost();
         TestContext.Out.WriteLine(run.Output);
 
-        if (!run.Output.Contains(SHADOW_STACKS_ON))
+        // The one line that says which case this run was, written before anything is asserted:
+        // a release check looks for it in the Windows job's log.
+        var enforced = run.Output.Contains(SHADOW_STACKS_ON);
+        StateTheCase(ProofLine(enforced));
+
+        if (!enforced)
         {
             Assert.That(run.Output, Does.Contain(SHADOW_STACKS_OFF), run.Output);
-            Assert.Ignore("the trap host ran WITHOUT shadow stacks on this machine (its processor or its system does not enforce them): " +
-                          "that a host under hardware stack protection survives a guest's trap was NOT proven here. " +
-                          "The explicit-trap mode such a host runs in is still exercised (ExplicitTrapsGiveTheVerdictsOfHardwareTrapsTest).");
+            Assert.Ignore(NOT_PROVEN);
         }
 
         Assert.That(run.Output, Does.Contain(TRAPS_EXPLICIT), "a host with shadow stacks takes traps as explicit checks");
         AssertEveryTrapIsAVerdict(run);
+    }
+
+    [Test]
+    public void C5TheLineARunStatesItsCaseInIsFixedTest()
+    {
+        // A release check looks for these words in the Windows job's log; they are not to drift.
+        Assert.Multiple(() =>
+        {
+            Assert.That(ProofLine(shadowStacks: true), Is.EqualTo("stack-protection proof: shadow stacks on (a host under hardware stack protection ran the guests' traps)"));
+            Assert.That(ProofLine(shadowStacks: false), Is.EqualTo("stack-protection proof: shadow stacks off (NOT proven on this machine: it does not enforce them)"));
+            Assert.That(ProofLine(shadowStacks: false), Does.Not.Contain(SHADOW_STACKS_ON), "the line of a run without them is not found by a search for the other");
+            Assert.That(NOT_PROVEN, Does.Not.Contain(SHADOW_STACKS_ON), "nor is the reason the proof is skipped with");
+        });
     }
 
     [Test]
@@ -117,6 +149,43 @@ public sealed class VerifyHostProtectionTests
     #endregion
 
     #region Tools
+
+    /// <summary>
+    /// The line a Windows run states its case in: whether the trap host ran under hardware
+    /// stack protection, so whether the proof of survival was made.
+    /// </summary>
+    /// <param name="shadowStacks">True when the trap host said that shadow stacks are enforced.</param>
+    /// <returns>The line, without a line end.</returns>
+    public static string ProofLine(bool shadowStacks)
+    {
+        return shadowStacks
+            ? $"{PROOF_LINE}{SHADOW_STACKS_ON} (a host under hardware stack protection ran the guests' traps)"
+            : $"{PROOF_LINE}{SHADOW_STACKS_OFF} (NOT proven on this machine: it does not enforce them)";
+    }
+
+    /// <summary>
+    /// Writes the line where a release check finds it: the run's log, once, and the job's summary
+    /// on the build server.
+    /// </summary>
+    private static void StateTheCase(string line)
+    {
+        // Progress goes to the log as it is written, whatever becomes of the test afterwards
+        // (a skipped test's own output is not always shown).
+        TestContext.Progress.WriteLine(line);
+
+        var summary = Environment.GetEnvironmentVariable(SUMMARY_ENV);
+        if (string.IsNullOrEmpty(summary))
+            return;
+
+        try
+        {
+            File.AppendAllText(summary, line + Environment.NewLine);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The summary is a convenience; the log has the line.
+        }
+    }
 
     private static void AssertEveryTrapIsAVerdict((int ExitCode, string Output) run)
     {

@@ -20,7 +20,7 @@ internal sealed class WitActivityAdapterVerifyCapabilities : WitActivityAdapterF
     #region Constructors
 
     public WitActivityAdapterVerifyCapabilities(IWitProcessingManager processingManager, IWitBlobService blobService, IServiceProvider services, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, VerifyLoggerGuarded.Wrap(logger))
     {
         BlobService = blobService;
         Services = services;

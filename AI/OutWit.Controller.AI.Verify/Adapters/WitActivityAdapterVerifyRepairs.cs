@@ -16,7 +16,7 @@ internal sealed class WitActivityAdapterVerifyRepairs : WitActivityAdapterFuncti
     #region Constructors
 
     public WitActivityAdapterVerifyRepairs(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, VerifyLoggerGuarded.Wrap(logger))
     {
         BlobService = blobService;
     }

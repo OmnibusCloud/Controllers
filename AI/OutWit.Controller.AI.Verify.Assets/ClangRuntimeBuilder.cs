@@ -87,11 +87,10 @@ internal static class ClangRuntimeBuilder
             if (entry.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile))
                 continue;
 
+            // The sysroot's entries start at the root it is mounted as ("/usr/..." read as "usr/...").
             var name = entry.Name.Replace('\\', '/').TrimStart('/');
-            if (name.Length == 0 || name.Split('/').Any(segment => segment is "" or "." or ".."))
-                throw new InvalidDataException($"unexpected sysroot entry '{entry.Name}'");
 
-            Write(entry.DataStream ?? Stream.Null, Path.Combine(treeDir, name.Replace('/', Path.DirectorySeparatorChar)));
+            Write(entry.DataStream ?? Stream.Null, ArchivePaths.Under(treeDir, name));
             files++;
         }
 

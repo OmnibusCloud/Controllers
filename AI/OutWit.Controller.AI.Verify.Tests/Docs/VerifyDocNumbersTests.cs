@@ -125,6 +125,39 @@ public sealed class VerifyDocNumbersTests
     }
 
     [Test]
+    public void M9TheDocumentsSayWhatIsReleasedAndWhatIsComparedTest()
+    {
+        // Audit finding V:M-9: the documents said that licences travel inside the archives
+        // (with a list that was not complete) and "byte for byte" of archives that were packed
+        // once by hand. They now name the releases the project file fetches from, the notices
+        // file of every folder, and the job that builds each archive again and compares it.
+        var releases = Regex.Matches(Load(CONTROLLER_PROJECT), "<Uri>gh-release://[^/]+/[^/]+/(?<tag>[^/]+)/[^<]+</Uri>")
+            .Select(match => match.Groups["tag"].Value)
+            .ToList();
+        var readme = Flat(Load(README));
+        var capabilities = Flat(Load(CAPABILITIES));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(releases, Has.Count.EqualTo(5), "the native library of three platforms, the language runtimes, the numpy runtime");
+
+            foreach (var release in releases.Distinct())
+                Assert.That(capabilities, Does.Contain($"release `{release}`"), "what a deployment carries is named by the release the project file fetches it from");
+
+            foreach (var (name, document) in new[] { (README, readme), (CAPABILITIES, capabilities) })
+            {
+                Assert.That(document, Does.Not.Contain("not yet complete"), $"{name}: the notices are complete, or the sentence says where they end");
+                Assert.That(document, Does.Not.Contain("packed once"), $"{name}: an archive is built again and compared");
+                Assert.That(document, Does.Contain("`THIRD-PARTY-NOTICES.txt`"), name);
+                Assert.That(document, Does.Contain("not by asking"), $"{name}: how the list of the engine's crates was made, and so where it ends");
+            }
+
+            Assert.That(readme, Does.Contain("the `AI Verify archives` workflow builds them again at every change of the asset tool, of a notices file or of a pin, and fails when one is not the archive the controller's project file pins by SHA-256 and size"));
+            Assert.That(capabilities, Does.Contain("a job builds each again from its pins at every change and fails when it is not the archive the controller's project file pins by SHA-256 and size"));
+        });
+    }
+
+    [Test]
     public void B4TheScriptsInTheReadmeAreTheBundledScriptsTest()
     {
         // The README shows the scripts "as they are": each is held to its file.

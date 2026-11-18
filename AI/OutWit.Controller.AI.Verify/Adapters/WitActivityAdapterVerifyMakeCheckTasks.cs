@@ -22,7 +22,7 @@ internal sealed class WitActivityAdapterVerifyMakeCheckTasks : WitActivityAdapte
     #region Constructors
 
     public WitActivityAdapterVerifyMakeCheckTasks(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, VerifyLoggerGuarded.Wrap(logger))
     {
         BlobService = blobService;
     }

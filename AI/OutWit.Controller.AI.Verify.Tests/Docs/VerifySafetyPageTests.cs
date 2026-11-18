@@ -35,7 +35,8 @@ public sealed class VerifySafetyPageTests
         nameof(Sandbox.VerifyHostProtectionTests),
         nameof(Sandbox.VerifyClangRuntimeTests),
         nameof(Sandbox.VerifyTrapModeTests),
-        nameof(Sandbox.VerifyHostileKitTests)
+        nameof(Sandbox.VerifyHostileKitTests),
+        nameof(Adapters.VerifyLoggerFateTests)
     ];
 
     #endregion
