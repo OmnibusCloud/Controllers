@@ -18,18 +18,23 @@ opting in, a rule about where a machine fetches from that a job cannot widen
 **Status: 0.6.0 — the third hardening release, about what travels with the controller and what
 does not: the module carries the licence notices of everything of others it redistributes (see
 *What the module carries*), no page of a real crawl is in the repository (the tests' shards are
-generated, see *Tests*), and a line a node's log cannot take does not decide a shard's fate (see
-*Node behaviour*). It changes no stage: its products are those of 0.4.0 and 0.5.0 byte for byte.
+generated, see *Tests*), a line a node's log cannot take does not decide a shard's fate, and a
+shard that stops inside a header line ends as its whole records and not as a malformed file (see
+*Node behaviour*). It changes no stage: what 0.4.0 and 0.5.0 made a product of, it makes the same
+product of, byte for byte.
 0.5.0 was the second: what a run promises before it starts holds whoever wrote the manifest (see
 *What a run promises before it starts*), and the tasks and the results travel as blobs, so a node
 is handed a reference and returns one whatever the size of the job (see *Tasks and results as
 blobs*). 0.4.0 was the first (see *Trust and integrity* and *What hostile input meets*): a result
 is bound to its task on the server, copies that disagree are settled by three machines, a node's
 own trouble is never a shard's verdict, no text written by a node reaches a lab, and a hostile
-page, pack or shard costs a node a bounded amount. 0.4.0 and 0.5.0 are proven on the test fleet
-(the demo kit's identity byte for byte under both; under 0.4.0 a dispute settled by three
-machines); 0.6.0 has not run on the build server or on the fleet yet; not yet released to
-nuget.org.** The full reference for lab engineers and application
+page, pack or shard costs a node a bounded amount. 0.4.0 and 0.5.0 are proven on the test fleet:
+under both, the demo kit's identity byte for byte, and, with one machine of the pool returning
+another product for every shard it held, all 24 products the honest ones and every dispute
+settled by three machines when two machines ran each shard (with one machine a shard, what the
+lying machine returned for a shard of its own stands: one or two of the 24, the limit stated
+under *Trust and integrity*). 0.6.0 has not run on the build server or on the fleet yet; not yet
+released to nuget.org.** The full reference for lab engineers and application
 developers is [docs/capabilities.md](docs/capabilities.md).
 The stage libraries are wired into eleven activities and four bundled scripts; the
 engine rig in the tests fetches generated shards from a loopback origin
@@ -1067,6 +1072,25 @@ admits no other to the work):
   the node, past the fixed words of a refusal or a fault; every adapter of the
   controller now hands the base the guard, not the host's logger. A log is not
   a place the product depends on: no line of it reaches a lab either way.
+- **A shard that stops anywhere is its whole records.** The reader gives the
+  records that are complete before the place a file stops, and says the file
+  is truncated: `Completed` with the code `truncated` when the origin said
+  where its body ends (a length, chunks: its own file stops there, the same
+  for every node), `FetchFailed` (`body_truncated`) when it did not. Up to
+  0.5.0 that held for a file that stopped inside a payload or between two
+  header lines; one that
+  stopped inside a line (a version line without its end, a header's name
+  without its colon, a length without its digits) was read as a malformed
+  record, and the whole shard was `Malformed` (`not_warc`): 63 of 5,000
+  evenly spaced cuts of the head of a real WET file. The last line of a file
+  that has no line feed is the line the cut went through, and is the
+  truncated tail whatever is left of it. A line that has its line feed and is
+  malformed is `Malformed` as before, and so is a last line where a record
+  should start that is no beginning of a version line: a body that is no WARC
+  is not a truncated WARC. What a reader cannot see is a file that stops
+  exactly between two records: packed, the gzip frame between two members and
+  the first bytes of the next member unpack to nothing, so 2 to 4 % of the
+  places a cut can fall in a real file leave a shorter whole file.
 - The node fetches only what the task declares and the machine permits:
   the URL's host must be on the task's allowlist and pass the machine's own
   rule above, the scheme HTTP(S); nothing else is ever requested, a redirect
@@ -1086,7 +1110,8 @@ admits no other to the work):
   broken body asks for the rest with a Range request and appends when the
   origin honours it. A body the origin did not frame (no `Content-Length`, no
   chunks) can end early unnoticed: a shard that ends inside a record after such
-  a fetch is a fetch that failed (`body_truncated`), not a shorter shard. At
+  a fetch (its payload or its headers) is a fetch that failed
+  (`body_truncated`), not a shorter shard. At
   most two shards download at once per node, whatever
   the node's degree; the others wait their turn. The user agent names the
   controller and its version.
@@ -1195,7 +1220,7 @@ which the file names and does not repeat: `LICENSE-wasmtime.txt` and
 
 | Piece | Where | What it does |
 |---|---|---|
-| `WarcReader` / `WarcRecord` | `Warc/` | streams the records of a gzip (one member per record, as Common Crawl writes them) or plain WARC/WET file, one record in memory at a time; oversized records skipped and counted; a truncated tail ends the file with the complete records; malformed input is an error at an offset |
+| `WarcReader` / `WarcRecord` | `Warc/` | streams the records of a gzip (one member per record, as Common Crawl writes them) or plain WARC/WET file, one record in memory at a time; oversized records skipped and counted; a truncated tail ends the file with the complete records, wherever the file stops (a last line without its line feed is the cut one and is not judged); malformed input is an error at an offset |
 | `PdfSandbox` / `PdfSandboxHost` / `PdfTextShaper` / `PdfTextChunker` / `PdfStageLimits` | `Pdf/` | the PDF extractor (pdftext, pdf_oxide for wasm32-wasip1) run in the controller's own copy of the AI wasm host (`AI/Shared/Wasm`, compiled in as source), the verdicts, the shaping of its text into pages without running lines, the page-range documents, the stage's contract; `ShardPdfStage` (`Shards/`) puts it in the pipeline |
 | `HttpResponsePayload` / `HtmlTextExtractor` / `HtmlTreeBudget` | `Text/` | a WARC response's HTTP headers and body, decoded by header charset → meta charset → UTF-8 (a charset the runtime does not carry drops the page); HTML to text on AngleSharp with a scoped rule set (scripts, styles, navigation, forms and hidden content dropped; blocks become lines; title first); a linear pre-scan refuses pages nested deeper than 512 or past 60k tags, and the parser itself is held to a budget on its own tree (depth and elements, the copies it makes on its own included). Agrees with Common Crawl's own WET text at a median Jaccard of 0.85 on the golden shard |
 | `CorpusCasing` / `CorpusCasingTable` | `Text/Casing/` | the lower-case table the language n-grams and the MinHash tokens are made with: Unicode 16.0.0 simple lower case, generated by the committed `generate_casing_table.py` from `UnicodeData.txt` (Unicode License v3, `LICENSE-unicode.txt`), and the ASCII-only comparisons of names and phrases — nothing that reaches a product asks the node's globalization library |
@@ -1289,7 +1314,11 @@ tests' own generator, see below) with the reference language pack and the 0.1.x
 model (committed under `Fixtures/`), on the heads of a real WET and a real WARC
 file (fetched, see below) and on
 hostile input
-(truncation, oversized records, garbage, hostile nesting, repetition); the
+(truncation, oversized records, garbage, hostile nesting, repetition); a shard
+cut at every byte of every record's headers, at five thousand places of each
+shard unpacked and at a thousand of each file as it is packed, held to a model
+of the framing that is the tests' own (`WarcCutModel`): the whole records
+before the cut, `Truncated`, and never a format error; the
 pipeline's determinism and counters; the language packs (the format and its
 refusals, the unsupported-language test on sentences written for the tests, the
 0.1.x model's products pinned unchanged, the build and evaluation on a small

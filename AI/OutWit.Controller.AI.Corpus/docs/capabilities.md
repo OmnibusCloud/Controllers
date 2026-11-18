@@ -18,10 +18,10 @@ node, what a run does when nodes disagree or fail, what hostile input costs, and
 and cannot read off a document (sections 7, 9, 11 and 12) — and is proven on the test fleet;
 0.5.0 is the second: what a run promises before it starts holds whoever wrote the manifest
 (section 8), and the tasks and the results travel as blobs (section 10), and is proven on the
-test fleet too; 0.6.0 is the third and changes nothing a document or a product shows: the module
-carries the licence notices of what it redistributes (section 14), and a line a node's log
-cannot take no longer decides a shard's fate (section 12). What changed for an application is
-listed in section 14. 0.6.0 has not run on the build server or on the fleet yet. Nothing is on
+test fleet too; 0.6.0 is the third and moves no product: the module carries the licence notices
+of what it redistributes (section 14), a line a node's log cannot take no longer decides a
+shard's fate (section 12), and a shard that stops inside a header line is truncated, not
+malformed (sections 5 and 7). What changed for an application is listed in section 14. 0.6.0 has not run on the build server or on the fleet yet. Nothing is on
 nuget.org or on the live network yet.
 
 ## Contents
@@ -318,7 +318,16 @@ The stages in the order a document meets them (`stages.order` in the capabilitie
 streamed one record at a time. A record over 8 MiB in a WET shard, or over 64 MiB in a WARC
 shard, is skipped and counted (`record_oversized`); a truncated tail ends
 the file with the complete records (the result's `error` is `truncated`, the verdict stays
-`Completed`); bytes that are not a WARC file are `Malformed`. A shard may unpack to 32 times its
+`Completed`); bytes that are not a WARC file are `Malformed`. A tail is truncated wherever the
+file stops: inside a payload, between two header lines, or inside a line. The last line of a
+file that has no line feed is the line the cut went through and is not judged as a header; a
+line that has its line feed and is malformed is `Malformed`, and so is a last line where a
+record should start that is no beginning of `WARC/` (a body that is no WARC is not a truncated
+WARC). Up to 0.5.0 a file that stopped inside a header line was `Malformed`: 63 of 5,000 evenly
+spaced cuts of the head of a real WET file. A file that stops exactly between two records is a
+shorter whole file, and nothing in it says so: packed, the gzip frame between two members and
+the first bytes of the next unpack to nothing, which is 2 to 4 % of the places a cut can fall in
+a real file. A shard may unpack to 32 times its
 size on the wire (64 MiB at least, 16 GiB at most): past that it is `Oversized`
 (`oversized_unpacked`) on every node, at the same byte.
 
@@ -505,11 +514,11 @@ never a text:
 
 | Verdict | When | `error` |
 |---|---|---|
-| `Completed` | fetched and processed; under `full` its products uploaded | "" or `truncated` (the file ended inside a record: the records before it are the product) |
+| `Completed` | fetched and processed; under `full` its products uploaded | "" or `truncated` (the file ended inside a record, in its payload or in its headers: the records before it are the product) |
 | `OriginRefused` | the URL is not one the task's list permits, or not one this machine fetches from; a redirect led off the list; nothing of the shard was read | `origin_not_allowed`, `origin_not_listed`, `origin_address`, `origin_redirect` |
 | `FetchFailed` | the origin answered and its answer is not the shard: an HTTP status, bytes that do not hash to the manifest's `sha256`, a body without a length that ended inside a record | `http_NNN` (the status), `hash_mismatch`, `body_truncated` |
 | `Oversized` | more bytes on the wire than the cap, more than the size the shard was declared with allows (section 8), or more unpacked than a shard may hold | `oversized`, `oversized_declared`, `oversized_unpacked` |
-| `Malformed` | the bytes are not a WARC file, or the compression is damaged | `not_warc`, `bad_compression` |
+| `Malformed` | the bytes are not a WARC file, or the compression is damaged; a file that stops inside a record is not malformed (`truncated`, `body_truncated`) | `not_warc`, `bad_compression` |
 | `PipelineUnavailable` | the pipeline identifies languages and names no model, or the model is not one the controller reads within its limits | `no_language_model`, `language_model_refused` |
 | `Failed` | a task that is no task (no source, no pipeline, parameters no pipeline may have) | `task_invalid` |
 | `Disputed` | the shard's copies disagreed and three machines did not settle it (section 9); no product, out of the counters | "" |
@@ -794,8 +803,9 @@ stage's included.
   80 s apart or the origin's `Retry-After`, two minutes at most each. A read that stalls 60 s
   counts as a failure, and so does a fetch slower than 32 KiB/s over its whole length; a 4xx
   other than 429 is final; a broken body is resumed with a Range request; a body without a length
-  that ends inside a record is `FetchFailed` (`body_truncated`). At most two shards download at
-  once per node.
+  that ends inside a record, in its payload or in its headers, is `FetchFailed`
+  (`body_truncated`); one that ends exactly between two records cannot be told from a whole
+  file (section 5). At most two shards download at once per node.
 - **The disk.** A node holds its degree and two more shards at a time, whatever its share: a
   task waits for a place before it fetches. The preflight states the room each held shard needs.
 - **The language pack** arrives as a blob (cached per node) and is used only when its bytes hash to
@@ -927,11 +937,21 @@ beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
 
 **What changed for an application in 0.6.0** (from 0.5.0):
 
-- **Nothing in a call, a document or a product.** The scripts, the activities, the wire types
-  (Model 0.2.0), the four schemas and every fixed word are those of 0.5.0, and no stage changed:
-  the products of an honest run are byte for byte those of 0.4.0 and 0.5.0, and the stage set's
-  fingerprint is the same. A job still runs on one controller version, so server and nodes move
-  to 0.6.0 together.
+- **Nothing in a call or a document, and no product moved.** The scripts, the activities, the
+  wire types (Model 0.2.0), the four schemas and every fixed word are those of 0.5.0, and no
+  stage changed: what 0.4.0 and 0.5.0 made a product of, 0.6.0 makes the same product of, byte
+  for byte, and the stage set's fingerprint is the same. A job still runs on one controller
+  version, so server and nodes move to 0.6.0 together.
+- **One verdict changed: a shard that stops inside a header line is truncated, not
+  malformed.** A file whose last line has no line feed, where the cut went through the version
+  line or a header of a record, ended as `Malformed` (`not_warc`) and gave no product. It now
+  ends as every other cut file does: `Completed` with `error` `truncated` and the product of
+  its whole records when the origin said where its body ends (a length, chunks),
+  `FetchFailed` (`body_truncated`) when it did not. On a real WET file that is one cut in
+  eighty. A report
+  that counted such a shard under `Malformed` counts it under `Completed` or `FetchFailed`;
+  no code is new. A line that has its line feed and is malformed, and a body that is no WARC at
+  all, are `Malformed` as before (section 5).
 - **The module is twelve files, not eight:** the four texts above travel in it. A deployment
   that lists or counts the files of a module, or pins the module's content digest, sees them.
 - **A node's log cannot fail a package.** On a client that hands controllers a logger that is
