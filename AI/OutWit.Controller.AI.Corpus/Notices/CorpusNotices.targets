@@ -38,7 +38,9 @@
   </UsingTask>
 
   <PropertyGroup>
-    <CorpusNoticesDir>$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\notices\</CorpusNoticesDir>
+    <!-- Absolute, with the separators of the machine that builds: the task writes the files
+         itself, and a path is a path only once MSBuild has made it one. -->
+    <CorpusNoticesDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', '$(Configuration)', '$(TargetFramework)', 'notices'))</CorpusNoticesDir>
     <CorpusNoticesFileName>THIRD-PARTY-NOTICES.txt</CorpusNoticesFileName>
   </PropertyGroup>
 

@@ -60,11 +60,11 @@ namespace OutWit.Controller.AI.Corpus.Build
                 if (problems.Count > 0)
                     return false;
 
-                WriteIfChanged(OutputFile, Compose(entries));
+                WriteIfChanged(LocalPath(OutputFile), Compose(entries));
 
                 foreach (var copy in Copies ?? new ITaskItem[0])
                 {
-                    var text = ReadText(copy.ItemSpec);
+                    var text = ReadText(LocalPath(copy.ItemSpec));
                     var expected = copy.GetMetadata("Sha256");
                     var actual = Sha256(Encoding.UTF8.GetBytes(text));
                     // The controller's own licence is copied as it is; a third party's is held to its hash.
@@ -74,7 +74,7 @@ namespace OutWit.Controller.AI.Corpus.Build
                         return false;
                     }
 
-                    WriteIfChanged(copy.GetMetadata("Destination"), text);
+                    WriteIfChanged(LocalPath(copy.GetMetadata("Destination")), text);
                 }
 
                 return !Log.HasLoggedErrors;
@@ -110,7 +110,7 @@ namespace OutWit.Controller.AI.Corpus.Build
                     problems.Add(entry.Name + " declares no " + required + ".");
             }
 
-            var textFile = item.GetMetadata("TextFile");
+            var textFile = LocalPath(item.GetMetadata("TextFile"));
             if (!string.IsNullOrEmpty(textFile))
             {
                 if (!File.Exists(textFile))
@@ -143,7 +143,7 @@ namespace OutWit.Controller.AI.Corpus.Build
                 return;
             }
 
-            var folder = Path.Combine(PackagesRoot, entry.PackageId.ToLowerInvariant(), entry.Version);
+            var folder = Path.Combine(LocalPath(PackagesRoot), entry.PackageId.ToLowerInvariant(), entry.Version);
             var nuspec = Path.Combine(folder, entry.PackageId.ToLowerInvariant() + ".nuspec");
             if (!File.Exists(nuspec))
             {
@@ -165,7 +165,7 @@ namespace OutWit.Controller.AI.Corpus.Build
             if (!string.Equals(commit, entry.Commit, StringComparison.OrdinalIgnoreCase))
                 problems.Add(entry.Name + ": the package's nuspec names the source commit '" + commit + "', the notice '" + entry.Commit + "': the licence text was taken at the notice's.");
 
-            var staged = Path.Combine(AssemblyDirectory, entry.Assembly + ".dll");
+            var staged = Path.Combine(LocalPath(AssemblyDirectory), entry.Assembly + ".dll");
             if (!File.Exists(staged))
             {
                 problems.Add(entry.Name + ": " + entry.Assembly + ".dll is not in " + AssemblyDirectory + ".");
@@ -306,6 +306,16 @@ namespace OutWit.Controller.AI.Corpus.Build
         }
 
         /// <summary>A file's text with its line ends as line feeds, whatever a checkout made of them; nothing else is touched.</summary>
+        /// <summary>
+        /// A path from a project file in the separators of this machine. MSBuild hands a task's
+        /// metadata over as written; on Linux and macOS a backslash is a character of a file name,
+        /// so a path written with them would name one file in the current folder.
+        /// </summary>
+        private static string LocalPath(string path)
+        {
+            return string.IsNullOrEmpty(path) ? path : path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+        }
+
         private static string ReadText(string path)
         {
             return new UTF8Encoding(false).GetString(File.ReadAllBytes(path)).Replace("\r\n", "\n");
