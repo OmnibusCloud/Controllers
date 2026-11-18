@@ -14,8 +14,19 @@
       entries in byte order with fixed times and modes, so the same tree gives the same bytes
   layers.py asset <dir> <zip>
       the same, deflated: the data asset that carries a runtime folder to the nodes
+  layers.py changes <toolchain-dir> <build-info>
+      adds to the build's record what numpy was built with that is not numpy's own: the
+      patches applied to its sources, each with the words it starts with, and the files of
+      the toolchain compiled in or put in front of its sources, each with its SHA-256
+
+The asset's bytes depend on the entries and on the compressor: zlib at its level 9, the one
+Python's zipfile calls. zlib 1.2.12, 1.3 and 1.3.1 were seen to give the same bytes. A Python
+that brings another compressor in zlib's place (zlib-ng) gives an archive that unpacks to the
+same files and hashes differently; the job that holds an archive to its pinned hash then says
+so, and the files inside are still held by their own pins.
 """
 
+import hashlib
 import os
 import shutil
 import sys
@@ -23,6 +34,16 @@ import zipfile
 
 SKIPPED_STDLIB = {"test", "site-packages", "idlelib", "tkinter", "turtledemo", "curses", "multiprocessing",
                   "venv", "ensurepip"}
+
+# What the build takes from the toolchain's folder besides the patches, by what it is there for.
+ADAPTATIONS = [
+    ("put in front of numpy's sources by the compiler's command line (wasi-numpy.cross.in):",
+     ["npy_fenv_flags.h", "npy_random_legacy_rename.h"]),
+    ("compiled and linked in beside numpy's modules:",
+     ["wasinumpy.c", "cxa_stubs.c"]),
+    ("the entry points of python.wasm, the start-up snapshot, in place of CPython's main:",
+     ["pynp_snapshot.c"]),
+]
 
 
 def walk(root):
@@ -95,6 +116,38 @@ def write_zip(entries, target, compression):
     print(f"{os.path.basename(target)}: {len(entries)} entries, {os.path.getsize(target)} bytes")
 
 
+def record_changes(toolchain, build_info):
+    lines = ["",
+             "numpy's sources are not built as they are. What was changed, each file with its SHA-256",
+             "(the patches lie in patches/ beside this file; every file named here is in",
+             "toolchain/python-numpy of the controller's repository):",
+             "",
+             "patches to numpy's sources, in the order they are applied:"]
+    patches = os.path.join(toolchain, "patches")
+    for name in sorted(n for n in os.listdir(patches) if n.endswith(".patch")):
+        path = os.path.join(patches, name)
+        lines.append(f"  {sha256(path)}  patches/{name}")
+        with open(path, encoding="utf-8") as patch:
+            for line in patch:
+                # A patch starts with what it changes and where it is from, up to its first empty line.
+                if not line.strip():
+                    break
+                lines.append("      " + line.rstrip())
+    for title, names in ADAPTATIONS:
+        lines.append(title)
+        for name in names:
+            lines.append(f"  {sha256(os.path.join(toolchain, name))}  {name}")
+    lines.append("CPython's sources are built as they are.")
+    with open(build_info, "ab") as record:
+        record.write(("\n".join(lines) + "\n").encode("utf-8"))
+    print(f"{os.path.basename(build_info)}: {len(lines)} lines about the changes")
+
+
+def sha256(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
 def copy(source, target):
     os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.copyfile(source, target)
@@ -102,7 +155,7 @@ def copy(source, target):
 
 if __name__ == "__main__":
     commands = {"stage-stdlib": (stage_stdlib, 3), "stage-package": (stage_package, 2), "zip": (make_zip, 2),
-                "asset": (make_asset, 2)}
+                "asset": (make_asset, 2), "changes": (record_changes, 2)}
     if len(sys.argv) < 2 or sys.argv[1] not in commands or len(sys.argv) != commands[sys.argv[1]][1] + 2:
         sys.exit(__doc__)
     commands[sys.argv[1]][0](*sys.argv[2:])

@@ -14,6 +14,10 @@ OpenFOAM/**/Fixtures/** text eol=lf
 *.wasm binary
 # Modules the Verify runtime set ships as built (lua.wasm and its licence): bytes, pinned by hash
 AI/OutWit.Controller.AI.Verify.Assets/modules/** -text
+# The third-party notices of the Verify module: a generated file the module's content digest covers, the
+# same bytes on every checkout. The tool that writes the notices and its table: LF on every checkout
+AI/OutWit.Controller.AI.Verify/THIRD-PARTY-NOTICES.txt -text
+AI/OutWit.Controller.AI.Verify.Assets/toolchain/notices/** text eol=lf
 # Patches the toolchain applies to pinned sources: LF, whatever the checkout OS
 *.patch text eol=lf
 # The Corpus toolchain (the PDF extractor's crate, its lock file, the build and test scripts): LF on

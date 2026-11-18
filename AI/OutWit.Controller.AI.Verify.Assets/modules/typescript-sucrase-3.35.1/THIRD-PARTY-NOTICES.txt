@@ -1,0 +1,60 @@
+THIRD-PARTY NOTICES
+typescript-sucrase-3.35.1/ of the language runtimes of the OmnibusCloud Verify controller
+
+What this folder carries: sucrase.js, the transform of sucrase 3.35.1 with the packages it
+needs, from npm by the integrity hashes of the toolchain's lock file, bundled into one script by
+esbuild 0.25.10. QuickJS loads it before a TypeScript task.
+
+This file is written by a tool (toolchain/notices in the controller's repository,
+https://github.com/OmnibusCloud/Controllers), and a build job fails when the committed file is
+not what the tool writes. No text here is written from memory: each is a file, or a named part
+of a file, at the address given with it, held to the SHA-256 given with it, or a file that lies
+beside this one. A text is unchanged but for its line ends.
+
+The controller itself is its authors' work under the MIT licence. This file is about what it
+carries of others.
+
+Parts
+-----
+  1. sucrase and the packages bundled with it: MIT (ts-interface-checker: Apache-2.0)
+  2. esbuild 0.25.10: MIT
+
+================================================================================
+1. sucrase and the packages bundled with it
+================================================================================
+In:       sucrase.js
+Licence:  MIT (ts-interface-checker: Apache-2.0)
+Note:     The file names every bundled package with its version and gives each one's licence text: sucrase, lines-and-columns, ts-interface-checker and four @jridgewell packages.
+Text:     LICENSE-sucrase.txt, beside this file
+
+================================================================================
+2. esbuild 0.25.10
+================================================================================
+In:       sucrase.js: the bundler wrote the few functions that tie the bundled modules together
+Licence:  MIT
+
+Text: https://raw.githubusercontent.com/evanw/esbuild/v0.25.10/LICENSE.md
+(SHA-256 of that file: b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681)
+
+MIT License
+
+Copyright (c) 2020 Evan Wallace
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+

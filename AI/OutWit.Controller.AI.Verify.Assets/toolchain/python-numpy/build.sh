@@ -74,6 +74,13 @@ fetch "$NUMPY_URL" "$NUMPY_SHA256" "$WORK/numpy-$NUMPY_VERSION.tar.gz"
 fetch "$CYTHON_URL" "$CYTHON_SHA256" "$WORK/$(basename "$CYTHON_URL")"
 fetch "$NINJA_URL" "$NINJA_SHA256" "$WORK/$(basename "$NINJA_URL")"
 fetch "$WASMTIME_URL" "$WASMTIME_SHA256" "$WORK/wasmtime.tar.xz"
+# A download without a pin is hashed and named above, and that is all that is done with it:
+# nothing is unpacked or run before every download has matched its pin.
+if [ "$UNPINNED" -ne 0 ]; then
+  echo "some downloads are not pinned (see UNPINNED above): nothing was unpacked or run"
+  exit 3
+fi
+echo "every download matched its pin"
 
 echo "== tools"
 SDK="$WORK/wasi-sdk-24"
@@ -246,12 +253,8 @@ echo "== built"
   echo "builtins:"
   grep -o '"numpy[^"]*"' "$L/npyinittab.h" | tr -d '"'
 } > "$OUT/build-info.txt"
+# What numpy was built with that is not numpy's own: the patches and the toolchain's files, each
+# with its SHA-256. The record ships as BUILD.txt, beside the patches themselves.
+python3 -I "$HERE/layers.py" changes "$HERE" "$OUT/build-info.txt"
 cat "$OUT/build-info.txt"
 ( cd "$OUT" && sha256sum python-numpy.wasm ./*.zip LICENSE-*.txt && ls -l python-numpy.wasm ./*.zip | awk '{ print $5, $9 }' )
-
-echo "== pins"
-if [ "$UNPINNED" -ne 0 ]; then
-  echo "some downloads are not pinned (see UNPINNED above)"
-  exit 3
-fi
-echo "every download matched its pin"
