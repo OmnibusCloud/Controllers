@@ -76,10 +76,16 @@
        nodes (the Render 1.23.22 incident).
        Engine.Assets.MSBuild flows transitively to consumers (PrivateAssets=none
        + IncludeAssets=build;buildTransitive) so the ResolveControllerAssetsTask
-       UsingTask reaches the consumer's build. -->
+       UsingTask reaches the consumer's build. It is the package that fetches a
+       controller's data assets and holds each to its SHA-256, so it does not float
+       either: a version that appears on a feed must not be taken by the next build
+       without anyone having chosen it. A plain version, as for Engine.Data: restore
+       takes the lowest version a reference allows, which is exactly this one, and a
+       consumer that needs a newer one can still ask for it (a bracket would make two
+       controllers built a patch apart refuse to restore together). -->
   <ItemGroup>
     <PackageReference Include="OutWit.Engine.Data" Version="1.1.4" />
-    <PackageReference Include="OutWit.Engine.Assets.MSBuild" Version="1.0.*">
+    <PackageReference Include="OutWit.Engine.Assets.MSBuild" Version="1.0.1">
       <PrivateAssets>none</PrivateAssets>
       <IncludeAssets>build; buildTransitive</IncludeAssets>
     </PackageReference>

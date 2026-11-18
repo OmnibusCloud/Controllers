@@ -1,0 +1,89 @@
+name: AI Verify archives
+run-name: "AI Verify archives: ${{ github.event.pull_request.title || github.ref_name }}"
+
+# What the Verify controller hands on besides its own code, held to its sources:
+#
+#   notices   The third-party notices of every folder a node is sent (each language runtime,
+#             the native engine library, the module) are committed files. The job writes them
+#             again from their pinned sources (toolchain/notices) and fails when a committed
+#             file is not what the tool writes.
+#   archives  The archives of the controller's data assets (the language runtimes, and the
+#             native engine library of each platform) are built from their pins and packed the
+#             same way every time (toolchain/archives.sh). The job fails when an archive is not
+#             the one the controller's project file pins by SHA-256 and size. The archives are
+#             published as a workflow artifact: a release takes them from here.
+#
+# The numpy runtime's archive is built, and held to its pin, by its own workflow
+# (ai-verify-python-numpy.yml).
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'AI/OutWit.Controller.AI.Verify.Assets/**'
+      - '!AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/layers.py'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/pins.env'
+      - 'AI/OutWit.Controller.AI.Verify/OutWit.Controller.AI.Verify.csproj'
+      - 'AI/OutWit.Controller.AI.Verify/THIRD-PARTY-NOTICES.txt'
+      - '.github/workflows/ai-verify-archives.yml'
+  # The same paths as above.
+  pull_request:
+    paths:
+      - 'AI/OutWit.Controller.AI.Verify.Assets/**'
+      - '!AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/layers.py'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/pins.env'
+      - 'AI/OutWit.Controller.AI.Verify/OutWit.Controller.AI.Verify.csproj'
+      - 'AI/OutWit.Controller.AI.Verify/THIRD-PARTY-NOTICES.txt'
+      - '.github/workflows/ai-verify-archives.yml'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+
+jobs:
+  notices:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The pinned sources (the engine's source archive is 200 MB); every one is held to its
+      # pin again when it is read, from the cache or not.
+      - name: Cache the pinned sources
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/notices-cache
+          key: verify-notices-${{ hashFiles('AI/OutWit.Controller.AI.Verify.Assets/toolchain/notices/notices.json', 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/pins.env', 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/pins.env') }}
+
+      - name: The committed notices are what the pinned sources give
+        shell: bash
+        run: python3 -I AI/OutWit.Controller.AI.Verify.Assets/toolchain/notices/notices.py check . --cache "$RUNNER_TEMP/notices-cache"
+
+  archives:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build the archives from their pins and hold them to the project file
+        shell: bash
+        run: bash AI/OutWit.Controller.AI.Verify.Assets/toolchain/archives.sh "$RUNNER_TEMP/archives" "$RUNNER_TEMP/work" --check
+
+      # Also when the check failed: after a change that is meant to move an archive, these
+      # are the archives and the log has their hashes.
+      - name: Publish the archives
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: verify-archives
+          path: ${{ runner.temp }}/archives/*.zip
+          if-no-files-found: ignore

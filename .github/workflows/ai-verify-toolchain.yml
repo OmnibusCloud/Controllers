@@ -7,15 +7,38 @@ run-name: "AI Verify toolchain: ${{ github.ref_name }}"
 # in two folders and compares the bytes, checks that the fixtures committed with the tests
 # are those bytes, runs each module under the pinned wasmtime, and publishes the modules as
 # a workflow artifact with their hashes in the log.
+#
+# It runs on a pull request as well as after a merge: a change that replaces a committed
+# module, or moves one of its pins, is held to what the sources build to before it is merged.
+# The paths are the modules, the toolchain that builds them, and the two files that pin them
+# (the asset tool's pins and the controller's runtime catalog).
 
 on:
   workflow_dispatch:
   push:
     paths:
       - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/**'
-      # The numpy runtime has a workflow of its own (ai-verify-python-numpy.yml).
+      # The numpy runtime has a workflow of its own (ai-verify-python-numpy.yml), and the
+      # notices and the archives have theirs (ai-verify-archives.yml).
       - '!AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/**'
+      - '!AI/OutWit.Controller.AI.Verify.Assets/toolchain/notices/**'
       - 'AI/OutWit.Controller.AI.Verify.Assets/modules/**'
+      - '!AI/OutWit.Controller.AI.Verify.Assets/modules/**/THIRD-PARTY-NOTICES.txt'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/AssetPins.cs'
+      - 'AI/OutWit.Controller.AI.Verify/Runtimes/VerifyRuntimeCatalog.cs'
+      - 'AI/OutWit.Controller.AI.Verify.Tests/Sandbox/Fixtures/**'
+      - 'AI/OutWit.Controller.AI.Verify.Live/demo/03-wasm/**'
+      - '.github/workflows/ai-verify-toolchain.yml'
+  # The same paths as above: a list is written twice because a workflow has no way to share one.
+  pull_request:
+    paths:
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/**'
+      - '!AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/**'
+      - '!AI/OutWit.Controller.AI.Verify.Assets/toolchain/notices/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/modules/**'
+      - '!AI/OutWit.Controller.AI.Verify.Assets/modules/**/THIRD-PARTY-NOTICES.txt'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/AssetPins.cs'
+      - 'AI/OutWit.Controller.AI.Verify/Runtimes/VerifyRuntimeCatalog.cs'
       - 'AI/OutWit.Controller.AI.Verify.Tests/Sandbox/Fixtures/**'
       - 'AI/OutWit.Controller.AI.Verify.Live/demo/03-wasm/**'
       - '.github/workflows/ai-verify-toolchain.yml'
@@ -30,29 +53,20 @@ jobs:
     env:
       TOOLCHAIN: AI/OutWit.Controller.AI.Verify.Assets/toolchain
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      # A download without a pin stops the build before anything is unpacked or run (exit 3,
+      # with the hash that was seen in the log): nothing is built from it, here or below.
       - name: Build
-        id: build
         shell: bash
-        run: |
-          set +e
-          bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/work"
-          code=$?
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          # 3 = built, but a download has no pin yet: the modules are still published.
-          [ "$code" -eq 0 ] || [ "$code" -eq 3 ] || exit "$code"
+        run: bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/work"
 
       - name: Build again in another folder and compare
         shell: bash
         run: |
-          set +e
           mkdir -p "$RUNNER_TEMP/work2"
           cp "$RUNNER_TEMP/work/wasi-sdk.tar.gz" "$RUNNER_TEMP/work/lua.tar.gz" "$RUNNER_TEMP/work/binaryen.tar.gz" "$RUNNER_TEMP/work/quickjs.tar.gz" "$RUNNER_TEMP/work2/"
-          bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out2" "$RUNNER_TEMP/work2" > "$RUNNER_TEMP/build2.log" 2>&1
-          code=$?
-          [ "$code" -eq 0 ] || [ "$code" -eq 3 ] || { cat "$RUNNER_TEMP/build2.log"; exit "$code"; }
-          set -e
+          bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out2" "$RUNNER_TEMP/work2" > "$RUNNER_TEMP/build2.log" 2>&1 || { cat "$RUNNER_TEMP/build2.log"; exit 1; }
           for module in "$RUNNER_TEMP"/out/*.wasm "$RUNNER_TEMP"/out/*.js "$RUNNER_TEMP"/out/LICENSE-*.txt; do
             name="$(basename "$module")"
             if cmp -s "$module" "$RUNNER_TEMP/out2/$name"; then
@@ -193,7 +207,7 @@ jobs:
         run: bash "$TOOLCHAIN/gates.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/work" "$RUNNER_TEMP/wasmtime/wasmtime"
 
       - name: Publish the modules
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: verify-toolchain-modules
           path: |
@@ -241,7 +255,7 @@ jobs:
 
       - name: Publish the raw-wasm demo kit as built
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: verify-raw-wasm-kit
           path: ${{ runner.temp }}/kit-built/
@@ -262,10 +276,3 @@ jobs:
               exit 1
             fi
           done
-
-      - name: Every download is pinned
-        if: steps.build.outputs.code != '0'
-        shell: bash
-        run: |
-          echo "::error::a download has no pin yet (UNPINNED lines in the build step)"
-          exit 1

@@ -54,6 +54,13 @@ fetch "$WASI_SDK_URL" "$WASI_SDK_SHA256" "$WORK/wasi-sdk.tar.gz"
 fetch "$LUA_URL" "$LUA_SHA256" "$WORK/lua.tar.gz" "$LUA_MIRROR_URL"
 fetch "$BINARYEN_URL" "$BINARYEN_SHA256" "$WORK/binaryen.tar.gz"
 fetch "$QUICKJS_URL" "$QUICKJS_SHA256" "$WORK/quickjs.tar.gz"
+# A download without a pin is hashed and named above, and that is all that is done with it:
+# nothing is unpacked or run before every download has matched its pin.
+if [ "$UNPINNED" -ne 0 ]; then
+  echo "some downloads are not pinned (see UNPINNED above): nothing was unpacked or run"
+  exit 3
+fi
+echo "every download matched its pin"
 
 SDK="$WORK/wasi-sdk"
 if [ ! -x "$SDK/bin/clang" ]; then
@@ -206,10 +213,3 @@ fi
 
 echo "== built"
 ( cd "$OUT" && sha256sum *.wasm && ls -l *.wasm | awk '{ print $5, $9 }' )
-
-echo "== pins"
-if [ "$UNPINNED" -ne 0 ]; then
-  echo "some downloads are not pinned (see UNPINNED above)"
-  exit 3
-fi
-echo "every download matched its pin"
