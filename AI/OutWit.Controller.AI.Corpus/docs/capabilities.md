@@ -922,7 +922,7 @@ and a merge over the first 12 of the 24 shards finds 7,292: why no figure "so fa
 | The scripts | 0.1.5 | `OutWit.Controller.AI.Corpus.Scripts` |
 | The PDF extractor | pdftext 1.0.0 (pdf_oxide 0.3.78) | `corpus-pdftext-wasm.zip`, release `pdftext-v1.0.0` (5.9 MB, extracted to `wasm/` beside the controller) |
 | The sandbox engine | wasmtime binding 48.0.2 over the native library 48.0.8 | natives per platform, release `wasmtime-v48.0.8` (8 to 10 MB each), the bytes Verify ships |
-| The reference language pack | `cc-2026-43-16` | a job input; built by `corpus-assets` from Common Crawl WET files and the rule data in `OutWit.Controller.AI.Corpus.Assets/languages/` |
+| The reference language pack | `cc-2026-43-16` | a job input; built by `corpus-assets` from Common Crawl WET files and the rule data in `OutWit.Controller.AI.Corpus.Assets/languages/`. That rule data holds FineWeb-2's stop-word lists and repetition thresholds (Apache-2.0): `LICENSE-fineweb-2.txt` is beside the pack wherever the repository hands it out as a file, and the module's notices name the pack |
 
 One wasmtime binding loads per client process: Corpus and Verify carry the same version.
 

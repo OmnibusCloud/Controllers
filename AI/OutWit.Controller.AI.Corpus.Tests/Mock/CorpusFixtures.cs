@@ -35,6 +35,9 @@ public static class CorpusFixtures
     /// <summary>The reference language pack (WITLID2): sixteen supported languages.</summary>
     public const string PACK = "language-pack-cc-2026-43-16.bin";
 
+    /// <summary>The licence text of FineWeb-2, whose stop-word lists and repetition thresholds the pack's rule data holds: beside the pack wherever the pack is a file.</summary>
+    public const string PACK_LICENCE = "LICENSE-fineweb-2.txt";
+
     /// <summary>The 0.1.x language model (WITLID1).</summary>
     public const string WITLID1 = "language-model-cc-2026-43-16.bin";
 

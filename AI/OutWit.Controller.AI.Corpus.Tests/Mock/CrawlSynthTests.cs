@@ -25,10 +25,10 @@ public sealed class CrawlSynthTests
     private const string TESTS = "OutWit.Controller.AI.Corpus.Tests";
     private const string FIXTURES = "Fixtures";
 
-    /// <summary>The fixtures folder of the repository: these files and no other.</summary>
+    /// <summary>The fixtures folder of the repository: these files and no other. The licence text is FineWeb-2's, beside the pack that carries its lists.</summary>
     private static readonly IReadOnlyList<string> COMMITTED =
     [
-        CorpusCrawlHeads.LISTING, CorpusFixtures.WARC, CorpusFixtures.WET, CorpusFixtures.WITLID1, CorpusFixtures.PACK,
+        CorpusCrawlHeads.LISTING, CorpusFixtures.WARC, CorpusFixtures.WET, CorpusFixtures.WITLID1, CorpusFixtures.PACK, CorpusFixtures.PACK_LICENCE,
         .. CrawlSynth.SUPPORTED.Concat(CrawlSynth.UNSUPPORTED).Select(code => $"{CrawlSynthLanguage.FOLDER}/{code}.txt")
     ];
 

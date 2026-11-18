@@ -369,10 +369,22 @@ input files are Common Crawl CC-MAIN-2026-43 WET files:
 - **calibration** — files 00030-00034 of the same segment, at a recall of
   0.999 (a language's region holds 999 of 1,000 of its calibration
   documents);
-- **rule data** — `OutWit.Controller.AI.Corpus.Assets/languages/`;
+- **rule data** — `OutWit.Controller.AI.Corpus.Assets/languages/`: Gopher's
+  eight English words, FineWeb-2's stop-word lists for the other fifteen
+  languages and its repetition thresholds for Japanese and Chinese
+  (Apache-2.0);
 - **evaluation** — nine files used for nothing else: 00000 and 00035-00039
   of the same segment and file 00500 of segments 1791170054112.6,
   1791170054429.52 and 1791170055137.36.
+
+With that rule data the pack carries data of another project, so it does not
+travel alone: wherever the repository hands the pack out as a file — the
+tests' `Fixtures/` and their output, the `models/` folder `corpus-live` runs
+from — `LICENSE-fineweb-2.txt` is beside it, a test holds every project that
+copies the pack to copying the licence text into the same folder, and the
+module's notices name the pack (see *What the module carries*). The pack's
+bytes are what they were: its hash is what manifests pin. Whoever hands the
+pack on hands the licence text on with it.
 
 On the evaluation files (128,699 documents labelled with a supported
 language, 10,126 with another), the supported languages keep their label at
@@ -432,7 +444,9 @@ hash. No controller release.
    (rare languages need more files than the supported ones). The tool prints
    the documents per language, the limits and the pack's SHA-256, and the
    pack records its input files by name and hash. The same inputs give the
-   same bytes.
+   same bytes. A pack holds the lists of its folders: one built from the
+   folders of this repository carries FineWeb-2's, and
+   `languages/LICENSE-fineweb-2.txt` goes with it.
 4. **Evaluate** on files outside both sets:
    ```
    corpus-assets evaluate-language-pack my-pack.bin <wet.gz>...
@@ -1196,7 +1210,7 @@ in the module that is not the controller's own:
 | ZstdSharp.Port 0.8.8 | MIT | `ZstdSharp.dll` |
 | Zstandard 1.5.7, which ZstdSharp is a port of | BSD-3-Clause | inside `ZstdSharp.dll` |
 | Wasmtime 48.0.2, the .NET binding | Apache-2.0 WITH LLVM-exception | `Wasmtime.Dotnet.dll` |
-| FineWeb-2's stop-word lists and Japanese repetition thresholds | Apache-2.0 | data inside the controller's assembly (the rule data of a `WITLID1` model) |
+| FineWeb-2's stop-word lists and Japanese repetition thresholds | Apache-2.0 | data inside the controller's assembly (the rule data of a `WITLID1` model); the entry also names the reference language pack, which carries that project's lists and is a job's input, no file of the module |
 | The Unicode Character Database 16.0.0 | Unicode-3.0 | the lower-case table inside the controller's assembly |
 
 Each entry names the version, the source and its commit, the file and its
