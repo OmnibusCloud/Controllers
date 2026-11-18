@@ -9,11 +9,21 @@
     <PackageTags>corpus;common-crawl;scripts;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
 
-  <!-- Compatibility marker: enable at first publish of the controller package, when it exists
-       on a feed (a reference to a package no feed has breaks restore until then). The scripts of 0.1.5
-       hand task and result packages to Corpus.ProcessPackage: they need a controller from 0.5.0 on.
+  <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md).
+       Lower bound: the scripts hand task and result packages to Corpus.ProcessPackage, which a
+       controller has from 0.5.0 on. Upper bound: the next major after the 1.x line, exclusive -
+       the release candidates become 1.0.0 with the activity surface they have, so a range that
+       ended at 1.0.0 would refuse the very release these scripts wait for.
+       NOT ENABLED YET, and it cannot be: the reference is restored from the feeds this
+       repository restores from, and no controller version of the range is on nuget.org (the 0.x
+       controller packages went to the organization's GitHub Packages feed only). Enabled now it
+       breaks the restore of this project, the publish job included. Enable it (remove the
+       comment marks around the ItemGroup, nothing else) as the first step after the controller
+       package of the release is on nuget.org, before this package is packed for it. A test
+       holds the range to the versions of the build, and fails a build of controller 1.0.0 or
+       later in which the marker is still off (CorpusScriptsCompatibilityTests).
   <ItemGroup>
-    <PackageReference Include="OutWit.Controller.AI.Corpus" Version="[0.5.0, 1.0.0)" />
+    <PackageReference Include="OutWit.Controller.AI.Corpus" Version="[0.5.0, 2.0.0)" />
   </ItemGroup>
   -->
 
