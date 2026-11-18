@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Dedup;
+using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Reports;
 using OutWit.Engine.Data.ActivityAdapters;
@@ -21,7 +22,7 @@ internal sealed class WitActivityAdapterCorpusDedup : WitActivityAdapterFunction
     #region Constructors
 
     public WitActivityAdapterCorpusDedup(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, CorpusLogger.Wrap(logger))
     {
         BlobService = blobService;
     }
