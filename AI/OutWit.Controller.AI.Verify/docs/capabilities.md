@@ -11,10 +11,25 @@ Every number on this page was measured, in the controller's tests or on a test f
 [README](../README.md) explains how things work inside; [safety.md](safety.md) is the same
 sandbox told for the people who lend their computers.
 
-Version described: **Verify 0.14.0** (with Verify.Model 0.4.0 and Verify.Scripts 0.6.0), for the
-test server. 0.13.0 is proven on a five-node test fleet (Windows and Linux; 0.11.3 on six nodes
+Version described: **Verify 0.15.0** (with Verify.Model 0.4.0 and Verify.Scripts 0.6.0), for the
+test server. 0.14.0 is proven on a five-node test fleet (Windows and Linux; 0.11.3 on six nodes
 with macOS), and the fleet figures on this page (scale, medians, pool rate) were measured before
 0.13.0. None of these versions is on nuget.org or on the live network.
+
+What 0.15.0 changed for an application:
+
+- **Nothing in a run.** A taskset gives the verdicts, the fuel figures and the report it gave
+  under 0.14.0, byte for byte, and the other documents with the controller's version as their
+  only difference; no schema and no document version moved; the model and the scripts are the
+  packages they were.
+- **A node's log cannot fail a package.** On a node whose log throws or cannot take two lines
+  at once (cloud clients up to 2.2.5), a share used to fail now and then with the log's own
+  error in the job's status, and the platform gave the work to another node. The work now
+  completes, and a package that fails for a reason of the node's own says so in the same fixed
+  words as before (section 6).
+- **What a deployment carries changed** (section 13): the archives of the language runtimes
+  and of the native engine library are new ones, with a `THIRD-PARTY-NOTICES.txt` in every
+  folder; the files inside that a program runs on are the same bytes.
 
 What 0.14.0 changed for an application:
 
@@ -360,7 +375,10 @@ run again (section 10).
 The documents never name a machine. The provenance has no degree and no wall time of a batch:
 with the memory cap and the degree the lab's to choose, a node's cores and memory could be read
 off them. What a node says of its own trouble reaches a document only as one of the reason
-codes above; a path, an account name or the text of an error stays in the node's own log. The
+codes above; a path, an account name or the text of an error stays in the node's own log. A
+node's log that fails (it throws, or cannot take two lines at once, as the log of cloud clients
+up to 2.2.5) changes nothing of this since 0.15.0: the line is lost, the package completes or
+fails in the same fixed words, and the log's own error goes nowhere. The
 program's own stdout and stderr are the program's and stay as they are.
 
 ## 7. Verdicts
@@ -751,18 +769,18 @@ task of the kit is ended by a node's wall clock.
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 0.14.0 | `OutWit.Controller.AI.Verify` (GitHub Packages; nuget.org at 1.0.0) |
+| The controller | 0.15.0 | `OutWit.Controller.AI.Verify` (GitHub Packages; nuget.org at 1.0.0) |
 | The model and the scripts | 0.4.0 and 0.6.0 | `OutWit.Controller.AI.Verify.Model`, `OutWit.Controller.AI.Verify.Scripts` |
-| The engine | wasmtime long-term line 48: the .NET binding 48.0.2 over the native library 48.0.8, pinned by SHA-256 | natives per platform, release `wasmtime-v48.0.8` (about 8 MB each; the bytes `verify-v0.6.0` carried) |
-| The language runtimes | as in section 8 | `verify-wasm.zip`, release `verify-v0.10.0` (68.7 MB) |
-| The numpy runtime | CPython 3.14.6 + numpy 2.5.4 | `verify-python-numpy.zip`, release `verify-v0.11.0` (17.2 MB) |
+| The engine | wasmtime long-term line 48: the .NET binding 48.0.2 over the native library 48.0.8, pinned by SHA-256 | natives per platform, release `wasmtime-v48.0.8-2` (8 to 10 MB each; the libraries of `wasmtime-v48.0.8`, byte for byte, with their third-party notices) |
+| The language runtimes | as in section 8 | `verify-wasm.zip`, release `verify-v0.15.0` (67.5 MB) |
+| The numpy runtime | CPython 3.14.6 + numpy 2.5.4 | `verify-python-numpy.zip`, release `verify-v0.15.0` (17.2 MB) |
 
 How a deployment uses them:
 - **The server.** Its build fetches the archives by hash and packs one zip per platform for the nodes. A node downloads it once per controller version.
 - **One controller version a job.** A task package names the version that made it; a node on another version refuses it, and the server refuses a result made by another version, engine or runtime bytes.
 - **The first use of a runtime in a node process** compiles its module (the 75 MB LLVM compiler takes about 15 s). The process keeps the compiled module.
-- **Licences** of the runtimes travel inside each archive (the list is not yet complete for what the interpreters link statically).
-- **Rebuilding:** `verify-assets` rebuilds the runtime set, the files inside the archives, from pinned downloads, byte for byte; the catalog pins every one of those files. The archives themselves are packed once and pinned by their SHA-256 in the controller's project file.
+- **Licences** travel with what they are about: every folder of an archive, and the controller's module, has a `THIRD-PARTY-NOTICES.txt` that lists the third-party software in the folder, what is linked statically into its module included, and gives the terms of each part (as a text in the file, or as a licence file beside it that the file names). The files are written by a tool from pinned sources and a job fails when a committed file is not what the tool writes; a test holds every folder to a pinned list of files and every file to its notices. The list of the engine's Rust crates was made by following the engine's manifests, not by asking its compiler, and the Rust standard library's own account of what it took from others is pointed to, not reproduced.
+- **Rebuilding:** `verify-assets` rebuilds the runtime set, the files inside the archives, from pinned downloads, byte for byte; the catalog pins every one of those files. The archives themselves are packed the same way every time (a fixed order, fixed times, zlib at level 9), and a job builds each again from its pins at every change and fails when it is not the archive the controller's project file pins by SHA-256 and size; the numpy runtime's archive is built twice, compared, and held to its pin by its own workflow. So an archive a node is sent is what the pinned sources build to, byte for byte, as long as the compressor is zlib; its files are held by their own pins whatever the compressor.
 
 ## 14. Known limits
 
