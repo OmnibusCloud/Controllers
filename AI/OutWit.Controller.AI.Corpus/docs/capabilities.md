@@ -965,6 +965,13 @@ beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
   which hid it, is no longer needed for it.
 - **The scripts package** is unchanged (0.1.5). Its compatibility range for the controller, not
   yet switched on, now reads `[0.5.0, 2.0.0)`: it will admit the 1.0.0 the candidates become.
+- **A PDF the clock stopped is the clock's, wherever it fired.** The engine reports the PDF
+  stage's wall-clock backstop as a trap when it stops the extractor's own code, and as an error
+  of another kind (whose cause is the deadline) when it stops it inside a call that passes
+  through the host. The second was read as an error of the document (`pdf_error`, the document
+  dropped): a product the machine's timing chose. Both are now the node fault `pdf_backstop`, and
+  the shard runs again elsewhere. The backstop is minutes past the stage's fuel, so an honest
+  run does not reach it; the build server found it with a backstop of one millisecond.
 
 **What changed for an application in 0.5.0** (from 0.4.0):
 

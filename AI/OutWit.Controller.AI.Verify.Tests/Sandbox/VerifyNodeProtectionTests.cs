@@ -403,6 +403,35 @@ public sealed class VerifyNodeProtectionTests : VerifySandboxTestBase
     }
 
     [Test]
+    public void M1AClockThatStopsAProgramInsideAHostCallIsStillTheClockTest()
+    {
+        // The clock reaches the host as a trap when it stops the program's own code, and as an
+        // error of another kind, whose cause is the deadline, when it stops the program inside a
+        // call that passes through the host. Until Verify 0.15.0 the second was a RuntimeError: a
+        // verdict the machine's timing chose. An interpreter that starts calls the host often, so a
+        // backstop of one millisecond lands there now and then; every run must end as the clock.
+        var task = PythonTask("while True:\n    pass\n");
+        var limits = VerifySandboxDefaults.Resolve(new VerifyLimitsData { FuelBudget = VerifyLimitCeilings.MAX_FUEL_BUDGET }, null);
+        var verdicts = new List<string>();
+        Sandbox.BackstopMs = 1;
+        try
+        {
+            for (var run = 0; run < 60; run++)
+            {
+                var result = Sandbox.Execute(Python, task, limits);
+                if (result.Verdict != VerifyVerdict.NoResult || result.Fault != VerifyFault.WALL_CLOCK)
+                    verdicts.Add($"run {run}: {result.Verdict} {result.Fault}");
+            }
+        }
+        finally
+        {
+            Sandbox.BackstopMs = null;
+        }
+
+        Assert.That(verdicts, Is.Empty, "a run the clock stopped became a verdict");
+    }
+
+    [Test]
     public void M1ABusyLoopEndsByItsFuelWhateverWallTimeTheTaskAsksForTest()
     {
         var limits = VerifySandboxDefaults.Resolve(new VerifyLimitsData { FuelBudget = 1_000_000_000, WallTimeMs = 1 }, null);

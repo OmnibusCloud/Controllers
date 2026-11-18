@@ -35,6 +35,13 @@ they name. What it changed:
 - A Windows run of the tests states in one line of its log whether the proof of survival
   under hardware stack protection ran: `stack-protection proof: shadow stacks on` or
   `stack-protection proof: shadow stacks off`.
+- The clock gives no verdict, wherever it fires. The engine reports the wall-clock backstop as
+  a trap when it stops the program's own code, and as an error of another kind (whose cause is
+  the deadline) when it stops the program inside a call that passes through the host; the
+  second was a `RuntimeError` (a `CompileError` during instantiation), a verdict the machine's
+  timing chose. Both are now the clock: `NoResult` with the fault `wall_clock`, run again
+  elsewhere. Found by the build server; the backstop of an ordinary task is minutes past its
+  fuel, so an honest run does not reach it.
 
 0.14.0 was the second hardening release. What it changed:
 
