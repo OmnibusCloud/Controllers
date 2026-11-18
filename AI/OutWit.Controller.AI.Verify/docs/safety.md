@@ -90,6 +90,8 @@ Your computer's name, your user name and your address are not in any of it. When
 something goes wrong on your computer (a language file that is missing, a transfer that
 failed, a disk that is full), what travels is fixed words or a short code, without a
 path, an account name or the text of an error. The detail stays in the client's own log.
+If the log itself fails (it cannot take a line, or two lines at once), the line is lost and
+nothing else: the work goes on, and the log's error travels nowhere.
 What a program itself printed is the program's and travels as it is.
 
 ## How to check this yourself
@@ -113,12 +115,17 @@ change:
   a host built like the client ends as a crash and leaves the host running. On a machine that
   enforces the processor's stack protection that is the proof that the client survives under
   it; on a machine that does not, that one test is reported as skipped and says the proof
-  did not run there. The way crashes are caught under the protection is run on every machine
-  all the same, by asking for it.
+  did not run there. Either way a Windows run states which it was in one line of its log:
+  `stack-protection proof: shadow stacks on` or `stack-protection proof: shadow stacks off`.
+  A release is cut from a commit whose Windows run states the first. The way crashes are
+  caught under the protection is run on every machine all the same, by asking for it.
 - `VerifyTrapModeTests`: the same programs give the same verdict, output and cost whichever
   of the two ways a crash is caught in.
 - `VerifyHostileKitTests`: the fifteen hostile tasks that are run on the test fleet, each
   with the verdict it must get.
+- `VerifyLoggerFateTests`: on a client whose log throws at every line, and on one whose log
+  cannot take two lines at once, every package of a share completes with its results, and a
+  package that fails for a reason of the computer's own still says only the fixed words.
 - `VerifyClangRuntimeTests`: a C or C++ build leaves nothing behind, and the program it
   builds sees no file system.
 - `WasmHostNativeResolutionTests`: in a host loaded like the client, an engine library that is
