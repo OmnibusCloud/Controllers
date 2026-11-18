@@ -106,6 +106,14 @@
     <None Include="LICENSE-unicode.txt" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <!-- What the module redistributes that is not the controller's own: the three libraries
+       above, the library one of them is a port of, and the third-party data compiled into the
+       assembly (FineWeb-2's stop words, the Unicode table). The build writes
+       THIRD-PARTY-NOTICES.txt for them and stages it, with the licence files it names and the
+       controller's own LICENSE, into the module - so into the zip and the package too - and
+       stops when the module carries a library the notices do not name. -->
+  <Import Project="Notices\CorpusNotices.targets" />
+
   <Import Project="..\..\Build\OutWit.Controller.targets" />
 
 </Project>

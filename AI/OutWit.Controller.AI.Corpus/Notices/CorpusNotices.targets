@@ -1,0 +1,195 @@
+<!--
+    Notices/CorpusNotices.targets
+    Imported by OutWit.Controller.AI.Corpus.csproj. Generates the THIRD-PARTY-NOTICES file of
+    corpus.module at build time and stages it, with the licence files that travel beside it,
+    into the module - and so into the zip and into the package's content/module/.
+
+    Everything the module redistributes that is not the controller's own is a component below:
+    the three libraries that are staged next to the controller (ControllerModuleAssembly), the
+    library one of them is a port of, and the two pieces of third-party data compiled into the
+    controller's assembly. The task (CorpusNoticesTask.cs) holds each package component to the
+    package the build restored - version, licence expression and source commit as its nuspec
+    states them, and the staged assembly byte for byte a file of that package - and each
+    licence text to its hash, and fails the build when the module carries an assembly no
+    component names. So a reference that moves, or a library that is added, stops the build
+    until its notice is reviewed.
+
+    Where the licence texts come from. The NuGet packages carry a licence expression and name
+    the commit they were built from, not the licence text. Each text in texts/ is the licence
+    file of the package's repository at exactly that commit, fetched once; TextSource says so
+    and TextSha256 is the SHA-256 of the file (with its line ends as line feeds):
+
+      AngleSharp 1.10.0     https://raw.githubusercontent.com/AngleSharp/AngleSharp/49d47510cbcdc91c1327527f7df9228749059476/LICENSE
+      ZstdSharp.Port 0.8.8  https://raw.githubusercontent.com/oleg-st/ZstdSharp/2cd0c019693bc786a5fe5c3be94e107b24e7267e/LICENSE
+      Zstandard 1.5.7       https://raw.githubusercontent.com/facebook/zstd/f8745da6ff1ad1e7bab384bd1f9d742439278e99/LICENSE
+                            (the commit of the tag v1.5.7; ZstdSharp's README at its commit says "Based on Zstandard v1.5.7")
+      Wasmtime 48.0.2       https://raw.githubusercontent.com/bytecodealliance/wasmtime-dotnet/d9db6b0005b93ba09a6ada8ddce2d5a3846511eb/LICENSE
+
+    To move a library: change its PackageReference, take the licence file at the commit the new
+    package's nuspec names, and update the component (Version, Commit, TextFile, TextSha256).
+    The build says which of them disagree.
+-->
+<Project>
+
+  <UsingTask TaskName="OutWit.Controller.AI.Corpus.Build.GenerateCorpusNotices" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <Task>
+      <Code Type="Class" Language="cs" Source="$(MSBuildThisFileDirectory)CorpusNoticesTask.cs" />
+    </Task>
+  </UsingTask>
+
+  <PropertyGroup>
+    <CorpusNoticesDir>$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\notices\</CorpusNoticesDir>
+    <CorpusNoticesFileName>THIRD-PARTY-NOTICES.txt</CorpusNoticesFileName>
+  </PropertyGroup>
+
+  <!-- The task's source is the build's, not the controller's. -->
+  <ItemGroup>
+    <Compile Remove="Notices\**\*.cs" />
+    <None Include="Notices\CorpusNoticesTask.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <CorpusNoticeComponent Include="AngleSharp">
+      <Kind>package</Kind>
+      <PackageId>AngleSharp</PackageId>
+      <Assembly>AngleSharp</Assembly>
+      <Version>1.10.0</Version>
+      <License>MIT</License>
+      <Source>https://github.com/AngleSharp/AngleSharp</Source>
+      <Commit>49d47510cbcdc91c1327527f7df9228749059476</Commit>
+      <Where>AngleSharp.dll</Where>
+      <What>The HTML parser of the extraction stage.</What>
+      <TextFile>$(MSBuildThisFileDirectory)texts\AngleSharp-1.10.0-LICENSE.txt</TextFile>
+      <TextSha256>6da3ab781b570d2c45102e74b366c0be0eb758ed0205c3b23093d6ac2231d394</TextSha256>
+      <TextSource>the file LICENSE of that repository at that commit</TextSource>
+    </CorpusNoticeComponent>
+
+    <CorpusNoticeComponent Include="ZstdSharp.Port">
+      <Kind>package</Kind>
+      <PackageId>ZstdSharp.Port</PackageId>
+      <Assembly>ZstdSharp</Assembly>
+      <Version>0.8.8</Version>
+      <License>MIT</License>
+      <Source>https://github.com/oleg-st/ZstdSharp</Source>
+      <Commit>2cd0c019693bc786a5fe5c3be94e107b24e7267e</Commit>
+      <Where>ZstdSharp.dll</Where>
+      <What>The compressor of the text product: a port of the Zstandard library to C#.</What>
+      <TextFile>$(MSBuildThisFileDirectory)texts\ZstdSharp-0.8.8-LICENSE.txt</TextFile>
+      <TextSha256>9a6a7216e532c4ee4f78881d31fb641c27148eb01b2d0e8e3235ffe9a70a662c</TextSha256>
+      <TextSource>the file LICENSE of that repository at that commit</TextSource>
+    </CorpusNoticeComponent>
+
+    <CorpusNoticeComponent Include="Zstandard">
+      <Kind>source</Kind>
+      <Version>1.5.7</Version>
+      <License>BSD-3-Clause</License>
+      <Holder>Meta Platforms, Inc. and affiliates (as its licence file states)</Holder>
+      <Source>https://github.com/facebook/zstd</Source>
+      <Commit>f8745da6ff1ad1e7bab384bd1f9d742439278e99</Commit>
+      <Where>ported to C# inside ZstdSharp.dll</Where>
+      <What>The compression library ZstdSharp is a port of (its README at the commit above says "Based on Zstandard v1.5.7"). The port is made from its sources, so its licence travels with the port.</What>
+      <TextFile>$(MSBuildThisFileDirectory)texts\Zstandard-1.5.7-LICENSE.txt</TextFile>
+      <TextSha256>7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8</TextSha256>
+      <TextSource>the file LICENSE of that repository at that commit (the commit of the tag v1.5.7)</TextSource>
+    </CorpusNoticeComponent>
+
+    <CorpusNoticeComponent Include="Wasmtime.Dotnet">
+      <Kind>package</Kind>
+      <PackageId>Wasmtime</PackageId>
+      <Assembly>Wasmtime.Dotnet</Assembly>
+      <Version>48.0.2</Version>
+      <License>Apache-2.0 WITH LLVM-exception</License>
+      <Source>https://github.com/bytecodealliance/wasmtime-dotnet</Source>
+      <Commit>d9db6b0005b93ba09a6ada8ddce2d5a3846511eb</Commit>
+      <Where>Wasmtime.Dotnet.dll</Where>
+      <What>The managed binding over the native wasmtime library, on which the sandbox of the PDF stage runs. Of the package only the managed assembly is in the module; the native library is a data asset (below) with notices of its own.</What>
+      <TextFile>$(MSBuildThisFileDirectory)texts\Wasmtime.Dotnet-48.0.2-LICENSE.txt</TextFile>
+      <TextSha256>a6c48161a09acc75a0e25503bab66a731eb5fba5392ed4bb4743e4ba5085327a</TextSha256>
+      <TextSource>the file LICENSE of that repository at that commit</TextSource>
+    </CorpusNoticeComponent>
+
+    <CorpusNoticeComponent Include="FineWeb-2 stop-word lists and repetition thresholds">
+      <Kind>data</Kind>
+      <License>Apache-2.0</License>
+      <Source>https://github.com/huggingface/fineweb-2 (configs/&lt;language&gt;_&lt;script&gt;.yml: the key "stopwords", and the repetition thresholds of jpn_Jpan.yml)</Source>
+      <Where>data inside OutWit.Controller.AI.Corpus.dll</Where>
+      <What>The stop-word lists of the quality filter for every language but English, and the Japanese repetition thresholds, frozen in the controller as the rule data a WITLID1 language model gets (Language/Resources/witlid1-rules.json). A language pack brings rule data of its own. The same text is beside this file as LICENSE-fineweb-2.txt.</What>
+      <TextFile>$(MSBuildThisFileDirectory)..\..\OutWit.Controller.AI.Corpus.Assets\languages\LICENSE-fineweb-2.txt</TextFile>
+      <TextSha256>c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4</TextSha256>
+      <TextSource>the Apache License 2.0, under which the project publishes them</TextSource>
+    </CorpusNoticeComponent>
+
+    <CorpusNoticeComponent Include="Unicode Character Database">
+      <Kind>data</Kind>
+      <Version>16.0.0</Version>
+      <License>Unicode-3.0</License>
+      <Holder>1991-2026 Unicode, Inc. (as its licence states)</Holder>
+      <Source>https://www.unicode.org/Public/16.0.0/ucd/UnicodeData.txt (SHA-256 ff58e5823bd095166564a006e47d111130813dcf8bf234ef79fa51a870edb48f)</Source>
+      <Where>a table inside OutWit.Controller.AI.Corpus.dll</Where>
+      <What>The controller lower-cases by a table of its own, made from the Simple_Lowercase_Mapping field of UnicodeData.txt, so that a product does not depend on a node's globalization library. The same text is beside this file as LICENSE-unicode.txt.</What>
+      <TextFile>$(MSBuildThisFileDirectory)..\LICENSE-unicode.txt</TextFile>
+      <TextSha256>e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96</TextSha256>
+      <TextSource>the Unicode License v3, under which the data files are published</TextSource>
+    </CorpusNoticeComponent>
+  </ItemGroup>
+
+  <!-- What a node fetches beside the module (the csproj's ControllerDataAsset items): each
+       archive carries its own notices, which the file names and does not repeat. A test holds
+       this list to the manifest's. -->
+  <ItemGroup>
+    <CorpusNoticeAsset Include="wasmtime-win-x64, wasmtime-linux-x64, wasmtime-osx-arm64">
+      <What>the native wasmtime library, one archive per platform, extracted to runtimes/&lt;platform&gt;/native/.</What>
+      <Notice>LICENSE-wasmtime.txt and NOTICE.txt in the same folder.</Notice>
+    </CorpusNoticeAsset>
+    <CorpusNoticeAsset Include="corpus-pdftext-wasm">
+      <What>the PDF extractor (pdftext.wasm: a Rust program and the crates it links, built for wasm32-wasip1), extracted to wasm/.</What>
+      <Notice>wasm/LICENSE-pdftext.txt.</Notice>
+    </CorpusNoticeAsset>
+  </ItemGroup>
+
+  <!-- The licence files that travel beside the notices, written with line feeds whatever the
+       checkout: the two the notices name, and the controller's own. -->
+  <ItemGroup>
+    <CorpusNoticeCopy Include="$(MSBuildThisFileDirectory)..\..\OutWit.Controller.AI.Corpus.Assets\languages\LICENSE-fineweb-2.txt">
+      <Destination>$(CorpusNoticesDir)LICENSE-fineweb-2.txt</Destination>
+      <Sha256>c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4</Sha256>
+    </CorpusNoticeCopy>
+    <CorpusNoticeCopy Include="$(MSBuildThisFileDirectory)..\LICENSE-unicode.txt">
+      <Destination>$(CorpusNoticesDir)LICENSE-unicode.txt</Destination>
+      <Sha256>e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96</Sha256>
+    </CorpusNoticeCopy>
+    <CorpusNoticeCopy Include="$(MSBuildThisFileDirectory)..\LICENSE">
+      <Destination>$(CorpusNoticesDir)LICENSE.txt</Destination>
+    </CorpusNoticeCopy>
+  </ItemGroup>
+
+  <!-- Into the module (OutWit.Controller.targets copies ControllerModuleFile items at
+       ControllerPostBuild; the zip and the package's content/module/ are made from the folder). -->
+  <ItemGroup>
+    <ControllerModuleFile Include="$(CorpusNoticesDir)$(CorpusNoticesFileName)" />
+    <ControllerModuleFile Include="$(CorpusNoticesDir)LICENSE-fineweb-2.txt" />
+    <ControllerModuleFile Include="$(CorpusNoticesDir)LICENSE-unicode.txt" />
+    <ControllerModuleFile Include="$(CorpusNoticesDir)LICENSE.txt" />
+  </ItemGroup>
+
+  <!-- And into the package's root, beside its LICENSE and the Unicode licence the project
+       file packs there already. -->
+  <ItemGroup>
+    <None Include="$(CorpusNoticesDir)$(CorpusNoticesFileName)" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(CorpusNoticesDir)LICENSE-fineweb-2.txt" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <Target Name="CorpusGenerateNotices" BeforeTargets="ControllerPostBuild">
+    <GenerateCorpusNotices Components="@(CorpusNoticeComponent)"
+                           Copies="@(CorpusNoticeCopy)"
+                           ModuleAssemblies="@(ControllerModuleAssembly)"
+                           DataAssets="@(CorpusNoticeAsset)"
+                           PackagesRoot="$(NuGetPackageRoot)"
+                           AssemblyDirectory="$(TargetDir)"
+                           Subject="$(PackageId)"
+                           SubjectVersion="$(Version)"
+                           ModuleName="$(ControllerModuleName)"
+                           OutputFile="$(CorpusNoticesDir)$(CorpusNoticesFileName)" />
+  </Target>
+
+</Project>
