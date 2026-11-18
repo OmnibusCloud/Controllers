@@ -5,7 +5,7 @@ using OutWit.Controller.AI.Corpus.Shards;
 namespace OutWit.Controller.AI.Corpus.Tests.Mock;
 
 /// <summary>
-/// A public origin on the loopback: serves the golden shards under /shards/&lt;name&gt; and
+/// A public origin on the loopback: serves the shards of a folder under /shards/&lt;name&gt; and
 /// scripted misbehaviour under /fail/... (a run of 503s before success, a stall, a body that
 /// lies about its length) so the fetcher's retries and caps are tested against a real socket,
 /// and redirects under /hop so the allowlist gate is tested hop by hop. A loopback origin is
@@ -48,7 +48,7 @@ public sealed class CorpusTestOrigin : IDisposable
 
     #region Functions
 
-    /// <summary>The URL of a golden shard.</summary>
+    /// <summary>The URL of a shard of the folder.</summary>
     public string ShardUrl(string name)
     {
         return $"{BaseUrl}shards/{name}";

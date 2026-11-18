@@ -25,7 +25,10 @@ public sealed class CorpusPackagesM5Tests : CorpusScriptTestBase
     #region Constants
 
     private const string SHARD = "tiny.warc.wet.gz";
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
+
+    /// <summary>A shard larger than the slack a declared size has (a mebibyte): one a node refuses when its manifest declares a byte.</summary>
+    private const string LARGE = "large.warc.wet.gz";
+
     private const int SHARDS = 1100;
 
     #endregion
@@ -47,6 +50,8 @@ public sealed class CorpusPackagesM5Tests : CorpusScriptTestBase
         m_directory = Path.Combine(Path.GetTempPath(), $"witai_corpus_packages_{Guid.NewGuid():N}");
         Directory.CreateDirectory(m_directory);
         WarcSynth.WriteWetShard(Path.Combine(m_directory, SHARD), 4, 120, 3);
+        WarcSynth.WriteWetShard(Path.Combine(m_directory, LARGE), 2500, 400, 4);
+        Assert.That(new FileInfo(Path.Combine(m_directory, LARGE)).Length, Is.GreaterThan(ShardLimits.DeclaredCap(1)), "the large shard is past the cap of a shard declared at one byte");
         m_tiny = new CorpusTestOrigin(m_directory);
         m_process = LoadScript("CorpusProcess.wit");
         m_preflight = LoadScript("CorpusPreflight.wit");
@@ -196,7 +201,7 @@ public sealed class CorpusPackagesM5Tests : CorpusScriptTestBase
     {
         // An origin the server cannot ask for a size (it answers no HEAD), so the split has only
         // the manifest's word. The first source states its size; the second states one byte.
-        var body = await File.ReadAllBytesAsync(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE));
+        var body = await File.ReadAllBytesAsync(Path.Combine(m_directory, LARGE));
         using var origin = new CorpusRawOrigin(async (_, head, stream, cancellationToken) =>
         {
             if (head.StartsWith("HEAD", StringComparison.Ordinal))
@@ -243,10 +248,10 @@ public sealed class CorpusPackagesM5Tests : CorpusScriptTestBase
     {
         // The same lie where the server can ask: the preflight names it and the split refuses it,
         // before a node fetches a byte.
-        var size = new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length;
+        var size = new FileInfo(Path.Combine(m_directory, LARGE)).Length;
         var manifest = await UploadAsync($$"""
-            {"pipeline":{"version":"h8","identify_language":false},"allowed_origins":["{{Origin.Host}}"],
-             "sources":[{"url":"{{Origin.ShardUrl(WET_FIXTURE)}}","size":1}]}
+            {"pipeline":{"version":"h8","identify_language":false},"allowed_origins":["{{m_tiny.Host}}"],
+             "sources":[{"url":"{{m_tiny.ShardUrl(LARGE)}}","size":1}]}
             """, "h8-probe.json");
         var problem = $"sources[0]: the origin answers {size} bytes and the manifest declares 1: a node holds the shard to {ShardLimits.DeclaredCap(1)} bytes and would refuse it (oversized_declared). Declare the shard's real size.";
 

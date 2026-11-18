@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Text;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Quality;
@@ -7,22 +8,22 @@ using OutWit.Controller.AI.Corpus.Warc;
 namespace OutWit.Controller.AI.Corpus.Tests.Quality;
 
 /// <summary>
-/// A diagnostic for tuning the thresholds (Explicit: run by hand): over the golden WET shard,
-/// which rule fires first per document, how many documents each rule alone would drop, and
+/// A diagnostic for tuning the thresholds (Explicit: run by hand): over the head of a real WET
+/// file (fetched by range, <see cref="CorpusCrawlHeads"/>), which rule fires first per document, how many documents each rule alone would drop, and
 /// a few samples of the documents the heaviest rule drops, so a threshold change is argued
 /// from text rather than from a count.
 /// </summary>
 [TestFixture]
-[Explicit("Tuning diagnostic: prints the drop profile of the golden WET shard")]
+[Explicit("Tuning diagnostic: prints the drop profile of the head of a real WET file")]
 public sealed class QualityDropDiagnosticsTests
 {
     [TestCase(false)]
     [TestCase(true)]
     public void PrintDropProfileTest(bool cleanLines)
     {
-        var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-pack-cc-2026-43-16.bin"));
+        var model = LanguageModel.Load(CorpusFixtures.PathOf(CorpusFixtures.PACK));
         var identifier = new LanguageIdentifier(model);
-        using var reader = WarcReader.Open(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "cc-main-2026-43-00000-head.warc.wet.gz"));
+        using var reader = WarcReader.Open(CorpusFixtures.PathOf(CorpusFixtures.CRAWL_WET));
 
         var firstRule = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var anyRule = new SortedDictionary<string, int>(StringComparer.Ordinal);

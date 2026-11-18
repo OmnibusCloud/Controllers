@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Diagnostics;
 using System.Text;
 using OutWit.Controller.AI.Corpus.Benchmark;
@@ -140,15 +141,16 @@ public sealed class CorpusBenchmarkTests
 
     /// <summary>
     /// Prints the numbers behind <see cref="CorpusBenchmark.REAL_MB_PER_REFERENCE_SHARD"/>: the
-    /// single-threaded time of the reference shard (no language stage) and of the golden WET
-    /// fixture through the full pipeline, per gzip megabyte. Run by hand on an idle machine.
+    /// single-threaded time of the reference shard (no language stage) and of the head of a
+    /// real WET file through the full pipeline, per gzip megabyte (the head is fetched by range:
+    /// see <see cref="CorpusCrawlHeads"/>). Run by hand on an idle machine.
     /// </summary>
     [Test]
     [Explicit("Calibration: run by hand on an idle machine and copy the constant")]
     public void PrintCalibrationTest()
     {
-        var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-pack-cc-2026-43-16.bin"));
-        var golden = File.ReadAllBytes(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "cc-main-2026-43-00000-head.warc.wet.gz"));
+        var model = LanguageModel.Load(CorpusFixtures.PathOf(CorpusFixtures.PACK));
+        var golden = File.ReadAllBytes(CorpusFixtures.PathOf(CorpusFixtures.CRAWL_WET));
         var reference = CorpusBenchmarkShard.Bytes;
 
         TimeSpan Time(Action action, int repeats)
@@ -179,7 +181,7 @@ public sealed class CorpusBenchmarkTests
 
         var report = new StringBuilder()
             .AppendLine($"reference shard: {reference.Length / 1024.0:F0} KB gzip, {CorpusBenchmarkShard.TextBytes / 1024.0:F0} KB text, {referenceTime.TotalMilliseconds:F0} ms (no language stage)")
-            .AppendLine($"golden WET:      {goldenMb:F2} MB gzip, {goldenTime.TotalMilliseconds:F0} ms (full pipeline) = {secondsPerRealMb:F3} s per real MB")
+            .AppendLine($"real WET head:   {goldenMb:F2} MB gzip, {goldenTime.TotalMilliseconds:F0} ms (full pipeline) = {secondsPerRealMb:F3} s per real MB")
             .AppendLine($"REAL_MB_PER_REFERENCE_SHARD = {constant:F3}")
             .AppendLine($"reference hash: {CorpusBenchmark.ProcessReference(reference)}");
         TestContext.Out.WriteLine(report.ToString());

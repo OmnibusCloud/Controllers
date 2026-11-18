@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Trust;
@@ -38,6 +39,9 @@ public static class CorpusPackageRunner
     /// <exception cref="ShardBatchRefusedException">The node refused the batch while the package ran.</exception>
     public static async Task<CorpusResultPackageData> RunAsync(CorpusTaskPackageData package, ShardFetcher fetcher, IWitBlobService blobs, string scope, Guid jobId, Action<double, string>? report, ILogger logger, Action? beforeFetch, CancellationToken cancellationToken)
     {
+        // Whoever the caller is, the node's log is written through the guard: a line that cannot be written is not a fault of the package.
+        logger = CorpusLogger.Wrap(logger);
+
         List<CorpusTaskData> tasks;
         try
         {

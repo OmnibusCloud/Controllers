@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Globalization;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
@@ -23,7 +24,7 @@ public sealed class DemoKitPinsDiagnosticsTests
     #region Constants
 
     private const string LIST_VARIABLE = "WITAI_CORPUS_KIT_SHARDS";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
 
     #endregion
 
@@ -38,7 +39,7 @@ public sealed class DemoKitPinsDiagnosticsTests
 
         var pins = Pins();
         var files = File.ReadAllLines(list!).Select(line => line.Trim()).Where(line => line.Length > 0).ToList();
-        var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", MODEL_FIXTURE));
+        var model = LanguageModel.Load(CorpusFixtures.PathOf(MODEL_FIXTURE));
         var lines = new string?[files.Count];
         var moved = 0;
 

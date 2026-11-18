@@ -1,0 +1,134 @@
+# English. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+# A sentence is an opener, a subject, a predicate and a closer, in that order.
+[label]
+Home
+News
+Events
+Contact
+About us
+Opening hours
+Market days
+Weather
+[opener]
+In the early morning,
+After the long winter,
+On the first day of the month,
+When the river runs high,
+Before the market opens,
+Late in the afternoon,
+During the autumn fair,
+Every second Tuesday,
+As soon as the fog lifts,
+Once the harvest is in,
+At the end of each season,
+While the bridge is being repaired,
+On quiet weekday evenings,
+Shortly after the noon bell,
+Whenever the weather allows it,
+Since the new road was finished,
+Throughout the summer holidays,
+On the morning of the festival,
+After a week of heavy rain,
+By the time the lamps are lit,
+At the start of the school year,
+Between the two harvest weeks,
+Long before the tourists arrive,
+In the last hour of daylight,
+[subject]
+the harbour master
+the village baker
+the school librarian
+the ferry captain
+the town clerk
+the old clockmaker
+the district nurse
+the market gardener
+the night watchman
+the bridge engineer
+the choir director
+the station keeper
+the youngest apprentice
+the retired teacher
+the mill owner
+the visiting surveyor
+the county archivist
+the bicycle mechanic
+the lighthouse keeper
+the orchard manager
+the weather observer
+the museum guide
+the postal carrier
+the boat builder
+the head gardener
+the water bailiff
+the stone mason
+the bee keeper
+the cheese maker
+the road inspector
+[predicate]
+checks every mooring line along the quay
+writes a careful report about the water level
+opens the wooden shutters of the workshop
+counts the crates that came in overnight
+repairs a broken fence near the lower meadow
+reads the notices pinned to the council board
+measures the depth of the channel twice
+sweeps the stone steps in front of the hall
+carries fresh bread to the houses on the hill
+records the temperature in a small green notebook
+teaches the children how to tie a proper knot
+sorts the letters by street and by house number
+inspects the timber stacked behind the sawmill
+waters the seedlings in the long glass house
+polishes the brass bell that hangs by the gate
+collects the fees from the stalls on the square
+draws a new map of the paths through the forest
+tunes the old piano in the community room
+mends the nets that were torn on the rocks
+labels the jars of honey for the weekend market
+walks the whole length of the flood wall
+oils the hinges of the heavy lock gates
+answers questions from travellers who lost their way
+paints the railings of the footbridge dark red
+weighs the sacks of flour delivered from the mill
+clears the fallen branches from the cycle track
+lights the stove in the waiting room
+copies the old parish records onto clean paper
+tests the pumps that protect the low streets
+prepares the hall for the monthly assembly
+plants a row of young apple trees by the road
+feeds the horses that pull the canal barge
+checks the lanterns along the harbour wall
+unlocks the reading room for the first visitors
+hangs the washed sails out to dry in the wind
+replaces the cracked tiles on the chapel roof
+counts the swallows nesting under the eaves
+winds the tower clock with a long iron key
+stacks the firewood under the covered passage
+marks the safe crossing with painted poles
+[closer]
+before the first ferry leaves
+while most of the town is still asleep
+so that nobody has to wait in the cold
+because the council asked for it last year
+as the rules of the valley have always required
+and then walks home along the river path
+with the help of two patient neighbours
+although nobody remembers who started the custom
+until the church bell strikes eight
+in spite of the wind from the north
+and notes the result for the yearly review
+which takes most of the morning
+without asking for anything in return
+as carefully as a watchmaker would
+long before the shops raise their blinds
+even when the snow lies deep on the roads
+and leaves the keys with the neighbour
+while the kettle boils in the back room
+because small faults are cheaper to fix early
+so the visitors find everything in order
+after a short talk with the mayor
+with a thermos of tea close at hand
+and nobody in the valley thinks it strange
+just as the previous keeper used to do

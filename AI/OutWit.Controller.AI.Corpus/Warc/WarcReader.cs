@@ -9,6 +9,14 @@ namespace OutWit.Controller.AI.Corpus.Warc;
 /// shard; a record larger than the cap is skipped and counted, not loaded. Malformed input is
 /// an error naming the byte offset, except a truncated tail, which ends the file with the
 /// records that were complete — the honest reading of a partial download.
+/// <para>
+/// A tail is truncated wherever the file stops: inside a payload, between two header lines, or
+/// inside a line. The last line of a file that has no line feed is the line the cut went
+/// through, so it is never judged as a header: a version line may have lost all but its first
+/// letter, a header its colon, a length some of its digits. A line that has its line feed and
+/// is malformed is an error, as is a last line where a record should start that is not the
+/// start of a version line (a body that is no WARC at all).
+/// </para>
 /// </summary>
 public sealed class WarcReader : IDisposable
 {
@@ -104,12 +112,21 @@ public sealed class WarcReader : IDisposable
 
             // Records are separated by CRLF CRLF; tolerate any run of blank lines between them.
             string? versionLine;
+            bool terminated;
             do
             {
-                versionLine = ReadLine();
+                versionLine = ReadLine(out terminated);
                 if (versionLine == null)
                     return null;
-            } while (versionLine.Length == 0);
+            } while (versionLine.Length == 0 && terminated);
+
+            // The file stops inside the line a record starts with (or inside the blank lines
+            // before it, a carriage return without its line feed): the truncated tail.
+            if (!terminated && IsStartOfVersionLine(versionLine))
+            {
+                m_truncated = true;
+                return null;
+            }
 
             if (!versionLine.StartsWith(VERSION_PREFIX, StringComparison.Ordinal))
                 throw new WarcFormatException($"expected a WARC version line at offset {recordOffset}, got '{Clip(versionLine)}'");
@@ -119,8 +136,10 @@ public sealed class WarcReader : IDisposable
             var headerBytes = 0;
             while (true)
             {
-                var line = ReadLine();
-                if (line == null)
+                // The headers stop before their blank line. A last line without its line feed is
+                // the one the cut went through, whatever is left of it: it is not judged.
+                var line = ReadLine(out terminated);
+                if (line == null || !terminated)
                 {
                     m_truncated = true;
                     return null;
@@ -177,11 +196,16 @@ public sealed class WarcReader : IDisposable
         }
     }
 
-    private string? ReadLine()
+    /// <summary>
+    /// The next line without its line end; <c>null</c> at the end of the input.
+    /// </summary>
+    /// <param name="terminated">Whether the line ended with a line feed. The input's last line may end with the input instead: that is where a file was cut.</param>
+    private string? ReadLine(out bool terminated)
     {
         // One buffer for every line: a shard may hold millions of them, the blank ones included.
         var buffer = m_line;
         buffer.Clear();
+        terminated = false;
         while (true)
         {
             var b = m_stream.ReadByte();
@@ -195,7 +219,10 @@ public sealed class WarcReader : IDisposable
             m_offset++;
             Watch();
             if (b == '\n')
+            {
+                terminated = true;
                 break;
+            }
 
             buffer.Add((byte)b);
             if (buffer.Count > MAX_HEADER_BYTES)
@@ -280,6 +307,14 @@ public sealed class WarcReader : IDisposable
         return b0 == GZIP_MAGIC[0] && b1 == GZIP_MAGIC[1];
     }
 
+    /// <summary>Whether a line that the input ended in can be what is left of a record's version line: any head of <c>WARC/</c>, the empty one included, or a line that begins with it.</summary>
+    private static bool IsStartOfVersionLine(string line)
+    {
+        return line.Length < VERSION_PREFIX.Length
+            ? VERSION_PREFIX.StartsWith(line, StringComparison.Ordinal)
+            : line.StartsWith(VERSION_PREFIX, StringComparison.Ordinal);
+    }
+
     private static string Clip(string text)
     {
         return text.Length <= 60 ? text : text[..60] + "…";
@@ -303,7 +338,7 @@ public sealed class WarcReader : IDisposable
     /// <summary>Records skipped because their payload exceeded the cap.</summary>
     public int SkippedOversized => m_skippedOversized;
 
-    /// <summary>Whether the input ended inside a record (a partial download); the records before it were returned.</summary>
+    /// <summary>Whether the input ended inside a record or inside a line (a partial download, or a file cut at its origin); the records before it were returned.</summary>
     public bool Truncated => m_truncated;
 
     /// <summary>Bytes of decompressed input consumed so far.</summary>

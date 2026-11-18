@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Security.Cryptography;
 using System.Text;
 using OutWit.Controller.AI.Corpus.Language;
@@ -16,7 +17,7 @@ public sealed class LanguageModelFormatTests
 {
     #region Constants
 
-    private const string WITLID1_FIXTURE = "language-model-cc-2026-43-16.bin";
+    private const string WITLID1_FIXTURE = CorpusFixtures.WITLID1;
     private const string WITLID1_SHA256 = "9670e262a8453661e47f0a4e838e0970fff561e20b3865b383227b01ba25558f";
 
     #endregion
@@ -217,7 +218,7 @@ public sealed class LanguageModelFormatTests
 
     private static string Fixture(string name)
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
+        return CorpusFixtures.PathOf(name);
     }
 
     #endregion

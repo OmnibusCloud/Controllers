@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Corpus.Shards;
@@ -69,6 +70,9 @@ public static class ShardBlobTransfer
 
     private static async Task<T> WithRetryAsync<T>(Func<Task<T>> transfer, string what, ILogger? logger, CancellationToken cancellationToken)
     {
+        // A warning that cannot be written must not fail the transfer it is about.
+        logger = logger == null ? null : CorpusLogger.Wrap(logger);
+
         var clock = Stopwatch.StartNew();
 
         for (var attempt = 0; ; attempt++)

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Diagnostics;
+using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -13,7 +14,7 @@ internal sealed class WitActivityAdapterCorpusRuntimeDiagnostics : WitActivityAd
     #region Constructors
 
     public WitActivityAdapterCorpusRuntimeDiagnostics(IWitProcessingManager processingManager, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, CorpusLogger.Wrap(logger))
     {
     }
 

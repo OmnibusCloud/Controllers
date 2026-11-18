@@ -16,7 +16,7 @@ public sealed class ShardFetcherM4Tests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
 
     #endregion
 
@@ -180,6 +180,30 @@ public sealed class ShardFetcherM4Tests
         });
     }
 
+    [Test]
+    public async Task M4AFileCutInsideARecordsHeadersIsTruncatedAndNotMalformedTest()
+    {
+        // The cut is in the headers of the 28th record, after the name of a header and before
+        // its colon. The reader took the half line for a malformed header: a partial download
+        // was reported as a file that is no WARC, and a file cut there at its origin made no
+        // product of its 27 whole records.
+        var records = Enumerable.Range(0, 40).Select(index => WarcSynth.ConversionRecord($"https://a.example/{index}", WarcSynth.Paragraphs(new Random(index), 300))).ToList();
+        byte[] cut = [.. records.Take(27).SelectMany(record => record), .. "WARC/1.0\r\nWARC-Type: conversion\r\nWARC-Target"u8];
+
+        var stated = await RunAsync(cut, withLength: true);
+        var unstated = await RunAsync(cut, withLength: false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(stated.Verdict, Is.EqualTo(CorpusShardVerdict.Completed), "the origin's file ends there: the same for every node");
+            Assert.That(stated.Error, Is.EqualTo(CorpusResultCodes.NOTE_TRUNCATED));
+            Assert.That(stated.Stats!.RecordsIn, Is.EqualTo(27));
+            Assert.That(unstated.Verdict, Is.EqualTo(CorpusShardVerdict.FetchFailed), "a body without a length that ends in a half line did not arrive");
+            Assert.That(unstated.Error, Is.EqualTo(CorpusResultCodes.BODY_TRUNCATED));
+            Assert.That(unstated.Stats, Is.Null);
+        });
+    }
+
     #endregion
 
     #region Tools
@@ -212,7 +236,7 @@ public sealed class ShardFetcherM4Tests
 
     private static string Fixtures()
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures");
+        return CorpusFixtures.Folder;
     }
 
     #endregion

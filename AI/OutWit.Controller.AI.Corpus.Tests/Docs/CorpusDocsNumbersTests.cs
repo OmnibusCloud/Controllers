@@ -32,7 +32,7 @@ public sealed class CorpusDocsNumbersTests
     #region Constants
 
     private const string CONTROLLER = "OutWit.Controller.AI.Corpus";
-    private const string PACK_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string PACK_FIXTURE = CorpusFixtures.PACK;
     private const double KIT_SAMPLING = 0.25;
 
     private const long KIB = 1024;
@@ -234,7 +234,7 @@ public sealed class CorpusDocsNumbersTests
         // the repository holds them.
         var manifestText = CorpusRepositoryFiles.ReadText("AI", $"{CONTROLLER}.Live", "demo", "01-common-crawl", "manifest.json");
         var manifest = CorpusManifestParser.Parse(manifestText);
-        var pack = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", PACK_FIXTURE);
+        var pack = CorpusFixtures.PathOf(PACK_FIXTURE);
         var packBytes = new FileInfo(pack).Length;
         var facts = CorpusLanguageModelFacts.Load(pack);
         var options = new CorpusOptionsData { SamplingRate = KIT_SAMPLING };

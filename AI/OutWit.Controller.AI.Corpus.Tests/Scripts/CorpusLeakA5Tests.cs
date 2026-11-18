@@ -25,9 +25,9 @@ public sealed partial class CorpusLeakA5Tests : CorpusScriptTestBase
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string WARC_FIXTURE = CorpusFixtures.WARC;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
 
     /// <summary>What the lying node writes wherever a result has room for text.</summary>
     private const string PLANTED = "LEAKED-BY-A-NODE";

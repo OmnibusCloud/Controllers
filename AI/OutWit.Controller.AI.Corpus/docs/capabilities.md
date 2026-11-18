@@ -11,15 +11,18 @@ Every number on this page is a constant of the code or was measured, in the cont
 or on a test fleet; the [README](../README.md) explains how things work inside, and the JSON
 schemas in this folder are the documents' contracts.
 
-Version described: **Corpus 0.5.0** (Model 0.2.0, Scripts 0.1.5). Corpus 0.2.1 is proven on a
+Version described: **Corpus 0.6.0** (Model 0.2.0, Scripts 0.1.5). Corpus 0.2.1 is proven on a
 six-node test fleet (Windows, Linux, macOS); 0.3.0 added what an application's studio needs
 (sections 4, 6 and 8); 0.4.0 was the first hardening release — what the server accepts from a
 node, what a run does when nodes disagree or fail, what hostile input costs, and what a lab can
 and cannot read off a document (sections 7, 9, 11 and 12) — and is proven on the test fleet;
 0.5.0 is the second: what a run promises before it starts holds whoever wrote the manifest
-(section 8), and the tasks and the results travel as blobs (section 10). What changed for an
-application is listed in section 14. 0.5.0 is proven in CI on the three platforms, not yet on the
-fleet. Nothing is on nuget.org or on the live network yet.
+(section 8), and the tasks and the results travel as blobs (section 10), and is proven on the
+test fleet too; 0.6.0 is the third and moves no product: the module carries the licence notices
+of what it redistributes (section 14), a line a node's log cannot take no longer decides a
+shard's fate (section 12), and a shard that stops inside a header line is truncated, not
+malformed (sections 5 and 7). What changed for an application is listed in section 14. 0.6.0 has not run on the build server or on the fleet yet. Nothing is on
+nuget.org or on the live network yet.
 
 ## Contents
 
@@ -315,7 +318,18 @@ The stages in the order a document meets them (`stages.order` in the capabilitie
 streamed one record at a time. A record over 8 MiB in a WET shard, or over 64 MiB in a WARC
 shard, is skipped and counted (`record_oversized`); a truncated tail ends
 the file with the complete records (the result's `error` is `truncated`, the verdict stays
-`Completed`); bytes that are not a WARC file are `Malformed`. A shard may unpack to 32 times its
+`Completed`); bytes that are not a WARC file are `Malformed`. A tail is truncated wherever the
+file stops: inside a payload, between two header lines, or inside a line. The last line of a
+file that has no line feed is the line the cut went through and is not judged as a header; a
+line that has its line feed and is malformed is `Malformed`, and so is a last line where a
+record should start that is no beginning of `WARC/` (a body that is no WARC is not a truncated
+WARC). Up to 0.5.0 a file that stopped inside a header line was `Malformed`: 63 of 5,000 evenly
+spaced cuts of the head of a real WET file; and one that stopped between the carriage return
+and the line feed of a blank line after a record passed for a whole file, where it is truncated
+now. A file that stops exactly between two records is a
+shorter whole file, and nothing in it says so: packed, the gzip frame between two members and
+the first bytes of the next unpack to nothing, which is 2 to 4 % of the places a cut can fall in
+a real file. A shard may unpack to 32 times its
 size on the wire (64 MiB at least, 16 GiB at most): past that it is `Oversized`
 (`oversized_unpacked`) on every node, at the same byte.
 
@@ -334,7 +348,7 @@ makes without a tag included (`html_too_complex`). Both are functions of the pag
 every node. A page its decoder or the parser fails on in a way of their own — an error of logic
 over its bytes, which the same bytes cause everywhere — drops as `html_error`: one page is never
 the end of its shard. Only the first 16 MiB of a body are decoded, and a page longer than 4 Mi characters is
-cut there before parsing. On the golden shard the extracted
+cut there before parsing. On the head of a real WARC file (112 of its pages) the extracted
 text agrees with Common Crawl's own WET text at a median Jaccard of 0.85.
 
 **PDFs (WARC only, `extract_pdf`).** A response with status 200 whose `Content-Type` or
@@ -502,11 +516,11 @@ never a text:
 
 | Verdict | When | `error` |
 |---|---|---|
-| `Completed` | fetched and processed; under `full` its products uploaded | "" or `truncated` (the file ended inside a record: the records before it are the product) |
+| `Completed` | fetched and processed; under `full` its products uploaded | "" or `truncated` (the file ended inside a record, in its payload or in its headers: the records before it are the product) |
 | `OriginRefused` | the URL is not one the task's list permits, or not one this machine fetches from; a redirect led off the list; nothing of the shard was read | `origin_not_allowed`, `origin_not_listed`, `origin_address`, `origin_redirect` |
 | `FetchFailed` | the origin answered and its answer is not the shard: an HTTP status, bytes that do not hash to the manifest's `sha256`, a body without a length that ended inside a record | `http_NNN` (the status), `hash_mismatch`, `body_truncated` |
 | `Oversized` | more bytes on the wire than the cap, more than the size the shard was declared with allows (section 8), or more unpacked than a shard may hold | `oversized`, `oversized_declared`, `oversized_unpacked` |
-| `Malformed` | the bytes are not a WARC file, or the compression is damaged | `not_warc`, `bad_compression` |
+| `Malformed` | the bytes are not a WARC file, or the compression is damaged; a file that stops inside a record is not malformed (`truncated`, `body_truncated`) | `not_warc`, `bad_compression` |
 | `PipelineUnavailable` | the pipeline identifies languages and names no model, or the model is not one the controller reads within its limits | `no_language_model`, `language_model_refused` |
 | `Failed` | a task that is no task (no source, no pipeline, parameters no pipeline may have) | `task_invalid` |
 | `Disputed` | the shard's copies disagreed and three machines did not settle it (section 9); no product, out of the counters | "" |
@@ -617,8 +631,8 @@ and ratios measured on real runs, the largest measured value raised by a fifth:
 The rows with the filter on hold for the thresholds they were measured with: the controller's
 defaults and the reference pack's rule data. A manifest that sets a `pipeline.quality` threshold
 (the curly-bracket switch aside, which only drops more), or a language pack with rule data of its
-own, is estimated at the row with the filter off, and the line says so. Measured on the golden
-WET head: a manifest's ten thresholds opened wide keep 3.6 % more text than the defaults, a pack's
+own, is estimated at the row with the filter off, and the line says so. Measured on the head of
+a real WET file: a manifest's ten thresholds opened wide keep 3.6 % more text than the defaults, a pack's
 rule data opened too 22.5 % more, which is what a run with the filter off keeps.
 
 A document's signature is 8 bytes per hash (1,024 bytes at the default 128), plus a header of 12
@@ -791,8 +805,9 @@ stage's included.
   80 s apart or the origin's `Retry-After`, two minutes at most each. A read that stalls 60 s
   counts as a failure, and so does a fetch slower than 32 KiB/s over its whole length; a 4xx
   other than 429 is final; a broken body is resumed with a Range request; a body without a length
-  that ends inside a record is `FetchFailed` (`body_truncated`). At most two shards download at
-  once per node.
+  that ends inside a record, in its payload or in its headers, is `FetchFailed`
+  (`body_truncated`); one that ends exactly between two records cannot be told from a whole
+  file (section 5). At most two shards download at once per node.
 - **The disk.** A node holds its degree and two more shards at a time, whatever its share: a
   task waits for a place before it fetches. The preflight states the room each held shard needs.
 - **The language pack** arrives as a blob (cached per node) and is used only when its bytes hash to
@@ -851,7 +866,12 @@ capabilities (`trust`); a node fault is a code; a batch refusal is one of five f
 and no failure's own words are thrown out of a node's activity (what a node throws is the job's
 message).
 A message of a node's file system or HTTP stack — which names paths, accounts and hosts — stays
-in the node's own log, and there as the kind of the failure and its system code. The diagnostics
+in the node's own log, and there as the kind of the failure and its system code. That log is the
+node's and decides nothing: every line goes through one guard, one call at a time, and a host's
+logger that throws (the in-memory logger of clients up to 2.2.5 does, when the packages of a
+share log at once) loses the line and nothing else. Before 0.6.0 such a logger could fail a
+package, and thrown inside the engine's own catch block it let the bare exception out in the
+place of a refusal's fixed sentence. The diagnostics
 say how many hosts the server's operator lists beside the public origins, not which. A test
 scans every document of hostile and failed runs for a path, an account, a machine, a node id and
 a ticket.
@@ -899,14 +919,52 @@ and a merge over the first 12 of the 24 shards finds 7,292: why no figure "so fa
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 0.5.0 | `OutWit.Controller.AI.Corpus` (GitHub Packages; nuget.org at 1.0.0) |
+| The controller | 0.6.0 | `OutWit.Controller.AI.Corpus` (GitHub Packages; nuget.org at 1.0.0) |
 | The wire types | 0.2.0 | `OutWit.Controller.AI.Corpus.Model`: the server restores it from the feed, so it is published before a controller that needs it |
 | The scripts | 0.1.5 | `OutWit.Controller.AI.Corpus.Scripts` |
 | The PDF extractor | pdftext 1.0.0 (pdf_oxide 0.3.78) | `corpus-pdftext-wasm.zip`, release `pdftext-v1.0.0` (5.9 MB, extracted to `wasm/` beside the controller) |
 | The sandbox engine | wasmtime binding 48.0.2 over the native library 48.0.8 | natives per platform, release `wasmtime-v48.0.8` (8 to 10 MB each), the bytes Verify ships |
-| The reference language pack | `cc-2026-43-16` | a job input; built by `corpus-assets` from Common Crawl WET files and the rule data in `OutWit.Controller.AI.Corpus.Assets/languages/` |
+| The reference language pack | `cc-2026-43-16` | a job input; built by `corpus-assets` from Common Crawl WET files and the rule data in `OutWit.Controller.AI.Corpus.Assets/languages/`. That rule data holds FineWeb-2's stop-word lists and repetition thresholds (Apache-2.0): `LICENSE-fineweb-2.txt` is beside the pack wherever the repository hands it out as a file, and the module's notices name the pack |
 
 One wasmtime binding loads per client process: Corpus and Verify carry the same version.
+
+The module (the folder, the zip a node is given, the package's `content/module/`) carries, beside
+the assemblies and `controller.json`, `THIRD-PARTY-NOTICES.txt` — AngleSharp (MIT), ZstdSharp
+(MIT) and Zstandard, which it is a port of (BSD-3-Clause), the Wasmtime binding (Apache-2.0 WITH
+LLVM-exception), FineWeb-2's stop-word lists (Apache-2.0) and the Unicode Character Database
+(Unicode-3.0), each with its version, source commit and licence text — `LICENSE-fineweb-2.txt`,
+`LICENSE-unicode.txt` and the controller's own `LICENSE.txt`: twelve files, held to that list by
+a test. The two data assets carry their own notices (`LICENSE-wasmtime.txt` and `NOTICE.txt`
+beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
+
+**What changed for an application in 0.6.0** (from 0.5.0):
+
+- **Nothing in a call or a document, and no product moved.** The scripts, the activities, the
+  wire types (Model 0.2.0), the four schemas and every fixed word are those of 0.5.0, and no
+  stage changed: what 0.4.0 and 0.5.0 made a product of, 0.6.0 makes the same product of, byte
+  for byte, and the stage set's fingerprint is the same. A job still runs on one controller
+  version, so server and nodes move to 0.6.0 together.
+- **One verdict changed: a shard that stops inside a header line is truncated, not
+  malformed.** A file whose last line has no line feed, where the cut went through the version
+  line or a header of a record, ended as `Malformed` (`not_warc`) and gave no product. It now
+  ends as every other cut file does: `Completed` with `error` `truncated` and the product of
+  its whole records when the origin said where its body ends (a length, chunks),
+  `FetchFailed` (`body_truncated`) when it did not. On a real WET file that is one cut in
+  eighty. A report
+  that counted such a shard under `Malformed` counts it under `Completed` or `FetchFailed`;
+  no code is new. By the same reading a file that stops between the carriage return and the
+  line feed of a blank line after a record is truncated; it was `Completed` without the code,
+  also when its body had no stated end. A line that has its line feed and is malformed, and a
+  body that is no WARC at all, are `Malformed` as before (section 5).
+- **The module is twelve files, not eight:** the four texts above travel in it. A deployment
+  that lists or counts the files of a module, or pins the module's content digest, sees them.
+- **A node's log cannot fail a package.** On a client that hands controllers a logger that is
+  not thread safe (clients up to 2.2.5), a share of several packages could lose a batch to an
+  exception of the logger's own, and the job's message could then be that exception's text
+  instead of fixed words. Neither can happen now; the platform's reassignment of such a batch,
+  which hid it, is no longer needed for it.
+- **The scripts package** is unchanged (0.1.5). Its compatibility range for the controller, not
+  yet switched on, now reads `[0.5.0, 2.0.0)`: it will admit the 1.0.0 the candidates become.
 
 **What changed for an application in 0.5.0** (from 0.4.0):
 
@@ -1016,7 +1074,7 @@ One wasmtime binding loads per client process: Corpus and Verify carry the same 
 - The line stage knows the sentence ends listed in section 5; in a script that ends sentences
   otherwise every line needs 12 words (40 letters) to stay.
 - A PDF compound broken at its own hyphen (Cyrillic, Greek) comes out as one word.
-- The storage table's WARC rows rest on one golden shard and one full file.
+- The storage table's WARC rows rest on the head of one real WARC file and one full file.
 - The busiest share takes the largest shards as the sampled ones and every node as a machine of
   its own; the platform picks at random and knows machines.
 - Shard-frequent lines (CCNet) and a URL blocklist are not in this release.

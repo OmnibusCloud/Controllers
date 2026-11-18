@@ -1,6 +1,7 @@
 using OutWit.Controller.AI.Corpus.Diagnostics;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Tests.Docs;
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Scripts;
@@ -17,9 +18,9 @@ public sealed class CorpusDiagnosticsSkeletonTests : CorpusScriptTestBase
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string WARC_FIXTURE = CorpusFixtures.WARC;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
 
     #endregion
 
@@ -170,7 +171,7 @@ public sealed class CorpusDiagnosticsSkeletonTests : CorpusScriptTestBase
 
     private static long Size(string fixture)
     {
-        return new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", fixture)).Length;
+        return new FileInfo(CorpusFixtures.PathOf(fixture)).Length;
     }
 
     private static IEnumerable<string> Messages(IWitProcessingStatus status)

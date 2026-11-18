@@ -1,6 +1,6 @@
 # 01 · Common Crawl: the expected result
 
-Measured locally with Corpus 0.3.0 and measured again with 0.4.0 and with 0.5.0, which give the
+Measured locally with Corpus 0.3.0 and measured again with 0.4.0, with 0.5.0 and with 0.6.0, which give the
 same 24 content hashes, signatures hashes and counters (the stages' diagnostics test
 `DemoKitPinsDiagnosticsTests` runs the files against `shards.tsv`): the 24 files of `manifest.json` (their SHA-256 checked
 against the manifest) through the stage pipeline of the controller, the manifest's pipeline and
@@ -11,7 +11,7 @@ platform. What only a fleet can measure is marked *fleet*, to be filled in from 
 ## The report
 
 ```
-report     : corpus-report/4, controller 0.5.0, output stats_and_hashes
+report     : corpus-report/4, controller 0.6.0, output stats_and_hashes
 shards     : 24 (Completed 24)
 fetched    : 1,584,054,229 bytes; the product would be 448,706,065 bytes compressed
 funnel     : records 515,379 > extracted 515,355 > language 453,528 > lines 427,293 > quality 273,891 = out 273,891

@@ -29,9 +29,13 @@
   </ItemGroup>
 
   <!-- The reference language pack (the tests' fixture): what the bundled manifests pin and what
-       the model option defaults to. -->
+       the model option defaults to. Its rule data holds FineWeb-2's stop-word lists and
+       repetition thresholds (Apache-2.0), so that project's licence text goes wherever the pack
+       goes: the two files are one item group, and a test holds every project that takes the pack
+       to taking the licence into the same folder. -->
   <ItemGroup>
     <None Include="..\OutWit.Controller.AI.Corpus.Tests\Fixtures\language-pack-cc-2026-43-16.bin" Link="models\language-pack-cc-2026-43-16.bin" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\OutWit.Controller.AI.Corpus.Tests\Fixtures\LICENSE-fineweb-2.txt" Link="models\LICENSE-fineweb-2.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
