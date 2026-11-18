@@ -541,7 +541,17 @@
         {
           "name": "Wasmtime.Dotnet", "version": "48.0.2",
           "licence": "Apache-2.0 WITH LLVM-exception",
-          "in": "Wasmtime.Dotnet.dll, the .NET binding of the wasmtime engine, from the NuGet package Wasmtime 48.0.2, unchanged",
+          "in": "Wasmtime.Dotnet.dll",
+          "package": {
+            "what": "The managed binding over the native wasmtime library, on which the sandbox runs. Of the package only the managed assembly is in the module; the native library is a data asset (above) with notices of its own.",
+            "id": "Wasmtime",
+            "authors": "Peter Huene",
+            "file": "Wasmtime.Dotnet.dll",
+            "sha256": "a4d77b21aa30bc3218ea40c77810fad53f7d305dcf126c249c1b0434cb386396",
+            "source": "https://github.com/bytecodealliance/wasmtime-dotnet",
+            "commit": "d9db6b0005b93ba09a6ada8ddce2d5a3846511eb",
+            "text": "the file LICENSE of that repository at that commit"
+          },
           "notes": [ "The package carries no licence text; it names this licence and the commit of its sources the text is taken at." ],
           "texts": [ { "from": "wasmtime-dotnet/LICENSE" } ]
         }

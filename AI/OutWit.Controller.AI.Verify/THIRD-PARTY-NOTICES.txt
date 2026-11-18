@@ -24,9 +24,15 @@ Parts
 ================================================================================
 1. Wasmtime.Dotnet 48.0.2
 ================================================================================
-In:       Wasmtime.Dotnet.dll, the .NET binding of the wasmtime engine, from the NuGet package Wasmtime 48.0.2, unchanged
-Licence:  Apache-2.0 WITH LLVM-exception
-Note:     The package carries no licence text; it names this licence and the commit of its sources the text is taken at.
+The managed binding over the native wasmtime library, on which the sandbox runs. Of
+the package only the managed assembly is in the module; the native library is a data
+asset (above) with notices of its own.
+
+Package:   Wasmtime 48.0.2, by Peter Huene
+File:      Wasmtime.Dotnet.dll, as the package ships it (SHA-256 a4d77b21aa30bc3218ea40c77810fad53f7d305dcf126c249c1b0434cb386396)
+Source:    https://github.com/bytecodealliance/wasmtime-dotnet at d9db6b0005b93ba09a6ada8ddce2d5a3846511eb
+Licence:   Apache-2.0 WITH LLVM-exception; the text below is the file LICENSE of that repository at that commit
+Note:      The package carries no licence text; it names this licence and the commit of its sources the text is taken at.
 
 Text: https://raw.githubusercontent.com/bytecodealliance/wasmtime-dotnet/d9db6b0005b93ba09a6ada8ddce2d5a3846511eb/LICENSE
 (SHA-256 of that file: a6c48161a09acc75a0e25503bab66a731eb5fba5392ed4bb4743e4ba5085327a)

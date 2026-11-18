@@ -251,10 +251,13 @@ def render(sources, document):
 
     for number, part in enumerate(parts, 1):
         out.write(f"{RULE}\n{number}. {title_of(part)}\n{RULE}\n")
-        out.write(f"In:       {part['in']}\n")
-        out.write(f"Licence:  {part['licence']}\n")
+        if "package" in part:
+            out.write(package_lines(sources, part))
+        else:
+            out.write(f"In:       {part['in']}\n")
+            out.write(f"Licence:  {part['licence']}\n")
         for note in part.get("notes", []):
-            out.write(f"Note:     {note}\n")
+            out.write(f"{'Note:':<{11 if 'package' in part else 10}}{note}\n")
         for beside in part.get("files", []):
             out.write(f"Text:     {beside}, beside this file\n")
         if "crates" in part:
@@ -268,6 +271,26 @@ def render(sources, document):
             out.write(f"\n{label}: {origin}\n\n{body}")
         out.write("\n")
     return out.getvalue()
+
+
+def package_lines(sources, part):
+    """A library taken unchanged from a NuGet package.
+
+    The same lines, word for word, as the Corpus controller's notices write for the same
+    library, so that two modules do not describe one file in two ways. The table states the
+    facts (the package's authors, the file's SHA-256, the commit of its sources); a test of
+    the controller holds each of them to the package the build restored and to the file the
+    module carries. Here the commit is held to the address the licence text is taken from.
+    """
+    package = part["package"]
+    for text in part.get("texts", []):
+        if package["commit"] not in sources.pin(text["from"])[0]:
+            sys.exit(f"{part['name']}: the licence text is not taken at the commit {package['commit']} the part names")
+    return (wrapped(package["what"], 86) + "\n\n"
+            + f"Package:   {package['id']} {part['version']}, by {package['authors']}\n"
+            + f"File:      {package['file']}, as the package ships it (SHA-256 {package['sha256']})\n"
+            + f"Source:    {package['source']} at {package['commit']}\n"
+            + f"Licence:   {part['licence']}; the text below is {package['text']}\n")
 
 
 def title_of(part):
