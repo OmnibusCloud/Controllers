@@ -37,6 +37,25 @@ public static class CrawlSynthDefects
     }
 
     /// <summary>
+    /// A shard that ends inside a record's headers: so many whole records, then the first bytes
+    /// of the next record's headers, cut in the middle of a line or after one. Unpacked, as
+    /// <see cref="CutInsideAPayload"/> is.
+    /// </summary>
+    /// <param name="records">The shard's records.</param>
+    /// <param name="whole">How many records are whole.</param>
+    /// <param name="headerBytes">How many bytes of the next record's headers are there (at least one, fewer than they have).</param>
+    /// <returns>The shard's bytes, unpacked.</returns>
+    public static byte[] CutInsideAHeader(IReadOnlyList<byte[]> records, int whole, int headerBytes)
+    {
+        var next = records[whole];
+        var headers = next.AsSpan().IndexOf("\r\n\r\n"u8) + 4;
+        if (headerBytes < 1 || headerBytes >= headers)
+            throw new ArgumentOutOfRangeException(nameof(headerBytes), $"Record {whole} has {headers} bytes of headers.");
+
+        return [.. records.Take(whole).SelectMany(record => record), .. next.AsSpan(0, headerBytes)];
+    }
+
+    /// <summary>
     /// Records that are no page, put between the pages: a request, a metadata record, a record
     /// of a type no reader knows. A WET file has none of them; a file that does is still a WARC
     /// file.
