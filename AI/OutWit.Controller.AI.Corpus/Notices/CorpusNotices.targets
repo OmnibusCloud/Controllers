@@ -102,7 +102,7 @@
       <Source>https://github.com/bytecodealliance/wasmtime-dotnet</Source>
       <Commit>d9db6b0005b93ba09a6ada8ddce2d5a3846511eb</Commit>
       <Where>Wasmtime.Dotnet.dll</Where>
-      <What>The managed binding over the native wasmtime library, on which the sandbox of the PDF stage runs. Of the package only the managed assembly is in the module; the native library is a data asset (below) with notices of its own.</What>
+      <What>The managed binding over the native wasmtime library, on which the sandbox of the PDF stage runs. Of the package only the managed assembly is in the module; the native library is a data asset (above) with notices of its own.</What>
       <TextFile>$(MSBuildThisFileDirectory)texts\Wasmtime.Dotnet-48.0.2-LICENSE.txt</TextFile>
       <TextSha256>a6c48161a09acc75a0e25503bab66a731eb5fba5392ed4bb4743e4ba5085327a</TextSha256>
       <TextSource>the file LICENSE of that repository at that commit</TextSource>
@@ -139,7 +139,7 @@
   <ItemGroup>
     <CorpusNoticeAsset Include="wasmtime-win-x64, wasmtime-linux-x64, wasmtime-osx-arm64">
       <What>the native wasmtime library, one archive per platform, extracted to runtimes/&lt;platform&gt;/native/.</What>
-      <Notice>LICENSE-wasmtime.txt and NOTICE.txt in the same folder.</Notice>
+      <Notice>THIRD-PARTY-NOTICES.txt (the Rust standard library and the crates the library is built from), LICENSE-wasmtime.txt and NOTICE.txt in the same folder.</Notice>
     </CorpusNoticeAsset>
     <CorpusNoticeAsset Include="corpus-pdftext-wasm">
       <What>the PDF extractor (pdftext.wasm: a Rust program and the crates it links, built for wasm32-wasip1), extracted to wasm/.</What>

@@ -197,10 +197,21 @@ jobs:
           ls -l "$data/wasm"
           echo "$file $actual from $url"
 
-      # The Corpus controller on the golden Common Crawl shards (committed fixtures): the stage
-      # libraries, the PDF stage in its sandbox on the pinned engine library (the one the
-      # controller ships, as under Verify), the node-side task against a loopback origin, and the
-      # bundled scripts through the engine rig with in-process nodes.
+      # The heads of two real Common Crawl files, which the tests of the category Crawl read: the
+      # repository holds none (generated shards only), so the tests fetch them by range from
+      # data.commoncrawl.org and hold them to the hashes of Fixtures/crawl-heads.json. With the
+      # cache the origin is asked once per list; on the build server a head that cannot be
+      # fetched is a failure, not a skip.
+      - name: Cache the Common Crawl heads
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: AI/OutWit.Controller.AI.Corpus.Tests/@Data/crawl
+          key: corpus-crawl-heads-${{ hashFiles('AI/OutWit.Controller.AI.Corpus.Tests/Fixtures/crawl-heads.json') }}
+
+      # The Corpus controller on generated shards (committed with their generator) and on the two
+      # real heads above: the stage libraries, the PDF stage in its sandbox on the pinned engine
+      # library (the one the controller ships, as under Verify), the node-side task against a
+      # loopback origin, and the bundled scripts through the engine rig with in-process nodes.
       - name: Corpus
         shell: bash
         run: |

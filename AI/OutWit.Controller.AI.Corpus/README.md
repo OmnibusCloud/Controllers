@@ -549,7 +549,7 @@ It travels as the data asset `corpus-pdftext-wasm.zip` (release `pdftext-v1.0.0`
 which extracts to `wasm/pdftext.wasm` beside the controller; bytes that do not
 hash to the pin are not run. It runs in wasmtime inside the client's process, in
 the controller's own copy of the AI wasm host (binding 48.0.2, natives 48.0.8 —
-the bytes Verify ships, release `wasmtime-v48.0.8`): it sees only `/in/doc.pdf`
+the bytes Verify ships, release `wasmtime-v48.0.8-2`): it sees only `/in/doc.pdf`
 and an empty `/out`, has no network, no clock of its own and seeded randomness,
 and is compiled once per process. Per PDF:
 

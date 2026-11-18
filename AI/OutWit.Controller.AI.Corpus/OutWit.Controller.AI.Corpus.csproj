@@ -60,7 +60,8 @@
 
   <!-- Tier-2 data assets, fetched by consumers at build time from the neutral asset releases of
        this repository, one asset referenced by every consumer by URI and SHA-256. The three native
-       wasmtime libraries (wasmtime-v48.0.8) are the very bytes Verify ships, extracted to the
+       wasmtime libraries (wasmtime-v48.0.8-2: the libraries of wasmtime 48.0.8, packed with the
+       engine's third-party notices) are the very bytes Verify ships, extracted to the
        folder the module's deps.json names. The PDF extractor (pdftext-v1.0.0: pdf_oxide built for
        wasm32-wasip1 by the toolchain workflow of OutWit.Controller.AI.Corpus.Assets, two builds
        compared byte for byte) arrives as one platform-independent zip whose entries live under
@@ -68,23 +69,23 @@
   <ItemGroup>
     <ControllerDataAsset Include="wasmtime-win-x64">
       <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8/wasmtime-win-x64.zip</Uri>
-      <Sha256>c4e799ba8b7f625a8e5aee1f6c43d0a57b2ce6ce0824e7a13ca62144c94bfdc5</Sha256>
-      <Size>8284072</Size>
+      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8-2/wasmtime-win-x64.zip</Uri>
+      <Sha256>da8365a7494f757d39d64810dea2b3eed1cb236f27bc794c9b831771b6a81e31</Sha256>
+      <Size>8065827</Size>
       <ExtractTo>runtimes/win-x64/native/</ExtractTo>
     </ControllerDataAsset>
     <ControllerDataAsset Include="wasmtime-linux-x64">
       <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8/wasmtime-linux-x64.zip</Uri>
-      <Sha256>9ea38410c9e9ac0e6a2983dbcca5b324cf0c8a12159ed9ec186cd195f987c4a8</Sha256>
-      <Size>9963229</Size>
+      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8-2/wasmtime-linux-x64.zip</Uri>
+      <Sha256>ede145fb96677509901f31183bc558bceac92c76026071c2a969db0c6d475911</Sha256>
+      <Size>9692410</Size>
       <ExtractTo>runtimes/linux-x64/native/</ExtractTo>
     </ControllerDataAsset>
     <ControllerDataAsset Include="wasmtime-osx-arm64">
       <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8/wasmtime-osx-arm64.zip</Uri>
-      <Sha256>252af1df65b0fa10fa67d0dece7713d6e5e61bde438ae9083993a75c5ef5a3d9</Sha256>
-      <Size>8563340</Size>
+      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8-2/wasmtime-osx-arm64.zip</Uri>
+      <Sha256>1f13fca2b811f16d3407cc50c3ff08a73c6781484bc32d5dfb28b433ec801012</Sha256>
+      <Size>8286398</Size>
       <ExtractTo>runtimes/osx-arm64/native/</ExtractTo>
     </ControllerDataAsset>
     <ControllerDataAsset Include="corpus-pdftext-wasm">
