@@ -81,11 +81,14 @@ public sealed class CorpusJsonStreamM5Tests
 
         TestContext.Out.WriteLine($"{count} items, {stream.Position} bytes read; at most {peak} bytes held while reading");
 
+        // The measure is the whole process's heap: what other threads of the test host hold at
+        // that moment counts too (3.2 MB on a macOS build server once, 1 MB as a rule). The bound
+        // is a quarter of the document: holding it would be the document's size at least.
         Assert.Multiple(() =>
         {
             Assert.That(count, Is.EqualTo(200_000));
             Assert.That(stream.Position, Is.GreaterThan(15_000_000));
-            Assert.That(peak, Is.LessThan(2_000_000), "the document was never in memory");
+            Assert.That(peak, Is.LessThan(stream.Position / 4), "the document was never in memory");
         });
     }
 
