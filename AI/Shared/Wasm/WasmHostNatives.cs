@@ -27,9 +27,19 @@ internal static class WasmHostNatives
     public const string VERSION = "48.0.8";
 
     /// <summary>
+    /// The release every controller's data assets name for the libraries: <c>wasmtime-v</c> and
+    /// the engine version, then <c>-2</c>, <c>-3</c> and so on when the same libraries were packed
+    /// again (the second packing added the notices of what is linked into them). The archives of
+    /// a published release are pinned by the controllers that shipped with it and are never
+    /// replaced, so another packing is another release.
+    /// </summary>
+    public const string RELEASE = "wasmtime-v48.0.8-2";
+
+    /// <summary>
     /// The SHA-256 of the library each platform's data asset carries, by portable runtime
     /// identifier: wasmtime 48.0.8, taken unchanged from the engine's C API release archives
-    /// (the asset tool's <c>toolchain/natives.sh</c>), released as <c>wasmtime-v48.0.8</c>.
+    /// (the asset tool's <c>toolchain/natives.sh</c>), the same file in every packing of
+    /// <c>wasmtime-v48.0.8</c>.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> PINNED = new Dictionary<string, string>(StringComparer.Ordinal)
     {

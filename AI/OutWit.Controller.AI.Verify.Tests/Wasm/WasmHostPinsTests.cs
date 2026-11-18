@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using OutWit.Controller.AI.Verify.Runtimes;
 using OutWit.Controller.AI.Wasm;
@@ -135,9 +136,10 @@ public sealed class WasmHostPinsTests
     [Test]
     public void EveryControllerFetchesItsNativesFromTheEngineReleaseTest()
     {
-        // The natives are one asset every consumer references, released on their own as
-        // wasmtime-v<version> (the bytes verify-v0.6.0 carried): Verify moved there in 0.12.0,
-        // Corpus started there.
+        // The natives are one asset every consumer references, released on their own (the bytes
+        // verify-v0.6.0 carried): Verify moved there in 0.12.0, Corpus started there. Every
+        // controller names the same release and the same asset names; the release is the host's
+        // constant, so a controller that stays behind fails here.
         var shippers = WasmHostRepository.AiProjects()
             .Select(project => (Name: Path.GetFileName(project.Path), Natives: WasmHostRepository.ShippedNativeUris(project.Project)))
             .Where(shipper => shipper.Natives.Count > 0)
@@ -149,9 +151,19 @@ public sealed class WasmHostPinsTests
             foreach (var (name, natives) in shippers)
             {
                 foreach (var (rid, uri) in natives)
-                    Assert.That(uri, Is.EqualTo($"gh-release://OmnibusCloud/Controllers/wasmtime-v{WasmHostNatives.VERSION}/wasmtime-{rid}.zip"), $"{name}: {rid}");
+                    Assert.That(uri, Is.EqualTo($"gh-release://OmnibusCloud/Controllers/{WasmHostNatives.RELEASE}/wasmtime-{rid}.zip"), $"{name}: {rid}");
             }
         });
+    }
+
+    [Test]
+    public void TheNativesReleaseIsNamedAfterTheEngineVersionTest()
+    {
+        // wasmtime-v<version>, or wasmtime-v<version>-<n> for the n-th packing of the same
+        // libraries: a release's archives are pinned by the controllers that shipped with it and
+        // cannot be replaced, so the same libraries with other files beside them are another release.
+        Assert.That(WasmHostNatives.RELEASE, Does.Match($"^wasmtime-v{Regex.Escape(WasmHostNatives.VERSION)}(-[2-9][0-9]*|-[1-9][0-9]+)?$"),
+            "the release of the natives is named after the engine version the guard pins");
     }
 
     #endregion
