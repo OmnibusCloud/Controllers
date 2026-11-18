@@ -12,7 +12,7 @@ namespace OutWit.Controller.AI.Corpus.Tests.Scripts;
 /// The distributed test rig for the bundled scripts: the engine SDK host with the modules the rig
 /// names (<see cref="CorpusRigModules"/>: the controller under test and what its scripts call,
 /// each checked to be this build's, and nothing else that happens to be staged), in-process mock
-/// nodes, a file-backed blob service, and a loopback origin that serves the golden shards — the
+/// nodes, a file-backed blob service, and a loopback origin that serves the generated shards — the
 /// "nodes" really fetch over HTTP and run the pipeline.
 /// </summary>
 public abstract class CorpusScriptTestBase
@@ -36,7 +36,7 @@ public abstract class CorpusScriptTestBase
 
         m_blobStoragePath = Path.Combine(Path.GetTempPath(), $"witai_corpus_e2e_{Guid.NewGuid():N}");
         BlobService = new CorpusTestBlobService(Path.Combine(m_blobStoragePath, "blobs"));
-        Origin = new CorpusTestOrigin(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures"));
+        Origin = new CorpusTestOrigin(CorpusFixtures.Folder);
 
         var tempStorage = new WitTempStorageDefault(Path.Combine(m_blobStoragePath, "temp"));
         NodesManager = new CorpusTestNodesManager(WitEngineNodeSdk.Instance, BlobService, Nodes);
@@ -89,7 +89,7 @@ public abstract class CorpusScriptTestBase
 
     protected async Task<Guid> UploadFixtureAsync(string name)
     {
-        return await BlobService.UploadFileAsync(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name));
+        return await BlobService.UploadFileAsync(CorpusFixtures.PathOf(name));
     }
 
     protected async Task<byte[]> ReadBytesAsync(Guid blobId)
@@ -131,7 +131,7 @@ public abstract class CorpusScriptTestBase
         return text.ToString();
     }
 
-    /// <summary>A manifest over golden shards served by the loopback origin.</summary>
+    /// <summary>A manifest over generated shards served by the loopback origin.</summary>
     protected string Manifest(params string[] fixtures)
     {
         var sources = string.Join(", ", fixtures.Select(fixture => $"\"{Origin.ShardUrl(fixture)}\""));

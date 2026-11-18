@@ -29,6 +29,11 @@
                       ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
+  <!-- The asset tool: the tests hold what it refuses of an archive it unpacks (VerifyAssetArchiveTests). -->
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify.Assets\OutWit.Controller.AI.Verify.Assets.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <ExcludedControllerModule Include="render.module" />
     <ExcludedControllerModule Include="renderdcc.module" />
@@ -39,7 +44,13 @@
        layers, QuickJS). Build it with the asset tool (OutWit.Controller.AI.Verify.Assets,
        "verify-assets build @Data/runtimes"); @Data/ is gitignored. -->
   <ItemGroup>
-    <PackageReference Include="Wasmtime" Version="48.0.2" />
+    <PackageReference Include="Wasmtime" Version="48.0.2" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <!-- Where the build restored the binding's package: the tests hold what the module's notices
+       say of Wasmtime.Dotnet.dll to the package's own description and files (VerifyBindingNoticeTests). -->
+  <ItemGroup>
+    <AssemblyMetadata Include="WasmtimePackageFolder" Value="$(PkgWasmtime)" />
   </ItemGroup>
 
   <ItemGroup>

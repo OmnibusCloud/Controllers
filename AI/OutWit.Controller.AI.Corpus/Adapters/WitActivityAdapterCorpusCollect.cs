@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
+using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Controller.AI.Corpus.Reports;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -19,7 +20,7 @@ internal sealed class WitActivityAdapterCorpusCollect : WitActivityAdapterFuncti
     #region Constructors
 
     public WitActivityAdapterCorpusCollect(IWitProcessingManager processingManager, IWitBlobService blobService, IWitTempStorage tempStorage, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, CorpusLogger.Wrap(logger))
     {
         BlobService = blobService;
         TempStorage = tempStorage;

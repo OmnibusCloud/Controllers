@@ -23,9 +23,10 @@ public sealed class CorpusStorageM8Tests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string PACK_FIXTURE = "language-pack-cc-2026-43-16.bin";
-    private const string WITLID1_FIXTURE = "language-model-cc-2026-43-16.bin";
+    /// <summary>The head of a real WET file: the measurement below is one of real crawl pages.</summary>
+    private const string WET_FIXTURE = CorpusFixtures.CRAWL_WET;
+    private const string PACK_FIXTURE = CorpusFixtures.PACK;
+    private const string WITLID1_FIXTURE = CorpusFixtures.WITLID1;
     private const long MIB = 1024 * 1024;
 
     #endregion
@@ -33,9 +34,10 @@ public sealed class CorpusStorageM8Tests
     #region Quality Overrides
 
     [Test]
+    [Category(CorpusFixtures.CRAWL)]
     public void M8ThresholdsLoosenedToNothingKeepWhatAnUnfilteredRunKeepsTest()
     {
-        // The golden WET shard with the filter on. Measured, not argued: the ten thresholds a
+        // The head of a real WET file with the filter on. Measured, not argued: the ten thresholds a
         // manifest can set, opened wide, keep a little more than the filter's defaults (the
         // repetition rules and the stop words are not a manifest's to set); a pack whose rule
         // data opens those too keeps what a run with the filter off keeps. The switch says
@@ -206,7 +208,7 @@ public sealed class CorpusStorageM8Tests
     [TestCase(1024)]
     public void M5AShardInAPackageCostsNoMoreThanTheEstimateCountsTest(int shards)
     {
-        // The guard of the two package constants, as the golden shards guard the table: packages
+        // The guard of the two package constants, as the heads of a real crawl guard the table: packages
         // of a job of up to 1,024 shards (one shard each), of a hundred thousand (98) and of the
         // most a job may have (1,024), with the longest things an honest run puts in them — a
         // WARC URL of Common Crawl with its published hash, and a result with every drop rule,
@@ -351,7 +353,7 @@ public sealed class CorpusStorageM8Tests
 
     private static string Fixture(string name)
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
+        return CorpusFixtures.PathOf(name);
     }
 
     #endregion

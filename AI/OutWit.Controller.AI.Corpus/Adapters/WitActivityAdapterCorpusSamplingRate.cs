@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
+using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
@@ -13,7 +14,7 @@ internal sealed class WitActivityAdapterCorpusSamplingRate : WitActivityAdapterF
     #region Constructors
 
     public WitActivityAdapterCorpusSamplingRate(IWitProcessingManager processingManager, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, CorpusLogger.Wrap(logger))
     {
     }
 

@@ -22,7 +22,7 @@ public sealed class CorpusRuntimeDiagnosticsTests
 {
     #region Constants
 
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
 
     #endregion
 
@@ -130,7 +130,7 @@ public sealed class CorpusRuntimeDiagnosticsTests
     [Test]
     public void TheReferenceModelFactsAreThoseOfTheFileTest()
     {
-        var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", MODEL_FIXTURE);
+        var path = CorpusFixtures.PathOf(MODEL_FIXTURE);
         var bytes = File.ReadAllBytes(path);
         var model = LanguageModel.FromBytes(bytes);
 

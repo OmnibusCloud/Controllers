@@ -2,22 +2,28 @@ using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Storage;
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Storage;
 
 /// <summary>
-/// The ratios the storage estimate stands on hold the golden shards under every switch setting,
-/// with the language stage on and off: a stage change that makes products larger fails here
-/// and the table moves with it. And the table covers every format and setting.
+/// The ratios the storage estimate stands on hold the heads of a real crawl under every switch
+/// setting, with the language stage on and off: a stage change that makes products larger fails
+/// here and the table moves with it. The table was measured on real crawl data and is held to
+/// real crawl data: those cases carry the category <c>Crawl</c> (fetched by range, ignored where
+/// the origin cannot be reached). The generated shards are held to what does not depend on what
+/// a page says: the layout of the signatures blob. And the table covers every format and setting.
 /// </summary>
 [TestFixture]
 public sealed class CorpusStorageRatiosTests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string WARC_FIXTURE = CorpusFixtures.WARC;
+    private const string CRAWL_WET = CorpusFixtures.CRAWL_WET;
+    private const string CRAWL_WARC = CorpusFixtures.CRAWL_WARC;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
     private const double BYTES_PER_MIB = 1024.0 * 1024.0;
 
     #endregion
@@ -52,10 +58,16 @@ public sealed class CorpusStorageRatiosTests
         }
     }
 
-    [TestCase(WET_FIXTURE, CorpusSourceFormat.Wet)]
-    [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc)]
-    public void TheRatiosHoldTheGoldenShardsTest(string fixture, CorpusSourceFormat format)
+    [TestCase(WET_FIXTURE, CorpusSourceFormat.Wet, false)]
+    [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc, false)]
+    [TestCase(CRAWL_WET, CorpusSourceFormat.Wet, true, Category = CorpusFixtures.CRAWL)]
+    [TestCase(CRAWL_WARC, CorpusSourceFormat.Warc, true, Category = CorpusFixtures.CRAWL)]
+    public void TheRatiosHoldTheGoldenShardsTest(string fixture, CorpusSourceFormat format, bool real)
     {
+        // The WARC shards hold a PDF and the default pipeline reads it.
+        if (format == CorpusSourceFormat.Warc)
+            PdfTestModule.Require();
+
         var size = new FileInfo(Fixture(fixture)).Length;
 
         Assert.Multiple(() =>
@@ -69,26 +81,33 @@ public sealed class CorpusStorageRatiosTests
                 var row = CorpusStorageRatios.For(format, pipeline);
                 var setting = $"{format} clean_lines={cleanLines} filter_quality={filterQuality} identify_language={identifyLanguage}";
 
-                Assert.That(text / (double)size, Is.LessThanOrEqualTo(row.TextPerByte), $"{setting}: text per byte");
-                Assert.That(documents / (size / BYTES_PER_MIB), Is.LessThanOrEqualTo(row.DocumentsPerMib), $"{setting}: documents per MiB");
+                // What a megabyte of crawl makes is a fact of real crawl data: generated pages are not held to it.
+                if (real)
+                {
+                    Assert.That(text / (double)size, Is.LessThanOrEqualTo(row.TextPerByte), $"{setting}: text per byte");
+                    Assert.That(documents / (size / BYTES_PER_MIB), Is.LessThanOrEqualTo(row.DocumentsPerMib), $"{setting}: documents per MiB");
+                }
+
                 Assert.That(signatures, Is.EqualTo(CorpusStorageRatios.SIGNATURE_HEADER_BYTES + documents * CorpusStorageRatios.SIGNATURE_BYTES_PER_DOCUMENT), $"{setting}: the signatures layout");
             }
         });
     }
 
     [Test]
+    [Category(CorpusFixtures.CRAWL)]
     public void TheEstimateHoldsTheGoldenShardsProductsTest()
     {
+        PdfTestModule.Require();
         var sources = new List<CorpusSourceData>
         {
-            new() { Url = "https://data.commoncrawl.org/a.warc.wet.gz", Format = CorpusSourceFormat.Wet, SizeBytes = new FileInfo(Fixture(WET_FIXTURE)).Length },
-            new() { Url = "https://data.commoncrawl.org/a.warc.gz", Format = CorpusSourceFormat.Warc, SizeBytes = new FileInfo(Fixture(WARC_FIXTURE)).Length }
+            new() { Url = "https://data.commoncrawl.org/a.warc.wet.gz", Format = CorpusSourceFormat.Wet, SizeBytes = new FileInfo(Fixture(CRAWL_WET)).Length },
+            new() { Url = "https://data.commoncrawl.org/a.warc.gz", Format = CorpusSourceFormat.Warc, SizeBytes = new FileInfo(Fixture(CRAWL_WARC)).Length }
         };
         var pipeline = new CorpusPipelineData { Version = "ratio-guard" };
 
         var estimate = CorpusStorageEstimator.Estimate(sources, pipeline, 0, 0);
-        var wet = Run(WET_FIXTURE, CorpusSourceFormat.Wet, pipeline);
-        var warc = Run(WARC_FIXTURE, CorpusSourceFormat.Warc, pipeline);
+        var wet = Run(CRAWL_WET, CorpusSourceFormat.Wet, pipeline);
+        var warc = Run(CRAWL_WARC, CorpusSourceFormat.Warc, pipeline);
 
         Assert.Multiple(() =>
         {
@@ -114,7 +133,7 @@ public sealed class CorpusStorageRatiosTests
 
     private static string Fixture(string name)
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
+        return CorpusFixtures.PathOf(name);
     }
 
     #endregion

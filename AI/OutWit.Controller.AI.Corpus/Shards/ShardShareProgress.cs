@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using OutWit.Controller.AI.Corpus.Logging;
 
 namespace OutWit.Controller.AI.Corpus.Shards;
 
@@ -67,7 +68,7 @@ public sealed class ShardShareProgress
     {
         m_jobId = jobId;
         m_report = report;
-        m_logger = logger;
+        m_logger = CorpusLogger.Wrap(logger);
     }
 
     #endregion

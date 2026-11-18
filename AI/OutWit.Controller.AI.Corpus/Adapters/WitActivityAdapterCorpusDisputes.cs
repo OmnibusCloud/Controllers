@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
+using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -12,7 +13,7 @@ internal sealed class WitActivityAdapterCorpusDisputes : WitActivityAdapterFunct
     #region Constructors
 
     public WitActivityAdapterCorpusDisputes(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, CorpusLogger.Wrap(logger))
     {
         BlobService = blobService;
     }

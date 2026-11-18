@@ -10,10 +10,17 @@
   </PropertyGroup>
 
   <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md).
-       ENABLE AT FIRST PUBLISH: the referenced controller package does not exist
-       on any feed yet, so the marker would break restore until then.
+       ENABLE WHEN THE CONTROLLER IS FIRST PUBLISHED TO NUGET.ORG, which is its 1.0.0: until
+       then the feed these packages are restored from has no controller package, and a
+       reference to a package a feed does not have breaks restore.
+       The range is the one to enable as it stands. Its lower bound is the first controller
+       version that feed will have (the decision record: a lower bound no feed has is noise at
+       every restore); its upper bound is the next major, exclusive. The scripts themselves
+       need the activities the controller has had since 0.13.0 (Verify.Repairs,
+       Verify.Disputes). The range this marker had, [0.1.0, 1.0.0), would have refused the
+       very 1.0.0 it was waiting for; a test holds the range to the release it waits for.
   <ItemGroup>
-    <PackageReference Include="OutWit.Controller.AI.Verify" Version="[0.1.0, 1.0.0)" />
+    <PackageReference Include="OutWit.Controller.AI.Verify" Version="[1.0.0, 2.0.0)" />
   </ItemGroup>
   -->
 

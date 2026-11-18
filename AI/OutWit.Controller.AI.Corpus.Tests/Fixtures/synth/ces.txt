@@ -1,0 +1,42 @@
+# Czech. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Úvod
+Aktuality
+Akce
+Kontakt
+O nás
+Otevírací doba
+Tržní dny
+Počasí
+[sentence]
+Městská knihovna otevírá v pondělí v devět hodin a zavírá v sedm večer.
+Pekař na rohu peče každé ráno čerstvý chléb pro celou čtvrť.
+Na jaře kvetou jabloně podél staré silnice.
+Přívoz jezdí přes řeku každých dvacet minut, když je dobré počasí.
+Po dlouhé zimě byly cesty v parku opraveny.
+Městská rada rozhodla, že most bude příští rok opraven.
+Na trhu prodávají zemědělci zeleninu, sýr a med z okolí.
+Žáci základní školy dnes navštíví malé muzeum v přístavu.
+Kvůli silnému dešti je podchod u nádraží uzavřen.
+Hodinář opravuje už čtyřicet let hodiny na věži kostela.
+Na podzim sousedé společně uklízejí listí z chodníků.
+Nová autobusová linka spojuje vesnici s městem a s nemocnicí.
+V sobotu se v kulturním domě koná koncert mládežnického sboru.
+Lesník ukazuje návštěvníkům nejstarší duby v lese.
+Mnoho obyvatel jezdí do práce na kole, protože ulice jsou úzké.
+Hasiči cvičí každý měsíc na břehu jezera.
+V dílně za radnicí se pečlivě opravuje starý nábytek.
+Lékař přestěhoval svou ordinaci do domu vedle lékárny.
+O prázdninách zůstává koupaliště otevřené až do pozdního večera.
+Zahradnice sází růže a levanduli před vchodem do nádraží.
+Nová cyklostezka teď vede z náměstí až ke mlýnu.
+Pošťák zná všechny rodiny v ulicích svého obvodu.
+Večer se šachisté scházejí v čítárně knihovny.
+Vodu v kašně pravidelně kontroluje hygienická služba.
+Učitelka vysvětluje dětem, jak se čte mapa.
+V zimě obec nejdříve odklízí sníh z hlavních ulic.
+Rybář přiváží svůj úlovek do přístavu brzy ráno.
+Obyvatelé starého města si přejí více laviček a stromů.
+Na kopci nad městem stojí stará cihlová vodárenská věž.
+Spolek hledá dobrovolníky, kteří pomohou při letní slavnosti.

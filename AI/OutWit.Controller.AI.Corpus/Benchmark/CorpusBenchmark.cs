@@ -33,10 +33,11 @@ public static class CorpusBenchmark
 
     /// <summary>
     /// Megabytes of real Common Crawl WET (gzip, full pipeline with the language stage) that cost
-    /// the same CPU as one reference shard without it. Measured single-threaded on the golden
-    /// WET fixture against the reference shard; see the calibration test (2026-11-08, Ryzen 9
-    /// 5950X, three runs 0.377-0.406: the reference shard ~285 ms without the language stage,
-    /// the golden WET fixture ~0.75 s per gzip megabyte with it).
+    /// the same CPU as one reference shard without it. Measured single-threaded on the head of
+    /// a real WET file (the first 1.5 MB of CC-MAIN-2026-43, segment 1791170053823.21, file
+    /// 00000, which the tests fetch by range) against the reference shard; see the calibration
+    /// test (2026-11-08, Ryzen 9 5950X, three runs 0.377-0.406: the reference shard ~285 ms
+    /// without the language stage, the WET head ~0.75 s per gzip megabyte with it).
     /// </summary>
     public const double REAL_MB_PER_REFERENCE_SHARD = 0.39;
 

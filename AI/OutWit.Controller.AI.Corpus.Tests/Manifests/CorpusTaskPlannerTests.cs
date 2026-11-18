@@ -1,6 +1,7 @@
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Manifests;
 
@@ -113,7 +114,7 @@ public sealed class CorpusTaskPlannerTests
     [Test]
     public void AModelThisControllerCannotUseStopsThePlanTest()
     {
-        var pack = File.ReadAllBytes(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-pack-cc-2026-43-16.bin"));
+        var pack = File.ReadAllBytes(CorpusFixtures.PathOf(CorpusFixtures.PACK));
         var manifest = Manifest(sources: ["https://h/a.warc.gz"]);
 
         var garbage = CorpusTaskPlanner.Plan(manifest, null, Guid.NewGuid(), MODEL_SHA, languageModel: CorpusLanguageModelFacts.Read(System.Text.Encoding.ASCII.GetBytes("not a model at all")));
@@ -135,8 +136,8 @@ public sealed class CorpusTaskPlannerTests
     [Test]
     public void AUsableModelIsDescribedAndTargetsItLacksAreNamedTest()
     {
-        var pack = CorpusLanguageModelFacts.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-pack-cc-2026-43-16.bin"));
-        var witlid1 = CorpusLanguageModelFacts.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "language-model-cc-2026-43-16.bin"));
+        var pack = CorpusLanguageModelFacts.Load(CorpusFixtures.PathOf(CorpusFixtures.PACK));
+        var witlid1 = CorpusLanguageModelFacts.Load(CorpusFixtures.PathOf(CorpusFixtures.WITLID1));
         var manifest = Manifest(sources: ["https://h/a.warc.gz"]);
         manifest.Pipeline.TargetLanguages = ["eng", "swe"];
 

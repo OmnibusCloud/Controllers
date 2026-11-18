@@ -19,8 +19,8 @@ public sealed class ShardOutputModeTests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
 
     #endregion
 
@@ -145,9 +145,9 @@ public sealed class ShardOutputModeTests
             Assert.That(ShardProcessor.Signs(pipeline), Is.True, "made, to be hashed and compared");
             Assert.That(ShardProcessor.KeepsSignatures(pipeline), Is.False);
             Assert.That(product.SignaturesSha256, Is.EqualTo(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(signatures.ToArray()))));
-            Assert.That(product.SignaturesSha256, Is.EqualTo("aa77d782313aba066db3054d44013b5c6d4b8b9a7004a90893acb963f93a1add"), "the golden WET shard's signatures blob, kept or not");
+            Assert.That(product.SignaturesSha256, Is.EqualTo("017e539b07f36abe6ff9f5fd7ff7566825668b1697c6500f742c610146819ab9"), "the generated WET shard's signatures blob, kept or not");
             Assert.That(text.Length, Is.GreaterThan(0), "the text is still made on the node, to be hashed and measured");
-            Assert.That(product.ContentSha256, Is.EqualTo("5fd9af0b09764d3b017cf15c1338b56271faf9f0e857efa653c4dc71a2d3e74b"), "the golden WET product, kept or not");
+            Assert.That(product.ContentSha256, Is.EqualTo("1a8e1ecb509fa6bb2174de5ef411261952c11d1e51debf68e098fb3eccb5c2cd"), "the generated WET product, kept or not");
         });
     }
 
@@ -187,7 +187,7 @@ public sealed class ShardOutputModeTests
 
     private static string Fixtures()
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures");
+        return CorpusFixtures.Folder;
     }
 
     #endregion

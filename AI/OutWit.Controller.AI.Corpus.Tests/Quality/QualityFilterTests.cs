@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Text;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Quality;
@@ -8,16 +9,16 @@ namespace OutWit.Controller.AI.Corpus.Tests.Quality;
 /// <summary>
 /// The quality filter: a plain article passes, each rule fails on the shape it names, every
 /// measure is the number DataTrove's code gives on the same text, the verdict is the same every
-/// time, and on the golden shard a plausible share of raw pages survives with the drops
-/// accounted for by rule. The rules of each language: <see cref="QualityRulesTests"/>.
+/// time, and of a shard's raw pages (the generated one's, and a real crawl's in the case of the
+/// category <c>Crawl</c>) a plausible share survives with the drops accounted for by rule. The rules of each language: <see cref="QualityRulesTests"/>.
 /// </summary>
 [TestFixture]
 public sealed class QualityFilterTests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
 
     private const string ARTICLE =
         "The committee reviewed the annual report in detail and approved the budget for the coming year.\n" +
@@ -209,10 +210,16 @@ public sealed class QualityFilterTests
 
     #endregion
 
-    #region Golden Shard Tests
+    #region Shard Tests
 
-    [Test]
-    public void GoldenShardPagesSurviveAtAPlausibleRateWithDropsByRuleTest()
+    /// <summary>
+    /// The raw pages of a shard, judged without the line stage: some pass, some do not, each
+    /// drop by a named rule. Of a real crawl's pages many do not pass (the case of the category
+    /// <c>Crawl</c>); the generated crawl is mostly articles, and the pages made to fail fail.
+    /// </summary>
+    [TestCase(WET_FIXTURE, 0.5, 0.99)]
+    [TestCase(CorpusFixtures.CRAWL_WET, 0.1, 0.95, Category = CorpusFixtures.CRAWL)]
+    public void GoldenShardPagesSurviveAtAPlausibleRateWithDropsByRuleTest(string fixture, double least, double most)
     {
         var model = LanguageModel.Load(Fixture(MODEL_FIXTURE));
         var identifier = new LanguageIdentifier(model);
@@ -220,7 +227,7 @@ public sealed class QualityFilterTests
         var passed = 0;
         var drops = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        using var reader = WarcReader.Open(Fixture(WET_FIXTURE));
+        using var reader = WarcReader.Open(Fixture(fixture));
         foreach (var record in reader.ReadRecords().Where(r => r.Type == "conversion"))
         {
             var text = Encoding.UTF8.GetString(record.Payload.Span);
@@ -236,7 +243,12 @@ public sealed class QualityFilterTests
 
         TestContext.Out.WriteLine($"{total} WET documents: {passed} pass ({100.0 * passed / total:F1} %); drops by rule: {string.Join(", ", drops.OrderByDescending(pair => pair.Value).Select(pair => $"{pair.Key}={pair.Value}"))}");
 
-        Assert.That((double)passed / total, Is.InRange(0.1, 0.95), "raw crawl pages: some survive, many do not");
+        Assert.Multiple(() =>
+        {
+            Assert.That((double)passed / total, Is.InRange(least, most), "raw pages: some survive, some do not");
+            Assert.That(drops.Keys, Does.Contain("min_words").And.SubsetOf(QualityFilter.RULES), "and the ones that do not are dropped by a rule with a name");
+            Assert.That(drops, Has.Count.GreaterThanOrEqualTo(5), "by more rules than one");
+        });
     }
 
     #endregion
@@ -245,7 +257,7 @@ public sealed class QualityFilterTests
 
     private static string Fixture(string name)
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
+        return CorpusFixtures.PathOf(name);
     }
 
     #endregion

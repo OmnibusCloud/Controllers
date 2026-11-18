@@ -54,6 +54,15 @@ fetch "$WASI_SDK_URL" "$WASI_SDK_SHA256" "$WORK/wasi-sdk.tar.gz"
 fetch "$LUA_URL" "$LUA_SHA256" "$WORK/lua.tar.gz" "$LUA_MIRROR_URL"
 fetch "$BINARYEN_URL" "$BINARYEN_SHA256" "$WORK/binaryen.tar.gz"
 fetch "$QUICKJS_URL" "$QUICKJS_SHA256" "$WORK/quickjs.tar.gz"
+fetch "$RUSTC_URL" "$RUSTC_SHA256" "$WORK/rustc.tar.xz"
+fetch "$RUST_STD_WASI_URL" "$RUST_STD_WASI_SHA256" "$WORK/rust-std-wasi.tar.xz"
+# A download without a pin is hashed and named above, and that is all that is done with it:
+# nothing is unpacked or run before every download has matched its pin.
+if [ "$UNPINNED" -ne 0 ]; then
+  echo "some downloads are not pinned (see UNPINNED above): nothing was unpacked or run"
+  exit 3
+fi
+echo "every download matched its pin"
 
 SDK="$WORK/wasi-sdk"
 if [ ! -x "$SDK/bin/clang" ]; then
@@ -68,6 +77,18 @@ if [ ! -x "$BINARYEN/bin/wasm-opt" ]; then
   tar -xzf "$WORK/binaryen.tar.gz" -C "$BINARYEN" --strip-components=1
 fi
 "$BINARYEN/bin/wasm-opt" --version
+
+# The Rust compiler and the standard library for wasm32-wasip1, from their two pinned archives
+# into one folder of the build's own, laid out as an installed toolchain is: the compiler's
+# files (bin, lib, with the linker it brings) and the target's library beside them.
+RUST="$WORK/rust"
+if [ ! -x "$RUST/bin/rustc" ]; then
+  rm -rf "$RUST"
+  mkdir -p "$RUST"
+  tar -xJf "$WORK/rustc.tar.xz" -C "$RUST" --strip-components=2 "rustc-$RUST_VERSION-x86_64-unknown-linux-gnu/rustc"
+  tar -xJf "$WORK/rust-std-wasi.tar.xz" -C "$RUST" --strip-components=2 "rust-std-$RUST_VERSION-wasm32-wasip1/rust-std-wasm32-wasip1"
+fi
+"$RUST/bin/rustc" --version
 
 LUA="$WORK/lua-$LUA_VERSION"
 rm -rf "$LUA"
@@ -167,16 +188,10 @@ echo "== sum.wasm (C)"
   "$HERE/fixtures/sum.c" -Wl,--strip-debug -o "$OUT/sum.wasm"
 
 echo "== words.wasm (Rust $RUST_VERSION)"
-if command -v rustup > /dev/null 2>&1; then
-  rustup toolchain install "$RUST_VERSION" --profile minimal --target wasm32-wasip1 > /dev/null 2>&1
-  rustup run "$RUST_VERSION" rustc --version
-  rustup run "$RUST_VERSION" rustc --target wasm32-wasip1 --edition 2021 \
-    -C opt-level=s -C strip=symbols -C codegen-units=1 -C panic=abort \
-    --remap-path-prefix "$HERE"=. \
-    "$HERE/fixtures/words.rs" -o "$OUT/words.wasm"
-else
-  echo "rustup not found: words.wasm skipped"
-fi
+"$RUST/bin/rustc" --target wasm32-wasip1 --edition 2021 \
+  -C opt-level=s -C strip=symbols -C codegen-units=1 -C panic=abort \
+  --remap-path-prefix "$HERE"=. \
+  "$HERE/fixtures/words.rs" -o "$OUT/words.wasm"
 
 # The raw-wasm demo kit of the live tool (demo/03-wasm): programs a lab compiles itself, built
 # here with the same pinned compilers so the kit's taskset carries known bytes. kit-*.wasm.
@@ -193,23 +208,12 @@ done
   "$KIT/src/threads.c" -Wl,--strip-debug,--import-memory,--export-memory,--max-memory=67108864 -o "$OUT/kit-threads-c.wasm"
 
 echo "== the raw-wasm demo kit (Rust $RUST_VERSION)"
-if command -v rustup > /dev/null 2>&1; then
-  for name in sum sum_unwrap primes primes_below words; do
-    rustup run "$RUST_VERSION" rustc --target wasm32-wasip1 --edition 2021 \
-      -C opt-level=s -C strip=symbols -C codegen-units=1 -C panic=abort \
-      --remap-path-prefix "$KIT"=. \
-      "$KIT/src/$name.rs" -o "$OUT/kit-$name-rust.wasm"
-  done
-else
-  echo "rustup not found: the kit's Rust modules skipped"
-fi
+for name in sum sum_unwrap primes primes_below words; do
+  "$RUST/bin/rustc" --target wasm32-wasip1 --edition 2021 \
+    -C opt-level=s -C strip=symbols -C codegen-units=1 -C panic=abort \
+    --remap-path-prefix "$KIT"=. \
+    "$KIT/src/$name.rs" -o "$OUT/kit-$name-rust.wasm"
+done
 
 echo "== built"
 ( cd "$OUT" && sha256sum *.wasm && ls -l *.wasm | awk '{ print $5, $9 }' )
-
-echo "== pins"
-if [ "$UNPINNED" -ne 0 ]; then
-  echo "some downloads are not pinned (see UNPINNED above)"
-  exit 3
-fi
-echo "every download matched its pin"

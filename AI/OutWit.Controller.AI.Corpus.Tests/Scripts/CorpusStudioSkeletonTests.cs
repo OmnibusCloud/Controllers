@@ -2,6 +2,7 @@ using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Scripts;
@@ -20,9 +21,9 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string WARC_FIXTURE = CorpusFixtures.WARC;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
 
     #endregion
 
@@ -62,8 +63,8 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
         Assert.Multiple(() =>
         {
             Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
-            Assert.That(report.PlannedNodes, Is.EqualTo(2), "two shards of a similar size on the rig's three unmeasured nodes");
-            Assert.That(report.BusiestNodeShare, Is.InRange(0.5, 0.6), "the larger of the two golden shards");
+            Assert.That(report.PlannedNodes, Is.EqualTo(2), "two shards on the rig's three unmeasured nodes");
+            Assert.That(report.BusiestNodeShare, Is.EqualTo(0.5).Within(0.001), "each shard is under a megabyte, the least a shard weighs: the two weigh the same");
             Assert.That(report.Messages, Has.Some.StartsWith("Work split as the platform would plan it now: 2 of 3 node(s) take shards; the busiest node's share of the work is"));
         });
     }
@@ -160,7 +161,7 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
         using var report = await ReadJsonAsync(reportBlob);
         using var integrity = await ReadJsonAsync((Guid)job.Variables["integrity"].Value!);
         var shards = report.RootElement.GetProperty("shards").EnumerateArray().ToList();
-        var model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", MODEL_FIXTURE));
+        var model = LanguageModel.Load(CorpusFixtures.PathOf(MODEL_FIXTURE));
 
         Assert.Multiple(() =>
         {
@@ -176,7 +177,7 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
 
         foreach (var (fixture, format, index) in new[] { (WET_FIXTURE, CorpusSourceFormat.Wet, 0), (WARC_FIXTURE, CorpusSourceFormat.Warc, 1) })
         {
-            using var shard = File.OpenRead(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", fixture));
+            using var shard = File.OpenRead(CorpusFixtures.PathOf(fixture));
             var direct = new ShardProcessor(new CorpusPipelineData { Version = "e2e-v1" }, model).Process(shard, format, new MemoryStream(), new MemoryStream());
             Assert.That(shards.Single(s => s.GetProperty("index").GetInt32() == index).GetProperty("content_sha256").GetString(), Is.EqualTo(direct.ContentSha256), $"shard {index}: the full run's hash");
         }
@@ -276,7 +277,7 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
 
     private static long Size(string fixture)
     {
-        return new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", fixture)).Length;
+        return new FileInfo(CorpusFixtures.PathOf(fixture)).Length;
     }
 
     private static IEnumerable<string> Messages(IWitProcessingStatus status)

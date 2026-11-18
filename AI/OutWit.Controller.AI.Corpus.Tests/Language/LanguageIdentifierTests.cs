@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Text;
 using OutWit.Controller.AI.Corpus.Language;
 using OutWit.Controller.AI.Corpus.Warc;
@@ -5,20 +6,22 @@ using OutWit.Controller.AI.Corpus.Warc;
 namespace OutWit.Controller.AI.Corpus.Tests.Language;
 
 /// <summary>
-/// Language identification on the golden WET shard with the committed model (16 languages,
-/// trained by corpus-assets on two CC-MAIN-2026-43 WET files, 31k documents labelled by
-/// Common Crawl's classifier): the model pins to its hash, agrees with Common Crawl's labels on
-/// the shard well above 95 %, answers the same every time, says nothing about too little
-/// text, and a training run is a deterministic function of its input.
+/// Language identification with the committed model (16 languages, trained by corpus-assets on
+/// two CC-MAIN-2026-43 WET files, 31k documents labelled by Common Crawl's classifier): the
+/// model pins to its hash, agrees with the labels of a shard well above 95 % (on the generated
+/// shard the label of a page is the language it was written in; on the head of a real WET file,
+/// the case of the category <c>Crawl</c>, it is Common Crawl's classifier's), answers the same
+/// every time, says nothing about too little text, and a training run is a deterministic
+/// function of its input.
 /// </summary>
 [TestFixture]
 public sealed class LanguageIdentifierTests
 {
     #region Constants
 
-    private const string MODEL_FIXTURE = "language-model-cc-2026-43-16.bin";
+    private const string MODEL_FIXTURE = CorpusFixtures.WITLID1;
     private const string MODEL_SHA256 = "9670e262a8453661e47f0a4e838e0970fff561e20b3865b383227b01ba25558f";
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
 
     #endregion
 
@@ -75,8 +78,9 @@ public sealed class LanguageIdentifierTests
         Assert.That(wrong, Is.Empty, string.Join("; ", wrong));
     }
 
-    [Test]
-    public void AgreesWithCommonCrawlsLabelsOnTheShardTest()
+    [TestCase(WET_FIXTURE)]
+    [TestCase(CorpusFixtures.CRAWL_WET, Category = CorpusFixtures.CRAWL)]
+    public void AgreesWithCommonCrawlsLabelsOnTheShardTest(string fixture)
     {
         var model = LanguageModel.Load(Fixture(MODEL_FIXTURE));
         var identifier = new LanguageIdentifier(model);
@@ -85,7 +89,7 @@ public sealed class LanguageIdentifierTests
         var total = 0;
         var agree = 0;
         var disagreements = new List<string>();
-        using var reader = WarcReader.Open(Fixture(WET_FIXTURE));
+        using var reader = WarcReader.Open(Fixture(fixture));
         foreach (var record in reader.ReadRecords())
         {
             var label = record.IdentifiedLanguage;
@@ -166,7 +170,7 @@ public sealed class LanguageIdentifierTests
 
     private static string Fixture(string name)
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
+        return CorpusFixtures.PathOf(name);
     }
 
     #endregion

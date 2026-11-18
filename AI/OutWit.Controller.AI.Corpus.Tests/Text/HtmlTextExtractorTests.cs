@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
@@ -7,20 +8,27 @@ using OutWit.Controller.AI.Corpus.Warc;
 namespace OutWit.Controller.AI.Corpus.Tests.Text;
 
 /// <summary>
-/// HTML to text on the golden WARC shard and on hostile pages: every HTML response decodes and
-/// extracts, the same bytes twice, scripts and navigation gone, the title first, and our text
-/// agrees with Common Crawl's own WET conversion of the same pages well beyond chance.
+/// HTML to text on the generated WARC shard, on the head of a real WARC file (the cases of the
+/// category <c>Crawl</c>: fetched by range, ignored where the origin cannot be reached) and on
+/// hostile pages: every HTML response decodes and extracts, to the same text on every machine,
+/// scripts and navigation gone, the title first, and our text agrees with the crawl's own WET
+/// conversion of the same pages well beyond chance.
 /// </summary>
 [TestFixture]
 public sealed class HtmlTextExtractorTests
 {
     #region Constants
 
-    private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
+    private const string WARC_FIXTURE = CorpusFixtures.WARC;
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string CRAWL_WET = CorpusFixtures.CRAWL_WET;
+    private const string CRAWL_WARC = CorpusFixtures.CRAWL_WARC;
 
-    /// <summary>SHA-256 over the extracted text of every HTML response of the golden WARC shard, in file order.</summary>
-    private const string EXTRACTED_TEXT_SHA256 = "1ccba0aeb54b9c6ad18b923a6c53bfe4ceb98781d6f7a51428e2bd28fc4b8d90";
+    /// <summary>SHA-256 over the extracted text of every HTML response of the generated WARC shard, in file order: pages in sixteen charsets, with their elements closed and left open.</summary>
+    private const string EXTRACTED_TEXT_SHA256 = "2a5293c7e9f760b18e8fc007a575e4fe7f6016c37a5365ac5eb5be93e00033ec";
+
+    /// <summary>The same over the head of the real WARC file.</summary>
+    private const string CRAWL_EXTRACTED_TEXT_SHA256 = "1ccba0aeb54b9c6ad18b923a6c53bfe4ceb98781d6f7a51428e2bd28fc4b8d90";
 
     #endregion
 
@@ -115,12 +123,13 @@ public sealed class HtmlTextExtractorTests
 
     #endregion
 
-    #region Golden Shard Tests
+    #region Shard Tests
 
-    [Test]
-    public void EveryHtmlResponseOfTheShardDecodesAndExtractsTest()
+    [TestCase(WARC_FIXTURE)]
+    [TestCase(CRAWL_WARC, Category = CorpusFixtures.CRAWL)]
+    public void EveryHtmlResponseOfTheShardDecodesAndExtractsTest(string fixture)
     {
-        var responses = Responses();
+        var responses = Responses(fixture);
         var html = responses.Where(r => r.Payload.IsHtml).ToList();
         var extracted = html.Select(r => HtmlTextExtractor.TryExtract(r.Payload.DecodeBody(), out var text, out _) ? text : "").ToList();
 
@@ -135,34 +144,38 @@ public sealed class HtmlTextExtractorTests
         });
     }
 
-    [Test]
-    public void L7ExtractionIsTheSameBytesOnEveryMachineTest()
+    [TestCase(WARC_FIXTURE, EXTRACTED_TEXT_SHA256)]
+    [TestCase(CRAWL_WARC, CRAWL_EXTRACTED_TEXT_SHA256, Category = CorpusFixtures.CRAWL)]
+    public void L7ExtractionIsTheSameBytesOnEveryMachineTest(string fixture, string expected)
     {
         // Audit finding L-7: this test compared an extraction with a second one in the same
-        // process, which cannot differ. The text of the golden shard's pages is pinned instead:
-        // the three platforms of the build server are held to one value.
+        // process, which cannot differ. The text of a shard's pages is pinned instead: the
+        // three platforms of the build server are held to one value.
         using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (var response in Responses().Where(r => r.Payload.IsHtml))
+        foreach (var response in Responses(fixture).Where(r => r.Payload.IsHtml))
             sha.AppendData(Encoding.UTF8.GetBytes(HtmlTextExtractor.Extract(response.Payload.DecodeBody())));
 
-        Assert.That(Convert.ToHexStringLower(sha.GetHashAndReset()), Is.EqualTo(EXTRACTED_TEXT_SHA256), "the extractor's text of the golden WARC head: a changed value is a changed extractor, and the golden content hashes move with it");
+        Assert.That(Convert.ToHexStringLower(sha.GetHashAndReset()), Is.EqualTo(expected), "the extractor's text of the shard's pages: a changed value is a changed extractor (or, for the generated shard, a changed generator), and the pinned content hashes move with it");
     }
 
-    [Test]
-    public void OurTextAgreesWithCommonCrawlsWetConversionTest()
+    [TestCase(WARC_FIXTURE, WET_FIXTURE)]
+    [TestCase(CRAWL_WARC, CRAWL_WET, Category = CorpusFixtures.CRAWL)]
+    public void OurTextAgreesWithCommonCrawlsWetConversionTest(string warc, string wetFixture)
     {
-        // The WET fixture is the conversion of the same WARC file: same URLs, in order. Token
-        // overlap (Jaccard over word sets) is an agreement statistic, not an identity - the two
-        // extractors differ by design - but it must sit well above chance.
+        // The WET shard is the conversion of the same WARC file: same URLs, in order (Common
+        // Crawl's own conversion for the real heads; for the generated shards the text the
+        // generator gives each page, its menu and its foot included). Token overlap (Jaccard
+        // over word sets) is an agreement statistic, not an identity - the two extractors
+        // differ by design - but it must sit well above chance.
         var wet = new Dictionary<string, string>();
-        using (var reader = WarcReader.Open(Fixture(WET_FIXTURE)))
+        using (var reader = WarcReader.Open(Fixture(wetFixture)))
         {
             foreach (var record in reader.ReadRecords().Where(r => r.Type == "conversion"))
                 wet.TryAdd(record.TargetUri!, Encoding.UTF8.GetString(record.Payload.Span));
         }
 
         var scores = new List<double>();
-        foreach (var response in Responses().Where(r => r.Payload.IsHtml))
+        foreach (var response in Responses(warc).Where(r => r.Payload.IsHtml))
         {
             if (!wet.TryGetValue(response.Uri, out var reference))
                 continue;
@@ -187,9 +200,9 @@ public sealed class HtmlTextExtractorTests
 
     #region Helpers
 
-    private static List<(string Uri, HttpResponsePayload Payload)> Responses()
+    private static List<(string Uri, HttpResponsePayload Payload)> Responses(string fixture)
     {
-        using var reader = WarcReader.Open(Fixture(WARC_FIXTURE));
+        using var reader = WarcReader.Open(Fixture(fixture));
         var responses = new List<(string, HttpResponsePayload)>();
         foreach (var record in reader.ReadRecords().Where(r => r.Type == "response"))
         {
@@ -211,7 +224,7 @@ public sealed class HtmlTextExtractorTests
 
     private static string Fixture(string name)
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
+        return CorpusFixtures.PathOf(name);
     }
 
     #endregion

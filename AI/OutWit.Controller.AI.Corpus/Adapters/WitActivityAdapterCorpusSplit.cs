@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
+using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Storage;
@@ -24,7 +25,7 @@ internal sealed class WitActivityAdapterCorpusSplit : WitActivityAdapterFunction
     #region Constructors
 
     public WitActivityAdapterCorpusSplit(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, CorpusLogger.Wrap(logger))
     {
         BlobService = blobService;
     }

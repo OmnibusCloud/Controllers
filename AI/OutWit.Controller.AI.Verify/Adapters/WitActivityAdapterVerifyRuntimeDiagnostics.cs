@@ -13,7 +13,7 @@ internal sealed class WitActivityAdapterVerifyRuntimeDiagnostics : WitActivityAd
     #region Constructors
 
     public WitActivityAdapterVerifyRuntimeDiagnostics(IWitProcessingManager processingManager, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, VerifyLoggerGuarded.Wrap(logger))
     {
     }
 

@@ -7,39 +7,47 @@ using OutWit.Controller.AI.Corpus.Warc;
 namespace OutWit.Controller.AI.Corpus.Tests.Warc;
 
 /// <summary>
-/// The streamed WARC/WET reader on the golden shards and on hostile input: every record of the
-/// Common Crawl fixtures comes out with its headers and exactly its payload, a partial download
-/// ends cleanly with the complete records, oversized records are skipped and counted, garbage is
-/// an error at an offset, and two reads give the same bytes.
+/// The streamed WARC/WET reader on the generated shards, on the heads of a real crawl (the cases
+/// of the category <c>Crawl</c>: fetched by range, ignored where the origin cannot be reached)
+/// and on hostile input: every record comes out with its headers and exactly its payload, a
+/// partial download ends cleanly with the complete records, oversized records are skipped and
+/// counted, garbage is an error at an offset, and a shard reads to the same bytes however its
+/// bytes arrive.
 /// </summary>
 [TestFixture]
 public sealed class WarcReaderTests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string WARC_FIXTURE = CorpusFixtures.WARC;
+    private const string CRAWL_WET = CorpusFixtures.CRAWL_WET;
+    private const string CRAWL_WARC = CorpusFixtures.CRAWL_WARC;
 
-    /// <summary>SHA-256 over every record of the golden WET shard, target URI then payload, in file order.</summary>
-    private const string WET_RECORDS_SHA256 = "a2a34e35d6bab251db8ae971bb441f9d3acdcbd6f6fb834e1868df57e9dda2a3";
+    /// <summary>SHA-256 over every record of the generated WET shard, target URI then payload, in file order.</summary>
+    private const string WET_RECORDS_SHA256 = "ed9c7202dd389da33b3658f8f3dfde27626956b7d74b6c0f43477ff42cce349a";
+
+    /// <summary>The same over the head of the real WET file.</summary>
+    private const string CRAWL_WET_RECORDS_SHA256 = "a2a34e35d6bab251db8ae971bb441f9d3acdcbd6f6fb834e1868df57e9dda2a3";
 
     #endregion
 
-    #region Golden Shard Tests
+    #region Shard Tests
 
-    [Test]
-    public void WetFixtureYieldsEveryConversionRecordTest()
+    [TestCase(WET_FIXTURE, 430)]
+    [TestCase(CRAWL_WET, 437, Category = CorpusFixtures.CRAWL)]
+    public void WetFixtureYieldsEveryConversionRecordTest(string fixture, int count)
     {
-        using var reader = WarcReader.Open(Fixture(WET_FIXTURE));
+        using var reader = WarcReader.Open(Fixture(fixture));
         var records = reader.ReadRecords().ToList();
 
         Assert.Multiple(() =>
         {
-            Assert.That(records, Has.Count.EqualTo(437), "one record per gzip member");
+            Assert.That(records, Has.Count.EqualTo(count), "one record per gzip member");
             Assert.That(records[0].Type, Is.EqualTo("warcinfo"));
             Assert.That(records.Skip(1).All(r => r.Type == "conversion"), Is.True);
             Assert.That(records.Skip(1).All(r => r.TargetUri != null && r.ContentType == "text/plain"), Is.True);
-            Assert.That(records.Skip(1).Count(r => r.IdentifiedLanguage != null), Is.GreaterThan(400), "Common Crawl labels most documents");
+            Assert.That(records.Skip(1).Count(r => r.IdentifiedLanguage != null), Is.GreaterThan(400), "a crawl labels most documents");
             Assert.That(reader.Truncated, Is.False);
             Assert.That(reader.SkippedOversized, Is.Zero);
         });
@@ -51,18 +59,19 @@ public sealed class WarcReaderTests
         Assert.That(first.Payload.Length.ToString(), Is.EqualTo(first.Header("Content-Length")));
     }
 
-    [Test]
-    public void WarcFixtureYieldsRequestResponseAndMetadataTripletsTest()
+    [TestCase(WARC_FIXTURE, 367)]
+    [TestCase(CRAWL_WARC, 350, Category = CorpusFixtures.CRAWL)]
+    public void WarcFixtureYieldsRequestResponseAndMetadataTripletsTest(string fixture, int count)
     {
-        using var reader = WarcReader.Open(Fixture(WARC_FIXTURE));
+        using var reader = WarcReader.Open(Fixture(fixture));
         var records = reader.ReadRecords().ToList();
         var types = records.GroupBy(r => r.Type).ToDictionary(g => g.Key, g => g.Count());
 
         Assert.Multiple(() =>
         {
-            Assert.That(records, Has.Count.EqualTo(350));
+            Assert.That(records, Has.Count.EqualTo(count));
             Assert.That(types["warcinfo"], Is.EqualTo(1));
-            Assert.That(types["request"] - types["response"], Is.InRange(0, 1), "a response per request; the fixture was cut at a member boundary, so the last request may stand alone");
+            Assert.That(types["request"] - types["response"], Is.InRange(0, 1), "a response per request; the real head was cut at a member boundary, so its last request may stand alone");
             Assert.That(types["metadata"], Is.EqualTo(types["response"]));
             Assert.That(records.Where(r => r.Type == "response").All(r => r.ContentType!.StartsWith("application/http", StringComparison.Ordinal)), Is.True);
             Assert.That(reader.Truncated, Is.False);
@@ -73,11 +82,12 @@ public sealed class WarcReaderTests
         Assert.That(http, Does.StartWith("HTTP/1."), "the payload is the HTTP response, headers first");
     }
 
-    [Test]
-    public void L7TheRecordsOfAShardAreTheSameBytesOnEveryMachineTest()
+    [TestCase(WET_FIXTURE, WET_RECORDS_SHA256)]
+    [TestCase(CRAWL_WET, CRAWL_WET_RECORDS_SHA256, Category = CorpusFixtures.CRAWL)]
+    public void L7TheRecordsOfAShardAreTheSameBytesOnEveryMachineTest(string fixture, string expected)
     {
         // Audit finding L-7: this test compared a read with a second read in the same process,
-        // which cannot differ. The records of the golden shard are pinned instead, so the three
+        // which cannot differ. The records of a shard are pinned instead, so the three
         // platforms of the build server are held to one value, and the same file handed over a
         // few bytes at a time must read to it too: a record does not depend on how the bytes arrive.
         static string Digest(WarcReader reader)
@@ -92,13 +102,13 @@ public sealed class WarcReaderTests
             return Convert.ToHexStringLower(sha.GetHashAndReset());
         }
 
-        using var whole = WarcReader.Open(Fixture(WET_FIXTURE));
-        using var trickled = new WarcReader(new TrickleStream(File.ReadAllBytes(Fixture(WET_FIXTURE)), 4099, seekable: true));
+        using var whole = WarcReader.Open(Fixture(fixture));
+        using var trickled = new WarcReader(new TrickleStream(File.ReadAllBytes(Fixture(fixture)), 4099, seekable: true));
 
         Assert.Multiple(() =>
         {
-            Assert.That(Digest(whole), Is.EqualTo(WET_RECORDS_SHA256));
-            Assert.That(Digest(trickled), Is.EqualTo(WET_RECORDS_SHA256), "4,099 bytes at a time");
+            Assert.That(Digest(whole), Is.EqualTo(expected));
+            Assert.That(Digest(trickled), Is.EqualTo(expected), "4,099 bytes at a time");
         });
     }
 
@@ -115,7 +125,7 @@ public sealed class WarcReaderTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(records, Has.Count.InRange(200, 436));
+            Assert.That(records, Has.Count.InRange(200, 429));
             Assert.That(records.All(r => r.Payload.Length.ToString() == r.Header("Content-Length")), Is.True, "no half record is returned");
         });
     }
@@ -199,7 +209,7 @@ public sealed class WarcReaderTests
 
     private static string Fixture(string name)
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
+        return CorpusFixtures.PathOf(name);
     }
 
     private static void Append(Stream stream, string type, string uri, string payload)

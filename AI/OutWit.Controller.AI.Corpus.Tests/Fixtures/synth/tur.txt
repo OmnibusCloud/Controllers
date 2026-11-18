@@ -1,0 +1,42 @@
+# Turkish. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Ana sayfa
+Haberler
+Etkinlikler
+İletişim
+Hakkımızda
+Çalışma saatleri
+Pazar günleri
+Hava durumu
+[sentence]
+Şehir kütüphanesi pazartesi günü saat dokuzda açılır ve akşam yedide kapanır.
+Köşedeki fırıncı her sabah bütün mahalle için taze ekmek pişirir.
+İlkbaharda eski yol boyunca elma ağaçları çiçek açar.
+Hava güzel olduğunda feribot her yirmi dakikada bir nehri geçer.
+Uzun kıştan sonra parktaki yollar yeniden yapıldı.
+Belediye meclisi köprüyü gelecek yıl yenilemeye karar verdi.
+Pazarda çiftçiler çevre köylerden gelen sebze, peynir ve bal satar.
+İlkokul öğrencileri bugün limandaki küçük müzeyi ziyaret ediyor.
+Şiddetli yağmur yüzünden istasyonun altındaki geçit kapatıldı.
+Saatçi kırk yıldır kilisenin kulesindeki saati tamir ediyor.
+Sonbaharda komşular kaldırımlardaki yaprakları birlikte toplar.
+Yeni otobüs hattı köyü şehre ve hastaneye bağlıyor.
+Cumartesi günü kültür evinde gençlik korosunun konseri olacak.
+Orman bekçisi ziyaretçilere ormanın en yaşlı meşelerini gösteriyor.
+Sokaklar dar olduğu için birçok kişi işe bisikletle gidiyor.
+İtfaiyeciler her ay göl kıyısında tatbikat yapıyor.
+Belediye binasının arkasındaki atölyede eski mobilyalar özenle onarılıyor.
+Doktor muayenehanesini eczanenin yanındaki eve taşıdı.
+Tatil boyunca yüzme havuzu akşam geç saatlere kadar açık kalıyor.
+Bahçıvan istasyonun girişine gül ve lavanta dikiyor.
+Yeni bisiklet yolu artık pazar meydanından değirmene kadar uzanıyor.
+Postacı kendi bölgesindeki sokaklarda yaşayan bütün aileleri tanır.
+Akşamları satranç oyuncuları kütüphanenin okuma salonunda buluşur.
+Çeşmenin suyu sağlık müdürlüğü tarafından düzenli olarak kontrol ediliyor.
+Öğretmen çocuklara bir haritanın nasıl okunacağını anlatıyor.
+Kışın belediye önce ana caddelerdeki karı temizliyor.
+Balıkçı tuttuğu balıkları sabah erkenden limana getiriyor.
+Eski şehirde yaşayanlar daha çok bank ve ağaç istiyor.
+Şehrin üstündeki tepede tuğladan yapılmış eski bir su kulesi duruyor.
+Dernek yaz şenliğinde yardım edecek gönüllüler arıyor.

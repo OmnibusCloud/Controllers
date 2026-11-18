@@ -20,9 +20,9 @@ public sealed class ShardTaskRunnerTests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string WARC_FIXTURE = CorpusFixtures.WARC;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
 
     #endregion
 
@@ -405,7 +405,7 @@ public sealed class ShardTaskRunnerTests
 
     private static string Fixtures()
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures");
+        return CorpusFixtures.Folder;
     }
 
     #endregion

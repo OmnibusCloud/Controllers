@@ -15,7 +15,7 @@ public sealed class ShardSizeProbeTests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
 
     #endregion
 
@@ -30,7 +30,7 @@ public sealed class ShardSizeProbeTests
     [OneTimeSetUp]
     public void Setup()
     {
-        m_origin = new CorpusTestOrigin(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures"));
+        m_origin = new CorpusTestOrigin(CorpusFixtures.Folder);
     }
 
     [OneTimeTearDown]
@@ -47,7 +47,7 @@ public sealed class ShardSizeProbeTests
     public async Task SourceOfAListedHostIsAskedItsSizeTest()
     {
         using var client = ShardHttp.CreateClient(CorpusTestOrigin.Policy);
-        var expected = new FileInfo(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE)).Length;
+        var expected = new FileInfo(CorpusFixtures.PathOf(WET_FIXTURE)).Length;
 
         var result = await ShardSizeProbe.ProbeAsync([Source(m_origin.ShardUrl(WET_FIXTURE))], [m_origin.Host], CorpusTestOrigin.Policy, client);
 

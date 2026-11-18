@@ -279,6 +279,11 @@ internal sealed class WasmHost : IDisposable
         {
             return Trapped(trap, 0);
         }
+        catch (WasmtimeException exception) when (WasmHostTraps.IsInterrupt(exception))
+        {
+            // The clock, inside a call of the guest's initialisation: the machine, not the module.
+            return Interrupted(0);
+        }
         catch (WasmtimeException exception)
         {
             // Unresolved imports, a type mismatch against WASI, a memory the store cannot
@@ -315,6 +320,13 @@ internal sealed class WasmHost : IDisposable
         {
             return Trapped(trap, PeakMemory(instance));
         }
+        catch (WasmtimeException exception) when (WasmHostTraps.IsInterrupt(exception))
+        {
+            // The clock's trap, stopping the guest inside a call that passes through the host: it
+            // arrives wrapped in an error of that call ("Caused by: wasm trap: interrupt") instead
+            // of as a trap. Where the clock fires is the machine's matter; the stop is the same.
+            return Interrupted(PeakMemory(instance));
+        }
         catch (WasmtimeException exception)
         {
             // Neither an exit nor a trap: the engine failed one of the guest's calls. None is known:
@@ -331,6 +343,12 @@ internal sealed class WasmHost : IDisposable
     private static Invocation Ended(WasmHostVerdict end, long peakMemory)
     {
         return new(end, -1, end == WasmHostVerdict.OutOfFuel ? TrapCode.OutOfFuel : null, peakMemory);
+    }
+
+    /// <summary>A run the epoch deadline ended, whichever way the engine reported it.</summary>
+    private static Invocation Interrupted(long peakMemory)
+    {
+        return new(WasmHostVerdict.Interrupted, -1, TrapCode.Interrupt, peakMemory, WasmHostTraps.Fault(TrapCode.Interrupt));
     }
 
     private static Invocation Trapped(TrapException trap, long peakMemory)

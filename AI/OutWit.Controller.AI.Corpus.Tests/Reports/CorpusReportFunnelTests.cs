@@ -10,7 +10,7 @@ using OutWit.Controller.AI.Corpus.Tests.Mock;
 namespace OutWit.Controller.AI.Corpus.Tests.Reports;
 
 /// <summary>
-/// The report's funnel and output: over the golden shards every drop rule belongs to a stage, the
+/// The report's funnel and output: over the generated shards every drop rule belongs to a stage, the
 /// documents extracted less the language, line and quality drops are the documents out, and the
 /// summary says what the run kept and how its signatures were made; a run that kept statistics
 /// and hashes only names no blob.
@@ -20,9 +20,9 @@ public sealed class CorpusReportFunnelTests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string WARC_FIXTURE = CorpusFixtures.WARC;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
 
     #endregion
 
@@ -45,7 +45,7 @@ public sealed class CorpusReportFunnelTests
     #region Tests
 
     [Test]
-    public void TheFunnelAddsUpOverTheGoldenShardsTest()
+    public void TheFunnelAddsUpOverTheShardsTest()
     {
         // The target languages make the language stage drop as well; the PDF stage is off so the
         // test runs without the extractor module.
@@ -63,7 +63,7 @@ public sealed class CorpusReportFunnelTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(drops.Select(drop => drop.Name), Is.SubsetOf(ShardDropRules.ALL.Select(rule => rule.Rule)), "every drop the golden shards make is a rule with a stage");
+            Assert.That(drops.Select(drop => drop.Name), Is.SubsetOf(ShardDropRules.ALL.Select(rule => rule.Rule)), "every drop the shards make is a rule with a stage");
             Assert.That(funnel.GetProperty("records").GetInt64(), Is.EqualTo(summary.GetProperty("records_in").GetInt64()));
             Assert.That(funnel.GetProperty("extracted").GetInt64(), Is.EqualTo(summary.GetProperty("documents_extracted").GetInt64()));
             Assert.That(funnel.GetProperty("out").GetInt64(), Is.EqualTo(summary.GetProperty("documents_out").GetInt64()));
@@ -97,8 +97,8 @@ public sealed class CorpusReportFunnelTests
             Assert.That(summary.GetProperty("minhash").GetProperty("hashes").GetInt32(), Is.EqualTo(128), "the signatures are made, not kept");
             Assert.That(shard.GetProperty("text_blob").GetString(), Is.Empty);
             Assert.That(shard.GetProperty("signatures_blob").GetString(), Is.Empty);
-            Assert.That(shard.GetProperty("signatures_sha256").GetString(), Is.EqualTo("aa77d782313aba066db3054d44013b5c6d4b8b9a7004a90893acb963f93a1add"), "the golden WET shard's signatures, hashed though not kept");
-            Assert.That(shard.GetProperty("content_sha256").GetString(), Is.EqualTo("5fd9af0b09764d3b017cf15c1338b56271faf9f0e857efa653c4dc71a2d3e74b"), "the golden WET product's hash, though the product is gone");
+            Assert.That(shard.GetProperty("signatures_sha256").GetString(), Is.EqualTo("017e539b07f36abe6ff9f5fd7ff7566825668b1697c6500f742c610146819ab9"), "the generated WET shard's signatures, hashed though not kept");
+            Assert.That(shard.GetProperty("content_sha256").GetString(), Is.EqualTo("1a8e1ecb509fa6bb2174de5ef411261952c11d1e51debf68e098fb3eccb5c2cd"), "the generated WET product's hash, though the product is gone");
             Assert.That(shard.GetProperty("minhash").GetProperty("bands").GetInt32(), Is.EqualTo(16));
             Assert.That(summary.GetProperty("funnel").GetProperty("out").GetInt64(), Is.EqualTo(summary.GetProperty("documents_out").GetInt64()));
         });
@@ -157,7 +157,7 @@ public sealed class CorpusReportFunnelTests
 
     private static string Fixtures()
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures");
+        return CorpusFixtures.Folder;
     }
 
     #endregion

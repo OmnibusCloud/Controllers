@@ -15,6 +15,12 @@ internal static class WasmHostTraps
     /// <summary>What a crash's fault text starts with.</summary>
     public const string FAULT_PREFIX = "wasm trap: ";
 
+    /// <summary>
+    /// The line wasmtime closes an error with when its cause is the epoch deadline: the words of
+    /// <see cref="TrapCode.Interrupt"/> in the engine's own text ("Caused by: wasm trap: interrupt").
+    /// </summary>
+    public const string INTERRUPT_CAUSE = "wasm trap: interrupt";
+
     #endregion
 
     #region Functions
@@ -35,6 +41,32 @@ internal static class WasmHostTraps
     public static bool IsBudgetStop(TrapCode code)
     {
         return code is TrapCode.OutOfFuel or TrapCode.Interrupt;
+    }
+
+    /// <summary>
+    /// Whether an error of the engine is the epoch deadline. The clock's trap reaches the host as
+    /// a trap when it stops the guest's own code, and as an error of another kind when it stops
+    /// the guest inside a call that passes through the host (its text then ends with the cause,
+    /// <see cref="INTERRUPT_CAUSE"/>). Where the clock fires is a matter of the machine, so both
+    /// are the same stop: the clock, never a verdict about the program.
+    /// </summary>
+    /// <param name="exception">What the engine threw.</param>
+    /// <returns>True when the exception, or one it wraps, is the deadline's trap or names it as its cause.</returns>
+    public static bool IsInterrupt(Exception exception)
+    {
+        for (var current = exception; current != null; current = current.InnerException)
+        {
+            if (current is TrapException { Type: TrapCode.Interrupt })
+                return true;
+
+            foreach (var line in current.Message.Split((char)10))
+            {
+                if (string.Equals(line.Trim(), INTERRUPT_CAUSE, StringComparison.Ordinal))
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>The words for one kind of trap.</summary>

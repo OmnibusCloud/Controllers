@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Diagnostics;
 using OutWit.Controller.AI.Corpus.Language;
+using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Signatures;
@@ -106,6 +107,9 @@ public static class ShardTaskRunner
     /// <returns>The result: a verdict on the shard, or a node fault.</returns>
     internal static async Task<CorpusResultData> RunAsync(CorpusTaskData task, ShardFetcher fetcher, IWitBlobService blobs, string workDirectory, ShardShareTicket? ticket, ILogger? logger, ShardPdfStage? pdfStage, Action? beforeFetch, CancellationToken cancellationToken)
     {
+        // The node's log is written through the guard: a line that cannot be written is not a fault of the shard.
+        logger = logger == null ? null : CorpusLogger.Wrap(logger);
+
         var result = new CorpusResultData
         {
             TaskIndex = task.TaskIndex,

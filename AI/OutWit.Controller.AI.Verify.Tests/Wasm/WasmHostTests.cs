@@ -270,6 +270,26 @@ public sealed class WasmHostTests
         Assert.That(Directory.GetFileSystemEntries(capture), Is.Empty, "every run deletes its stdin/stdout/stderr files");
     }
 
+    [Test]
+    public void TheDeadlineInsideAnotherErrorIsTheClockTest()
+    {
+        // The text wasmtime 48.0.8 gave a run the clock stopped inside a call through the host
+        // (2026-11-18, the PDF extractor), with the backtrace shortened; and one whose cause is a crash.
+        var newline = (char)10;
+        var wrapped = "error while executing at wasm backtrace:" + newline + "    0: 0x387f7a - <unknown>!<wasm function 3003>" + newline + newline
+                      + "Caused by:" + newline + "    error while executing at wasm backtrace:" + newline + "    0:    0x31c - <unknown>!<wasm function 20>" + newline + newline
+                      + "Caused by:" + newline + "    " + WasmHostTraps.INTERRUPT_CAUSE + newline;
+        var crash = "error while executing at wasm backtrace:" + newline + newline + "Caused by:" + newline + "    wasm trap: out of bounds memory access" + newline;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(WasmHostTraps.IsInterrupt(new WasmtimeException(wrapped)), Is.True);
+            Assert.That(WasmHostTraps.IsInterrupt(new InvalidOperationException("outer", new WasmtimeException(wrapped))), Is.True, "a cause one level down");
+            Assert.That(WasmHostTraps.IsInterrupt(new WasmtimeException(crash)), Is.False, "a crash is not the clock");
+            Assert.That(WasmHostTraps.IsInterrupt(new WasmtimeException("the guest wrote: wasm trap: interrupt, as a joke")), Is.False, "only the engine's own line");
+        });
+    }
+
     #endregion
 
     #region Folder Tests

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Benchmark;
 using OutWit.Controller.AI.Corpus.Delivery;
+using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Trust;
@@ -35,7 +36,7 @@ internal sealed class WitActivityAdapterCorpusProcessPackage : WitActivityAdapte
     #region Constructors
 
     public WitActivityAdapterCorpusProcessPackage(IWitProcessingManager processingManager, IWitBlobService blobService, IWitTempStorage tempStorage, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, CorpusLogger.Wrap(logger))
     {
         BlobService = blobService;
         TempStorage = tempStorage;

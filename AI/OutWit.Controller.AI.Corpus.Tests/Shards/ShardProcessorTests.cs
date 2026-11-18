@@ -13,21 +13,25 @@ using OutWit.Controller.AI.Corpus.Warc;
 namespace OutWit.Controller.AI.Corpus.Tests.Shards;
 
 /// <summary>
-/// The pipeline over the golden shards: the product is a function of the shard and the
-/// pipeline (same hash twice, on WET and on WARC), its JSON lines decompress to what the
-/// hash covers, the signatures line up with the documents, the counters add up, and each
-/// stage switch does what it says. The default model is the reference language pack; the
-/// 0.1.x model (WITLID1) still gives the products 0.1.14 gave.
+/// The pipeline over the generated shards, and over the heads of a real crawl where a product
+/// of real data is pinned: the product is a function of the shard and the pipeline (same hash
+/// twice, on WET and on WARC), its JSON lines decompress to what the hash covers, the signatures
+/// line up with the documents, the counters add up, and each stage switch does what it says. The
+/// default model is the reference language pack; the 0.1.x model (WITLID1) still gives the
+/// products 0.1.14 gave on the real heads. The cases of the real heads carry the category
+/// <c>Crawl</c>: they fetch the heads by range and are ignored where the origin cannot be reached.
 /// </summary>
 [TestFixture]
 public sealed class ShardProcessorTests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
-    private const string WARC_FIXTURE = "cc-main-2026-43-00000-head.warc.gz";
-    private const string MODEL_FIXTURE = "language-pack-cc-2026-43-16.bin";
-    private const string WITLID1_FIXTURE = "language-model-cc-2026-43-16.bin";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string WARC_FIXTURE = CorpusFixtures.WARC;
+    private const string CRAWL_WET = CorpusFixtures.CRAWL_WET;
+    private const string CRAWL_WARC = CorpusFixtures.CRAWL_WARC;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
+    private const string WITLID1_FIXTURE = CorpusFixtures.WITLID1;
 
     /// <summary>Drops that happen before a document counts as extracted.</summary>
     private static readonly HashSet<string> PRE_EXTRACTION =
@@ -58,6 +62,8 @@ public sealed class ShardProcessorTests
 
     [TestCase(WET_FIXTURE, CorpusSourceFormat.Wet)]
     [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc)]
+    [TestCase(CRAWL_WET, CorpusSourceFormat.Wet, Category = CorpusFixtures.CRAWL)]
+    [TestCase(CRAWL_WARC, CorpusSourceFormat.Warc, Category = CorpusFixtures.CRAWL)]
     public void SameShardSamePipelineGivesSameProductTest(string fixture, CorpusSourceFormat format)
     {
         var pipeline = DefaultPipeline();
@@ -70,7 +76,7 @@ public sealed class ShardProcessorTests
             Assert.That(first.Text, Is.EqualTo(second.Text), "the compressed bytes differ");
             Assert.That(first.Signatures, Is.EqualTo(second.Signatures));
             Assert.That(first.Product.Stats.Build(0, 0, 0, 0).Is(second.Product.Stats.Build(0, 0, 0, 0)), Is.True);
-            Assert.That(first.Product.Stats.DocumentsOut, Is.GreaterThan(20), "the golden shard should keep a meaningful share");
+            Assert.That(first.Product.Stats.DocumentsOut, Is.GreaterThan(20), "the shard should keep a meaningful share");
         });
     }
 
@@ -135,15 +141,19 @@ public sealed class ShardProcessorTests
     }
 
     /// <summary>
-    /// The products of the golden shards under the default pipeline, pinned: produced on win-x64,
+    /// The products of the shards under the default pipeline, pinned: produced on win-x64,
     /// re-checked on every platform the workflow runs, so a stage that read a platform (a Unicode
     /// table, a culture, a hash seed) would show here. A change to any stage moves them; pin the
-    /// new values with the change that moved them. The WARC shard's product here is the one with
-    /// the PDF stage off, the language pack's product from before the stage existed; with the stage
-    /// on, below.
+    /// new values with the change that moved them. The WARC shards' products here are the ones
+    /// with the PDF stage off, the language pack's product from before the stage existed; with
+    /// the stage on, below. The first two are the generated shards (they move with the generator
+    /// as well); the last two are the heads of the real crawl, the same values since the language
+    /// pack: a release that moves them moves what an honest run makes.
     /// </summary>
-    [TestCase(WET_FIXTURE, CorpusSourceFormat.Wet, "5fd9af0b09764d3b017cf15c1338b56271faf9f0e857efa653c4dc71a2d3e74b")]
-    [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc, "8ca081e1365d099006385c551dd17fb0536841fd2632f9547f5c1fd7165f1f90")]
+    [TestCase(WET_FIXTURE, CorpusSourceFormat.Wet, "1a8e1ecb509fa6bb2174de5ef411261952c11d1e51debf68e098fb3eccb5c2cd")]
+    [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc, "d5bede2c696fbf6fc0620d8d9966026d80c709b90f2596ac14a62882d21fb76c")]
+    [TestCase(CRAWL_WET, CorpusSourceFormat.Wet, "5fd9af0b09764d3b017cf15c1338b56271faf9f0e857efa653c4dc71a2d3e74b", Category = CorpusFixtures.CRAWL)]
+    [TestCase(CRAWL_WARC, CorpusSourceFormat.Warc, "8ca081e1365d099006385c551dd17fb0536841fd2632f9547f5c1fd7165f1f90", Category = CorpusFixtures.CRAWL)]
     public void GoldenShardProductIsPinnedTest(string fixture, CorpusSourceFormat format, string expected)
     {
         var product = Run(fixture, format, new CorpusPipelineData { Version = "test-v1", ExtractPdf = false }).Product;
@@ -152,12 +162,16 @@ public sealed class ShardProcessorTests
     }
 
     /// <summary>
-    /// A manifest pinned to the 0.1.x model (WITLID1) keeps its products: the golden shards'
+    /// A manifest pinned to the 0.1.x model (WITLID1) keeps its products: the real heads'
     /// products under Corpus 0.1.14 (its pins, unchanged; the PDF stage off, as 0.1.14 had none),
-    /// with the rule data 0.1.14 had in code now read from data, and no document called unsupported.
+    /// with the rule data 0.1.14 had in code now read from data, and no document called
+    /// unsupported. The generated shards are pinned under the same model: there it keeps, under a
+    /// language it has, pages the pack calls unsupported, so its products are others than the pack's.
     /// </summary>
-    [TestCase(WET_FIXTURE, CorpusSourceFormat.Wet, "61ac69cf399a57c75a127b86dc85c02534fc51de4e0e82a896b3de647f735620")]
-    [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc, "f0bedbac8df708e48cae4e181f4b8beeef07ea083ac9cc9babd1e3423f1b6690")]
+    [TestCase(WET_FIXTURE, CorpusSourceFormat.Wet, "058f3940239bc16afe1d658a9903aa49431bf22308b9a86356a602fe28c37a74")]
+    [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc, "041aab43f48129699ece818d5d98817976fe312f2f9905dfe640355e852f41b6")]
+    [TestCase(CRAWL_WET, CorpusSourceFormat.Wet, "61ac69cf399a57c75a127b86dc85c02534fc51de4e0e82a896b3de647f735620", Category = CorpusFixtures.CRAWL)]
+    [TestCase(CRAWL_WARC, CorpusSourceFormat.Warc, "f0bedbac8df708e48cae4e181f4b8beeef07ea083ac9cc9babd1e3423f1b6690", Category = CorpusFixtures.CRAWL)]
     public void AWitlid1ModelKeepsTheProductsOf0114Test(string fixture, CorpusSourceFormat format, string expected)
     {
         var witlid1 = LanguageModel.Load(Fixture(WITLID1_FIXTURE));
@@ -173,21 +187,24 @@ public sealed class ShardProcessorTests
     }
 
     /// <summary>
-    /// The golden WARC shard holds one PDF response (a one-page dance sheet): with the PDF stage on,
-    /// its document passes every stage and joins the product, under the 0.1.x model (the PDF stage's
-    /// own pin) and under the language pack (where the two meet). Needs the extractor module.
+    /// Each WARC shard holds one PDF response of one page (the generated shard a report of the
+    /// tests' own making, the real head a dance sheet): with the PDF stage on, its document
+    /// passes every stage and joins the product, under the 0.1.x model (the PDF stage's own pin)
+    /// and under the language pack (where the two meet). Needs the extractor module.
     /// </summary>
-    [TestCase(WITLID1_FIXTURE, "d4f7f075894df9b856e4702bf0eedf0698bb664c97db35613839500c41421fee")]
-    [TestCase(MODEL_FIXTURE, "40469b64d312f67a4055b838e767794d8e455ff554fc6eaf57fd4df373e108f1")]
-    public void GoldenWarcProductWithThePdfStageIsPinnedTest(string model, string expected)
+    [TestCase(WARC_FIXTURE, WITLID1_FIXTURE, "b9fe2d3ceae409b72f3bb4705e03aec1a47781bc031060bbc6e0cb531a9345d4")]
+    [TestCase(WARC_FIXTURE, MODEL_FIXTURE, "bd75043d87141d8afb7654d410845e29f9a439131d2c8c58e896ba987b7c4173")]
+    [TestCase(CRAWL_WARC, WITLID1_FIXTURE, "d4f7f075894df9b856e4702bf0eedf0698bb664c97db35613839500c41421fee", Category = CorpusFixtures.CRAWL)]
+    [TestCase(CRAWL_WARC, MODEL_FIXTURE, "40469b64d312f67a4055b838e767794d8e455ff554fc6eaf57fd4df373e108f1", Category = CorpusFixtures.CRAWL)]
+    public void GoldenWarcProductWithThePdfStageIsPinnedTest(string fixture, string model, string expected)
     {
         PdfTestModule.Require();
-        var run = Run(WARC_FIXTURE, CorpusSourceFormat.Warc, DefaultPipeline(), LanguageModel.Load(Fixture(model)));
+        var run = Run(fixture, CorpusSourceFormat.Warc, DefaultPipeline(), LanguageModel.Load(Fixture(model)));
         var stats = run.Product.Stats.Build(0, 0, 0, 0);
 
         Assert.Multiple(() =>
         {
-            Assert.That(run.Product.ContentSha256, Is.EqualTo(expected), $"{model}: the product hashes to {run.Product.ContentSha256}");
+            Assert.That(run.Product.ContentSha256, Is.EqualTo(expected), $"{fixture}, {model}: the product hashes to {run.Product.ContentSha256}");
             Assert.That(stats.Pdf!.In, Is.EqualTo(1));
             Assert.That(stats.Pdf.Extracted, Is.EqualTo(1));
             Assert.That(Lines(CorpusCompressor.Decompress(run.Text)).Count(line => line.Contains(".pdf#page=1-1\"", StringComparison.Ordinal)), Is.EqualTo(1));
@@ -196,6 +213,8 @@ public sealed class ShardProcessorTests
 
     [TestCase(WET_FIXTURE, CorpusSourceFormat.Wet)]
     [TestCase(WARC_FIXTURE, CorpusSourceFormat.Warc)]
+    [TestCase(CRAWL_WET, CorpusSourceFormat.Wet, Category = CorpusFixtures.CRAWL)]
+    [TestCase(CRAWL_WARC, CorpusSourceFormat.Warc, Category = CorpusFixtures.CRAWL)]
     public void ThePackOnlyAddsUnknownToTheWitlid1ProductTest(string fixture, CorpusSourceFormat format)
     {
         // The pack's supported profiles and rule data are the 0.1.x model's: every document it
@@ -224,15 +243,16 @@ public sealed class ShardProcessorTests
 
     #region Stage Tests
 
-    [Test]
-    public void CountersAddUpTest()
+    [TestCase(WET_FIXTURE, 430)]
+    [TestCase(CRAWL_WET, 437, Category = CorpusFixtures.CRAWL)]
+    public void CountersAddUpTest(string fixture, int records)
     {
-        var run = Run(WET_FIXTURE, CorpusSourceFormat.Wet, DefaultPipeline());
+        var run = Run(fixture, CorpusSourceFormat.Wet, DefaultPipeline());
         var stats = run.Product.Stats.Build(0, 0, 0, 0);
 
         Assert.Multiple(() =>
         {
-            Assert.That(stats.RecordsIn, Is.EqualTo(437), "the golden WET shard has 437 records");
+            Assert.That(stats.RecordsIn, Is.EqualTo(records), "every record of the shard is counted");
             Assert.That(stats.DocumentsExtracted + stats.Drops.Where(d => PRE_EXTRACTION.Contains(d.Name)).Sum(d => d.Count), Is.LessThanOrEqualTo(stats.RecordsIn));
             Assert.That(stats.DocumentsOut + stats.Drops.Where(d => !PRE_EXTRACTION.Contains(d.Name)).Sum(d => d.Count), Is.EqualTo(stats.DocumentsExtracted), "every extracted document is out or dropped by a later stage");
             Assert.That(stats.Languages.Sum(l => l.Count), Is.EqualTo(stats.DocumentsOut));
@@ -275,11 +295,12 @@ public sealed class ShardProcessorTests
         });
     }
 
-    [Test]
-    public void LineStageKeepsLinesAndCleansThemTest()
+    [TestCase(WET_FIXTURE)]
+    [TestCase(CRAWL_WET, Category = CorpusFixtures.CRAWL)]
+    public void LineStageKeepsLinesAndCleansThemTest(string fixture)
     {
-        var raw = Run(WET_FIXTURE, CorpusSourceFormat.Wet, new CorpusPipelineData { Version = "test-v1", IdentifyLanguage = false, CleanLines = false, FilterQuality = false, Sign = false });
-        var cleaned = Run(WET_FIXTURE, CorpusSourceFormat.Wet, new CorpusPipelineData { Version = "test-v1", IdentifyLanguage = false, CleanLines = true, FilterQuality = false, Sign = false });
+        var raw = Run(fixture, CorpusSourceFormat.Wet, new CorpusPipelineData { Version = "test-v1", IdentifyLanguage = false, CleanLines = false, FilterQuality = false, Sign = false });
+        var cleaned = Run(fixture, CorpusSourceFormat.Wet, new CorpusPipelineData { Version = "test-v1", IdentifyLanguage = false, CleanLines = true, FilterQuality = false, Sign = false });
 
         var rawTexts = Lines(CorpusCompressor.Decompress(raw.Text)).Select(line => JsonDocument.Parse(line).RootElement.GetProperty("text").GetString()!).ToList();
         var cleanTexts = Lines(CorpusCompressor.Decompress(cleaned.Text)).Select(line => JsonDocument.Parse(line).RootElement.GetProperty("text").GetString()!).ToList();
@@ -339,7 +360,7 @@ public sealed class ShardProcessorTests
     public void TheUnsupportedBreakdownNamesWhereEachDocumentWasNearestTest()
     {
         // A known unsupported language (Danish), a script no profile has (Armenian: no n-gram in
-        // common, "nearest" would be a tie), and the golden shard's own mix.
+        // common, "nearest" would be a tie), and the generated shard's own mix.
         const string danish =
             "Kommunen åbner det nye bibliotek i næste uge, når renoveringen er færdig.\n" +
             "Børneafdelingen flytter til anden sal, og læsesalen får nye stole.";
@@ -415,7 +436,7 @@ public sealed class ShardProcessorTests
 
     private (ShardProduct Product, byte[] Text, byte[] Signatures) Run(string fixture, CorpusSourceFormat format, CorpusPipelineData pipeline, LanguageModel? model = null)
     {
-        // The golden WARC shard holds a PDF: with the stage on, a process without the module makes no product of it.
+        // Each WARC shard holds a PDF: with the stage on, a process without the module makes no product of it.
         if (format == CorpusSourceFormat.Warc && pipeline.ExtractPdf)
             PdfTestModule.Require();
 
@@ -452,7 +473,7 @@ public sealed class ShardProcessorTests
 
     private static string Fixture(string name)
     {
-        return Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", name);
+        return CorpusFixtures.PathOf(name);
     }
 
     #endregion

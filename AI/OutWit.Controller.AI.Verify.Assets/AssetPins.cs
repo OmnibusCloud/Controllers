@@ -8,6 +8,12 @@ internal static class AssetPins
 {
     #region Constants
 
+    /// <summary>
+    /// The file every folder of the set has: the third-party software in the folder and the
+    /// terms of each part. Committed under modules/ (written by toolchain/notices), copied as it is.
+    /// </summary>
+    public const string NOTICES_FILE = "THIRD-PARTY-NOTICES.txt";
+
     public const string PYTHON_VERSION = "3.14.6";
     public const string PYTHON_RUNTIME_DIR = "python-3.14.6";
     public const string PYTHON_LIB_DIR = "python3.14";
@@ -107,15 +113,17 @@ internal static class AssetPins
 
     /// <summary>
     /// The numpy runtime's folder as toolchain/python-numpy builds it (the AI Verify python-numpy
-    /// workflow, two builds compared byte for byte): the start-up snapshot, the plain module, the
-    /// two layers the snapshot was made with, the licences. The controller's data asset of the
-    /// same name; until its release exists, --local or VERIFY_ASSETS_LOCAL names a folder that
-    /// holds the workflow's copy.
+    /// workflow: two builds compared byte for byte, and held to this hash): the start-up
+    /// snapshot, the plain module, the two layers the snapshot was made with, the licences, the
+    /// third-party notices, the build's record and the patches it names. The controller's data
+    /// asset of the same name, with the same hash (a test holds the two together); until its
+    /// release exists, --local or VERIFY_ASSETS_LOCAL names a folder that holds the workflow's
+    /// copy.
     /// </summary>
     public static readonly AssetPin PYTHON_NUMPY = new(
         "verify-python-numpy.zip",
-        "https://github.com/OmnibusCloud/Controllers/releases/download/verify-v0.11.0/verify-python-numpy.zip",
-        "6b70674b209288f3fad36d7448e84ab9ff1903b61352c9903ea7e82504f15b0e");
+        "https://github.com/OmnibusCloud/Controllers/releases/download/verify-v0.15.0/verify-python-numpy.zip",
+        "14eb2bea911159743f3f5c04eeeee405b746f213eab48e88a32d7c61fc587c84");
 
     public static readonly AssetPin SYMPY = new(
         "sympy-1.14.0-py3-none-any.whl",

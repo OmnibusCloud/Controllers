@@ -28,8 +28,8 @@ public sealed class ShardPdfStageTests
 {
     #region Constants
 
-    private const string MODEL_FIXTURE = "language-model-cc-2026-43-16.bin";
-    private const string PACK_FIXTURE = "language-pack-cc-2026-43-16.bin";
+    private const string MODEL_FIXTURE = CorpusFixtures.WITLID1;
+    private const string PACK_FIXTURE = CorpusFixtures.PACK;
 
     /// <summary>The product of the fixture through the default pipeline with the stage on (produced on win-x64, re-checked on every platform the workflow runs).</summary>
     private const string GOLDEN_SHA256 = "e907a225c20a98aad47b2d321deb68fcbb62df434b7f69097cd76137470bb123";
@@ -61,7 +61,7 @@ public sealed class ShardPdfStageTests
     [OneTimeSetUp]
     public void Setup()
     {
-        m_model = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", MODEL_FIXTURE));
+        m_model = LanguageModel.Load(CorpusFixtures.PathOf(MODEL_FIXTURE));
         m_shard = PdfWarcFixture.Shard();
     }
 
@@ -140,11 +140,11 @@ public sealed class ShardPdfStageTests
     public void WithoutASandboxAWetShardIsMadeAsAnywhereTest()
     {
         var processor = new ShardProcessor(new CorpusPipelineData { Version = "pdf-test-v1" }, m_model, new ShardPdfStage(null, "no sandbox in this test", null));
-        using var shard = File.OpenRead(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "cc-main-2026-43-00000-head.warc.wet.gz"));
+        using var shard = File.OpenRead(CorpusFixtures.PathOf(CorpusFixtures.WET));
 
         var product = processor.Process(shard, CorpusSourceFormat.Wet, new MemoryStream(), new MemoryStream());
 
-        Assert.That(product.ContentSha256, Is.EqualTo("61ac69cf399a57c75a127b86dc85c02534fc51de4e0e82a896b3de647f735620"), "the golden WET product");
+        Assert.That(product.ContentSha256, Is.EqualTo("058f3940239bc16afe1d658a9903aa49431bf22308b9a86356a602fe28c37a74"), "the generated WET product under this model (the pin of ShardProcessorTests)");
     }
 
     #endregion
@@ -263,7 +263,7 @@ public sealed class ShardPdfStageTests
     {
         // Where the PDF stage meets the language pack: the same PDFs make the same documents, and
         // the ones the pack does not support (the Greek PDF) leave as language_unsupported, named.
-        var pack = LanguageModel.Load(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", PACK_FIXTURE));
+        var pack = LanguageModel.Load(CorpusFixtures.PathOf(PACK_FIXTURE));
         var run = Run(Pipeline(extractPdf: true), RequireStage(), model: pack);
         var stats = run.Product.Stats.Build(0, 0, 0, 0);
         var described = Describe(stats);

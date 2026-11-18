@@ -15,7 +15,7 @@ internal sealed class WitActivityAdapterVerifyPreflight : WitActivityAdapterFunc
     #region Constructors
 
     public WitActivityAdapterVerifyPreflight(IWitProcessingManager processingManager, IWitBlobService blobService, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, VerifyLoggerGuarded.Wrap(logger))
     {
         BlobService = blobService;
     }

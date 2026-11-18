@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Verify</ControllerName>
-    <Version>0.14.0</Version>
+    <Version>0.15.0</Version>
     <Description>Sandboxed, deterministic, resource-metered execution of untrusted programs against specifications (WASM/wasmtime): code-vs-tests verification, code and math corpus generation with checking — verification by construction on anonymous nodes.</Description>
     <PackageTags>verify;sandbox;wasm;wasmtime;rlvr;code-execution;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>verify-execute</ControllerFeatures>
@@ -50,62 +50,71 @@
     <ControllerModuleAssembly Include="Wasmtime.Dotnet" />
   </ItemGroup>
 
+  <!-- What the module carries of others, and its terms: beside Wasmtime.Dotnet.dll, the one
+       assembly in the module that is not the controller's own. A committed file, written by
+       the asset tool's toolchain/notices from a pinned source and held to what that tool writes
+       by the toolchain job; kept byte for byte on every checkout (.gitattributes), since the
+       module's content digest covers it. -->
+  <ItemGroup>
+    <ControllerModuleFile Include="$(MSBuildProjectDirectory)\THIRD-PARTY-NOTICES.txt" />
+  </ItemGroup>
+
   <!-- Tier-2 data assets, fetched by consumers at build time from GitHub releases of this
-       repository. Three native wasmtime libraries, one per RID, from the neutral asset release
-       wasmtime-v48.0.8 (the bytes verify-v0.6.0 carried; Corpus references the same asset),
-       extracted to the folder the module's deps.json names; the wasm host's natives guard
-       (WasmHostNatives.PINNED) holds the library inside each to its SHA-256. One
-       platform-independent set of language runtime modules (tag verify-v<version>; the URI stays
-       on an older tag while the bytes do not change) extracted to wasm/. Sha256/Size are filled by outwit-assets-pack from
-       @Prerequisites/ (PackSource/PackKind are author-only and never reach the manifest).
+       repository, each held to the SHA-256 and the size stated here.
+
+       Three native wasmtime libraries, one per RID, from the neutral asset release
+       wasmtime-v48.0.8-2: the libraries of wasmtime-v48.0.8, byte for byte, packed again with
+       their third-party notices (the Rust standard library and the crates the engine is built
+       from). They are extracted to the folder the module's deps.json names; the wasm host's
+       natives guard (WasmHostNatives.PINNED) holds the library inside each to its SHA-256.
+       One platform-independent set of language runtime modules (tag verify-v<version>; the URI
+       stays on an older tag while the bytes do not change) extracted to wasm/.
+
+       These four archives are built from their pins and packed, the same bytes every time, by
+       the asset tool's toolchain/archives.sh; the toolchain job runs it with its check on, so
+       an archive that is not what the pins build to fails there. Sha256 and Size are the
+       values that script prints.
        RuntimeIdentifier uses RIDs; the node-side layout uses the same names here because
        the .NET resolver, not our own probe, reads them. -->
   <ItemGroup>
     <ControllerDataAsset Include="wasmtime-win-x64">
       <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8/wasmtime-win-x64.zip</Uri>
-      <Sha256>c4e799ba8b7f625a8e5aee1f6c43d0a57b2ce6ce0824e7a13ca62144c94bfdc5</Sha256>
-      <Size>8284072</Size>
+      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8-2/wasmtime-win-x64.zip</Uri>
+      <Sha256>da8365a7494f757d39d64810dea2b3eed1cb236f27bc794c9b831771b6a81e31</Sha256>
+      <Size>8065827</Size>
       <ExtractTo>runtimes/win-x64/native/</ExtractTo>
-      <PackSource>wasmtime/win-x64</PackSource>
-      <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="wasmtime-linux-x64">
       <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8/wasmtime-linux-x64.zip</Uri>
-      <Sha256>9ea38410c9e9ac0e6a2983dbcca5b324cf0c8a12159ed9ec186cd195f987c4a8</Sha256>
-      <Size>9963229</Size>
+      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8-2/wasmtime-linux-x64.zip</Uri>
+      <Sha256>ede145fb96677509901f31183bc558bceac92c76026071c2a969db0c6d475911</Sha256>
+      <Size>9692410</Size>
       <ExtractTo>runtimes/linux-x64/native/</ExtractTo>
-      <PackSource>wasmtime/linux-x64</PackSource>
-      <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="wasmtime-osx-arm64">
       <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8/wasmtime-osx-arm64.zip</Uri>
-      <Sha256>252af1df65b0fa10fa67d0dece7713d6e5e61bde438ae9083993a75c5ef5a3d9</Sha256>
-      <Size>8563340</Size>
+      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8-2/wasmtime-osx-arm64.zip</Uri>
+      <Sha256>1f13fca2b811f16d3407cc50c3ff08a73c6781484bc32d5dfb28b433ec801012</Sha256>
+      <Size>8286398</Size>
       <ExtractTo>runtimes/osx-arm64/native/</ExtractTo>
-      <PackSource>wasmtime/osx-arm64</PackSource>
-      <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
     <ControllerDataAsset Include="verify-wasm">
-      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.10.0/verify-wasm.zip</Uri>
-      <Sha256>d6c7340436bf4bea2593c6cc6dff78531914ff599738407b98cb730625b61fd3</Sha256>
-      <Size>68723812</Size>
+      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.15.0/verify-wasm.zip</Uri>
+      <Sha256>8cf98ea1a36a99ac96b2b95d3c2f2e056864bc3c25a19acf6a602c2bf6bb67b2</Sha256>
+      <Size>67495474</Size>
       <ExtractTo>wasm/</ExtractTo>
-      <PackSource>wasm</PackSource>
-      <PackKind>zip-folder</PackKind>
     </ControllerDataAsset>
     <!-- The numpy runtime's folder (python-3.14.6-numpy-2.5.4): its start-up snapshot is bound to
          the bytes of the two layers it was made with, so the folder travels as one asset of its
-         own. Built from pinned sources by the AI Verify python-numpy workflow (two builds
-         compared byte for byte), not packed from @Prerequisites/; the bytes are the same on
-         every platform. -->
+         own. Built from pinned sources by the AI Verify python-numpy workflow: two builds in
+         folders of different names are compared byte for byte, and the workflow fails unless
+         the archive they made is the one pinned here. The bytes are the same on every
+         platform. -->
     <ControllerDataAsset Include="verify-python-numpy">
       <RuntimeIdentifier>any</RuntimeIdentifier>
-      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.11.0/verify-python-numpy.zip</Uri>
-      <Sha256>6b70674b209288f3fad36d7448e84ab9ff1903b61352c9903ea7e82504f15b0e</Sha256>
-      <Size>17216715</Size>
+      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.15.0/verify-python-numpy.zip</Uri>
+      <Sha256>14eb2bea911159743f3f5c04eeeee405b746f213eab48e88a32d7c61fc587c84</Sha256>
+      <Size>17241530</Size>
       <ExtractTo>wasm/python-3.14.6-numpy-2.5.4/</ExtractTo>
     </ControllerDataAsset>
   </ItemGroup>

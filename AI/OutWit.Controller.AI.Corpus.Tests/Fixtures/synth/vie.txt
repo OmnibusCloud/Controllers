@@ -1,0 +1,42 @@
+# Vietnamese. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Trang chủ
+Tin tức
+Sự kiện
+Liên hệ
+Giới thiệu
+Giờ mở cửa
+Ngày họp chợ
+Thời tiết
+[sentence]
+Thư viện thành phố mở cửa vào thứ hai lúc chín giờ sáng và đóng cửa lúc bảy giờ tối.
+Người thợ làm bánh ở góc phố nướng bánh mì tươi mỗi buổi sáng cho cả khu phố.
+Vào mùa xuân, những cây táo nở hoa dọc theo con đường cũ.
+Khi thời tiết đẹp, chuyến phà qua sông chạy hai mươi phút một lần.
+Sau mùa đông dài, các lối đi trong công viên đã được sửa lại.
+Hội đồng thành phố đã quyết định sửa cây cầu vào năm tới.
+Ở chợ, những người nông dân bán rau, phô mai và mật ong của vùng này.
+Hôm nay các học sinh tiểu học đi thăm bảo tàng nhỏ ở bến cảng.
+Vì mưa lớn nên đường hầm dưới nhà ga đã bị đóng.
+Người thợ sửa đồng hồ đã sửa chiếc đồng hồ của nhà thờ suốt bốn mươi năm.
+Vào mùa thu, hàng xóm cùng nhau quét lá trên vỉa hè.
+Tuyến xe buýt mới nối ngôi làng với thành phố và bệnh viện.
+Vào thứ bảy sẽ có buổi hòa nhạc của dàn hợp xướng thiếu niên tại nhà văn hóa.
+Người gác rừng chỉ cho du khách những cây sồi già nhất trong rừng.
+Nhiều người dân đi làm bằng xe đạp vì đường phố rất hẹp.
+Lính cứu hỏa tập luyện hằng tháng bên bờ hồ.
+Trong xưởng phía sau tòa thị chính, đồ gỗ cũ được phục hồi cẩn thận.
+Bác sĩ đã chuyển phòng khám đến ngôi nhà bên cạnh hiệu thuốc.
+Trong kỳ nghỉ, bể bơi mở cửa đến tận tối muộn.
+Người làm vườn trồng hoa hồng và hoa oải hương trước lối vào nhà ga.
+Một làn đường xe đạp mới hiện chạy từ quảng trường chợ đến cối xay.
+Người đưa thư biết tất cả các gia đình trên những con phố trong khu của mình.
+Buổi tối, những người chơi cờ gặp nhau trong phòng đọc của thư viện.
+Nước ở đài phun được cơ quan y tế kiểm tra thường xuyên.
+Cô giáo giải thích cho các em nhỏ cách đọc bản đồ.
+Vào mùa đông, thành phố dọn tuyết trên các đường chính trước tiên.
+Người đánh cá mang cá của mình đến bến cảng từ sáng sớm.
+Người dân khu phố cổ mong muốn có thêm ghế dài và cây xanh.
+Trên ngọn đồi phía trên thành phố có một tháp nước cũ bằng gạch.
+Hội đang tìm tình nguyện viên giúp đỡ trong lễ hội mùa hè.

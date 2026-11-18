@@ -1,3 +1,4 @@
+using OutWit.Controller.AI.Corpus.Tests.Mock;
 using System.Security.Cryptography;
 using System.Text;
 using OutWit.Controller.AI.Corpus.Compression;
@@ -8,15 +9,16 @@ namespace OutWit.Controller.AI.Corpus.Tests.Compression;
 /// <summary>
 /// zstd through the managed port: a round trip is the identity, the frame of a fixed input is
 /// the same bytes on every run and every platform (the committed digest is the CI legs' common
-/// pin), the stream form matches the buffer form, and the golden shard's text compresses by
-/// the order of magnitude the corpus plan counts on.
+/// pin), the stream form matches the buffer form, and a shard's text (the generated one's, and
+/// the head of a real WET file's in the case of the category <c>Crawl</c>) compresses by the
+/// order of magnitude the corpus plan counts on.
 /// </summary>
 [TestFixture]
 public sealed class CorpusCompressorTests
 {
     #region Constants
 
-    private const string WET_FIXTURE = "cc-main-2026-43-00000-head.warc.wet.gz";
+    private const string WET_FIXTURE = CorpusFixtures.WET;
 
     /// <summary>SHA-256 of the frame of <see cref="GOLDEN_INPUT"/> at the pinned level; produced on win-x64, re-checked on every platform.</summary>
     private const string GOLDEN_FRAME_SHA256 = "f40ad608beb553b99200fc28b0809cfaa544609fc1b63a5e3be182adf1bbad36";
@@ -92,10 +94,11 @@ public sealed class CorpusCompressorTests
         TestContext.Out.WriteLine($"buffer frame {buffered.Length} bytes, streamed frame {destination.Length} bytes");
     }
 
-    [Test]
-    public void GoldenShardTextCompressesByAnOrderOfMagnitudeTest()
+    [TestCase(WET_FIXTURE)]
+    [TestCase(CorpusFixtures.CRAWL_WET, Category = CorpusFixtures.CRAWL)]
+    public void GoldenShardTextCompressesByAnOrderOfMagnitudeTest(string fixture)
     {
-        using var reader = WarcReader.Open(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", WET_FIXTURE));
+        using var reader = WarcReader.Open(CorpusFixtures.PathOf(fixture));
         var text = new MemoryStream();
         foreach (var record in reader.ReadRecords().Where(r => r.Type == "conversion"))
         {

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Diagnostics;
+using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
@@ -24,7 +25,7 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
     #region Constructors
 
     public WitActivityAdapterCorpusPreflight(IWitProcessingManager processingManager, IWitBlobService blobService, IServiceProvider services, ILogger logger)
-        : base(processingManager, logger)
+        : base(processingManager, CorpusLogger.Wrap(logger))
     {
         BlobService = blobService;
         Services = services;
