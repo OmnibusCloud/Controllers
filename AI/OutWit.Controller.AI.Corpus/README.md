@@ -15,18 +15,24 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.5.0 — the second hardening release: what a run promises before it starts holds
-whoever wrote the manifest (see *What a run promises before it starts*), and the tasks and the
-results travel as blobs, so a node is handed a reference and returns one whatever the size of the
-job (see *Tasks and results as blobs*). 0.4.0 was the first (see *Trust and integrity* and *What
-hostile input meets*): a result is bound to its task on the server, copies that disagree are
-settled by three machines, a node's own trouble is never a shard's verdict, no text written by a
-node reaches a lab, and a hostile page, pack or shard costs a node a bounded amount. 0.5.0 is
-proven in CI on the three platforms, not yet on the fleet (0.4.0 is: the demo kit's identity byte
-for byte, a dispute settled by three machines); not yet released to nuget.org.** The full reference for lab engineers and application
+**Status: 0.6.0 — the third hardening release, about what travels with the controller and what
+does not: the module carries the licence notices of everything of others it redistributes (see
+*What the module carries*), no page of a real crawl is in the repository (the tests' shards are
+generated, see *Tests*), and a line a node's log cannot take does not decide a shard's fate (see
+*Node behaviour*). It changes no stage: its products are those of 0.4.0 and 0.5.0 byte for byte.
+0.5.0 was the second: what a run promises before it starts holds whoever wrote the manifest (see
+*What a run promises before it starts*), and the tasks and the results travel as blobs, so a node
+is handed a reference and returns one whatever the size of the job (see *Tasks and results as
+blobs*). 0.4.0 was the first (see *Trust and integrity* and *What hostile input meets*): a result
+is bound to its task on the server, copies that disagree are settled by three machines, a node's
+own trouble is never a shard's verdict, no text written by a node reaches a lab, and a hostile
+page, pack or shard costs a node a bounded amount. 0.4.0 and 0.5.0 are proven on the test fleet
+(the demo kit's identity byte for byte under both; under 0.4.0 a dispute settled by three
+machines); 0.6.0 has not run on the build server or on the fleet yet; not yet released to
+nuget.org.** The full reference for lab engineers and application
 developers is [docs/capabilities.md](docs/capabilities.md).
 The stage libraries are wired into eleven activities and four bundled scripts; the
-engine rig in the tests fetches the golden shards from a loopback origin
+engine rig in the tests fetches generated shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
 server the controller processed real Common Crawl WET shards on Windows and
 Linux nodes with every sampled pair agreeing on the content hash (0
@@ -932,8 +938,8 @@ measured on real runs, per format and per setting of `clean_lines` and
 | WARC | off | on | 0.12 | 60 |
 | WARC | off | off | 0.18 | 100 |
 
-The WARC rows hold with the PDF stage on (re-measured for 0.2.0): the golden
-WARC head with its one PDF reaches at most 0.073, 0.086, 0.100 and 0.145 of text
+The WARC rows hold with the PDF stage on (re-measured for 0.2.0): the head of
+a real WARC file (its first 1.5 MB) with its one PDF reaches at most 0.073, 0.086, 0.100 and 0.145 of text
 per byte and 39, 64, 44 and 79 documents per MiB in the four rows' settings, and
 Common Crawl's whole WARC file 00000 (923.8 MB, 221 PDFs) 0.020 to 0.039 and 13
 to 25 — a quarter of the head's, which stays the rows' basis.
@@ -953,7 +959,7 @@ sets a `pipeline.quality` threshold of its own (the curly-bracket switch aside,
 which only drops more), and a language pack with rule data of its own (other
 than the reference pack's and the controller's frozen rules, which a `WITLID1`
 model takes), is estimated at the row of the same `clean_lines` setting with
-the filter off, and the line says so. Measured on the golden WET head: the ten thresholds a manifest can set,
+the filter off, and the line says so. Measured on the head of a real WET file (its first 1.5 MB): the ten thresholds a manifest can set,
 opened as wide as they go, keep 3.6 % more text than the defaults (the
 repetition rules and the stop words are not a manifest's to set); with a pack's
 rule data opened too, 22.5 % more, which is what a run with the filter off keeps.
@@ -961,8 +967,9 @@ rule data opened too, 22.5 % more, which is what a run with the filter off keeps
 The task packages (1,024 bytes and 128 a shard) and the result packages of
 every execution (1,024 bytes and 768 a shard; measured 93 and 568 a shard) are
 blobs and are counted.
-The guard test over the golden shards fails when a stage makes products larger
-than the table allows. A run that keeps statistics and hashes only leaves no
+The guard test over the heads of a real WET and a real WARC file (fetched by
+range when the tests run) fails when a stage makes products larger than the table
+allows. A run that keeps statistics and hashes only leaves no
 text, no signatures and no dedup document: its estimate is the report, the
 integrity document and the inputs, and the preflight line says the products stay
 on the nodes. A signature costs 8 bytes per hash and document (`minhash`).
@@ -1047,6 +1054,19 @@ admits no other to the work):
 
 ## Node behaviour
 
+- **The node's log is the node's, and it decides nothing.** Everything Corpus
+  writes to a host's log goes through one guard (`CorpusLogger`): one call at a
+  time for the whole controller in the process, and whatever the host's logger
+  throws ends there — the line is lost and counted, the shard goes on. It has
+  to: the logger a host hands a controller is the host's own, and on clients up
+  to 2.2.5 it is an in-memory list without a lock, which throws when the
+  packages of a share log at once (an `IndexOutOfRangeException` out of the
+  list, as it was seen once on a fleet) and, once broken, refuses every later
+  line. The engine's adapter base logs inside its own catch block before it
+  returns a status, so a logger that throws there let the bare exception leave
+  the node, past the fixed words of a refusal or a fault; every adapter of the
+  controller now hands the base the guard, not the host's logger. A log is not
+  a place the product depends on: no line of it reaches a lab either way.
 - The node fetches only what the task declares and the machine permits:
   the URL's host must be on the task's allowlist and pass the machine's own
   rule above, the scheme HTTP(S); nothing else is ever requested, a redirect
@@ -1132,6 +1152,45 @@ admits no other to the work):
   of a package's shards, by the manifest's sizes or the origin's answers — so
   the allocator gives a 32-thread desktop the share its speed earns.
 
+## What the module carries
+
+`corpus.module` — the folder a build stages, the zip a node is given, the
+`content/module/` of the package — is twelve files, and a test holds it to that
+list: the controller's assembly and the wire types' with their dependency lists,
+`controller.json`, three libraries of others (`AngleSharp.dll`, `ZstdSharp.dll`,
+`Wasmtime.Dotnet.dll`), and four texts: `THIRD-PARTY-NOTICES.txt`,
+`LICENSE-fineweb-2.txt`, `LICENSE-unicode.txt` and the controller's own
+`LICENSE.txt`.
+
+`THIRD-PARTY-NOTICES.txt` is written by the build (`Notices/`) for everything
+in the module that is not the controller's own:
+
+| What | Licence | Where it is |
+|---|---|---|
+| AngleSharp 1.10.0 | MIT | `AngleSharp.dll` |
+| ZstdSharp.Port 0.8.8 | MIT | `ZstdSharp.dll` |
+| Zstandard 1.5.7, which ZstdSharp is a port of | BSD-3-Clause | inside `ZstdSharp.dll` |
+| Wasmtime 48.0.2, the .NET binding | Apache-2.0 WITH LLVM-exception | `Wasmtime.Dotnet.dll` |
+| FineWeb-2's stop-word lists and Japanese repetition thresholds | Apache-2.0 | data inside the controller's assembly (the rule data of a `WITLID1` model) |
+| The Unicode Character Database 16.0.0 | Unicode-3.0 | the lower-case table inside the controller's assembly |
+
+Each entry names the version, the source and its commit, the file and its
+SHA-256, and carries the licence text whole. The NuGet packages state a licence
+expression and the commit they were built from, not the text, so each text is
+the licence file of the package's repository at that commit, kept in
+`Notices/texts/` with its hash. The build refuses a notice it cannot stand
+behind: the package in the NuGet cache must state the version, the licence and
+the commit the notice declares, the staged assembly must be byte for byte a file
+of that package, every text must have its hash — and a library staged into the
+module that no notice names stops the build. A library that moves takes its
+notice with it or the build fails.
+
+The two data assets a node fetches beside the module carry their own notices,
+which the file names and does not repeat: `LICENSE-wasmtime.txt` and
+`NOTICE.txt` beside each native wasmtime library, and `wasm/LICENSE-pdftext.txt`
+(every crate linked into the extractor, and the Rust standard library) beside
+`pdftext.wasm`. The package's root holds the notices and the licence files too.
+
 ## What is here
 
 | Piece | Where | What it does |
@@ -1144,6 +1203,8 @@ admits no other to the work):
 | `LanguageModelTrainer` / `LanguagePackBuilder` / `LanguagePackCalibrator` / `LanguagePackEvaluator` / `LanguagePackSource` | `Language/` | what `corpus-assets` runs: profiles trained from WET files' own language labels, the per-language source folders read, the limits calibrated, a pack measured against the crawl's labels |
 | `LineCleaner` / `QualityFilter` / `QualityRules` / `QualityRuleOverrides` | `Quality/` | the line stage (C4's line rules, script-aware; C4's curly-bracket rule) and the Gopher quality and repetition rules with DataTrove's definitions of every measure, each threshold with its source in the code (Gopher, C4, FineWeb-2), every failed rule named with its measurement; scripts without word spacing are judged by their letters; the thresholds a language's rule data may set, by name |
 | `MinHashSigner` / `MinHashParameters` | `Signatures/` | MinHash values over word shingles (FNV-1a + a seeded universal hash family; 128 over 5 words by default, a pipeline's own up to 1,024 and 32), LSH band keys, estimated Jaccard between signatures; the parameters resolved and checked |
+| `CorpusLogger` / `CorpusLoggerScope` | `Logging/` | the one way the controller writes to a host's log: one call at a time for the whole controller in the process, and a host's logger that throws loses the line and nothing else; every adapter hands the engine's adapter base this guard |
+| `CorpusNotices.targets` / `CorpusNoticesTask.cs` / `texts/` | `Notices/` | the build's part (not in the assembly): the third-party notices written and staged into the module, each component held to the package the build restored, each licence text to its hash |
 | `CorpusCompressor` | `Compression/` | zstd through the managed ZstdSharp port at one pinned level, buffer and stream forms; the frame is a function of the content |
 | `ShardProcessor` and friends | `Shards/` | the pipeline over one shard (`ShardProcessor`) within its reading limits (`ShardLimits`), the allowlist gate (`ShardOrigin`), the capped retrying fetch (`ShardFetcher`, `ShardFetchPolicy`), the bounded model cache (`ShardLanguageModels`), the signatures layout (`ShardSignatureWriter`), the canonical counters (`ShardStatsBuilder`), the node-side task start to finish (`ShardTaskRunner`: verdict or node fault, the window on the disk), what a node checks before a batch (`ShardBatchGuard`), the one memory budget (`ShardDegree`), the shard's thread (`ShardWorker`) and the deletions nobody waits for (`ShardCleanup`) |
 | `CorpusLedger` and friends | `Trust/` | the server's account of a run: tickets (`CorpusTickets`), the shape an honest result has (`CorpusResultCheck`), the fixed codes (`CorpusResultCodes`), a round read from its blobs one package at a time with every answer bound to its package (`CorpusRoundSource`, `CorpusRoundSourceBlobs`), the rulings of the three rounds (`CorpusLedgerRuling`) and what each shard came to (`CorpusLedger`: accepted, `Disputed`, `NoResult`), kept as counts (`CorpusLedgerTally`) |
@@ -1187,10 +1248,11 @@ table depending on the machine, and the three differ for hundreds of code
 points), and ASCII names and phrases are compared as ASCII. A controller release that
 changes a stage changes the product of an unchanged pipeline (0.1.5 keeps WET
 line structure and adds the line stage; 0.4.0 lower-cases the capitals Unicode
-16 added the same way everywhere; 0.5.0 changes no stage, and its products are
-those of 0.4.0 byte for byte), which is why a job runs on one controller
+16 added the same way everywhere; 0.5.0 and 0.6.0 change no stage, and their
+products are those of 0.4.0 byte for byte), which is why a job runs on one controller
 version: a node on another refuses its batch. The tests pin a zstd frame digest and a MinHash signature digest,
-pin the golden shard's records, extracted text and language answers to values
+pin the records and the extracted text of a shard (a generated one, and the head
+of a real crawl file) and a pack's language answers to values
 the three platforms must all give, and prove the
 content hash of a shard through the engine equals a direct run's; the
 `AI Verify` workflow runs them on all three platforms.
@@ -1221,9 +1283,11 @@ fetches it); a node without the sandbox, which refuses a WARC batch before it
 fetches anything (through the engine rig, where then no node has one, the job
 fails with the refusal's fixed sentence), a sandbox that fails mid-shard, which
 returns that shard as a node fault, and a shard without a PDF stage, which such
-a node makes as any node does; every stage on the golden shards (the
-first complete members of a real WET and a real WARC file, 1.5 MB each, the
-reference language pack and the 0.1.x model, committed under `Fixtures/`) and on
+a node makes as any node does; every stage on two generated shards (a WET
+shard of 429 pages and a WARC shard of its first 110 as HTML, written by the
+tests' own generator, see below) with the reference language pack and the 0.1.x
+model (committed under `Fixtures/`), on the heads of a real WET and a real WARC
+file (fetched, see below) and on
 hostile input
 (truncation, oversized records, garbage, hostile nesting, repetition); the
 pipeline's determinism and counters; the language packs (the format and its
@@ -1232,14 +1296,14 @@ refusals, the unsupported-language test on sentences written for the tests, the
 generated fixture, the frozen 0.1.14 rule data); the fetcher against a loopback origin
 (retries, caps, final refusals, stalls); the node-side task's verdicts; the
 manifest parser and planner; the report; the wire layout of every model type;
-the storage estimate against a measured run and the golden shards, the
+the storage estimate against a measured run and the heads of a real crawl, the
 headroom sources and the refusal; the diagnostics and the capabilities
 document, with every published schema checked against what the writers write;
 the output modes (a run that keeps statistics and hashes only uploads nothing
-and hashes as the full output does) and the MinHash parameters (the golden shards'
-signatures blobs pinned to 0.2.1's bytes under the defaults, other parameters,
+and hashes as the full output does) and the MinHash parameters (the shards'
+signatures blobs pinned under the defaults, the real heads' to 0.2.1's bytes, other parameters,
 the refusals, the merge's refusals); the busiest share against the Grid
-controller's allocator itself; the funnel over the golden shards;
+controller's allocator itself; the funnel over the generated shards;
 the hostile-input suite over synthetic shards (`WarcSynth` writes WARC/WET the
 way Common Crawl does: truncation mid-record, invalid UTF-8, hostile HTML,
 non-WARC records, corrupt gzip members); and the distributed gate — the bundled
@@ -1249,6 +1313,38 @@ through the processor in bounded memory to the same hash twice, several
 shards on one process agree with the single run, and a synthetic job of a
 hundred thousand shards runs through the engine rig with six mock nodes, its
 payloads and its memory measured (see *Tasks and results as blobs*).
+
+**No page of anybody else is in the repository.** The two shards under
+`Fixtures/` are generated: `CrawlSynth` makes a crawl of sites that do not
+exist (every address is on the reserved `.example` domain) from text written
+for the tests (`Fixtures/synth/`: sentences in the sixteen languages the
+reference pack supports and four it knows and does not support), by its own
+integer random numbers, and `CrawlSynthShards` writes it the way Common Crawl
+writes its files. Most pages are articles; the rest are what a crawl is full of
+and a corpus does not want (too thin, links only, repeated, bullet lists,
+teasers, hash tags, two languages, unlabelled, empty, too few letters, a
+template left unfilled, a placeholder text, near copies) and a page with the
+letters whose lower case a platform's library decides. The WARC shard serves
+its pages in sixteen charsets, named in the header, in a meta tag or nowhere,
+some with their elements left open, between captures that are no page (a robots
+file, an image, JSON, a PDF of the tests' own making, a page that is gone, a
+redirect, a page in UTF-7, a page with cut bytes, a record that is no HTTP
+response). A test holds the committed shards to the generator record for
+record, the fixtures folder to a pinned list of files, and every address to the
+reserved domain; `CrawlSynthDefects` spoils the same crawl the way an origin or
+a link can.
+
+The tests that must see **real crawl data** — the products of an honest run on
+it, the storage table's ratios, the agreement with Common Crawl's own labels
+and with its own conversion of the same pages — fetch it when they run: the
+first 1.5 MB of one WET file of CC-MAIN-2026-43 and of the WARC file it was
+converted from, by a range request to `data.commoncrawl.org`, held to the
+SHA-256 of `Fixtures/crawl-heads.json` (names, ranges and hashes; nothing of the
+content) and kept in the test project's gitignored `@Data/crawl/` for the next
+run. They carry the category `Crawl`; on a machine that cannot reach the origin
+they are ignored, each with the reason, and on the build server they fail
+instead, so a green run has read the real data. Their pins are the ones the
+committed files had: `--filter Category=Crawl` runs them alone.
 
 The engine rigs load a named set of modules (`variables`, `blobs`, `grid`,
 `corpus`) from a folder of their own: each is copied there only when it is
@@ -1282,3 +1378,15 @@ report read from a stream in bounded memory; a job of 1,100 shards on six mock
 nodes; the wire guard, which holds every member of every wire type to its
 order, name, type and default; and the tests that used to compare a call with
 itself, which now compare it with a pinned value or with another way of asking.
+
+The third batch's tests: `M6…` (the generated shards against their generator,
+the fixtures folder against its list, a crawl head fetched by range against its
+hash), `M7…` (the staged module against its pinned list of files, every library
+noticed with the version and commit the file states of itself and the hash of
+the file staged, every licence text in the notices whole, the zip and the
+package holding what the module holds) and `C6…` (a node's adapter driven
+through the engine's own entry point, the packages of a batch started together,
+into a logger that fails every call, into one that is not thread safe and says
+so, and into the very logger clients up to 2.2.5 hand out: every package
+completes with the product of a quiet run, and a refused batch leaves in its
+fixed words).
