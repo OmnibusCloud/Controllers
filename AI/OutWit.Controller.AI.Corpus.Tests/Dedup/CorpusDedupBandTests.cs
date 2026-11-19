@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using OutWit.Controller.AI.Corpus.Dedup;
 using OutWit.Controller.AI.Corpus.Reports;
 using OutWit.Controller.AI.Corpus.Signatures;
@@ -28,6 +30,13 @@ public sealed class CorpusDedupBandTests
     /// the band keys takes minutes for it, and four times as long for twice the documents.
     /// </summary>
     private const double CHAINED_SECONDS = 10;
+
+    /// <summary>The decision of the merge over the signer's own signatures of this fixture's texts: its masks and its clusters, hashed.</summary>
+    private const string DECISION_SHA256 = "a628e1bcf97ae82eae4b1b01418827a6abe6d34acc3cbe1141b4e6c246ffb480";
+
+    private const int DECISION_DUPLICATES = 172;
+
+    private const int DECISION_CLUSTERS = 120;
 
     #endregion
 
@@ -125,6 +134,42 @@ public sealed class CorpusDedupBandTests
         });
     }
 
+    [Test]
+    public void TheSignersOwnSignaturesGiveOneDecisionRunAfterRunTest()
+    {
+        // Texts, light edits of them and heavier ones, signed as a node signs them, in three
+        // shards: the merge run twice, run over the shards in another order, and decided by a
+        // table keyed with the band keys. One decision, and the one pinned here: the masks and
+        // the clusters, on any machine.
+        var random = new Random(31);
+        var originals = Enumerable.Range(0, 120).Select(_ => WarcSynth.Paragraphs(random, 300)).ToList();
+        var shards = new List<CorpusDedupShard>
+        {
+            Signed(0, originals),
+            Signed(1, originals.Select(text => Edit(text, random, 2))),
+            Signed(2, originals.Select((text, index) => index % 3 == 0 ? text : Edit(text, random, 3 + index % 40)))
+        };
+
+        var runs = new[]
+        {
+            new CorpusDeduplicator().Run(shards),
+            new CorpusDeduplicator().Run(shards),
+            new CorpusDeduplicator().Run([shards[2], shards[0], shards[1]]),
+            CorpusTestTableMerge.Run(shards)
+        };
+
+        TestContext.Out.WriteLine($"{runs[0].Documents} documents, {runs[0].Duplicates} duplicates, {runs[0].Clusters.Count} clusters: decision {Decision(runs[0])}");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(runs.Select(Decision), Is.All.EqualTo(DECISION_SHA256), "twice, in another order of the shards, and by the table: the pinned decision");
+            Assert.That(runs.Select(run => run.Documents), Is.All.EqualTo(360));
+            Assert.That(runs.Select(run => run.Duplicates), Is.All.EqualTo(DECISION_DUPLICATES));
+            Assert.That(runs.Select(run => run.Clusters.Count), Is.All.EqualTo(DECISION_CLUSTERS));
+            Assert.That(runs.Select(run => Convert.ToHexString(SHA256.HashData(CorpusDedupWriter.Write(run)))).Distinct().Count(), Is.EqualTo(1), "and one document, byte for byte");
+        });
+    }
+
     #endregion
 
     #region A merge that was stopped
@@ -175,6 +220,31 @@ public sealed class CorpusDedupBandTests
     #endregion
 
     #region Tools
+
+    /// <summary>A shard of texts signed as a node signs them, under a blob identifier that is the same in every run.</summary>
+    private static CorpusDedupShard Signed(int index, IEnumerable<string> texts)
+    {
+        return CorpusDedupShard.Of(index, new Guid(index + 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), texts.Select(text => MinHashSigner.Sign(text)).ToList());
+    }
+
+    /// <summary>Replaces a few words, so that the text is a near-duplicate and not a copy.</summary>
+    private static string Edit(string text, Random random, int words)
+    {
+        var tokens = text.Split(' ');
+        for (var word = 0; word < words; word++)
+            tokens[random.Next(tokens.Length)] = "edited" + random.Next(1000);
+
+        return string.Join(' ', tokens);
+    }
+
+    /// <summary>What a merge decided, in a form that is the same on every platform: each shard's mask and every cluster, hashed.</summary>
+    private static string Decision(CorpusDedupResult result)
+    {
+        var masks = string.Join(";", result.Shards.Select(shard => $"{shard.ShardIndex}:{Convert.ToHexString(CorpusDedupWriter.ToBitset(shard.Keep))}"));
+        var clusters = string.Join(";", result.Clusters.Select(cluster => string.Join(",", cluster.Select(document => $"{document.ShardIndex}.{document.Ordinal}"))));
+
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{result.Documents}|{masks}|{clusters}"))).ToLowerInvariant();
+    }
 
     /// <summary>
     /// Three shards of signatures with near-duplicates planted in them: a document is new, or a
