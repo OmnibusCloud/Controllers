@@ -16,10 +16,13 @@ using OutWit.Engine.Sdk;
 namespace OutWit.Controller.Grid.Tests
 {
     /// <summary>
-    /// A node answers only what it was asked. A value that comes under a return variable the batch's
-    /// tasks asked for is kept, as many times as they asked for that name; any other value is left out
-    /// and the batch stands. A call whose nodes answer as asked returns exactly what it returned before
-    /// the rule existed: that half is the larger part of these tests.
+    /// A node answers only what it was asked. A task asks for one value, under its return slot; a value
+    /// that comes under a slot the batch's tasks asked for is kept, as many times as they asked for that
+    /// name; any other value is left out and the batch stands. A call whose nodes answer as asked
+    /// returns exactly what it returned before the rule existed: that half is the larger part of these
+    /// tests. The tasks here are built by hand around an activity that is not a function, so a task's
+    /// slot is the variable it carries under one of Grid's slot names; what a slot is, and that a
+    /// variable of the script is none, has its own tests.
     /// </summary>
     [TestFixture]
     public class GridReassignmentAnswersTests
@@ -62,7 +65,8 @@ namespace OutWit.Controller.Grid.Tests
 
         /// <summary>
         /// What a node returns, as the engine's node does it: for each task, the variables of its pool
-        /// whose names the task asked for (those that pass for return variables), in the pool's order.
+        /// whose names the task asked for, in the pool's order. A task asks for its slot and for nothing
+        /// else it carries.
         /// </summary>
         private static List<IWitVariable> Honest(WitGridTaskGroup group)
         {
@@ -70,9 +74,7 @@ namespace OutWit.Controller.Grid.Tests
 
             foreach (var task in group)
             {
-                var asked = task.Variables.Select(variable => variable.Name).Where(name => name.StartsWith("return")).ToList();
-
-                foreach (var variable in task.Variables.Where(variable => asked.Contains(variable.Name)))
+                foreach (var variable in task.Variables.Where(variable => GridTestTasks.IsSlot(task, variable.Name)))
                     answers.Add(new WitVariableObject(variable.Name, variable.Value ?? Answer(group, variable.Name)));
             }
 
@@ -179,10 +181,11 @@ namespace OutWit.Controller.Grid.Tests
         }
 
         [Test]
-        public async Task AScriptVariableThatPassesForAReturnVariableComesBackOncePerTaskAsBeforeTest()
+        public async Task ATaskThatCarriesAScriptVariableNamedLikeAReturnVariableIsAnsweredWithItsSlotAloneTest()
         {
-            // A script's own variable named "returnCode" is carried by every task that refers to it,
-            // is asked of the node with the task's slot, and comes back once per task. It always did.
+            // A script's own variable named "returnCode" is carried by every task that refers to it.
+            // Up to 1.3.0 it was asked of the node with the task's slot and came back once per task,
+            // as one more value of every item: ten values for five tasks. A task asks for its slot.
             var nodes = new[] { Node(10) };
             var tasks = Enumerable.Range(0, 5).Select(index => MakeTask(index, null, "returnCode")).ToList();
             var warnings = new List<string>();
@@ -190,8 +193,9 @@ namespace OutWit.Controller.Grid.Tests
             var outcome = await RunAsync(nodes, tasks, Honest, warnings);
 
             Assert.That(outcome.Failed, Is.False);
-            Assert.That(outcome.Results, Has.Count.EqualTo(10), "five slots and the script's variable five times");
-            Assert.That(outcome.Results.Count(value => Equals(value, "script:returnCode")), Is.EqualTo(5));
+            Assert.That(outcome.Results, Has.Count.EqualTo(5), "five tasks, five values");
+            Assert.That(outcome.Results, Has.None.EqualTo("script:returnCode"));
+            Assert.That(Slots(outcome).OrderBy(name => name, StringComparer.Ordinal), Is.EqualTo(Enumerable.Range(0, 5).Select(ReturnName)));
             Assert.That(warnings, Is.Empty);
         }
 
@@ -232,7 +236,8 @@ namespace OutWit.Controller.Grid.Tests
                     .ToList();
 
                 // What the call returned before the rule: every value of every batch that completed,
-                // in the order the batches were taken.
+                // in the order the batches were taken. A task that carries script variables named like
+                // return variables is asked for its slot alone, so an honest node returns one value.
                 var before = new List<object?>();
                 var warnings = new List<string>();
 
@@ -369,10 +374,13 @@ namespace OutWit.Controller.Grid.Tests
         }
 
         [Test]
-        public async Task AScriptVariableIsGoodForAsManyValuesAsTasksCarryItTest()
+        public async Task AValueUnderAScriptVariableIsLeftOutHoweverManyTasksCarryItTest()
         {
+            // Up to 1.3.0 the variable was good for as many values as tasks carried it: three slots and
+            // the variable three times. It is not a slot, so no value under it is kept.
             var nodes = new[] { Node(10) };
             var tasks = Enumerable.Range(0, 3).Select(index => MakeTask(index, null, "returnCode")).ToList();
+            var warnings = new List<string>();
 
             var outcome = await RunAsync(nodes, tasks, group =>
             {
@@ -380,10 +388,13 @@ namespace OutWit.Controller.Grid.Tests
                 answers.Add(Surplus("returnCode"));
                 answers.Add(Surplus("returnCode"));
                 return answers;
-            });
+            }, warnings);
 
-            Assert.That(outcome.Results, Has.Count.EqualTo(6), "three slots and the variable three times: the fourth and the fifth are left out");
+            Assert.That(outcome.Failed, Is.False);
+            Assert.That(outcome.Results, Has.Count.EqualTo(3), "three tasks, three values");
             Assert.That(outcome.Results, Has.None.EqualTo(SURPLUS));
+            Assert.That(warnings, Has.Count.EqualTo(1));
+            Assert.That(warnings[0], Does.Contain("2 value(s)"));
         }
 
         [Test]

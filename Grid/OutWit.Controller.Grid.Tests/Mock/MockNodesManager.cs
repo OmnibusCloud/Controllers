@@ -31,7 +31,12 @@ namespace OutWit.Controller.Grid.Tests.Mock
         public async Task<(IWitProcessingStatus, IReadOnlyList<IWitVariable>)> Process(Guid nodeId, Guid jobId, IWitActivity activity, IWitVariablesCollection pool,
             IReadOnlyList<string> returnVariables)
         {
-            return await Node.Process(jobId, activity, pool, returnVariables);
+            lock (Singles)
+                Singles.Add((nodeId, returnVariables.ToArray()));
+
+            var (status, variables) = await Node.Process(jobId, activity, pool, returnVariables);
+
+            return (status, Answers?.Invoke(nodeId, variables) ?? variables);
         }
 
         public async Task<(IWitProcessingStatus, IReadOnlyList<IWitVariable>)> ProcessBatch(
@@ -66,7 +71,7 @@ namespace OutWit.Controller.Grid.Tests.Mock
                     return (status, allVariables);
             }
 
-            return (lastStatus ?? throw new InvalidOperationException("No requests provided"), allVariables);
+            return (lastStatus ?? throw new InvalidOperationException("No requests provided"), Answers?.Invoke(nodeId, allVariables) ?? allVariables);
         }
 
         public IWitEngineNode Node => WitEngineNodeSdk.Instance;
@@ -78,6 +83,17 @@ namespace OutWit.Controller.Grid.Tests.Mock
         public IReadOnlyList<WitNodeTaskRequest>? LastBatchRequests { get; private set; }
 
         public List<(Guid NodeId, IReadOnlyList<WitNodeTaskRequest> Requests)> Batches { get; } = new();
+
+        /// <summary>
+        /// The requests that came one task at a time (the Queued strategy): the node and the names it was asked for.
+        /// </summary>
+        public List<(Guid NodeId, IReadOnlyList<string> ReturnVariables)> Singles { get; } = new();
+
+        /// <summary>
+        /// Stands between a node and Grid: given the node and what it returned for a batch or a task that
+        /// completed, gives what Grid receives. Null when the answer travels as it is.
+        /// </summary>
+        public Func<Guid, IReadOnlyList<IWitVariable>, IReadOnlyList<IWitVariable>>? Answers { get; set; }
 
         public IReadOnlyList<IWitEngineActivityNode> CompatibleNodes { get; set; }
             = new IWitEngineActivityNode[] { new MockActivityNode(WitEngineNodeSdk.Instance), new MockActivityNode(WitEngineNodeSdk.Instance), new MockActivityNode(WitEngineNodeSdk.Instance) };
