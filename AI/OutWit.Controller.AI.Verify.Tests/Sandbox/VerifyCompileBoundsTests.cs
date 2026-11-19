@@ -65,6 +65,9 @@ public sealed class VerifyCompileBoundsTests
         };
 
         var limits = VerifyLimitCeilings.Effective(new VerifyLimitsData { FuelBudget = long.MaxValue }, null);
+
+        // The fixture's sandbox is shared: what another test of it compiled is not this test's.
+        var compiledBefore = m_sandbox.TaskModuleCacheCount;
         var clock = Stopwatch.StartNew();
 
         Assert.Multiple(() =>
@@ -77,7 +80,7 @@ public sealed class VerifyCompileBoundsTests
                 Assert.That(result.Stderr, Is.EqualTo(problem), what);
             }
 
-            Assert.That(m_sandbox.TaskModuleCacheCount, Is.Zero, "none of them reached the engine's compiler");
+            Assert.That(m_sandbox.TaskModuleCacheCount, Is.EqualTo(compiledBefore), "none of them reached the engine's compiler");
             Assert.That(clock.Elapsed, Is.LessThan(TimeSpan.FromSeconds(5)), "the largest budget buys none of these compiles");
         });
     }
