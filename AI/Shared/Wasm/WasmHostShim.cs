@@ -12,7 +12,8 @@ namespace OutWit.Controller.AI.Wasm;
 /// so a host function cannot call it directly ("missing required memory export"): a small module
 /// that imports the guest's memory, exports it under the name WASI looks for, and forwards each
 /// call stands in between. It is compiled once an engine and instantiated in a run's store on the
-/// first call that needs it.
+/// first call that needs it. It forwards the calls the host looks into (<see cref="WasmHostSyscalls"/>)
+/// and the ones it only meters (<see cref="WasmHostPlainCalls"/>).
 /// </summary>
 internal sealed class WasmHostShim : IDisposable
 {
@@ -102,17 +103,19 @@ internal sealed class WasmHostShim : IDisposable
     public static string Text()
     {
         var text = new StringBuilder();
+        var forwarded = Forwarded();
+
         text.Append("(module\n");
         text.Append($"  (import \"{GUEST_MODULE}\" \"{MEMORY}\" (memory 0))\n");
 
-        foreach (var (name, parameters) in FORWARDED)
-            text.Append($"  (import \"{WASI_MODULE}\" \"{name}\" (func ${name} (param {string.Join(' ', parameters)}) (result {I32})))\n");
+        foreach (var (name, parameters) in forwarded)
+            text.Append($"  (import \"{WASI_MODULE}\" \"{name}\" (func ${name}{Parameters(parameters)} (result {I32})))\n");
 
         text.Append($"  (export \"{MEMORY}\" (memory 0))\n");
 
-        foreach (var (name, parameters) in FORWARDED)
+        foreach (var (name, parameters) in forwarded)
         {
-            text.Append($"  (func (export \"{name}\") (param {string.Join(' ', parameters)}) (result {I32})");
+            text.Append($"  (func (export \"{name}\"){Parameters(parameters)} (result {I32})");
             for (var index = 0; index < parameters.Length; index++)
                 text.Append($" local.get {index}");
             text.Append($" call ${name})\n");
@@ -120,6 +123,24 @@ internal sealed class WasmHostShim : IDisposable
 
         text.Append(")\n");
         return text.ToString();
+    }
+
+    /// <summary>Every call the shim forwards, once: the ones the host looks into, then the ones it only meters.</summary>
+    private static List<(string Name, string[] Parameters)> Forwarded()
+    {
+        var forwarded = FORWARDED.ToList();
+        foreach (var (name, parameters, _) in WasmHostPlainCalls.CALLS)
+        {
+            if (forwarded.All(call => call.Name != name))
+                forwarded.Add((name, parameters.Select(kind => kind == ValueKind.Int64 ? I64 : I32).ToArray()));
+        }
+
+        return forwarded;
+    }
+
+    private static string Parameters(string[] parameters)
+    {
+        return parameters.Length == 0 ? "" : $" (param {string.Join(' ', parameters)})";
     }
 
     #endregion

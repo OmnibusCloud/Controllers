@@ -150,8 +150,11 @@ public sealed class VerifyBatchExecutorTests : VerifySandboxTestBase
 
         Assert.Multiple(() =>
         {
-            Assert.That(VerifyBatchExecutor.MemoryPerTask(c, Clang), Is.EqualTo(VerifyClangBuild.STEP_MEMORY_BYTES));
+            Assert.That(VerifyBatchExecutor.MemoryPerTask(c, Clang), Is.EqualTo(VerifyClangBuild.STEP_MEMORY_BYTES + VerifyWasmSandbox.HEAVY_COMPILE_BYTES),
+                "the compiler's step, and the engine compiling the program it built");
             Assert.That(VerifyBatchExecutor.MemoryPerTask(python, Python), Is.EqualTo(16 << 20));
+            Assert.That(VerifyBatchExecutor.MemoryAside(Clang), Is.EqualTo(VerifyWasmSandbox.CompileGateBytes + VerifyTaskModuleCache.DEFAULT_BYTE_CAPACITY));
+            Assert.That(VerifyBatchExecutor.MemoryAside(Python), Is.Zero, "the interpreter is the controller's own module, compiled once");
         });
     }
 

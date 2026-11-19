@@ -108,6 +108,7 @@ public sealed class VerifySandboxLoadTests : VerifySandboxTestBase
         {
             Assert.That(result.Results.All(r => r.Verdict == VerifyVerdict.Pass), Is.True, string.Join("; ", result.Results.Where(r => r.Verdict != VerifyVerdict.Pass).Select(r => $"{r.TaskIndex}: {r.Verdict} {r.Stderr}")));
             Assert.That(Sandbox.TaskModuleCacheCount, Is.LessThanOrEqualTo(VerifyWasmSandbox.TaskModuleCacheCapacity));
+            Assert.That(Sandbox.TaskModuleCacheHeldBytes, Is.InRange(1, VerifyWasmSandbox.TaskModuleCacheBytes), "and by the bytes of their compiled code");
             Assert.That(wasi.Descriptor.TaskSupplied, Is.True);
         });
     }

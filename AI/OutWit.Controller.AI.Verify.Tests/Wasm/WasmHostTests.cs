@@ -283,10 +283,12 @@ public sealed class WasmHostTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(WasmHostTraps.IsInterrupt(new WasmtimeException(wrapped)), Is.True);
-            Assert.That(WasmHostTraps.IsInterrupt(new InvalidOperationException("outer", new WasmtimeException(wrapped))), Is.True, "a cause one level down");
-            Assert.That(WasmHostTraps.IsInterrupt(new WasmtimeException(crash)), Is.False, "a crash is not the clock");
-            Assert.That(WasmHostTraps.IsInterrupt(new WasmtimeException("the guest wrote: wasm trap: interrupt, as a joke")), Is.False, "only the engine's own line");
+            Assert.That(WasmHostTraps.IsInterrupt(new WasmtimeException(wrapped), true), Is.True);
+            Assert.That(WasmHostTraps.IsInterrupt(new InvalidOperationException("outer", new WasmtimeException(wrapped)), true), Is.True, "a cause one level down");
+            Assert.That(WasmHostTraps.IsInterrupt(new WasmtimeException(crash), true), Is.False, "a crash is not the clock");
+            Assert.That(WasmHostTraps.IsInterrupt(new WasmtimeException("the guest wrote: wasm trap: interrupt, as a joke"), true), Is.False, "only the engine's own line");
+            Assert.That(WasmHostTraps.IsInterrupt(new WasmtimeException(wrapped), false), Is.False, "before the deadline no text is the clock");
+            Assert.That(WasmHostTraps.IsInterrupt(new WasmtimeException(WasmHostTraps.INTERRUPT_CAUSE + newline + "    0: 0x1 - m!f" + newline), true), Is.False, "the engine's last line, not any line");
         });
     }
 

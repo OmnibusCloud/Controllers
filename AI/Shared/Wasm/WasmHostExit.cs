@@ -32,11 +32,16 @@ internal sealed class WasmHostExit
     /// Defines the run's <c>proc_exit</c> in a linker that has WASI and allows shadowing.
     /// </summary>
     /// <param name="linker">The run's linker.</param>
+    /// <param name="meter">The run's meter: the exit is a call into the host like any other.</param>
     /// <returns>The run's exit, which holds the status once the guest exited.</returns>
-    public static WasmHostExit Define(Linker linker)
+    public static WasmHostExit Define(Linker linker, WasmHostMeter meter)
     {
         var exit = new WasmHostExit();
-        linker.DefineFunction(WASI_MODULE, PROC_EXIT, (int status) => exit.Take(status));
+        linker.DefineFunction(WASI_MODULE, PROC_EXIT, (Caller caller, int status) =>
+        {
+            meter.Call(caller, PROC_EXIT);
+            exit.Take(status);
+        });
         return exit;
     }
 

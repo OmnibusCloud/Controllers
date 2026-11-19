@@ -37,9 +37,9 @@ internal sealed class WasmHostRunRequest
     /// unit of fuel per byte of data segments it copies at instantiation, and only where no
     /// copy-on-write memory image is used (Windows always pays it, Linux does not): a budget set
     /// before instantiation then depends on the platform for a guest that ends near it. With this
-    /// on, instantiation runs under the budget plus the most that copying segments can cost
-    /// (<see cref="WasmHostLimits.InstantiationFuel"/>), the store is filled up to the budget again
-    /// before <c>_start</c>, and <see cref="WasmHostRunOutcome.FuelConsumed"/> is the guest's alone.
+    /// on, instantiation runs under the most that copying segments can cost and nothing else
+    /// (<see cref="WasmHostLimits.InstantiationFuel"/>), the store is given the budget before
+    /// <c>_start</c>, and <see cref="WasmHostRunOutcome.FuelConsumed"/> is the guest's alone.
     /// Off by default: the budget then covers instantiation as well. Verify (since 0.12.0) and
     /// Corpus turn it on.
     /// </summary>
@@ -100,12 +100,18 @@ internal sealed class WasmHostRunRequest
     public long WritableLimitBytes { get; init; }
 
     /// <summary>
-    /// Whether a call into the host costs fuel in proportion to the bytes it moves (a unit a
-    /// byte read, written or filled, as the engine charges a guest's own bulk copies), so that a
-    /// run cannot spend the host's time for nothing. Off by default: only the guest's own
-    /// instructions cost fuel then.
+    /// Whether a call into the host costs fuel: a fixed amount every call
+    /// (<see cref="WasmHostMeter.CALL_FUEL"/>) and a unit a byte it moves (read, written, filled or
+    /// copied, as the engine charges a guest's own bulk copies), so that a run cannot spend the
+    /// host's time for nothing. Off by default: only the guest's own instructions cost fuel then.
     /// </summary>
     public bool ChargeHostCalls { get; init; }
+
+    /// <summary>
+    /// Where the run's calls into the host are counted by name, or null. A tool for finding where
+    /// two machines answer a guest differently; no run needs it.
+    /// </summary>
+    public WasmHostCallCensus? Census { get; init; }
 
     /// <summary>
     /// Recognises a refused allocation in the guest's stderr (as capped, or the host's fault when
