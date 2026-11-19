@@ -10,4 +10,5 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// <param name="Fuel">The fuel used; the whole budget for a run out of fuel.</param>
 /// <param name="WallMs">The wall time taken.</param>
 /// <param name="Diagnostics">What the tool wrote to stderr, capped.</param>
-internal sealed record VerifyToolOutcome(WasmHostVerdict Verdict, int ExitCode, TrapCode? Trap, long Fuel, int WallMs, string Diagnostics);
+/// <param name="ProductBytes">The bytes of the tool's product that were written to its file.</param>
+internal sealed record VerifyToolOutcome(WasmHostVerdict Verdict, int ExitCode, TrapCode? Trap, long Fuel, int WallMs, string Diagnostics, long ProductBytes);
