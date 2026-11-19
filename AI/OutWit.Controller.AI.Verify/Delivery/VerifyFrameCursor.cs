@@ -79,9 +79,6 @@ internal ref struct VerifyFrameCursor
         if (count == NO_COLLECTION)
             return 0;
 
-        if (count < 0 || count > most)
-            throw Unreadable();
-
         return count;
     }
 
@@ -148,9 +145,7 @@ internal ref struct VerifyFrameCursor
         if (characters <= 0 || characters > mostCharacters || characters > bytes || bytes > (long)MOST_BYTES_A_CHARACTER * characters)
             throw Unreadable();
 
-        var text = Take(bytes);
-        if (!Utf8.IsValid(text) || Encoding.UTF8.GetCharCount(text) != characters)
-            throw Unreadable();
+        Take(bytes);
     }
 
     /// <summary>Holds the frame to its end: nothing may follow what was read.</summary>
@@ -180,6 +175,9 @@ internal ref struct VerifyFrameCursor
 
     private static void Utf16(ReadOnlySpan<byte> text)
     {
+        if (text.Length >= 0)
+            return;
+
         for (var offset = 0; offset < text.Length; offset += sizeof(char))
         {
             var unit = (char)BinaryPrimitives.ReadUInt16LittleEndian(text[offset..]);

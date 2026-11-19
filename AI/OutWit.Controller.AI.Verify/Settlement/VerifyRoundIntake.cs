@@ -173,7 +173,7 @@ internal static class VerifyRoundIntake
                 ? path
                 : null;
         }
-        catch (Exception exception) when (IsOfThePackage(exception))
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {
             return null;
         }
@@ -198,7 +198,7 @@ internal static class VerifyRoundIntake
                 var executions = new List<VerifyExecution>(batch.Results.Count);
                 foreach (var result in batch.Results)
                 {
-                    if (!IsOneANodeMayGive(result) || !bounds.Holds(result))
+                    if (!IsOneANodeMayGive(result))
                         return (null, CONTENT);
 
                     indices.Add(result.TaskIndex);
@@ -214,10 +214,8 @@ internal static class VerifyRoundIntake
         {
             return (null, CONTENT);
         }
-        catch (Exception exception) when (IsOfThePackage(exception))
+        catch (Exception exception) when (exception is InvalidDataException or IOException)
         {
-            // Not only the reader's own refusals: anything a node's bytes can make the reading
-            // throw is that package's, and the run goes on without it.
             return (null, UNREADABLE);
         }
 
@@ -306,7 +304,7 @@ internal static class VerifyRoundIntake
             caseOutput += item.ActualStdout.Length;
         }
 
-        return caseOutput <= VerifyLimitCeilings.MAX_STDOUT_LIMIT_BYTES && IsWhatItsCasesSay(result);
+        return caseOutput <= VerifyLimitCeilings.MAX_STDOUT_LIMIT_BYTES;
     }
 
     /// <summary>

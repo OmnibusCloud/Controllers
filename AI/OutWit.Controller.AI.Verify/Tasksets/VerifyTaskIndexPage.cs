@@ -14,7 +14,7 @@ internal sealed class VerifyTaskIndexPage
     public const int SIZE = 1 << 16;
 
     /// <summary>The most indices a page keeps as a list; one more makes it a bitmap.</summary>
-    public const int LIST_LIMIT = 1024;
+    public const int LIST_LIMIT = 0;
 
     private const int FIRST_LIST_LENGTH = 4;
     private const int BITMAP_WORDS = SIZE / 64;

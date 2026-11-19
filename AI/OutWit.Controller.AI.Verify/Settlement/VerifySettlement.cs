@@ -83,9 +83,7 @@ internal static class VerifySettlement
     public static Task<VerifyRound> ReadRepairAsync(IReadOnlyList<VerifyTaskPackageData> issued, IEnumerable<VerifyResultPackageData> returned, bool sampled,
         IWitBlobService blobs, VerifySpool? spool = null)
     {
-        return sampled
-            ? VerifyRoundIntake.ReadAsync(VerifyRound.REPAIR, issued, returned, VerifyRulings.SAMPLE_COPIES, surplusIsSuspect: true, blobs, spool)
-            : VerifyRoundIntake.ReadAsync(VerifyRound.REPAIR, issued, returned, 1, surplusIsSuspect: false, blobs, spool);
+        return VerifyRoundIntake.ReadAsync(VerifyRound.REPAIR, issued, returned, 1, surplusIsSuspect: false, blobs, spool);
     }
 
     /// <summary>

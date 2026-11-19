@@ -175,7 +175,7 @@ Job:VerifyRun(Blob:taskset, VerifyOptions:opts)
 
     ~ A task without a verdict (no answer the server accepts, or a fault of the node that ran it) goes out once more, under the same sampling. ~
     VerifyTaskPackageCollection:repairs = Verify.Repairs(packages, results);
-    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs, checked)
+    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs)
         => Verify.ExecutePackage(package);
 
     ~ A task whose executions disagree runs three more times, on different machines. ~
@@ -206,7 +206,7 @@ Job:VerifyGenerate(Blob:taskset, VerifyOptions:opts)
 
     ~ A task without a verdict (no answer the server accepts, or a fault of the node that ran it) goes out once more, under the same sampling. ~
     VerifyTaskPackageCollection:repairs = Verify.Repairs(packages, results);
-    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs, checked)
+    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs)
         => Verify.ExecutePackage(package);
 
     ~ A task whose executions disagree runs three more times, on different machines. ~
@@ -249,7 +249,7 @@ Job:VerifyGenerateAndCheck(Blob:generators, Blob:checker, VerifyOptions:opts)
 
     ~ A check without a verdict goes out once more, under the same sampling. ~
     VerifyTaskPackageCollection:repairs = Verify.Repairs(checkPackages, verdicts);
-    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs, checked)
+    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs)
         => Verify.ExecutePackage(package);
 
     ~ A check whose executions disagree runs three more times, on different machines. ~

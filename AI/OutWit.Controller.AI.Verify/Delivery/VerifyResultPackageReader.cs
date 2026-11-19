@@ -129,7 +129,7 @@ public static class VerifyResultPackageReader
         {
             return MemoryPackSerializer.Deserialize<T>(image) ?? throw VerifyFrameCursor.Unreadable();
         }
-        catch (Exception exception) when (exception is not (InvalidDataException or OutOfMemoryException))
+        catch (MemoryPackSerializationException)
         {
             throw VerifyFrameCursor.Unreadable();
         }
