@@ -28,6 +28,12 @@ public sealed class WasmHostMeterTests
     /// <summary>What one turn of the loop around a call costs at the most, the call's own arguments included.</summary>
     private const int LOOP_FUEL = 40;
 
+    /// <summary>The calls in one turn of a loop whose deadline should land inside a call.</summary>
+    private const int CALLS_A_TURN = 64;
+
+    /// <summary>How long a program is given to be in its loop before the epoch is moved.</summary>
+    private const int SETTLE_MS = 200;
+
     #endregion
 
     #region Fields
@@ -336,6 +342,31 @@ public sealed class WasmHostMeterTests
         Assert.That(others, Is.Empty);
     }
 
+    [TestCase("fd_fdstat_get", "(param i32 i32) (result i32)", "(i32.const 1) (i32.const 64)")]
+    [TestCase("fd_seek", "(param i32 i64 i32 i32) (result i32)", "(i32.const 99) (i64.const 0) (i32.const 0) (i32.const 64)")]
+    public void N11TheClockAheadOfTheRunsOwnClockIsKnownInsideACallByItsCodeTest(string function, string signature, string arguments)
+    {
+        // The epoch is the engine's: the host's ticker moves it in whole ticks, and by several at
+        // once when it wakes late, while a run's deadline counts from the epoch the run found. So
+        // the deadline can fire before the run's own clock says its wall time is over, and the
+        // text of an error is read only after that. Here the epoch is moved the way the ticker
+        // moves it, a whole wall time at once, while the program calls through the host (a call
+        // handed to WASI as it comes, and one the host defines and forwards): only the trap's
+        // code, seen inside the call, tells the clock. With many calls in a turn of the loop the
+        // deadline lands inside a call nearly every time.
+        var module = Turns(function, signature, arguments, CALLS_A_TURN);
+        var others = new List<string>();
+
+        for (var run = 0; run < 4; run++)
+        {
+            var outcome = RunWithTheEpochAhead(module);
+            if (outcome.Verdict != WasmHostVerdict.Interrupted || outcome.Trap != TrapCode.Interrupt || outcome.WallMs >= WALL_MS / 2)
+                others.Add($"run {run}: {outcome.Verdict} {outcome.Trap} {outcome.Fault} after {outcome.WallMs} ms");
+        }
+
+        Assert.That(others, Is.Empty);
+    }
+
     #endregion
 
     #region Tools
@@ -344,7 +375,36 @@ public sealed class WasmHostMeterTests
         IReadOnlyList<string>? argv = null, IReadOnlyList<(string Name, string Value)>? environment = null, WasmHostCallCensus? census = null)
     {
         using var module = Wasmtime.Module.FromBytes(m_host.Engine, "main.wasm", bytes);
-        return m_host.Run(module, new WasmHostRunRequest
+        return m_host.Run(module, Request(charge, fuel, memoryBytes, wallMs, argv, environment, census));
+    }
+
+    /// <summary>
+    /// Runs a module that does not end by itself, and moves the engine's epoch a whole wall time
+    /// ahead once the program is in its loop, as the host's ticker does when it catches up.
+    /// </summary>
+    private WasmHostRunOutcome RunWithTheEpochAhead(byte[] bytes)
+    {
+        using var module = Wasmtime.Module.FromBytes(m_host.Engine, "main.wasm", bytes);
+        var run = Task.Run(() => m_host.Run(module, Request(charge: true, long.MaxValue / 4, MEMORY_BYTES, WALL_MS)));
+
+        // Into the loop first: a deadline that passes before the program starts ends it in its
+        // own code. Moved again if the run had not set its deadline yet.
+        var wait = TimeSpan.FromMilliseconds(SETTLE_MS);
+        while (!run.Wait(wait))
+        {
+            for (var tick = 0UL; tick <= WasmHostLimits.WallToTicks(WALL_MS); tick++)
+                m_host.Engine.IncrementEpoch();
+
+            wait = TimeSpan.FromSeconds(1);
+        }
+
+        return run.Result;
+    }
+
+    private WasmHostRunRequest Request(bool charge, long fuel, long memoryBytes, int wallMs,
+        IReadOnlyList<string>? argv = null, IReadOnlyList<(string Name, string Value)>? environment = null, WasmHostCallCensus? census = null)
+    {
+        return new WasmHostRunRequest
         {
             Argv = argv ?? ["main.wasm"],
             Environment = environment ?? [],
@@ -358,7 +418,7 @@ public sealed class WasmHostMeterTests
             WallMs = wallMs,
             ChargeHostCalls = charge,
             Census = census
-        });
+        };
     }
 
     /// <summary>Calls one function of WASI a number of times (without end for a negative number) and drops what it answers.</summary>
@@ -374,6 +434,24 @@ public sealed class WasmHostMeterTests
                   (drop (call $f {{arguments}}))
                   (local.set $i (i32.add (local.get $i) (i32.const 1)))
                   (br_if $n (i32.lt_u (local.get $i) (i32.const {{calls}}))))))
+            """);
+    }
+
+    /// <summary>
+    /// Calls one function of WASI a number of times in every turn of a loop without end, and drops
+    /// what it answers: the loop's own check of the deadline comes once in that many calls.
+    /// </summary>
+    private static byte[] Turns(string function, string signature, string arguments, int callsATurn)
+    {
+        var calls = string.Concat(Enumerable.Repeat($"(drop (call $f {arguments}))", callsATurn));
+        return HostileModules.Bytes($$"""
+            (module
+              (import "{{WASI}}" "{{function}}" (func $f {{signature}}))
+              (memory (export "memory") 2)
+              (func (export "_start")
+                (loop $n
+                  {{calls}}
+                  (br $n))))
             """);
     }
 
