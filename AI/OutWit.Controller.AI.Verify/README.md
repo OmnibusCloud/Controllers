@@ -41,6 +41,9 @@ prices were missing (see "Determinism"). What it changed:
 - How deep a recursion goes before the engine's stack ends depends on the node; that is a
   stated limit now (see "Runtimes"), and the comparison of the two trap modes runs a deep
   recursion on either side of it.
+- The fuel of a CPython task is held to one number on Windows, Linux and macOS, as every other
+  runtime's is. The drift between hosts the documents allowed for it ended with 0.13.0 (see
+  "Determinism").
 
 0.16.0 was the fourth hardening release: what the server takes from a node, and what a run says
 of itself when a fan-out came back short. For a run without lying or failing nodes the
@@ -606,11 +609,16 @@ not where it maps a copy-on-write image (Linux). That copy was the fixed step
 between Linux and the other two systems that earlier versions showed for Ruby and
 Lua (a Lua hello cost 569,680 units on Linux and 602,449 on Windows and macOS;
 32,769 of that was the copy): the hello of every runtime is now one number on
-Windows, Linux and macOS, pinned by the tests, but for the CPython tasks that
-read their library from files (`python-3.14.6` and its sympy flavour), which
-the tests allow to drift between hosts by up to 0.06 % in how each host's WASI
-answers the interpreter's file queries (the numpy runtime starts from a
-snapshot and does not drift). Fuel is
+Windows, Linux and macOS, pinned by the tests. That holds for the CPython tasks
+that read their library from files (`python-3.14.6` and its sympy flavour) as
+well: up to 0.12.0 their fuel drifted between hosts by a few hundredths of a
+percent (on the build server a hello cost 1,153 units and the import of sympy
+968,240 units less on Linux than on Windows and macOS), because the
+interpreter's imports read the host's file records (times, device, file
+number); since 0.13.0 those records say nothing of the host, and the build
+server has measured the same figure on the three systems since.
+Since 0.17.0 the tests also list a CPython hello's calls into the host in
+order, and the listings of the three systems are equal call by call. Fuel is
 reproducible per host; the peak linear memory of a CPython task can differ by
 one 64 KiB page between hosts; wall time is hardware. All three are metrics and live per task in the provenance
 document.

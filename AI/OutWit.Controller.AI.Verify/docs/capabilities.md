@@ -31,6 +31,8 @@ What 0.17.0 changed for an application:
   MiB an object and no bound on their sum).
 - **A deep recursion is a stated limit** (sections 9 and 14): how deep one goes before the
   engine's stack ends depends on the node.
+- **The fuel of a CPython task is no longer said to drift between hosts** (section 10): it has
+  been one number on Windows, Linux and macOS since 0.13.0, and the tests now hold it to that.
 - **No document, no schema and no script changed.** The model and the scripts are the packages
   they were.
 
@@ -724,7 +726,7 @@ What is a metric, not identity (it lives in the provenance):
   - Since 0.13.0 a call into the host costs fuel by the bytes it moves (section 9), so every task's fuel grew by the bytes its runtime reads at start. Figures quoted before 0.13.0 are lower by that. The hellos then, on Windows x64: `python-3.14.6` 122,363,490 (it was 121,262,306); `python-3.14.6-sympy-1.14.0` with `import sympy` 3,205,340,541 (3,058,460,132); `python-3.14.6-numpy-2.5.4` with `import numpy` 24,920,091 (24,917,573); `quickjs-0.15.1` 2,359,037; `ruby-3.4.1` 153,868,237; `lua-5.4.8` 571,435; `typescript-sucrase-3.35.1` 333,353,693. Those were the figures of 0.13.0 to 0.16.0.
   - Since 0.17.0 a call into the host costs 1,000 units besides its bytes (section 9), so every task's fuel grew by a thousand for every call its runtime makes (a CPython hello makes 118, the import of sympy 7,814). The hellos now, on Windows x64, with the figure of 0.13.0 to 0.16.0 in brackets: `python-3.14.6` 122,481,638 (122,363,490); `python-3.14.6-sympy-1.14.0` 3,213,154,830 (3,205,340,541); `python-3.14.6-numpy-2.5.4` 24,941,299 (24,920,091); `quickjs-0.15.1` 2,367,084 (2,359,037); `ruby-3.4.1` 153,965,549 (153,868,237); `lua-5.4.8` 588,454 (571,435); `typescript-sucrase-3.35.1` 333,420,186 (333,353,693).
   - A task of the `wasi` or the `clang-22.1.0` runtime also reports the price of compiling its module (section 9).
-  - The hello of every runtime costs one pinned number on Windows, Linux and macOS (the controller's tests), but for CPython reading its library from files (`python-3.14.6` and the sympy runtime): the tests allow it to drift between hosts by up to 0.06 %, in how each host answers its file queries. The numpy runtime starts from a snapshot and does not drift.
+  - The hello of every runtime costs one pinned number on Windows, Linux and macOS (the controller's tests), CPython reading its library from files (`python-3.14.6` and the sympy runtime) included. Up to 0.12.0 the fuel of those two drifted between hosts by a few hundredths of a percent, because the interpreter's imports read the host's file records; since 0.13.0 a file's record says nothing of the host (section 9), and the figures have been the same on the three systems since. The tests also list a CPython hello's calls into the host in order, and the three systems' listings are equal call by call.
 - **Peak memory** of a CPython task can differ by one 64 KiB page.
 - **Wall time** depends on the hardware.
 
@@ -925,6 +927,6 @@ How a deployment uses them:
   - in Python by its recursion limit;
   - in JavaScript by a `RangeError` (about 300 levels);
   - in C/C++ and in a raw module by the engine's 8 MiB stack: some 90,000 to 170,000 levels for a small function. How many depends on the node (the trap mode, the processor architecture: section 9), so a recursion deeper than a few tens of thousands of levels can pass on one honest node and overflow on another.
-- The fuel of a CPython task (not numpy) can differ by up to 0.06 % between hosts, and its peak memory by a page (section 10). Verdicts and outputs do not.
+- The peak memory of a CPython task can differ by a page between hosts (section 10). Verdicts and outputs do not.
 - A run waits for its slowest share (section 11).
 - The controller is proven on the test fleet. Its release to nuget.org and to the live network is the owner's decision.
