@@ -12,7 +12,12 @@ internal static class WitGridTaskBuilder
 {
     #region Constants
 
-    private const string RETURN_VARIABLE_NAME = "return";
+    /// <summary>
+    /// The prefix of a return slot's name. A task's slot is this prefix and a number, and it is the
+    /// return reference of the task's own activity: that reference, not the prefix, says what a task
+    /// asks its node for.
+    /// </summary>
+    internal const string RETURN_VARIABLE_NAME = "return";
 
     #endregion
 
@@ -213,10 +218,5 @@ internal static class WitGridTaskBuilder
         if (typeof(IEnumerable<IWitParameter>).IsAssignableFrom(type)) return true;
         if (typeof(IEnumerable<IWitActivity>).IsAssignableFrom(type)) return true;
         return false;
-    }
-
-    public static bool IsReturnVariable(this IWitVariable variable)
-    {
-        return variable.Name.StartsWith(RETURN_VARIABLE_NAME);
     }
 }

@@ -26,14 +26,23 @@ namespace OutWit.Controller.Grid.Utils;
 /// who returned which item. A copy with no machine left is dropped; an item fails the job only when it
 /// has no result at all.
 ///
-/// A node answers only what it was asked. A task names its return variables, and a node returns the
-/// variables of those names: that is what every node has done since the first Grid.ForEach. Here a
-/// batch's values are held to it: a value is kept when it comes under a return variable some task of
-/// the batch asked for, as many times as tasks of the batch asked for that name; any other value is
-/// left out of the results (with a warning) and the rest of the batch stands. Nothing is reordered and
-/// no batch fails for it, so a call whose nodes answer as asked returns exactly what it returned
-/// before. What it gives: no machine has more values in a call's results than its tasks asked for, so
-/// a controller that compares the copies of an item can count each value as one machine's.
+/// A node answers only what it was asked. A task asks for one value, under the return slot Grid gave
+/// its activity, and a node returns the variable of that name: that is what every node has done since
+/// the first Grid.ForEach. Here a batch's values are held to it: a value is kept when it comes under a
+/// slot some task of the batch asked for, as many times as tasks of the batch asked for that name; any
+/// other value is left out of the results (with a warning) and the rest of the batch stands. Nothing
+/// is reordered and no batch fails for it, so a call whose nodes answer as asked returns exactly what
+/// it returned before. What it gives: no machine has more values in a call's results than its tasks
+/// asked for, so a controller that compares the copies of an item can count each value as one
+/// machine's.
+///
+/// A value the return collection would refuse is an answer not given. A typed collection takes a list
+/// whole or not at all, so one null or one value of another type would cost the call every value of
+/// every node. Such a value is left out like an unasked one (with a warning that says how many and
+/// why), the batch stands, and its task has no answer. A task without an answer is not sent again,
+/// here or for a node that returned fewer values than tasks: the results come back short and the
+/// caller decides. For a copy the machine still counts as holding the item (it has run it), so no
+/// other copy of that item is placed on it.
 /// </summary>
 public static class GridReassignment
 {
@@ -61,11 +70,44 @@ public static class GridReassignment
         public string? FailureMessage { get; set; }
     }
 
+    /// <summary>
+    /// Distributes the tasks of a call whose return collection takes every value.
+    /// </summary>
+    /// <param name="nodes">The nodes that can take the work.</param>
+    /// <param name="tasks">The tasks of the call.</param>
+    /// <param name="processGroup">Runs one node's batch.</param>
+    /// <param name="logWarning">Where warnings go; null when nobody listens.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The values that were kept, the statuses of the batches that completed, and whether the work failed.</returns>
+    /// <exception cref="OperationCanceledException">The call was cancelled.</exception>
+    public static Task<DistributionOutcome> DistributeAsync(
+        IReadOnlyList<IWitEngineActivityNode> nodes,
+        IReadOnlyList<WitGridTask> tasks,
+        Func<WitGridTaskGroup, CancellationToken, Task<GroupProcessResult>> processGroup,
+        Action<string>? logWarning,
+        CancellationToken cancellationToken)
+    {
+        return DistributeAsync(nodes, tasks, processGroup, logWarning, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Distributes the tasks of a call and holds every answer to what its tasks asked for and to what
+    /// the return collection takes.
+    /// </summary>
+    /// <param name="nodes">The nodes that can take the work.</param>
+    /// <param name="tasks">The tasks of the call.</param>
+    /// <param name="processGroup">Runs one node's batch.</param>
+    /// <param name="logWarning">Where warnings go; null when nobody listens.</param>
+    /// <param name="values">What the return collection takes; null when it takes every value.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The values that were kept, the statuses of the batches that completed, and whether the work failed.</returns>
+    /// <exception cref="OperationCanceledException">The call was cancelled.</exception>
     public static async Task<DistributionOutcome> DistributeAsync(
         IReadOnlyList<IWitEngineActivityNode> nodes,
         IReadOnlyList<WitGridTask> tasks,
         Func<WitGridTaskGroup, CancellationToken, Task<GroupProcessResult>> processGroup,
         Action<string>? logWarning,
+        GridValueRule? values,
         CancellationToken cancellationToken)
     {
         var outcome = new DistributionOutcome();
@@ -121,15 +163,15 @@ public static class GridReassignment
                     if (result.Status != null)
                         outcome.CompletedStatuses.Add(result.Status);
 
-                    IReadOnlyList<IWitVariable> answers = KeepAsked(group, result.Variables, out int leftOut);
-                    if (leftOut > 0)
-                        logWarning?.Invoke(
-                            $"Node {group.Node.NodeId} returned {leftOut} value(s) its {group.Count} task(s) did not ask for; "
-                            + "they are left out of the results.");
+                    IReadOnlyList<IWitVariable> answers = GridAnswers.Keep(group, result.Variables, values, out int unasked, out var refused);
+
+                    GridAnswers.Warn(logWarning, GridAnswers.Who(group.Node.NodeId, result.Status, "batch"), group.Count, unasked, refused, values);
 
                     foreach (var variable in answers)
                         outcome.Results.Add(variable.Value);
 
+                    // A copy whose value was left out is recorded all the same: the machine has run the
+                    // item, and another copy of it must not land there.
                     RecordHolder(holders, group);
                 }
                 else
@@ -189,52 +231,6 @@ public static class GridReassignment
         }
 
         return kept;
-    }
-
-    /// <summary>
-    /// The values of a batch that its tasks asked for, in the order the node returned them. A name is
-    /// good for as many values as tasks of the batch asked for it: the slot Grid gives a task is asked
-    /// once, and a variable of the script whose name passes for a return variable is asked by every task
-    /// that carries it, exactly as the node is asked. The list itself comes back when nothing is left out.
-    /// </summary>
-    /// <param name="group">The node's batch.</param>
-    /// <param name="variables">What the node returned for it.</param>
-    /// <param name="leftOut">How many values were not asked for.</param>
-    /// <returns>The values that were asked for.</returns>
-    private static IReadOnlyList<IWitVariable> KeepAsked(WitGridTaskGroup group, IReadOnlyList<IWitVariable> variables, out int leftOut)
-    {
-        leftOut = 0;
-        if (variables.Count == 0)
-            return variables;
-
-        var asked = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var task in group)
-        {
-            foreach (var variable in task.Variables)
-            {
-                if (variable.IsReturnVariable())
-                    asked[variable.Name] = asked.GetValueOrDefault(variable.Name) + 1;
-            }
-        }
-
-        List<IWitVariable>? kept = null;
-        for (int index = 0; index < variables.Count; index++)
-        {
-            var variable = variables[index];
-
-            if (variable?.Name is string name && asked.TryGetValue(name, out int left) && left > 0)
-            {
-                asked[name] = left - 1;
-                kept?.Add(variable);
-                continue;
-            }
-
-            // The first value left out: from here on the kept ones are a list of their own.
-            kept ??= variables.Take(index).ToList();
-            leftOut++;
-        }
-
-        return kept ?? variables;
     }
 
     private static void RecordHolder(Dictionary<int, HashSet<Guid>> holders, WitGridTaskGroup group)
