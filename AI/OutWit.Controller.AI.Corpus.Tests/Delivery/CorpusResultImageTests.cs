@@ -152,6 +152,31 @@ public sealed class CorpusResultImageTests
     }
 
     [Test]
+    public void ACountBelowZeroWithNoEntriesAfterItIsRefusedForTheCountTest()
+    {
+        // A list that holds nothing: its count is all there is of it. With a count below zero the
+        // rest of the image is laid out as it should be, so nothing but the count is wrong with
+        // it: the walk refuses it for the count and not for where its bytes end.
+        var image = CorpusTestImage.Of(CorpusTestRun.Completed(CorpusTestRun.Task(0)));
+        var bytes = image.ToArray();
+        var empty = image.Heads.Where(head => head.Kind == CorpusTestImageHeadKind.List && BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(head.Offset)) == 0).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(empty.Select(head => head.Name), Is.EqualTo(new[] { "drops", "unsupported_languages" }), "the lists of this result that hold nothing");
+            Assert.That(CorpusResultImage.IsSound(bytes), Is.True);
+
+            foreach (var head in empty)
+            {
+                Assert.That(CorpusResultImage.IsSound(image.With(head, CorpusTestImage.NULL_COLLECTION)), Is.True, $"{head}: no list is a list of nothing");
+
+                foreach (var count in new[] { -2, -3, -1000, int.MinValue })
+                    Assert.That(CorpusResultImage.IsSound(image.With(head, count)), Is.False, $"{head}: a count of {count} and no entries after it");
+            }
+        });
+    }
+
+    [Test]
     public void AStringLengthOutsideTheImageIsRefusedTest()
     {
         var image = Rich();
