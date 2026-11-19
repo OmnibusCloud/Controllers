@@ -17,21 +17,24 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// the server (<c>output</c>) and the MinHash parameters of its signatures. The shards, their
 /// indexes and their URLs are the server's own task list: a shard is in the report whether or not
 /// anything came back for it, and nothing a node returns can put another URL there. Each accepted
-/// shard says how many results it rests on (<c>executions</c>: 1 is one machine's word). No
+/// shard says how many results it rests on (<c>executions</c>: 1 is one machine's word). Beside
+/// the summary stand the sampling the run asked for with what came back of it, in a word and in a
+/// sentence, and how each round's fan-out came back (<c>sampling</c>, <c>rounds</c>:
+/// <see cref="CorpusFanOutWriter"/>): a run whose checking did not happen says so. No
 /// document says which machine ran what or what that machine is (its platform is named,
 /// <c>runtime_target</c>; its cores and memory are not), and no ticket is written. Schema
-/// <c>corpus-report/4</c>; <c>/3</c> also said how many shards the machine of each result ran at
-/// once (<c>degree</c>).
+/// <c>corpus-report/5</c>: the shape of <c>/4</c> with <c>sampling</c> and <c>rounds</c>;
+/// <c>/3</c> also said how many shards the machine of each result ran at once (<c>degree</c>).
 /// </summary>
 public static class CorpusReportWriter
 {
     #region Constants
 
     /// <summary>The report schema name.</summary>
-    public const string SCHEMA = "corpus-report/4";
+    public const string SCHEMA = "corpus-report/5";
 
-    /// <summary>The earlier report schemas Corpus.Dedup still reads: <c>/3</c> said the degree of the node that ran each shard, <c>/2</c> chose between executions by what they said, <c>/1</c> also named the nodes.</summary>
-    public static readonly IReadOnlyList<string> PREVIOUS_SCHEMAS = ["corpus-report/3", "corpus-report/2", "corpus-report/1"];
+    /// <summary>The earlier report schemas Corpus.Dedup still reads: <c>/4</c> did not state the sampling asked for or how the rounds came back, <c>/3</c> said the degree of the node that ran each shard, <c>/2</c> chose between executions by what they said, <c>/1</c> also named the nodes.</summary>
+    public static readonly IReadOnlyList<string> PREVIOUS_SCHEMAS = ["corpus-report/4", "corpus-report/3", "corpus-report/2", "corpus-report/1"];
 
     /// <summary>The bytes the writer holds before it hands them to the stream.</summary>
     private const int FLUSH_BYTES = 1 << 16;
@@ -140,6 +143,9 @@ public static class CorpusReportWriter
         if (minHash != null && oneMinHash)
             WriteMinHash(writer, minHash);
         writer.WriteEndObject();
+
+        // What the run asked for in second executions, and how each round came back.
+        CorpusFanOutWriter.Write(writer, ledger);
 
         writer.WriteStartArray("shards");
         foreach (var shard in ledger.Shards)

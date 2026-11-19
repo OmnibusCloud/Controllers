@@ -88,7 +88,7 @@ public sealed class CorpusCapabilitiesTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo("corpus-capabilities/3"));
+            Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo("corpus-capabilities/4"));
             Assert.That(root.GetProperty("controller").GetString(), Does.Match("^[0-9]+[.][0-9]+[.][0-9]+"));
             Assert.That(root.GetProperty("benchmark_unit").GetString(), Is.EqualTo(CorpusBenchmark.UNIT));
             Assert.That(root.GetProperty("stages").GetProperty("verified").GetBoolean(), Is.True);

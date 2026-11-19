@@ -128,7 +128,7 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
             Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(perShard), "the largest shard, half of it again for its products, 64 MiB");
             Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(ShardDisk.Needed(largest)), "what a node asks of its own disk before it fetches");
             Assert.That(report.Messages, Has.Some.StartsWith("Node disk: a node holds at most its degree and 2 more shards at a time").And.Contains($"Each held shard needs {perShard} bytes free"));
-            Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a node that fails or falls silent has its whole share fetched again by other nodes. The allowance is not a bound: a sampled shard whose two copies disagree is fetched again by up to 3 machines (a dispute: at most 1 shard(s) here), and a shard a node returns as a fault of its own is fetched once more (a repair); the report's counters (repairs, disputes) say what a run added."));
+            Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a node that fails or falls silent has its whole share fetched again by other nodes. The allowance is not a bound: a shard whose two copies disagree is fetched again by up to 3 machines (a dispute; 1 shard(s) are sampled here), and a shard a node returns as a fault of its own is fetched again by 2 machines (a repair); the report's counters (repairs, disputes) say what a run added."));
         });
     }
 
@@ -248,7 +248,7 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
 
             Assert.Multiple(() =>
             {
-                Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/6"));
+                Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/7"));
                 Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));
                 Assert.That(summary.GetProperty("disputes_resolved").GetInt32(), Is.EqualTo(summary.GetProperty("signature_mismatches").GetInt32()), "three machines ran each such shard again, and two of them are honest");
                 Assert.That(summary.GetProperty("signature_mismatches").GetInt32(), Is.GreaterThanOrEqualTo(1), "the dishonest node held a side of at least one pair");

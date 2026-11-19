@@ -11,8 +11,9 @@ namespace OutWit.Controller.AI.Corpus.Tests.Mock;
 /// dishonest. What a node returns is an answer: a reference to a blob of results.
 /// <see cref="Tamper"/> sees every shard result of every answer a node returns (the answer is
 /// then written anew, as that node would have written it), <see cref="Rewrite"/> replaces a whole
-/// answer, and <see cref="Twice"/> makes a node return an answer once more than its tasks asked
-/// for. All sit where a node's answer reaches Grid, so Grid sees what a dishonest node would send
+/// answer, <see cref="Twice"/> makes a node return an answer once more than its tasks asked
+/// for, and <see cref="Null"/> makes it return a value that is no answer under the name its task
+/// asked for. All sit where a node's answer reaches Grid, so Grid sees what a dishonest node would send
 /// it. The manager also measures what travels: the Corpus values a task carries to a node as
 /// parameters and the ones that come back as return values, in the wire's own encoding.
 /// </summary>
@@ -127,6 +128,13 @@ internal sealed class CorpusTestNodesManager : IWitNodesManager
                 continue;
             }
 
+            // A value of the right type and name that holds nothing: what the wire can carry.
+            if (Null != null && Null(nodeId, answer))
+            {
+                bent.Add(new WitVariableCorpusResultPackage(variable.Name, null));
+                continue;
+            }
+
             if (Tamper != null && answer.ResultsBlobId != Guid.Empty)
             {
                 // The node's results, changed and written as that node would have written them.
@@ -230,6 +238,13 @@ internal sealed class CorpusTestNodesManager : IWitNodesManager
     /// more, after every answer of the node's call. Null for nodes that return one value for each task.
     /// </summary>
     public Func<Guid, CorpusResultPackageData, bool>? Twice { get; set; }
+
+    /// <summary>
+    /// Makes a node answer a task with nothing: an answer this says true for is replaced by a
+    /// null value under the return variable its task asked for. It is asked of every answer of
+    /// every node, before anything else is done to the answer. Null for nodes that answer.
+    /// </summary>
+    public Func<Guid, CorpusResultPackageData, bool>? Null { get; set; }
 
     /// <summary>Whether a node starts the tasks of a batch together, as a client does (false: one after another).</summary>
     public bool StartTogether { get; set; }

@@ -32,8 +32,9 @@ public sealed record CorpusTrafficEstimate(long OnceBytes, long CopyBytes, int S
     /// <summary>
     /// The share of the fetches added for what a run fetches more than once without anything being
     /// wrong with the manifest: an attempt that starts over when the origin does not continue a
-    /// broken body, a shard a node returned as a fault of its own (fetched once more), a sampled
-    /// shard whose copies disagreed (fetched by up to three more machines). A tenth: an allowance,
+    /// broken body, a shard a node returned as a fault of its own (fetched once more, by two
+    /// machines when the run samples), a shard whose copies disagreed (fetched by up to three more
+    /// machines). A tenth: an allowance,
     /// not a bound — a node that loses its whole share has it fetched again elsewhere.
     /// </summary>
     public const double RETRY_ALLOWANCE = 1.0 / RETRY_ALLOWANCE_DIVISOR;
@@ -115,12 +116,15 @@ public sealed record CorpusTrafficEstimate(long OnceBytes, long CopyBytes, int S
     /// <returns>The preflight's second line on traffic.</returns>
     public string DescribeRounds()
     {
+        // A run that samples sends a shard out again on two machines, and such a pair can
+        // disagree like a sampled one: no count of the sampled shards bounds the disputes.
         var line = "Not in the traffic estimate: a node that fails or falls silent has its whole share fetched again by other nodes. " +
                    "The allowance is not a bound: " +
                    (SampledShards > 0
-                       ? $"a sampled shard whose two copies disagree is fetched again by up to {Trust.CorpusLedger.DISPUTE_COPIES} machines (a dispute: at most {SampledShards} shard(s) here), and "
-                       : "") +
-                   "a shard a node returns as a fault of its own is fetched once more (a repair); the report's counters (repairs, disputes) say what a run added.";
+                       ? $"a shard whose two copies disagree is fetched again by up to {Trust.CorpusLedger.DISPUTE_COPIES} machines (a dispute; {SampledShards} shard(s) are sampled here), and " +
+                         $"a shard a node returns as a fault of its own is fetched again by {Trust.CorpusLedger.REPAIR_COPIES} machines (a repair)"
+                       : "a shard a node returns as a fault of its own is fetched once more (a repair)") +
+                   "; the report's counters (repairs, disputes) say what a run added.";
 
         if (ModelBytesPerNode > 0 && Nodes == 0)
             line += string.Create(CultureInfo.InvariantCulture, $" The number of nodes is not known here: every node that takes part also downloads the language model once ({ModelBytesPerNode} bytes).");

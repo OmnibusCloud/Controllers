@@ -31,6 +31,10 @@ internal sealed class WitActivityAdapterCorpusRepairs : WitActivityAdapterFuncti
             if (ledger.PendingRepairs > 0)
                 Logger.LogWarning("Corpus.Repairs: {Count} shard(s) came back without a result ({Faults} node fault(s), {Rejected} value(s) dropped); they are sent out once more.", ledger.PendingRepairs, ledger.NodeFaults, ledger.RejectedResults);
 
+            // A fan-out that came back short: packages nobody answered at all.
+            if (ledger.FirstRound.Unanswered > 0)
+                Logger.LogWarning("Corpus.Repairs: {Unanswered} of the {Packages} package(s) of the first round were not answered.", ledger.FirstRound.Unanswered, ledger.FirstRound.Packages);
+
             // The run is read once more, a shard at a time, and its tasks go straight into packages.
             return await CorpusRounds.PackagesAsync(BlobService, ledger.EnumerateRepairTasks(), ledger.PendingRepairs);
         });

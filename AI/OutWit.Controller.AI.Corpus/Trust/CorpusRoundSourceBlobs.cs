@@ -55,6 +55,7 @@ public sealed class CorpusRoundSourceBlobs : CorpusRoundSource
 
         Shards = packages.Sum(package => package.Reference.ShardCount);
         Missing = packages.Sum(package => Math.Max(0, Asked - package.Returned));
+        Answers = CorpusRoundAnswers.Of(packages.Select(package => package.Returned));
     }
 
     #endregion
@@ -283,6 +284,9 @@ public sealed class CorpusRoundSourceBlobs : CorpusRoundSource
 
     /// <inheritdoc />
     public override int Missing { get; }
+
+    /// <inheritdoc />
+    public override CorpusRoundAnswers Answers { get; }
 
     #endregion
 

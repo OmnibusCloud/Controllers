@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Controller.AI.Corpus.Reports;
+using OutWit.Controller.AI.Corpus.Trust;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -14,6 +15,9 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
     #region Constants
 
     private const string BLOB_NAME = "corpus-integrity.json";
+
+    /// <summary>The arguments that name the rounds: the tasks and the answers of each of the three.</summary>
+    private const int ROUND_PARAMETERS = 6;
 
     #endregion
 
@@ -34,7 +38,10 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
     {
         var blobId = await CorpusRounds.HostAsync("Corpus.Integrity", async () =>
         {
-            var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved);
+            var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved, activity.Options);
+
+            if (ledger.Sampling.State is CorpusSampling.STATE_SHORT or CorpusSampling.STATE_NONE)
+                Logger.LogWarning("Corpus.Integrity: {Statement}", ledger.Sampling.Statement);
 
             // The pairs grow with the manifest (a share of its shards): written as they are read.
             return await CorpusDocuments.UploadAsync(BlobService, TempStorage, BLOB_NAME, stream => CorpusIntegrityWriter.Write(ledger, stream));
@@ -52,11 +59,13 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
     {
         try
         {
-            if (parameters.Length != 6)
-                throw new ArgumentException($"Expected 6 parameter(s), got {parameters.Length}.");
+            // The run's options are the last argument since 0.7.0; a script written for an earlier
+            // controller hands six, and its document says the sampling asked for is not known.
+            if (parameters.Length is not (ROUND_PARAMETERS or ROUND_PARAMETERS + 1))
+                throw new ArgumentException($"Expected {ROUND_PARAMETERS} or {ROUND_PARAMETERS + 1} parameter(s), got {parameters.Length}.");
 
-            var references = new IWitReference[6];
-            string[] names = ["Tasks", "Executions", "Repairs", "Repaired", "Disputes", "Resolved"];
+            var references = new IWitReference[parameters.Length];
+            string[] names = ["Tasks", "Executions", "Repairs", "Repaired", "Disputes", "Resolved", "Options"];
             for (var index = 0; index < references.Length; index++)
                 references[index] = parameters[index] as IWitReference ?? throw new ArgumentException($"Parameter '{names[index]}' must be a variable reference.");
 
@@ -67,7 +76,8 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
                 Repairs = references[2],
                 Repaired = references[3],
                 Disputes = references[4],
-                Resolved = references[5]
+                Resolved = references[5],
+                Options = references.Length > ROUND_PARAMETERS ? references[ROUND_PARAMETERS] : null
             };
         }
         catch (Exception e)

@@ -26,16 +26,31 @@ internal static class CorpusRounds
     /// <param name="repaired">What the repair round returned.</param>
     /// <param name="disputes">The dispute round's task packages; null when the caller is before that round.</param>
     /// <param name="resolved">What the dispute round returned.</param>
+    /// <param name="options">The run's options, for the sampling the run asked for; null when the caller's script hands it none (the documents then say the rate is not known).</param>
     /// <returns>The ledger.</returns>
     /// <exception cref="InvalidOperationException">The job's task packages or the first round's answers are not in the pool, or are not the ones this controller wrote.</exception>
-    public static async Task<CorpusLedger> LedgerAsync(IWitBlobService blobs, IWitVariablesCollection pool, IWitReference? tasks, IWitReference? executions, IWitReference? repairs = null, IWitReference? repaired = null, IWitReference? disputes = null, IWitReference? resolved = null)
+    public static async Task<CorpusLedger> LedgerAsync(IWitBlobService blobs, IWitVariablesCollection pool, IWitReference? tasks, IWitReference? executions, IWitReference? repairs = null, IWitReference? repaired = null, IWitReference? disputes = null, IWitReference? resolved = null, IWitReference? options = null)
     {
         var first = await CorpusRoundSourceBlobs.OpenAsync(CorpusRoundKind.First, Items(Required(pool, tasks, "Tasks")), Items(Required(pool, executions, "Executions")), blobs);
         var repair = await RoundAsync(blobs, pool, CorpusRoundKind.Repair, repairs, repaired);
         var dispute = await RoundAsync(blobs, pool, CorpusRoundKind.Dispute, disputes, resolved);
+        var rate = SamplingRate(pool, options);
 
         // The first reading of the run, for its counts: off the caller's thread.
-        return await Task.Run(() => CorpusLedger.Build(ControllerBuildInfo.VERSION, first, repair, dispute));
+        return await Task.Run(() => CorpusLedger.Build(ControllerBuildInfo.VERSION, first, repair, dispute, rate));
+    }
+
+    /// <summary>The share of the packages the run asked to run twice, as the script's options state it.</summary>
+    /// <param name="pool">The script's variables.</param>
+    /// <param name="options">The reference to the run's options; null when the script hands none.</param>
+    /// <returns>0 to 1 (options that are not set ask for nothing); null without a reference.</returns>
+    public static double? SamplingRate(IWitVariablesCollection pool, IWitReference? options)
+    {
+        if (options == null)
+            return null;
+
+        pool.TryGetValue(options, out CorpusOptionsData? data);
+        return CorpusSampling.RateOf(data);
     }
 
     /// <summary>Writes a round's tasks into task packages.</summary>

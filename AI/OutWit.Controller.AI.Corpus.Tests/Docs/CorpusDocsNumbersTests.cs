@@ -115,7 +115,7 @@ public sealed class CorpusDocsNumbersTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(activities, Has.Count.EqualTo(11), string.Join(", ", activities));
+            Assert.That(activities, Has.Count.EqualTo(12), string.Join(", ", activities));
             Assert.That(Readme, Does.Contain($"wired into {Spelled(activities.Count)} activities"));
             Assert.That(inReadme, Is.EqualTo(activities), "README.md names every activity and none that is not one");
 
@@ -138,6 +138,7 @@ public sealed class CorpusDocsNumbersTests
             .Concat(CorpusLedger.REJECTION_REASONS)
             .Concat(CorpusLedger.NO_RESULT_REASONS)
             .Concat(CorpusLedger.DISPUTE_OUTCOMES)
+            .Concat(CorpusSampling.STATES)
             .Concat(ShardBatchRefusedException.CODES)
             .Concat(CorpusDedupExclusion.REASONS)
             .Concat(ShardDropRules.ALL.Select(rule => rule.Rule))
@@ -343,6 +344,7 @@ public sealed class CorpusDocsNumbersTests
             3 => "three",
             4 => "four",
             11 => "eleven",
+            12 => "twelve",
             _ => throw new InvalidOperationException($"The documents have no word for {count}: write it, and its case here.")
         };
     }

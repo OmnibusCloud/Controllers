@@ -28,7 +28,7 @@ public sealed class CorpusReportWriterTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo("corpus-report/4"));
+            Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo("corpus-report/5"));
             Assert.That(root.GetProperty("controller").GetString(), Is.EqualTo(CorpusTestRun.VERSION));
             Assert.That(shards.Select(s => s.GetProperty("index").GetInt32()), Is.EqualTo(new[] { 0, 1, 2 }));
             Assert.That(shards.Select(s => s.GetProperty("url").GetString()), Is.EqualTo(tasks.Select(task => task.Source!.Url)));

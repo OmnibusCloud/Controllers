@@ -11,7 +11,7 @@ Every number on this page is a constant of the code or was measured, in the cont
 or on a test fleet; the [README](../README.md) explains how things work inside, and the JSON
 schemas in this folder are the documents' contracts.
 
-Version described: **Corpus 0.6.0** (Model 0.2.0, Scripts 0.1.5). Corpus 0.2.1 is proven on a
+Version described: **Corpus 0.7.0** (Model 0.2.0, Scripts 0.1.6). Corpus 0.2.1 is proven on a
 six-node test fleet (Windows, Linux, macOS); 0.3.0 added what an application's studio needs
 (sections 4, 6 and 8); 0.4.0 was the first hardening release — what the server accepts from a
 node, what a run does when nodes disagree or fail, what hostile input costs, and what a lab can
@@ -21,7 +21,12 @@ and cannot read off a document (sections 7, 9, 11 and 12) — and is proven on t
 test fleet too; 0.6.0 is the third and moves no product: the module carries the licence notices
 of what it redistributes (section 14), a line a node's log cannot take no longer decides a
 shard's fate (section 12), and a shard that stops inside a header line is truncated, not
-malformed (sections 5 and 7). What changed for an application is listed in section 14. 0.6.0 has not run on the build server or on the fleet yet. Nothing is on
+malformed (sections 5 and 7), and gave the same products on the test fleet; 0.7.0 is the fourth
+and moves no product either: a result frame is walked before it is decoded and a result's
+counters are held to the bytes of its shard (sections 9 and 11), a shard that goes out again goes
+out on two machines when the run asked for sampling, and both documents state the sampling that
+was asked for and how each round came back (sections 6 and 9). What changed for an application is
+listed in section 14. 0.7.0 has not run on the fleet yet. Nothing is on
 nuget.org or on the live network yet.
 
 ## Contents
@@ -127,20 +132,22 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
     CorpusResultPackageCollection:executions = Grid.ForEach(package in tasks, checked)
         => Corpus.ProcessPackage(package);
     CorpusTaskPackageCollection:repairs = Corpus.Repairs(tasks, executions);
-    CorpusResultPackageCollection:repaired = Grid.ForEach(package in repairs)
+    Double:again = Corpus.RepairRate(opts);
+    ProcessingOptions:rechecked = Grid.Replicas(2, again);
+    CorpusResultPackageCollection:repaired = Grid.ForEach(package in repairs, rechecked)
         => Corpus.ProcessPackage(package);
     CorpusTaskPackageCollection:disputes = Corpus.Disputes(tasks, executions, repairs, repaired);
     ProcessingOptions:majority = Grid.Replicas(3);
     CorpusResultPackageCollection:resolved = Grid.ForEach(package in disputes, majority)
         => Corpus.ProcessPackage(package);
     Blob:report = Corpus.Collect(tasks, executions, repairs, repaired, disputes, resolved, opts);
-    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved);
+    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, opts);
 }
 ```
 
 Every collection of the script holds references to blobs: the tasks and the results travel in
-packages (section 10). The second and third fan-outs run over nothing when a run goes well
-(section 9).
+packages (section 10). The second and third fan-outs run over nothing when a run goes well; a
+shard of the second runs on two machines when the run asked for sampling (section 9).
 
 Pass an empty blob (`Guid.Empty`) as `languageModel` when the pipeline's `identify_language` is
 `false`.
@@ -154,9 +161,10 @@ Pass an empty blob (`Guid.Empty`) as `languageModel` when the pipeline's `identi
 | `Corpus.ProcessPackage` | node | a task package start to finish: the checks a node makes before a batch (its version, its PDF sandbox, room on its disk), the package's blob held to its reference, then for every shard the origin re-check, the pinned pack, the fetch capped by the job's cap and the shard's declared size, the stages, the uploads (none under statistics and hashes only); the results go into one blob whose reference is returned. A shard's result is a verdict on the shard or a node fault (section 7) |
 | `Corpus.SamplingRate` | server | the options' `SamplingRate` clamped to 0..1 |
 | `Corpus.Repairs` | server | the shards the first round left without a result, as new tasks in new packages |
-| `Corpus.Disputes` | server | the shards whose copies disagree, as new tasks in new packages for three machines |
+| `Corpus.RepairRate` | server | the share of the repair round's packages that run on two machines: 1 when the options' `SamplingRate` is above 0, else 0 |
+| `Corpus.Disputes` | server | the shards whose copies disagree (in the first round or in the repair round), as new tasks in new packages for three machines |
 | `Corpus.Collect` | server | the report, from the server's account of every round |
-| `Corpus.Integrity` | server | the integrity document, from the same account |
+| `Corpus.Integrity` | server | the integrity document, from the same account; the run's options are its last argument (without them the document's `sampling.state` is `unknown`) |
 | `Corpus.Dedup` | server | the near-duplicate merge |
 | `Corpus.RuntimeDiagnostics` | server | the module's diagnostics |
 | `Corpus.Capabilities` | server | the capabilities document |
@@ -174,7 +182,7 @@ Pass an empty blob (`Guid.Empty`) as `languageModel` when the pipeline's `identi
 
 `CorpusPreflight` answers without fetching a shard (section 8). `CorpusRuntimeDiagnostics` returns
 the module's diagnostics and the `capabilities` document (schema
-[`corpus-capabilities.schema.json`](corpus-capabilities.schema.json), `corpus-capabilities/3`):
+[`corpus-capabilities.schema.json`](corpus-capabilities.schema.json), `corpus-capabilities/4`):
 
 | Field | What it holds |
 |---|---|
@@ -190,7 +198,7 @@ the module's diagnostics and the `capabilities` document (schema
 | `signatures` | the default MinHash parameters and the bytes of one document's signature |
 | `drop_rules` | every drop rule with the stage that applies it, in the order a document meets them |
 | `casing` | the Unicode version and the hash of the lower-case table the language and signature stages use (section 9) |
-| `trust` | the copies a sampled shard runs in (2), the machines of a dispute (3) and its quorum (2); the outcomes `Disputed` and `NoResult` with the reasons of the latter; and every fixed word a document may carry in place of a text: `verdict_codes` per verdict, `fault_codes`, `rejection_reasons`, `dispute_outcomes`, `batch_refusals`, `dedup_exclusions` (sections 7 and 9) |
+| `trust` | the copies a sampled shard runs in (2), the machines a shard goes to when it goes out again in a run that samples (`repair_copies`, 2), the machines of a dispute (3) and its quorum (2); the outcomes `Disputed` and `NoResult` with the reasons of the latter; and every fixed word a document may carry in place of a text: `verdict_codes` per verdict, `fault_codes`, `rejection_reasons`, `dispute_outcomes`, `sampling_states`, `batch_refusals`, `dedup_exclusions` (sections 7 and 9) |
 | `products` | each product's file, schema and the output modes that keep it |
 | `storage` | the measured ratios of the storage estimate, what a task and a result cost in a package, the deployment's headroom and retention window when stated |
 | `pool` | the fleet as totals: `nodes`, `measured`, `workers` (when every measured node reports its degree), `rate` (MB of WET per second). No node is ever named |
@@ -435,10 +443,10 @@ from one constant through splitmix64) each keeping its minimum.
 |---|---|---|---|
 | `text.jsonl.zst` | shard execution | `full` | JSON lines, below |
 | `signatures.bin` | shard execution | `full` | binary, below |
-| `corpus-report.json` | run | both | [`corpus-report.schema.json`](corpus-report.schema.json), `corpus-report/4` |
-| `corpus-integrity.json` | run | both | [`corpus-integrity.schema.json`](corpus-integrity.schema.json), `corpus-integrity/6` |
+| `corpus-report.json` | run | both | [`corpus-report.schema.json`](corpus-report.schema.json), `corpus-report/5` |
+| `corpus-integrity.json` | run | both | [`corpus-integrity.schema.json`](corpus-integrity.schema.json), `corpus-integrity/7` |
 | `corpus-dedup.json` | dedup run | `full` | [`corpus-dedup.schema.json`](corpus-dedup.schema.json), `corpus-dedup/2` |
-| `corpus-capabilities.json` | diagnostics run | — | [`corpus-capabilities.schema.json`](corpus-capabilities.schema.json), `corpus-capabilities/3` |
+| `corpus-capabilities.json` | diagnostics run | — | [`corpus-capabilities.schema.json`](corpus-capabilities.schema.json), `corpus-capabilities/4` |
 
 **Text.** zstd-compressed JSON lines, one per document that passed every stage,
 `{"url","lang","text"}` in that order; `lang` is "" when the language stage is off; a PDF's
@@ -477,6 +485,29 @@ sums them over the accepted results and adds:
   `lines`, `quality`. `extracted − dropped.language − dropped.lines − dropped.quality = out`;
 - `output`: `full` or `stats_and_hashes`;
 - `minhash`: the parameters of the run's signatures, when the shards have any.
+
+Beside the summary stand two objects the integrity document carries too, in the same words:
+
+- `sampling`: `rate` (the share of the packages the run asked to run on two machines, 0 to 1;
+  null when the script did not hand the run's options to the activity), `packages` (the task
+  packages of the first round), `asked_twice` (the packages that share comes to: rounded up, one
+  at least when the rate is above 0), `answered_twice` (the packages two answers or more came
+  back for), `compared` (the shards whose two results of the first round were compared), `state`
+  and `statement`. `state` is one word: `not_asked` (the run asked for no second execution),
+  `as_asked` (as many packages came back twice as were asked for, and shards were compared),
+  `short` (fewer came back twice: some of the checking did not happen), `none` (second executions
+  were asked for and no shard was compared: the checking did not happen), `unknown` (the rate is
+  not known to the activity). `statement` says the same in a sentence, with the numbers in it;
+- `rounds`: `first`, `repair` and `dispute`, each with `packages` (the task packages that went
+  out), `answers` (the answers that came back under their tickets), and the packages by the
+  answers each got: `unanswered`, `answered_once`, `answered_twice`, `answered_thrice`,
+  `answered_more`. A round that was not run has zeros. An answer is counted whatever it held (a
+  node's fault and an unreadable blob are answers); what the answers were worth is in the
+  counters and the lists.
+
+A run whose first round came back short therefore says so, whatever its other numbers are: with
+every answer of the first round lost, `sampling.state` is `none` and `rounds.first.unanswered` is
+the number of its packages.
 
 The funnel needs no second pass and no new counter: it is the drop histogram summed by stage, so
 an application can draw the same funnel for one shard from its `drops` with the capabilities'
@@ -694,24 +725,44 @@ Integrity — what the server accepts from a node, and what a run does when node
   dropped and counted by reason (`rejected_results`; the integrity document's `rejected`, every
   reason written, 0 included): `unknown_ticket` (under no ticket of this job and round: an
   answer under no package ticket is not opened at all), `unreadable` (no result, or not shaped as
-  an honest node shapes one; an answer whose blob is missing, damaged, larger than an answer may
-  be or holds more results than its package had shards), `version` (another controller version
-  than the server's), `content` (not what its task asked for: another shard's index or URL under
-  this ticket, at odds with the task's pipeline, or more bytes fetched than the shard was held
+  an honest node shapes one, counters the bytes of its shard cannot hold among it; a frame in
+  which a length or a count points outside the frame or past the bound of its kind, which is not
+  handed to the decoder; an answer whose blob is missing, damaged, will not open, is larger than
+  an answer may be or holds more results than its package had shards), `version` (another
+  controller version than the server's), `content` (not what its task asked for: another shard's
+  index or URL under this ticket, at odds with the task's pipeline, PDF counts where the task
+  runs no PDF stage, or more bytes fetched than the shard was held
   to), `surplus` (more values under one ticket than its round takes: an answer beyond the ones a
   round opens for a package, a second result for one shard in one answer; see *Two machines, not
   two values*). The words are the Verify controller's. Its `duplicate` (one results blob returned
   twice) has no counterpart in Corpus: two answers that name one blob are two answers, counted as
-  any two under one ticket. A value that is dropped fails that value, never the run. A node
+  any two under one ticket. A value that is dropped fails that value, never the run, and so does
+  whatever fails while an answer is read. A node
   knows only its own tickets, so it cannot answer for a shard it never had; a ticket is never
   written into a document.
+- **What a result's counters are held to.** The sums of a result agree among themselves (the
+  funnel), and its counts are held to what the server knows of the shard: no more records than
+  the bytes it says it fetched can unpack to (a record takes 24 bytes of the unpacked file at
+  the least, so 2,796,202 records for a shard of up to 2 MiB and 715,827,882 for the largest), a
+  document for each record that is no PDF, and for the PDF stage a PDF for a record, a page and
+  a document at least for each PDF that gave text, no more documents than pages, no more pages
+  cut than documents. Within these bounds a node still says what it likes of a shard nobody else
+  ran: they keep a count from being absurd, not from being false. The report's sums are kept in
+  64 bits and stop at the largest number.
 - **Sampling.** `SamplingRate` runs that share of the shards twice, in the same fan-out as the
   rest. The platform picks the shards at random and keeps the two executions on different
   machines, so a node cannot tell whether its shard is being checked. A shard that is not sampled
   rests on one machine's word, and `single_execution` says how many do: on an unsampled shard a
   node can return anything an honest node could have returned for some shard. Raise the rate for
   what must be checked.
-- **The comparison.** `corpus-integrity.json` (`corpus-integrity/6`) pairs the copies and compares
+- **What was asked and what came back.** The platform does not say which packages it picked, so
+  the server counts: `sampling` (section 6) states the rate the run asked for, how many packages
+  that comes to, how many came back with a second answer and how many shards were compared, and
+  says in a word whether the checking happened (`as_asked`, `short`, `none`, `not_asked`;
+  `unknown` when the script did not hand the options over); `rounds` states for every round the
+  packages that went out and the answers that came back. A first round that lost its answers
+  cannot pass for a run that was checked.
+- **The comparison.** `corpus-integrity.json` (`corpus-integrity/7`) pairs the copies and compares
   what an honest node cannot vary: the verdict, the content hash, the signatures hash, the
   document counts, the drop histogram with the unsupported breakdown, the language histogram, the
   PDF counts (not the fuel: a cost, compared through the documents it produced). `differs` names
@@ -719,19 +770,30 @@ Integrity — what the server accepts from a node, and what a run does when node
   own kind (`signatures` in `differs`, `signature_mismatches`), and the near-duplicate merge holds
   each blob to the hash that was compared (section 6). A pair whose sides made no signature has
   `signatures: none`. A pair with a side that is no result (a node fault, a dropped value) is
-  `incomplete`, not compared. `version_skew` is kept for readers of `/4` and is always 0: a node
+  `incomplete`, not compared. `pairs` holds the pairs of the first round and of the repair round
+  (`round`: `first` or `repair`). The summary's `sampled`, `compared`, `incomplete`, `mismatches`
+  and `mismatch_rate` count the first round's, which are the run's sample; the repair round's
+  are counted apart (`repair_pairs`, `repair_compared`, `repair_mismatches`). `version_skew` is
+  kept for readers of `/4` and is always 0: a node
   can no longer leave the comparison by the version it claims.
 - **Disputes.** The server never chooses between two copies by what a node says (0.3.0 took the
   lowest content hash). Copies that disagree are run again on three machines; the result returned
   by the most of them, two at least and with no tie, is accepted, and otherwise the shard is
   `Disputed`: named in the report, out of the counters and the products. The integrity document's
   `disputes` lists what the three returned and how each dispute ended (`outcome`, beside
-  `first_copies`, `copies` and `agreeing`): `resolved`; `no_majority` (no result was returned by
+  `first_copies`, `repair_copies`, `copies` and `agreeing`): `resolved`; `no_majority` (no result was returned by
   more copies than any other, and by two at least); `too_few_copies` (fewer than two copies came
   back with a verdict); `surplus_copies` (below).
 - **Repairs.** A shard a node returned as a fault of its own, or returned nothing acceptable for,
   is sent out once more; still without a result it is `NoResult` with its reason (`node_fault` or
   `no_answer`). The integrity document's `no_result` lists them with the fault codes met.
+  When the run asked for sampling at all (`SamplingRate` above 0), every shard of the repair
+  round goes to two machines (`Corpus.RepairRate`): the server cannot tell a package that was
+  picked for a second machine and lost both answers from one that was never picked, so a round
+  that came back short keeps its checking only if every shard that goes out again goes out
+  twice. The two copies are compared as a sampled pair is: agreeing, they are accepted
+  (`executions: 2`); disagreeing, the shard goes to the dispute round. A run that asked for no
+  sampling repairs on one machine.
 - **Two machines, not two values.** The server sees values, not machines: the platform keeps the
   copies of a package on different machines and hands over what they returned without saying
   which task each answer was for; the copies of a package carry one ticket, and so do the copies
@@ -741,11 +803,12 @@ Integrity — what the server accepts from a node, and what a run does when node
   most for each return variable its tasks asked for. With an older Grid a node could return
   several answers for one task and this ruling would count them as machines. A machine can still
   spend a slot it holds on another ticket it holds, which leaves that one an answer short. Of the
-  answers under a package's ticket a round opens one more than it asked for (three, two, four),
+  answers under a package's ticket a round opens one more than it asked for (three, three, four),
   so that one too many is seen; any further is counted as `surplus` and not read. Then:
   - in the first round more than two values under a shard's ticket send the shard to a dispute;
-  - in the repair round (one machine, one value) more than one value under the ticket means none
-    is taken: each is counted as `surplus` and the shard is `NoResult`;
+  - the repair round is ruled as the first (two machines at the most): values that disagree, or
+    more than two under the ticket, send the shard to a dispute (up to 0.6.0 the round asked one
+    machine, and two values under its ticket left the shard `NoResult`);
   - in the dispute round more than three values under the ticket mean none is taken: each is
     counted as `surplus` and the dispute ends as `too_few_copies`. Otherwise the leading result
     must have been returned by two machines: of its values, as many as the other packages of the
@@ -757,7 +820,8 @@ Integrity — what the server accepts from a node, and what a run does when node
   dispute was returned by an honest machine; three machines that agree still settle their shard
   when another package of the round lost a copy.
 - **Cost.** A run that goes well runs no extra round. A disputed shard is fetched again by up to
-  three machines, a repaired one once more; the traffic estimate's allowance (a tenth of the
+  three machines, a repaired one once more (by two machines when the run samples); the traffic
+  estimate's allowance (a tenth of the
   fetches) is for these, and the preflight says that it is not a bound.
 - Under statistics and hashes only the copies are compared exactly the same way: the signatures
   are made and hashed on the node, not kept.
@@ -849,9 +913,10 @@ stage's included.
 | PDF | section 5 |
 | MinHash | 1 to 1,024 hashes, 1 to 32 shingle words, bands dividing the hashes |
 | dedup | 4,000,000 documents at 128 hashes (512 million signature values, about 4 GB; fewer documents with more hashes), asked of the report before a blob is read; a report of 4 GiB at most (4,096 bytes for each shard a job may have), read a shard at a time; 100,000 clusters listed |
-| sampling | 0 to 1; one copy per sampled shard, on another machine; three machines for a disputed shard |
-| a result from a node | bounded strings, hashes of 64 hexadecimal digits, a code of the fixed list, counters that add up; anything else is dropped (`unreadable`) |
-| an answer from a node | bound to a package by its ticket before it is opened; one more answer opened than the round asked for; 128 KiB a result at the most; one value a shard |
+| sampling | 0 to 1; one copy per sampled shard, on another machine; a shard that goes out again on two machines when the rate is above 0; three machines for a disputed shard |
+| a result from a node | bounded strings, hashes of 64 hexadecimal digits, a code of the fixed list, counters that add up and that the bytes of the shard can hold (24 bytes a record at the least; a document for each record that is no PDF; the PDF counts at one with one another); anything else is dropped (`unreadable`) |
+| a result frame from a node | walked before it is decoded: every object the members its type has, every string's lengths inside the frame and within 4,096 characters, every list within the most its kind holds (the drop rules, 512 languages, 1,025 keys of the unsupported breakdown), nothing left over; anything else is dropped (`unreadable`) and never decoded |
+| an answer from a node | bound to a package by its ticket before it is opened; one more answer opened than the round asked for; 128 KiB a result at the most; one value a shard; whatever fails while it is read costs that answer |
 
 ## 12. What a lab sees and what never leaves the node
 
@@ -919,9 +984,9 @@ and a merge over the first 12 of the 24 shards finds 7,292: why no figure "so fa
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 0.6.0 | `OutWit.Controller.AI.Corpus` (GitHub Packages; nuget.org at 1.0.0) |
+| The controller | 0.7.0 | `OutWit.Controller.AI.Corpus` (GitHub Packages; nuget.org at 1.0.0) |
 | The wire types | 0.2.0 | `OutWit.Controller.AI.Corpus.Model`: the server restores it from the feed, so it is published before a controller that needs it |
-| The scripts | 0.1.5 | `OutWit.Controller.AI.Corpus.Scripts` |
+| The scripts | 0.1.6 | `OutWit.Controller.AI.Corpus.Scripts` |
 | The PDF extractor | pdftext 1.0.0 (pdf_oxide 0.3.78) | `corpus-pdftext-wasm.zip`, release `pdftext-v1.0.0` (5.9 MB, extracted to `wasm/` beside the controller) |
 | The sandbox engine | wasmtime binding 48.0.2 over the native library 48.0.8 | natives per platform, release `wasmtime-v48.0.8-2` (8 to 10 MB each; the libraries of 48.0.8 with the engine's third-party notices), the bytes Verify ships |
 | The reference language pack | `cc-2026-43-16` | a job input; built by `corpus-assets` from Common Crawl WET files and the rule data in `OutWit.Controller.AI.Corpus.Assets/languages/`. That rule data holds FineWeb-2's stop-word lists and repetition thresholds (Apache-2.0): `LICENSE-fineweb-2.txt` is beside the pack wherever the repository hands it out as a file, and the module's notices name the pack |
@@ -936,6 +1001,56 @@ LLVM-exception), FineWeb-2's stop-word lists (Apache-2.0) and the Unicode Charac
 `LICENSE-unicode.txt` and the controller's own `LICENSE.txt`: twelve files, held to that list by
 a test. The two data assets carry their own notices (`LICENSE-wasmtime.txt` and `NOTICE.txt`
 beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
+
+**What changed for an application in 0.7.0** (from 0.6.0):
+
+- **No product moved.** No stage changed and the stage set's fingerprint is the same: what
+  0.4.0 to 0.6.0 made a product of, 0.7.0 makes the same product of, byte for byte, with the
+  same content hashes, signatures hashes and verdicts. The wire types are those of 0.6.0
+  (Model 0.2.0). A job still runs on one controller version, so server and nodes move to 0.7.0
+  together.
+- **New schema versions: `corpus-report/5`, `corpus-integrity/7` and `corpus-capabilities/4`.**
+  The capabilities document gains `trust.repair_copies` and `trust.sampling_states`. The report
+  and the integrity document gain two
+  root objects, `sampling` and `rounds` (section 6). The integrity document also gains
+  `round` (`first` or `repair`) in every entry of `pairs`, `repair_copies` in every entry of
+  `disputes`, and three counters in its summary: `repair_pairs`, `repair_compared`,
+  `repair_mismatches`. Nothing was removed or renamed, and a shard's entry in the report is as
+  it was. `Corpus.Dedup` reads a report of `/5` and of every earlier schema.
+- **The words of `sampling.state`:** `not_asked`, `as_asked`, `short`, `none`, `unknown`. An
+  application that shows a run's integrity should show this word (or `statement`, the same in
+  a sentence): `short` and `none` mean that checking the run asked for did not happen, whatever
+  the other counters say. A pool of one machine ends as `none` for any rate above 0.
+- **A repaired shard may rest on two executions.** With `SamplingRate` above 0 every shard of
+  the repair round runs on two machines. Such a shard has `executions: 2` when its copies
+  agree, is in `pairs` with `round: repair`, and goes to the dispute round when they disagree
+  (0.6.0 repaired on one machine, and two values under a repair ticket left the shard
+  `NoResult`). So `disputes` may now hold a shard whose `first_copies` is 0 or 1, with its
+  `repair_copies` beside it, and `single_execution` no longer counts the repaired shards of a
+  sampled run that came back twice. With `SamplingRate` 0 nothing changes.
+- **The scripts are 0.1.6 and need a controller of 0.7.0:** `CorpusProcess` has two more
+  variables (`again`, `rechecked`), calls the new activity `Corpus.RepairRate` and hands the
+  options to `Corpus.Integrity` as a seventh argument. Its inputs and its outputs (`report`,
+  `integrity`) are unchanged. A script written for 0.6.0 still runs on a 0.7.0 controller
+  (`Corpus.Integrity` takes six arguments or seven): its repair round stays on one machine and
+  its integrity document says `sampling.state: unknown`. The scripts' compatibility range, not
+  yet switched on, reads `[0.7.0, 2.0.0)`.
+- **A result can be dropped for more reasons, under the same words.** `unreadable` now also
+  covers a result frame whose lengths or counts point outside it (it is not decoded), an answer
+  whose file will not open, and a result whose counters the bytes of its shard cannot hold;
+  `content` also covers PDF counts for a task that runs no PDF stage. No reason is new, and
+  nothing an honest node returns is affected.
+- **A manifest with text that is no Unicode is reported, not thrown.** A string or a key with
+  the escape of half a surrogate pair, or with bytes that are not UTF-8, is a problem of the
+  manifest (`manifest: a string or a key is not Unicode text ...`) in the preflight's messages
+  and in the split's failure; before, it left both activities as an error of the JSON library.
+  `Corpus.Dedup` refuses such a report as it refuses any document that is no report.
+- **One preflight message changed its words** for a run that samples: `... The allowance is
+  not a bound: a shard whose two copies disagree is fetched again by up to 3 machines (a
+  dispute; N shard(s) are sampled here), and a shard a node returns as a fault of its own is
+  fetched again by 2 machines (a repair); ...`. For a run that does not sample it is as it was.
+- **The report's sums are 64-bit** (`pdf_*` in the summary were 32-bit) and stop at the largest
+  number instead of wrapping.
 
 **What changed for an application in 0.6.0** (from 0.5.0):
 

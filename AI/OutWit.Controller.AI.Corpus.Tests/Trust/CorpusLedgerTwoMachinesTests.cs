@@ -11,9 +11,9 @@ namespace OutWit.Controller.AI.Corpus.Tests.Trust;
 /// that returned them. The platform keeps one value for each task of a node's batch (Grid 1.3.0),
 /// so a machine cannot add values; it can still spend the slot of one task it holds on the ticket
 /// of another, which leaves the one short. These tests hold the ruling to that: a value counts
-/// towards two machines only as far as it cannot be such a second answer, and a ticket with more
-/// values than its round asked for settles nothing. In every scenario 'a' is the honest result
-/// and '0' the forged one.
+/// towards two machines only as far as it cannot be such a second answer, and in the dispute
+/// round a ticket with more values than the round asked for settles nothing. In every scenario
+/// 'a' is the honest result and '0' the forged one.
 /// </summary>
 [TestFixture]
 public sealed class CorpusLedgerTwoMachinesTests
@@ -177,52 +177,63 @@ public sealed class CorpusLedgerTwoMachinesTests
     #region Repairs
 
     [Test]
-    public void TwoAnswersToARepairAreNotTakenAndTheShardHasNoAnswerTest()
+    public void TwoAnswersToARepairThatAgreeAreAPairTest()
     {
-        // The repair round asks one machine for one value. Two came back: none is the answer,
-        // and the shard does not go on to a dispute its sender could then try to win.
+        // The repair round sends a shard to two machines when the run samples, so two values
+        // under its ticket are what it asked for: agreeing, they are accepted as a pair. (Up to
+        // 0.6.0 the round asked one machine, and two values left the shard without a result.)
         var tasks = CorpusTestRun.Tasks(1);
         var repairs = CorpusTestRun.Ledger(tasks, []).RepairTasks();
 
-        var ledger = CorpusTestRun.Ledger(tasks, [], (repairs, [CorpusTestRun.Completed(repairs[0], '0'), CorpusTestRun.Completed(repairs[0], '0')]));
+        var ledger = CorpusTestRun.Ledger(tasks, [], (repairs, [CorpusTestRun.Completed(repairs[0], 'a'), CorpusTestRun.Completed(repairs[0], 'a')]));
         using var report = JsonDocument.Parse(CorpusReportWriter.Write(ledger));
         using var integrity = JsonDocument.Parse(CorpusIntegrityWriter.Write(ledger));
         var shard = report.RootElement.GetProperty("shards")[0];
+        var summary = integrity.RootElement.GetProperty("summary");
 
         Assert.Multiple(() =>
         {
-            Assert.That(shard.GetProperty("verdict").GetString(), Is.EqualTo(CorpusReportWriter.VERDICT_NO_RESULT));
-            Assert.That(shard.GetProperty("reason").GetString(), Is.EqualTo(CorpusLedger.NO_RESULT_NO_ANSWER));
-            Assert.That(shard.GetProperty("text_blob").GetString(), Is.Empty);
-            Assert.That(ledger.Rejected, Is.EqualTo(new Dictionary<string, int> { [CorpusLedger.REJECTED_SURPLUS] = 2 }));
-            Assert.That(ledger.DisputeTasks(), Is.Empty, "it is no dispute");
-            Assert.That(ledger.Disputes, Is.Zero);
-            Assert.That(integrity.RootElement.GetProperty("rejected").GetProperty("surplus").GetInt32(), Is.EqualTo(2));
-            Assert.That(integrity.RootElement.GetProperty("no_result")[0].GetProperty("reason").GetString(), Is.EqualTo(CorpusLedger.NO_RESULT_NO_ANSWER));
-            Assert.That(integrity.RootElement.GetProperty("summary").GetProperty("repaired").GetInt32(), Is.Zero);
+            Assert.That(shard.GetProperty("verdict").GetString(), Is.EqualTo("Completed"));
+            Assert.That(shard.GetProperty("content_sha256").GetString(), Is.EqualTo(CorpusTestRun.Hash('a')));
+            Assert.That(shard.GetProperty("executions").GetInt32(), Is.EqualTo(2));
+            Assert.That(ledger.RejectedResults, Is.Zero, "nothing is surplus");
+            Assert.That(ledger.DisputeTasks(), Is.Empty);
+            Assert.That(ledger.SingleExecutions, Is.Zero);
+            Assert.That(summary.GetProperty("repaired").GetInt32(), Is.EqualTo(1));
+            Assert.That(summary.GetProperty("repair_pairs").GetInt32(), Is.EqualTo(1));
+            Assert.That(summary.GetProperty("repair_compared").GetInt32(), Is.EqualTo(1));
+            Assert.That(summary.GetProperty("repair_mismatches").GetInt32(), Is.Zero);
+            Assert.That(summary.GetProperty("sampled").GetInt32(), Is.Zero, "the first round's sample is counted apart");
+            Assert.That(integrity.RootElement.GetProperty("pairs")[0].GetProperty("round").GetString(), Is.EqualTo("repair"));
+            Assert.That(integrity.RootElement.GetProperty("pairs")[0].GetProperty("match").GetBoolean(), Is.True);
         });
     }
 
     [Test]
-    public void TwoAnswersToARepairAfterANodeFaultLeaveTheFaultAsTheReasonTest()
+    public void ARepairOfOneResultAndOneFaultIsOneMachinesWordTest()
     {
-        // The reason is what the nodes said: the first round's machine returned the shard as a
-        // fault of its own, and the repair round added nothing that was taken.
+        // Two machines were asked; one returned the shard as a fault of its own. The other's
+        // result stands, as one machine's word, and both faults are named.
         var tasks = CorpusTestRun.Tasks(1);
         var first = new object?[] { CorpusTestRun.Fault(tasks[0]) };
         var repairs = CorpusTestRun.Ledger(tasks, first).RepairTasks();
 
-        var ledger = CorpusTestRun.Ledger(tasks, first, (repairs, [CorpusTestRun.Completed(repairs[0], '0'), CorpusTestRun.Fault(repairs[0], CorpusResultCodes.FAULT_NETWORK)]));
+        var ledger = CorpusTestRun.Ledger(tasks, first, (repairs, [CorpusTestRun.Completed(repairs[0], 'a'), CorpusTestRun.Fault(repairs[0], CorpusResultCodes.FAULT_NETWORK)]));
+        using var integrity = JsonDocument.Parse(CorpusIntegrityWriter.Write(ledger));
         var shard = ledger.Shards.Single();
 
         Assert.Multiple(() =>
         {
-            Assert.That(shard.Outcome, Is.EqualTo(CorpusShardOutcome.NoResult));
-            Assert.That(shard.Reason, Is.EqualTo(CorpusLedger.NO_RESULT_NODE_FAULT));
-            Assert.That(shard.Faults, Is.EqualTo(new[] { CorpusResultCodes.FAULT_DISK }), "a fault that was dropped as surplus is nobody's word");
-            Assert.That(ledger.Rejected[CorpusLedger.REJECTED_SURPLUS], Is.EqualTo(2));
-            Assert.That(ledger.NodeFaults, Is.EqualTo(1));
+            Assert.That(shard.Outcome, Is.EqualTo(CorpusShardOutcome.Accepted));
+            Assert.That(shard.Copies, Is.EqualTo(1));
+            Assert.That(shard.Faults, Is.EqualTo(new[] { CorpusResultCodes.FAULT_DISK, CorpusResultCodes.FAULT_NETWORK }));
+            Assert.That(ledger.RejectedResults, Is.Zero);
+            Assert.That(ledger.NodeFaults, Is.EqualTo(2));
+            Assert.That(ledger.SingleExecutions, Is.EqualTo(1));
             Assert.That(ledger.DisputeTasks(), Is.Empty);
+            Assert.That(integrity.RootElement.GetProperty("summary").GetProperty("repair_pairs").GetInt32(), Is.EqualTo(1));
+            Assert.That(integrity.RootElement.GetProperty("summary").GetProperty("repair_compared").GetInt32(), Is.Zero, "a pair with a fault is not compared");
+            Assert.That(integrity.RootElement.GetProperty("pairs")[0].GetProperty("incomplete").GetBoolean(), Is.True);
         });
     }
 

@@ -3,8 +3,9 @@
     python check.py <report.json> [<integrity.json>]
 
 Prints the funnel, the drops by stage, the languages kept and the languages lost, what the
-results rest on (corpus-report/4: shards that one machine alone answered for, values the server
-dropped, repairs, disputes), then one line per shard that differs from the kit's list (verdict,
+results rest on (corpus-report/5: shards that one machine alone answered for, values the server
+dropped, repairs, disputes, and whether the sampling the run asked for came back), then one line
+per shard that differs from the kit's list (verdict,
 content hash, signatures hash, document counts), the kit's identities (the SHA-256 of the lines
 "index:content_sha256", and of the lines "index:signatures_sha256", in index order) and, with the
 integrity document, its counters. Exits 1 when a shard differs or the report kept text.
@@ -61,6 +62,10 @@ def main(argv):
     if 'single_execution' in summary:
         print(f"trust      : {summary['single_execution']} shard(s) rest on one execution; rejected results {summary['rejected_results']},"
               f" repairs {summary['repairs']}, disputes {summary['disputes']} (resolved {summary['disputes_resolved']})")
+    sampling = report.get('sampling')
+    if sampling:
+        print(f"sampling   : {sampling['state']} (rate {sampling['rate']}: {sampling['asked_twice']} of {sampling['packages']} package(s) asked to run twice,"
+              f" {sampling['answered_twice']} answered twice, {sampling['compared']} shard(s) compared)")
 
     unexpected = 0
     kept_text = 0
