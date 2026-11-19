@@ -562,5 +562,11 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// </summary>
     internal WasmHostCallCensus? Census { get; set; }
 
+    /// <summary>
+    /// The gate the compiles of the larger kind take their place in (<see cref="HEAVY_COMPILE_BYTES"/>,
+    /// <see cref="HEAVY_COMPILE_FUEL"/>). For tests of which compiles go through it.
+    /// </summary>
+    internal VerifyCompileGate CompileGate => m_compileGate;
+
     #endregion
 }

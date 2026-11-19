@@ -148,6 +148,62 @@ public sealed class VerifyCompileMemoryTests
         });
     }
 
+    [Test]
+    public void N2TheSandboxSendsACompileThatMayTakeMuchThroughTheGateAndNoOtherTest()
+    {
+        // Two modules of one function of nothing but nops: priced alike by their instructions, and
+        // apart by the memory their compile may take, the larger body past the line and the smaller
+        // under it. With the gate held full, the one past the line waits for its place; the other
+        // is compiled and run as if there were no gate.
+        var wasi = VerifyRuntimeCatalog.Resolve(null, VerifyRuntimeCatalog.WASI, out var reason) ?? throw new InvalidOperationException(reason);
+        var limits = VerifySandboxDefaults.Resolve(null, null);
+        var small = ShapeModules.Body(4096);
+        var large = ShapeModules.Body(16_384);
+        var smallShape = VerifyModuleShape.Scan(small);
+        var largeShape = VerifyModuleShape.Scan(large);
+
+        using var sandbox = new VerifyWasmSandbox();
+        var gate = sandbox.CompileGate;
+
+        Task<VerifyResultData> largeRun;
+        Task<VerifyResultData> smallRun;
+        bool smallDoneWhileFull;
+        bool largeDoneWhileFull;
+        var full = gate.Enter(gate.Capacity);
+        try
+        {
+            largeRun = Task.Run(() => sandbox.Execute(wasi, ModuleTask(large), limits));
+            smallRun = Task.Run(() => sandbox.Execute(wasi, ModuleTask(small), limits));
+            smallDoneWhileFull = smallRun.Wait(TimeSpan.FromSeconds(60));
+
+            // The larger started first: without the gate it would have been compiled and run by now.
+            largeDoneWhileFull = largeRun.Wait(TimeSpan.FromSeconds(2));
+        }
+        finally
+        {
+            full.Dispose();
+        }
+
+        var largeDone = largeRun.Wait(TimeSpan.FromSeconds(60));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(smallShape.CompileMemoryBytes, Is.LessThan(VerifyWasmSandbox.HEAVY_COMPILE_BYTES));
+            Assert.That(largeShape.CompileMemoryBytes, Is.GreaterThanOrEqualTo(VerifyWasmSandbox.HEAVY_COMPILE_BYTES));
+            Assert.That(largeShape.ShapeFuel, Is.LessThan(VerifyWasmSandbox.HEAVY_COMPILE_FUEL), "past the line by the memory alone");
+            Assert.That(smallDoneWhileFull, Is.True, "a compile under the line does not wait for the gate");
+            Assert.That(largeDoneWhileFull, Is.False, "a compile past the line waits while the gate has no room");
+            Assert.That(largeDone, Is.True, "and goes on once it has");
+            Assert.That(gate.Taken, Is.Zero);
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(smallRun.Result.Verdict, Is.EqualTo(VerifyVerdict.Pass), smallRun.Result.Stderr);
+            Assert.That(largeRun.Result.Verdict, Is.EqualTo(VerifyVerdict.Pass), largeRun.Result.Stderr);
+        });
+    }
+
     #endregion
 
     #region Degree Tests
@@ -292,6 +348,21 @@ public sealed class VerifyCompileMemoryTests
             Assert.That(sandbox.TaskModuleCacheHeldBytes, Is.GreaterThan(6 * 6000L), "the bytes counted are the compiled code's, not the module's");
             Assert.That(largest, Is.LessThanOrEqualTo(VerifyWasmSandbox.TaskModuleCacheBytes));
         });
+    }
+
+    #endregion
+
+    #region Tools
+
+    /// <summary>A <c>wasi</c> task that brings a module.</summary>
+    private static VerifyTaskData ModuleTask(byte[] module)
+    {
+        return new VerifyTaskData
+        {
+            RuntimeId = VerifyRuntimeCatalog.WASI,
+            EntryPoint = "main.wasm",
+            Sources = [new VerifySourceFileData { Name = "main.wasm", Content = Convert.ToBase64String(module) }]
+        };
     }
 
     #endregion
