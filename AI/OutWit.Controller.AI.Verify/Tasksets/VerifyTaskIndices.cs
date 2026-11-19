@@ -1,11 +1,13 @@
 namespace OutWit.Controller.AI.Verify.Tasksets;
 
 /// <summary>
-/// The task indices a taskset has used so far, kept to tell a duplicate: a bit an index, in
-/// pages made as indices fall into them, so a taskset numbered from zero costs an eighth of a
-/// byte a task and none of its text. The line of an index is remembered for the first
-/// <see cref="MAX_REMEMBERED_LINES"/> tasks only: a message names the earlier line when it is
-/// known and says "an earlier line" otherwise.
+/// The task indices a taskset has used so far, kept to tell a duplicate. The indices are kept
+/// in pages made as indices fall into them (<see cref="VerifyTaskIndexPage"/>): a page with many
+/// is a bitmap, so a taskset numbered from zero costs an eighth of a byte a task, and a page
+/// with few is a short list, so a taskset numbered far apart costs a few bytes a task and never
+/// a page of bits for each. Nothing of a task's text is kept. The line of an index is
+/// remembered for the first <see cref="MAX_REMEMBERED_LINES"/> tasks only: a message names the
+/// earlier line when it is known and says "an earlier line" otherwise.
 /// </summary>
 public sealed class VerifyTaskIndices
 {
@@ -15,14 +17,13 @@ public sealed class VerifyTaskIndices
     public const int MAX_REMEMBERED_LINES = 65536;
 
     private const int PAGE_SHIFT = 16;
-    private const int PAGE_WORDS = (1 << PAGE_SHIFT) / 64;
-    private const int PAGE_MASK = (1 << PAGE_SHIFT) - 1;
+    private const int PAGE_MASK = VerifyTaskIndexPage.SIZE - 1;
 
     #endregion
 
     #region Fields
 
-    private readonly Dictionary<int, ulong[]> m_pages = new();
+    private readonly Dictionary<int, VerifyTaskIndexPage> m_pages = new();
     private readonly Dictionary<int, int> m_lines = new();
 
     #endregion
@@ -39,17 +40,14 @@ public sealed class VerifyTaskIndices
         earlier = 0;
 
         if (!m_pages.TryGetValue(index >> PAGE_SHIFT, out var page))
-            m_pages[index >> PAGE_SHIFT] = page = new ulong[PAGE_WORDS];
+            m_pages[index >> PAGE_SHIFT] = page = new VerifyTaskIndexPage();
 
-        var offset = index & PAGE_MASK;
-        var bit = 1UL << (offset & 63);
-        if ((page[offset >> 6] & bit) != 0)
+        if (!page.Add(index & PAGE_MASK))
         {
             m_lines.TryGetValue(index, out earlier);
             return false;
         }
 
-        page[offset >> 6] |= bit;
         if (m_lines.Count < MAX_REMEMBERED_LINES)
             m_lines[index] = line;
 
