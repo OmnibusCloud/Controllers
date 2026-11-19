@@ -11,10 +11,28 @@ Every number on this page was measured, in the controller's tests or on a test f
 [README](../README.md) explains how things work inside; [safety.md](safety.md) is the same
 sandbox told for the people who lend their computers.
 
-Version described: **Verify 0.16.0** (with Verify.Model 0.4.0 and Verify.Scripts 0.7.0), for the
+Version described: **Verify 0.17.0** (with Verify.Model 0.4.0 and Verify.Scripts 0.7.0), for the
 test server. 0.15.0 is proven on a five-node test fleet (Windows and Linux; 0.11.3 on six nodes
 with macOS), and the fleet figures on this page (scale, medians, pool rate) were measured before
 0.13.0. None of these versions is on nuget.org or on the live network.
+
+What 0.17.0 changed for an application:
+
+- **Every fuel figure moved; no verdict and no output did.** A call into the host costs 1,000
+  units besides the bytes it moves, and the modules the engine compiles on a node (`wasi` and
+  C/C++) pay for their smallest functions (sections 9 and 10, with the figures before and
+  after). A task budgeted within a few percent of its need should be given the difference.
+- **More of a task's module is refused before it is compiled** (section 9): a function type of
+  more than 128 parameters or 8 results, a block of more than 8 values, a function of more than
+  16,384 locals or 128 KiB, a module of more than 32,768 functions, and a module with a start
+  function. Each is a `CompileError` with fixed words. No program a C, C++ or Rust compiler
+  writes for this target is near these, a start function aside.
+- **A C/C++ build may write 128 MiB in all**, its objects and its program together (it was 64
+  MiB an object and no bound on their sum).
+- **A deep recursion is a stated limit** (sections 9 and 14): how deep one goes before the
+  engine's stack ends depends on the node.
+- **No document, no schema and no script changed.** The model and the scripts are the packages
+  they were.
 
 What 0.16.0 changed for an application:
 
@@ -132,7 +150,7 @@ same activity with different programs, so one primitive carries several products
 |---|---|
 | Languages | Python 3.14 (also with sympy, also with numpy), JavaScript, TypeScript, Ruby 3.4, Lua 5.4, C and C++ compiled on the node, and any compiled `wasm32-wasip1` module (Rust, Zig, TinyGo, …) |
 | Sandbox | WebAssembly (wasmtime, long-term line 48): no files of the machine, no network, no processes, no threads; its own clock and random source |
-| Limits per task | fuel (one unit per instruction, and one a byte a call into the host moves) 20e9 by default and 240e9 at most; memory 256 MiB / 2 GiB; stdout 256 KiB / 8 MiB. No wall-time limit: the clock is a node's own backstop |
+| Limits per task | fuel (one unit per instruction, 1,000 a call into the host and one a byte the call moves) 20e9 by default and 240e9 at most; memory 256 MiB / 2 GiB; stdout 256 KiB / 8 MiB. No wall-time limit: the clock is a node's own backstop |
 | Determinism | the verdict report and the outputs are the same bytes on every fleet, every placement and every run, as long as every node did its work and told the truth |
 | Integrity | a share of the packages runs twice on two different machines and the pairs are compared; tasks whose copies disagree run three more times and a majority settles them; a task nobody answers is sent out once more |
 | Scale | a million small tasks in 22 min 41 s on six nodes; 100,000 in 2 min 55 s; 10,000 in 23 s (measured before 0.13.0) |
@@ -436,7 +454,7 @@ program's own stdout and stderr are the program's and stay as they are.
 |---|---|---|
 | `Pass` | the run, or every case, did what was expected | |
 | `Fail` | it ran, but a case printed the wrong thing or exited with the wrong code (not a crash) | a wrong answer |
-| `CompileError` | the program never ran | a C/C++ compile or link error, or a build whose product is over 64 MiB; a module that does not validate or imports what the sandbox does not provide; a raw module over 8 MiB; a function that nests blocks deeper than 2,048 |
+| `CompileError` | the program never ran | a C/C++ compile or link error, or a build whose product is over 64 MiB; a module that does not validate or imports what the sandbox does not provide; a raw module over 8 MiB; a function that nests blocks deeper than 2,048, a module past another bound of a task's module, or one with a start function (section 9); a C/C++ build that writes more than 128 MiB in all |
 | `RuntimeError` | it crashed, or exited non-zero where 0 was expected (any status, 126 and more included) | an exception, a panic, `abort`, an out-of-bounds access, a stack overflow, `exit(200)` |
 | `Timeout` | the fuel ran out, and nothing else. It is the same on every node | an endless or too slow program; a module whose compile the budget does not hold (section 9) |
 | `MemoryExceeded` | the program's allocator was refused memory | Python's `MemoryError`, Lua's "not enough memory", C++'s `bad_alloc` |
@@ -528,20 +546,20 @@ document's `notes`.
 - **C and C++** (`clang-22.1.0`):
   - The language standards are C17 for `.c` and C++20 for `.cc`, `.cpp` and `.cxx`, compiled at `-O2` with wasi-libc and libc++.
   - All the build steps share a budget of 100 G fuel and 1 GiB of memory a step, separate from the program's limits. A build that runs out of that fuel is `CompileError`. A node's 600 s backstop on a build gives no verdict, like the one on a run (section 9).
-  - A compile or link error is `CompileError` with clang's diagnostics on stderr. So is a step whose product (an object file, the program) passes 64 MiB: it is cut at the write.
+  - A compile or link error is `CompileError` with clang's diagnostics on stderr. So is a step whose product (an object file, the program) passes 64 MiB, and a build that writes more than 128 MiB in all, its objects and its program together: each is cut at the write.
   - The program the build makes is priced like a module a task brings, and the price comes out of the task's fuel (section 9).
   - A header is found under the exact name it has: `#include "Util.h"` does not find `util.h` on any node.
   - `__TIMESTAMP__` is `Thu Jan  1 00:00:00 1970` on every node.
   - C++ has no exceptions: `try` and `throw` do not compile.
   - The target is 32-bit: `int`, `long` and pointers are 32 bits, `long long` is 64.
-  - The program's stack is 8 MiB (a local array of a million ints fits). A small recursive function reaches about 100,000 to 160,000 levels.
+  - The program's stack is 8 MiB (a local array of a million ints fits). A small recursive function reaches some 90,000 to 170,000 levels, and how many depends on the node (section 9): a recursion of 20,000 levels returns everywhere, a deeper one should use an explicit stack.
   - `new` past the memory cap is `MemoryExceeded`. A write through a null pointer does not crash: address 0 is memory.
   - The program has no file system.
   - The compiler is compiled once per node process, about 15 s, before its first build.
 - **Compiled modules** (`wasi`):
   - A `wasm32-wasip1` command module (`_start`), 8 MiB at most. It is compiled on the node and cached by its hash within a batch.
   - Before it is compiled it is validated and its shape is priced; the price comes out of the task's fuel (section 9).
-  - It is refused before running (`CompileError`) when it imports what the sandbox does not provide, or needs a second memory, a 64-bit memory, shared memory or threads, the GC heap, exception handling or stack switching, or nests blocks deeper than 2,048 in one function.
+  - It is refused before running (`CompileError`) when it imports what the sandbox does not provide, or needs a second memory, a 64-bit memory, shared memory or threads, the GC heap, exception handling or stack switching, or nests blocks deeper than 2,048 in one function, or is past another bound of the table in section 9, or has a start function.
   - A module without `_start` is a `RuntimeError`.
 
 ## 9. Limits and the sandbox
@@ -556,7 +574,14 @@ document's `notes`.
 | Tables | 1,048,576 elements, 8 tables | | growth is refused |
 | A module a task brings (`wasi`) | 8 MiB | | `CompileError` |
 | Blocks nested in one function of such a module, or of a built C/C++ program | 2,048 | | `CompileError` |
+| Parameters, and results, of a function type of such a module or program | 128, and 8 | | `CompileError` |
+| Values a block of such a module or program takes and gives | 8 | | `CompileError` |
+| Locals of one function, and declared by all the functions of such a module or program | 16,384, and 4,194,304 | | `CompileError` |
+| Functions of such a module or program | 32,768 | | `CompileError` |
+| The body of one function of such a module or program | 128 KiB | | `CompileError` |
+| A start function in such a module or program | none | | `CompileError` |
 | The product of a C/C++ build step | 64 MiB | | `CompileError` |
+| Everything a C/C++ build writes, its objects and its program | 128 MiB | | `CompileError` |
 | Cases of a suite | | 1,024 | the taskset is refused |
 | Sources of a task | | 1,024 | the taskset is refused |
 | Arguments of a task, and of a case | | 1,024 | the taskset is refused |
@@ -577,9 +602,13 @@ sources or arguments than the table allows, whoever made the package.
 
 - **Fuel is the one budget of a run's work.** `Timeout` means out of fuel, and nothing else. It
   is the same on every node.
-- **What costs fuel:** one unit an instruction, and one unit a byte a call into the host moves:
-  a byte read from a file, written to stdout or stderr, filled by `random_get`, or of a path
-  that is looked up. It is the rate the engine charges for a guest's own bulk memory copy.
+- **What costs fuel:** one unit an instruction; 1,000 units a call into the host, whoever
+  answers it; and one unit a byte the call moves: a byte read from a file, written to stdout or
+  stderr, filled by `random_get`, of a path that is looked up, of a record a wait
+  (`poll_oneoff`) reads or writes (48 a subscription, 32 an event), of the arguments or the
+  environment each time a program copies them. A byte is the rate the engine charges for a
+  guest's own bulk memory copy; the thousand is half a microsecond at the reference rate, about
+  what the host's own part of a call takes.
 - **The reference rate** is 2,000 million units a second: what a plain busy loop burns on the
   slowest node the fleet has shown. The default budget is ten seconds of such a loop, the
   ceiling two minutes.
@@ -617,15 +646,34 @@ loops: a module of 6.9 KB took 1.5 s, one of 28 KB took 81 s and 1.5 GiB. So:
 - The price is 2,048 units a byte of the module; plus 4 units for every unit of (the locals of
   a function)² × (the depth of its nested loops); plus 100 units for every unit of (the targets
   of a branch table) × (the blocks around it).
+- Since 0.17.0 the price also has: 4 units for every unit of (the branches of a function)², for
+  a function of more than 1,024 branches; 128 units for every unit of (the locals a function
+  uses) × (its branches) past 16,384; 4 units for every unit of (the values a block passes) ×
+  (the blocks around it), for a block of two values or more; 64 units a local past 256 in a
+  function; and a function is priced as 24 bytes at the least. Each is what the engine was
+  measured to take for that shape, in the proportion a byte's price has to a byte's time.
 - A task whose budget does not hold the price is `Timeout`, and nothing is compiled.
 - Blocks nested deeper than 2,048 in one function are refused with a `CompileError`. Its stderr
   is `a function of the module nests blocks deeper than 2048`. The shipped interpreters nest
   115 to 781 deep.
+- Since 0.17.0 the other bounds of the table above are refused the same way, each with its own
+  words on stderr: `a function type of the module has more than 128 parameters`, `... more than
+  8 results`, `a block of the module takes and gives more than 8 values`, `a function of the
+  module has more than 16384 locals`, `the functions of the module declare more than 4194304
+  locals together`, `the module has more than 32768 functions`, `a function of the module is
+  larger than 128 KiB`, and `the module has a start function, which a task's module may not
+  have: a program starts at _start`.
 - The compile uses the calling worker's thread only, so it stays within the cores a batch
   counts.
+- The memory the engine takes while it compiles is in no task's memory cap. It is estimated
+  from the shape (about 6 KB a function, up to 4 KB a byte of the largest function; about a
+  gibibyte for a module at every bound). Compiles that may take 64 MiB or more share 1,040 MiB
+  between them in a node's process: one at the bounds runs alone, several of ordinary programs
+  side by side. A node counts those 1,040 MiB where it decides how many tasks run at once
+  (section 11).
 
-The fuel a task reports includes the price: a C hello costs 8,314,372 (it reported 710 before
-0.13.0) and the 224-byte raw hello 458,764 (it reported 6).
+The fuel a task reports includes the price: a C hello costs 8,628,668 (8,314,372 before 0.17.0;
+it reported 710 before 0.13.0) and the 224-byte raw hello 482,292 (458,764; it reported 6).
 
 What a program can reach:
 - **Files:** only its runtime's library, or for Lua and C/C++ its own sources, read-only. It cannot write, create, remove, rename or list. A raw module and a C/C++ program have no file system.
@@ -642,6 +690,15 @@ crash never takes the host down. Elsewhere traps are hardware faults the engine 
 is faster. The verdicts, the outputs and the fuel are the same either way: the controller's
 tests run the same programs in both modes in one process and compare every field of their
 results (`VerifyTrapModeTests`).
+
+One thing does depend on the mode, and on the processor architecture: how deep a recursion
+goes before the engine's 8 MiB stack ends. A frame is larger where traps are explicit checks: a
+small C function returned from 104,850 levels with hardware traps and from 87,375 with explicit
+checks on one machine, a function of a raw module from 174,755 and 131,066. The tests run a
+recursion of 20,000 levels (it returns in both modes) and one of 1,000,000 (it overflows in
+both). Between those a deep recursion can end as `Pass` on one honest node and as
+`RuntimeError` (`call stack exhausted`) on another; when such a task is sampled it is a
+dispute. This is a stated limit of this version.
 
 The sandbox runs only on the engine it was built and tested with: the .NET binding the controller
 was compiled against, and the native library pinned by its SHA-256 for the platform (section
@@ -664,7 +721,8 @@ What is guaranteed:
 What is a metric, not identity (it lives in the provenance):
 - **Fuel** is the program's own and reproducible on one host.
   - Since 0.12.0 the budget is given once the module is instantiated, so the copy of its data segments (a unit a byte where wasmtime copies them, nothing where Linux maps an image) is in neither the budget nor the fuel reported. That copy was the fixed step earlier versions showed for Ruby and Lua between Linux and the other systems (a Lua hello before 0.12.0: 569,680 on Linux, 602,449 on Windows and macOS).
-  - Since 0.13.0 a call into the host costs fuel by the bytes it moves (section 9), so every task's fuel grew by the bytes its runtime reads at start. Figures quoted before 0.13.0 are lower by that. The hellos now, on Windows x64: `python-3.14.6` 122,363,490 (it was 121,262,306); `python-3.14.6-sympy-1.14.0` with `import sympy` 3,205,340,541 (3,058,460,132); `python-3.14.6-numpy-2.5.4` with `import numpy` 24,920,091 (24,917,573); `quickjs-0.15.1` 2,359,037; `ruby-3.4.1` 153,868,237; `lua-5.4.8` 571,435; `typescript-sucrase-3.35.1` 333,353,693.
+  - Since 0.13.0 a call into the host costs fuel by the bytes it moves (section 9), so every task's fuel grew by the bytes its runtime reads at start. Figures quoted before 0.13.0 are lower by that. The hellos then, on Windows x64: `python-3.14.6` 122,363,490 (it was 121,262,306); `python-3.14.6-sympy-1.14.0` with `import sympy` 3,205,340,541 (3,058,460,132); `python-3.14.6-numpy-2.5.4` with `import numpy` 24,920,091 (24,917,573); `quickjs-0.15.1` 2,359,037; `ruby-3.4.1` 153,868,237; `lua-5.4.8` 571,435; `typescript-sucrase-3.35.1` 333,353,693. Those were the figures of 0.13.0 to 0.16.0.
+  - Since 0.17.0 a call into the host costs 1,000 units besides its bytes (section 9), so every task's fuel grew by a thousand for every call its runtime makes (a CPython hello makes 118, the import of sympy 7,814). The hellos now, on Windows x64, with the figure of 0.13.0 to 0.16.0 in brackets: `python-3.14.6` 122,481,638 (122,363,490); `python-3.14.6-sympy-1.14.0` 3,213,154,830 (3,205,340,541); `python-3.14.6-numpy-2.5.4` 24,941,299 (24,920,091); `quickjs-0.15.1` 2,367,084 (2,359,037); `ruby-3.4.1` 153,965,549 (153,868,237); `lua-5.4.8` 588,454 (571,435); `typescript-sucrase-3.35.1` 333,420,186 (333,353,693).
   - A task of the `wasi` or the `clang-22.1.0` runtime also reports the price of compiling its module (section 9).
   - The hello of every runtime costs one pinned number on Windows, Linux and macOS (the controller's tests), but for CPython reading its library from files (`python-3.14.6` and the sympy runtime): the tests allow it to drift between hosts by up to 0.06 %, in how each host answers its file queries. The numpy runtime starts from a snapshot and does not drift.
 - **Peak memory** of a CPython task can differ by one 64 KiB page.
@@ -836,7 +894,7 @@ task of the kit is ended by a node's wall clock.
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 0.16.0 | `OutWit.Controller.AI.Verify` (GitHub Packages; nuget.org at 1.0.0) |
+| The controller | 0.17.0 | `OutWit.Controller.AI.Verify` (GitHub Packages; nuget.org at 1.0.0) |
 | The model and the scripts | 0.4.0 and 0.7.0 | `OutWit.Controller.AI.Verify.Model`, `OutWit.Controller.AI.Verify.Scripts` |
 | The engine | wasmtime long-term line 48: the .NET binding 48.0.2 over the native library 48.0.8, pinned by SHA-256 | natives per platform, release `wasmtime-v48.0.8-2` (8 to 10 MB each; the libraries of `wasmtime-v48.0.8`, byte for byte, with their third-party notices) |
 | The language runtimes | as in section 8 | `verify-wasm.zip`, release `verify-v0.15.0` (67.5 MB) |
@@ -859,14 +917,14 @@ How a deployment uses them:
 - A task that was not sampled rests on one machine (`single_execution` in the integrity document). So does a task that was sent out once more after a node's fault, unless its repair package was one of the share that runs twice.
 - The server does not know which packages the platform ran twice. It counts how many came back with two accepted results against how many the rate asks for, and says `short` when fewer did; it cannot say which package lost its second execution.
 - The server cannot see which machine returned an answer. A liar can keep a dispute from being resolved (the task stays `Disputed`); it cannot make its answer the accepted one, except when the honest copies of a disputed task were all lost (section 10).
-- The price of compiling a task's own module is an estimate fitted to measurements, not a proof about every module. A compile, once started, cannot be interrupted, and one expensive compile runs at a time in a node's process (section 9).
+- The bounds and the price of compiling a task's own module are fitted to measurements of particular shapes, not a proof about every module the engine accepts. A compile, once started, cannot be interrupted, and one expensive compile runs at a time in a node's process (section 9). What the engine takes in memory while it compiles is estimated and counted by the node, not capped.
 - Fuel bounds work, not time: a run of slow instructions can take four times as long as its budget lasts at the reference rate, and ten seconds more, before a node's backstop ends it (section 9).
 - Python runs the standard library, sympy or numpy, but no other package and no C extension. Ruby has four bundled gems and no others.
 - TypeScript is not type-checked. C++ has no exceptions. numpy and C/C++ are 32-bit targets.
 - A recursion is bounded:
   - in Python by its recursion limit;
   - in JavaScript by a `RangeError` (about 300 levels);
-  - in C/C++ by the 8 MiB stack (100,000 to 160,000 levels for a small function).
+  - in C/C++ and in a raw module by the engine's 8 MiB stack: some 90,000 to 170,000 levels for a small function. How many depends on the node (the trap mode, the processor architecture: section 9), so a recursion deeper than a few tens of thousands of levels can pass on one honest node and overflow on another.
 - The fuel of a CPython task (not numpy) can differ by up to 0.06 % between hosts, and its peak memory by a page (section 10). Verdicts and outputs do not.
 - A run waits for its slowest share (section 11).
 - The controller is proven on the test fleet. Its release to nuget.org and to the live network is the owner's decision.

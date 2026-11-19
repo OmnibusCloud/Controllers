@@ -14,6 +14,10 @@ summary also states the sampling rate, whether the sampling took place (`as_aske
 of two machines or more) and the packages nothing answered (0), so its size and SHA-256 moved
 once more; the outputs did not change.
 
+**With Verify 0.17.0** the verdicts, the report and the outputs are unchanged. The fuel figures
+of the provenance are higher: every call into the host costs a thousand units, and a module the
+engine compiles on a node pays for its smallest functions.
+
 ## The rewards table
 
 ```

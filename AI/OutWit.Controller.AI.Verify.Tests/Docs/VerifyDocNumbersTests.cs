@@ -6,6 +6,7 @@ using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
 using OutWit.Controller.AI.Verify.Sandbox;
 using OutWit.Controller.AI.Verify.Tasksets;
+using OutWit.Controller.AI.Wasm;
 
 namespace OutWit.Controller.AI.Verify.Tests.Docs;
 
@@ -201,7 +202,11 @@ public sealed class VerifyDocNumbersTests
             (CAPABILITIES, $"| Memory (one linear memory, 32-bit addresses) | {defaultMemory} | {maxMemory} |"),
             (CAPABILITIES, $"| stdout, of a task with all its cases | {defaultStdout} | {maxStdout} |"),
             (CAPABILITIES, $"| stderr | {defaultStderr} | {maxStderr} |"),
-            (CAPABILITIES, $"fuel (one unit per instruction, and one a byte a call into the host moves) {defaultFuel}e9 by default and {maxFuel}e9 at most; memory {defaultMemory} / {maxMemory}; stdout {defaultStdout} / {maxStdout}"),
+            (CAPABILITIES, $"fuel (one unit per instruction, {Count(WasmHostMeter.CALL_FUEL)} a call into the host and one a byte the call moves) {defaultFuel}e9 by default and {maxFuel}e9 at most; memory {defaultMemory} / {maxMemory}; stdout {defaultStdout} / {maxStdout}"),
+            (CAPABILITIES, $"**What costs fuel:** one unit an instruction; {Count(WasmHostMeter.CALL_FUEL)} units a call into the host, whoever answers it; and one unit a byte the call moves"),
+            (CAPABILITIES, $"({WasmHostLinker.SUBSCRIPTION_SIZE} a subscription, {WasmHostLinker.EVENT_SIZE} an event)"),
+            (README, $"fuel, one unit an instruction, {Count(WasmHostMeter.CALL_FUEL)} a call into the host and one a byte the call moves"),
+            (README, $"a call into the host also costs a fixed {Count(WasmHostMeter.CALL_FUEL)} units"),
             (README, $"{defaultFuel}e9 by default (about ten seconds of a plain busy loop on the slowest node the fleet has shown, at {Count(VerifySandboxDefaults.REFERENCE_FUEL_PER_SECOND / 1_000_000)} million units a second), {maxFuel}e9 at most"),
             (README, $"one linear memory of 32-bit addresses: {defaultMemory} by default, {maxMemory} at most"),
             (README, $"stdout: {defaultStdout} by default, {maxStdout} at most, for a task with all the cases of its suite. stderr: {defaultStderr} by default, {maxStderr} at most."),
@@ -225,6 +230,24 @@ public sealed class VerifyDocNumbersTests
             (README, $"{Count(VerifyModuleShape.COMPILE_FUEL_PER_BYTE)} units of fuel a byte of the module"),
             (README, $"Blocks nested deeper than {Count(VerifyModuleShape.MAX_NESTING)} in one function are refused"),
             (README, $"A raw module may be at most {Size(VerifyWasmSandbox.MAX_TASK_MODULE_BYTES)}."),
+
+            // The bounds of a task's module, and what its shape costs.
+            (CAPABILITIES, $"| Parameters, and results, of a function type of such a module or program | {Count(VerifyModuleShape.MAX_PARAMETERS)}, and {Count(VerifyModuleShape.MAX_RESULTS)} | | `CompileError` |"),
+            (CAPABILITIES, $"| Values a block of such a module or program takes and gives | {Count(VerifyModuleShape.MAX_BLOCK_VALUES)} | | `CompileError` |"),
+            (CAPABILITIES, $"| Locals of one function, and declared by all the functions of such a module or program | {Count(VerifyModuleShape.MAX_LOCALS)}, and {Count(VerifyModuleShape.MAX_MODULE_LOCALS)} | | `CompileError` |"),
+            (CAPABILITIES, $"| Functions of such a module or program | {Count(VerifyModuleShape.MAX_FUNCTIONS)} | | `CompileError` |"),
+            (CAPABILITIES, $"| The body of one function of such a module or program | {Size(VerifyModuleShape.MAX_BODY_BYTES)} | | `CompileError` |"),
+            (CAPABILITIES, $"| Everything a C/C++ build writes, its objects and its program | {Size(VerifyClangBuild.BUILD_LIMIT_BYTES)} | | `CompileError` |"),
+            (CAPABILITIES, $"{VerifyModuleShape.COMPILE_FUEL_PER_BRANCH_UNIT} units for every unit of (the branches of a function)², for a function of more than {Count(VerifyModuleShape.FREE_BRANCHES)} branches; {VerifyModuleShape.COMPILE_FUEL_PER_LIVE_UNIT} units for every unit of (the locals a function uses) × (its branches) past {Count(VerifyModuleShape.FREE_LIVE_UNITS)}; {VerifyModuleShape.COMPILE_FUEL_PER_BLOCK_UNIT} units for every unit of (the values a block passes) × (the blocks around it), for a block of two values or more; {VerifyModuleShape.COMPILE_FUEL_PER_LOCAL} units a local past {VerifyModuleShape.FREE_LOCALS} in a function; and a function is priced as {VerifyModuleShape.FUNCTION_FLOOR_BYTES} bytes at the least"),
+            (CAPABILITIES, $"`a function type of the module has more than {VerifyModuleShape.MAX_PARAMETERS} parameters`, `... more than {VerifyModuleShape.MAX_RESULTS} results`, `a block of the module takes and gives more than {VerifyModuleShape.MAX_BLOCK_VALUES} values`, `a function of the module has more than {VerifyModuleShape.MAX_LOCALS} locals`, `the functions of the module declare more than {VerifyModuleShape.MAX_MODULE_LOCALS} locals together`, `the module has more than {VerifyModuleShape.MAX_FUNCTIONS} functions`, `a function of the module is larger than {VerifyModuleShape.MAX_BODY_BYTES >> 10} KiB`, and `{VerifyModuleShape.START_FUNCTION}`"),
+            (CAPABILITIES, $"Compiles that may take {Size(VerifyWasmSandbox.HEAVY_COMPILE_BYTES)} or more share {Count(VerifyWasmSandbox.CompileGateBytes / MEBIBYTE)} MiB between them"),
+            (README, $"a function type has at most {Count(VerifyModuleShape.MAX_PARAMETERS)} parameters and {Count(VerifyModuleShape.MAX_RESULTS)} results, a block passes at most {Count(VerifyModuleShape.MAX_BLOCK_VALUES)} values, a function has at most {Count(VerifyModuleShape.MAX_LOCALS)} locals and a body of {Size(VerifyModuleShape.MAX_BODY_BYTES)}, a module at most {Count(VerifyModuleShape.MAX_FUNCTIONS)} functions and {Count(VerifyModuleShape.MAX_MODULE_LOCALS)} declared locals"),
+            (README, $"when a function type has more than {Count(VerifyModuleShape.MAX_PARAMETERS)} parameters or more than {Count(VerifyModuleShape.MAX_RESULTS)} results, a block takes and gives more than {Count(VerifyModuleShape.MAX_BLOCK_VALUES)} values, a function has more than {Count(VerifyModuleShape.MAX_LOCALS)} locals or a body larger than {Size(VerifyModuleShape.MAX_BODY_BYTES)}, or the module has more than {Count(VerifyModuleShape.MAX_FUNCTIONS)} functions or its functions declare more than {Count(VerifyModuleShape.MAX_MODULE_LOCALS)} locals together"),
+            (README, $"{VerifyModuleShape.COMPILE_FUEL_PER_BRANCH_UNIT} units for every unit of (branches of a function)², for a function of more than {Count(VerifyModuleShape.FREE_BRANCHES)} branches; {VerifyModuleShape.COMPILE_FUEL_PER_LIVE_UNIT} units for every unit of (locals a function uses) × (its branches) past {Count(VerifyModuleShape.FREE_LIVE_UNITS)}; {VerifyModuleShape.COMPILE_FUEL_PER_BLOCK_UNIT} units for every unit of (values a block passes) × (blocks around it), for a block of two values or more; {VerifyModuleShape.COMPILE_FUEL_PER_LOCAL} units a local past {VerifyModuleShape.FREE_LOCALS} in a function; and a function is priced as {VerifyModuleShape.FUNCTION_FLOOR_BYTES} bytes at the least"),
+            (README, $"is capped at {Size(VerifyClangBuild.BUILD_LIMIT_BYTES)}, at the write as well"),
+            (README, $"compiles that may take {Size(VerifyWasmSandbox.HEAVY_COMPILE_BYTES)} or more share {Count(VerifyWasmSandbox.CompileGateBytes / MEBIBYTE)} MiB between them"),
+            (README, $"the {Count(VerifyWasmSandbox.CompileGateBytes / MEBIBYTE)} MiB the larger compiles share"),
+            (README, $"the {Size(VerifyTaskModuleCache.DEFAULT_BYTE_CAPACITY)} of compiled code the node keeps for the tasks to come"),
 
             // What a taskset may hold.
             (CAPABILITIES, $"| Cases of a suite | | {cases} | the taskset is refused |"),
