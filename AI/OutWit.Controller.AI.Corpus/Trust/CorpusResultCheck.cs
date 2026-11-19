@@ -11,9 +11,12 @@ namespace OutWit.Controller.AI.Corpus.Trust;
 /// used: a node chooses every byte of what it returns, the wire carries nulls where the types say
 /// there are none, and one result shaped otherwise must cost that result, never the run. A result
 /// that passes has no null, no name outside the controller's vocabulary, no list longer than an
-/// honest one can be, no count below zero, and sums that agree with its totals; the writers can
-/// then read it without a guard. Whether the result is the truth about its shard is another
-/// question, which only a second machine answers.
+/// honest one can be, no count below zero, sums that agree with its totals, and no count above
+/// what the bytes it says it fetched can hold (<see cref="ShardLimits.MaxRecords"/> records, a
+/// document for each record that is no PDF, and for a PDF no more than its text can be cut
+/// into); the writers can then read it without a guard. Whether the result is the truth about its
+/// shard is another question, which only a second machine answers: within these bounds a node
+/// still says what it likes of a shard nobody else ran.
 /// </summary>
 public static class CorpusResultCheck
 {
@@ -24,6 +27,19 @@ public static class CorpusResultCheck
 
     /// <summary>The most characters of a source URL.</summary>
     public const int MAX_URL_CHARS = 4096;
+
+    /// <summary>The most languages a result's statistics may name: every profile a language pack may carry.</summary>
+    public const int MAX_LANGUAGES = LanguageModelLimits.MAX_PROFILES;
+
+    /// <summary>The most keys the breakdown of the unsupported documents may have: a language's code, the same code past its limit, and the one for no profile at all.</summary>
+    public const int MAX_UNSUPPORTED = 2 * LanguageModelLimits.MAX_PROFILES + 1;
+
+    /// <summary>
+    /// The most pages the text of one PDF can be: the stage takes at most
+    /// <see cref="Pdf.PdfStageLimits.MAX_TEXT_BYTES"/> bytes of text from a PDF, and a page more
+    /// is a page break more.
+    /// </summary>
+    public const long MAX_PDF_PAGES = (long)Pdf.PdfStageLimits.MAX_TEXT_BYTES + 1;
 
     private const string VERSION_MARKS = ".-+";
     private const string TARGET_MARKS = "-_";
@@ -97,9 +113,14 @@ public static class CorpusResultCheck
             || stats.BytesProduced < 0 || stats.FetchMs < 0 || stats.ProcessMs < 0 || stats.WaitMs < 0)
             return false;
 
-        if (!IsCounts(stats.Drops, DROP_RULES.Count, DROP_RULES.Contains, out var drops)
-            || !IsCounts(stats.Languages, LanguageModelLimits.MAX_PROFILES, name => name.Length == 0 || LanguageModelLimits.IsCode(name), out var languages)
-            || !IsCounts(stats.UnsupportedLanguages, 2 * LanguageModelLimits.MAX_PROFILES + 1, IsUnsupportedKey, out var unsupported))
+        // A record is a number of bytes of the unpacked file at the least: no more records than
+        // the bytes the result says it fetched may unpack to.
+        if (stats.RecordsIn > ShardLimits.MaxRecords(stats.BytesFetched))
+            return false;
+
+        if (!IsCounts(stats.Drops, MaxDrops, DROP_RULES.Contains, out var drops)
+            || !IsCounts(stats.Languages, MAX_LANGUAGES, name => name.Length == 0 || LanguageModelLimits.IsCode(name), out var languages)
+            || !IsCounts(stats.UnsupportedLanguages, MAX_UNSUPPORTED, IsUnsupportedKey, out var unsupported))
             return false;
 
         // The funnel: the documents extracted less the language, line and quality drops are the
@@ -121,14 +142,32 @@ public static class CorpusResultCheck
         if (drops - inside > (long)stats.RecordsIn + (stats.Pdf?.In ?? 0))
             return false;
 
-        return stats.Pdf == null || IsPdf(stats.Pdf);
+        if (stats.Pdf != null && !IsPdf(stats.Pdf, stats.RecordsIn))
+            return false;
+
+        // A record gives one document at the most, unless it is a PDF: a PDF gives its page
+        // ranges, and those are counted with the PDFs.
+        long pdfs = stats.Pdf?.In ?? 0;
+        long pdfDocuments = stats.Pdf?.Documents ?? 0;
+
+        return stats.DocumentsExtracted >= pdfDocuments && stats.DocumentsExtracted - pdfDocuments <= stats.RecordsIn - pdfs;
     }
 
-    private static bool IsPdf(CorpusPdfStatsData pdf)
+    /// <summary>
+    /// The PDF stage's counts as the stage makes them: a PDF is a record of the shard; one that
+    /// gave text has a page at the least and a document at the least, no more documents than
+    /// pages, no more pages than its text can be, no more pages cut than documents, and no more
+    /// lines removed than its text has characters.
+    /// </summary>
+    private static bool IsPdf(CorpusPdfStatsData pdf, int records)
     {
-        return pdf.In > 0 && pdf.Truncated >= 0 && pdf.Truncated <= pdf.In
+        return pdf.In > 0 && pdf.In <= records
+               && pdf.Truncated >= 0 && pdf.Truncated <= pdf.In
                && pdf.Extracted >= 0 && pdf.Extracted <= pdf.In
-               && pdf.Pages >= 0 && pdf.Documents >= 0 && pdf.PagesCut >= 0 && pdf.RunningLines >= 0
+               && pdf.Pages >= pdf.Extracted && pdf.Pages <= pdf.Extracted * MAX_PDF_PAGES
+               && pdf.Documents >= pdf.Extracted && pdf.Documents <= pdf.Pages
+               && pdf.PagesCut >= 0 && pdf.PagesCut <= pdf.Documents
+               && pdf.RunningLines >= 0 && pdf.RunningLines <= (long)pdf.Extracted * Pdf.PdfStageLimits.MAX_TEXT_BYTES
                // A shard's PDFs stop being run once their fuel together is spent: no honest sum passes it by a whole budget.
                && pdf.Fuel >= 0 && pdf.Fuel <= Pdf.PdfStageLimits.SHARD_FUEL + Pdf.PdfStageLimits.FUEL;
     }
@@ -165,6 +204,13 @@ public static class CorpusResultCheck
             ? name[ShardStatsBuilder.UNSUPPORTED_PAST_LIMIT.Length..]
             : name);
     }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>The most drop rules a result's statistics may name: every rule the stages have.</summary>
+    public static int MaxDrops => DROP_RULES.Count;
 
     #endregion
 }

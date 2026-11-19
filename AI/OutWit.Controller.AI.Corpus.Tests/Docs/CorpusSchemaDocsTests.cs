@@ -124,6 +124,7 @@ public sealed class CorpusSchemaDocsTests
         var pipeline = CorpusTestRun.Signed();
         pipeline.IdentifyLanguage = true;
         var tasks = CorpusTestRun.Tasks(6, pipeline);
+        tasks[2].Source!.Format = CorpusSourceFormat.Warc;
         var withPdf = CorpusTestRun.Completed(tasks[2], 'b', 6, drops: [("pdf_encrypted", 1)]);
         withPdf.Stats!.Pdf = new CorpusPdfStatsData { In = 3, Truncated = 1, Extracted = 2, Pages = 14, Documents = 3, PagesCut = 0, RunningLines = 20, Fuel = 123_456_789 };
         var first = new object?[]

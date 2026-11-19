@@ -71,7 +71,7 @@ public static class CorpusReportWriter
         var verdicts = new SortedDictionary<string, int>(StringComparer.Ordinal);
 
         long recordsIn = 0, extracted = 0, documentsOut = 0, fetched = 0, produced = 0;
-        CorpusPdfStatsData? pdf = null;
+        PdfTotals? pdf = null;
         var output = CorpusOutputMode.Full;
         CorpusMinHashData? minHash = null;
         var oneMinHash = true;
@@ -94,16 +94,18 @@ public static class CorpusReportWriter
             if (shard.Accepted?.Stats is not { } stats)
                 continue;
 
-            recordsIn += stats.RecordsIn;
-            extracted += stats.DocumentsExtracted;
-            documentsOut += stats.DocumentsOut;
-            fetched += stats.BytesFetched;
-            produced += stats.BytesProduced;
+            // Sums of what the nodes said, over a run of any length: in 64 bits, and held at the
+            // largest number rather than wrapped past it.
+            recordsIn = Sum(recordsIn, stats.RecordsIn);
+            extracted = Sum(extracted, stats.DocumentsExtracted);
+            documentsOut = Sum(documentsOut, stats.DocumentsOut);
+            fetched = Sum(fetched, stats.BytesFetched);
+            produced = Sum(produced, stats.BytesProduced);
             Add(drops, stats.Drops);
             Add(languages, stats.Languages);
             Add(unsupported, stats.UnsupportedLanguages);
             if (stats.Pdf is { } shardPdf)
-                pdf = Add(pdf ?? new CorpusPdfStatsData(), shardPdf);
+                (pdf ??= new PdfTotals()).Add(shardPdf);
         }
 
         using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
@@ -131,7 +133,8 @@ public static class CorpusReportWriter
         WriteCounts(writer, "drops", drops);
         WriteCounts(writer, "languages", languages);
         WriteCounts(writer, "unsupported_languages", unsupported);
-        WritePdf(writer, pdf);
+        if (pdf != null)
+            WritePdf(writer, pdf.In, pdf.Truncated, pdf.Extracted, pdf.Pages, pdf.Documents, pdf.PagesCut, pdf.RunningLines, pdf.Fuel);
         WriteFunnel(writer, recordsIn, extracted, documentsOut, drops);
         writer.WriteString("output", CorpusOutputModeNames.Name(output));
         if (minHash != null && oneMinHash)
@@ -210,7 +213,8 @@ public static class CorpusReportWriter
             WriteCounts(writer, "drops", Sum(stats.Drops));
             WriteCounts(writer, "languages", Sum(stats.Languages));
             WriteCounts(writer, "unsupported_languages", Sum(stats.UnsupportedLanguages));
-            WritePdf(writer, stats.Pdf);
+            if (stats.Pdf is { } pdf)
+                WritePdf(writer, pdf.In, pdf.Truncated, pdf.Extracted, pdf.Pages, pdf.Documents, pdf.PagesCut, pdf.RunningLines, pdf.Fuel);
             writer.WriteEndObject();
         }
         else
@@ -219,20 +223,17 @@ public static class CorpusReportWriter
         writer.WriteEndObject();
     }
 
-    /// <summary>The PDF stage's counts, flat beside the others; nothing when the stage met no PDF.</summary>
-    private static void WritePdf(Utf8JsonWriter writer, CorpusPdfStatsData? pdf)
+    /// <summary>The PDF stage's counts, flat beside the others: a shard's own, or their sums over the run.</summary>
+    private static void WritePdf(Utf8JsonWriter writer, long pdfIn, long truncated, long extracted, long pages, long documents, long pagesCut, long runningLines, long fuel)
     {
-        if (pdf == null)
-            return;
-
-        writer.WriteNumber("pdf_in", pdf.In);
-        writer.WriteNumber("pdf_truncated", pdf.Truncated);
-        writer.WriteNumber("pdf_extracted", pdf.Extracted);
-        writer.WriteNumber("pdf_pages", pdf.Pages);
-        writer.WriteNumber("pdf_documents", pdf.Documents);
-        writer.WriteNumber("pdf_pages_cut", pdf.PagesCut);
-        writer.WriteNumber("pdf_running_lines", pdf.RunningLines);
-        writer.WriteNumber("pdf_fuel", pdf.Fuel);
+        writer.WriteNumber("pdf_in", pdfIn);
+        writer.WriteNumber("pdf_truncated", truncated);
+        writer.WriteNumber("pdf_extracted", extracted);
+        writer.WriteNumber("pdf_pages", pages);
+        writer.WriteNumber("pdf_documents", documents);
+        writer.WriteNumber("pdf_pages_cut", pagesCut);
+        writer.WriteNumber("pdf_running_lines", runningLines);
+        writer.WriteNumber("pdf_fuel", fuel);
     }
 
     /// <summary>
@@ -275,23 +276,16 @@ public static class CorpusReportWriter
         writer.WriteEndObject();
     }
 
-    private static CorpusPdfStatsData Add(CorpusPdfStatsData sum, CorpusPdfStatsData shard)
+    /// <summary>A sum that stops at the largest number: the values are counts and bytes, never below zero.</summary>
+    private static long Sum(long sum, long value)
     {
-        sum.In += shard.In;
-        sum.Truncated += shard.Truncated;
-        sum.Extracted += shard.Extracted;
-        sum.Pages += shard.Pages;
-        sum.Documents += shard.Documents;
-        sum.PagesCut += shard.PagesCut;
-        sum.RunningLines += shard.RunningLines;
-        sum.Fuel += shard.Fuel;
-        return sum;
+        return value > long.MaxValue - sum ? long.MaxValue : sum + value;
     }
 
     private static void Add(SortedDictionary<string, long> sums, IReadOnlyList<CorpusCountData> counts)
     {
         foreach (var count in counts)
-            sums[count.Name] = sums.GetValueOrDefault(count.Name) + count.Count;
+            sums[count.Name] = Sum(sums.GetValueOrDefault(count.Name), count.Count);
     }
 
     private static SortedDictionary<string, long> Sum(IReadOnlyList<CorpusCountData> counts)
@@ -307,6 +301,45 @@ public static class CorpusReportWriter
         foreach (var pair in counts.OrderBy(pair => pair.Key, StringComparer.Ordinal))
             writer.WriteNumber(pair.Key, pair.Value);
         writer.WriteEndObject();
+    }
+
+    #endregion
+
+    #region Types
+
+    /// <summary>
+    /// The PDF stage's counts over a run. A shard states them in 32 bits and a run has up to a
+    /// million shards, so the sums are kept in 64.
+    /// </summary>
+    private sealed class PdfTotals
+    {
+        public void Add(CorpusPdfStatsData shard)
+        {
+            In = Sum(In, shard.In);
+            Truncated = Sum(Truncated, shard.Truncated);
+            Extracted = Sum(Extracted, shard.Extracted);
+            Pages = Sum(Pages, shard.Pages);
+            Documents = Sum(Documents, shard.Documents);
+            PagesCut = Sum(PagesCut, shard.PagesCut);
+            RunningLines = Sum(RunningLines, shard.RunningLines);
+            Fuel = Sum(Fuel, shard.Fuel);
+        }
+
+        public long In { get; private set; }
+
+        public long Truncated { get; private set; }
+
+        public long Extracted { get; private set; }
+
+        public long Pages { get; private set; }
+
+        public long Documents { get; private set; }
+
+        public long PagesCut { get; private set; }
+
+        public long RunningLines { get; private set; }
+
+        public long Fuel { get; private set; }
     }
 
     #endregion

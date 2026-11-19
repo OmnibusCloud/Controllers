@@ -9,6 +9,13 @@ namespace OutWit.Controller.AI.Corpus.Json;
 /// million sources or a report of a million shards is read in the memory of its largest entry.
 /// A single value (a property of the root that is not the array, or one item of the array) is
 /// held while it is handed over and is bounded: a document with a larger one is refused.
+/// <para>
+/// A string or a key whose text is no Unicode (an escape of half a surrogate pair, bytes that
+/// are not UTF-8) passes the tokenizer and fails only when it is read as a string, with an
+/// exception of another kind. Here it is one more way a document is not valid JSON: it leaves
+/// as <see cref="JsonException"/> with <see cref="NOT_UNICODE"/>, whether a key of the root or
+/// anything inside a value held it.
+/// </para>
 /// </summary>
 public static class CorpusJsonStream
 {
@@ -19,6 +26,9 @@ public static class CorpusJsonStream
 
     /// <summary>The message of the exception thrown for a document whose root is not an object.</summary>
     public const string NOT_AN_OBJECT = "The document must be a JSON object.";
+
+    /// <summary>The message of the exception thrown for a document with a string or a key whose text is no Unicode.</summary>
+    public const string NOT_UNICODE = "A string or a key of the document is not Unicode text: an escape of half a surrogate pair, or bytes that are not UTF-8.";
 
     private const int FIRST_BUFFER_BYTES = 64 * 1024;
 
@@ -35,7 +45,7 @@ public static class CorpusJsonStream
     /// <param name="onItem">Receives every item of the named array: its index from 0 and the item. The element is valid during the call only.</param>
     /// <param name="options">How the document is read (comments, trailing commas).</param>
     /// <returns>True when the root holds the named property and its value is an array (an empty one included).</returns>
-    /// <exception cref="JsonException">The stream is no JSON document, its root is no object, a property of the root appears twice, or a value is larger than <see cref="MAX_VALUE_BYTES"/>.</exception>
+    /// <exception cref="JsonException">The stream is no JSON document, its root is no object, a property of the root appears twice, a value is larger than <see cref="MAX_VALUE_BYTES"/>, or a string or a key is no Unicode text.</exception>
     public static bool Read(Stream stream, string arrayName, Action<string, JsonElement> onProperty, Action<int, JsonElement> onItem, JsonReaderOptions options = default)
     {
         var buffer = new byte[FIRST_BUFFER_BYTES];
@@ -85,7 +95,7 @@ public static class CorpusJsonStream
                         break;
 
                     case Where.Root:
-                        var name = reader.GetString() ?? "";
+                        var name = Name(ref reader);
                         if (name == arrayName)
                         {
                             // The value's first token says whether it is the array.
@@ -118,7 +128,7 @@ public static class CorpusJsonStream
                         using (value)
                         {
                             Once(seen, name);
-                            onProperty(name, value.RootElement);
+                            Hand(onProperty, name, value.RootElement);
                         }
 
                         break;
@@ -136,7 +146,7 @@ public static class CorpusJsonStream
                         }
 
                         using (item)
-                            onItem(index++, item.RootElement);
+                            Hand(onItem, index++, item.RootElement);
 
                         break;
                 }
@@ -200,6 +210,36 @@ public static class CorpusJsonStream
     {
         if (!seen.Add(name))
             throw new JsonException($"The key '{name}' appears more than once.");
+    }
+
+    /// <summary>A key of the root; one whose text is no Unicode is the document's fault.</summary>
+    private static string Name(ref Utf8JsonReader reader)
+    {
+        try
+        {
+            return reader.GetString() ?? "";
+        }
+        catch (InvalidOperationException)
+        {
+            throw new JsonException(NOT_UNICODE);
+        }
+    }
+
+    /// <summary>
+    /// Hands a value to its reader. A string or a key inside the value whose text is no Unicode
+    /// fails when the reader asks for it, with the JSON library's exception for it: the
+    /// document's fault, in the words of every other one.
+    /// </summary>
+    private static void Hand<T>(Action<T, JsonElement> take, T key, JsonElement value)
+    {
+        try
+        {
+            take(key, value);
+        }
+        catch (InvalidOperationException)
+        {
+            throw new JsonException(NOT_UNICODE);
+        }
     }
 
     #endregion

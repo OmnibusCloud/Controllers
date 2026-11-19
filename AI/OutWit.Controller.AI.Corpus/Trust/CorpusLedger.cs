@@ -85,7 +85,7 @@ public sealed class CorpusLedger
     /// A result that does not hold what its task asked for: its ticket is one shard's and its
     /// index or URL another's, or it is at odds with the task (another output mode, other MinHash
     /// parameters, a product where none is kept, more bytes than the shard was to be held to,
-    /// languages the pipeline cannot label).
+    /// languages the pipeline cannot label, PDF counts where the task runs no PDF stage).
     /// </summary>
     public const string REJECTED_CONTENT = "content";
 
@@ -362,12 +362,7 @@ public sealed class CorpusLedger
 
     private CorpusLedgerEntry Entry(CorpusResultData result, CorpusTaskData task, CorpusLedgerTally tally)
     {
-        var reason = !CorpusResultCheck.IsWellFormed(result) ? REJECTED_UNREADABLE
-            : result.TaskIndex != task.TaskIndex || !string.Equals(result.SourceUrl, task.Source?.Url ?? "", StringComparison.Ordinal) ? REJECTED_CONTENT
-            : !string.Equals(result.ControllerVersion, ControllerVersion, StringComparison.Ordinal) ? REJECTED_VERSION
-            : !Fits(result, task) ? REJECTED_CONTENT
-            : null;
-
+        var reason = Reason(result, task);
         if (reason != null)
         {
             tally.Reject(reason);
@@ -377,6 +372,26 @@ public sealed class CorpusLedger
         return result.Verdict == CorpusShardVerdict.NodeFault
             ? new CorpusLedgerEntry(CorpusLedgerEntryKind.Fault, result, result.Error)
             : new CorpusLedgerEntry(CorpusLedgerEntryKind.Execution, result, "");
+    }
+
+    /// <summary>
+    /// Why a value is dropped, or null for one that is taken. A node shaped the value, so whatever
+    /// a check throws over it is that value's: it is unreadable, and the run goes on.
+    /// </summary>
+    private string? Reason(CorpusResultData result, CorpusTaskData task)
+    {
+        try
+        {
+            return !CorpusResultCheck.IsWellFormed(result) ? REJECTED_UNREADABLE
+                : result.TaskIndex != task.TaskIndex || !string.Equals(result.SourceUrl, task.Source?.Url ?? "", StringComparison.Ordinal) ? REJECTED_CONTENT
+                : !string.Equals(result.ControllerVersion, ControllerVersion, StringComparison.Ordinal) ? REJECTED_VERSION
+                : !Fits(result, task) ? REJECTED_CONTENT
+                : null;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            return REJECTED_UNREADABLE;
+        }
     }
 
     /// <summary>Whether a checked result is one the task's pipeline can have produced.</summary>
@@ -405,6 +420,10 @@ public sealed class CorpusLedger
         // More bytes than the node was to accept for the shard: the cap, or the size it was declared with.
         var stats = result.Stats!;
         if (stats.BytesFetched > ShardLimits.FetchCap(task))
+            return false;
+
+        // The PDF stage runs on a WARC shard of a pipeline that has it on, and nowhere else.
+        if (stats.Pdf != null && (task.Source?.Format != CorpusSourceFormat.Warc || !pipeline.ExtractPdf))
             return false;
 
         if (!pipeline.IdentifyLanguage)

@@ -116,9 +116,14 @@ public static class CorpusManifestParser
         }
         catch (JsonException exception)
         {
-            var problem = exception.Message == CorpusJsonStream.NOT_AN_OBJECT
-                ? "manifest: the document must be a JSON object."
-                : $"manifest: not valid JSON ({exception.Message}).";
+            // The reader's own words for a document that is no object and for text that is no
+            // Unicode; the JSON library's for everything else.
+            var problem = exception.Message switch
+            {
+                CorpusJsonStream.NOT_AN_OBJECT => "manifest: the document must be a JSON object.",
+                CorpusJsonStream.NOT_UNICODE => "manifest: a string or a key is not Unicode text (an escape of half a surrogate pair, or bytes that are not UTF-8).",
+                _ => $"manifest: not valid JSON ({exception.Message})."
+            };
 
             return new CorpusManifest(new CorpusPipelineData(), [], [], [problem]);
         }
