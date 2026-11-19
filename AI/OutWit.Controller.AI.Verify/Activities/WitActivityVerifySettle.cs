@@ -12,6 +12,9 @@ namespace OutWit.Controller.AI.Verify.Activities;
 /// round, and the dispute round when the script ran one) → the settled run as one ledger blob.
 /// Every result package is accepted or refused here, under its ticket; every task is ruled on
 /// here; the four documents (report, outputs, provenance, integrity) are written here, once.
+/// The last argument, when a script gives it, is the sampling rate its fan-outs ran under: the
+/// repair round is then taken in as a sampled one, and the documents state the rate and whether
+/// it was met.
 /// </summary>
 [Activity("Verify.Settle")]
 [MemoryPackable]
@@ -21,7 +24,9 @@ public sealed partial class WitActivityVerifySettle : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Packages}, {Results}, {Repairs}, {Repaired}, {Disputes}, {Settled}";
+        return Rate == null
+            ? $"{Packages}, {Results}, {Repairs}, {Repaired}, {Disputes}, {Settled}"
+            : $"{Packages}, {Results}, {Repairs}, {Repaired}, {Disputes}, {Settled}, {Rate}";
     }
 
     #endregion
@@ -43,7 +48,8 @@ public sealed partial class WitActivityVerifySettle : WitActivityFunction
                && Repairs.Check(activity.Repairs)
                && Repaired.Check(activity.Repaired)
                && Disputes.Check(activity.Disputes)
-               && Settled.Check(activity.Settled);
+               && Settled.Check(activity.Settled)
+               && Rate.Check(activity.Rate);
     }
 
     protected override WitActivityVerifySettle InnerClone()
@@ -55,7 +61,8 @@ public sealed partial class WitActivityVerifySettle : WitActivityFunction
             Repairs = Repairs?.Clone() as IWitReference,
             Repaired = Repaired?.Clone() as IWitReference,
             Disputes = Disputes?.Clone() as IWitReference,
-            Settled = Settled?.Clone() as IWitReference
+            Settled = Settled?.Clone() as IWitReference,
+            Rate = Rate?.Clone() as IWitReference
         };
     }
 
@@ -86,6 +93,10 @@ public sealed partial class WitActivityVerifySettle : WitActivityFunction
     /// <summary>Reference to the 'Settled' argument of the activity (may be absent).</summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Settled { get; init; }
+
+    /// <summary>Reference to the 'Rate' argument of the activity: the sampling rate the fan-outs ran under (may be absent).</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Rate { get; init; }
 
     #endregion
 }

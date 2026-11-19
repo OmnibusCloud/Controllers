@@ -10,7 +10,10 @@ namespace OutWit.Controller.AI.Verify.Activities;
 /// <summary>
 /// Host-side: the task packages a fan-out gave out and the result packages it returned → the
 /// tasks whose executions disagree, as new task packages for a fan-out in three copies
-/// (Grid.Replicas(3)). An empty collection when no executions disagree.
+/// (Grid.Replicas(3)). An empty collection when no executions disagree. With the repair round
+/// as well (what it gave out and what it returned), a task the first fan-out left without a
+/// verdict is taken from the repair round: when its executions there disagree it goes to the
+/// dispute too.
 /// </summary>
 [Activity("Verify.Disputes")]
 [MemoryPackable]
@@ -20,7 +23,7 @@ public sealed partial class WitActivityVerifyDisputes : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Packages}, {Results}";
+        return Repairs == null ? $"{Packages}, {Results}" : $"{Packages}, {Results}, {Repairs}, {Repaired}";
     }
 
     #endregion
@@ -38,7 +41,9 @@ public sealed partial class WitActivityVerifyDisputes : WitActivityFunction
 
         return base.Is(activity, tolerance)
                && Packages.Check(activity.Packages)
-               && Results.Check(activity.Results);
+               && Results.Check(activity.Results)
+               && Repairs.Check(activity.Repairs)
+               && Repaired.Check(activity.Repaired);
     }
 
     protected override WitActivityVerifyDisputes InnerClone()
@@ -46,7 +51,9 @@ public sealed partial class WitActivityVerifyDisputes : WitActivityFunction
         return new WitActivityVerifyDisputes
         {
             Packages = Packages?.Clone() as IWitReference,
-            Results = Results?.Clone() as IWitReference
+            Results = Results?.Clone() as IWitReference,
+            Repairs = Repairs?.Clone() as IWitReference,
+            Repaired = Repaired?.Clone() as IWitReference
         };
     }
 
@@ -61,6 +68,14 @@ public sealed partial class WitActivityVerifyDisputes : WitActivityFunction
     /// <summary>Reference to the 'Results' argument of the activity.</summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Results { get; init; }
+
+    /// <summary>Reference to the 'Repairs' argument of the activity (may be absent).</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Repairs { get; init; }
+
+    /// <summary>Reference to the 'Repaired' argument of the activity (may be absent).</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Repaired { get; init; }
 
     #endregion
 }

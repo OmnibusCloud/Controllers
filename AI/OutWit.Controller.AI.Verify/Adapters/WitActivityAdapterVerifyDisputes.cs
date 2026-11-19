@@ -30,9 +30,15 @@ internal sealed class WitActivityAdapterVerifyDisputes : WitActivityAdapterFunct
         var issued = VerifyAdapterTools.TaskPackages(pool, activity.Packages, "Packages");
         var returned = VerifyAdapterTools.ResultPackages(pool, activity.Results, "Results");
 
-        // Executions that disagree are not chosen between: the task runs three more times.
+        // Executions that disagree are not chosen between: the task runs three more times. A
+        // script that hands over its repair round ran it under the sampling of the first
+        // fan-out, so the executions of a repaired task can disagree as well.
         var main = await VerifySettlement.ReadMainAsync(issued, returned, BlobService);
-        var packages = await VerifySettlement.PublishDisputesAsync(main, BlobService);
+        var repair = activity.Repairs == null
+            ? null
+            : await VerifySettlement.ReadRepairAsync(VerifyAdapterTools.TaskPackages(pool, activity.Repairs, "Repairs"),
+                VerifyAdapterTools.ResultPackages(pool, activity.Repaired, "Repaired"), sampled: true, BlobService);
+        var packages = await VerifySettlement.PublishDisputesAsync(main, repair, BlobService);
 
         Logger.LogInformation("Verify.Disputes: {Tasks} task(s) whose executions disagree run three more times in {Packages} package(s)",
             packages.Sum(package => (long)package.TaskCount), packages.Count);
@@ -49,13 +55,15 @@ internal sealed class WitActivityAdapterVerifyDisputes : WitActivityAdapterFunct
     {
         try
         {
-            if (parameters.Length != 2)
-                throw new ArgumentException($"Expected 2 parameter(s), got {parameters.Length}.");
+            if (parameters.Length != 2 && parameters.Length != 4)
+                throw new ArgumentException($"Expected 2 or 4 parameter(s), got {parameters.Length}.");
 
             return new WitActivityVerifyDisputes
             {
                 Packages = VerifyAdapterTools.Reference(parameters, 0, "Packages"),
-                Results = VerifyAdapterTools.Reference(parameters, 1, "Results")
+                Results = VerifyAdapterTools.Reference(parameters, 1, "Results"),
+                Repairs = parameters.Length > 2 ? VerifyAdapterTools.Reference(parameters, 2, "Repairs") : null,
+                Repaired = parameters.Length > 3 ? VerifyAdapterTools.Reference(parameters, 3, "Repaired") : null
             };
         }
         catch (Exception e)

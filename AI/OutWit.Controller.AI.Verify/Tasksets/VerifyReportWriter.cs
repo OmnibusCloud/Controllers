@@ -16,15 +16,18 @@ namespace OutWit.Controller.AI.Verify.Tasksets;
 /// A task the nodes could not settle is in it as such: <c>NoResult</c> with a reason code, or
 /// <c>Disputed</c>, never left out and never counted as a pass. The summary counts the result
 /// packages the server refused and the disputes it had to settle; all three are zero in a run
-/// without lying or failing nodes. Fuel, peak memory and wall time are metrics and live per task
-/// in the provenance document (<see cref="VerifyProvenanceWriter"/>).
+/// without lying or failing nodes. It also states the sampling the run asked for, whether it
+/// happened, and the packages nothing answered: in a run without lying or failing nodes on two
+/// machines or more the sampling is as asked and no package is unanswered, so the report of a
+/// taskset under the same options stays the same bytes. Fuel, peak memory and wall time are
+/// metrics and live per task in the provenance document (<see cref="VerifyProvenanceWriter"/>).
 /// </summary>
 public static class VerifyReportWriter
 {
     #region Constants
 
     /// <summary>The document's schema tag.</summary>
-    public const string SCHEMA = "verify-report/2";
+    public const string SCHEMA = "verify-report/3";
 
     #endregion
 
@@ -76,6 +79,7 @@ public static class VerifyReportWriter
         writer.WriteNumber("rejected_results", summary.RejectedResults);
         writer.WriteNumber("disputes", summary.Disputes);
         writer.WriteNumber("disputes_resolved", summary.DisputesResolved);
+        VerifySampling.Write(writer, summary.SamplingRate, summary.Sampling, summary.UnansweredPackages);
         writer.WriteEndObject();
 
         writer.WriteStartArray("results");

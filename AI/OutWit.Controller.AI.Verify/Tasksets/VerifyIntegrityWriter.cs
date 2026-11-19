@@ -6,19 +6,22 @@ namespace OutWit.Controller.AI.Verify.Tasksets;
 
 /// <summary>
 /// Writes the integrity document of a run: what the server did with what the nodes returned.
-/// Every task executed more than once in the first fan-out, its executions paired and whether
-/// they agree on everything an honest node cannot vary (verdict, exit code, outputs, per-case
-/// outcomes); every dispute and how three more executions settled it; and the counts: the result
-/// packages refused and why, the tasks sent out once more, the tasks left without a result, and
-/// how many tasks rest on one execution because they were not sampled. The platform keeps the
-/// executions of one batch on different machines, and the document does not say which.
+/// Every task executed more than once in the fan-out it was first ruled on (the first one, or
+/// the repair round), its executions paired and whether they agree on everything an honest node
+/// cannot vary (verdict, exit code, outputs, per-case outcomes); every dispute and how three more
+/// executions settled it; and the counts: the result packages refused and why, the tasks sent
+/// out once more, the tasks left without a result, and how many tasks rest on one execution
+/// because they were not sampled. It states the sampling the run asked for and whether it
+/// happened, and for every fan-out the packages that came back with the answers asked of them
+/// and the packages nothing answered: a run whose checking did not happen says so. The platform
+/// keeps the executions of one batch on different machines, and the document does not say which.
 /// </summary>
 internal static class VerifyIntegrityWriter
 {
     #region Constants
 
     /// <summary>The document's schema tag.</summary>
-    public const string SCHEMA = "verify-integrity/2";
+    public const string SCHEMA = "verify-integrity/3";
 
     private const int FLUSH_BYTES = 128 * 1024;
 
@@ -72,7 +75,25 @@ internal static class VerifyIntegrityWriter
             foreach (var reason in VerifyRoundIntake.REASONS)
                 writer.WriteNumber(reason, facts.Rejected.GetValueOrDefault(reason));
             writer.WriteEndObject();
+            VerifySampling.Write(writer, facts.SamplingRate, facts.Sampling, facts.UnansweredPackages);
             writer.WriteEndObject();
+
+            writer.WriteStartArray("fan_outs");
+            foreach (var fanOut in facts.FanOuts)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("round", fanOut.Round);
+                writer.WriteNumber("packages", fanOut.Packages);
+                writer.WriteNumber("copies", fanOut.Copies);
+                if (fanOut.Selected is { } selected)
+                    writer.WriteNumber("selected", selected);
+                else
+                    writer.WriteNull("selected");
+                writer.WriteNumber("complete", fanOut.Complete);
+                writer.WriteNumber("unanswered", fanOut.Unanswered);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
 
             writer.WriteStartArray("pairs");
             foreach (var pair in facts.Pairs)
@@ -105,6 +126,7 @@ internal static class VerifyIntegrityWriter
     {
         writer.WriteStartObject();
         writer.WriteNumber("index", pair.Index);
+        writer.WriteString("round", pair.Round);
         WriteSide(writer, "primary", pair.Primary);
         WriteSide(writer, "replica", pair.Replica);
         writer.WriteBoolean("compared", true);

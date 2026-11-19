@@ -187,16 +187,21 @@ internal sealed class VerifySettleRig : IDisposable
             (Array.Empty<VerifyTaskPackageData>(), Array.Empty<VerifyResultPackageData>()));
     }
 
-    /// <summary>Settles a run from its fan-outs, as Verify.Settle does, and reads the documents back.</summary>
+    /// <summary>
+    /// Settles a run from its fan-outs, as Verify.Settle does, and reads the documents back.
+    /// <paramref name="samplingRate"/> is what a script states as its last argument: with it the
+    /// repair round is taken in as a sampled one; without it the script is one that does not say.
+    /// </summary>
     public async Task<VerifySettledRun> SettleAsync(
         (IReadOnlyList<VerifyTaskPackageData> Issued, IEnumerable<VerifyResultPackageData> Returned) fanOut,
         (IReadOnlyList<VerifyTaskPackageData> Issued, IEnumerable<VerifyResultPackageData> Returned)? repair,
-        (IReadOnlyList<VerifyTaskPackageData> Issued, IEnumerable<VerifyResultPackageData> Returned)? dispute)
+        (IReadOnlyList<VerifyTaskPackageData> Issued, IEnumerable<VerifyResultPackageData> Returned)? dispute,
+        double? samplingRate = null)
     {
         // Awaited as a plain task, here and below: an awaiter of a controller type would be a
         // value type among this method's fields, and the test assembly's types are all loaded
         // when the tests are discovered. The module-load proof needs the controller unloaded then.
-        var settling = VerifySettlement.SettleAsync(fanOut, repair, dispute, Server ?? Blobs, Path.Combine(m_folder, "work"));
+        var settling = VerifySettlement.SettleAsync(fanOut, repair, dispute, Server ?? Blobs, Path.Combine(m_folder, "work"), samplingRate);
         await (Task)settling;
 
         var ledgerPath = settling.Result.LedgerPath;
@@ -236,7 +241,24 @@ internal sealed class VerifySettleRig : IDisposable
         var reading = VerifySettlement.ReadMainAsync(issued, returned, Blobs);
         await (Task)reading;
 
-        return await VerifySettlement.PublishDisputesAsync(reading.Result, Blobs);
+        return await VerifySettlement.PublishDisputesAsync(reading.Result, null, Blobs);
+    }
+
+    /// <summary>
+    /// The tasks whose executions disagree, in the first fan-out or in a repair round that ran
+    /// under its sampling, published for a dispute round: what Verify.Disputes does when a script
+    /// hands it both rounds.
+    /// </summary>
+    public async Task<List<VerifyTaskPackageData>> DisputesAsync(IReadOnlyList<VerifyTaskPackageData> issued, IEnumerable<VerifyResultPackageData> returned,
+        IReadOnlyList<VerifyTaskPackageData> repairs, IEnumerable<VerifyResultPackageData> repaired)
+    {
+        var reading = VerifySettlement.ReadMainAsync(issued, returned, Blobs);
+        await (Task)reading;
+
+        var again = VerifySettlement.ReadRepairAsync(repairs, repaired, sampled: true, Blobs);
+        await (Task)again;
+
+        return await VerifySettlement.PublishDisputesAsync(reading.Result, again.Result, Blobs);
     }
 
     #endregion

@@ -9,6 +9,11 @@ three counters, and fuel now counts the bytes a program reads and prints, so the
 SHA-256 values in the table of the run are those of the version named above. They are measured
 again when the kit is next walked on a fleet.
 
+**With Verify 0.16.0** the verdicts are unchanged again. The report is `verify-report/3`: its
+summary also states the sampling rate, whether the sampling took place (`as_asked` on a fleet
+of two machines or more) and the packages nothing answered (0), so its size and SHA-256 moved
+once more; the outputs did not change.
+
 ## The rewards table
 
 ```

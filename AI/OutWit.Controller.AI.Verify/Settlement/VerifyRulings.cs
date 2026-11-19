@@ -7,7 +7,9 @@ namespace OutWit.Controller.AI.Verify.Settlement;
 /// between two executions by what a node says:
 /// <list type="bullet">
 /// <item>a task with no verdict from the first fan-out (no accepted answer, or only faults of
-/// the nodes) is sent out once more; if it still has none, it has no result;</item>
+/// the nodes) is sent out once more; if it still has none, it has no result. The repair round
+/// keeps the checking of the first one: a script that states its sampling runs it under the
+/// same options, and its executions are ruled on as the first fan-out's are;</item>
 /// <item>executions that agree on everything that is compared are accepted, and so is the one
 /// execution of a task that was not sampled (it rests on one machine, and the integrity
 /// document counts it so);</item>
@@ -79,20 +81,36 @@ internal static class VerifyRulings
         return main.Verdicts(index).Count == 0;
     }
 
-    /// <summary>Whether the executions of a task in the first fan-out make a dispute.</summary>
-    /// <param name="main">The first fan-out.</param>
+    /// <summary>
+    /// Whether the executions of a task in a fan-out that samples (the first one, or a repair
+    /// round run under the same options) make a dispute.
+    /// </summary>
+    /// <param name="round">The fan-out.</param>
     /// <param name="index">The task.</param>
     /// <returns>True when its verdicts disagree, or when more answers came back for its package than were asked for.</returns>
-    public static bool IsDisputed(VerifyRound main, int index)
+    public static bool IsDisputed(VerifyRound round, int index)
     {
-        var verdicts = main.Verdicts(index);
+        var verdicts = round.Verdicts(index);
         if (verdicts.Count == 0)
             return false;
 
-        if (main.UnitOf.TryGetValue(index, out var unit) && main.Surplus.Contains(unit.Ticket))
+        if (round.UnitOf.TryGetValue(index, out var unit) && round.Surplus.Contains(unit.Ticket))
             return true;
 
         return verdicts.Skip(1).Any(other => !VerifyComparable.Agree(verdicts[0], other));
+    }
+
+    /// <summary>
+    /// Whether a task that went out once more came back from the repair round with executions
+    /// that make a dispute.
+    /// </summary>
+    /// <param name="main">The first fan-out.</param>
+    /// <param name="repair">The repair round.</param>
+    /// <param name="index">The task.</param>
+    /// <returns>True when the first fan-out gave the task no verdict and its repair executions disagree.</returns>
+    public static bool IsDisputedInRepair(VerifyRound main, VerifyRound repair, int index)
+    {
+        return NeedsRepair(main, index) && IsDisputed(repair, index);
     }
 
     /// <summary>
@@ -130,9 +148,14 @@ internal static class VerifyRulings
         if (verdicts.Count == 0)
         {
             var repaired = repair?.Verdicts(index) ?? [];
-            return repaired.Count > 0
-                ? VerifyRuling.Accept(index, repaired[0], 1, repaired: true)
-                : VerifyRuling.Without(index, FaultOf(main.Of(index), repair?.Of(index) ?? []));
+            if (repair == null || repaired.Count == 0)
+                return VerifyRuling.Without(index, FaultOf(main.Of(index), repair?.Of(index) ?? []));
+
+            // The repair round is ruled on as the first one is: copies that agree are accepted
+            // (one copy is one machine's word, and counted so), copies that disagree are a dispute.
+            return IsDisputed(repair, index)
+                ? Settle(index, repaired.Count, dispute, borrowable)
+                : VerifyRuling.Accept(index, repaired[0], repaired.Count, repaired: true);
         }
 
         if (!IsDisputed(main, index))

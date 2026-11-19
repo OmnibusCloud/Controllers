@@ -8,13 +8,14 @@ namespace OutWit.Controller.AI.Verify.Settlement;
 
 /// <summary>
 /// Settles a run on the server from what its fan-outs returned: the first one, the repair round
-/// (tasks without a verdict, sent out once more) and the dispute round (tasks whose executions
-/// disagreed, in three copies). Every result package is taken in under its ticket and checked
-/// (<see cref="VerifyRoundIntake"/>), every task is ruled on (<see cref="VerifyRulings"/>), and
-/// the four documents are written into one ledger (<see cref="VerifyLedger"/>). The results are
-/// read once, a batch at a time, and kept in a spool file while the documents are written, and
-/// every document goes to a file as it is written: the server's memory holds a record per
-/// execution, never the outputs and never a document.
+/// (tasks without a verdict, sent out once more, under the sampling of the first) and the
+/// dispute round (tasks whose executions disagreed, in three copies). Every result package is
+/// taken in under its ticket and checked (<see cref="VerifyRoundIntake"/>), every task is ruled
+/// on (<see cref="VerifyRulings"/>), and the four documents are written into one ledger
+/// (<see cref="VerifyLedger"/>). The results are read once, a batch at a time, and kept in a
+/// spool file while the documents are written, and every document goes to a file as it is
+/// written: the server's memory holds a record per execution, never the outputs and never a
+/// document.
 /// </summary>
 internal static class VerifySettlement
 {
@@ -67,13 +68,36 @@ internal static class VerifySettlement
     }
 
     /// <summary>
-    /// Stores the tasks of the first fan-out whose executions disagree as packages to run three
-    /// more times.
+    /// Takes in the repair round.
+    /// </summary>
+    /// <param name="issued">The task packages it gave out.</param>
+    /// <param name="returned">What Grid.ForEach returned.</param>
+    /// <param name="sampled">
+    /// True when the round ran under the sampling of the first fan-out: a package may have two
+    /// answers, and its tasks are ruled on as the first fan-out's are. False when every package
+    /// was asked for once: a package with more answers has none of them taken.
+    /// </param>
+    /// <param name="blobs">The host's blob service.</param>
+    /// <param name="spool">Where whole results are kept, or null when only the comparison is needed.</param>
+    /// <returns>The round as accepted.</returns>
+    public static Task<VerifyRound> ReadRepairAsync(IReadOnlyList<VerifyTaskPackageData> issued, IEnumerable<VerifyResultPackageData> returned, bool sampled,
+        IWitBlobService blobs, VerifySpool? spool = null)
+    {
+        return sampled
+            ? VerifyRoundIntake.ReadAsync(VerifyRound.REPAIR, issued, returned, VerifyRulings.SAMPLE_COPIES, surplusIsSuspect: true, blobs, spool)
+            : VerifyRoundIntake.ReadAsync(VerifyRound.REPAIR, issued, returned, 1, surplusIsSuspect: false, blobs, spool);
+    }
+
+    /// <summary>
+    /// Stores the tasks whose executions disagree as packages to run three more times: those of
+    /// the first fan-out, and those the first fan-out left without a verdict whose executions in
+    /// a sampled repair round disagree.
     /// </summary>
     /// <param name="main">The first fan-out.</param>
+    /// <param name="repair">The repair round, taken in as a sampled one, or null when the script hands none over.</param>
     /// <param name="blobs">The host's blob service.</param>
     /// <returns>The references; empty when nothing is disputed.</returns>
-    public static Task<List<VerifyTaskPackageData>> PublishDisputesAsync(VerifyRound main, IWitBlobService blobs)
+    public static Task<List<VerifyTaskPackageData>> PublishDisputesAsync(VerifyRound main, VerifyRound? repair, IWitBlobService blobs)
     {
         var wanted = new Dictionary<string, HashSet<int>?>(StringComparer.Ordinal);
 
@@ -83,7 +107,17 @@ internal static class VerifySettlement
                 Want(wanted, unit.Ticket, index);
         }
 
-        return PublishAsync(main.Issued, wanted, blobs);
+        if (repair == null)
+            return PublishAsync(main.Issued, wanted, blobs);
+
+        foreach (var (index, unit) in repair.UnitOf)
+        {
+            if (VerifyRulings.IsDisputedInRepair(main, repair, index))
+                Want(wanted, unit.Ticket, index);
+        }
+
+        // A ticket is of one round, so the packages of the two rounds are told apart by it.
+        return PublishAsync([.. main.Issued, .. repair.Issued], wanted, blobs);
     }
 
     /// <summary>
@@ -94,18 +128,25 @@ internal static class VerifySettlement
     /// <param name="dispute">The dispute round, or null when the script ran none.</param>
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="workFolder">A folder of the server's own for the working files.</param>
+    /// <param name="samplingRate">
+    /// The share of the packages the script asked to run twice, in the first fan-out and in the
+    /// repair round, or null when the script does not say. With a rate above 0 the repair round
+    /// is taken in as a sampled one; the documents state the rate and whether it was met.
+    /// </param>
     /// <returns>The ledger file (the caller stores and deletes it) and the run's counts.</returns>
     public static async Task<(string LedgerPath, VerifySettlementSummary Summary)> SettleAsync(
         (IReadOnlyList<VerifyTaskPackageData> Issued, IEnumerable<VerifyResultPackageData> Returned) fanOut,
         (IReadOnlyList<VerifyTaskPackageData> Issued, IEnumerable<VerifyResultPackageData> Returned)? repair,
         (IReadOnlyList<VerifyTaskPackageData> Issued, IEnumerable<VerifyResultPackageData> Returned)? dispute,
-        IWitBlobService blobs, string workFolder)
+        IWitBlobService blobs, string workFolder, double? samplingRate = null)
     {
         using var spool = new VerifySpool(workFolder);
 
+        var rate = samplingRate is { } stated ? VerifySampling.Clamp(stated) : (double?)null;
+
         var main = await ReadMainAsync(fanOut.Issued, fanOut.Returned, blobs, spool);
         var repaired = repair is { } again
-            ? await VerifyRoundIntake.ReadAsync(VerifyRound.REPAIR, again.Issued, again.Returned, 1, surplusIsSuspect: false, blobs, spool)
+            ? await ReadRepairAsync(again.Issued, again.Returned, sampled: rate > 0, blobs, spool)
             : null;
         var settled = dispute is { } thrice
             ? await VerifyRoundIntake.ReadAsync(VerifyRound.DISPUTE, thrice.Issued, thrice.Returned, VerifyRulings.DISPUTE_COPIES, surplusIsSuspect: false, blobs, spool)
@@ -124,8 +165,8 @@ internal static class VerifySettlement
         var rulings = indices.Select(index => VerifyRulings.Rule(index, main, repaired, settled, borrowable)).ToList();
         var rounds = new[] { main, repaired, settled }.OfType<VerifyRound>().ToList();
 
-        var summary = Summarize(rulings, rounds);
-        var facts = Facts(indices, rulings, main, rounds);
+        var facts = Facts(indices, rulings, main, repaired, settled, rate);
+        var summary = Summarize(rulings, rounds, facts);
 
         var stem = Path.Combine(workFolder, $"verify-settle-{Guid.NewGuid():N}");
         var outputsPath = stem + OUTPUTS_EXTENSION;
@@ -202,7 +243,7 @@ internal static class VerifySettlement
         return new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, WRITE_BUFFER_BYTES);
     }
 
-    private static VerifySettlementSummary Summarize(IReadOnlyList<VerifyRuling> rulings, IReadOnlyList<VerifyRound> rounds)
+    private static VerifySettlementSummary Summarize(IReadOnlyList<VerifyRuling> rulings, IReadOnlyList<VerifyRound> rounds, VerifyIntegrityFacts facts)
     {
         var summary = new VerifySettlementSummary();
         foreach (var ruling in rulings)
@@ -211,21 +252,36 @@ internal static class VerifySettlement
         summary.RejectedResults = rounds.Sum(round => round.RejectedTotal);
         summary.Disputes = rulings.Count(ruling => ruling.Disputed != null);
         summary.DisputesResolved = rulings.Count(ruling => ruling.Disputed is { Resolved: true });
+        summary.SamplingRate = facts.SamplingRate;
+        summary.Sampling = facts.Sampling;
+        summary.UnansweredPackages = facts.UnansweredPackages;
         return summary;
     }
 
-    private static VerifyIntegrityFacts Facts(IReadOnlyCollection<int> indices, IReadOnlyList<VerifyRuling> rulings, VerifyRound main, IReadOnlyList<VerifyRound> rounds)
+    private static VerifyIntegrityFacts Facts(IReadOnlyCollection<int> indices, IReadOnlyList<VerifyRuling> rulings, VerifyRound main, VerifyRound? repair, VerifyRound? dispute,
+        double? rate)
     {
-        var facts = new VerifyIntegrityFacts { Tasks = indices.Count };
+        var facts = new VerifyIntegrityFacts { Tasks = indices.Count, SamplingRate = rate };
 
         foreach (var index in indices)
         {
+            // The executions a task is first ruled on: of the first fan-out, or of the repair
+            // round when the first one gave it no verdict.
+            var round = main;
             var verdicts = main.Verdicts(index);
-            for (var copy = 1; copy < verdicts.Count; copy++)
-                facts.Pairs.Add(new VerifyPairRecord(index, verdicts[0], verdicts[copy], VerifyComparable.Differences(verdicts[0], verdicts[copy])));
-
-            if (VerifyRulings.NeedsRepair(main, index))
+            if (verdicts.Count == 0)
+            {
                 facts.Repairs++;
+
+                if (repair != null)
+                {
+                    round = repair;
+                    verdicts = repair.Verdicts(index);
+                }
+            }
+
+            for (var copy = 1; copy < verdicts.Count; copy++)
+                facts.Pairs.Add(new VerifyPairRecord(index, round.Name, verdicts[0], verdicts[copy], VerifyComparable.Differences(verdicts[0], verdicts[copy])));
         }
 
         foreach (var ruling in rulings)
@@ -241,13 +297,41 @@ internal static class VerifySettlement
                 facts.SingleExecution++;
         }
 
-        foreach (var round in rounds)
+        foreach (var round in new[] { main, repair, dispute }.OfType<VerifyRound>())
         {
             foreach (var (reason, count) in round.Rejected)
                 facts.Rejected[reason] = facts.Rejected.GetValueOrDefault(reason) + count;
         }
 
+        // What each fan-out was asked for and what came back, in packages.
+        int? asked = rate is { } stated ? VerifySampling.Selected(main.Issued.Count, stated) : null;
+        facts.FanOuts.Add(FanOut(main, VerifyRulings.SAMPLE_COPIES, asked));
+
+        if (repair != null)
+        {
+            // A repair round runs under the sampling of the first fan-out when a rate above 0 is
+            // stated; otherwise every package of it was asked for once.
+            facts.FanOuts.Add(rate is double share && share > 0
+                ? FanOut(repair, VerifyRulings.SAMPLE_COPIES, VerifySampling.Selected(repair.Issued.Count, share))
+                : FanOut(repair, 1, repair.Issued.Count));
+        }
+
+        if (dispute != null)
+            facts.FanOuts.Add(FanOut(dispute, VerifyRulings.DISPUTE_COPIES, dispute.Issued.Count));
+
+        facts.Sampling = VerifySampling.State(rate, facts.FanOuts);
         return facts;
+    }
+
+    /// <summary>One fan-out in numbers: the packages that came back with the answers asked of them, and those without any.</summary>
+    private static VerifyFanOutRecord FanOut(VerifyRound round, int copies, int? selected)
+    {
+        var answers = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var package in round.Accepted)
+            answers[package.Unit.Ticket] = answers.GetValueOrDefault(package.Unit.Ticket) + 1;
+
+        return new VerifyFanOutRecord(round.Name, round.Issued.Count, copies, selected,
+            answers.Values.Count(count => count >= copies), round.Issued.Count(unit => !answers.ContainsKey(unit.Ticket)));
     }
 
     private static void Want(Dictionary<string, HashSet<int>?> wanted, string ticket, int index)

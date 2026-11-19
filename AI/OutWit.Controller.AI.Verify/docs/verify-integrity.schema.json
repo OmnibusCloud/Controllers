@@ -2,28 +2,29 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-integrity.schema.json",
   "title": "Verify integrity",
-  "description": "The integrity blob of every Verify script: what the server did with what the nodes returned. The share of packages (VerifyOptions.SamplingRate) that ran twice in the first fan-out, the executions of each of their tasks compared on everything an honest node cannot vary (verdict, exit code, outputs, per-case outcomes); every dispute and how three more executions settled it; and the counts: the result packages refused and why, the tasks sent out once more, the tasks left without a result, and the tasks that rest on one execution because they were not sampled. The platform keeps the executions of one package on different machines and the document does not say which. Empty pairs at rate 0.",
+  "description": "The integrity blob of every Verify script: what the server did with what the nodes returned. The share of packages (VerifyOptions.SamplingRate) that ran twice, in the first fan-out and in the repair round, the executions of each of their tasks compared on everything an honest node cannot vary (verdict, exit code, outputs, per-case outcomes); every dispute and how three more executions settled it; the counts: the result packages refused and why, the tasks sent out once more, the tasks left without a result, and the tasks that rest on one execution because they were not sampled; and what every fan-out was asked for and what came back, in packages, with the sampling rate that was asked for and whether it was met. The platform keeps the executions of one package on different machines and the document does not say which. Empty pairs at rate 0.",
   "type": "object",
-  "required": ["schema", "summary", "pairs", "disputes"],
+  "required": ["schema", "summary", "fan_outs", "pairs", "disputes"],
   "additionalProperties": false,
   "properties": {
-    "schema": { "type": "string", "const": "verify-integrity/2" },
+    "schema": { "type": "string", "const": "verify-integrity/3" },
     "summary": {
       "type": "object",
       "required": [
         "tasks", "sampled", "compared", "mismatches", "mismatch_rate", "agreed", "single_execution",
-        "disputes", "disputes_resolved", "disputed", "repairs", "no_result", "rejected_results", "rejected"
+        "disputes", "disputes_resolved", "disputed", "repairs", "no_result", "rejected_results", "rejected",
+        "sampling_rate", "sampling", "unanswered_packages"
       ],
       "additionalProperties": false,
       "properties": {
         "tasks": { "type": "integer", "description": "Tasks of the run." },
-        "sampled": { "type": "integer", "description": "Pairs of executions of one task in the first fan-out, both with a verdict." },
+        "sampled": { "type": "integer", "description": "Pairs of executions of one task, both with a verdict, in the fan-out the task was first ruled on: the first one, or the repair round for a task the first left without a verdict." },
         "compared": { "type": "integer", "description": "Pairs compared; every pair is." },
         "mismatches": { "type": "integer", "description": "Compared pairs that disagree." },
         "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "mismatches / compared; 0 when nothing was compared." },
         "agreed": { "type": "integer", "description": "Tasks accepted on two or more executions that agree, a resolved dispute included." },
         "single_execution": { "type": "integer", "description": "Tasks accepted on one execution: they rest on one machine. A task that was not sampled is one of them." },
-        "disputes": { "type": "integer", "description": "Tasks whose executions in the first fan-out disagreed, or whose package got more answers there than were asked for." },
+        "disputes": { "type": "integer", "description": "Tasks whose executions disagreed, or whose package got more answers than were asked for, in the first fan-out or in a repair round that ran under its sampling." },
         "disputes_resolved": { "type": "integer", "description": "Disputes settled by a majority of three more executions." },
         "disputed": { "type": "integer", "description": "Disputes that stand: disputes - disputes_resolved, the tasks with verdict Disputed." },
         "repairs": { "type": "integer", "description": "Tasks without a verdict from the first fan-out, sent out once more." },
@@ -37,23 +38,48 @@
           "properties": {
             "unknown_ticket": { "type": "integer", "description": "A result under a ticket the fan-out did not give out." },
             "duplicate": { "type": "integer", "description": "The same result blob returned again." },
-            "unreadable": { "type": "integer", "description": "Not a result package this version reads, not the bytes its reference names, damaged, or larger than one may be." },
+            "unreadable": { "type": "integer", "description": "Not a result package this version reads, not the bytes its reference names, damaged, or larger than one may be; a frame with a length that leaves the frame, a count outside its bound or text that is not valid Unicode; and whatever else failed while the package was read." },
             "version": { "type": "integer", "description": "Made by another controller version, engine or runtime bytes than the server's." },
-            "content": { "type": "integer", "description": "Does not hold exactly the tasks of the package it answers (one missing, foreign or twice), or holds a result a node may not give." },
-            "surplus": { "type": "integer", "description": "More results under one ticket than copies were asked for, in the repair or the dispute round: which is the answer cannot be told, so none is taken." }
+            "content": { "type": "integer", "description": "Does not hold exactly the tasks of the package it answers (one missing, foreign or twice), or holds a result a node may not give: a verdict it has no word for, a number outside what the task allows (fuel beyond the budget of its runs, memory beyond the cap, a time below zero), more stdout than the task's cap, case records that are not those of the task's suite, or a verdict its own case records do not give." },
+            "surplus": { "type": "integer", "description": "More results under one ticket than copies were asked for, in the dispute round or in a repair round that asked for one: which is the answer cannot be told, so none is taken." }
           }
+        },
+        "sampling_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "The share of the packages the run asked to execute twice, as the script stated it to Verify.Settle. null when the script did not state it." },
+        "sampling": {
+          "type": "string",
+          "enum": ["not_stated", "none", "as_asked", "short"],
+          "description": "Whether the sampling that was asked for happened; the same word as in the report. not_stated: the script did not say what it asked for. none: the rate is 0. as_asked: in the first fan-out and in the repair round, complete is selected or more. short: in one of the two it is less."
+        },
+        "unanswered_packages": { "type": "integer", "description": "The sum of unanswered over the fan-outs." }
+      }
+    },
+    "fan_outs": {
+      "type": "array",
+      "description": "One record per fan-out the script ran, in the order they ran: what it was asked for and what came back, counted in task packages. It names no package and no machine.",
+      "items": {
+        "type": "object",
+        "required": ["round", "packages", "copies", "selected", "complete", "unanswered"],
+        "additionalProperties": false,
+        "properties": {
+          "round": { "type": "string", "enum": ["main", "repair", "dispute"] },
+          "packages": { "type": "integer", "description": "Task packages the fan-out gave out." },
+          "copies": { "type": "integer", "description": "The executions a selected package was asked for: 2 in the first fan-out and in a repair round under its sampling, 1 in a repair round that asked for each package once, 3 in a dispute round." },
+          "selected": { "type": ["integer", "null"], "description": "Packages asked for that many executions: what the sampling rate asks for (the share of packages rounded up to a whole one, one at least for a rate above 0), or every package where all are asked alike. null in the first fan-out when the script did not state its rate. The platform picks the packages at random and the server does not learn which." },
+          "complete": { "type": "integer", "description": "Packages that came back with that many accepted results, or more." },
+          "unanswered": { "type": "integer", "description": "Packages no accepted result came back for." }
         }
       }
     },
     "pairs": {
       "type": "array",
-      "description": "One record per pair of executions of a task in the first fan-out, ordered by index.",
+      "description": "One record per pair of executions of a task in the fan-out it was first ruled on, ordered by index.",
       "items": {
         "type": "object",
-        "required": ["index", "primary", "replica", "compared", "match"],
+        "required": ["index", "round", "primary", "replica", "compared", "match"],
         "additionalProperties": false,
         "properties": {
           "index": { "type": "integer" },
+          "round": { "type": "string", "enum": ["main", "repair"], "description": "The fan-out the two executions ran in: the first one, or the repair round for a task the first left without a verdict." },
           "primary": { "$ref": "#/$defs/side" },
           "replica": { "$ref": "#/$defs/side" },
           "compared": { "type": "boolean", "const": true },
@@ -71,7 +97,7 @@
         "additionalProperties": false,
         "properties": {
           "index": { "type": "integer" },
-          "first_copies": { "type": "integer", "description": "Executions of the first fan-out that had a verdict." },
+          "first_copies": { "type": "integer", "description": "Executions with a verdict in the fan-out the task was first ruled on: the first one, or the repair round." },
           "copies": { "type": "integer", "description": "Executions of the dispute round that came back with a verdict." },
           "agreeing": { "type": "integer", "description": "The most of them that returned one result." },
           "outcome": {

@@ -63,6 +63,8 @@ public sealed class VerifyLyingNodesTests : VerifyScriptTestBase
         m_nodes.Lies = 0;
         m_nodes.Second = null;
         m_nodes.SecondAnswers = 0;
+        m_nodes.NoValues = 0;
+        m_nodes.NoValuesSent = 0;
     }
 
     #endregion
@@ -82,6 +84,84 @@ public sealed class VerifyLyingNodesTests : VerifyScriptTestBase
             Assert.That(run.Integrity("sampled"), Is.EqualTo(TASKS));
             Assert.That(run.Integrity("mismatches"), Is.Zero);
             Assert.That(run.Integrity("repairs"), Is.Zero);
+            Assert.That(run.Word("sampling"), Is.EqualTo(VerifySampling.AS_ASKED));
+            Assert.That(run.Summary("unanswered_packages"), Is.Zero);
+        });
+    }
+
+    [TestCase(1.0)]
+    [TestCase(0.5)]
+    [TestCase(0.34)]
+    [TestCase(0.05)]
+    public async Task AnHonestRunGetsTheSamplingItAskedForTest(double rate)
+    {
+        // The settlement counts how many packages a rate asks for by the rule the platform
+        // selects by. Held to the platform here: an honest fan-out comes back with exactly that
+        // many packages answered twice, at every rate, and the documents say "as asked".
+        var run = await RunAsync(rate);
+        var (packages, copies, selected, complete, unanswered) = run.FanOut(VerifyRound.MAIN);
+
+        Assert.Multiple(() =>
+        {
+            AssertHonestVerdicts(run);
+            Assert.That(packages, Is.EqualTo(TASKS / 2), "two tasks a package");
+            Assert.That(copies, Is.EqualTo(2));
+            Assert.That(selected, Is.EqualTo(VerifySampling.Selected(packages, rate)));
+            Assert.That(complete, Is.EqualTo(selected), "the platform ran as many packages twice as the settlement expects of the rate");
+            Assert.That(unanswered, Is.Zero);
+            Assert.That(run.Word("sampling"), Is.EqualTo(VerifySampling.AS_ASKED));
+            Assert.That(run.Rate(), Is.EqualTo(rate));
+            Assert.That(run.Integrity("sampled"), Is.EqualTo(2 * selected), "two tasks of every package that ran twice");
+            Assert.That(run.Summary("rejected_results") + run.Summary("disputes") + run.Summary("unanswered_packages"), Is.Zero);
+        });
+    }
+
+    [Test]
+    public async Task ANodeThatAnswersWithNoValueAndLiesInTheRepairGainsNothingTest()
+    {
+        // The delta audit's finding N-4. The liar answers the first package it holds with a
+        // variable that has no value, and from then on says Pass for everything. Under Grid
+        // 1.3.0 the one answer of no value empties the results of the whole first fan-out:
+        // every task goes out once more, and the liar takes its share of that round. That round
+        // used to run once a package, so the liar's answers in it stood (two false passes of
+        // twelve in the audit's run) and no document said anything. It now runs under the
+        // sampling of the first, so the liar's copies meet honest ones and are outvoted. A Grid
+        // that leaves the answer out instead hands over a fan-out one answer short, and the
+        // honest copy of that package stands. Either way no task takes the liar's word, and the
+        // documents say that the sampling that was asked for did not all happen.
+        m_nodes.NoValues = 1;
+        m_nodes.Lie = honest => ForgeAsync(honest, batches =>
+        {
+            foreach (var result in batches.SelectMany(batch => batch.Results))
+            {
+                result.Verdict = VerifyVerdict.Pass;
+                result.ExitCode = 0;
+                result.Stdout = "";
+                foreach (var item in result.CaseResults)
+                {
+                    item.Passed = true;
+                    item.Verdict = VerifyVerdict.Pass;
+                    item.ActualStdout = "";
+                }
+            }
+        });
+
+        var run = await RunAsync(sampling: 1.0);
+        var (packages, _, selected, complete, _) = run.FanOut(VerifyRound.MAIN);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(m_nodes.NoValuesSent, Is.EqualTo(1));
+            AssertHonestVerdicts(run);
+            Assert.That(run.Summary("pass"), Is.EqualTo(TASKS / 2), "no false pass");
+            Assert.That(run.Outputs[0].GetProperty("cases")[0].GetProperty("stdout").GetString(), Is.EqualTo("0" + (char)10), "the outputs are the honest ones");
+            Assert.That(run.Summary("disputes_resolved"), Is.EqualTo(run.Summary("disputes")), "two honest machines of three settle every dispute");
+
+            Assert.That(selected, Is.EqualTo(packages), "every package was asked for twice");
+            Assert.That(complete, Is.LessThan(selected), "and not every one came back with two answers");
+            Assert.That(run.Word("sampling"), Is.EqualTo(VerifySampling.SHORT), "the report says so in a word");
+            Assert.That(run.IntegrityWord("sampling"), Is.EqualTo(VerifySampling.SHORT), "and so does the integrity document");
+            Assert.That(run.Integrity("single_execution") + run.Integrity("agreed"), Is.EqualTo(TASKS), "every task has a result");
         });
     }
 
@@ -377,6 +457,25 @@ public sealed class VerifyLyingNodesTests : VerifyScriptTestBase
         public Dictionary<int, JsonElement> Outputs { get; }
 
         public int Summary(string name) => m_report.GetProperty("summary").GetProperty(name).GetInt32();
+
+        public string? Word(string name) => m_report.GetProperty("summary").GetProperty(name).GetString();
+
+        public string? IntegrityWord(string name) => m_integrity.GetProperty("summary").GetProperty(name).GetString();
+
+        public double? Rate()
+        {
+            var rate = m_report.GetProperty("summary").GetProperty("sampling_rate");
+            return rate.ValueKind == JsonValueKind.Null ? null : rate.GetDouble();
+        }
+
+        public (int Packages, int Copies, int Selected, int Complete, int Unanswered) FanOut(string round)
+        {
+            var fanOut = m_integrity.GetProperty("fan_outs").EnumerateArray().Single(item => item.GetProperty("round").GetString() == round);
+            var selected = fanOut.GetProperty("selected");
+
+            return (fanOut.GetProperty("packages").GetInt32(), fanOut.GetProperty("copies").GetInt32(), selected.ValueKind == JsonValueKind.Null ? -1 : selected.GetInt32(),
+                fanOut.GetProperty("complete").GetInt32(), fanOut.GetProperty("unanswered").GetInt32());
+        }
 
         public int Integrity(string name) => m_integrity.GetProperty("summary").GetProperty(name).GetInt32();
 

@@ -11,10 +11,35 @@ Every number on this page was measured, in the controller's tests or on a test f
 [README](../README.md) explains how things work inside; [safety.md](safety.md) is the same
 sandbox told for the people who lend their computers.
 
-Version described: **Verify 0.15.0** (with Verify.Model 0.4.0 and Verify.Scripts 0.6.0), for the
-test server. 0.14.0 is proven on a five-node test fleet (Windows and Linux; 0.11.3 on six nodes
+Version described: **Verify 0.16.0** (with Verify.Model 0.4.0 and Verify.Scripts 0.7.0), for the
+test server. 0.15.0 is proven on a five-node test fleet (Windows and Linux; 0.11.3 on six nodes
 with macOS), and the fleet figures on this page (scale, medians, pool rate) were measured before
 0.13.0. None of these versions is on nuget.org or on the live network.
+
+What 0.16.0 changed for an application:
+
+- **New document versions.** `verify-report/3` and `verify-integrity/3` (section 6). Every
+  field of the earlier versions is there with the name and the meaning it had. New in both
+  summaries: `sampling_rate` (the rate that was asked for; `null` when the script did not say),
+  `sampling` (`as_asked`, `short`, `none`, `not_stated`) and `unanswered_packages`. New in the
+  integrity document: `fan_outs`, a record for every fan-out, and `round` in every pair. An
+  application that holds a document to its `schema` tag takes the new tags.
+- **The report of a taskset is the same bytes for the same options.** It now states the
+  sampling rate, so the report of one taskset at two rates differs in that field. In a pool of
+  one machine nothing runs twice, and a run that asked for sampling says `short`.
+- **The scripts changed.** The repair round runs under the sampling of the first fan-out,
+  `Verify.Disputes` is handed the repair round too, and `Verify.Settle` the sampling rate
+  (section 3). The job variables an application reads are the same. A script of Verify.Scripts
+  0.6.0 still runs and settles as it did; its documents say `not_stated`.
+- **More is refused of a node.** A result outside what its task allows (fuel beyond the budget
+  of its runs, memory beyond the cap, a time below zero, stdout beyond the cap, case records
+  that are not those of the suite, a verdict its case records do not give) is refused as
+  `content`, and a package with a length or a count that does not fit its own bytes, or with
+  text that is not valid Unicode, as `unreadable` (section 10). The task then goes out once
+  more. No result of an honest node is outside these.
+- **Nothing else moved.** No verdict, no fuel figure and no output of a run without lying or
+  failing nodes changed, and its provenance differs only in the controller version it names;
+  the model is the package it was.
 
 What 0.15.0 changed for an application:
 
@@ -164,10 +189,15 @@ The job variables an application reads are the same as before 0.13.0. Inside, a 
 to three fan-outs (section 10):
 
 1. the first one, with a share of the packages in two copies;
-2. the repair round: tasks without a verdict go out once more;
-3. the dispute round: tasks whose executions disagree run three more times on different
-   machines.
+2. the repair round: tasks without a verdict go out once more, the same share of their
+   packages in two copies;
+3. the dispute round: tasks whose executions disagree, in either of the two, run three more
+   times on different machines.
 
+`Verify.Disputes` is given the first fan-out and the repair round (four arguments; with two it
+looks at the first fan-out alone, as before 0.16.0). `Verify.Settle` is given the three rounds
+and, as its seventh argument, the sampling rate they ran under; without it the repair round is
+taken as one execution a package and the documents say that the sampling was `not_stated`.
 `Verify.Settle` then rules on every task and writes the four documents once, into one ledger
 blob; `Verify.Collect`, `Verify.CollectOutputs`, `Verify.Provenance` and `Verify.Integrity`
 hand them out from the ledger. The [README](../README.md) shows the scripts as they are.
@@ -179,7 +209,7 @@ hand them out from the ledger. The [README](../README.md) shows the scripts as t
 | `DefaultLimits` | the controller's defaults (section 9) | limits for tasks that do not set their own. Its wall time is accepted and is not a limit |
 | `BatchSize` | 32 (0 means the default) | tasks per batch, clamped to 4,096; a batch shares one compiled runtime module. A batch is also cut earlier by its tasks' text and output caps (section 11) |
 | `MaxDegree` | 16 (0 means the default) | at most this many sandboxes at once on a node (never more than its cores or its memory allows) |
-| `SamplingRate` | 0 | the share of packages run twice on another machine for integrity, 0 to 1 |
+| `SamplingRate` | 0 | the share of packages run twice on another machine for integrity, 0 to 1: rounded up to a whole package, one at least for a rate above 0, in the first fan-out and in the repair round |
 | `ReportFormat` | — | reserved |
 
 ### Before a run
@@ -342,10 +372,10 @@ problems, and one checker that verifies every answer by another route.
 
 | Output | Schema | Content | Identical across runs and fleets |
 |---|---|---|---|
-| `report` | [`verify-report.schema.json`](verify-report.schema.json), `verify-report/2` | `summary` (`total`, `pass`, `pass_rate`, counts per verdict, `rejected_results`, `disputes`, `disputes_resolved`) and `results[]`: `index`, `verdict`, `exit`, `reason` (only for `NoResult`), `cases[]` (`case`, `passed`, `verdict`) | yes, as long as every node did its work and told the truth: the run's identity |
+| `report` | [`verify-report.schema.json`](verify-report.schema.json), `verify-report/3` | `summary` (`total`, `pass`, `pass_rate`, counts per verdict, `rejected_results`, `disputes`, `disputes_resolved`, `sampling_rate`, `sampling`, `unanswered_packages`) and `results[]`: `index`, `verdict`, `exit`, `reason` (only for `NoResult`), `cases[]` (`case`, `passed`, `verdict`) | yes, for the same options, as long as every node did its work and told the truth: the run's identity |
 | `outputs` / `corpus` | [`verify-corpus.schema.json`](verify-corpus.schema.json) | one JSON line per task: `index`, `verdict`, `exit`, `reason` (only for `NoResult`), `stdout`, `stderr`, the truncation flags, and per case its `exit` and `stdout` | yes, on the same condition |
 | `provenance` | [`verify-provenance.schema.json`](verify-provenance.schema.json), `verify-provenance/2` | per accepted batch: `round` (`main`, `repair`, `dispute`), platform (`windows-x64`, …), wasmtime and controller versions, runtime and its hash, fuel; per task: `fuel`, `peak_memory`, `wall_ms`, and `fault` for a task the node could not run | no: these are metrics (section 10) |
-| `integrity` | [`verify-integrity.schema.json`](verify-integrity.schema.json), `verify-integrity/2` | `summary` (the counts below), the `pairs` with what differs, and the `disputes` with how each ended | no: which packages are sampled is random |
+| `integrity` | [`verify-integrity.schema.json`](verify-integrity.schema.json), `verify-integrity/3` | `summary` (the counts below), the `fan_outs` (what each round was asked for and what came back, in packages), the `pairs` with what differs, and the `disputes` with how each ended | no: which packages are sampled is random |
 
 What the documents say of a run that did not go well:
 
@@ -357,14 +387,33 @@ What the documents say of a run that did not go well:
 - **`pass_rate`** is `pass / total`: both kinds are in the total.
 - **The report's `rejected_results`, `disputes` and `disputes_resolved`** are zero in a run
   without lying or failing nodes.
+- **A fan-out that came back short** shows in three fields of the report's summary, and of the
+  integrity document's: `sampling_rate` is the rate that was asked for, `sampling` says whether
+  it took place, and `unanswered_packages` counts the task packages no accepted result came
+  back for, every fan-out together. `sampling` is `as_asked` when as many packages came back
+  with two accepted results as the rate asks for, in the first fan-out and in the repair
+  round; `short` when fewer did; `none` at a rate of 0; `not_stated` when the script did not
+  hand the rate to `Verify.Settle`. A run without lying or failing nodes on two machines or
+  more says `as_asked` (or `none`) and has no unanswered package.
 
 The integrity summary counts: `tasks`; `sampled`, `compared`, `mismatches`, `mismatch_rate`
-(the pairs of the first fan-out); `agreed` (tasks accepted on two or more executions that
+(the pairs of the first fan-out, and of the repair round for the tasks the first left without
+a verdict); `agreed` (tasks accepted on two or more executions that
 agree) and `single_execution` (tasks accepted on one execution, which rest on one machine: a
 task that was not sampled is one of them); `disputes`, `disputes_resolved`, `disputed` (the
 disputes that stand); `repairs` (tasks sent out once more);
 `no_result`; `rejected_results`, and `rejected` by reason (`unknown_ticket`, `duplicate`,
-`unreadable`, `version`, `content`, `surplus`).
+`unreadable`, `version`, `content`, `surplus`); `sampling_rate`, `sampling` and
+`unanswered_packages` as in the report.
+
+`fan_outs` has a record for every round the script ran (`main`, `repair`, `dispute`):
+`packages` (the task packages it gave out), `copies` (the executions a selected package was
+asked for: 2 where a share is sampled, 3 in a dispute, 1 in a repair round that asked for each
+package once), `selected` (the packages asked for that many: what the rate asks for, or all of
+them in a dispute; `null` in the first fan-out when the script did not state its rate),
+`complete` (the packages that came back with that many accepted results) and `unanswered`
+(the packages with none). It names no package: the platform picks the sampled ones at random
+and the server does not learn which.
 
 For a task with a suite, the task's own `stdout` is the last case's.
 
@@ -636,19 +685,37 @@ under rules.
   its blob is the bytes its reference names, when it was made by the server's own controller
   version, engine and runtime bytes, and when it holds exactly the tasks of the package it
   answers: none missing, none foreign, none twice.
+- **A package is walked before it is decoded.** Every text and every list of a frame must lie
+  inside the frame's own bytes, every count inside its bound (a result has at most 1,024 case
+  records), and every text must be valid Unicode with its true length stated. A package that
+  is not is `unreadable`.
+- **A result is held to its task.** The server has the task, so a result must be one a run of
+  that task could give: fuel from 0 to the task's budget for each of its runs, peak memory
+  from 0 to its cap, no time below zero, stdout within the task's cap (all its cases together),
+  a case record for each case of its suite in order (or none, for a task that never ran: a
+  module that did not compile, a compile its budget did not pay for), a pass with exit code 0,
+  and for a task with case records the verdict and the exit code of the first case that did
+  not pass. Stderr is held to the ceiling only: it is also where a node puts what the engine
+  or the compiler said of a run that never started. A result outside this is `content`.
 - **What is dropped.** Anything else is dropped and counted (`rejected_results`), by reason:
   `unknown_ticket`, `duplicate`, `unreadable`, `version`, `content`, `surplus`. A dropped
-  package fails that package and not the run.
+  package fails that package and not the run, whatever it was that failed while it was read.
 - **One controller version a job.** A package names the version that made it, and a node on
   another version refuses it before doing anything.
 - **Sampling.** `SamplingRate` runs that share of the packages twice, in the same fan-out as
   the rest. The platform picks the packages at random and keeps the two executions on
   different machines, so a node cannot tell whether it is being checked. With one machine
   available nothing runs twice. A copy that did not come back with a verdict makes no pair and
-  is not a mismatch.
+  is not a mismatch; it does make the fan-out short of its sampling, and the documents say so
+  (section 6).
 - **Repair.** A task with no verdict from the first fan-out (no accepted answer, or only a
   fault of the node that ran it) is sent out once more. If it still has none it is `NoResult`
-  with a `reason`: `wall_clock`, `node_fault` or `no_answer`.
+  with a `reason`: `wall_clock`, `node_fault` or `no_answer`. The repair round runs under the
+  sampling of the first fan-out, and its executions are ruled on the same way: two that agree
+  are accepted, two that disagree are a dispute. So a node that leaves packages unanswered
+  does not get their tasks back in a round nobody checks. The server does not know which
+  packages the platform ran twice, so the repair of a package is sampled at the rate that was
+  asked for, whether or not the package was one of them.
 - **The server never chooses between two executions.** Executions that agree on verdict, exit
   code, outputs and per-case outcomes are accepted. Executions that disagree are a dispute.
 - **Disputes.** A disputed task runs three more times on different machines
@@ -665,10 +732,10 @@ keep one value at most for each return variable its tasks asked for. What the co
 alone, whatever a node returns:
 
 - a node answers only for packages it was given (tickets);
-- in the first fan-out, more answers than the two asked for send the package's tasks to a
-  dispute;
-- in the repair and dispute rounds, a package with more answers than were asked for has none of
-  them taken;
+- in the first fan-out, and in a repair round under its sampling, more answers than the two
+  asked for send the package's tasks to a dispute;
+- in the dispute round, and in a repair round that asked for each package once, a package with
+  more answers than were asked for has none of them taken;
 - so a node does not win a dispute in which all three copies came back: a second answer of its
   own is one too many, and the task stays `Disputed`.
 
@@ -769,8 +836,8 @@ task of the kit is ended by a node's wall clock.
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 0.15.0 | `OutWit.Controller.AI.Verify` (GitHub Packages; nuget.org at 1.0.0) |
-| The model and the scripts | 0.4.0 and 0.6.0 | `OutWit.Controller.AI.Verify.Model`, `OutWit.Controller.AI.Verify.Scripts` |
+| The controller | 0.16.0 | `OutWit.Controller.AI.Verify` (GitHub Packages; nuget.org at 1.0.0) |
+| The model and the scripts | 0.4.0 and 0.7.0 | `OutWit.Controller.AI.Verify.Model`, `OutWit.Controller.AI.Verify.Scripts` |
 | The engine | wasmtime long-term line 48: the .NET binding 48.0.2 over the native library 48.0.8, pinned by SHA-256 | natives per platform, release `wasmtime-v48.0.8-2` (8 to 10 MB each; the libraries of `wasmtime-v48.0.8`, byte for byte, with their third-party notices) |
 | The language runtimes | as in section 8 | `verify-wasm.zip`, release `verify-v0.15.0` (67.5 MB) |
 | The numpy runtime | CPython 3.14.6 + numpy 2.5.4 | `verify-python-numpy.zip`, release `verify-v0.15.0` (17.2 MB) |
@@ -789,7 +856,8 @@ How a deployment uses them:
 - The limits are a run's, and a task with a suite runs once a case: one task can ask a node for 1,024 runs at the fuel ceiling (section 9).
 - The list of package references a job carries grows with the run, one reference of about 230 bytes a package. At the default output caps the largest taskset is about 2 MB of them. The controller bounds the tasks of a taskset, not its packages: 4,194,304 tasks that each ask for the stdout ceiling would be cut into about 280,000 packages, a list of 64 MB, and are not refused.
 - The scale runs on the fleet (a million tasks) were measured before 0.13.0 and have not been repeated since.
-- A task that was not sampled rests on one machine (`single_execution` in the integrity document). So does a task that was sent out once more after a node's fault.
+- A task that was not sampled rests on one machine (`single_execution` in the integrity document). So does a task that was sent out once more after a node's fault, unless its repair package was one of the share that runs twice.
+- The server does not know which packages the platform ran twice. It counts how many came back with two accepted results against how many the rate asks for, and says `short` when fewer did; it cannot say which package lost its second execution.
 - The server cannot see which machine returned an answer. A liar can keep a dispute from being resolved (the task stays `Disputed`); it cannot make its answer the accepted one, except when the honest copies of a disputed task were all lost (section 10).
 - The price of compiling a task's own module is an estimate fitted to measurements, not a proof about every module. A compile, once started, cannot be interrupted, and one expensive compile runs at a time in a node's process (section 9).
 - Fuel bounds work, not time: a run of slow instructions can take four times as long as its budget lasts at the reference rate, and ten seconds more, before a node's backstop ends it (section 9).

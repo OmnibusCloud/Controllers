@@ -59,7 +59,7 @@ internal sealed class VerifyLyingNodesManager : IWitNodesManager
     {
         var lie = Lie;
         var second = Second;
-        if ((lie == null && second == null) || nodeId != Liar)
+        if ((lie == null && second == null && NoValues == 0) || nodeId != Liar)
             return variables;
 
         var returned = new List<IWitVariable>(variables.Count + 1);
@@ -68,6 +68,16 @@ internal sealed class VerifyLyingNodesManager : IWitNodesManager
         {
             if (variable.Value is VerifyResultPackageData honest)
             {
+                // An answer of no value in place of a result package, under the package's own
+                // return variable: the right type, the right name, nothing in it.
+                if (NoValues > 0)
+                {
+                    NoValues--;
+                    NoValuesSent++;
+                    returned.Add(new WitVariableVerifyResultPackage(variable.Name, null));
+                    continue;
+                }
+
                 // One more answer for the first package of the batch, under that package's own
                 // return variable; every package still gets its answer.
                 if (second != null && extra == null)
@@ -112,6 +122,16 @@ internal sealed class VerifyLyingNodesManager : IWitNodesManager
 
     /// <summary>The result packages the liar replaced since the manager was made or the count was reset.</summary>
     public int Lies { get; set; }
+
+    /// <summary>
+    /// How many of its next result packages the liar answers with a variable of the right type
+    /// and name that holds no value; it does the work and answers honestly, or as
+    /// <see cref="Lie"/> says, after those.
+    /// </summary>
+    public int NoValues { get; set; }
+
+    /// <summary>The answers of no value the liar sent since the manager was made or the count was reset.</summary>
+    public int NoValuesSent { get; set; }
 
     /// <summary>The second answers the liar sent since the manager was made or the count was reset.</summary>
     public int SecondAnswers { get; set; }

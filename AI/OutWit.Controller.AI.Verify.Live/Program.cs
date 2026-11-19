@@ -293,6 +293,14 @@ public static class Program
         var verdicts = summary.GetProperty("verdicts");
         var histogram = string.Join(", ", verdicts.EnumerateObject().Where(p => p.Value.GetInt32() > 0).Select(p => $"{p.Name}={p.Value.GetInt32()}"));
         Console.WriteLine($"    verdicts: {histogram}");
+
+        // Since verify-report/3: what was asked for of the sampling, and whether it happened.
+        if (summary.TryGetProperty("sampling", out var sampling))
+        {
+            var rate = summary.GetProperty("sampling_rate");
+            var asked = rate.ValueKind == JsonValueKind.Number ? rate.GetDouble().ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "not stated";
+            Console.WriteLine($"    sampling: {sampling.GetString()} (rate {asked}), unanswered packages {summary.GetProperty("unanswered_packages").GetInt32()}");
+        }
     }
 
     private static void PrintProvenance(byte[] provenance)
@@ -325,9 +333,23 @@ public static class Program
                           $"no result {summary.GetProperty("no_result").GetInt32()}, disputes {summary.GetProperty("disputes").GetInt32()} " +
                           $"(resolved {summary.GetProperty("disputes_resolved").GetInt32()})");
 
+        // Since verify-integrity/3: what every fan-out was asked for and what came back, in packages.
+        if (document.RootElement.TryGetProperty("fan_outs", out var fanOuts))
+        {
+            foreach (var fanOut in fanOuts.EnumerateArray())
+            {
+                var selected = fanOut.GetProperty("selected");
+                Console.WriteLine($"    {fanOut.GetProperty("round").GetString(),-7}: {fanOut.GetProperty("packages").GetInt32()} package(s), " +
+                                  $"{(selected.ValueKind == JsonValueKind.Number ? selected.GetInt32().ToString() : "an unstated number")} asked for {fanOut.GetProperty("copies").GetInt32()} execution(s), " +
+                                  $"{fanOut.GetProperty("complete").GetInt32()} came back with them, {fanOut.GetProperty("unanswered").GetInt32()} unanswered");
+            }
+        }
+
         if (sampled == 0)
         {
-            Console.WriteLine("  integrity: no sampling");
+            // A run that asked for sampling and compared nothing says so; so does one that asked for none.
+            var state = summary.TryGetProperty("sampling", out var sampling) ? sampling.GetString() : null;
+            Console.WriteLine(state is "short" ? "  integrity: NOTHING WAS COMPARED (the sampling that was asked for did not happen)" : "  integrity: no sampling");
             return;
         }
 
