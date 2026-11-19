@@ -15,7 +15,7 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.7.0 — the fourth hardening release, about what the server takes from a node and what
+**Status: 0.8.0 — the fifth hardening release, about the near-duplicate merge: what a merge costs and how long it runs do not depend on what a node wrote into the signatures of its shard, a merge that was stopped is left at the next document, and a merge holds four million documents at the most whatever the length of their signatures (see *What hostile input meets*). It changes no stage, and a merge keeps what it kept. 0.7.0 was the fourth, about what the server takes from a node and what
 it says when a round comes back short: a result frame is walked before it is decoded, a result's
 counters are held to the bytes of its shard, a shard that goes out again goes out on two machines
 when the run asked for sampling, and both documents state the sampling that was asked for and how
@@ -39,7 +39,7 @@ under both, the demo kit's identity byte for byte, and, with one machine of the 
 another product for every shard it held, all 24 products the honest ones and every dispute
 settled by three machines when two machines ran each shard (with one machine a shard, what the
 lying machine returned for a shard of its own stands: one or two of the 24, the limit stated
-under *Trust and integrity*). 0.6.0 gave the same identity on the test fleet. 0.7.0 has not run
+under *Trust and integrity*). 0.6.0 gave the same identity on the test fleet. 0.7.0 and 0.8.0 have not run
 on the fleet yet; not yet
 released to nuget.org.** The full reference for lab engineers and application
 developers is [docs/capabilities.md](docs/capabilities.md).
@@ -891,7 +891,8 @@ honest nodes meet it at the same place:
 | an answer from a node | bound to a package by its ticket before it is opened; one more answer opened than the round asked for; a blob of 128 KiB a result at most; a frame refused by its stated length; one value a shard; whatever fails while it is read costs that answer, never the run | dropped, counted |
 | a result frame from a node | walked before it is decoded: every object the members its type has, every string's lengths inside the frame, at one with one another and within 4,096 characters, every list within the most its kind holds, nothing left over | dropped, counted |
 | a result from a node | the shape of an honest result; its counters held to its shard: no more records than the bytes fetched can unpack to (24 bytes a record at the least), a document for each record that is no PDF, the PDF stage's counts at one with one another, PDF counts only where the task runs that stage | dropped, counted |
-| a report given to `Corpus.Dedup` | 4 GiB (4,096 bytes for each shard a job may have), read a shard at a time; the capacity asked of its counts before a blob is read | refused by name |
+| a report given to `Corpus.Dedup` | 4 GiB (4,096 bytes for each shard a job may have), read a shard at a time; the capacity asked of its counts before a blob is read: 4,000,000 documents whatever the length of their signatures, fewer above 128 hashes (512 million signature values) | refused by name |
+| the signatures a node wrote, in `Corpus.Dedup` | a band's keys are sorted, not looked up in a table keyed by them, so a merge costs the same whatever the signatures are; beside the signatures a document costs the merge under 48 bytes; the token is read at every document | the merge runs as for any other signatures; a job that was stopped is left at the next document |
 
 Cancellation is looked at inside a record, every 4,096 bytes of it, so a shard
 that never yields a record (512 MiB of line feeds) stops when its job does.
@@ -1351,7 +1352,7 @@ table depending on the machine, and the three differ for hundreds of code
 points), and ASCII names and phrases are compared as ASCII. A controller release that
 changes a stage changes the product of an unchanged pipeline (0.1.5 keeps WET
 line structure and adds the line stage; 0.4.0 lower-cases the capitals Unicode
-16 added the same way everywhere; 0.5.0, 0.6.0 and 0.7.0 change no stage, and their
+16 added the same way everywhere; 0.5.0, 0.6.0, 0.7.0 and 0.8.0 change no stage, and their
 products are those of 0.4.0 byte for byte), which is why a job runs on one controller
 version: a node on another refuses its batch. The tests pin a zstd frame digest and a MinHash signature digest,
 pin the records and the extracted text of a shard (a generated one, and the head

@@ -116,13 +116,16 @@ public sealed record CorpusDedupInput(IReadOnlyList<CorpusDedupSource> Shards, M
         var merged = shards.Where(shard => shard.Parameters == runParameters).ToList();
 
         // Before a blob is opened: the documents the report states, against what one merge holds.
+        // The merge counts documents as well as signature values, so shorter signatures buy no
+        // more documents than the merge has room for; longer ones buy fewer.
         var total = merged.Sum(shard => (long)shard.Documents);
         var capacity = CorpusDeduplicator.Capacity(runParameters.Hashes);
         if (total > capacity)
         {
             return Refuse(
                 $"The run has {total} documents and one merge holds {capacity} with {runParameters.Hashes}-hash signatures: " +
-                "merge the run in parts (a report of some of its shards), or sign with fewer hashes.") with { Parameters = runParameters };
+                "merge the run in parts (a report of some of its shards)" +
+                (capacity < CorpusDeduplicator.MAX_DOCUMENTS ? ", or sign with fewer hashes." : ".")) with { Parameters = runParameters };
         }
 
         return new CorpusDedupInput(merged, runParameters, null) { Excluded = excluded };

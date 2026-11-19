@@ -160,6 +160,52 @@ public sealed class CorpusDedupInputTests
     }
 
     [Test]
+    public void ARunOfShortSignaturesHoldsNoMoreDocumentsThanAMergeHasRoomForTest()
+    {
+        // 1,000 shards signed with one hash. The values of 12 million such documents are 96 MB,
+        // far inside the bound on the values; the merge's own tables grow with the documents, so
+        // the documents are counted too, here, before a blob is opened.
+        var pipeline = CorpusTestRun.Signed();
+        pipeline.MinHash = new CorpusMinHashData { Hashes = 1, ShingleWords = 5, Bands = 1 };
+        var tasks = CorpusTestRun.Tasks(1000, pipeline);
+
+        var over = CorpusDedupInput.Read(Report(tasks, tasks.Select(task => CorpusTestRun.Completed(task, documentsOut: 12_000)).ToArray()));
+        var one = CorpusDedupInput.Read(Report(tasks, tasks.Select(task => CorpusTestRun.Completed(task, documentsOut: task.TaskIndex == 0 ? 4_001 : 4_000)).ToArray()));
+        var most = CorpusDedupInput.Read(Report(tasks, tasks.Select(task => CorpusTestRun.Completed(task, documentsOut: 4_000)).ToArray()));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(over.Refusal, Is.EqualTo("The run has 12000000 documents and one merge holds 4000000 with 1-hash signatures: merge the run in parts (a report of some of its shards)."));
+            Assert.That(over.Shards, Is.Empty, "nothing to open");
+            Assert.That(one.Refusal, Does.StartWith("The run has 4000001 documents and one merge holds 4000000 with 1-hash signatures"));
+
+            Assert.That(most.Refusal, Is.Null, "as many as a merge holds are merged");
+            Assert.That(most.Shards, Has.Count.EqualTo(1000));
+            Assert.That(most.Parameters.Hashes, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public void TheRefusalAdvisesFewerHashesOnlyWhereTheyWouldHelpTest()
+    {
+        // At 256 hashes the values are the bound (2 million documents): signing with fewer hashes
+        // makes room. At 128 and below the documents are, and it would not.
+        var longer = CorpusTestRun.Signed();
+        longer.MinHash = new CorpusMinHashData { Hashes = 256, ShingleWords = 5, Bands = 16 };
+        var tasks = CorpusTestRun.Tasks(1000, longer);
+        var defaults = CorpusTestRun.Tasks(1000, CorpusTestRun.Signed());
+
+        var values = CorpusDedupInput.Read(Report(tasks, tasks.Select(task => CorpusTestRun.Completed(task, documentsOut: 3_000)).ToArray()));
+        var documents = CorpusDedupInput.Read(Report(defaults, defaults.Select(task => CorpusTestRun.Completed(task, documentsOut: 12_000)).ToArray()));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(values.Refusal, Is.EqualTo("The run has 3000000 documents and one merge holds 2000000 with 256-hash signatures: merge the run in parts (a report of some of its shards), or sign with fewer hashes."));
+            Assert.That(documents.Refusal, Is.EqualTo("The run has 12000000 documents and one merge holds 4000000 with 128-hash signatures: merge the run in parts (a report of some of its shards)."));
+        });
+    }
+
+    [Test]
     public void WhatIsNotAReportIsRefusedByNameTest()
     {
         string[] hostile =

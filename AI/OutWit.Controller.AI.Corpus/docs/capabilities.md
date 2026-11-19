@@ -11,7 +11,7 @@ Every number on this page is a constant of the code or was measured, in the cont
 or on a test fleet; the [README](../README.md) explains how things work inside, and the JSON
 schemas in this folder are the documents' contracts.
 
-Version described: **Corpus 0.7.0** (Model 0.2.0, Scripts 0.1.6). Corpus 0.2.1 is proven on a
+Version described: **Corpus 0.8.0** (Model 0.2.0, Scripts 0.1.6). Corpus 0.2.1 is proven on a
 six-node test fleet (Windows, Linux, macOS); 0.3.0 added what an application's studio needs
 (sections 4, 6 and 8); 0.4.0 was the first hardening release — what the server accepts from a
 node, what a run does when nodes disagree or fail, what hostile input costs, and what a lab can
@@ -25,8 +25,11 @@ malformed (sections 5 and 7), and gave the same products on the test fleet; 0.7.
 and moves no product either: a result frame is walked before it is decoded and a result's
 counters are held to the bytes of its shard (sections 9 and 11), a shard that goes out again goes
 out on two machines when the run asked for sampling, and both documents state the sampling that
-was asked for and how each round came back (sections 6 and 9). What changed for an application is
-listed in section 14. 0.7.0 has not run on the fleet yet. Nothing is on
+was asked for and how each round came back (sections 6 and 9); 0.8.0 is the fifth and moves no
+product either: the near-duplicate merge costs the same whatever a node wrote into its signatures,
+is left at the next document when its job is stopped, and holds 4,000,000 documents at the most
+whatever the length of their signatures (sections 6 and 11). What changed for an application is
+listed in section 14. 0.7.0 and 0.8.0 have not run on the fleet yet. Nothing is on
 nuget.org or on the live network yet.
 
 ## Contents
@@ -529,7 +532,11 @@ and skipping the lines whose bit is 0. Refused by name: a run that kept statisti
 only, a run whose completed shards have documents and no signatures (`sign` off), shards whose
 signatures were made with different MinHash parameters, a report that names one blob for two
 shards, and a run past the capacity — asked of the report's document counts before a single blob
-is read. Each blob is then held to what the report states for it: its length (the header and one
+is read: 4,000,000 documents whatever the length of their signatures, and 512 million signature
+values (so fewer documents above 128 hashes). A node wrote the signatures, and the merge costs the
+same whatever they are: the documents of a band key are found by sorting a band's keys, the merge
+holds under 48 bytes a document beside the signatures, and a job that was stopped is left at the
+next document. Each blob is then held to what the report states for it: its length (the header and one
 signature per document), its header and its SHA-256 (the `signatures_sha256` integrity
 compared). A shard whose blob fails one is left out of the merge and listed in `excluded` with the
 reason (`blob_missing`, `blob_length`, `blob_header`, `blob_hash`, `parameters`); the summary
@@ -912,7 +919,7 @@ stage's included.
 | language identification | the first 4,000 characters; 20 letters at least |
 | PDF | section 5 |
 | MinHash | 1 to 1,024 hashes, 1 to 32 shingle words, bands dividing the hashes |
-| dedup | 4,000,000 documents at 128 hashes (512 million signature values, about 4 GB; fewer documents with more hashes), asked of the report before a blob is read; a report of 4 GiB at most (4,096 bytes for each shard a job may have), read a shard at a time; 100,000 clusters listed |
+| dedup | 4,000,000 documents whatever the length of their signatures, and 512 million signature values (about 4 GB: 4,000,000 documents at 128 hashes, fewer with more), asked of the report before a blob is read; beside the signatures under 48 bytes a document; a report of 4 GiB at most (4,096 bytes for each shard a job may have), read a shard at a time; 100,000 clusters listed |
 | sampling | 0 to 1; one copy per sampled shard, on another machine; a shard that goes out again on two machines when the rate is above 0; three machines for a disputed shard |
 | a result from a node | bounded strings, hashes of 64 hexadecimal digits, a code of the fixed list, counters that add up and that the bytes of the shard can hold (24 bytes a record at the least; a document for each record that is no PDF; the PDF counts at one with one another); anything else is dropped (`unreadable`) |
 | a result frame from a node | walked before it is decoded: every object the members its type has, every string's lengths inside the frame and within 4,096 characters, every list within the most its kind holds (the drop rules, 512 languages, 1,025 keys of the unsupported breakdown), nothing left over; anything else is dropped (`unreadable`) and never decoded |
@@ -984,7 +991,7 @@ and a merge over the first 12 of the 24 shards finds 7,292: why no figure "so fa
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 0.7.0 | `OutWit.Controller.AI.Corpus` (GitHub Packages; nuget.org at 1.0.0) |
+| The controller | 0.8.0 | `OutWit.Controller.AI.Corpus` (GitHub Packages; nuget.org at 1.0.0) |
 | The wire types | 0.2.0 | `OutWit.Controller.AI.Corpus.Model`: the server restores it from the feed, so it is published before a controller that needs it |
 | The scripts | 0.1.6 | `OutWit.Controller.AI.Corpus.Scripts` |
 | The PDF extractor | pdftext 1.0.0 (pdf_oxide 0.3.78) | `corpus-pdftext-wasm.zip`, release `pdftext-v1.0.0` (5.9 MB, extracted to `wasm/` beside the controller) |
@@ -1001,6 +1008,22 @@ LLVM-exception), FineWeb-2's stop-word lists (Apache-2.0) and the Unicode Charac
 `LICENSE-unicode.txt` and the controller's own `LICENSE.txt`: twelve files, held to that list by
 a test. The two data assets carry their own notices (`LICENSE-wasmtime.txt` and `NOTICE.txt`
 beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
+
+**What changed for an application in 0.8.0** (from 0.7.0):
+
+- **No product moved, and no document.** No stage changed; the wire types, the scripts and every
+  schema are those of 0.7.0. `Corpus.Dedup` keeps the documents it kept: for the same report and
+  the same signature blobs the dedup document is the same, byte for byte.
+- **A merge holds 4,000,000 documents whatever the length of their signatures.** Up to 0.7.0 the
+  capacity was counted in signature values alone, so a run signed with fewer than 128 hashes was
+  admitted with more documents (8,000,000 at 64 hashes). Such a run is now refused from the
+  report, before a blob is read, like any other run past the capacity: merge it in parts (a
+  report of some of its shards). At 128 hashes and above nothing changed.
+- **The refusal's last words.** `The run has N documents and one merge holds M with H-hash
+  signatures: merge the run in parts (a report of some of its shards)` ends there when the
+  documents are the bound (128 hashes and fewer), and goes on `, or sign with fewer hashes.` only
+  where fewer hashes would make room (more than 128).
+- **A stopped `CorpusDedup` job ends sooner:** at the next document, not at the next band.
 
 **What changed for an application in 0.7.0** (from 0.6.0):
 

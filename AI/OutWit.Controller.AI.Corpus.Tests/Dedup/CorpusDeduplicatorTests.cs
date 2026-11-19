@@ -119,6 +119,73 @@ public sealed class CorpusDeduplicatorTests
     }
 
     [Test]
+    public void TheCapacityIsCountedInDocumentsAsWellAsInValuesTest()
+    {
+        Assert.Multiple(() =>
+        {
+            // Up to 128 hashes the documents are the bound: shorter signatures buy no more of them.
+            foreach (var hashes in new[] { 1, 2, 16, 64, 127, 128 })
+                Assert.That(CorpusDeduplicator.Capacity(hashes), Is.EqualTo(CorpusDeduplicator.MAX_DOCUMENTS), $"{hashes} hash(es)");
+
+            // Above that the values are: longer signatures buy fewer.
+            Assert.That(CorpusDeduplicator.Capacity(129), Is.LessThan(CorpusDeduplicator.MAX_DOCUMENTS));
+            Assert.That(CorpusDeduplicator.Capacity(256), Is.EqualTo(CorpusDeduplicator.MAX_DOCUMENTS / 2));
+            Assert.That(CorpusDeduplicator.Capacity(MinHashSigner.MAX_HASHES), Is.EqualTo(CorpusDeduplicator.MAX_DOCUMENTS / 8));
+
+            foreach (var hashes in new[] { 1, 64, 128, 256, MinHashSigner.MAX_HASHES })
+                Assert.That(CorpusDeduplicator.Capacity(hashes) * hashes, Is.LessThanOrEqualTo(CorpusDeduplicator.MAX_SIGNATURE_VALUES), $"{hashes} hash(es)");
+        });
+    }
+
+    [Test]
+    public void MoreDocumentsThanAMergeHoldsAreRefusedWhateverTheirSignaturesTest()
+    {
+        // Signatures of one value: 4,000,001 documents are 32 MB of them, far inside the bound on
+        // the values, and one document more than the merge has room for.
+        var most = new CorpusDedupShard(0, Guid.NewGuid(), 1, new ulong[CorpusDeduplicator.MAX_DOCUMENTS]);
+        var over = new CorpusDedupShard(0, Guid.NewGuid(), 1, new ulong[CorpusDeduplicator.MAX_DOCUMENTS + 1]);
+
+        using var stopped = new CancellationTokenSource();
+        stopped.Cancel();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(() => new CorpusDeduplicator(0, 1).Run([over]), Throws.InvalidOperationException.With.Message.EqualTo("4000001 documents exceed the merge's capacity of 4000000."));
+
+            // The most it holds is not refused: it gets as far as its first document.
+            Assert.That(() => new CorpusDeduplicator(0, 1).Run([most], stopped.Token), Throws.InstanceOf<OperationCanceledException>());
+        });
+    }
+
+    [Test]
+    public void WhatAMergeHoldsForADocumentBesideItsSignatureIsBoundedTest()
+    {
+        // A million documents of one value each: 8 MB of signatures. What the merge allocates on
+        // top of them is its own tables, and they grow with the documents.
+        var documents = 1_000_000;
+        var bytesPerDocument = 48;
+
+        var shard = CorpusTestSignatures.Any(0, documents, 1, seed: 3);
+        new CorpusDeduplicator(0, 1).Run([CorpusTestSignatures.Any(0, 1000, 1, seed: 4)]);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var result = new CorpusDeduplicator(0, 1).Run([shard]);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        TestContext.Out.WriteLine($"{documents} documents of 1 hash: {allocated} bytes allocated by the merge, {(double)allocated / documents:F1} a document");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Documents, Is.EqualTo(documents));
+            Assert.That(result.Duplicates, Is.Zero);
+            Assert.That(allocated, Is.LessThanOrEqualTo((long)bytesPerDocument * documents), "bytes a document beside its signature");
+
+            // So the most documents a merge holds cost it this much beside their signatures.
+            Assert.That((long)bytesPerDocument * CorpusDeduplicator.MAX_DOCUMENTS, Is.LessThan(200L << 20));
+        });
+    }
+
+    [Test]
     public void ABandKeyIsTheKeyOfThatBandTest()
     {
         var signature = MinHashSigner.Sign("one two three four five six seven eight nine ten eleven twelve");
