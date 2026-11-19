@@ -26,24 +26,23 @@ internal static class CorpusLedgerRuling
             Accept(shard, executions[0], executions.Count);
     }
 
-    /// <summary>Settles a shard on the repair round's values: the one value asked for, or none.</summary>
+    /// <summary>
+    /// Settles a shard on the repair round's values, by the first round's rule: the round sends a
+    /// shard out on two machines at the most, so copies that agree are accepted, and copies that
+    /// disagree, or more values than two, are a dispute. A shard nothing came back for with a
+    /// verdict stays without a result.
+    /// </summary>
     /// <param name="shard">The shard with its repair round's entries.</param>
-    /// <param name="tally">Receives what is dropped.</param>
-    public static void JudgeRepair(CorpusLedgerShard shard, CorpusLedgerTally tally)
+    public static void JudgeRepair(CorpusLedgerShard shard)
     {
         shard.NeedsRepair = false;
-
-        // The round asks for one value: with more that would be taken, which of them is the
-        // answer cannot be told, so none is, and the shard has no result.
-        if (Taken(shard.Repair) > CorpusLedger.REPAIR_COPIES)
-        {
-            DropSurplus(shard.Repair, tally);
-            return;
-        }
-
         var executions = Executions(shard.Repair);
-        if (executions.Count == 1)
-            Accept(shard, executions[0], 1);
+
+        // More answers than the round sent out: one machine answered twice, and nothing says which.
+        if (shard.Repair.Count > CorpusLedger.REPAIR_COPIES || !Agree(executions))
+            shard.NeedsDispute = true;
+        else if (executions.Count > 0)
+            Accept(shard, executions[0], executions.Count);
     }
 
     /// <summary>
@@ -172,10 +171,11 @@ internal static class CorpusLedgerRuling
     }
 
     /// <summary>
-    /// More values came back under a ticket than its round asked for, in a round that settles a
-    /// shard: which of them is the answer cannot be told, so none is. Each value that would have
-    /// been taken becomes a rejection (<see cref="CorpusLedger.REJECTED_SURPLUS"/>); one that was dropped for a
-    /// reason of its own keeps it.
+    /// More values came back under a ticket than the dispute round asked for, the round that
+    /// settles a shard for good: which of them is the answer cannot be told, so none is. Each
+    /// value that would have been taken becomes a rejection
+    /// (<see cref="CorpusLedger.REJECTED_SURPLUS"/>); one that was dropped for a reason of its own
+    /// keeps it.
     /// </summary>
     private static void DropSurplus(List<CorpusLedgerEntry> entries, CorpusLedgerTally tally)
     {

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Logging;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Trust;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -26,8 +27,7 @@ internal sealed class WitActivityAdapterCorpusSamplingRate : WitActivityAdapterF
     {
         pool.TryGetValue(activity.Options, out CorpusOptionsData? options);
 
-        var requested = options?.SamplingRate ?? 0;
-        var rate = requested > 0 ? Math.Min(requested, 1) : 0;
+        var rate = CorpusSampling.RateOf(options);
 
         if (!pool.TrySetValue(activity.ReturnReference, rate))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");

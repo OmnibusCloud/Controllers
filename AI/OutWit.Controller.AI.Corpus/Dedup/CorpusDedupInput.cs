@@ -36,7 +36,7 @@ public sealed record CorpusDedupInput(IReadOnlyList<CorpusDedupSource> Shards, M
     #region Functions
 
     /// <summary>Reads a report.</summary>
-    /// <param name="report">The report bytes (<c>corpus-report/4</c> or an earlier schema).</param>
+    /// <param name="report">The report bytes (<c>corpus-report/5</c> or an earlier schema).</param>
     /// <returns>The input, with the refusal when the run cannot be merged.</returns>
     /// <exception cref="InvalidOperationException">Not a corpus report.</exception>
     public static CorpusDedupInput Read(byte[] report)
@@ -49,7 +49,7 @@ public sealed record CorpusDedupInput(IReadOnlyList<CorpusDedupSource> Shards, M
     /// Reads a report from a stream, a shard at a time: a report grows with its run (a few
     /// kilobytes a shard), and what is kept of it is one small entry for each completed shard.
     /// </summary>
-    /// <param name="report">The report, UTF-8 (<c>corpus-report/4</c> or an earlier schema).</param>
+    /// <param name="report">The report, UTF-8 (<c>corpus-report/5</c> or an earlier schema).</param>
     /// <returns>The input, with the refusal when the run cannot be merged.</returns>
     /// <exception cref="InvalidOperationException">Not a corpus report.</exception>
     public static CorpusDedupInput Read(Stream report)

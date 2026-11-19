@@ -9,10 +9,11 @@ using OutWit.Controller.AI.Corpus.Trust;
 namespace OutWit.Controller.AI.Corpus.Tests.Reports;
 
 /// <summary>
-/// The integrity document (<c>corpus-integrity/6</c>): the first round's pairs compared field by
+/// The integrity document (<c>corpus-integrity/7</c>): the first round's pairs compared field by
 /// field, signatures a mismatch of their own kind, a pair with a side that is no result counted
 /// apart, the disputes and what settled them, the shards without a result, the values dropped; no
-/// machine named.
+/// machine named. (The sampling asked for, the rounds and the repair round's pairs:
+/// <c>CorpusShortFanOutTests</c>.)
 /// </summary>
 [TestFixture]
 public sealed class CorpusIntegrityWriterTests
@@ -38,7 +39,7 @@ public sealed class CorpusIntegrityWriterTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(document.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/6"));
+            Assert.That(document.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/7"));
             Assert.That(summary.GetProperty("shards").GetInt32(), Is.EqualTo(4));
             Assert.That(summary.GetProperty("sampled").GetInt32(), Is.EqualTo(2), "the shard executed once makes no pair");
             Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));
@@ -49,6 +50,8 @@ public sealed class CorpusIntegrityWriterTests
             Assert.That(summary.GetProperty("no_result").GetInt32(), Is.EqualTo(1));
 
             Assert.That(pairs.Select(p => p.GetProperty("index").GetInt32()), Is.EqualTo(new[] { 0, 2 }));
+            Assert.That(pairs.Select(p => p.GetProperty("round").GetString()), Is.All.EqualTo("first"), "the run's sample");
+            Assert.That(summary.GetProperty("repair_pairs").GetInt32(), Is.Zero);
             Assert.That(pairs[0].GetProperty("compared").GetBoolean(), Is.True);
             Assert.That(pairs[0].GetProperty("match").GetBoolean(), Is.False);
             Assert.That(pairs[0].GetProperty("differs").EnumerateArray().Select(d => d.GetString()), Is.EqualTo(new[] { "documents", "languages" }));

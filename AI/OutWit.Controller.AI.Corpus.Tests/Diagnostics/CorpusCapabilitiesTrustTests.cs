@@ -10,7 +10,7 @@ using OutWit.Controller.AI.Corpus.Trust;
 namespace OutWit.Controller.AI.Corpus.Tests.Diagnostics;
 
 /// <summary>
-/// The capabilities document (<c>corpus-capabilities/3</c>) states what an application needs to
+/// The capabilities document (<c>corpus-capabilities/4</c>) states what an application needs to
 /// read the documents of a hardened run: every fixed word that stands where a node's text once
 /// stood, the copies a result rests on, the limits a hostile input meets, the case table. Each is
 /// held to the code's own constant, so the document cannot drift from what the controller does.
@@ -77,6 +77,9 @@ public sealed class CorpusCapabilitiesTrustTests
         Assert.Multiple(() =>
         {
             Assert.That(trust.GetProperty("copies").GetInt32(), Is.EqualTo(2));
+            Assert.That(trust.GetProperty("repair_copies").GetInt32(), Is.EqualTo(2), "a shard that goes out again in a run that samples");
+            Assert.That(Strings(trust.GetProperty("sampling_states")), Is.EqualTo(new[] { "not_asked", "as_asked", "short", "none", "unknown" }));
+            Assert.That(Strings(trust.GetProperty("sampling_states")), Is.EqualTo(CorpusSampling.STATES));
             Assert.That(trust.GetProperty("dispute_copies").GetInt32(), Is.EqualTo(3));
             Assert.That(trust.GetProperty("dispute_quorum").GetInt32(), Is.EqualTo(2));
             Assert.That(Strings(trust.GetProperty("outcomes")), Is.EqualTo(new[] { "Disputed", "NoResult" }));

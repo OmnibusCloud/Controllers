@@ -292,11 +292,15 @@ public static class Program
         if (summary.TryGetProperty("output", out var output))
             Console.WriteLine($"             output: {output.GetString()}");
 
-        // What the results rest on (corpus-report/4): how many shards one machine alone answered
-        // for, and everything that did not go the plain way.
+        // What the results rest on: how many shards one machine alone answered for, and
+        // everything that did not go the plain way.
         if (summary.TryGetProperty("single_execution", out var single))
             Console.WriteLine($"             trust: {single.GetInt32()} shard(s) rest on one execution; rejected results {summary.GetProperty("rejected_results").GetInt32()}, " +
                               $"repairs {summary.GetProperty("repairs").GetInt32()}, disputes {summary.GetProperty("disputes").GetInt32()} (resolved {summary.GetProperty("disputes_resolved").GetInt32()})");
+
+        // Whether the sampling the run asked for came back (corpus-report/5), in the report's own words.
+        if (root.TryGetProperty("sampling", out var sampling))
+            Console.WriteLine($"             sampling: {sampling.GetProperty("state").GetString()}. {sampling.GetProperty("statement").GetString()}");
 
         var hashes = new List<string>();
         foreach (var shard in root.GetProperty("shards").EnumerateArray())
@@ -326,7 +330,14 @@ public static class Program
                               ? $"; signatures compared {signatures.GetInt32()}, signature mismatches {summary.GetProperty("signature_mismatches").GetInt32()}"
                               : ""));
 
-        // corpus-integrity/6: what was dropped, what was sent out again, how each dispute ended.
+        // How each round's fan-out came back (corpus-integrity/7): a package nobody answered is a round that came back short.
+        if (root.TryGetProperty("rounds", out var rounds))
+        {
+            Console.WriteLine("             rounds: " + string.Join("; ", rounds.EnumerateObject().Select(round =>
+                $"{round.Name} {round.Value.GetProperty("packages").GetInt32()} package(s), {round.Value.GetProperty("answers").GetInt32()} answer(s), {round.Value.GetProperty("unanswered").GetInt32()} unanswered")));
+        }
+
+        // What was dropped, what was sent out again, how each dispute ended.
         if (summary.TryGetProperty("rejected_results", out var rejected))
         {
             var reasons = root.TryGetProperty("rejected", out var byReason)

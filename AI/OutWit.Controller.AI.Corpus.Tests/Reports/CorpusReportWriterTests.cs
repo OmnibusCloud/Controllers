@@ -28,7 +28,7 @@ public sealed class CorpusReportWriterTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo("corpus-report/4"));
+            Assert.That(root.GetProperty("schema").GetString(), Is.EqualTo("corpus-report/5"));
             Assert.That(root.GetProperty("controller").GetString(), Is.EqualTo(CorpusTestRun.VERSION));
             Assert.That(shards.Select(s => s.GetProperty("index").GetInt32()), Is.EqualTo(new[] { 0, 1, 2 }));
             Assert.That(shards.Select(s => s.GetProperty("url").GetString()), Is.EqualTo(tasks.Select(task => task.Source!.Url)));
@@ -56,7 +56,10 @@ public sealed class CorpusReportWriterTests
     [Test]
     public void ThePdfCountsAreWrittenWhereAShardMetAPdfAndSummedTest()
     {
+        // PDFs are met in WARC shards: a result that counts them for a shard of another format is dropped.
         var tasks = CorpusTestRun.Tasks(3);
+        tasks[0].Source!.Format = CorpusSourceFormat.Warc;
+        tasks[1].Source!.Format = CorpusSourceFormat.Warc;
         var first = CorpusTestRun.Completed(tasks[0], drops: [("pdf_encrypted", 1)]);
         first.Stats!.Pdf = new CorpusPdfStatsData { In = 4, Truncated = 1, Extracted = 3, Pages = 30, Documents = 5, PagesCut = 1, RunningLines = 60, Fuel = 1_000_000 };
         var second = CorpusTestRun.Completed(tasks[1], documentsOut: 2);

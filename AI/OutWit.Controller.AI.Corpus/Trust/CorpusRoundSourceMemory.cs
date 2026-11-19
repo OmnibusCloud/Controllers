@@ -89,6 +89,8 @@ public sealed class CorpusRoundSourceMemory : CorpusRoundSource
             m_packages.Add(new CorpusRoundPackage(slots, answers, dropped.GetValueOrDefault(index) ?? NOTHING));
             Missing += Math.Max(0, Asked - answers);
         }
+
+        Answers = CorpusRoundAnswers.Of(m_packages.Select(package => package.Returned));
     }
 
     #endregion
@@ -118,6 +120,9 @@ public sealed class CorpusRoundSourceMemory : CorpusRoundSource
 
     /// <inheritdoc />
     public override int Missing { get; }
+
+    /// <inheritdoc />
+    public override CorpusRoundAnswers Answers { get; }
 
     #endregion
 }

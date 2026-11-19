@@ -2,22 +2,24 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-report.schema.json",
   "title": "Corpus report",
-  "description": "The output of Corpus.Collect: every shard of the job's task list in task order with how it ended - the verdict of its accepted result with its product blobs and content hash, Disputed (its copies disagreed and no majority of three machines settled it) or NoResult with a fixed reason (no machine returned a result that could be accepted) - and the aggregate over the accepted results. The shards, their indexes and their URLs are the server's own task list; nothing a node returns can add, remove or rename one. Version 4: version 3 said, for every shard, how many shards the machine that ran it processes at once (degree): a fact about a machine, not about a shard, and gone. Version 3: version 2 took the index and the URL from the node's result and chose between the executions of a sampled shard by their content hashes.",
+  "description": "The output of Corpus.Collect: every shard of the job's task list in task order with how it ended - the verdict of its accepted result with its product blobs and content hash, Disputed (its copies disagreed and no majority of three machines settled it) or NoResult with a fixed reason (no machine returned a result that could be accepted) - and the aggregate over the accepted results. The shards, their indexes and their URLs are the server's own task list; nothing a node returns can add, remove or rename one. Version 5: version 4 and two root objects, sampling (the share of the packages the run asked to run on two machines and what came back of it, in a word and in a sentence) and rounds (for each round the task packages that went out and the answers that came back): a run whose checking did not happen says so, and its numbers need not be held against the options it was started with. The integrity document carries the same two. Version 4: version 3 said, for every shard, how many shards the machine that ran it processes at once (degree): a fact about a machine, not about a shard, and gone. Version 3: version 2 took the index and the URL from the node's result and chose between the executions of a sampled shard by their content hashes.",
   "type": "object",
-  "required": ["schema", "controller", "summary", "shards"],
+  "required": ["schema", "controller", "summary", "sampling", "rounds", "shards"],
   "properties": {
-    "schema": { "const": "corpus-report/4" },
+    "schema": { "const": "corpus-report/5" },
     "controller": { "type": "string", "description": "The controller version that wrote the report." },
+    "sampling": { "$ref": "#/$defs/sampling" },
+    "rounds": { "$ref": "#/$defs/rounds" },
     "summary": {
       "type": "object",
       "required": ["tasks", "verdicts", "single_execution", "rejected_results", "repairs", "disputes", "disputes_resolved", "records_in", "documents_extracted", "documents_out", "bytes_fetched", "bytes_produced", "drops", "languages"],
       "properties": {
         "tasks": { "type": "integer", "description": "The shards of the job: the task list Corpus.Split made, whatever came back." },
         "verdicts": { "$ref": "#/$defs/counts", "description": "Shards per verdict, Disputed and NoResult among them." },
-        "single_execution": { "type": "integer", "description": "Shards whose accepted result is one machine's word: not sampled, or the copy came back as a node fault. Nothing compared it." },
+        "single_execution": { "type": "integer", "description": "Shards whose accepted result is one machine's word: not sampled, or the copy came back as a node fault or did not come back. Nothing compared it." },
         "rejected_results": { "type": "integer", "description": "Values the server dropped: under no ticket of this job and round, no result or shaped as no honest node shapes one, claiming another controller version, not what their task asked for, or more under one ticket than a round takes. The integrity document counts them by reason." },
-        "repairs": { "type": "integer", "description": "Shards sent out once more because the first round left them without a result (a node fault, a dropped value)." },
-        "disputes": { "type": "integer", "description": "Shards whose copies disagreed: each was run again on up to three machines." },
+        "repairs": { "type": "integer", "description": "Shards sent out once more because the first round left them without a result (a node fault, a dropped value, no answer): on two machines when the run asked for sampling, on one otherwise." },
+        "disputes": { "type": "integer", "description": "Shards whose copies disagreed, in the first round or in the repair round: each was run again on up to three machines." },
         "disputes_resolved": { "type": "integer", "description": "Of those, the ones settled: one result was returned by the most machines, two at least, without a tie. The others are Disputed." },
         "records_in": { "type": "integer" },
         "documents_extracted": { "type": "integer" },
@@ -72,7 +74,7 @@
           "url": { "type": "string", "description": "The shard's URL, from the server's task." },
           "verdict": { "type": "string", "enum": ["Completed", "OriginRefused", "FetchFailed", "Oversized", "Malformed", "PipelineUnavailable", "Failed", "Disputed", "NoResult"], "description": "How the shard ended. The first seven are verdicts on the shard, the same on any honest node. Disputed: its copies disagreed and three machines did not settle it; it has no product and is out of the counts. NoResult: no machine returned a result that could be accepted, after one more try; reason says why. A node's own trouble is never a verdict." },
           "reason": { "type": "string", "enum": ["node_fault", "no_answer"], "description": "Present on NoResult: node_fault (a machine that held the shard returned it as a fault of its own; faults names the codes), no_answer (nothing that was accepted came back for it: nothing at all, or only values that were dropped)." },
-          "executions": { "type": "integer", "description": "How many results the accepted one rests on: 1 is one machine's word, 2 a pair that agreed, 2 or 3 the majority of a dispute; 0 for Disputed and NoResult." },
+          "executions": { "type": "integer", "description": "How many results the accepted one rests on: 1 is one machine's word, 2 a pair that agreed (in the first round, or in the repair round of a run that samples), 2 or 3 the majority of a dispute; 0 for Disputed and NoResult." },
           "faults": { "type": "array", "items": { "type": "string", "enum": ["disk", "disk_space", "network", "language_model", "pdf_sandbox", "pdf_backstop", "upload", "memory", "internal", "tasks"] }, "description": "Present when a node returned the shard as a fault of its own in any round: the fault codes, each once. A shard with a fault and a result was made by another machine or on the second try." },
           "text_blob": { "type": "string", "description": "Blob id of the zstd JSON lines, or \"\"." },
           "signatures_blob": { "type": "string", "description": "Blob id of the signatures, or \"\"." },
@@ -117,6 +119,43 @@
     }
   },
   "$defs": {
+    "sampling": {
+      "type": "object",
+      "description": "What the run asked for in second executions and what came back of it in the first round. The platform picks the packages that run twice and does not say which, so the server counts: how many packages the rate comes to, how many came back with a second answer, how many shards had two results that were compared.",
+      "required": ["rate", "state", "packages", "asked_twice", "answered_twice", "compared", "statement"],
+      "properties": {
+        "rate": { "type": ["number", "null"], "description": "The share of the packages the run asked to run on two machines (CorpusOptions.SamplingRate held to 0..1); null when the script did not hand the run's options to the activity that wrote the document." },
+        "state": { "type": "string", "enum": ["not_asked", "as_asked", "short", "none", "unknown"], "description": "The account in a word. not_asked: the run asked for no second execution. as_asked: as many packages came back twice as were asked for, and shards were compared. short: fewer packages came back twice than were asked for, so some of the checking did not happen. none: second executions were asked for and no shard was compared, so the checking did not happen (a pool of one machine ends here). unknown: rate is null." },
+        "packages": { "type": "integer", "description": "The task packages of the first round (a package is one shard in a job of up to 1,024 shards)." },
+        "asked_twice": { "type": "integer", "description": "The packages the rate comes to by the platform's rule: rounded up, one at least when the rate is above 0; 0 when the rate is 0 or null." },
+        "answered_twice": { "type": "integer", "description": "The packages two answers or more came back for." },
+        "compared": { "type": "integer", "description": "The shards whose first two values of the first round were both results, and were compared." },
+        "statement": { "type": "string", "description": "The same account in a sentence of fixed words, with the numbers in it." }
+      }
+    },
+    "rounds": {
+      "type": "object",
+      "description": "How each round's fan-out came back, counted before any answer is opened: an answer counts whatever it held (results, a fault of its node, nothing readable). A round that was not run has zeros.",
+      "required": ["first", "repair", "dispute"],
+      "properties": {
+        "first": { "$ref": "#/$defs/round", "description": "The first round: every package once, and the ones the platform picked for the run's sampling a second time on another machine." },
+        "repair": { "$ref": "#/$defs/round", "description": "The repair round: the shards the first round left without a result, on two machines when the run asked for sampling, on one otherwise." },
+        "dispute": { "$ref": "#/$defs/round", "description": "The dispute round: the shards whose copies disagreed, on three machines." }
+      }
+    },
+    "round": {
+      "type": "object",
+      "required": ["packages", "answers", "unanswered", "answered_once", "answered_twice", "answered_thrice", "answered_more"],
+      "properties": {
+        "packages": { "type": "integer", "description": "The task packages that went out." },
+        "answers": { "type": "integer", "description": "The answers that came back under the round's tickets." },
+        "unanswered": { "type": "integer", "description": "The packages no answer came back for." },
+        "answered_once": { "type": "integer", "description": "The packages one answer came back for." },
+        "answered_twice": { "type": "integer", "description": "The packages two answers came back for." },
+        "answered_thrice": { "type": "integer", "description": "The packages three answers came back for." },
+        "answered_more": { "type": "integer", "description": "The packages more than three answers came back for." }
+      }
+    },
     "minhash": {
       "type": "object",
       "required": ["hashes", "shingle_words", "bands"],

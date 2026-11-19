@@ -142,14 +142,15 @@ internal static class CorpusTestRun
         return Verdict(task, CorpusShardVerdict.NodeFault, code);
     }
 
-    /// <summary>The ledger of a run: the first round, and the later rounds when given.</summary>
-    public static CorpusLedger Ledger(IReadOnlyList<CorpusTaskData> tasks, IEnumerable<object?> executions, (IReadOnlyList<CorpusTaskData> Tasks, IEnumerable<object?> Results)? repair = null, (IReadOnlyList<CorpusTaskData> Tasks, IEnumerable<object?> Results)? dispute = null)
+    /// <summary>The ledger of a run: the first round, and the later rounds when given; with the sampling rate the run asked for when a test states one.</summary>
+    public static CorpusLedger Ledger(IReadOnlyList<CorpusTaskData> tasks, IEnumerable<object?> executions, (IReadOnlyList<CorpusTaskData> Tasks, IEnumerable<object?> Results)? repair = null, (IReadOnlyList<CorpusTaskData> Tasks, IEnumerable<object?> Results)? dispute = null, double? samplingRate = null)
     {
         return CorpusLedger.Build(
             VERSION,
             new CorpusRound(CorpusRoundKind.First, tasks, executions.ToList()),
             repair is { } repaired ? new CorpusRound(CorpusRoundKind.Repair, repaired.Tasks, repaired.Results.ToList()) : null,
-            dispute is { } disputed ? new CorpusRound(CorpusRoundKind.Dispute, disputed.Tasks, disputed.Results.ToList()) : null);
+            dispute is { } disputed ? new CorpusRound(CorpusRoundKind.Dispute, disputed.Tasks, disputed.Results.ToList()) : null,
+            samplingRate);
     }
 
     /// <summary>Named counts in the order a node writes them: by name, ordinal.</summary>

@@ -25,7 +25,10 @@ namespace OutWit.Controller.AI.Corpus.Diagnostics;
 /// module and limits, every drop rule with the stage that applies it, the products and the output
 /// modes that keep them, the measured storage ratios with the deployment's headroom, and the pool as
 /// totals. A JSON document like every other output, so an
-/// application reads it without the controller's types. Schema <c>corpus-capabilities/3</c>:
+/// application reads it without the controller's types. Schema <c>corpus-capabilities/4</c>:
+/// <c>/3</c> and, in <c>trust</c>, the machines a shard goes to when it goes out again in a run
+/// that samples (<c>repair_copies</c>) and the words in which a run's documents say whether the
+/// sampling it asked for happened (<c>sampling_states</c>). <c>/3</c> was
 /// <c>/2</c> and what bounds a job as a whole (the shards a manifest may name, its size, the
 /// packages its tasks travel in, the problems a preflight lists), the slack a declared size has
 /// before a node refuses its shard, what the traffic estimate adds for retries, and the bytes a
@@ -41,7 +44,7 @@ public static class CorpusCapabilitiesWriter
     #region Constants
 
     /// <summary>The document's schema tag.</summary>
-    public const string SCHEMA = "corpus-capabilities/3";
+    public const string SCHEMA = "corpus-capabilities/4";
 
     #endregion
 
@@ -215,12 +218,14 @@ public static class CorpusCapabilitiesWriter
     {
         writer.WriteStartObject("trust");
         writer.WriteNumber("copies", CorpusLedger.FIRST_ROUND_COPIES);
+        writer.WriteNumber("repair_copies", CorpusLedger.REPAIR_COPIES);
         writer.WriteNumber("dispute_copies", CorpusLedger.DISPUTE_COPIES);
         writer.WriteNumber("dispute_quorum", CorpusLedger.DISPUTE_QUORUM);
         WriteStrings(writer, "outcomes", [CorpusReportWriter.VERDICT_DISPUTED, CorpusReportWriter.VERDICT_NO_RESULT]);
         WriteStrings(writer, "no_result_reasons", CorpusLedger.NO_RESULT_REASONS);
         WriteStrings(writer, "rejection_reasons", CorpusLedger.REJECTION_REASONS);
         WriteStrings(writer, "dispute_outcomes", CorpusLedger.DISPUTE_OUTCOMES);
+        WriteStrings(writer, "sampling_states", CorpusSampling.STATES);
         WriteStrings(writer, "fault_codes", CorpusResultCodes.FAULTS);
 
         writer.WriteStartObject("verdict_codes");

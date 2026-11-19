@@ -23,7 +23,11 @@ public abstract class CorpusRoundSource
 
     #region Functions
 
-    /// <summary>The answers a round asks of a package: itself and one copy in the first round, one in the repair round, three in the dispute round.</summary>
+    /// <summary>
+    /// The most answers a round asks of a package: itself and one copy in the first round (of the
+    /// packages the run's sampling picks) and in the repair round (of every package, when the run
+    /// asked for sampling at all), three in the dispute round.
+    /// </summary>
     /// <param name="kind">The round.</param>
     /// <returns>The count.</returns>
     public static int AskedOf(CorpusRoundKind kind)
@@ -60,7 +64,7 @@ public abstract class CorpusRoundSource
     /// <summary>Which round.</summary>
     public CorpusRoundKind Kind { get; }
 
-    /// <summary>The answers the round asks of each package.</summary>
+    /// <summary>The most answers the round asks of a package.</summary>
     public int Asked => AskedOf(Kind);
 
     /// <summary>The shards of the round: its tasks.</summary>
@@ -69,8 +73,17 @@ public abstract class CorpusRoundSource
     /// <summary>The values that belong to no package of the round, by reason: nothing of them is opened.</summary>
     public abstract IReadOnlyDictionary<string, int> Unbound { get; }
 
-    /// <summary>What the round is short of: over its packages, the answers each was asked for and did not get.</summary>
+    /// <summary>
+    /// What the round is short of: over its packages, the answers each could have got at the most
+    /// (<see cref="Asked"/>) and did not. The ledger reads it of the dispute round only, where
+    /// every package is asked for in three copies; in the other rounds a package that was not
+    /// picked for a second machine counts as one short here (<see cref="Answers"/> says how a
+    /// round came back without assuming what was asked of each package).
+    /// </summary>
     public abstract int Missing { get; }
+
+    /// <summary>How the round's fan-out came back: its packages by the answers each got, known before any is opened.</summary>
+    public abstract CorpusRoundAnswers Answers { get; }
 
     #endregion
 }

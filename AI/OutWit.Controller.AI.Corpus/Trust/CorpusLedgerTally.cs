@@ -55,6 +55,8 @@ internal sealed class CorpusLedgerTally
             PendingRepairs++;
         if (shard.NeedsDispute && !shard.SentToDispute)
             PendingDisputes++;
+        if (CorpusLedger.IsCompared(shard.First))
+            Compared++;
     }
 
     #endregion
@@ -106,6 +108,9 @@ internal sealed class CorpusLedgerTally
 
     /// <summary>Shards whose copies disagreed that no dispute round has taken yet.</summary>
     public int PendingDisputes { get; private set; }
+
+    /// <summary>Shards whose first two values of the first round were both results: the pairs that were compared.</summary>
+    public int Compared { get; private set; }
 
     #endregion
 }

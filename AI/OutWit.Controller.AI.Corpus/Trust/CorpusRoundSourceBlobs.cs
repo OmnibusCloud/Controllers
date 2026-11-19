@@ -18,7 +18,10 @@ namespace OutWit.Controller.AI.Corpus.Trust;
 /// result under a ticket that is no shard's of the package is dropped, and when an answer holds
 /// two results under one shard's ticket none of them is taken. So of the values under a shard's
 /// ticket no two come from one answer, and the platform keeps one answer for each task of a
-/// node's batch: that is what lets the ledger count values as machines.</item>
+/// node's batch: that is what lets the ledger count values as machines. Whatever fails while an
+/// answer is read (a frame that is no result, a stream that is none, a file that will not open)
+/// costs that answer, under the reason <see cref="CorpusLedger.REJECTED_UNREADABLE"/>, and never
+/// the run.</item>
 /// <item>An answer that carries a fault code instead of a blob returns every shard of its package
 /// as a fault of that node.</item>
 /// </list>
@@ -52,6 +55,7 @@ public sealed class CorpusRoundSourceBlobs : CorpusRoundSource
 
         Shards = packages.Sum(package => package.Reference.ShardCount);
         Missing = packages.Sum(package => Math.Max(0, Asked - package.Returned));
+        Answers = CorpusRoundAnswers.Of(packages.Select(package => package.Returned));
     }
 
     #endregion
@@ -224,17 +228,27 @@ public sealed class CorpusRoundSourceBlobs : CorpusRoundSource
                 slot.Values.Add(CorpusRoundValue.Of(result));
             }
         }
-        catch (InvalidDataException)
+        catch (Exception exception) when (exception is not OutOfMemoryException)
         {
-            // The rest of the answer cannot be read; what was read before it stands.
+            // The rest of the answer cannot be read, whatever the reading said of it (a damaged
+            // stream, a frame that is no result, a file that will not open): it costs this
+            // answer and never the run. What was read before it stands.
             Count(dropped, CorpusLedger.REJECTED_UNREADABLE);
         }
     }
 
+    /// <summary>Whether an answer's blob is a file of a size the results of its package can have; a file that cannot be asked is none.</summary>
     private static bool Fits(string path, int shards)
     {
-        var file = new FileInfo(path);
-        return file.Exists && file.Length <= CorpusPackageCodec.MaxResultsBlobBytes(shards);
+        try
+        {
+            var file = new FileInfo(path);
+            return file.Exists && file.Length <= CorpusPackageCodec.MaxResultsBlobBytes(shards);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            return false;
+        }
     }
 
     private static async Task<string?> ResolveAsync(IWitBlobService blobs, CorpusResultPackageData answer)
@@ -270,6 +284,9 @@ public sealed class CorpusRoundSourceBlobs : CorpusRoundSource
 
     /// <inheritdoc />
     public override int Missing { get; }
+
+    /// <inheritdoc />
+    public override CorpusRoundAnswers Answers { get; }
 
     #endregion
 

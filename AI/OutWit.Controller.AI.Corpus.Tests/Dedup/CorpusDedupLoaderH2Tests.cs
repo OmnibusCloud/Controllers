@@ -117,6 +117,31 @@ public sealed class CorpusDedupLoaderH2Tests
     }
 
     [Test]
+    public async Task WhateverTheStoreSaysOfABlobCostsThatShardNotTheMergeTest()
+    {
+        // The store answers for a blob in a way of its own: a time-out, an exception of its
+        // transport, a path that is no path. None of them is a failure of the merge.
+        var honest = Blob(MinHashParameters.DEFAULT, 300, 301);
+        var source = Source(0, honest, documents: 2);
+        Exception[] failures = [new TimeoutException("the store did not answer"), new FormatException("not an id"), new ApplicationException("the transport's own"), new NullReferenceException()];
+
+        var reasons = new List<string>();
+        foreach (var failure in failures)
+            reasons.Add((await CorpusDedupLoader.LoadAsync(source, _ => throw failure, CancellationToken.None)).Reason);
+
+        var input = new CorpusDedupInput([source, Source(1, honest, 2)], MinHashParameters.DEFAULT, null);
+        var (shards, excluded) = await CorpusDedupLoader.LoadAsync(input, blobId => blobId == source.SignaturesBlobId ? throw new TimeoutException() : Task.FromResult(Write(blobId, honest)), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(reasons, Is.All.EqualTo(CorpusDedupExclusion.BLOB_MISSING));
+            Assert.That(shards.Select(shard => shard.ShardIndex), Is.EqualTo(new[] { 1 }), "the other shard is merged");
+            Assert.That(excluded.Select(exclusion => (exclusion.Index, exclusion.Reason)), Is.EqualTo(new[] { (0, CorpusDedupExclusion.BLOB_MISSING) }));
+            Assert.That(async () => await CorpusDedupLoader.LoadAsync(source, _ => throw new OperationCanceledException(), CancellationToken.None), Throws.InstanceOf<OperationCanceledException>(), "a cancelled job is still a cancelled job");
+        });
+    }
+
+    [Test]
     public async Task H3OneBadBlobCostsThatShardNotTheMergeTest()
     {
         // Three shards; the middle one's node uploaded other signatures than it reported.

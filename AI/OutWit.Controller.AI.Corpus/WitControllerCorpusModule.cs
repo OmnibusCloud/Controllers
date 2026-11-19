@@ -40,6 +40,7 @@ public sealed class WitControllerCorpusModule : WitPluginBase, IWitControllerNod
         services.AddActivityAdapter<WitActivityCorpusDisputes, WitActivityAdapterCorpusDisputes>();
         services.AddActivityAdapter<WitActivityCorpusCollect, WitActivityAdapterCorpusCollect>();
         services.AddActivityAdapter<WitActivityCorpusSamplingRate, WitActivityAdapterCorpusSamplingRate>();
+        services.AddActivityAdapter<WitActivityCorpusRepairRate, WitActivityAdapterCorpusRepairRate>();
         services.AddActivityAdapter<WitActivityCorpusIntegrity, WitActivityAdapterCorpusIntegrity>();
         services.AddActivityAdapter<WitActivityCorpusDedup, WitActivityAdapterCorpusDedup>();
         services.AddActivityAdapter<WitActivityCorpusRuntimeDiagnostics, WitActivityAdapterCorpusRuntimeDiagnostics>();

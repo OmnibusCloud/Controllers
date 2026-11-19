@@ -183,7 +183,10 @@ public static class CorpusPackageCodec
     /// nothing in it is believed: a frame larger than a result may be, a frame of another kind, or
     /// more frames than the task package had shards ends the reading
     /// (<see cref="InvalidDataException"/>); what was read before it stands. A frame whose image
-    /// is no result is given as null and the reading goes on.
+    /// is no result is given as null and the reading goes on. An image is walked before it is
+    /// decoded (<see cref="CorpusResultImage"/>): the decoder is handed only one in which every
+    /// length and every count is inside the image and inside the bound of its kind, and whatever
+    /// it then throws is caught here.
     /// </summary>
     /// <param name="path">The blob's local file.</param>
     /// <param name="maxResults">The most results the package may hold: the shards of the task package it answers.</param>
@@ -206,7 +209,7 @@ public static class CorpusPackageCodec
             if (++results > maxResults)
                 throw new InvalidDataException("The result package holds more results than its task package had shards.");
 
-            yield return Deserialize<CorpusResultData>(ReadFrame(brotli, length));
+            yield return Result(ReadFrame(brotli, length));
         }
     }
 
@@ -331,6 +334,15 @@ public static class CorpusPackageCodec
         {
             throw new InvalidDataException("The package's stream is damaged.");
         }
+    }
+
+    /// <summary>
+    /// The result an image holds, or null. A node chose the bytes, so every length the decoder
+    /// would believe is checked first: an image the walk refuses never reaches the decoder.
+    /// </summary>
+    private static CorpusResultData? Result(byte[] image)
+    {
+        return CorpusResultImage.IsSound(image) ? Deserialize<CorpusResultData>(image) : null;
     }
 
     private static T? Deserialize<T>(byte[] image) where T : class

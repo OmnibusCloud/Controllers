@@ -9,10 +9,12 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
     CorpusResultPackageCollection:executions = Grid.ForEach(package in tasks, checked)
         => Corpus.ProcessPackage(package);
 
-    ~ A shard without a result (no answer the server accepts, or a fault of the node that ran it) goes out once more. ~
+    ~ A shard without a result (no answer the server accepts, or a fault of the node that ran it) goes out once more: on two machines when the run asked for sampling, so that a round that came back short keeps its checking. ~
     CorpusTaskPackageCollection:repairs = Corpus.Repairs(tasks, executions);
+    Double:again = Corpus.RepairRate(opts);
+    ProcessingOptions:rechecked = Grid.Replicas(2, again);
 
-    CorpusResultPackageCollection:repaired = Grid.ForEach(package in repairs)
+    CorpusResultPackageCollection:repaired = Grid.ForEach(package in repairs, rechecked)
         => Corpus.ProcessPackage(package);
 
     ~ A shard whose copies disagree runs three more times, on different machines. ~
@@ -23,5 +25,5 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
         => Corpus.ProcessPackage(package);
 
     Blob:report = Corpus.Collect(tasks, executions, repairs, repaired, disputes, resolved, opts);
-    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved);
+    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, opts);
 }

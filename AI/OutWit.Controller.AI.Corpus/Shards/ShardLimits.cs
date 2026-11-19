@@ -43,6 +43,14 @@ public static class ShardLimits
     /// <summary>The least slack a declared size has: a mebibyte, so a declaration of a few kilobytes is not held to the byte.</summary>
     public const long DECLARED_SLACK_MIN_BYTES = 1024 * 1024;
 
+    /// <summary>
+    /// The fewest bytes of the unpacked file one record takes: a version line (<c>WARC/</c> and
+    /// its line feed, 6 bytes), a <c>Content-Length</c> header of one digit (17) and the blank line
+    /// that ends the headers (1). The reader takes no record without the three, so what a shard
+    /// may unpack to bounds the records it can hold.
+    /// </summary>
+    public const int MIN_RECORD_BYTES = 24;
+
     #endregion
 
     #region Functions
@@ -54,6 +62,18 @@ public static class ShardLimits
     {
         var byRatio = Math.Max(0, packedBytes) > MAX_UNPACKED_BYTES / UNPACK_RATIO ? MAX_UNPACKED_BYTES : Math.Max(0, packedBytes) * UNPACK_RATIO;
         return Math.Clamp(byRatio, MIN_UNPACKED_BYTES, MAX_UNPACKED_BYTES);
+    }
+
+    /// <summary>
+    /// The most records a shard of a packed size can hold: what it may unpack to, in records of
+    /// the fewest bytes a record takes. A node counts a record for each one it read or passed
+    /// over, so no honest count is above this; the server holds a result's records to it.
+    /// </summary>
+    /// <param name="packedBytes">The shard's size as fetched.</param>
+    /// <returns>The bound: 2,796,202 for a shard of up to 2 MiB, 715,827,882 for one of 512 MiB and more.</returns>
+    public static long MaxRecords(long packedBytes)
+    {
+        return MaxUnpackedBytes(packedBytes) / MIN_RECORD_BYTES;
     }
 
     /// <summary>The most bytes a shard of a declared size may be on the wire: the declaration and its slack.</summary>

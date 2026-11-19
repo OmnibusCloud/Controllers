@@ -8,13 +8,22 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// Writes the integrity document of a run from the server's ledger: what the run's results rest
 /// on, and everything that did not go the plain way.
 /// <list type="bullet">
-/// <item><b>pairs</b>: every shard that came back twice in the first round, its two results
+/// <item><b>sampling</b> and <b>rounds</b>: the share of the packages the run asked to run on two
+/// machines and what came back of it, in a word and in a sentence, and for each round the
+/// packages that went out and the answers that came back (<see cref="CorpusFanOutWriter"/>). A
+/// run whose checking did not happen says so in words.</item>
+/// <item><b>pairs</b>: every shard that came back twice in the first round or in the repair
+/// round (<c>round</c> says which), its two results
 /// compared on everything an honest node cannot vary — the verdict, the content hash of the
 /// product, the hash of its signatures, the document count, the drop and language histograms, the
 /// PDF stage's counts. Signatures that differ while the text agrees are a mismatch of their own
 /// kind (<c>signatures</c>, counted apart). A pair with a side that is no result (a node fault, a
 /// dropped value) is counted, not compared (<c>incomplete</c>). The platform keeps the two on
-/// different machines, and the document does not say which.</item>
+/// different machines, and the document does not say which. The summary counts the first
+/// round's pairs (<c>sampled</c>, <c>compared</c>, <c>mismatches</c> and the rate they give:
+/// those are the run's sample) apart from the repair round's (<c>repair_pairs</c>,
+/// <c>repair_compared</c>, <c>repair_mismatches</c>: shards that went out again, on two machines
+/// when the run asked for sampling).</item>
 /// <item><b>disputes</b>: every shard whose copies disagreed, what three machines returned for it
 /// and how it ended (<c>outcome</c>): <c>resolved</c> (the most of them, two at least and without
 /// a tie, returned the same), <c>no_majority</c>, <c>too_few_copies</c> or
@@ -27,7 +36,11 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// under one ticket than a round takes (<c>surplus</c>). Every reason is written, 0 included.</item>
 /// </list>
 /// A shard in none of these lists was run once, and its result is one machine's word
-/// (<c>single_execution</c> says how many). Schema <c>corpus-integrity/6</c>: the shape of
+/// (<c>single_execution</c> says how many). Schema <c>corpus-integrity/7</c>: <c>/6</c> with
+/// <c>sampling</c> and <c>rounds</c>, the repair round's pairs beside the first round's (each
+/// pair says its <c>round</c>; three more counters in the summary), and <c>repair_copies</c> in
+/// a dispute's record, since a shard that goes out again goes out on two machines when the run
+/// asked for sampling. <c>/6</c> was the shape of
 /// <c>/5</c> with one more fault code (<c>tasks</c>: a node's task package did not arrive) and a
 /// wider <c>surplus</c> (an answer beyond the ones a round opens for a package, two results for
 /// one shard in one answer), since tasks and results travel in packages; <c>/4</c> let a
@@ -40,7 +53,7 @@ public static class CorpusIntegrityWriter
     #region Constants
 
     /// <summary>The document schema name.</summary>
-    public const string SCHEMA = "corpus-integrity/6";
+    public const string SCHEMA = "corpus-integrity/7";
 
     /// <summary>A compared pair's signatures: both sides made the same.</summary>
     public const string SIGNATURES_MATCH = "match";
@@ -82,16 +95,28 @@ public static class CorpusIntegrityWriter
     public static void Write(CorpusLedger ledger, Stream stream)
     {
         int shards = 0, sampled = 0, compared = 0, mismatches = 0, signaturesCompared = 0, signatureMismatches = 0, unanswered = 0;
+        int repairPairs = 0, repairCompared = 0, repairMismatches = 0;
         foreach (var shard in ledger.Shards)
         {
             shards++;
             if (shard.Outcome == CorpusShardOutcome.NoResult)
                 unanswered++;
 
+            // The repair round's pairs are counted apart: they are no sample of the run.
+            if (shard.Repair.Count >= 2)
+            {
+                var again = Pair(shard, shard.Repair, CorpusFanOutWriter.ROUND_REPAIR);
+                repairPairs++;
+                if (again.Compared)
+                    repairCompared++;
+                if (again.Compared && !again.Match)
+                    repairMismatches++;
+            }
+
             if (shard.First.Count < 2)
                 continue;
 
-            var pair = Pair(shard);
+            var pair = Pair(shard, shard.First, CorpusFanOutWriter.ROUND_FIRST);
             sampled++;
             if (!pair.Compared)
                 continue;
@@ -126,11 +151,17 @@ public static class CorpusIntegrityWriter
         writer.WriteNumber("node_faults", ledger.NodeFaults);
         writer.WriteNumber("repairs", ledger.Repairs);
         writer.WriteNumber("repaired", ledger.Repaired);
+        writer.WriteNumber("repair_pairs", repairPairs);
+        writer.WriteNumber("repair_compared", repairCompared);
+        writer.WriteNumber("repair_mismatches", repairMismatches);
         writer.WriteNumber("no_result", unanswered);
         writer.WriteNumber("disputes", ledger.Disputes);
         writer.WriteNumber("disputes_resolved", ledger.DisputesResolved);
         writer.WriteNumber("disputed", ledger.Disputes - ledger.DisputesResolved);
         writer.WriteEndObject();
+
+        // What the run asked for in second executions, and how each round came back.
+        CorpusFanOutWriter.Write(writer, ledger);
 
         writer.WriteStartObject("rejected");
         foreach (var reason in CorpusLedger.REJECTION_REASONS)
@@ -141,7 +172,10 @@ public static class CorpusIntegrityWriter
         foreach (var shard in ledger.Shards)
         {
             if (shard.First.Count >= 2)
-                WritePair(writer, Pair(shard));
+                WritePair(writer, Pair(shard, shard.First, CorpusFanOutWriter.ROUND_FIRST));
+
+            if (shard.Repair.Count >= 2)
+                WritePair(writer, Pair(shard, shard.Repair, CorpusFanOutWriter.ROUND_REPAIR));
 
             Flush(writer);
         }
@@ -197,11 +231,12 @@ public static class CorpusIntegrityWriter
             writer.Flush();
     }
 
-    private static PairRecord Pair(CorpusLedgerShard shard)
+    /// <summary>The first two values of a shard in one round, side by side.</summary>
+    private static PairRecord Pair(CorpusLedgerShard shard, List<CorpusLedgerEntry> entries, string round)
     {
-        var primary = shard.First[0];
-        var replica = shard.First[1];
-        var compared = primary.Kind == CorpusLedgerEntryKind.Execution && replica.Kind == CorpusLedgerEntryKind.Execution;
+        var primary = entries[0];
+        var replica = entries[1];
+        var compared = CorpusLedger.IsCompared(entries);
         var differing = compared ? CorpusLedger.Differences(primary.Result!, replica.Result!) : [];
 
         var signatures = !compared ? SIGNATURES_NONE
@@ -209,17 +244,18 @@ public static class CorpusIntegrityWriter
             : CorpusLedger.SignaturesDiffer(differing) ? SIGNATURES_DIFFER
             : SIGNATURES_MATCH;
 
-        return new PairRecord(shard, primary, replica, compared, differing.Count == 0, differing, signatures);
+        return new PairRecord(shard, round, entries.Count, primary, replica, compared, differing.Count == 0, differing, signatures);
     }
 
     private static void WritePair(Utf8JsonWriter writer, PairRecord pair)
     {
         writer.WriteStartObject();
         writer.WriteNumber("index", pair.Shard.Index);
+        writer.WriteString("round", pair.Round);
         WriteSide(writer, "primary", pair.Primary);
         WriteSide(writer, "replica", pair.Replica);
-        if (pair.Shard.First.Count > 2)
-            writer.WriteNumber("results", pair.Shard.First.Count);
+        if (pair.Values > 2)
+            writer.WriteNumber("results", pair.Values);
         writer.WriteBoolean("compared", pair.Compared);
         if (!pair.Compared)
             writer.WriteBoolean("incomplete", true);
@@ -236,7 +272,8 @@ public static class CorpusIntegrityWriter
             }
         }
 
-        if (pair.Shard.NeedsDispute)
+        // The pair a dispute came from: the repair round's when the shard went out again, the first round's otherwise.
+        if (pair.Shard.NeedsDispute && pair.Shard.SentToRepair == (pair.Round == CorpusFanOutWriter.ROUND_REPAIR))
             writer.WriteBoolean("dispute", true);
 
         writer.WriteEndObject();
@@ -249,6 +286,7 @@ public static class CorpusIntegrityWriter
         writer.WriteStartObject();
         writer.WriteNumber("index", shard.Index);
         writer.WriteNumber("first_copies", shard.First.Count(entry => entry.Kind == CorpusLedgerEntryKind.Execution));
+        writer.WriteNumber("repair_copies", shard.Repair.Count(entry => entry.Kind == CorpusLedgerEntryKind.Execution));
         writer.WriteNumber("copies", shard.Dispute.Count(entry => entry.Kind == CorpusLedgerEntryKind.Execution));
         writer.WriteNumber("agreeing", shard.DisputeAgreeing);
         writer.WriteString("outcome", shard.DisputeOutcome);
@@ -301,8 +339,8 @@ public static class CorpusIntegrityWriter
 
     #region Types
 
-    /// <summary>The first two results of a shard that came back more than once: compared only when both are results with a verdict.</summary>
-    private sealed record PairRecord(CorpusLedgerShard Shard, CorpusLedgerEntry Primary, CorpusLedgerEntry Replica, bool Compared, bool Match, List<string> Differing, string Signatures);
+    /// <summary>The first two results of a shard that came back more than once in a round, and how many values the round brought it: compared only when both are results with a verdict.</summary>
+    private sealed record PairRecord(CorpusLedgerShard Shard, string Round, int Values, CorpusLedgerEntry Primary, CorpusLedgerEntry Replica, bool Compared, bool Match, List<string> Differing, string Signatures);
 
     #endregion
 }

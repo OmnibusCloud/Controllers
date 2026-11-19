@@ -217,7 +217,7 @@ public sealed class CorpusLoggerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(adapters, Has.Count.EqualTo(11), "the controller's eleven activities");
+            Assert.That(adapters, Has.Count.EqualTo(12), "the controller's twelve activities");
             Assert.That(unguarded, Is.Empty, "an adapter that hands the engine's base the host's logger lets a failing logger decide its activity's fate");
         });
     }

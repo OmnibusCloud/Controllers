@@ -8,9 +8,11 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.AI.Corpus.Activities;
 
 /// <summary>
-/// Host-side: the integrity document of a run (a JSON blob) — the pairs of the first round
+/// Host-side: the integrity document of a run (a JSON blob) — the sampling the run asked for and
+/// how each round's fan-out came back, the pairs of the first round and of the repair round
 /// compared, the disputes and how each ended, the shards without a result, the values dropped,
-/// by reason.
+/// by reason. The run's options are its last argument; a script that hands none gets a document
+/// that says the sampling asked for is not known.
 /// </summary>
 [Activity("Corpus.Integrity")]
 [MemoryPackable]
@@ -20,7 +22,9 @@ public sealed partial class WitActivityCorpusIntegrity : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Tasks}, {Executions}, {Repairs}, {Repaired}, {Disputes}, {Resolved}";
+        return Options == null
+            ? $"{Tasks}, {Executions}, {Repairs}, {Repaired}, {Disputes}, {Resolved}"
+            : $"{Tasks}, {Executions}, {Repairs}, {Repaired}, {Disputes}, {Resolved}, {Options}";
     }
 
     #endregion
@@ -42,7 +46,8 @@ public sealed partial class WitActivityCorpusIntegrity : WitActivityFunction
                && Repairs.Check(activity.Repairs)
                && Repaired.Check(activity.Repaired)
                && Disputes.Check(activity.Disputes)
-               && Resolved.Check(activity.Resolved);
+               && Resolved.Check(activity.Resolved)
+               && Options.Check(activity.Options);
     }
 
     protected override WitActivityCorpusIntegrity InnerClone()
@@ -54,7 +59,8 @@ public sealed partial class WitActivityCorpusIntegrity : WitActivityFunction
             Repairs = Repairs?.Clone() as IWitReference,
             Repaired = Repaired?.Clone() as IWitReference,
             Disputes = Disputes?.Clone() as IWitReference,
-            Resolved = Resolved?.Clone() as IWitReference
+            Resolved = Resolved?.Clone() as IWitReference,
+            Options = Options?.Clone() as IWitReference
         };
     }
 
@@ -85,6 +91,10 @@ public sealed partial class WitActivityCorpusIntegrity : WitActivityFunction
     /// <summary>Reference to what the dispute round returned.</summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Resolved { get; init; }
+
+    /// <summary>Reference to the 'Options' argument: the sampling the run asked for is read from it. Null when the script hands none.</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Options { get; init; }
 
     #endregion
 }

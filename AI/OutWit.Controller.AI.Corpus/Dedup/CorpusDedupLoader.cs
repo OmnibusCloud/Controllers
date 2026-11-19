@@ -97,8 +97,11 @@ public static class CorpusDedupLoader
         {
             return (null, CorpusDedupExclusion.BLOB_LENGTH);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException && (ShardLocalFaultException.IsLocal(exception) || exception is InvalidOperationException or KeyNotFoundException or ArgumentException))
+        catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
         {
+            // Whatever the store or the file system says of a blob a node uploaded (it is not
+            // there, it will not open, the store answers in a way of its own): the blob is not
+            // read, and that costs the merge this shard.
             return (null, CorpusDedupExclusion.BLOB_MISSING);
         }
     }

@@ -4,14 +4,16 @@
 
   <PropertyGroup>
     <ControllerName>Corpus</ControllerName>
-    <Version>0.1.5</Version>
-    <Description>Bundled .wit scripts for the OutWit Corpus controller — CorpusProcess (public-corpus shards fetched by the nodes, cleaned, language-tagged, quality-filtered and signed, with the tasks and the results travelling as blobs, sampled re-execution, a repair round for shards a node could not answer and a dispute round by three machines for copies that disagree), CorpusPreflight, CorpusDedup (the near-duplicate merge over a run) and CorpusRuntimeDiagnostics (the module's diagnostics and the capabilities document).</Description>
+    <Version>0.1.6</Version>
+    <Description>Bundled .wit scripts for the OutWit Corpus controller — CorpusProcess (public-corpus shards fetched by the nodes, cleaned, language-tagged, quality-filtered and signed, with the tasks and the results travelling as blobs, sampled re-execution, a repair round for shards a node could not answer, on two machines when the run samples, and a dispute round by three machines for copies that disagree), CorpusPreflight, CorpusDedup (the near-duplicate merge over a run) and CorpusRuntimeDiagnostics (the module's diagnostics and the capabilities document).</Description>
     <PackageTags>corpus;common-crawl;scripts;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
 
   <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md).
-       Lower bound: the scripts hand task and result packages to Corpus.ProcessPackage, which a
-       controller has from 0.5.0 on. Upper bound: the next major after the 1.x line, exclusive -
+       Lower bound: the scripts ask Corpus.RepairRate how the repair round goes out and hand the
+       run's options to Corpus.Integrity, which a controller does from 0.7.0 on (an earlier one
+       has no such activity and takes six arguments there; packages and Corpus.ProcessPackage
+       are from 0.5.0). Upper bound: the next major after the 1.x line, exclusive -
        the release candidates become 1.0.0 with the activity surface they have, so a range that
        ended at 1.0.0 would refuse the very release these scripts wait for.
        NOT ENABLED YET, and it cannot be: the reference is restored from the feeds this
@@ -23,7 +25,7 @@
        holds the range to the versions of the build, and fails a build of controller 1.0.0 or
        later in which the marker is still off (CorpusScriptsCompatibilityTests).
   <ItemGroup>
-    <PackageReference Include="OutWit.Controller.AI.Corpus" Version="[0.5.0, 2.0.0)" />
+    <PackageReference Include="OutWit.Controller.AI.Corpus" Version="[0.7.0, 2.0.0)" />
   </ItemGroup>
   -->
 
