@@ -14,7 +14,7 @@ internal sealed class VerifyTaskIndexPage
     public const int SIZE = 1 << 16;
 
     /// <summary>The most indices a page keeps as a list; one more makes it a bitmap.</summary>
-    public const int LIST_LIMIT = 0;
+    public const int LIST_LIMIT = 1024;
 
     private const int FIRST_LIST_LENGTH = 4;
     private const int BITMAP_WORDS = SIZE / 64;
@@ -25,7 +25,7 @@ internal sealed class VerifyTaskIndexPage
 
     private ushort[]? m_list = new ushort[FIRST_LIST_LENGTH];
     private int m_listed;
-    private ulong[]? m_bits;
+    private ulong[]? m_bits = new ulong[BITMAP_WORDS];
 
     #endregion
 
