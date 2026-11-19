@@ -1,6 +1,10 @@
+using System.Buffers.Binary;
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using MemoryPack;
 using Microsoft.Extensions.Logging.Abstractions;
+using OutWit.Engine.Interfaces;
 using OutWit.Controller.AI.Verify.Delivery;
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
@@ -51,16 +55,30 @@ internal sealed class VerifySettleRig : IDisposable
     /// <summary>A batch of tasks of the raw WASI runtime, which needs no runtime files: one per index.</summary>
     public static VerifyTaskBatchData Batch(params int[] indices)
     {
+        return BatchOf(0, null, indices);
+    }
+
+    /// <summary>A batch of tasks that each have a suite of so many cases.</summary>
+    public static VerifyTaskBatchData BatchWithSuite(int cases, params int[] indices)
+    {
+        return BatchOf(cases, null, indices);
+    }
+
+    /// <summary>A batch of tasks under limits of their own, each with a suite of so many cases (0 for none).</summary>
+    public static VerifyTaskBatchData BatchOf(int cases, VerifyLimitsData? limits, params int[] indices)
+    {
         return new VerifyTaskBatchData
         {
             RuntimeId = VerifyRuntimeCatalog.WASI,
             RuntimeSha256 = "",
+            DefaultLimits = limits,
             Tasks = indices.Select(index => new VerifyTaskData
             {
                 TaskIndex = index,
                 RuntimeId = VerifyRuntimeCatalog.WASI,
                 EntryPoint = "m.wasm",
-                Sources = [new VerifySourceFileData { Name = "m.wasm", Content = "AA==" }]
+                Sources = [new VerifySourceFileData { Name = "m.wasm", Content = "AA==" }],
+                Suite = cases == 0 ? null : new VerifySuiteData { Cases = Enumerable.Range(0, cases).Select(_ => new VerifySuiteCaseData()).ToList() }
             }).ToList()
         };
     }
@@ -100,6 +118,35 @@ internal sealed class VerifySettleRig : IDisposable
         var reference = await VerifyPackageTransfer.UploadResultsAsync(Blobs, path, ticket, batches.Sum(batch => batch.Results.Count), batches.Count, NullLogger.Instance, CancellationToken.None);
         File.Delete(path);
         return reference;
+    }
+
+    /// <summary>
+    /// Stores a result package made of frames a test wrote by hand, with a reference that names
+    /// its bytes truthfully: what a node can send that no honest writer makes.
+    /// </summary>
+    public Task<VerifyResultPackageData> StoreFramesAsync(string ticket, params (byte Kind, byte[] Image)[] frames)
+    {
+        using var stream = new MemoryStream();
+        VerifyPackageCodec.WriteHeader(stream, VerifyPackageCodec.KIND_RESULTS, VerifyPackageCodec.RESULTS_VERSION);
+        using (var brotli = new BrotliStream(stream, CompressionLevel.Fastest, leaveOpen: true))
+        {
+            Span<byte> length = stackalloc byte[sizeof(int)];
+            foreach (var (kind, image) in frames)
+            {
+                brotli.WriteByte(kind);
+                BinaryPrimitives.WriteInt32LittleEndian(length, image.Length);
+                brotli.Write(length);
+                brotli.Write(image);
+            }
+        }
+
+        return StoreRawAsync(stream.ToArray(), ticket);
+    }
+
+    /// <summary>The frame that opens a batch of an honest node of the rig, for a package of frames written by hand.</summary>
+    public static (byte Kind, byte[] Image) HeadFrame(string ticket, int tasks = 1)
+    {
+        return (VerifyResultPackageWriter.FRAME_BATCH, MemoryPackSerializer.Serialize(new VerifyResultBatchData { Ticket = ticket, Diagnostics = Diagnostics(VerifyRuntimeCatalog.WASI, tasks) }));
     }
 
     /// <summary>Stores arbitrary bytes as a blob and returns a reference that names them truthfully: a package only in name.</summary>
@@ -149,7 +196,7 @@ internal sealed class VerifySettleRig : IDisposable
         // Awaited as a plain task, here and below: an awaiter of a controller type would be a
         // value type among this method's fields, and the test assembly's types are all loaded
         // when the tests are discovered. The module-load proof needs the controller unloaded then.
-        var settling = VerifySettlement.SettleAsync(fanOut, repair, dispute, Blobs, Path.Combine(m_folder, "work"));
+        var settling = VerifySettlement.SettleAsync(fanOut, repair, dispute, Server ?? Blobs, Path.Combine(m_folder, "work"));
         await (Task)settling;
 
         var ledgerPath = settling.Result.LedgerPath;
@@ -215,6 +262,9 @@ internal sealed class VerifySettleRig : IDisposable
 
     /// <summary>The rig's blob store: the server's and the nodes' at once.</summary>
     public VerifyTestBlobService Blobs { get; }
+
+    /// <summary>The blob service a run is settled through, when a test puts one in front of the rig's own; null for the rig's own.</summary>
+    public IWitBlobService? Server { get; set; }
 
     #endregion
 }

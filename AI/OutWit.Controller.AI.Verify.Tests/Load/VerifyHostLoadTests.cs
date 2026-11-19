@@ -57,7 +57,7 @@ public sealed class VerifyHostLoadTests
         // them twice, every task ruled on, the four documents written.
         using var rig = new VerifySettleRig();
         var batches = Enumerable.Range(0, TASKS / BATCH_SIZE)
-            .Select(batch => VerifySettleRig.Batch(Enumerable.Range(batch * BATCH_SIZE, BATCH_SIZE).ToArray()))
+            .Select(batch => VerifySettleRig.BatchWithSuite(1, Enumerable.Range(batch * BATCH_SIZE, BATCH_SIZE).ToArray()))
             .ToArray();
         var issued = await rig.PublishAsync(batches);
 

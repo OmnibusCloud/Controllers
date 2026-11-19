@@ -94,8 +94,9 @@ public static class VerifyPackageCodec
             var batches = MemoryPackSerializer.Deserialize<VerifyTaskBatchData[]>(image);
             return batches?.ToList() ?? throw new InvalidDataException("The task package holds no batches.");
         }
-        catch (MemoryPackSerializationException)
+        catch (Exception exception) when (exception is not (InvalidDataException or OutOfMemoryException))
         {
+            // Whatever the decoder throws, of any type: the package cannot be read.
             throw new InvalidDataException("The task package cannot be read.");
         }
     }

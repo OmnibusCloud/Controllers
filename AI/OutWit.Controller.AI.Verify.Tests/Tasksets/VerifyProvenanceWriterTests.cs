@@ -148,6 +148,38 @@ public sealed class VerifyProvenanceWriterTests
         });
     }
 
+    [Test]
+    public void N3ASumOfWhatNodesReportedStopsAtTheLargestValueTest()
+    {
+        // Audit finding N-3: fuel of the largest number on one task beside a small one, and the
+        // sum of a batch's fuel threw out of the settlement, after all the work. A number of a
+        // result is now held to its task before it is taken; a sum of such numbers stops at the
+        // largest value all the same, here over executions no intake would let through.
+        var batch = new VerifyAcceptedBatch(Diagnostics("python-3.14.6", "aaa"),
+        [
+            VerifyComparable.Record(new VerifyResultData { TaskIndex = 0, FuelConsumed = long.MaxValue, WallMs = int.MaxValue }),
+            VerifyComparable.Record(new VerifyResultData { TaskIndex = 1, FuelConsumed = 1 << 20, WallMs = int.MaxValue }),
+            VerifyComparable.Record(new VerifyResultData { TaskIndex = 2, FuelConsumed = long.MaxValue, WallMs = int.MaxValue })
+        ]);
+        var other = Batch("python-3.14.6", "aaa", [3, 4]);
+
+        byte[] written = [];
+        Assert.That(() => written = VerifyProvenanceWriter.Write([Round(VerifyRound.MAIN, other, batch)]), Throws.Nothing);
+
+        using var document = JsonDocument.Parse(written);
+        var first = document.RootElement.GetProperty("batches")[0];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(first.GetProperty("fuel").GetInt64(), Is.EqualTo(long.MaxValue), "the sum stops, it does not wrap or throw");
+            Assert.That(first.GetProperty("metrics")[1].GetProperty("fuel").GetInt64(), Is.EqualTo(1 << 20));
+            Assert.That(VerifySums.Add(long.MaxValue, long.MaxValue), Is.EqualTo(long.MaxValue));
+            Assert.That(VerifySums.Add(long.MaxValue - 1, 1), Is.EqualTo(long.MaxValue));
+            Assert.That(VerifySums.Add(3, 4), Is.EqualTo(7));
+            Assert.That(VerifySums.Add(-5, 4), Is.EqualTo(4), "a number below zero adds nothing");
+        });
+    }
+
     #endregion
 
     #region Tools
