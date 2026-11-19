@@ -8,8 +8,9 @@ using OutWit.Engine.Interfaces;
 namespace OutWit.Controller.Grid.Utils;
 
 /// <summary>
-/// What a task asks its node for, and what is kept of the node's answer. Both strategies use it, so a
-/// node is asked and held the same way whether its tasks travel as one batch or one by one.
+/// What a task asks its node for, and what is kept of the node's answer. Both strategies of
+/// Grid.ForEach use it, and so does Grid.Delegate for its one task, so a node is asked and held the
+/// same way whether its tasks travel as one batch or one by one.
 ///
 /// A task asks for one value: the return slot Grid gave its activity. A value is kept when it comes
 /// under a name the tasks asked for, as many times as they asked for it, and when the return

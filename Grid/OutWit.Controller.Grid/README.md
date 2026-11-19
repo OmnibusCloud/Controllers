@@ -87,9 +87,16 @@ Grid.Delegate => Activity(args);            ~ procedural: no return value ~
 
 Like `Grid.ForEach`, node compatibility is keyed off the delegated activity's type, and
 only the variables that activity actually references are forwarded to the node. The single
-task is allocated to the fastest compatible node via the same `WitGridTaskAllocator`. The node is
-asked for one value, under the return slot Grid gave the delegated activity; a variable of the
-script is never asked for, whatever its name.
+task is allocated to the fastest compatible node via the same `WitGridTaskAllocator`.
+
+The node is asked for one value, under the return slot Grid gave the delegated activity; a
+variable of the script is never asked for, whatever its name. The result is the value that comes
+back under that slot: a value under any other name, and a second value under the slot, are left
+out with a warning (up to 1.3.0 the first value a node returned was the result, whatever its name).
+When the return variable does not take the value (a typed variable refuses a value of another
+type, and a variable of a value type refuses null), the variable keeps the value it had and a
+warning says which kind of value came and which was expected. The job does not fail for it: a
+script that must not go on with the old value has to check the variable itself.
 
 ### Grid.Replicas
 

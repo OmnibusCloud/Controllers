@@ -30,11 +30,17 @@ namespace OutWit.Controller.Grid.Tests
 
         private const string RESULTS = "results";
 
+        private const string REFUSED = "would refuse";
+
+        private const string NOT_ASKED = "did not ask for";
+
         #endregion
 
         #region Fields
 
         private MockNodesManager m_nodes = null!;
+
+        private MockLogger m_logger = null!;
 
         private IReadOnlyList<IWitEngineActivityNode> m_fleet = null!;
 
@@ -56,8 +62,9 @@ namespace OutWit.Controller.Grid.Tests
             };
 
             m_nodes = new MockNodesManager { CompatibleNodes = m_fleet };
+            m_logger = new MockLogger();
 
-            WitEngineSdk.Instance.Reload(Guid.NewGuid(), m_nodes, false, null, controllersPath);
+            WitEngineSdk.Instance.Reload(Guid.NewGuid(), m_nodes, false, m_logger, controllersPath);
         }
 
         [SetUp]
@@ -67,6 +74,7 @@ namespace OutWit.Controller.Grid.Tests
             m_nodes.Singles.Clear();
             m_nodes.Answers = null;
             m_nodes.CompatibleNodes = m_fleet;
+            m_logger.Clear();
         }
 
         #endregion
@@ -178,6 +186,8 @@ namespace OutWit.Controller.Grid.Tests
             Assert.That(AskedNames(), Has.Count.EqualTo(6));
             Assert.That(AskedNames().Select(names => names.Count), Is.All.EqualTo(1), "a task asks for one value");
             Assert.That(AskedNames().Select(names => names[0]).Distinct().Count(), Is.EqualTo(6));
+            Assert.That(m_logger.WarningsWith(REFUSED), Is.Empty);
+            Assert.That(m_logger.WarningsWith(NOT_ASKED), Is.Empty);
         }
 
         [TestCase(BALANCED)]
@@ -195,6 +205,7 @@ namespace OutWit.Controller.Grid.Tests
             Assert.That(values, Has.Count.EqualTo(6));
             Assert.That(values.Count(value => value == null), Is.EqualTo(1));
             Assert.That(values.Where(value => value != null), Is.SubsetOf(Enumerable.Range(10, 6)));
+            Assert.That(m_logger.WarningsWith(REFUSED), Is.Empty);
         }
 
         [TestCase(BALANCED)]
@@ -235,6 +246,8 @@ namespace OutWit.Controller.Grid.Tests
             Assert.That(values, Is.All.InstanceOf<int>());
             Assert.That(values, Is.Unique);
             Assert.That(values, Is.SubsetOf(Enumerable.Range(10, 6)));
+            Assert.That(m_logger.WarningsWith(REFUSED), Has.Count.EqualTo(1));
+            Assert.That(m_logger.WarningsWith(REFUSED)[0], Does.Contain("1 value(s) the return collection would refuse (1 null where Int32 was expected)"));
         }
 
         [TestCase(BALANCED)]
@@ -253,6 +266,8 @@ namespace OutWit.Controller.Grid.Tests
             Assert.That(values, Is.All.InstanceOf<int>());
             Assert.That(values, Is.Unique);
             Assert.That(values, Is.SubsetOf(Enumerable.Range(10, 6)));
+            Assert.That(m_logger.WarningsWith(REFUSED), Has.Count.EqualTo(1));
+            Assert.That(m_logger.WarningsWith(REFUSED)[0], Does.Contain("1 value(s) the return collection would refuse (1 of type String where Int32 was expected)"));
         }
 
         [Test]
