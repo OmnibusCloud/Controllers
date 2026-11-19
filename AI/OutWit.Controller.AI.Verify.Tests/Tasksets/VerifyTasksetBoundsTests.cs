@@ -306,6 +306,85 @@ public sealed class VerifyTasksetBoundsTests
         Assert.That(forgotten, Is.Zero, "a line past those remembered is 'an earlier line'");
     }
 
+    [Test]
+    public void N10IndicesFarApartCostWhatTheyAreNotTheRangeTheyAreSpreadOverTest()
+    {
+        // Audit finding N-10, the lab's half: 32,768 tasks numbered 65,536 apart (a taskset of
+        // 2.2 MB) each fell into a page of their own, and each page was 8 KiB of bits: 256 MiB
+        // for the scan of a preflight. A page with few indices is now a short list.
+        const int tasks = 32_768;
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var sparse = new VerifyTaskIndices();
+        var allNew = true;
+        for (var task = 0; task < tasks; task++)
+            allNew &= sparse.Add(task * 65_536, task + 1, out _);
+
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        TestContext.Out.WriteLine($"{tasks} indices 65,536 apart: {allocated / 1024} KiB");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(allocated, Is.LessThan(16 * MEBIBYTE), "a few hundred bytes a task with its line, not a page of bits each");
+            Assert.That(allNew, Is.True);
+            Assert.That(sparse.Count, Is.EqualTo(tasks));
+            Assert.That(sparse.Add(65_536, 0, out var earlier), Is.False, "a duplicate is told all the same");
+            Assert.That(earlier, Is.EqualTo(2), "with the line that used the index first");
+            Assert.That(sparse.Add((tasks - 1) * 65_536, 0, out _), Is.False);
+            Assert.That(sparse.Add(65_537, 0, out _), Is.True, "and a neighbour is another index");
+        });
+    }
+
+    [Test]
+    public void N10APageOfIndicesToldApartAsAListAndAsBitsTest()
+    {
+        // One page filled in an order of no pattern, across the point where its list becomes a
+        // bitmap: every index is new once and a duplicate ever after, whichever form holds it.
+        const int filled = 3 * VerifyTaskIndexPage.LIST_LIMIT;
+        const int stride = 7919;
+
+        var indices = new VerifyTaskIndices();
+        var first = new List<int>();
+        for (var step = 0; step < filled; step++)
+            first.Add(step * stride % VerifyTaskIndexPage.SIZE);
+
+        var wrong = new List<string>();
+        for (var step = 0; step < filled; step++)
+        {
+            if (!indices.Add(first[step], step + 1, out _))
+                wrong.Add($"index {first[step]} is new at step {step}");
+
+            if (step is not (VerifyTaskIndexPage.LIST_LIMIT - 1 or VerifyTaskIndexPage.LIST_LIMIT or filled - 1))
+                continue;
+
+            // Everything added so far is a duplicate, with the line that added it.
+            for (var seen = 0; seen <= step; seen += 37)
+            {
+                if (indices.Add(first[seen], 0, out var earlier) || earlier != seen + 1)
+                    wrong.Add($"index {first[seen]} of step {seen} is not told as a duplicate of line {seen + 1} at step {step}");
+            }
+        }
+
+        // Descending and from the top of the range: the last page, its last number first.
+        var top = new VerifyTaskIndices();
+        for (var index = int.MaxValue; index > int.MaxValue - 2 * VerifyTaskIndexPage.LIST_LIMIT; index--)
+        {
+            if (!top.Add(index, 1, out _))
+                wrong.Add($"index {index} is new");
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(first.Distinct().Count(), Is.EqualTo(filled), "the stride visits no number twice");
+            Assert.That(wrong, Is.Empty, string.Join("; ", wrong.Take(10)));
+            Assert.That(indices.Count, Is.EqualTo(filled));
+            Assert.That(indices.Add(VerifyTaskIndexPage.SIZE + first[1], 0, out _), Is.True, "the same place in the next page is another index");
+            Assert.That(top.Add(int.MaxValue, 2, out _), Is.False);
+            Assert.That(top.Add(int.MaxValue - 2 * VerifyTaskIndexPage.LIST_LIMIT + 1, 2, out _), Is.False);
+            Assert.That(top.Add(int.MaxValue - 2 * VerifyTaskIndexPage.LIST_LIMIT, 2, out _), Is.True);
+        });
+    }
+
     #endregion
 
     #region The Preflight

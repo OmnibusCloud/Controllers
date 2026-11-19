@@ -12,6 +12,12 @@ namespace OutWit.Controller.AI.Verify.Delivery;
 /// results than the task package had, and at more bytes in all than a result package may hold.
 /// A blob of a few kilobytes that unpacks to a gigabyte is refused after the bound, not after
 /// the gigabyte.
+/// <para>
+/// A frame is walked before it is decoded (<see cref="VerifyResultFrames"/>): every length in it
+/// lies inside the frame and every count inside its bound, so the decoder is handed only bytes
+/// it can read without leaving them, and allocates by nothing but what the frame holds. Whatever
+/// the decoder still throws is a frame that cannot be read, whatever its type.
+/// </para>
 /// </summary>
 public static class VerifyResultPackageReader
 {
@@ -89,6 +95,7 @@ public static class VerifyResultPackageReader
                     if (++batches > maxBatches)
                         throw new VerifyPackageContentException("The result package holds more batches than its task package had.");
 
+                    VerifyResultFrames.CheckBatch(image);
                     current = Deserialize<VerifyResultBatchData>(image);
                     current.Results = [];
                     break;
@@ -99,6 +106,7 @@ public static class VerifyResultPackageReader
                     if (++results > maxResults)
                         throw new VerifyPackageContentException("The result package holds more results than its task package had tasks.");
 
+                    VerifyResultFrames.CheckResult(image);
                     current.Results.Add(Deserialize<VerifyResultData>(image));
                     break;
                 default:
@@ -110,15 +118,20 @@ public static class VerifyResultPackageReader
             yield return current;
     }
 
+    /// <summary>
+    /// Decodes a frame that was walked. The walk is what keeps the decoder inside the frame; the
+    /// catch is for whatever it throws all the same, of any type: a frame that cannot be read
+    /// fails its package, never the caller.
+    /// </summary>
     private static T Deserialize<T>(byte[] image) where T : class
     {
         try
         {
-            return MemoryPackSerializer.Deserialize<T>(image) ?? throw new InvalidDataException("A frame of the result package is empty.");
+            return MemoryPackSerializer.Deserialize<T>(image) ?? throw VerifyFrameCursor.Unreadable();
         }
-        catch (MemoryPackSerializationException)
+        catch (Exception exception) when (exception is not (InvalidDataException or OutOfMemoryException))
         {
-            throw new InvalidDataException("A frame of the result package cannot be read.");
+            throw VerifyFrameCursor.Unreadable();
         }
     }
 

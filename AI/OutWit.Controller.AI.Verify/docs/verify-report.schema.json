@@ -2,15 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-report.schema.json",
   "title": "Verify verdict report",
-  "description": "The report blob of VerifyRun, VerifyGenerate (over the generators) and VerifyGenerateAndCheck (over the checks). One JSON object: the run's identity. It carries only what two honest executions agree on wherever they ran (verdict, exit code, per-case outcome), so it is byte-identical for a taskset regardless of placement, as long as every node did its work and told the truth. A task the nodes could not settle is in it as such (NoResult with a reason, or Disputed), never left out and never counted as a pass. Fuel, peak memory and wall time are metrics and live per task in the provenance blob.",
+  "description": "The report blob of VerifyRun, VerifyGenerate (over the generators) and VerifyGenerateAndCheck (over the checks). One JSON object: the run's identity. It carries only what two honest executions agree on wherever they ran (verdict, exit code, per-case outcome), so it is byte-identical for a taskset and its options regardless of placement, as long as every node did its work and told the truth. A task the nodes could not settle is in it as such (NoResult with a reason, or Disputed), never left out and never counted as a pass. The summary also states the sampling the run asked for, whether it happened, and how many packages nothing answered: a run whose checking did not happen says so. Fuel, peak memory and wall time are metrics and live per task in the provenance blob.",
   "type": "object",
   "required": ["schema", "summary", "results"],
   "additionalProperties": false,
   "properties": {
-    "schema": { "type": "string", "const": "verify-report/2" },
+    "schema": { "type": "string", "const": "verify-report/3" },
     "summary": {
       "type": "object",
-      "required": ["total", "pass", "pass_rate", "verdicts", "rejected_results", "disputes", "disputes_resolved"],
+      "required": ["total", "pass", "pass_rate", "verdicts", "rejected_results", "disputes", "disputes_resolved", "sampling_rate", "sampling", "unanswered_packages"],
       "additionalProperties": false,
       "properties": {
         "total": { "type": "integer", "description": "Tasks in the report." },
@@ -23,7 +23,14 @@
         },
         "rejected_results": { "type": "integer", "description": "Result packages the server refused, every round and reason together (the integrity blob counts them by reason). 0 in a run without lying or failing nodes." },
         "disputes": { "type": "integer", "description": "Tasks whose executions disagreed. 0 in a run without lying or failing nodes." },
-        "disputes_resolved": { "type": "integer", "description": "Disputes that three more executions settled by a majority. The others are the tasks with verdict Disputed." }
+        "disputes_resolved": { "type": "integer", "description": "Disputes that three more executions settled by a majority. The others are the tasks with verdict Disputed." },
+        "sampling_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "The share of the packages the run asked to execute twice (VerifyOptions.SamplingRate, clamped to 0..1), as the script stated it to Verify.Settle. null when the script did not state it (the scripts of Verify.Scripts before 0.7.0)." },
+        "sampling": {
+          "type": "string",
+          "enum": ["not_stated", "none", "as_asked", "short"],
+          "description": "Whether the sampling that was asked for happened. not_stated: the script did not say what it asked for. none: the rate is 0. as_asked: in the first fan-out and in the repair round, as many packages came back with two accepted results as the rate asks for (the share rounded up to a whole package, one at least). short: fewer did, so part of the checking, or all of it, did not happen: results were not returned or were refused, or the pool had a single machine. The integrity blob has the numbers for every fan-out. as_asked in a run without lying or failing nodes on two machines or more."
+        },
+        "unanswered_packages": { "type": "integer", "description": "Task packages no accepted result came back for, every fan-out together (the first one, the repair round, the dispute round). Their tasks went out once more or are NoResult or Disputed. 0 in a run without lying or failing nodes." }
       }
     },
     "results": {

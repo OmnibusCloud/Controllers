@@ -414,7 +414,7 @@ public sealed class VerifyTrustBoundaryTests
     {
         // Two executions equal in verdict, exit code and the task's own streams, different in what
         // the first case printed: the pick took whichever arrived first.
-        var issued = await m_rig.PublishAsync(VerifySettleRig.Batch(0));
+        var issued = await m_rig.PublishAsync(VerifySettleRig.BatchWithSuite(2, 0));
         var one = await m_rig.AnswerAsync(issued[0], task => WithCases(task, "alpha"));
         var other = await m_rig.AnswerAsync(issued[0], task => WithCases(task, "beta"));
 

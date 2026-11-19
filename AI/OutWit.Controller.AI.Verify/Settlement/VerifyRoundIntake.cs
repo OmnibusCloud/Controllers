@@ -16,11 +16,14 @@ namespace OutWit.Controller.AI.Verify.Settlement;
 /// <item>every batch in it names the same ticket, the server's own controller version and
 /// engine, and the runtime bytes the server pins;</item>
 /// <item>it holds exactly the tasks of the package it answers, each once, and every result is
-/// one a node may give (a verdict, or a fault of the node with one of its codes).</item>
+/// one a node may give (a verdict, or a fault of the node with one of its codes) and one a node
+/// may give of that task: its numbers within the task's limits, its stdout within the task's
+/// cap, its case records those of the task's suite (<see cref="VerifyTaskBounds"/>).</item>
 /// </list>
 /// Anything else is dropped and counted by reason; the same blob returned twice counts once.
 /// A package that is dropped fails that package and nothing else: its tasks are simply without
-/// an answer from it.
+/// an answer from it. Whatever goes wrong while a package is read, of whatever type, makes that
+/// package unreadable and never ends the run.
 /// </summary>
 internal static class VerifyRoundIntake
 {
@@ -82,6 +85,10 @@ internal static class VerifyRoundIntake
 
         var seenBlobs = new HashSet<Guid>();
 
+        // The references are taken a ticket at a time, so the tasks of one package are read once
+        // for all its answers and let go before the next.
+        VerifyTaskBounds? bounds = null;
+
         // An order that follows from the references, never from the order they came back in.
         var ordered = returned
             .OrderBy(reference => reference.Ticket, StringComparer.Ordinal)
@@ -107,7 +114,18 @@ internal static class VerifyRoundIntake
                 continue;
             }
 
-            var (accepted, reason) = await ReadPackageAsync(unit, reference, blobs, spool);
+            var path = await LocateAsync(reference, blobs);
+            if (path == null)
+            {
+                Reject(round, UNREADABLE);
+                continue;
+            }
+
+            // The server's own blob: if it cannot be read the run cannot be settled at all.
+            if (bounds == null || !string.Equals(bounds.Ticket, unit.Ticket, StringComparison.Ordinal))
+                bounds = await VerifyTaskBounds.LoadAsync(unit, blobs);
+
+            var (accepted, reason) = ReadPackage(unit, reference, path, bounds, spool);
             if (accepted == null)
             {
                 Reject(round, reason!);
@@ -137,26 +155,33 @@ internal static class VerifyRoundIntake
         return round;
     }
 
-    private static async Task<(VerifyAcceptedPackage? Accepted, string? Reason)> ReadPackageAsync(VerifyTaskPackageData unit, VerifyResultPackageData reference,
-        IWitBlobService blobs, VerifySpool? spool)
+    /// <summary>
+    /// The local file of a result blob, when the blob is there, is no larger than a result
+    /// package may be and is the bytes its reference names; null otherwise, whatever failed.
+    /// </summary>
+    private static async Task<string?> LocateAsync(VerifyResultPackageData reference, IWitBlobService blobs)
     {
-        string path;
         try
         {
             if (reference.ResultsBlobId == Guid.Empty)
-                return (null, UNREADABLE);
+                return null;
 
-            path = await blobs.GetLocalPathAsync(reference.ResultsBlobId);
+            var path = await blobs.GetLocalPathAsync(reference.ResultsBlobId);
 
-            if (new FileInfo(path).Length > VerifyResultPackageReader.MAX_IMAGE_BYTES
-                || !string.Equals(VerifyPackageCodec.HashFile(path), reference.Sha256, StringComparison.Ordinal))
-                return (null, UNREADABLE);
+            return new FileInfo(path).Length <= VerifyResultPackageReader.MAX_IMAGE_BYTES
+                   && string.Equals(VerifyPackageCodec.HashFile(path), reference.Sha256, StringComparison.Ordinal)
+                ? path
+                : null;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        catch (Exception exception) when (IsOfThePackage(exception))
         {
-            return (null, UNREADABLE);
+            return null;
         }
+    }
 
+    private static (VerifyAcceptedPackage? Accepted, string? Reason) ReadPackage(VerifyTaskPackageData unit, VerifyResultPackageData reference, string path,
+        VerifyTaskBounds bounds, VerifySpool? spool)
+    {
         var batches = new List<VerifyAcceptedBatch>();
         var indices = new List<int>(unit.TaskCount);
 
@@ -173,7 +198,7 @@ internal static class VerifyRoundIntake
                 var executions = new List<VerifyExecution>(batch.Results.Count);
                 foreach (var result in batch.Results)
                 {
-                    if (!IsOneANodeMayGive(result))
+                    if (!IsOneANodeMayGive(result) || !bounds.Holds(result))
                         return (null, CONTENT);
 
                     indices.Add(result.TaskIndex);
@@ -189,12 +214,10 @@ internal static class VerifyRoundIntake
         {
             return (null, CONTENT);
         }
-        catch (InvalidDataException)
+        catch (Exception exception) when (IsOfThePackage(exception))
         {
-            return (null, UNREADABLE);
-        }
-        catch (IOException)
-        {
+            // Not only the reader's own refusals: anything a node's bytes can make the reading
+            // throw is that package's, and the run goes on without it.
             return (null, UNREADABLE);
         }
 
@@ -203,6 +226,15 @@ internal static class VerifyRoundIntake
             return (null, CONTENT);
 
         return (new VerifyAcceptedPackage(unit, reference.Sha256, batches), null);
+    }
+
+    /// <summary>
+    /// Whether an exception met while a result package is read is taken as that package's
+    /// fault: every one but the two that say the process itself is out of room.
+    /// </summary>
+    private static bool IsOfThePackage(Exception exception)
+    {
+        return exception is not (OutOfMemoryException or InsufficientExecutionStackException);
     }
 
     /// <summary>
@@ -244,7 +276,8 @@ internal static class VerifyRoundIntake
 
     /// <summary>
     /// Whether a result is one a node may give: a verdict a run can end with, or a fault of the
-    /// node with one of the node's codes, and outputs no longer than the ceilings allow.
+    /// node with one of the node's codes, outputs no longer than the ceilings allow, and a
+    /// verdict that is the one its own records give (<see cref="IsWhatItsCasesSay"/>).
     /// </summary>
     private static bool IsOneANodeMayGive(VerifyResultData result)
     {
@@ -273,7 +306,36 @@ internal static class VerifyRoundIntake
             caseOutput += item.ActualStdout.Length;
         }
 
-        return caseOutput <= VerifyLimitCeilings.MAX_STDOUT_LIMIT_BYTES;
+        return caseOutput <= VerifyLimitCeilings.MAX_STDOUT_LIMIT_BYTES && IsWhatItsCasesSay(result);
+    }
+
+    /// <summary>
+    /// Whether a result's verdict and exit code are the ones its own records give, as a node
+    /// makes them: a pass ended with exit code 0; a case passed exactly when its verdict is a
+    /// pass; and a task with case records passed when all of them did, and otherwise has the
+    /// verdict and the exit code of the first that did not.
+    /// </summary>
+    private static bool IsWhatItsCasesSay(VerifyResultData result)
+    {
+        if (result.Verdict == VerifyVerdict.Pass && result.ExitCode != 0)
+            return false;
+
+        VerifyCaseResultData? firstUnmet = null;
+        foreach (var item in result.CaseResults)
+        {
+            if (item.Passed != (item.Verdict == VerifyVerdict.Pass))
+                return false;
+
+            if (!item.Passed)
+                firstUnmet ??= item;
+        }
+
+        if (result.CaseResults.Count == 0)
+            return true;
+
+        return firstUnmet == null
+            ? result.Verdict == VerifyVerdict.Pass
+            : result.Verdict == firstUnmet.Verdict && result.ExitCode == firstUnmet.ExitCode;
     }
 
     private static void DropOrMarkSurplus(VerifyRound round, int copiesAsked, bool surplusIsSuspect)

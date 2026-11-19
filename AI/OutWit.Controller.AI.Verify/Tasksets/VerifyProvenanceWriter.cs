@@ -53,8 +53,8 @@ internal static class VerifyProvenanceWriter
             .OrderBy(entry => entry.First)
             .ThenBy(entry => entry.Round, StringComparer.Ordinal)
             .ThenBy(entry => entry.Batch.Diagnostics.RuntimeTarget ?? "", StringComparer.Ordinal)
-            .ThenBy(entry => entry.Batch.Executions.Sum(execution => execution.Fuel))
-            .ThenBy(entry => entry.Batch.Executions.Sum(execution => (long)execution.WallMs))
+            .ThenBy(entry => VerifySums.Fuel(entry.Batch.Executions))
+            .ThenBy(entry => VerifySums.WallMs(entry.Batch.Executions))
             .ToList();
 
         using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false });
@@ -87,7 +87,8 @@ internal static class VerifyProvenanceWriter
         writer.WriteString("controller", diagnostics.ControllerVersion);
         writer.WriteString("runtime", diagnostics.RuntimeId);
         writer.WriteString("runtime_sha256", diagnostics.RuntimeSha256);
-        writer.WriteNumber("fuel", executions.Sum(execution => execution.Fuel));
+        // A sum of numbers nodes reported: it stops at the largest value and never throws.
+        writer.WriteNumber("fuel", VerifySums.Fuel(executions));
 
         writer.WriteStartArray("tasks");
         foreach (var execution in executions)

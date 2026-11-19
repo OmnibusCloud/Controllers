@@ -80,7 +80,10 @@ public sealed class VerifySchemaDocsTests
         {
             Assert.That(PropertyNames(root), Is.EquivalentTo(new[] { "schema", "summary", "results" }));
             Assert.That(root.GetProperty("schema").GetProperty("const").GetString(), Is.EqualTo(OutWit.Controller.AI.Verify.Tasksets.VerifyReportWriter.SCHEMA));
-            Assert.That(summary, Is.EquivalentTo(new[] { "total", "pass", "pass_rate", "verdicts", "rejected_results", "disputes", "disputes_resolved" }));
+            Assert.That(summary, Is.EquivalentTo(new[] { "total", "pass", "pass_rate", "verdicts", "rejected_results", "disputes", "disputes_resolved", "sampling_rate", "sampling", "unanswered_packages" }));
+            Assert.That(root.GetProperty("summary").GetProperty("required").EnumerateArray().Select(name => name.GetString()), Is.EquivalentTo(summary), "every field of the summary is always written");
+            Assert.That(root.GetProperty("summary").GetProperty("properties").GetProperty("sampling").GetProperty("enum").EnumerateArray().Select(state => state.GetString()),
+                Is.EqualTo(OutWit.Controller.AI.Verify.Settlement.VerifySampling.STATES), "the states of a run's sampling are a fixed list");
             Assert.That(result, Is.EquivalentTo(new[] { "index", "verdict", "exit", "reason", "cases" }));
             Assert.That(root.GetProperty("results").GetProperty("items").GetProperty("properties").GetProperty("reason").GetProperty("enum").EnumerateArray().Select(code => code.GetString()),
                 Is.EqualTo(OutWit.Controller.AI.Verify.Model.VerifyFault.ALL), "the reason codes of a task without a result are a fixed list");
@@ -159,16 +162,29 @@ public sealed class VerifySchemaDocsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(PropertyNames(root), Is.EquivalentTo(new[] { "schema", "summary", "pairs", "disputes" }));
-            Assert.That(root.GetProperty("schema").GetProperty("const").GetString(), Is.EqualTo("verify-integrity/2"));
+            Assert.That(PropertyNames(root), Is.EquivalentTo(new[] { "schema", "summary", "fan_outs", "pairs", "disputes" }));
+            Assert.That(document.RootElement.GetProperty("required").EnumerateArray().Select(name => name.GetString()), Is.EquivalentTo(PropertyNames(root)));
+            Assert.That(root.GetProperty("schema").GetProperty("const").GetString(), Is.EqualTo(OutWit.Controller.AI.Verify.Tasksets.VerifyIntegrityWriter.SCHEMA));
             Assert.That(summary, Is.EquivalentTo(new[]
             {
                 "tasks", "sampled", "compared", "mismatches", "mismatch_rate", "agreed", "single_execution",
-                "disputes", "disputes_resolved", "disputed", "repairs", "no_result", "rejected_results", "rejected"
+                "disputes", "disputes_resolved", "disputed", "repairs", "no_result", "rejected_results", "rejected",
+                "sampling_rate", "sampling", "unanswered_packages"
             }));
+            Assert.That(root.GetProperty("summary").GetProperty("required").EnumerateArray().Select(name => name.GetString()), Is.EquivalentTo(summary), "every field of the summary is always written");
+            Assert.That(root.GetProperty("summary").GetProperty("properties").GetProperty("sampling").GetProperty("enum").EnumerateArray().Select(state => state.GetString()),
+                Is.EqualTo(OutWit.Controller.AI.Verify.Settlement.VerifySampling.STATES), "the states of a run's sampling are a fixed list");
+            Assert.That(PropertyNames(root.GetProperty("fan_outs").GetProperty("items").GetProperty("properties")),
+                Is.EquivalentTo(new[] { "round", "packages", "copies", "selected", "complete", "unanswered" }));
+            Assert.That(root.GetProperty("fan_outs").GetProperty("items").GetProperty("properties").GetProperty("round").GetProperty("enum").EnumerateArray().Select(round => round.GetString()),
+                Is.EqualTo(new[]
+                {
+                    OutWit.Controller.AI.Verify.Settlement.VerifyRound.MAIN, OutWit.Controller.AI.Verify.Settlement.VerifyRound.REPAIR,
+                    OutWit.Controller.AI.Verify.Settlement.VerifyRound.DISPUTE
+                }));
             Assert.That(PropertyNames(root.GetProperty("summary").GetProperty("properties").GetProperty("rejected").GetProperty("properties")),
                 Is.EqualTo(OutWit.Controller.AI.Verify.Settlement.VerifyRoundIntake.REASONS), "the reasons a result package is refused for are a fixed list");
-            Assert.That(pair, Is.EquivalentTo(new[] { "index", "primary", "replica", "compared", "match", "differs" }));
+            Assert.That(pair, Is.EquivalentTo(new[] { "index", "round", "primary", "replica", "compared", "match", "differs" }));
             Assert.That(PropertyNames(root.GetProperty("disputes").GetProperty("items").GetProperty("properties")),
                 Is.EquivalentTo(new[] { "index", "first_copies", "copies", "agreeing", "outcome" }));
             Assert.That(root.GetProperty("disputes").GetProperty("items").GetProperty("properties").GetProperty("outcome").GetProperty("enum").EnumerateArray().Select(outcome => outcome.GetString()),
@@ -178,6 +194,49 @@ public sealed class VerifySchemaDocsTests
                     OutWit.Controller.AI.Verify.Settlement.VerifyRulings.TOO_FEW_COPIES, OutWit.Controller.AI.Verify.Settlement.VerifyRulings.SURPLUS_COPIES
                 }));
             Assert.That(side, Is.EquivalentTo(new[] { "verdict", "exit" }));
+        });
+    }
+
+    [Test]
+    public async Task TheDocumentsOfASettledRunHaveTheFieldsTheirSchemasListTest()
+    {
+        // The other way round: a run settled with every round in it, and each field its report
+        // and its integrity document carry is one the schema has, the required ones all there.
+        using var rig = new Settlement.VerifySettleRig();
+        var issued = await rig.PublishAsync(Settlement.VerifySettleRig.Batch(0), Settlement.VerifySettleRig.Batch(1), Settlement.VerifySettleRig.Batch(2));
+        var first = new[]
+        {
+            await rig.AnswerAsync(issued[0], task => new OutWit.Controller.AI.Verify.Model.VerifyResultData { TaskIndex = task.TaskIndex, ExitCode = 1, Verdict = OutWit.Controller.AI.Verify.Model.VerifyVerdict.Fail }),
+            await rig.AnswerAsync(issued[0], task => new OutWit.Controller.AI.Verify.Model.VerifyResultData { TaskIndex = task.TaskIndex }),
+            await rig.AnswerAsync(issued[1], task => new OutWit.Controller.AI.Verify.Model.VerifyResultData { TaskIndex = task.TaskIndex })
+        };
+        var repairs = await rig.RepairsAsync(issued, first);
+        var repaired = new[] { await rig.AnswerAsync(repairs[0], task => new OutWit.Controller.AI.Verify.Model.VerifyResultData { TaskIndex = task.TaskIndex }) };
+        var disputes = await rig.DisputesAsync(issued, first, repairs, repaired);
+        var run = await rig.SettleAsync((issued, first), (repairs, repaired), (disputes, []), samplingRate: 0.5);
+
+        using var reportSchema = Load("verify-report.schema.json");
+        using var integritySchema = Load("verify-integrity.schema.json");
+        using var report = JsonDocument.Parse(run.Report);
+        using var integrity = JsonDocument.Parse(run.Integrity);
+
+        var reportProperties = reportSchema.RootElement.GetProperty("properties");
+        var integrityProperties = integritySchema.RootElement.GetProperty("properties");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.RootElement.GetProperty("schema").GetString(), Is.EqualTo(reportProperties.GetProperty("schema").GetProperty("const").GetString()));
+            Assert.That(PropertyNames(report.RootElement), Is.EquivalentTo(PropertyNames(reportProperties)));
+            Assert.That(PropertyNames(report.RootElement.GetProperty("summary")), Is.EquivalentTo(PropertyNames(reportProperties.GetProperty("summary").GetProperty("properties"))));
+
+            Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo(integrityProperties.GetProperty("schema").GetProperty("const").GetString()));
+            Assert.That(PropertyNames(integrity.RootElement), Is.EquivalentTo(PropertyNames(integrityProperties)));
+            Assert.That(PropertyNames(integrity.RootElement.GetProperty("summary")), Is.EquivalentTo(PropertyNames(integrityProperties.GetProperty("summary").GetProperty("properties"))));
+            Assert.That(integrity.RootElement.GetProperty("fan_outs").GetArrayLength(), Is.EqualTo(3), "the first fan-out, the repair round, the dispute round");
+            Assert.That(PropertyNames(integrity.RootElement.GetProperty("fan_outs")[0]), Is.EquivalentTo(PropertyNames(integrityProperties.GetProperty("fan_outs").GetProperty("items").GetProperty("properties"))));
+            Assert.That(PropertyNames(integrity.RootElement.GetProperty("pairs")[0]), Is.SubsetOf(PropertyNames(integrityProperties.GetProperty("pairs").GetProperty("items").GetProperty("properties"))));
+            Assert.That(PropertyNames(integrity.RootElement.GetProperty("pairs")[0]), Is.SupersetOf(integrityProperties.GetProperty("pairs").GetProperty("items").GetProperty("required").EnumerateArray().Select(name => name.GetString()!).ToList()));
+            Assert.That(PropertyNames(integrity.RootElement.GetProperty("disputes")[0]), Is.EquivalentTo(PropertyNames(integrityProperties.GetProperty("disputes").GetProperty("items").GetProperty("properties"))));
         });
     }
 

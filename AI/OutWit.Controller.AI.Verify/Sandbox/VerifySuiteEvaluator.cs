@@ -53,9 +53,11 @@ internal static class VerifySuiteEvaluator
             last = outcome;
             left -= outcome.StdoutBytes;
 
-            totalFuel += outcome.FuelConsumed;
+            // Sums that stop at the largest value: the server holds every number of a result
+            // to a range, and a sum that wrapped would be outside it.
+            totalFuel = outcome.FuelConsumed > long.MaxValue - totalFuel ? long.MaxValue : totalFuel + outcome.FuelConsumed;
             peakMemory = Math.Max(peakMemory, outcome.PeakMemoryBytes);
-            totalWall += outcome.WallMs;
+            totalWall = (int)Math.Min(int.MaxValue, (long)totalWall + outcome.WallMs);
 
             var caseVerdict = CaseVerdict(outcome, testCase, out var passed);
             caseResults.Add(new VerifyCaseResultData

@@ -359,10 +359,14 @@ public sealed class VerifyWasmSandbox : IDisposable
             OutOfMemory = LooksLikeOutOfMemory
         });
 
+        // The host times a run by the system's clock, which a machine may set back while the
+        // run goes on: a time is never reported as less than none.
+        var wallMs = Math.Max(0, outcome.WallMs);
+
         // The clock, not fuel, ended the run: that says something about this node (slow, busy,
         // or starved of processor time) and nothing about the program.
         if (outcome.Verdict == WasmHostVerdict.Interrupted)
-            return VerifyRunOutcome.Faulted(VerifyFault.WALL_CLOCK, outcome.WallMs);
+            return VerifyRunOutcome.Faulted(VerifyFault.WALL_CLOCK, wallMs);
 
         var verdict = VerdictOf(outcome);
 
@@ -376,7 +380,7 @@ public sealed class VerifyWasmSandbox : IDisposable
         // A run a trap ended (a crash or a budget stop) reports its whole budget and no peak.
         var trapped = outcome.Trap != null;
         return new VerifyRunOutcome(verdict, outcome.ExitCode, exited, outcome.Stdout, outcome.StdoutTruncated, (int)outcome.StdoutBytes, outcome.Stderr, outcome.StderrTruncated,
-            trapped ? fuel : outcome.FuelConsumed, trapped ? 0 : outcome.PeakMemoryBytes, outcome.WallMs);
+            trapped ? fuel : outcome.FuelConsumed, trapped ? 0 : outcome.PeakMemoryBytes, wallMs);
     }
 
     private static VerifyVerdict VerdictOf(WasmHostRunOutcome outcome)

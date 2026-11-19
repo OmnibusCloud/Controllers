@@ -7,9 +7,41 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking — generation and verification are the
 same activity with different programs.
 
-**Status: 0.15.0 (Verify.Model 0.4.0, Verify.Scripts 0.6.0) — for the test server; 0.14.0 is
+**Status: 0.16.0 (Verify.Model 0.4.0, Verify.Scripts 0.7.0) — for the test server; 0.15.0 is
 the version proven on the test fleet. Not yet released to nuget.org or the live network.**
-0.15.0 is the third hardening release: what the controller hands on of other people's work,
+0.16.0 is the fourth hardening release: what the server takes from a node, and what a run says
+of itself when a fan-out came back short. For a run without lying or failing nodes the
+verdicts, the fuel figures and the outputs are what they were under 0.15.0, and the provenance
+differs only in the controller version it names; the report and the integrity document carry
+more and are `verify-report/3` and `verify-integrity/3`. What it changed:
+
+- A result package is walked before it is decoded: every text and every list of a frame lies
+  inside the frame's own bytes, every count inside its bound (a result has at most 1,024 case
+  records), every text is valid Unicode and states its true length. Whatever fails while a
+  package is read, of whatever type, makes that package `unreadable` and never ends the run.
+- A result is held to its task. Fuel is from 0 to the task's budget for each of its runs, peak
+  memory from 0 to its cap, no time is below zero, stdout is within the task's cap, the case
+  records are those of the task's suite, and the verdict is the one the case records give. A
+  result outside that is refused as `content`; it used to be written into the documents. A
+  sum of what nodes reported stops at the largest value instead of failing the settlement.
+- A fan-out that came back short keeps its checking. The repair round runs under the sampling
+  of the first fan-out, its executions are compared, and where they disagree the task goes to
+  the dispute round like any other. Before, every task of a fan-out that came back empty was
+  repaired on one machine, with nothing compared.
+- The documents say what was asked for and what happened. Both summaries state the sampling
+  rate (`sampling_rate`), whether the sampling took place (`sampling`: `as_asked`, `short`,
+  `none` or `not_stated`) and the packages nothing answered (`unanswered_packages`); the
+  integrity document has a record for every fan-out (`fan_outs`). A run whose checking did
+  not happen says `short`.
+- `Verify.Disputes` takes the repair round as well (four arguments) and `Verify.Settle` the
+  sampling rate (a seventh argument); the bundled scripts pass them. The scripts of
+  Verify.Scripts 0.6.0 run as they did: their repair round is one execution a package, and the
+  documents say `not_stated`.
+- The duplicate check of a taskset's indices costs what the indices cost, not the range they
+  are spread over: a page of the index space with few indices in it is a short list, not 8 KiB
+  of bits.
+
+0.15.0 was the third hardening release: what the controller hands on of other people's work,
 and what stands between a change and what a node is sent. A run is what it was under 0.14.0:
 the same verdicts, fuel and reports, and documents that differ only in the controller version
 they name. What it changed:
@@ -98,14 +130,14 @@ verifiable by construction: code passes its test suite or it does not.
 | `Verify.Split` | host | taskset (JSON lines) + options → batches, grouped by runtime, limits clamped to the ceilings; the batches are grouped into packages, each stored as a blob with a ticket of its own, and what the activity returns is the references. The taskset is read a line at a time, its tasks wait in working files of the server's own, and the packages are stored one at a time. A taskset with a line the schema does not allow (an unknown field, a field given twice, a value of another type, a number outside its range), a source name that is not portable, an unknown runtime id, a task whose text is over 8 MiB or more tasks than a taskset may have is refused, by name |
 | `Verify.ExecutePackage` | node | the primitive, and the one way work reaches a node. The node checks the package before it runs any of it and refuses it whole when it cannot run it (another controller version, a package or batch larger than a node takes, a runtime it lacks or has other bytes of). It downloads the package blob and runs its batches — one compiled runtime module per batch, the tasks executed concurrently in isolated stores under fuel and memory limits clamped to the ceilings — writes the results to a file batch by batch and uploads the file as a blob; progress of the delivery and of the work; batch provenance |
 | `Verify.Repairs` | host | the task packages of a fan-out + what it returned → the tasks that have no verdict yet (no accepted answer, or only a fault of the node that ran them), as task packages to send out once more |
-| `Verify.Disputes` | host | the task packages of a fan-out + what it returned → the tasks whose executions disagree, as task packages for three copies (`Grid.Replicas(3)`) |
-| `Verify.Settle` | host | everything the fan-outs gave out and returned (the first one, the repair round, and the dispute round when the script ran one) → the settled run as one ledger blob. Every result package is accepted or refused here, under its ticket; every task is ruled on here; the four documents are written here, once |
+| `Verify.Disputes` | host | the task packages of a fan-out + what it returned, and the same of the repair round when the script hands it over → the tasks whose executions disagree, in the first fan-out or in the repair round, as task packages for three copies (`Grid.Replicas(3)`) |
+| `Verify.Settle` | host | everything the fan-outs gave out and returned (the first one, the repair round, and the dispute round when the script ran one), and the sampling rate they ran under when the script states it → the settled run as one ledger blob. Every result package is accepted or refused here, under its ticket; every task is ruled on here; the four documents are written here, once |
 | `Verify.Collect` | host | the ledger → the verdict report (aggregates + one record per task; the run's identity, byte-identical regardless of placement as long as every node did its work and told the truth) |
 | `Verify.CollectOutputs` | host | the ledger → the outputs (one JSON line per task: stdout, stderr, and the outcome and stdout of every case of a suite; byte-deterministic on the same condition). The sandbox log of a run, the corpus of a generation |
 | `Verify.MakeCheckTasks` | host | the ledger of a settled generator run + a checker spec → check task packages, one check per passing candidate under the candidate's index |
 | `Verify.Provenance` | host | the ledger → the provenance document (which tasks ran together, in which round, on which platform, with which wasmtime, controller and runtime module, and what each task cost: fuel, peak memory, wall time; never which machine, and nothing a machine could be measured by) |
 | `Verify.SamplingRate` | host | options → `SamplingRate` clamped to 0..1, the share of the packages `Grid.Replicas` runs twice |
-| `Verify.Integrity` | host | the ledger → the integrity document (the pairs of executions of the first fan-out and whether they agree on verdict, exit, outputs and cases; every dispute and how it ended; the counts of refused result packages, repairs and tasks without a result) |
+| `Verify.Integrity` | host | the ledger → the integrity document (the pairs of executions of the first fan-out and of the repair round and whether they agree on verdict, exit, outputs and cases; every dispute and how it ended; the counts of refused result packages, repairs and tasks without a result; the sampling that was asked for and, for every fan-out, the packages that came back with their answers and the packages nothing answered) |
 | `Verify.Preflight` | host | counts, runtimes referenced, unknown runtimes, size estimate, ceiling notes, and whether `Verify.Split` would refuse the taskset — before anything runs. One pass over the taskset, nothing kept; the answer is bounded whatever the taskset (32 messages of a kind, 240 characters each, and a line for the rest) |
 | `Verify.RuntimeDiagnostics` | host | wasmtime version (the native library is loaded to prove it), runtime target, per-runtime availability and hash — of the server's module; a node's module is exercised by `Verify.ExecutePackage` and described by the provenance |
 | `Verify.Capabilities` | host | what a submitter can know before a run, as a document: the controller's version, the runtimes it carries, the defaults and ceilings, how fuel relates to time, the source-name rule, what a task's own module is held to, the caps on packages and batches, the bounds of a taskset and of what a preflight answers (`taskset`: `max_line_bytes`, `max_tasks`, `max_sources`, `max_args`, `max_suite_cases`, `max_preflight_messages`, `max_preflight_messages_per_kind`, `max_preflight_message_length`, `max_preflight_unknown_runtimes`), and the pool as totals (nodes, concurrent sandboxes, reference tasks per second; no node named) |
@@ -116,7 +148,7 @@ verifiable by construction: code passes its test suite or it does not.
 
 | Script | Shape | Returns |
 |---|---|---|
-| `VerifyRun(Blob taskset, VerifyOptions opts)` | Split → ForEach ⇒ ExecutePackage (a share of the packages twice) → Repairs → ForEach ⇒ ExecutePackage → Disputes → ForEach ⇒ ExecutePackage (three copies) → Settle → Collect, CollectOutputs, Provenance, Integrity | `report`, `outputs`, `provenance`, `integrity` |
+| `VerifyRun(Blob taskset, VerifyOptions opts)` | Split → ForEach ⇒ ExecutePackage (a share of the packages twice) → Repairs → ForEach ⇒ ExecutePackage (the same share twice) → Disputes → ForEach ⇒ ExecutePackage (three copies) → Settle → Collect, CollectOutputs, Provenance, Integrity | `report`, `outputs`, `provenance`, `integrity` |
 | `VerifyGenerate(Blob taskset, VerifyOptions opts)` | the same fan-outs; the programs are generators | `corpus`, `report`, `provenance`, `integrity` |
 | `VerifyGenerateAndCheck(Blob generators, Blob checker, VerifyOptions opts)` | generators fan out once each → Repairs → Settle (a ledger of their own) → MakeCheckTasks → the checks fan out as in `VerifyRun` → Settle → Collect | `report` (the checks), `corpus` (the candidates), `provenance`, `integrity` |
 | `VerifyPreflight(Blob taskset, VerifyOptions opts)` | one host activity | `result` |
@@ -141,18 +173,18 @@ Job:VerifyRun(Blob:taskset, VerifyOptions:opts)
     VerifyResultPackageCollection:results = Grid.ForEach(package in packages, checked)
         => Verify.ExecutePackage(package);
 
-    ~ A task without a verdict (no answer the server accepts, or a fault of the node that ran it) goes out once more. ~
+    ~ A task without a verdict (no answer the server accepts, or a fault of the node that ran it) goes out once more, under the same sampling. ~
     VerifyTaskPackageCollection:repairs = Verify.Repairs(packages, results);
-    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs)
+    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs, checked)
         => Verify.ExecutePackage(package);
 
     ~ A task whose executions disagree runs three more times, on different machines. ~
-    VerifyTaskPackageCollection:disputes = Verify.Disputes(packages, results);
+    VerifyTaskPackageCollection:disputes = Verify.Disputes(packages, results, repairs, repaired);
     ProcessingOptions:thrice = Grid.Replicas(3);
     VerifyResultPackageCollection:settled = Grid.ForEach(package in disputes, thrice)
         => Verify.ExecutePackage(package);
 
-    Blob:ledger = Verify.Settle(packages, results, repairs, repaired, disputes, settled);
+    Blob:ledger = Verify.Settle(packages, results, repairs, repaired, disputes, settled, rate);
 
     Blob:report = Verify.Collect(ledger, opts);
     Blob:outputs = Verify.CollectOutputs(ledger, opts);
@@ -172,18 +204,18 @@ Job:VerifyGenerate(Blob:taskset, VerifyOptions:opts)
     VerifyResultPackageCollection:results = Grid.ForEach(package in packages, checked)
         => Verify.ExecutePackage(package);
 
-    ~ A task without a verdict (no answer the server accepts, or a fault of the node that ran it) goes out once more. ~
+    ~ A task without a verdict (no answer the server accepts, or a fault of the node that ran it) goes out once more, under the same sampling. ~
     VerifyTaskPackageCollection:repairs = Verify.Repairs(packages, results);
-    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs)
+    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs, checked)
         => Verify.ExecutePackage(package);
 
     ~ A task whose executions disagree runs three more times, on different machines. ~
-    VerifyTaskPackageCollection:disputes = Verify.Disputes(packages, results);
+    VerifyTaskPackageCollection:disputes = Verify.Disputes(packages, results, repairs, repaired);
     ProcessingOptions:thrice = Grid.Replicas(3);
     VerifyResultPackageCollection:settled = Grid.ForEach(package in disputes, thrice)
         => Verify.ExecutePackage(package);
 
-    Blob:ledger = Verify.Settle(packages, results, repairs, repaired, disputes, settled);
+    Blob:ledger = Verify.Settle(packages, results, repairs, repaired, disputes, settled, rate);
 
     Blob:corpus = Verify.CollectOutputs(ledger, opts);
     Blob:report = Verify.Collect(ledger, opts);
@@ -215,18 +247,18 @@ Job:VerifyGenerateAndCheck(Blob:generators, Blob:checker, VerifyOptions:opts)
     VerifyResultPackageCollection:verdicts = Grid.ForEach(package in checkPackages, checked)
         => Verify.ExecutePackage(package);
 
-    ~ A check without a verdict goes out once more. ~
+    ~ A check without a verdict goes out once more, under the same sampling. ~
     VerifyTaskPackageCollection:repairs = Verify.Repairs(checkPackages, verdicts);
-    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs)
+    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs, checked)
         => Verify.ExecutePackage(package);
 
     ~ A check whose executions disagree runs three more times, on different machines. ~
-    VerifyTaskPackageCollection:disputes = Verify.Disputes(checkPackages, verdicts);
+    VerifyTaskPackageCollection:disputes = Verify.Disputes(checkPackages, verdicts, repairs, repaired);
     ProcessingOptions:thrice = Grid.Replicas(3);
     VerifyResultPackageCollection:settled = Grid.ForEach(package in disputes, thrice)
         => Verify.ExecutePackage(package);
 
-    Blob:ledger = Verify.Settle(checkPackages, verdicts, repairs, repaired, disputes, settled);
+    Blob:ledger = Verify.Settle(checkPackages, verdicts, repairs, repaired, disputes, settled, rate);
 
     Blob:report = Verify.Collect(ledger, opts);
     Blob:corpus = Verify.CollectOutputs(generated, opts);
@@ -335,11 +367,11 @@ results; the SDK only moves blobs and submits scripts.
 |---|---|---|
 | taskset (JSON lines, one task per line) | [`verify-taskset.schema.json`](docs/verify-taskset.schema.json) | in |
 | checker spec (one object) | [`verify-checker.schema.json`](docs/verify-checker.schema.json) | in |
-| verdict report (`verify-report/2`) | [`verify-report.schema.json`](docs/verify-report.schema.json) | out |
+| verdict report (`verify-report/3`) | [`verify-report.schema.json`](docs/verify-report.schema.json) | out |
 | outputs of a run, corpus of a generation (JSON lines) | [`verify-corpus.schema.json`](docs/verify-corpus.schema.json) | out |
 | capabilities (`verify-capabilities/3`) | [`verify-capabilities.schema.json`](docs/verify-capabilities.schema.json) | out |
 | provenance (`verify-provenance/2`) | [`verify-provenance.schema.json`](docs/verify-provenance.schema.json) | out |
-| integrity (`verify-integrity/2`) | [`verify-integrity.schema.json`](docs/verify-integrity.schema.json) | out |
+| integrity (`verify-integrity/3`) | [`verify-integrity.schema.json`](docs/verify-integrity.schema.json) | out |
 
 A minimal taskset — one code-vs-tests task and one plain run:
 
@@ -399,7 +431,10 @@ What the documents say of a run that did not go well: a `NoResult` or a
 `Disputed` task is in the report (never left out, never a pass; `pass_rate` is
 pass / total) and has an outputs line with empty stdout and stderr. The
 report's summary counts the result packages the server refused
-(`rejected_results`) and the disputes (`disputes`, `disputes_resolved`). The
+(`rejected_results`) and the disputes (`disputes`, `disputes_resolved`), and
+states the sampling: the rate that was asked for (`sampling_rate`; `null` when
+the script did not say), whether it took place (`sampling`) and the task
+packages no accepted result came back for (`unanswered_packages`). The
 provenance names the round of every batch (`main`, `repair`, `dispute`) and
 carries a `fault` for a task a node could not run. It has no degree and no wall
 time of a batch: with the memory cap and the degree the lab's to choose, a
@@ -426,7 +461,8 @@ machines, so a node cannot tell whether its package is being checked. The
 integrity document pairs the two executions of each task and says whether they
 agree on verdict, exit code, outputs and per-case outcomes —
 exactly the fields an honest execution reproduces anywhere. With a single machine
-available nothing runs twice. The mismatch rate is over the compared pairs.
+available nothing runs twice, and the documents say so: the sampling is `short`.
+The mismatch rate is over the compared pairs.
 
 What the server does with what nodes return:
 
@@ -437,16 +473,40 @@ What the server does with what nodes return:
   fan-out, when the blob is the bytes its reference names, was made by the
   server's own controller version, engine and runtime bytes, and holds exactly
   the tasks of the package it answers (none missing, none foreign, none twice).
+  The package is walked before it is decoded: a frame with a length that leaves
+  the frame, a count outside its bound (1,024 case records a result) or text
+  that is not valid Unicode is one that cannot be read. And a result is held to
+  its task: fuel within the budget of the task's runs, peak memory within its
+  cap, no time below zero, stdout within its cap, the case records of its
+  suite and no other, a verdict that is the one those records give.
   Anything else is dropped and counted (`rejected_results`), by reason:
   `unknown_ticket`, `duplicate`, `unreadable`, `version`, `content`, `surplus`.
-  A dropped package fails that package and not the run.
+  A dropped package fails that package and not the run, whatever it was that
+  failed while it was read.
 - **One controller version a job.** A package names the version that made it
   (`RequiredControllerVersion`), and a node on another version refuses it
   before doing anything.
 - **The repair round.** A task with no verdict from the first fan-out (no
   accepted answer, or only a fault of the node that ran it) is sent out once
   more. If it still has none it is `NoResult` with a `reason`: `wall_clock`,
-  `node_fault` or `no_answer`.
+  `node_fault` or `no_answer`. The round runs under the sampling of the first
+  fan-out (the same share of its packages twice, on different machines), and
+  its executions are ruled on the same way: two that agree are accepted, two
+  that disagree are a dispute. The platform chooses the packages that run
+  twice and the server does not learn which, so a package that came back
+  without any answer is repaired at the rate that was asked for, not because
+  it is known to have been one of them. A fan-out that comes back short does
+  not turn into a round nobody checks.
+- **What was asked for, and what came back.** The report and the integrity
+  document state the sampling rate and say whether the sampling took place:
+  `as_asked` when as many packages came back with two accepted results as the
+  rate asks for (the share rounded up to a whole package, one at least), in the
+  first fan-out and in the repair round; `short` when fewer did (answers not
+  returned or refused, copies the platform could not place, a pool of one
+  machine); `none` at a rate of 0; `not_stated` when the script does not hand
+  the rate to `Verify.Settle`. `unanswered_packages` counts the task packages
+  no accepted result came back for, every fan-out together. A short fan-out is
+  said, not punished: the verdicts are settled by the same rules either way.
 - **No choosing.** The server never chooses between two executions. Executions
   that agree are accepted. Executions that disagree are a dispute: the task
   runs three more times on different machines (`Grid.Replicas(3)`), and the
@@ -457,12 +517,17 @@ What the server does with what nodes return:
 - **One machine.** A task that was not sampled rests on one machine; the
   integrity document counts those (`single_execution`).
 
-The integrity document (`verify-integrity/2`) has the summary (`tasks`,
+The integrity document (`verify-integrity/3`) has the summary (`tasks`,
 `sampled`, `compared`, `mismatches`, `mismatch_rate`, `agreed`,
 `single_execution`, `disputes`, `disputes_resolved`, `disputed`, `repairs`,
-`no_result`, `rejected_results`, and `rejected` with the six reason counts),
-the `pairs`, and the `disputes`: for each, `index`, `first_copies`, `copies`,
-`agreeing` and an `outcome` (`resolved`, `no_majority`, `too_few_copies`,
+`no_result`, `rejected_results`, `rejected` with the six reason counts, and
+`sampling_rate`, `sampling`, `unanswered_packages` as in the report), the
+`fan_outs` (for each round: `packages` given out, `copies` a selected package
+was asked for, `selected` packages asked for that many, `complete` packages
+that came back with that many accepted results, `unanswered` packages), the
+`pairs` (each with the `round` its two executions ran in, `main` or `repair`),
+and the `disputes`: for each, `index`, `first_copies`, `copies`, `agreeing`
+and an `outcome` (`resolved`, `no_majority`, `too_few_copies`,
 `surplus_copies`).
 
 The known limit: the server sees results, not machines. Reading answers as
@@ -471,9 +536,10 @@ was given; the controller cannot check that itself. Grid 1.3.0 and later hold a
 node to it: of what a node's batch returns they keep one value at most for each
 return variable its tasks asked for. By the controller alone,
 whatever a node returns: a node answers only for packages it was given; in the
-first fan-out more answers than the two asked for send the package's tasks to a
-dispute; in the repair and dispute rounds a package with more answers than were
-asked for has none of them taken; so a node does not win a dispute in which all
+first fan-out, and in a repair round under its sampling, more answers than the
+two asked for send the package's tasks to a dispute; in the dispute round, and
+in a repair round that asked for each package once, a package with more answers
+than were asked for has none of them taken; so a node does not win a dispute in which all
 three copies came back. Where the platform holds a node to one result a
 package, a node that answers one package twice has left another short of its
 answer, and in the dispute round an answer counts towards "two machines" only
@@ -493,9 +559,12 @@ three copies are the majority, and win.
 
 The verdict report is the run's identity: it carries verdicts, exit codes and
 per-case outcomes — the fields two honest executions agree on wherever they
-ran — and is byte-identical for a taskset regardless of which nodes ran which
-packages, as long as every node did its work and told the truth (proven on the
-test fleet across three placements, before 0.13.0). `Timeout` is out of fuel,
+ran — and is byte-identical for a taskset and its options regardless of which
+nodes ran which packages, as long as every node did its work and told the truth
+(proven on the test fleet across three placements, before 0.13.0). Since 0.16.0
+its summary also states the sampling rate and whether the sampling took place;
+in a pool of one machine nothing runs twice, and the report of a run that asked
+for sampling says `short` there. `Timeout` is out of fuel,
 which is the same on every node; a run a node's clock ended has no verdict.
 Fuel is the program's own since 0.12.0: the budget is given once the module is instantiated,
 so neither the budget nor the fuel reported carries the copy of the module's
@@ -1046,8 +1115,12 @@ records, seeds, a runtime that is missing), the
 tree hash, the worker pool (cancellation
 included) and the
 benchmark, the taskset, sampling and integrity pipelines, the caps of the plan,
-the server's intake and rulings (`VerifyTrustBoundaryTests`) and whole runs
-against lying nodes (`VerifyLyingNodesTests`), the two trap modes compared
+the server's intake and rulings (`VerifyTrustBoundaryTests`), the walk of a
+result package's frames against what a writer writes and against frames
+changed at random (`VerifyResultFramesTests`), results outside what their task
+allows (`VerifyResultIntakeTests`), fan-outs that came back short
+(`VerifyShortFanOutTests`) and whole runs against lying nodes
+(`VerifyLyingNodesTests`), the two trap modes compared
 (`VerifyTrapModeTests`), the hostile taskset of the fleet proofs held to its
 verdicts (`VerifyHostileKitTests`), a scan of every document of
 hostile and failed runs for anything of a node (`VerifyAnonymityTests`), the
