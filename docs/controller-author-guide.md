@@ -354,7 +354,7 @@ Once that passes, you have a working controller. Continue with [Reference: Testi
 
 ### 9. Wire into the solution + publish workflow
 
-Add the three csprojs to [`OutWit.slnx`](../OutWit.slnx) under a new `<Folder Name="/Foo/">`. Add `OutWit.Controller.Foo` and `OutWit.Controller.Foo.Model` to the project-choice list in [`.github/workflows/publish.yml`](../.github/workflows/publish.yml#L28-L42).
+Add the three csprojs to [`OutWit.slnx`](../OutWit.slnx) under a new `<Folder Name="/Foo/">`. Add `OutWit.Controller.Foo` and `OutWit.Controller.Foo.Model` to the project-choice list in [`.github/workflows/publish.yml`](../.github/workflows/publish.yml#L45-L59).
 
 For Path-A (first-party, nuget.org) distribution, the publish workflow handles everything. For Path-B (third-party), see the [`outwit-controller-pack` README](../Tools/OutWit.Controller.Pack/README.md).
 
@@ -690,7 +690,7 @@ The fields:
 
 `outwit-assets-pack` regenerates a Tier-2 controller's asset set in one command: bumps version, repacks zips, computes SHAs, updates the csproj, creates the GitHub Release with everything uploaded. See [its README](../Tools/OutWit.Controller.Assets.Pack/README.md).
 
-**GitHub Release tag convention**: the publish workflow ([`.github/workflows/publish.yml:107-108`](../.github/workflows/publish.yml#L107-L108)) computes the tag as `<ControllerName.lower-no-dots>-v<Version>`:
+**GitHub Release tag convention**: the publish workflow ([`.github/workflows/publish.yml:160-171`](../.github/workflows/publish.yml#L160-L171)) computes the tag as `<ControllerName.lower-no-dots>-v<Version>`:
 - `OutWit.Controller.Render` v1.15.3 → tag `render-v1.15.3`
 - `OutWit.Controller.Render.Dcc` v1.0.5 → tag `renderdcc-v1.0.5`
 
@@ -840,7 +840,7 @@ The shared MSBuild logic runs in this order at every controller build:
 
 1. **`Build/OutWit.Controller.props`** imported at the top of the csproj. Sets up identity defaults, common PackageReferences, content-only nupkg shape.
 2. **`Build/OutWit.Controller.targets`** imported at the bottom. Pulls in `OutWit.Controller.Manifest.targets`. Computes `ControllerModuleName`, `ControllerModuleOutputDir`, `ControllerZipOutputDir` from `ControllerName` and `Configuration`.
-3. **`GenerateControllerBuildArtifacts`** (BeforeTargets=`BeforeCompile`) — validates the five required fields, emits `obj/<Cfg>/net10.0/ControllerBuildInfo.g.cs` and `obj/<Cfg>/net10.0/controller.json`, then adds the .cs to `<Compile>`.
+3. **`GenerateControllerBuildArtifacts`** (BeforeTargets=`BeforeCompile`) — validates the required fields and every data asset's pin (`ControllerValidateDataAssets`), emits `obj/<Cfg>/net10.0/ControllerBuildInfo.g.cs` and `obj/<Cfg>/net10.0/controller.json`, then adds the .cs to `<Compile>`.
 4. **`ControllerPostBuild`** (AfterTargets=`PostBuildEvent`) — copies the controller's DLL + `.deps.json` + `controller.json` + any locale-resource DLLs into `$(SolutionDir)@Controllers/$(Configuration)/<name>.module/`.
 5. **`ControllerStageSourceResources`** (AfterTargets=`ControllerPostBuild`) — copies `<csproj>/Resources/**` into `<module>/Resources/`. Skipped silently when the folder doesn't exist.
 6. **Companion `ModelPostBuild`** in the `.Model` csproj — copies the Model DLL into the SAME `<module>` directory.
@@ -915,13 +915,11 @@ OutWit.Controller.Render.<version>.nupkg
 
 ### Reference: the publish workflow
 
-`.github/workflows/publish.yml` is a unified workflow for every nupkg in the repo (controllers, models, tools, the `Engine.Assets.MSBuild`). It takes a `workflow_dispatch` input with the project name and:
+`.github/workflows/publish.yml` is a unified workflow for every nupkg in the repo (controllers, models, tools). It takes a `workflow_dispatch` input with the project name and runs three jobs, so that the code a build runs never runs where a credential that publishes is held:
 
-1. **Tier-2 only**: HEAD-checks every expected GitHub Release asset before pushing the nupkg to nuget.org — refuses to publish if assets are missing. The asset list is currently hard-coded for Render in the workflow ([`publish.yml:237-246`](../.github/workflows/publish.yml#L237-L246)). If you add a new Tier-2 controller, the workflow needs a corresponding asset-existence guard.
-2. Builds in Release, packs the nupkg.
-3. Pushes to nuget.org with `pushToNuGet: true` (default).
-4. Pushes to GitHub Packages with `pushToGitHubPackages: true` (default).
-5. Creates the GitHub Release tag (`<name.lower-no-dots>-v<version>`) with `createGitHubRelease: true`.
+1. **build** (`contents: read` only): builds in Release with the SDK `global.json` pins, packs the nupkg, and runs the guards. **Tier-2**: HEAD-checks every expected GitHub Release asset before a nuget.org push and refuses to publish if one is missing. The asset list is hard-coded for Render in the workflow ([`publish.yml:331-341`](../.github/workflows/publish.yml#L331-L341)); a new Tier-2 controller needs a guard of its own. **The AI controllers**: every data asset the built package's manifest declares is fetched and held to its `Sha256` and its `Size` before a push to any feed (`.github/scripts/released-data-assets.sh`). The package goes on as a workflow artifact.
+2. **github-packages** (`packages: write`): pushes the built package to GitHub Packages with `pushToGitHubPackages: true` (default). It runs from any branch.
+3. **release** (the `release` environment: a reviewer approves the run, and `main` is its only branch): creates the GitHub Release (`<name.lower-no-dots>-v<version>`) with `createGitHubRelease: true`, and pushes to nuget.org with `pushToNuGet: true` (**off by default**) by trusted publishing (no stored key). It refuses any ref but `main`.
 
 For Path-A distribution this is fully automated. For Path-B (third-party authors without nuget.org rights), use [`outwit-controller-pack`](../Tools/OutWit.Controller.Pack/README.md) to produce a self-contained zip that gets uploaded through the OmnibusCloud admin UI.
 

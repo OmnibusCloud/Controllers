@@ -280,6 +280,7 @@ canonical minimal Model shape.
 │   └── sweep.yml                            # Sweep, CalculiX and OpenFOAM tests on Linux, macOS and Windows
 │
 ├── OutWit.slnx                              # Solution file (SLNX format, .NET 10)
+├── global.json                              # The exact .NET SDK every build uses (no roll-forward)
 ├── LICENSE                                  # MIT
 └── README.md                                # this file
 ```
@@ -355,7 +356,7 @@ See [Tools/OutWit.Controller.Pack/README.md](Tools/OutWit.Controller.Pack/README
 
 | Workflow                            | Trigger                       | Purpose                                                                                           |
 | ----------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------- |
-| [`publish.yml`](.github/workflows/publish.yml)                       | `workflow_dispatch`             | Publish any project. Tier-2 controllers (Render, ParaView, OpenFOAM) have a release-assets-exist guard before the nuget.org push. |
+| [`publish.yml`](.github/workflows/publish.yml)                       | `workflow_dispatch`             | Publish any project: GitHub Packages from any branch; nuget.org (trusted publishing, off by default) and GitHub Releases from `main` only, through the `release` environment. Tier-2 controllers (Render, ParaView, OpenFOAM) have a release-assets-exist guard before the nuget.org push; the AI controllers' data assets are fetched and held to their pins before any push. |
 | [`verify-render-consumer.yml`](.github/workflows/verify-render-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference the published Render package, assert every external asset materialised. |
 | [`verify-scripts-consumer.yml`](.github/workflows/verify-scripts-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference a published Scripts package, assert the staged `@Scripts/*.wit` layout matches what WitCloud's ScriptSeeder expects. |
 | [`openfoam-oracle.yml`](.github/workflows/openfoam-oracle.yml) | PR touching `OpenFOAM/**`, `workflow_dispatch` | The OpenFOAM controller against the real v2606 kits downloaded from OmnibusCloud/OpenFOAM: pitzDaily through `Foam.Run` serially and on two ranks (Linux, macOS), serially on Windows, plus the whole ordinary test run per platform. |
