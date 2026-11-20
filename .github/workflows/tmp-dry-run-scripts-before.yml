@@ -1,0 +1,481 @@
+name: Temporary dry run of Schwarz.Scripts with the earlier workflow
+run-name: "Temporary dry run of Schwarz.Scripts with the earlier workflow"
+
+# Unified publish workflow for everything in this repo.
+#
+# Supports three project shapes via the same pipeline:
+#
+#   * Controllers   (OutWit.Controller.<Name>)
+#       Tier-2 controllers may also produce a GitHub Release with attached
+#       data assets (rowMatrix.smat for Matrices today; Blender / FFmpeg
+#       per platform for Render later). Asset prep is keyed off the project
+#       name — controllers without external assets are no-op for that step.
+#
+#   * Models        (OutWit.Controller.<Name>.Model)
+#       Regular library NuGets. No GH Release.
+#
+#   * Tools         (OutWit.Controller.Pack)
+#       Global .NET tools. No GH Release.
+#
+# Three jobs, so that the code a build runs (the repository's own MSBuild tasks, restored
+# packages and their build targets) never runs where a credential that publishes is held:
+#
+#   build              reads the repository, builds, packs and runs the guards; holds no
+#                      token that can write anything. The private WitMath feed's token is
+#                      handed to the build of the two Simulation controllers only, which
+#                      restore from it.
+#   github-packages    pushes the built package to GitHub Packages; holds packages: write.
+#                      Runs from any branch, with no reviewer: the test rollouts take their
+#                      packages from there.
+#   release            pushes to nuget.org and creates the GitHub Release. Runs in the
+#                      "release" environment (a required reviewer, main as its only branch)
+#                      and only from main; nuget.org takes a key that lives for this run only
+#                      (trusted publishing), so no nuget.org key is stored anywhere.
+#
+# nuget.org is off by default: it is asked for by name, from main, and approved.
+
+# A dry run of publish.yml on its branch, generated from it; removed before the merge.
+on:
+  push:
+    branches: [fix/d6-build]
+    paths:
+      - '.github/workflows/tmp-dry-run-scripts-before.yml'
+
+# Nothing by default: each job asks for what it needs.
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PROJECT: ${{ 'OutWit.Controller.Simulation.Schwarz.Scripts' }}
+    outputs:
+      version: ${{ steps.paths.outputs.version }}
+      asset_tag: ${{ steps.paths.outputs.asset_tag }}
+      sdk: ${{ steps.paths.outputs.sdk }}
+      hasNupkg: ${{ steps.collect.outputs.hasNupkg }}
+      hasSnupkg: ${{ steps.collect.outputs.hasSnupkg }}
+      hasAssets: ${{ steps.assets.outputs.hasAssets }}
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # The SDK global.json pins, exactly: a module's content digest depends on it.
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+
+      # Find csproj by name (mirrors the WitEngine publish.yml pattern).
+      # Also extracts Version and computes a tag prefix used for GH Release
+      # naming. The tag-prefix transform turns OutWit.Controller.Render.Dcc
+      # into 'renderdcc' (matches the existing manual matrices-v1.0.0 tag
+      # convention).
+      - name: Resolve project path
+        id: paths
+        shell: bash
+        run: |
+          name="${{ env.PROJECT }}"
+          csproj=$(find . -name "$name.csproj" -type f | head -1)
+          if [ -z "$csproj" ]; then
+            echo "ERROR: csproj not found for project '$name'"
+            exit 1
+          fi
+
+          version=$(grep -oP '<Version>\K[^<]+' "$csproj" | head -1)
+          if [ -z "$version" ]; then
+            echo "ERROR: <Version> not found in $csproj"
+            exit 1
+          fi
+
+          # OutWit.Controller.Foo -> foo; OutWit.Controller.Render.Dcc -> renderdcc
+          tag_prefix=$(echo "$name" | sed 's/^OutWit\.Controller\.//' | tr -d '.' | tr '[:upper:]' '[:lower:]')
+
+          # The asset release tag is whatever the csproj's gh-release:// URIs
+          # actually point at — NOT a value recomputed from <Version>. Asset
+          # versions are independent of the controller version: a controller
+          # bump that doesn't change the binary assets keeps pointing at the
+          # existing release, so we never re-upload unchanged assets. Falls back
+          # to the version-derived tag for projects with no asset URIs.
+          # `|| true`: grep exits 1 when a controller has no gh-release:// URIs
+          # (Tier-1: Grid/Special/Variables/Render.Dcc). Under the runner's
+          # `set -euo pipefail` that non-match would otherwise abort the step.
+          asset_tag=$(grep -oP 'gh-release://[^/]+/[^/]+/\K[^/]+' "$csproj" | head -1 || true)
+          if [ -z "$asset_tag" ]; then asset_tag="$tag_prefix-v$version"; fi
+
+          # The pinned SDK, for the jobs that push and check nothing out.
+          sdk=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["sdk"]["version"])' global.json)
+
+          echo "csproj=$csproj"        >> $GITHUB_OUTPUT
+          echo "version=$version"      >> $GITHUB_OUTPUT
+          echo "tag=$tag_prefix-v$version" >> $GITHUB_OUTPUT
+          echo "asset_tag=$asset_tag"  >> $GITHUB_OUTPUT
+          echo "sdk=$sdk"              >> $GITHUB_OUTPUT
+
+          echo "Resolved:"
+          echo "  csproj    = $csproj"
+          echo "  version   = $version"
+          echo "  tag       = $tag_prefix-v$version"
+          echo "  asset_tag = $asset_tag  (from csproj gh-release:// URIs)"
+          echo "  sdk       = $sdk  (global.json; this job runs $(dotnet --version))"
+
+      # SolutionDir is referenced by controller csprojs (PostBuild + PackZip
+      # targets stage into $(SolutionDir)@Controllers/ and $(SolutionDir)@Zips/).
+      # When MSBuild builds a single csproj instead of the whole slnx,
+      # $(SolutionDir) defaults to '*Undefined*' and the paths corrupt. Pass
+      # it explicitly using the runner's workspace root (trailing slash required).
+      - name: Build
+        shell: bash
+        # Credentials for the private WitMath feed, which nuget.config reads
+        # from GITHUB_USER and GITHUB_TOKEN. Only the two Simulation controllers
+        # restore from it, so only their build is handed the token; everything
+        # else here comes from nuget.org. For those the two variables are not
+        # set at all: set to an empty value, they fail every restore
+        # ("Value cannot be null or empty string. (Parameter 'password')").
+        #
+        # WitMath belongs to a personal account rather than to this
+        # organization, so this repository's built-in GITHUB_TOKEN has no read
+        # access to it: WITMATH_PACKAGES_TOKEN must be a PAT with read:packages
+        # on that account. Scoped to this step on purpose.
+        env:
+          WITMATH_TOKEN: ${{ ('OutWit.Controller.Simulation.Schwarz.Scripts' == 'OutWit.Controller.Simulation.Schwarz' || 'OutWit.Controller.Simulation.Schwarz.Scripts' == 'OutWit.Controller.Simulation.Parareal') && secrets.WITMATH_PACKAGES_TOKEN || '' }}
+        run: |
+          if [ -n "$WITMATH_TOKEN" ]; then
+            export GITHUB_USER="${{ github.actor }}" GITHUB_TOKEN="$WITMATH_TOKEN"
+          fi
+          unset WITMATH_TOKEN
+          dotnet build "${{ steps.paths.outputs.csproj }}" -c Release -p:ContinuousIntegrationBuild=true -p:SolutionDir="${GITHUB_WORKSPACE}/"
+
+      - name: Pack
+        shell: bash
+        run: dotnet pack "${{ steps.paths.outputs.csproj }}" -c Release --no-build -p:SolutionDir="${GITHUB_WORKSPACE}/"
+
+      - name: Collect nupkg / snupkg
+        id: collect
+        shell: bash
+        run: |
+          mkdir -p NuGet
+          find . -path "*/bin/Release/${{ env.PROJECT }}.${{ steps.paths.outputs.version }}.nupkg"  -exec cp {} NuGet/ \;
+          find . -path "*/bin/Release/${{ env.PROJECT }}.${{ steps.paths.outputs.version }}.snupkg" -exec cp {} NuGet/ \; 2>/dev/null || true
+
+          hasNupkg=false
+          hasSnupkg=false
+          if ls NuGet/*.nupkg  > /dev/null 2>&1; then hasNupkg=true; fi
+          if ls NuGet/*.snupkg > /dev/null 2>&1; then hasSnupkg=true; fi
+          echo "hasNupkg=$hasNupkg"   >> $GITHUB_OUTPUT
+          echo "hasSnupkg=$hasSnupkg" >> $GITHUB_OUTPUT
+
+          echo "Collected:"
+          ls -la NuGet/ || echo "  (none)"
+
+      # Per-controller asset preparation. Each Tier-2 controller has its own
+      # logic for producing the binary blobs that go in the GitHub Release.
+      # Models and tools fall through the *) branch (no-op).
+      - name: Prepare assets
+        id: assets
+        shell: bash
+        run: |
+          mkdir -p dist
+
+          case "${{ env.PROJECT }}" in
+            OutWit.Controller.Matrices)
+              # Step 10b — both benchmark matrices are external assets, uploaded
+              # to the release named by the csproj gh-release:// URIs (asset_tag).
+              # Only stage them for upload if that release does NOT already exist:
+              # the .smat files are independent of the controller version, so a
+              # version bump that leaves the URIs on the existing tag must NOT
+              # re-upload unchanged assets (the existing release already serves
+              # consumers). Re-upload happens only when asset_tag is a new tag.
+              asset_tag="${{ steps.paths.outputs.asset_tag }}"
+              code=$(curl -s -L -o /dev/null -w "%{http_code}" "https://github.com/${{ github.repository }}/releases/download/${asset_tag}/rowMatrix.smat")
+              if [ "$code" = "200" ]; then
+                echo "(Matrices assets already published on release '${asset_tag}'; skipping re-upload.)"
+              else
+                echo "(Matrices assets not found on '${asset_tag}'; staging for upload.)"
+                cp Matrices/OutWit.Controller.Matrices/Resources/rowMatrix.smat dist/
+                cp Matrices/OutWit.Controller.Matrices/Resources/largeMatrix.smat dist/
+              fi
+              ;;
+            OutWit.Controller.Render)
+              # Render Tier-2: author publishes the GitHub Release locally
+              # using outwit-assets-pack BEFORE triggering this workflow.
+              # The release must already exist with the 9 expected artifacts;
+              # this case-branch only verifies that, it does not upload.
+              echo "(Render assets are author-uploaded via outwit-assets-pack; verifying release...)"
+              ;;
+            OutWit.Controller.Visualization.ParaView)
+              # ParaView Tier-2: the trimmed per-platform pvpython runtimes are
+              # author-uploaded via outwit-assets-pack (paraview-v<ver>); the
+              # guard step below verifies the release before the nuget.org push.
+              echo "(ParaView assets are author-uploaded via outwit-assets-pack; verifying release...)"
+              ;;
+            *)
+              echo "(no external assets for ${{ env.PROJECT }})"
+              ;;
+          esac
+
+          hasAssets=false
+          if ls dist/* > /dev/null 2>&1; then hasAssets=true; fi
+          echo "hasAssets=$hasAssets" >> $GITHUB_OUTPUT
+
+          if [ "$hasAssets" = "true" ]; then
+            echo "Prepared assets:"
+            ls -la dist/
+            echo ""
+            echo "SHA256:"
+            sha256sum dist/*
+
+            # Markdown release body matching the manual-release look.
+            {
+              echo "Automated release for **${{ env.PROJECT }}** v${{ steps.paths.outputs.version }}."
+              echo ""
+              echo "Published by the publish workflow (commit \`${{ github.sha }}\`)."
+              echo ""
+              echo "## Assets"
+              echo ""
+              echo "| File | Size | SHA256 |"
+              echo "| --- | --- | --- |"
+              for f in dist/*; do
+                fname=$(basename "$f")
+                size=$(stat --printf="%s" "$f")
+                sha=$(sha256sum "$f" | awk '{print $1}')
+                if   [ "$size" -lt 1024 ];               then size_h="${size} B";
+                elif [ "$size" -lt $((1024*1024)) ];     then size_h="$((size/1024)) KB";
+                elif [ "$size" -lt $((1024*1024*1024)) ]; then size_h="$((size/1024/1024)) MB";
+                else                                          size_h="$((size/1024/1024/1024)) GB";
+                fi
+                echo "| \`${fname}\` | ${size_h} | \`${sha}\` |"
+              done
+            } > dist-release-body.md
+          fi
+
+      # Render (and any future Tier-2 controller that author-uploads its
+      # release) ships a nupkg whose controller.json references gh-release://
+      # URIs. If the release tag doesn't exist or any expected asset is
+      # missing, the published nupkg is broken for every consumer. Fail
+      # loudly BEFORE the nuget.org push so we never end up in that state.
+      - name: Verify Tier-2 release assets exist (Render)
+        if: false && env.PROJECT == 'OutWit.Controller.Render'
+        shell: bash
+        run: |
+          set -e
+          tag="${{ steps.paths.outputs.asset_tag }}"
+          expected=(
+            blender-windows-x64.zip
+            blender-linux-x64.zip
+            blender-macos-arm64.zip
+            ffmpeg-windows-x64.zip
+            ffmpeg-linux-x64.zip
+            ffmpeg-macos-arm64.zip
+            benchmark_scene.blend
+            benchmark_scene_still.blend
+            benchmark_scene_video.blend
+          )
+          missing=0
+          for asset in "${expected[@]}"; do
+            url="https://github.com/${{ github.repository }}/releases/download/${tag}/${asset}"
+            code=$(curl -s -L -o /dev/null -w "%{http_code}" "$url")
+            if [ "$code" = "200" ]; then
+              echo "  OK   $asset"
+            else
+              echo "  FAIL $asset  (HTTP $code at $url)"
+              missing=$((missing+1))
+            fi
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo ""
+            echo "::error::$missing asset(s) missing on release '$tag'. Run outwit-assets-pack --push-release locally first."
+            exit 1
+          fi
+
+      - name: Verify Tier-2 release assets exist (ParaView)
+        if: false && env.PROJECT == 'OutWit.Controller.Visualization.ParaView'
+        shell: bash
+        run: |
+          set -e
+          tag="${{ steps.paths.outputs.asset_tag }}"
+          expected=(
+            paraview-windows-x64.zip
+            paraview-linux-x64.zip
+            paraview-macos-arm64.zip
+          )
+          missing=0
+          for asset in "${expected[@]}"; do
+            url="https://github.com/${{ github.repository }}/releases/download/${tag}/${asset}"
+            code=$(curl -s -L -o /dev/null -w "%{http_code}" "$url")
+            if [ "$code" = "200" ]; then
+              echo "  OK   $asset"
+            else
+              echo "  FAIL $asset  (HTTP $code at $url)"
+              missing=$((missing+1))
+            fi
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo ""
+            echo "::error::$missing asset(s) missing on release '$tag'. Run outwit-assets-pack --push-release locally first."
+            exit 1
+          fi
+
+      # The OpenFOAM kits are not staged by outwit-assets-pack: they are the
+      # release assets of OmnibusCloud/OpenFOAM, and the csproj pins their
+      # release tag, names and hashes. The guard checks that release, not ours.
+      - name: Verify kit release assets exist (OpenFOAM)
+        if: false && env.PROJECT == 'OutWit.Controller.OpenFOAM'
+        shell: bash
+        run: |
+          set -e
+          csproj="${{ steps.paths.outputs.csproj }}"
+          missing=0
+          checked=0
+          # Every gh-release://owner/repo/tag/asset <Uri> of a ControllerDataAsset
+          # in the csproj must answer 200 as a release download.
+          for uri in $(grep -o '<Uri>gh-release://[^<]*</Uri>' "$csproj" | sed -e 's#<Uri>gh-release://##' -e 's#</Uri>##'); do
+            checked=$((checked+1))
+            owner_repo=$(echo "$uri" | cut -d/ -f1-2)
+            tag=$(echo "$uri" | cut -d/ -f3)
+            asset=$(echo "$uri" | cut -d/ -f4-)
+            url="https://github.com/${owner_repo}/releases/download/${tag}/${asset}"
+            code=$(curl -s -L -o /dev/null -w "%{http_code}" "$url")
+            if [ "$code" = "200" ]; then
+              echo "  OK   $asset  ($owner_repo @ $tag)"
+            else
+              echo "  FAIL $asset  (HTTP $code at $url)"
+              missing=$((missing+1))
+            fi
+          done
+          if [ "$checked" -eq 0 ]; then
+            echo "::error::no gh-release:// <Uri> found in $csproj - the kit assets are not declared."
+            exit 1
+          fi
+          if [ "$missing" -gt 0 ]; then
+            echo ""
+            echo "::error::$missing kit asset(s) missing in OmnibusCloud/OpenFOAM releases. Release the kits there first."
+            exit 1
+          fi
+
+      # The AI controllers' packages name their data assets by release address and pin each by
+      # SHA-256 and size (the language runtimes, the native engine libraries, the PDF module).
+      # A package whose asset is not on its release, or is another file than the pinned one, is
+      # broken for every consumer and every node. So before a push to any feed every asset is
+      # fetched and held to its pin: the package goes out only when what it names is there.
+      # The assets are read from the manifest the built package ships, not from the project
+      # file's text: what the build evaluated is what a consumer gets.
+      - name: Verify the data assets are released and are the pinned files (AI controllers)
+        if: (false || true) && (env.PROJECT == 'OutWit.Controller.AI.Verify' || env.PROJECT == 'OutWit.Controller.AI.Corpus')
+        shell: bash
+        run: bash .github/scripts/released-data-assets.sh "NuGet/${{ env.PROJECT }}.${{ steps.paths.outputs.version }}.nupkg"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ env.PROJECT }}-v${{ steps.paths.outputs.version }}
+          path: |
+            NuGet/*
+            dist/*
+            dist-release-body.md
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The package as the build job made it, to GitHub Packages. No checkout: nothing of the
+  # repository runs here.
+  github-packages:
+    needs: build
+    if: true && needs.build.outputs.hasNupkg == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    env:
+      PROJECT: ${{ 'OutWit.Controller.Simulation.Schwarz.Scripts' }}
+
+    steps:
+      - name: Download the build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ env.PROJECT }}-v${{ needs.build.outputs.version }}
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: ${{ needs.build.outputs.sdk }}
+
+      - name: Add GitHub Packages source
+        run: >
+          dotnet nuget add source
+          --username ${{ github.actor }}
+          --password ${{ secrets.GITHUB_TOKEN }}
+          --store-password-in-clear-text
+          --name github
+          "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+
+      - name: Push nupkg to GitHub Packages
+        shell: bash
+        run: ls -l NuGet/*.nupkg && echo "dry run, not pushed"
+
+  # nuget.org and the GitHub Release: in the "release" environment, whose reviewer approves
+  # the run and which allows main only, and from main only whatever the environment says.
+  release:
+    needs: build
+    if: >-
+      (false && (needs.build.outputs.hasNupkg == 'true' || needs.build.outputs.hasSnupkg == 'true'))
+      || (false && needs.build.outputs.hasAssets == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # the OIDC token nuget.org exchanges for a key that lives for this run
+    env:
+      PROJECT: ${{ 'OutWit.Controller.Simulation.Schwarz.Scripts' }}
+
+    steps:
+      - name: Publishing goes from main only
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::nuget.org and GitHub Releases are published from main only; this run is on $GITHUB_REF"
+            exit 1
+          fi
+
+      - name: Download the build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ env.PROJECT }}-v${{ needs.build.outputs.version }}
+
+      - name: Create GitHub Release
+        if: false && needs.build.outputs.hasAssets == 'true'
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ needs.build.outputs.asset_tag }}
+          target_commitish: ${{ github.sha }}
+          name: "${{ env.PROJECT }} v${{ needs.build.outputs.version }}"
+          body_path: dist-release-body.md
+          files: dist/*
+          fail_on_unmatched_files: true
+          make_latest: legacy
+
+      - name: Setup .NET 10
+        if: false
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: ${{ needs.build.outputs.sdk }}
+
+      # Trusted publishing: nuget.org holds a policy for this repository, this workflow file
+      # and this environment, and hands out a key that lives for one run.
+      - name: Log in to nuget.org
+        id: login
+        if: false
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ secrets.NUGET_USER }}   # the nuget.org account that holds the policy
+
+      - name: Push nupkg to nuget.org
+        if: false && needs.build.outputs.hasNupkg == 'true'
+        shell: bash
+        run: ls -l NuGet/*.nupkg && echo "dry run, not pushed"
+
+      - name: Push snupkg to nuget.org
+        if: false && needs.build.outputs.hasSnupkg == 'true'
+        shell: bash
+        run: ls -l NuGet/*.snupkg && echo "dry run, not pushed"
