@@ -149,45 +149,58 @@ public sealed class ShardDiskReservationsTests
     {
         // The job ends while the upload of a product still runs (its call takes no token): the
         // product stays on the disk until the call ends, and so does its room.
-        var shards = Path.Combine(m_directory, "shards");
-        Directory.CreateDirectory(shards);
-        WarcSynth.WriteWetShard(Path.Combine(shards, "s.warc.wet.gz"), 40, 200, 5);
-        var size = new FileInfo(Path.Combine(shards, "s.warc.wet.gz")).Length;
-        using var origin = new CorpusTestOrigin(shards);
         var held = new CorpusHeldBlobService(new CorpusTestBlobService(Path.Combine(m_directory, "blobs")));
-        var fetcher = new ShardFetcher(ShardFetchPolicy.Immediate, CorpusTestOrigin.Policy);
+        var (task, fetcher, origin) = HeldShard();
         var work = Path.Combine(m_directory, "held");
-        var baseTime = ShardBlobTransfer.BaseTime;
-        ShardBlobTransfer.BaseTime = TimeSpan.FromMilliseconds(200);
         using var job = new CancellationTokenSource();
 
         try
         {
-            var running = ShardTaskRunner.RunAsync(TaskFor(origin, size), fetcher, held, work, job.Token);
+            var running = ShardTaskRunner.RunAsync(task, fetcher, held, work, job.Token);
             await WaitFor(() => held.Uploads > 0);
-            await Task.Delay(500);
             job.Cancel();
 
             Assert.That(async () => await running, Throws.InstanceOf<OperationCanceledException>());
-            Assert.Multiple(() =>
-            {
-                Assert.That(ShardDiskReservations.Reserved, Is.GreaterThan(0), "the room is held while the upload runs");
-                Assert.That(File.Exists(Path.Combine(work, "text.jsonl.zst")), Is.True, "and the product it reads");
-            });
-
+            await HeldUntilReleasedAsync(held, work);
+        }
+        finally
+        {
             held.Release();
-            await WaitFor(() => ShardDiskReservations.Reserved == 0);
+            origin.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task AProductAnUploadGaveUpOnKeepsItsRoomUntilTheCallEndsTest()
+    {
+        // The upload's call outlasts its schedule: the task is the fault `upload`, and the call
+        // still reads the product, so the product and its room stay until the call ends.
+        var held = new CorpusHeldBlobService(new CorpusTestBlobService(Path.Combine(m_directory, "blobs")));
+        var (task, fetcher, origin) = HeldShard();
+        var work = Path.Combine(m_directory, "given-up");
+        var baseTime = ShardBlobTransfer.BaseTime;
+        var delays = ShardBlobTransfer.Delays;
+        ShardBlobTransfer.BaseTime = TimeSpan.FromMilliseconds(200);
+        ShardBlobTransfer.Delays = [];
+
+        try
+        {
+            var result = await ShardTaskRunner.RunAsync(task, fetcher, held, work, CancellationToken.None);
 
             Assert.Multiple(() =>
             {
-                Assert.That(ShardDiskReservations.Reserved, Is.Zero, "given back when the upload ended");
-                Assert.That(File.Exists(Path.Combine(work, "text.jsonl.zst")), Is.False);
+                Assert.That(result.Verdict, Is.EqualTo(CorpusShardVerdict.NodeFault));
+                Assert.That(result.Error, Is.EqualTo(CorpusResultCodes.FAULT_UPLOAD));
+                Assert.That(held.Uploads, Is.EqualTo(1), "one call, given up and not repeated");
             });
+            await HeldUntilReleasedAsync(held, work);
         }
         finally
         {
             ShardBlobTransfer.BaseTime = baseTime;
+            ShardBlobTransfer.Delays = delays;
             held.Release();
+            origin.Dispose();
         }
     }
 
@@ -260,6 +273,36 @@ public sealed class ShardDiskReservationsTests
     {
         for (var waited = 0; waited < 200 && !condition(); waited++)
             await Task.Delay(50);
+    }
+
+    /// <summary>A sized WET shard on a local origin, for a task whose upload the test holds.</summary>
+    private (CorpusTaskData Shard, ShardFetcher Fetcher, CorpusTestOrigin Origin) HeldShard()
+    {
+        var shards = Path.Combine(m_directory, "shards");
+        Directory.CreateDirectory(shards);
+        WarcSynth.WriteWetShard(Path.Combine(shards, "s.warc.wet.gz"), 40, 200, 5);
+        var size = new FileInfo(Path.Combine(shards, "s.warc.wet.gz")).Length;
+        var origin = new CorpusTestOrigin(shards);
+        return (TaskFor(origin, size), new ShardFetcher(ShardFetchPolicy.Immediate, CorpusTestOrigin.Policy), origin);
+    }
+
+    /// <summary>The product and its room are held while the upload's call runs, and go when it ends.</summary>
+    private static async Task HeldUntilReleasedAsync(CorpusHeldBlobService held, string work)
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(ShardDiskReservations.Reserved, Is.GreaterThan(0), "the room is held while the upload's call runs");
+            Assert.That(File.Exists(Path.Combine(work, "text.jsonl.zst")), Is.True, "and the product it reads");
+        });
+
+        held.Release();
+        await WaitFor(() => ShardDiskReservations.Reserved == 0 && !File.Exists(Path.Combine(work, "text.jsonl.zst")));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ShardDiskReservations.Reserved, Is.Zero, "given back when the call ended");
+            Assert.That(File.Exists(Path.Combine(work, "text.jsonl.zst")), Is.False);
+        });
     }
 
     private static CorpusTaskData TaskFor(CorpusTestOrigin origin, long size)

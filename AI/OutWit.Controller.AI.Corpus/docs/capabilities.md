@@ -920,9 +920,10 @@ stage's included.
   the pin. Blob transfers that fail are tried again for about five minutes; every attempt has two
   minutes and the time of its bytes at 32 KiB/s to hold the node's transfer gate, so a transfer
   that never returns does not hold the node's others behind it. Its call cannot be stopped: it
-  is waited for, the job's token ending the wait, and no second attempt of the same transfer
-  starts beside it; a product an upload still reads keeps its file and its room until the call
-  ends.
+  is waited for, each further time of an attempt counting as an attempt of the schedule, and no
+  second attempt of the same transfer starts beside it; a call that outlasts the schedule fails
+  the transfer (a fault of the node), and the job's token ends the wait. A product an upload
+  still reads keeps its file and its room until the call ends.
 - **Processing.** One streaming pass on a thread below normal priority, the PDF extractor's
   guest code included; one shard per core at most, fewer when memory is short. A node's memory is
   budgeted once: half of it to shards (256 MB each), a quarter to PDFs (1 GiB each), the rest
@@ -1091,9 +1092,10 @@ beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
   for room once it has read the tasks, before a byte is fetched, when its disk cannot take what
   the largest of them reserves under its own pipeline. A blob transfer attempt that does not
   finish in two minutes and the time of its bytes at 32 KiB/s frees the node's transfer gate;
-  the call goes on and is waited for (the job's cancellation ends the wait), and no second
-  attempt of the same transfer starts beside it. A product an upload still reads keeps its file
-  and its room until the call ends.
+  the call goes on and is waited for, each further time of an attempt counting as an attempt of
+  the schedule, and no second attempt of the same transfer starts beside it; once the schedule
+  is spent the transfer fails as before. A product an upload still reads keeps its file and its
+  room until the call ends.
 
 **What changed for an application in 0.8.0** (from 0.7.0):
 

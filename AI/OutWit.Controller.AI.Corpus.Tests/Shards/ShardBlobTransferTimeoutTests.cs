@@ -51,40 +51,37 @@ public sealed class ShardBlobTransferTimeoutTests
     #region Tests
 
     [Test]
-    public async Task ATransferThatNeverReturnsHoldsNoOtherJobWhenItsTimeIsUpTest()
+    public async Task ATransferThatNeverReturnsFailsWhenItsTimeIsUpAndHoldsNoOtherJobTest()
     {
         ShardBlobTransfer.BaseTime = TimeSpan.FromMilliseconds(300);
         var blobId = await UploadAsync();
         CloseTheGate(blobId);
 
-        using var job = new CancellationTokenSource();
         var hanging = new CorpusHangingBlobService(m_blobs, hangs: 1);
-        var stuck = ShardBlobTransfer.DownloadAsync(hanging, blobId, 0, null, job.Token);
+        var stuck = ShardBlobTransfer.DownloadAsync(hanging, blobId, 0, null, CancellationToken.None);
         var other = ShardBlobTransfer.DownloadAsync(m_blobs, blobId, 0, null, CancellationToken.None);
 
         var finished = await Task.WhenAny(other, Task.Delay(TimeSpan.FromSeconds(15)));
 
         Assert.Multiple(() =>
         {
-            Assert.That(hanging.Hung, Is.EqualTo(1), "the first call was taken and never answered, and not called again");
             Assert.That(finished, Is.SameAs(other), "another job's transfer went through: the gate is free");
-            Assert.That(stuck.IsCompleted, Is.False, "its own transfer waits for the call it gave up, and starts no second one beside it");
+            Assert.That(async () => await stuck, Throws.InstanceOf<IOException>(), "the attempt that never returned counts as failed once its schedule is spent: its shard becomes a fault of this node");
+            Assert.That(hanging.Hung, Is.EqualTo(1), "the first call was taken and never answered");
         });
-
-        job.Cancel();
-        Assert.That(async () => await stuck, Throws.InstanceOf<OperationCanceledException>(), "the job's token ends that wait");
     }
 
     [Test]
     public async Task AnAttemptThatRanOutOfItsTimeIsWaitedForAndNoSecondOneStartsBesideItTest()
     {
         // An upload that takes longer than its attempt's time and then succeeds: retried at once,
-        // the same file went up twice side by side (nine times with every retry), each a blob.
+        // the same file went up again beside the call still sending it (five times here), each
+        // a blob, and the transfer failed all the same.
         ShardBlobTransfer.BaseTime = TimeSpan.FromMilliseconds(200);
-        ShardBlobTransfer.Delays = [TimeSpan.Zero, TimeSpan.Zero];
+        ShardBlobTransfer.Delays = [TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero];
         var path = Path.Combine(m_directory, "product.bin");
         await File.WriteAllBytesAsync(path, [1, 2, 3]);
-        var slow = new CorpusSlowBlobService(m_blobs, TimeSpan.FromMilliseconds(900));
+        var slow = new CorpusSlowBlobService(m_blobs, TimeSpan.FromMilliseconds(500));
 
         var blobId = await ShardBlobTransfer.UploadAsync(slow, path, null, CancellationToken.None);
 
@@ -97,21 +94,61 @@ public sealed class ShardBlobTransferTimeoutTests
     }
 
     [Test]
+    public async Task ACallThatOutlastsTheScheduleFailsTheTransferAndHoldsItsFileUntilItEndsTest()
+    {
+        // Three attempts' time spent on one call: the transfer fails as before, with one call
+        // made, and the call still reads the file.
+        ShardBlobTransfer.BaseTime = TimeSpan.FromMilliseconds(200);
+        ShardBlobTransfer.Delays = [TimeSpan.Zero, TimeSpan.Zero];
+        var path = Path.Combine(m_directory, "outlasting.bin");
+        await File.WriteAllBytesAsync(path, [1, 2, 3]);
+        var held = new CorpusHeldBlobService(m_blobs);
+
+        try
+        {
+            Assert.That(async () => await ShardBlobTransfer.UploadAsync(held, path, null, CancellationToken.None), Throws.InstanceOf<IOException>());
+            Assert.Multiple(() =>
+            {
+                Assert.That(held.Uploads, Is.EqualTo(1), "no second call beside the first");
+                Assert.That(ShardBlobTransfer.HeldBy(path), Is.Not.Null, "the call still reads the file");
+            });
+
+            held.Release();
+            await WaitFor(() => ShardBlobTransfer.HeldBy(path) == null);
+            Assert.That(ShardBlobTransfer.HeldBy(path), Is.Null, "let go when the call ended");
+        }
+        finally
+        {
+            held.Release();
+        }
+    }
+
+    [Test]
     public async Task AnUploadTheJobLeftRunningHoldsItsFileUntilItEndsTest()
     {
-        ShardBlobTransfer.BaseTime = TimeSpan.FromMilliseconds(200);
+        // The attempt's time is long; the job is cancelled while the call runs.
         var path = Path.Combine(m_directory, "held.bin");
         await File.WriteAllBytesAsync(path, [1, 2, 3]);
-        var hanging = new CorpusHangingBlobService(m_blobs, hangs: 1);
-        using var job = new CancellationTokenSource(TimeSpan.FromMilliseconds(800));
+        var held = new CorpusHeldBlobService(m_blobs);
+        using var job = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
 
-        Assert.That(async () => await ShardBlobTransfer.UploadAsync(hanging, path, null, job.Token), Throws.InstanceOf<OperationCanceledException>());
-
-        Assert.Multiple(() =>
+        try
         {
-            Assert.That(hanging.Hung, Is.EqualTo(1));
-            Assert.That(ShardBlobTransfer.HeldBy(path), Is.Not.Null, "the call still reads the file");
-        });
+            Assert.That(async () => await ShardBlobTransfer.UploadAsync(held, path, null, job.Token), Throws.InstanceOf<OperationCanceledException>());
+            Assert.Multiple(() =>
+            {
+                Assert.That(held.Uploads, Is.EqualTo(1));
+                Assert.That(ShardBlobTransfer.HeldBy(path), Is.Not.Null, "the call still reads the file");
+            });
+
+            held.Release();
+            await WaitFor(() => ShardBlobTransfer.HeldBy(path) == null);
+            Assert.That(ShardBlobTransfer.HeldBy(path), Is.Null, "let go when the call ended");
+        }
+        finally
+        {
+            held.Release();
+        }
     }
 
     [Test]
@@ -151,6 +188,12 @@ public sealed class ShardBlobTransferTimeoutTests
     #endregion
 
     #region Tools
+
+    private static async Task WaitFor(Func<bool> condition)
+    {
+        for (var waited = 0; waited < 200 && !condition(); waited++)
+            await Task.Delay(50);
+    }
 
     private async Task<Guid> UploadAsync()
     {

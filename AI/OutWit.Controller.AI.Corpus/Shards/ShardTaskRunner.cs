@@ -346,8 +346,9 @@ public static class ShardTaskRunner
             // products go before the place is given to the next one.
             TryDelete(shardPath);
 
-            // An upload the job left running still reads its product: the products and their
-            // room on the disk go when it ends, not before.
+            // An upload call a transfer left running (its schedule spent, or the job cancelled)
+            // still reads its product: the products and their room on the disk go when it ends,
+            // not before.
             var held = new[] { ShardBlobTransfer.HeldBy(textPath), ShardBlobTransfer.HeldBy(signaturesPath) }.OfType<Task>().ToArray();
             if (held.Length == 0)
             {

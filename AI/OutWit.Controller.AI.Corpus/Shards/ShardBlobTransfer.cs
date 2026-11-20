@@ -15,10 +15,11 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// together do not come back together. Every attempt has a time to finish in, by the size of
 /// what it moves (<see cref="TransferTimeout"/>): the channel's calls take no token, so an
 /// attempt that never returns frees the gate when its time is up. Its call goes on, and no other
-/// attempt of the same transfer starts beside it: it is waited for, the job's token bounding the
-/// wait, and what it comes to is that attempt's outcome — a file is never sent twice at once. A
-/// call the job leaves running holds its file (<see cref="HeldBy"/>): the task keeps the file and
-/// its room on the disk until the call ends.
+/// attempt of the same transfer starts beside it: it is waited for, each further time of an
+/// attempt spent on it counting as an attempt of the schedule, and what it comes to is that
+/// attempt's outcome — a file is never sent twice at once. When the schedule is spent, or the job
+/// is cancelled, while the call still runs, the transfer ends and the call holds its file
+/// (<see cref="HeldBy"/>): the task keeps the file and its room on the disk until the call ends.
 /// </summary>
 public static class ShardBlobTransfer
 {
@@ -87,7 +88,7 @@ public static class ShardBlobTransfer
         return WithRetryAsync(() => blobs.UploadFileAsync(localFilePath), TransferTimeout(Size(localFilePath)), "upload of a product", logger, cancellationToken, localFilePath);
     }
 
-    /// <summary>The upload call that still reads a file after its job was cancelled; null when none does.</summary>
+    /// <summary>The upload call that still reads a file after its transfer ended (its schedule spent, or its job cancelled); null when none does.</summary>
     /// <param name="localFilePath">The file.</param>
     /// <returns>The call, which ends on its own; null when no call holds the file.</returns>
     public static Task? HeldBy(string localFilePath)
@@ -147,15 +148,26 @@ public static class ShardBlobTransfer
             }
 
             // An attempt that ran out of its time goes on outside the gate (its call takes no
-            // token): it is waited for, and no other attempt starts beside it. What it comes to
-            // is this attempt's outcome.
-            if (abandoned != null)
+            // token). No other attempt starts beside it: the call is waited for, each further time
+            // of an attempt spent on it counting as an attempt of the schedule, and what it comes
+            // to is this attempt's outcome. When the schedule is spent and the call still runs,
+            // the transfer fails (a fault of the node) and the call holds its file until it ends.
+            while (abandoned != null)
             {
                 try
                 {
-                    return await abandoned.WaitAsync(cancellationToken);
+                    return await abandoned.WaitAsync(timeout, cancellationToken);
                 }
-                catch (OperationCanceledException)
+                catch (TimeoutException) when (!abandoned.IsCompleted && attempt < Delays.Count)
+                {
+                    attempt++;
+                }
+                catch (TimeoutException exception) when (!abandoned.IsCompleted)
+                {
+                    Hold(file, abandoned);
+                    throw new IOException($"The {what} did not end in {attempt + 1} attempt time(s) over {clock.Elapsed.TotalSeconds:F0} s; its call still runs.", exception);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     Hold(file, abandoned);
                     throw;
@@ -163,6 +175,7 @@ public static class ShardBlobTransfer
                 catch (Exception exception)
                 {
                     failure = exception;
+                    abandoned = null;
                 }
             }
 
@@ -183,7 +196,7 @@ public static class ShardBlobTransfer
         }
     }
 
-    /// <summary>Records a call the job left running on a file, until it ends.</summary>
+    /// <summary>Records a call a transfer left running on a file, until it ends.</summary>
     private static void Hold(string? file, Task? call)
     {
         if (file == null || call == null || call.IsCompleted)
