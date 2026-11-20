@@ -11,12 +11,16 @@ run-name: "AI Corpus toolchain: ${{ github.ref_name }}"
 # (its SHA-256 and its size): what a node is sent is then what this workflow builds, or the
 # workflow fails.
 #
-# It runs on a pull request as well as after a push, for a change to the toolchain or to the
-# project file, which holds the pin.
+# It runs on a pull request, and after a push to main or ai-controllers, for a change to the
+# toolchain or to the project file, which holds the pin; a branch with a pull request is
+# built once, by the pull request's run (another branch is run by hand). It also runs for
+# a pdftext-v* tag, so that the module of a release is built from the tagged commit.
 
 on:
   workflow_dispatch:
   push:
+    branches: [main, ai-controllers]
+    tags: ['pdftext-v*']
     paths:
       - 'AI/OutWit.Controller.AI.Corpus.Assets/toolchain/**'
       - 'AI/OutWit.Controller.AI.Corpus/OutWit.Controller.AI.Corpus.csproj'
@@ -53,6 +57,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       # Build b runs the scripts from a copy in another folder, with its work folder at
       # another depth: if any path reached the module, the two builds would differ.
@@ -159,6 +165,8 @@ jobs:
       TESTS: AI/OutWit.Controller.AI.Corpus.Assets/toolchain/tests
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
