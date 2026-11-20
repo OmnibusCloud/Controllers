@@ -26,7 +26,7 @@ public abstract class CorpusRoundSource
     /// <summary>
     /// The most answers a round asks of a package: itself and one copy in the first round (of the
     /// packages the run's sampling picks) and in the repair round (of every package, when the run
-    /// asked for sampling at all), three in the dispute round.
+    /// asked for sampling at all), three in either dispute round.
     /// </summary>
     /// <param name="kind">The round.</param>
     /// <returns>The count.</returns>
@@ -84,6 +84,28 @@ public abstract class CorpusRoundSource
 
     /// <summary>How the round's fan-out came back: its packages by the answers each got, known before any is opened.</summary>
     public abstract CorpusRoundAnswers Answers { get; }
+
+    /// <summary>
+    /// The slots of the round that brought nothing at all: its packages times <see cref="Asked"/>,
+    /// less every value that came back (bound to a package or not; a null is no value). A slot
+    /// whose value came back under no ticket of the round lent nothing to another package, so
+    /// only a silent slot can be where one machine's second answer for a shard came from. Null
+    /// when more values came back than the round had slots: the platform then kept more than one
+    /// value of a task, and nothing is read from the count. The ledger reads it of the dispute
+    /// rounds only.
+    /// </summary>
+    public abstract int? Silent { get; }
+
+    /// <summary>The slots of a round less the values that came back; null when more came back than there were slots.</summary>
+    /// <param name="packages">The round's packages.</param>
+    /// <param name="asked">The answers it asks of a package.</param>
+    /// <param name="values">The values that came back, of any kind but null.</param>
+    /// <returns>The silent slots, or null.</returns>
+    protected static int? SilentOf(int packages, int asked, long values)
+    {
+        var slots = (long)packages * asked;
+        return values > slots ? null : (int)(slots - values);
+    }
 
     #endregion
 }

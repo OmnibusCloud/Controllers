@@ -13,6 +13,21 @@ internal static class CorpusSchemaCheck
 {
     #region Functions
 
+    /// <summary>Loads one of the controller's published schemas from the repository's checkout (the test is ignored outside one).</summary>
+    /// <param name="fileName">The schema's file name in the controller's <c>docs</c> folder.</param>
+    /// <returns>The schema; the caller disposes it.</returns>
+    public static JsonDocument LoadSchema(string fileName)
+    {
+        var dir = TestContext.CurrentContext.TestDirectory;
+        while (dir != null && !File.Exists(Path.Combine(dir, "OutWit.slnx")))
+            dir = Path.GetDirectoryName(dir);
+
+        if (dir == null)
+            Assert.Ignore("Solution root not found");
+
+        return JsonDocument.Parse(File.ReadAllBytes(Path.Combine(dir!, "AI", "OutWit.Controller.AI.Corpus", "docs", fileName)));
+    }
+
     /// <summary>Validates a document.</summary>
     /// <param name="schema">The schema's root.</param>
     /// <param name="document">The document's root.</param>

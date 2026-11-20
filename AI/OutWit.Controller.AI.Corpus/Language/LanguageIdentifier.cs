@@ -33,7 +33,8 @@ public sealed class LanguageIdentifier
     private readonly LanguageModel m_model;
     private readonly LanguageAcceptance? m_acceptance;
     private readonly int m_maxRank;
-    private readonly Dictionary<ulong, (int Profile, int Rank)[]> m_index;
+    private readonly ulong[] m_keys;
+    private readonly (int Profile, int Rank)[][] m_postings;
 
     #endregion
 
@@ -59,7 +60,7 @@ public sealed class LanguageIdentifier
         m_model = model;
         m_acceptance = acceptance;
         m_maxRank = model.Profiles.Count == 0 ? 0 : model.Profiles.Max(profile => profile.Grams.Count);
-        m_index = Index(model);
+        (m_keys, m_postings) = Index(model);
     }
 
     #endregion
@@ -162,10 +163,11 @@ public sealed class LanguageIdentifier
         Array.Fill(distances, (long)m_maxRank * textProfile.Count);
         for (var i = 0; i < textProfile.Count; i++)
         {
-            if (!m_index.TryGetValue(textProfile[i], out var postings))
+            var at = Array.BinarySearch(m_keys, textProfile[i]);
+            if (at < 0)
                 continue;
 
-            foreach (var (profile, rank) in postings)
+            foreach (var (profile, rank) in m_postings[at])
                 distances[profile] += Math.Abs(rank - i) - m_maxRank;
         }
 
@@ -173,9 +175,12 @@ public sealed class LanguageIdentifier
     }
 
     /// <summary>Every profile's n-grams by packed key: the profiles (in model order) that hold it and its rank there, the first rank when a profile lists it twice (<see cref="LanguageProfile.RankOf(ulong)"/>).</summary>
-    private static Dictionary<ulong, (int Profile, int Rank)[]> Index(LanguageModel model)
+    private static (ulong[] Keys, (int Profile, int Rank)[][] Postings) Index(LanguageModel model)
     {
-        var lists = new Dictionary<ulong, List<(int Profile, int Rank)>>();
+        // The pack's n-grams are the pack author's choice, and a table keyed by them can be made
+        // to put them all in one chain: they are sorted instead, by key, then profile, then rank,
+        // and looked up by a binary search.
+        var entries = new List<(ulong Key, int Profile, int Rank)>();
         for (var p = 0; p < model.Profiles.Count; p++)
         {
             var grams = model.Profiles[p].Grams;
@@ -184,19 +189,32 @@ public sealed class LanguageIdentifier
                 if (grams[rank].Length is 0 or > LanguageNgrams.MAX_N)
                     continue;
 
-                var key = LanguageNgrams.Pack(grams[rank]);
-                if (!lists.TryGetValue(key, out var list))
-                {
-                    list = [];
-                    lists[key] = list;
-                }
-
-                if (list.Count == 0 || list[^1].Profile != p)
-                    list.Add((p, rank));
+                entries.Add((LanguageNgrams.Pack(grams[rank]), p, rank));
             }
         }
 
-        return lists.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray());
+        entries.Sort();
+
+        var keys = new List<ulong>();
+        var postings = new List<(int Profile, int Rank)[]>();
+        var list = new List<(int Profile, int Rank)>();
+        for (var at = 0; at < entries.Count; at++)
+        {
+            var (key, profile, rank) = entries[at];
+
+            // The first rank a profile lists a key at: a profile in the list once.
+            if (list.Count == 0 || list[^1].Profile != profile)
+                list.Add((profile, rank));
+
+            if (at + 1 < entries.Count && entries[at + 1].Key == key)
+                continue;
+
+            keys.Add(key);
+            postings.Add(list.ToArray());
+            list.Clear();
+        }
+
+        return (keys.ToArray(), postings.ToArray());
     }
 
     /// <summary>A distance in millionths of the worst one, rounded down (integer arithmetic).</summary>

@@ -51,6 +51,17 @@ public static class PdfStageLimits
     /// </summary>
     public const long SHARD_FUEL = 100 * FUEL;
 
+    /// <summary>
+    /// The most PDFs of one shard the stage runs. A run costs more than its fuel: a folder, two
+    /// files, an instance of the module and its teardown, some 7 ms of a core whatever the PDF,
+    /// and a body that only starts as a PDF burns 1.5 million fuel — so the fuel alone let a shard
+    /// of such bodies hold a core for hours (five million runs under the shard's fuel). A Common
+    /// Crawl WARC file holds about 220 PDFs a gigabyte; a PDF met after this many were run is not
+    /// run and drops as <c>pdf_shard_runs</c>: the count is the same on every node, and so is the
+    /// PDF it stops at. With <see cref="SHARD_FUEL"/> it bounds what one shard's PDFs cost a node.
+    /// </summary>
+    public const int SHARD_RUNS = 4_096;
+
     /// <summary>The cap of the module's linear memory: a grow past it is refused, and the module ends by its own hand.</summary>
     public const long MEMORY_BYTES = 1L << 30;
 
@@ -95,7 +106,7 @@ public static class PdfStageLimits
     /// the stage set's fingerprint.
     /// </summary>
     public static readonly string DESCRIPTOR = string.Create(CultureInfo.InvariantCulture,
-        $"pdftext sha256={MODULE_SHA256}; engine=wasmtime {WasmHostBinding.BUILT_AGAINST}; fuel={FUEL} after instantiation; shard_fuel={SHARD_FUEL}; memory={MEMORY_BYTES}; " +
+        $"pdftext sha256={MODULE_SHA256}; engine=wasmtime {WasmHostBinding.BUILT_AGAINST}; fuel={FUEL} after instantiation; shard_fuel={SHARD_FUEL}; shard_runs={SHARD_RUNS}; memory={MEMORY_BYTES}; " +
         $"seed={RANDOM_SEED}; input={MAX_INPUT_BYTES}; text={MAX_TEXT_BYTES}; document_words={DOCUMENT_WORDS} at page boundaries, a longer page cut at a line; " +
         $"running_lines=on {RUNNING_LINE_MIN_PAGES}+ pages, on half the pages or more, digits folded; " +
         $"hyphens=a lower-case Cyrillic or Greek word broken at a line end rejoined (Latin is pdf_oxide's)");

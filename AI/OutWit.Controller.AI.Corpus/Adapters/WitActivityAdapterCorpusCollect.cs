@@ -37,7 +37,7 @@ internal sealed class WitActivityAdapterCorpusCollect : WitActivityAdapterFuncti
             // The task list is the server's own: the report holds every shard of it, bound to what
             // came back by the tickets, whatever order and whatever indexes the nodes returned.
             // The run's options say what sampling was asked for: the report states it beside what came back.
-            var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved, activity.Options);
+            var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved, activity.Options, activity.Again, activity.Settled);
 
             if (ledger.RejectedResults > 0 || ledger.Disputes > 0)
                 Logger.LogWarning("Corpus.Collect: {Rejected} value(s) dropped, {Disputes} dispute(s) of which {Resolved} settled.", ledger.RejectedResults, ledger.Disputes, ledger.DisputesResolved);
@@ -59,11 +59,15 @@ internal sealed class WitActivityAdapterCorpusCollect : WitActivityAdapterFuncti
     {
         try
         {
-            if (parameters.Length != 7)
-                throw new ArgumentException($"Expected 7 parameter(s), got {parameters.Length}.");
+            // The rounds and the options; since 0.9.0 the second dispute round may come before the
+            // options (nine arguments). A script written for an earlier controller hands seven.
+            if (parameters.Length is not (7 or 9))
+                throw new ArgumentException($"Expected 7 or 9 parameter(s), got {parameters.Length}.");
 
-            var references = new IWitReference[7];
-            string[] names = ["Tasks", "Executions", "Repairs", "Repaired", "Disputes", "Resolved", "Options"];
+            var references = new IWitReference[parameters.Length];
+            string[] names = parameters.Length == 9
+                ? ["Tasks", "Executions", "Repairs", "Repaired", "Disputes", "Resolved", "Again", "Settled", "Options"]
+                : ["Tasks", "Executions", "Repairs", "Repaired", "Disputes", "Resolved", "Options"];
             for (var index = 0; index < references.Length; index++)
                 references[index] = parameters[index] as IWitReference ?? throw new ArgumentException($"Parameter '{names[index]}' must be a variable reference.");
 
@@ -75,7 +79,9 @@ internal sealed class WitActivityAdapterCorpusCollect : WitActivityAdapterFuncti
                 Repaired = references[3],
                 Disputes = references[4],
                 Resolved = references[5],
-                Options = references[6]
+                Again = references.Length == 9 ? references[6] : null,
+                Settled = references.Length == 9 ? references[7] : null,
+                Options = references[^1]
             };
         }
         catch (Exception e)

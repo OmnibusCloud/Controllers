@@ -38,7 +38,7 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
     {
         var blobId = await CorpusRounds.HostAsync("Corpus.Integrity", async () =>
         {
-            var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved, activity.Options);
+            var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved, activity.Options, activity.Again, activity.Settled);
 
             if (ledger.Sampling.State is CorpusSampling.STATE_SHORT or CorpusSampling.STATE_NONE)
                 Logger.LogWarning("Corpus.Integrity: {Statement}", ledger.Sampling.Statement);
@@ -61,11 +61,15 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
         {
             // The run's options are the last argument since 0.7.0; a script written for an earlier
             // controller hands six, and its document says the sampling asked for is not known.
-            if (parameters.Length is not (ROUND_PARAMETERS or ROUND_PARAMETERS + 1))
-                throw new ArgumentException($"Expected {ROUND_PARAMETERS} or {ROUND_PARAMETERS + 1} parameter(s), got {parameters.Length}.");
+            // Since 0.9.0 the second dispute round may come before the options (nine arguments).
+            if (parameters.Length is not (ROUND_PARAMETERS or ROUND_PARAMETERS + 1 or ROUND_PARAMETERS + 3))
+                throw new ArgumentException($"Expected {ROUND_PARAMETERS}, {ROUND_PARAMETERS + 1} or {ROUND_PARAMETERS + 3} parameter(s), got {parameters.Length}.");
 
+            var again = parameters.Length == ROUND_PARAMETERS + 3;
             var references = new IWitReference[parameters.Length];
-            string[] names = ["Tasks", "Executions", "Repairs", "Repaired", "Disputes", "Resolved", "Options"];
+            string[] names = again
+                ? ["Tasks", "Executions", "Repairs", "Repaired", "Disputes", "Resolved", "Again", "Settled", "Options"]
+                : ["Tasks", "Executions", "Repairs", "Repaired", "Disputes", "Resolved", "Options"];
             for (var index = 0; index < references.Length; index++)
                 references[index] = parameters[index] as IWitReference ?? throw new ArgumentException($"Parameter '{names[index]}' must be a variable reference.");
 
@@ -77,7 +81,9 @@ internal sealed class WitActivityAdapterCorpusIntegrity : WitActivityAdapterFunc
                 Repaired = references[3],
                 Disputes = references[4],
                 Resolved = references[5],
-                Options = references.Length > ROUND_PARAMETERS ? references[ROUND_PARAMETERS] : null
+                Again = again ? references[6] : null,
+                Settled = again ? references[7] : null,
+                Options = references.Length > ROUND_PARAMETERS ? references[^1] : null
             };
         }
         catch (Exception e)

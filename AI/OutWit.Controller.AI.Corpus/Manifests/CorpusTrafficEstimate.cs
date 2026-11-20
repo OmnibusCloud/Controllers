@@ -62,8 +62,9 @@ public sealed record CorpusTrafficEstimate(long OnceBytes, long CopyBytes, int S
     /// <param name="uploadBytes">What every execution uploads, together (the storage estimate's products and result packages).</param>
     /// <param name="modelBytes">The language model's size; 0 when the job has none.</param>
     /// <param name="nodes">The nodes that will take part; 0 when not known (the model is then left out and said).</param>
+    /// <param name="uploadCeilingBytes">The most every execution may upload together (the storage estimate's product ceiling and result packages); 0 when not known.</param>
     /// <returns>The estimate.</returns>
-    public static CorpusTrafficEstimate Of(IReadOnlyList<long> sizes, double samplingRate, IReadOnlyList<long>? bounds, long uploadBytes, long modelBytes, int nodes)
+    public static CorpusTrafficEstimate Of(IReadOnlyList<long> sizes, double samplingRate, IReadOnlyList<long>? bounds, long uploadBytes, long modelBytes, int nodes, long uploadCeilingBytes = 0)
     {
         var perPackage = CorpusPackagePlanner.ShardsPerPackage(sizes.Count);
         var packages = CorpusPackagePlanner.PackageSums(sizes);
@@ -83,7 +84,8 @@ public sealed record CorpusTrafficEstimate(long OnceBytes, long CopyBytes, int S
             UploadBytes = Math.Max(0, uploadBytes),
             ModelBytesPerNode = Math.Max(0, modelBytes),
             Nodes = Math.Max(0, nodes),
-            CeilingBytes = ceiling
+            CeilingBytes = ceiling,
+            UploadCeilingBytes = Math.Max(0, uploadCeilingBytes)
         };
     }
 
@@ -141,6 +143,10 @@ public sealed record CorpusTrafficEstimate(long OnceBytes, long CopyBytes, int S
         var line = string.Create(CultureInfo.InvariantCulture,
             $"The nodes accept at most {CeilingBytes} bytes for those fetches, whoever wrote the manifest: a shard is held to the size the manifest declares (or the origin answered when the server asked) and 1/{ShardLimits.DECLARED_SLACK_DIVISOR} more, {ShardLimits.DECLARED_SLACK_MIN_BYTES} bytes at least; one past that is refused as Oversized ({Trust.CorpusResultCodes.OVERSIZED_DECLARED}).");
 
+        if (UploadCeilingBytes > 0)
+            line += string.Create(CultureInfo.InvariantCulture,
+                $" They upload at most {UploadCeilingBytes} bytes for them: a shard's product is held to {ShardProductLimits.DOCUMENTS_PER_MIB} documents a fetched mebibyte ({ShardProductLimits.MIN_DOCUMENTS} at least) and {ShardProductLimits.TEXT_PER_BYTE} bytes of compressed text a fetched byte ({ShardProductLimits.MIN_TEXT_BYTES} at least), and one past that is refused as Oversized ({Trust.CorpusResultCodes.OVERSIZED_PRODUCT}).");
+
         if (unsizedShards > 0)
             line += string.Create(CultureInfo.InvariantCulture, $" {unsizedShards} shard(s) have no size of their own and are held to the cap of {capBytes} bytes only: declare their sizes to make the estimate a bound for them.");
 
@@ -168,6 +174,9 @@ public sealed record CorpusTrafficEstimate(long OnceBytes, long CopyBytes, int S
 
     /// <summary>The most the nodes accept for the fetches: every shard at the size it is held to; 0 when no ceiling was asked for.</summary>
     public long CeilingBytes { get; init; }
+
+    /// <summary>The most every execution may upload together: the products at the most a shard may give and the result packages; 0 when not known.</summary>
+    public long UploadCeilingBytes { get; init; }
 
     /// <summary>The fetches: every shard once and the sampled ones a second time.</summary>
     public long FetchBytes => OnceBytes + CopyBytes;

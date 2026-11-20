@@ -24,7 +24,11 @@ public static class CorpusResultCodes
     /// <summary>OriginRefused: not a public origin, and the owner of the machine has not listed the host; or a public origin written another way than https on the default port.</summary>
     public const string ORIGIN_NOT_LISTED = "origin_not_listed";
 
-    /// <summary>OriginRefused: the host resolves to no public address.</summary>
+    /// <summary>
+    /// A public origin's name resolves on this node to no public address. Since 0.9.0 no result
+    /// carries it: the node's own resolver said so, and the shard is the fault
+    /// <see cref="FAULT_NETWORK"/>. The node's log keeps the word.
+    /// </summary>
     public const string ORIGIN_ADDRESS = "origin_address";
 
     /// <summary>OriginRefused: a redirect leads somewhere that is not fetched, or there are too many.</summary>
@@ -51,6 +55,9 @@ public static class CorpusResultCodes
     /// <summary>Oversized: more bytes on the wire than the size the manifest declares for the shard (or the origin answered when the server asked) and its slack: the manifest promised less traffic than the shard takes.</summary>
     public const string OVERSIZED_DECLARED = "oversized_declared";
 
+    /// <summary>Oversized: the shard's product passes what a shard of its fetched size may give, in documents or in compressed text (<see cref="Shards.ShardProductLimits"/>).</summary>
+    public const string OVERSIZED_PRODUCT = "oversized_product";
+
     /// <summary>Malformed: the bytes are not a WARC file where a record should start.</summary>
     public const string NOT_WARC = "not_warc";
 
@@ -72,7 +79,13 @@ public static class CorpusResultCodes
     /// <summary>NodeFault: the disk has less room than the shard needs.</summary>
     public const string FAULT_DISK_SPACE = "disk_space";
 
-    /// <summary>NodeFault: the origin did not answer this node (no connection, no name, a stalled or broken body) after every retry; the node cannot tell its own link from the origin.</summary>
+    /// <summary>
+    /// NodeFault: the origin did not answer this node with the shard after every retry: no
+    /// connection, no name or a public origin's name that resolves here to no public address, no
+    /// answer head or a stalled or broken body, a server error (5xx) or a request to slow down
+    /// (429) that outlasted the retries, the node's proxy asking for credentials (407). The node
+    /// cannot tell its own link, a gateway or a proxy in front of it from the origin.
+    /// </summary>
     public const string FAULT_NETWORK = "network";
 
     /// <summary>NodeFault: the language model did not arrive on the node, or arrived with other bytes than its pin.</summary>
@@ -108,9 +121,9 @@ public static class CorpusResultCodes
     private static readonly IReadOnlyDictionary<CorpusShardVerdict, IReadOnlySet<string>> BY_VERDICT = new Dictionary<CorpusShardVerdict, IReadOnlySet<string>>
     {
         [CorpusShardVerdict.Completed] = Set("", NOTE_TRUNCATED),
-        [CorpusShardVerdict.OriginRefused] = Set(ORIGIN_NOT_ALLOWED, ORIGIN_NOT_LISTED, ORIGIN_ADDRESS, ORIGIN_REDIRECT),
+        [CorpusShardVerdict.OriginRefused] = Set(ORIGIN_NOT_ALLOWED, ORIGIN_NOT_LISTED, ORIGIN_REDIRECT),
         [CorpusShardVerdict.FetchFailed] = Set(HASH_MISMATCH, BODY_TRUNCATED),
-        [CorpusShardVerdict.Oversized] = Set(OVERSIZED, OVERSIZED_UNPACKED, OVERSIZED_DECLARED),
+        [CorpusShardVerdict.Oversized] = Set(OVERSIZED, OVERSIZED_UNPACKED, OVERSIZED_DECLARED, OVERSIZED_PRODUCT),
         [CorpusShardVerdict.Malformed] = Set(NOT_WARC, BAD_COMPRESSION),
         [CorpusShardVerdict.PipelineUnavailable] = Set(NO_LANGUAGE_MODEL, LANGUAGE_MODEL_REFUSED),
         [CorpusShardVerdict.Failed] = Set(TASK_INVALID),

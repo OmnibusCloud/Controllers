@@ -91,8 +91,8 @@ internal sealed class WitActivityAdapterCorpusPreflight : WitActivityAdapterFunc
 
             // The disk a node needs: it holds a few shards at a time, never its whole share.
             var largest = sizes.Sizes.Count > 0 ? Math.Min(Math.Max(0, sizes.Sizes.Max()), cap) : 0;
-            report.NodeDiskBytesPerShard = ShardDisk.Needed(largest > 0 ? largest : cap);
-            report.Messages.Add(ShardDisk.Describe(largest, cap));
+            report.NodeDiskBytesPerShard = ShardDisk.Needed(largest > 0 ? largest : cap, plan.Pipeline);
+            report.Messages.Add(ShardDisk.Describe(largest, cap, plan.Pipeline));
 
             // What the job leaves on the server, against the deployment's headroom.
             var (limit, refusal) = await CorpusPlanning.CheckStorageAsync(estimates.Storage, new CorpusStorageHeadroomHost(BlobService), cancellationToken);

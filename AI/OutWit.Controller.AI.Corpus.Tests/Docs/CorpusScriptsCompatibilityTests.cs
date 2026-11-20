@@ -21,11 +21,12 @@ public sealed class CorpusScriptsCompatibilityTests
     private const string CONTROLLER = "OutWit.Controller.AI.Corpus";
 
     /// <summary>
-    /// The first controller with everything the bundled script calls: <c>Corpus.RepairRate</c>,
-    /// and <c>Corpus.Integrity</c> with the run's options as its seventh argument
-    /// (<c>Corpus.ProcessPackage</c> and the packages are from 0.5.0).
+    /// The first controller with everything the bundled script calls: <c>Corpus.Disputes</c> with
+    /// six arguments (the second dispute round) and <c>Corpus.Collect</c> and
+    /// <c>Corpus.Integrity</c> with nine (<c>Corpus.RepairRate</c> is from 0.7.0,
+    /// <c>Corpus.ProcessPackage</c> and the packages from 0.5.0).
     /// </summary>
-    private const string FIRST_WITH_THE_SCRIPTS_ACTIVITIES = "0.7.0";
+    private const string FIRST_WITH_THE_SCRIPTS_ACTIVITIES = "0.9.0";
 
     /// <summary>The release the candidates become.</summary>
     private const string RELEASE = "1.0.0";

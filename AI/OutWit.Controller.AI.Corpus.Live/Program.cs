@@ -298,7 +298,7 @@ public static class Program
             Console.WriteLine($"             trust: {single.GetInt32()} shard(s) rest on one execution; rejected results {summary.GetProperty("rejected_results").GetInt32()}, " +
                               $"repairs {summary.GetProperty("repairs").GetInt32()}, disputes {summary.GetProperty("disputes").GetInt32()} (resolved {summary.GetProperty("disputes_resolved").GetInt32()})");
 
-        // Whether the sampling the run asked for came back (corpus-report/5), in the report's own words.
+        // Whether the sampling the run asked for came back (corpus-report/5 and later), in the report's own words.
         if (root.TryGetProperty("sampling", out var sampling))
             Console.WriteLine($"             sampling: {sampling.GetProperty("state").GetString()}. {sampling.GetProperty("statement").GetString()}");
 
@@ -330,7 +330,7 @@ public static class Program
                               ? $"; signatures compared {signatures.GetInt32()}, signature mismatches {summary.GetProperty("signature_mismatches").GetInt32()}"
                               : ""));
 
-        // How each round's fan-out came back (corpus-integrity/7): a package nobody answered is a round that came back short.
+        // How each round's fan-out came back (corpus-integrity/7 and later; /8 has the second dispute round): a package nobody answered is a round that came back short.
         if (root.TryGetProperty("rounds", out var rounds))
         {
             Console.WriteLine("             rounds: " + string.Join("; ", rounds.EnumerateObject().Select(round =>

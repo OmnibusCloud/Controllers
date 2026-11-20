@@ -2,11 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-report.schema.json",
   "title": "Corpus report",
-  "description": "The output of Corpus.Collect: every shard of the job's task list in task order with how it ended - the verdict of its accepted result with its product blobs and content hash, Disputed (its copies disagreed and no majority of three machines settled it) or NoResult with a fixed reason (no machine returned a result that could be accepted) - and the aggregate over the accepted results. The shards, their indexes and their URLs are the server's own task list; nothing a node returns can add, remove or rename one. Version 5: version 4 and two root objects, sampling (the share of the packages the run asked to run on two machines and what came back of it, in a word and in a sentence) and rounds (for each round the task packages that went out and the answers that came back): a run whose checking did not happen says so, and its numbers need not be held against the options it was started with. The integrity document carries the same two. Version 4: version 3 said, for every shard, how many shards the machine that ran it processes at once (degree): a fact about a machine, not about a shard, and gone. Version 3: version 2 took the index and the URL from the node's result and chose between the executions of a sampled shard by their content hashes.",
+  "description": "The output of Corpus.Collect: every shard of the job's task list in task order with how it ended - the verdict of its accepted result with its product blobs and content hash, Disputed (its copies disagreed and no majority of three machines settled it) or NoResult with a fixed reason (no machine returned a result that could be accepted) - and the aggregate over the accepted results. The shards, their indexes and their URLs are the server's own task list; nothing a node returns can add, remove or rename one. Version 6: version 5 with the second dispute round in rounds (dispute_again): a dispute the dispute round left with too few copies, or with a lead that may be one machine's second answers, goes out once more on three machines. Version 5: version 4 and two root objects, sampling (the share of the packages the run asked to run on two machines and what came back of it, in a word and in a sentence) and rounds (for each round the task packages that went out and the answers that came back): a run whose checking did not happen says so, and its numbers need not be held against the options it was started with. The integrity document carries the same two. Version 4: version 3 said, for every shard, how many shards the machine that ran it processes at once (degree): a fact about a machine, not about a shard, and gone. Version 3: version 2 took the index and the URL from the node's result and chose between the executions of a sampled shard by their content hashes.",
   "type": "object",
   "required": ["schema", "controller", "summary", "sampling", "rounds", "shards"],
   "properties": {
-    "schema": { "const": "corpus-report/5" },
+    "schema": { "const": "corpus-report/6" },
     "controller": { "type": "string", "description": "The controller version that wrote the report." },
     "sampling": { "$ref": "#/$defs/sampling" },
     "rounds": { "$ref": "#/$defs/rounds" },
@@ -136,11 +136,12 @@
     "rounds": {
       "type": "object",
       "description": "How each round's fan-out came back, counted before any answer is opened: an answer counts whatever it held (results, a fault of its node, nothing readable). A round that was not run has zeros.",
-      "required": ["first", "repair", "dispute"],
+      "required": ["first", "repair", "dispute", "dispute_again"],
       "properties": {
         "first": { "$ref": "#/$defs/round", "description": "The first round: every package once, and the ones the platform picked for the run's sampling a second time on another machine." },
         "repair": { "$ref": "#/$defs/round", "description": "The repair round: the shards the first round left without a result, on two machines when the run asked for sampling, on one otherwise." },
-        "dispute": { "$ref": "#/$defs/round", "description": "The dispute round: the shards whose copies disagreed, on three machines." }
+        "dispute": { "$ref": "#/$defs/round", "description": "The dispute round: the shards whose copies disagreed, on three machines." },
+        "dispute_again": { "$ref": "#/$defs/round", "description": "The second dispute round: the disputes the dispute round left with too few copies, or with a lead that may be one machine's second answers, on three machines once more (no package under a script written for a controller before 0.9.0)." }
       }
     },
     "round": {

@@ -63,6 +63,9 @@ public static class CorpusStorageCheck
         if (!estimate.MeasuredFilter)
             line += " The quality filter runs with thresholds of the manifest or of the language pack, not the ones the estimate was measured with: it is taken as keeping what an unfiltered run keeps.";
 
+        if (estimate.ProductsKept)
+            line += $" Whatever the origins serve, the products of every execution are at most {Bytes(estimate.ProductCeilingBytes)}: a node stops a shard whose product passes what a shard of its size may give (Oversized, {Trust.CorpusResultCodes.OVERSIZED_PRODUCT}); the refusal below is held to the estimate, not to this.";
+
         line += limit.IsStated
             ? $" The deployment allows one job {Bytes(limit.HeadroomBytes)} ({limit.Source})."
             : " The deployment states no headroom for one job, so storage refuses nothing.";

@@ -240,7 +240,7 @@ public sealed class ShardFetcherTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(exception!.Status, Is.EqualTo(HttpStatusCode.ServiceUnavailable), "the origin answered: its status is what the result will say");
+            Assert.That(exception!.Status, Is.EqualTo(HttpStatusCode.ServiceUnavailable), "the origin answered: the failure carries its status (a 503 that outlasts the retries may be the node's own link, and the task runner makes it a fault of the node)");
             Assert.That(m_origin.Requests - before, Is.EqualTo(3), "the policy's attempts, no more");
         });
     }

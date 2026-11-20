@@ -372,6 +372,7 @@ network, a pinned clock and seeded randomness.
 |---|---|
 | fuel | 8·10¹⁰ per PDF, counted from `_start` (given after instantiation, so it does not depend on the platform) |
 | fuel per shard | 8·10¹² for all the PDFs of one shard together (a hundred full budgets; a Common Crawl WARC file's PDFs burn seven and a half): a PDF met after it is spent is not run and drops as `pdf_shard_fuel` |
+| runs per shard | 4,096 PDFs of one shard (a Common Crawl WARC file holds about 220 a gigabyte): a PDF met after them is not run and drops as `pdf_shard_runs`. A run costs some 7 ms of a core beside its fuel; with the fuel alone a shard of bodies that only start as PDFs held a core for hours. Together: 11 to 15 minutes of a core in fuel at the worst, and about half a minute of runs |
 | linear memory | 1 GiB |
 | input | 64 MiB (a PDF Common Crawl truncated at 5 MiB is read all the same, and counted) |
 | text | 16 MiB of UTF-8 |

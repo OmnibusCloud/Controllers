@@ -136,7 +136,8 @@ internal static class CorpusPlanning
         }
 
         var storage = CorpusStorageEstimator.Estimate(sized, planned.Plan.Pipeline, rate, planned.InputBytes, cap, planned.Model?.MeasuredThresholds ?? true);
-        var traffic = CorpusTrafficEstimate.Of(counted, rate, bounds, storage.UploadBytes, planned.ModelBytes, nodes);
+        var uploadCeiling = storage.ProductCeilingBytes > long.MaxValue - storage.ResultPackageBytes ? long.MaxValue : storage.ProductCeilingBytes + storage.ResultPackageBytes;
+        var traffic = CorpusTrafficEstimate.Of(counted, rate, bounds, storage.UploadBytes, planned.ModelBytes, nodes, uploadCeiling);
 
         return new CorpusEstimates(storage, traffic, counted);
     }

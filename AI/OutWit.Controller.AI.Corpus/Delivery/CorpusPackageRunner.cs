@@ -134,7 +134,7 @@ public static class CorpusPackageRunner
         if (package.ShardCount is < 1 or > CorpusPackagePlanner.MAX_PACKAGE_SHARDS)
             throw new InvalidDataException("The package holds more shards than a package may.");
 
-        var path = await ShardBlobTransfer.DownloadAsync(blobs, package.TasksBlobId, logger, cancellationToken);
+        var path = await ShardBlobTransfer.DownloadAsync(blobs, package.TasksBlobId, package.SizeBytes, logger, cancellationToken);
 
         if (new FileInfo(path).Length != package.SizeBytes || !string.Equals(CorpusPackageCodec.HashFile(path), package.Sha256, StringComparison.Ordinal))
             throw new InvalidDataException("The task blob is not the one its reference names.");

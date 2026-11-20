@@ -46,27 +46,49 @@ internal static class CorpusLedgerRuling
     }
 
     /// <summary>
-    /// Settles one shard of the dispute round.
+    /// Settles one shard of the dispute round. A dispute that ends with too few copies, or with a
+    /// lead that may be one machine's second answers, goes out once more
+    /// (<see cref="CorpusLedgerShard.NeedsDisputeAgain"/>): neither says the copies disagree.
     /// </summary>
     /// <param name="shard">The shard.</param>
-    /// <param name="borrowable">The answers the other packages of the round are short of, together: as many of this shard's values may be one machine's second.</param>
+    /// <param name="borrowable">How many of this shard's values may be one machine's second: what the other packages of the round are short of, no more than the round's silent slots.</param>
     /// <param name="tally">Receives what is dropped.</param>
     public static void JudgeDispute(CorpusLedgerShard shard, int borrowable, CorpusLedgerTally tally)
     {
+        var (outcome, agreeing) = Rule(shard, shard.Dispute, borrowable, tally);
+        shard.DisputeOutcome = outcome;
+        shard.DisputeAgreeing = agreeing;
+        shard.NeedsDisputeAgain = outcome is CorpusLedger.DISPUTE_TOO_FEW_COPIES or CorpusLedger.DISPUTE_SURPLUS_COPIES;
+    }
+
+    /// <summary>
+    /// Settles one shard of the second dispute round, by the dispute round's rule: its outcome is
+    /// the dispute's, and the first round's is kept as the reason it went out again.
+    /// </summary>
+    /// <param name="shard">The shard, sent out again.</param>
+    /// <param name="borrowable">How many of this shard's values may be one machine's second in the second round.</param>
+    /// <param name="tally">Receives what is dropped.</param>
+    public static void JudgeDisputeAgain(CorpusLedgerShard shard, int borrowable, CorpusLedgerTally tally)
+    {
+        shard.AgainAfter = shard.DisputeOutcome;
+        var (outcome, agreeing) = Rule(shard, shard.Again, borrowable, tally);
+        shard.DisputeOutcome = outcome;
+        shard.AgainAgreeing = agreeing;
+    }
+
+    /// <summary>The rule of a dispute round over its values for a shard: how it ended, and how many executions agreed at the most.</summary>
+    private static (string Outcome, int Agreeing) Rule(CorpusLedgerShard shard, List<CorpusLedgerEntry> entries, int borrowable, CorpusLedgerTally tally)
+    {
         // More values than machines were asked: none is taken.
-        if (Taken(shard.Dispute) > CorpusLedger.DISPUTE_COPIES)
+        if (Taken(entries) > CorpusLedger.DISPUTE_COPIES)
         {
-            DropSurplus(shard.Dispute, tally);
-            Leave(shard, CorpusLedger.DISPUTE_TOO_FEW_COPIES, 0);
-            return;
+            DropSurplus(entries, tally);
+            return (CorpusLedger.DISPUTE_TOO_FEW_COPIES, 0);
         }
 
-        var executions = Executions(shard.Dispute);
+        var executions = Executions(entries);
         if (executions.Count < CorpusLedger.DISPUTE_QUORUM)
-        {
-            Leave(shard, CorpusLedger.DISPUTE_TOO_FEW_COPIES, executions.Count);
-            return;
-        }
+            return (CorpusLedger.DISPUTE_TOO_FEW_COPIES, executions.Count);
 
         // The executions that agree with one another, the largest group first.
         var groups = new List<List<CorpusResultData>>();
@@ -84,37 +106,23 @@ internal static class CorpusLedgerRuling
         var next = groups.Count > 1 ? groups[1].Count : 0;
 
         if (most < CorpusLedger.DISPUTE_QUORUM || most <= next)
-        {
-            Leave(shard, CorpusLedger.DISPUTE_NO_MAJORITY, most);
-            return;
-        }
+            return (CorpusLedger.DISPUTE_NO_MAJORITY, most);
 
-        // Two machines must have returned the leading result. Of its values, as many as the
-        // other packages of the round are short of may be one machine's second, and do not count.
+        // Two machines must have returned the leading result. Of its values, as many as may be
+        // one machine's second answers do not count.
         var machines = most - Math.Max(0, borrowable);
         if (machines < CorpusLedger.DISPUTE_QUORUM || machines <= next)
-        {
-            Leave(shard, CorpusLedger.DISPUTE_SURPLUS_COPIES, most);
-            return;
-        }
+            return (CorpusLedger.DISPUTE_SURPLUS_COPIES, most);
 
         Accept(shard, groups[0][0], most);
-        shard.DisputeOutcome = CorpusLedger.DISPUTE_RESOLVED;
-        shard.DisputeAgreeing = most;
-    }
-
-    /// <summary>A dispute that was not settled: why, and how many of its executions agreed at the most.</summary>
-    private static void Leave(CorpusLedgerShard shard, string outcome, int agreeing)
-    {
-        shard.DisputeOutcome = outcome;
-        shard.DisputeAgreeing = agreeing;
+        return (CorpusLedger.DISPUTE_RESOLVED, most);
     }
 
     /// <summary>What the shard ends as once no further round is coming.</summary>
     /// <param name="shard">The shard, judged round by round.</param>
     public static void Close(CorpusLedgerShard shard)
     {
-        shard.Faults = shard.First.Concat(shard.Repair).Concat(shard.Dispute)
+        shard.Faults = shard.First.Concat(shard.Repair).Concat(shard.Dispute).Concat(shard.Again)
             .Where(entry => entry.Kind == CorpusLedgerEntryKind.Fault)
             .Select(entry => entry.Code)
             .Distinct(StringComparer.Ordinal)

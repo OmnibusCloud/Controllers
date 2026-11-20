@@ -40,17 +40,32 @@ public sealed class CorpusLedgerShard
     /// <summary>What came back under the dispute round's ticket.</summary>
     public List<CorpusLedgerEntry> Dispute { get; } = [];
 
+    /// <summary>What came back under the second dispute round's ticket.</summary>
+    public List<CorpusLedgerEntry> Again { get; } = [];
+
     /// <summary>Whether the first round left the shard without an accepted result and without a disagreement: it is to be sent out once more.</summary>
     public bool NeedsRepair { get; internal set; }
 
     /// <summary>Whether the shard's copies disagreed (or more came back than were sent out): it is to be run on three machines.</summary>
     public bool NeedsDispute { get; internal set; }
 
-    /// <summary>How the shard's dispute ended: one of <see cref="CorpusLedger.DISPUTE_OUTCOMES"/>; "" for a shard that had none.</summary>
+    /// <summary>How the shard's dispute ended, in the second dispute round when it went out again: one of <see cref="CorpusLedger.DISPUTE_OUTCOMES"/>; "" for a shard that had none.</summary>
     public string DisputeOutcome { get; internal set; } = "";
 
     /// <summary>The most executions of the dispute round that agreed with one another; 0 when none came back with a verdict.</summary>
     public int DisputeAgreeing { get; internal set; }
+
+    /// <summary>Whether the dispute round left the shard with too few copies, or with a lead that may be one machine's second answers: it is to be run on three machines once more.</summary>
+    public bool NeedsDisputeAgain { get; internal set; }
+
+    /// <summary>Whether the second dispute round held a task for the shard.</summary>
+    public bool SentToDisputeAgain { get; internal set; }
+
+    /// <summary>How the dispute round ended for a shard the second dispute round judged (why it went out again); "" otherwise.</summary>
+    public string AgainAfter { get; internal set; } = "";
+
+    /// <summary>The most executions of the second dispute round that agreed with one another.</summary>
+    public int AgainAgreeing { get; internal set; }
 
     /// <summary>Whether the repair round held a task for the shard.</summary>
     public bool SentToRepair { get; internal set; }

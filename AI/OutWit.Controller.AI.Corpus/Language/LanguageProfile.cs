@@ -11,7 +11,8 @@ public sealed class LanguageProfile
     #region Fields
 
     private readonly Dictionary<string, int> m_ranks;
-    private readonly Dictionary<ulong, int> m_packedRanks;
+    private readonly ulong[] m_packedKeys;
+    private readonly int[] m_packedRanks;
 
     #endregion
 
@@ -29,13 +30,30 @@ public sealed class LanguageProfile
         Code = code;
         Grams = grams;
         m_ranks = new Dictionary<string, int>(grams.Count, StringComparer.Ordinal);
-        m_packedRanks = new Dictionary<ulong, int>(grams.Count);
+        var packed = new List<(ulong Key, int Rank)>(grams.Count);
         for (var i = 0; i < grams.Count; i++)
         {
             m_ranks.TryAdd(grams[i], i);
             if (grams[i].Length is > 0 and <= LanguageNgrams.MAX_N)
-                m_packedRanks.TryAdd(LanguageNgrams.Pack(grams[i]), i);
+                packed.Add((LanguageNgrams.Pack(grams[i]), i));
         }
+
+        // The packed n-grams are the pack author's choice, and a table keyed by them can be made
+        // to put them all in one chain: they are sorted instead, the first rank of a key kept.
+        packed.Sort();
+        var keys = new List<ulong>(packed.Count);
+        var ranks = new List<int>(packed.Count);
+        foreach (var (key, rank) in packed)
+        {
+            if (keys.Count > 0 && keys[^1] == key)
+                continue;
+
+            keys.Add(key);
+            ranks.Add(rank);
+        }
+
+        m_packedKeys = keys.ToArray();
+        m_packedRanks = ranks.ToArray();
     }
 
     #endregion
@@ -57,7 +75,8 @@ public sealed class LanguageProfile
     /// <returns>The zero-based rank, or -1.</returns>
     public int RankOf(ulong key)
     {
-        return m_packedRanks.TryGetValue(key, out var rank) ? rank : -1;
+        var at = Array.BinarySearch(m_packedKeys, key);
+        return at >= 0 ? m_packedRanks[at] : -1;
     }
 
     #endregion

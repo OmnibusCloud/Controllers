@@ -124,7 +124,7 @@ public sealed class ShardTaskRunnerTests
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
 
         Assert.That(
-            async () => await ShardBlobTransfer.DownloadAsync(flaky, Guid.NewGuid(), null, cancellation.Token),
+            async () => await ShardBlobTransfer.DownloadAsync(flaky, Guid.NewGuid(), 0, null, cancellation.Token),
             Throws.InstanceOf<OperationCanceledException>());
     }
 

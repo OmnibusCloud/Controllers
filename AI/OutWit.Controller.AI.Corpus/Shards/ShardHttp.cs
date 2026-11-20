@@ -8,7 +8,9 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// The HTTP plumbing every request of the controller goes through, on a node and on the host
 /// alike: a client that connects only to addresses the machine's policy accepts and never
 /// follows a redirect on its own, and a send that follows redirects one hop at a time,
-/// asking the allowlist gate about every hop.
+/// asking the allowlist gate about every hop. Each hop may have a time for its answer's head:
+/// an origin that takes the request and never answers it is then the same broken answer a
+/// body that stalls is.
 /// </summary>
 public static class ShardHttp
 {
@@ -55,9 +57,11 @@ public static class ShardHttp
     /// <param name="allowedOrigins">Host names the task allows.</param>
     /// <param name="policy">What this machine fetches from.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
+    /// <param name="headLimit">The longest each hop may take to send its answer's head (the request's connection included); null for no limit of its own (the caller's token bounds the wait).</param>
     /// <returns>The response of the last hop, headers read; the caller disposes it.</returns>
     /// <exception cref="ShardOriginRefusedException">A redirect points somewhere the task or the machine does not fetch from, or there are too many of them.</exception>
-    public static async Task<HttpResponseMessage> SendAsync(HttpClient client, HttpMethod method, Uri uri, long rangeFrom, IReadOnlyCollection<string> allowedOrigins, ShardOriginPolicy policy, CancellationToken cancellationToken)
+    /// <exception cref="IOException">A hop sent no answer head within <paramref name="headLimit"/>.</exception>
+    public static async Task<HttpResponseMessage> SendAsync(HttpClient client, HttpMethod method, Uri uri, long rangeFrom, IReadOnlyCollection<string> allowedOrigins, ShardOriginPolicy policy, CancellationToken cancellationToken, TimeSpan? headLimit = null)
     {
         var current = uri;
 
@@ -67,7 +71,7 @@ public static class ShardHttp
             if (rangeFrom > 0)
                 request.Headers.Range = new RangeHeaderValue(rangeFrom, null);
 
-            var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            var response = await HeadAsync(client, request, cancellationToken, headLimit);
             if (!IsRedirect(response.StatusCode) || response.Headers.Location == null)
                 return response;
 
@@ -89,6 +93,25 @@ public static class ShardHttp
     #endregion
 
     #region Tools
+
+    /// <summary>Sends one hop's request and waits for its answer's head, within the hop's limit.</summary>
+    private static async Task<HttpResponseMessage> HeadAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken, TimeSpan? headLimit)
+    {
+        if (headLimit is not { } limit || limit == Timeout.InfiniteTimeSpan)
+            return await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        // The hop's own token ends with the hop: the body that follows is bounded by the caller.
+        using var head = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        head.CancelAfter(limit);
+        try
+        {
+            return await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, head.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new IOException("The origin sent no answer head in time.");
+        }
+    }
 
     private static bool IsRedirect(HttpStatusCode status)
     {

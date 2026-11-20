@@ -40,7 +40,7 @@ internal sealed class CorpusLedgerTally
     {
         var accepted = shard.Outcome == CorpusShardOutcome.Accepted;
 
-        NodeFaults += Faults(shard.First) + Faults(shard.Repair) + Faults(shard.Dispute);
+        NodeFaults += Faults(shard.First) + Faults(shard.Repair) + Faults(shard.Dispute) + Faults(shard.Again);
         if (shard.SentToRepair)
             Repairs++;
         if (shard.SentToRepair && !shard.SentToDispute && accepted)
@@ -55,6 +55,12 @@ internal sealed class CorpusLedgerTally
             PendingRepairs++;
         if (shard.NeedsDispute && !shard.SentToDispute)
             PendingDisputes++;
+        if (shard.NeedsDisputeAgain && !shard.SentToDisputeAgain)
+            PendingDisputesAgain++;
+        if (shard.NeedsDisputeAgain && shard.SentToDisputeAgain)
+            DisputesAgain++;
+        if (shard.NeedsDisputeAgain && shard.SentToDisputeAgain && accepted)
+            DisputesAgainResolved++;
         if (CorpusLedger.IsCompared(shard.First))
             Compared++;
     }
@@ -108,6 +114,15 @@ internal sealed class CorpusLedgerTally
 
     /// <summary>Shards whose copies disagreed that no dispute round has taken yet.</summary>
     public int PendingDisputes { get; private set; }
+
+    /// <summary>Disputes to go out once more that no second dispute round has taken yet.</summary>
+    public int PendingDisputesAgain { get; private set; }
+
+    /// <summary>Disputes the second dispute round took.</summary>
+    public int DisputesAgain { get; private set; }
+
+    /// <summary>Of those, the ones it settled.</summary>
+    public int DisputesAgainResolved { get; private set; }
 
     /// <summary>Shards whose first two values of the first round were both results: the pairs that were compared.</summary>
     public int Compared { get; private set; }

@@ -26,7 +26,16 @@ internal sealed class WitActivityAdapterCorpusDisputes : WitActivityAdapterFunct
     {
         var packages = await CorpusRounds.HostAsync("Corpus.Disputes", async () =>
         {
-            var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired);
+            var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved);
+
+            // Given the dispute round, the disputes it could not settle for want of copies go out once more.
+            if (activity.Disputes != null)
+            {
+                if (ledger.PendingDisputesAgain > 0)
+                    Logger.LogWarning("Corpus.Disputes: {Count} dispute(s) came back with too few copies, or with a lead that may be one machine's; each runs once more on up to three machines.", ledger.PendingDisputesAgain);
+
+                return await CorpusRounds.PackagesAsync(BlobService, ledger.EnumerateDisputeAgainTasks(), ledger.PendingDisputesAgain);
+            }
 
             if (ledger.PendingDisputes > 0)
                 Logger.LogWarning("Corpus.Disputes: the copies of {Count} shard(s) disagree; each runs again on up to three machines.", ledger.PendingDisputes);
@@ -46,27 +55,24 @@ internal sealed class WitActivityAdapterCorpusDisputes : WitActivityAdapterFunct
     {
         try
         {
-            if (parameters.Length != 4)
-                throw new ArgumentException($"Expected 4 parameter(s), got {parameters.Length}.");
+            // Four arguments name the rounds before the dispute round; six name the dispute round
+            // too, and ask for its disputes to go out once more.
+            if (parameters.Length is not (4 or 6))
+                throw new ArgumentException($"Expected 4 or 6 parameter(s), got {parameters.Length}.");
 
-            if (parameters[0] is not IWitReference tasks)
-                throw new ArgumentException("Parameter 'Tasks' must be a variable reference.");
-
-            if (parameters[1] is not IWitReference executions)
-                throw new ArgumentException("Parameter 'Executions' must be a variable reference.");
-
-            if (parameters[2] is not IWitReference repairs)
-                throw new ArgumentException("Parameter 'Repairs' must be a variable reference.");
-
-            if (parameters[3] is not IWitReference repaired)
-                throw new ArgumentException("Parameter 'Repaired' must be a variable reference.");
+            var references = new IWitReference[parameters.Length];
+            string[] names = ["Tasks", "Executions", "Repairs", "Repaired", "Disputes", "Resolved"];
+            for (var index = 0; index < references.Length; index++)
+                references[index] = parameters[index] as IWitReference ?? throw new ArgumentException($"Parameter '{names[index]}' must be a variable reference.");
 
             return new WitActivityCorpusDisputes
             {
-                Tasks = tasks,
-                Executions = executions,
-                Repairs = repairs,
-                Repaired = repaired
+                Tasks = references[0],
+                Executions = references[1],
+                Repairs = references[2],
+                Repaired = references[3],
+                Disputes = references.Length > 4 ? references[4] : null,
+                Resolved = references.Length > 4 ? references[5] : null
             };
         }
         catch (Exception e)

@@ -20,7 +20,9 @@ public sealed partial class WitActivityCorpusCollect : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Tasks}, {Executions}, {Repairs}, {Repaired}, {Disputes}, {Resolved}, {Options}";
+        return Again == null
+            ? $"{Tasks}, {Executions}, {Repairs}, {Repaired}, {Disputes}, {Resolved}, {Options}"
+            : $"{Tasks}, {Executions}, {Repairs}, {Repaired}, {Disputes}, {Resolved}, {Again}, {Settled}, {Options}";
     }
 
     #endregion
@@ -43,7 +45,9 @@ public sealed partial class WitActivityCorpusCollect : WitActivityFunction
                && Repaired.Check(activity.Repaired)
                && Disputes.Check(activity.Disputes)
                && Resolved.Check(activity.Resolved)
-               && Options.Check(activity.Options);
+               && Options.Check(activity.Options)
+               && Again.Check(activity.Again)
+               && Settled.Check(activity.Settled);
     }
 
     protected override WitActivityCorpusCollect InnerClone()
@@ -56,7 +60,9 @@ public sealed partial class WitActivityCorpusCollect : WitActivityFunction
             Repaired = Repaired?.Clone() as IWitReference,
             Disputes = Disputes?.Clone() as IWitReference,
             Resolved = Resolved?.Clone() as IWitReference,
-            Options = Options?.Clone() as IWitReference
+            Options = Options?.Clone() as IWitReference,
+            Again = Again?.Clone() as IWitReference,
+            Settled = Settled?.Clone() as IWitReference
         };
     }
 
@@ -91,6 +97,14 @@ public sealed partial class WitActivityCorpusCollect : WitActivityFunction
     /// <summary>Reference to the 'Options' argument.</summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Options { get; init; }
+
+    /// <summary>Reference to the second dispute round's tasks (the output of Corpus.Disputes with six arguments); null when the script runs no such round.</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Again { get; init; }
+
+    /// <summary>Reference to what the second dispute round returned.</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Settled { get; init; }
 
     #endregion
 }

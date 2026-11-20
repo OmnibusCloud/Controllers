@@ -27,17 +27,20 @@ internal static class CorpusRounds
     /// <param name="disputes">The dispute round's task packages; null when the caller is before that round.</param>
     /// <param name="resolved">What the dispute round returned.</param>
     /// <param name="options">The run's options, for the sampling the run asked for; null when the caller's script hands it none (the documents then say the rate is not known).</param>
+    /// <param name="again">The second dispute round's task packages; null when the caller is before that round or its script runs none.</param>
+    /// <param name="settled">What the second dispute round returned.</param>
     /// <returns>The ledger.</returns>
     /// <exception cref="InvalidOperationException">The job's task packages or the first round's answers are not in the pool, or are not the ones this controller wrote.</exception>
-    public static async Task<CorpusLedger> LedgerAsync(IWitBlobService blobs, IWitVariablesCollection pool, IWitReference? tasks, IWitReference? executions, IWitReference? repairs = null, IWitReference? repaired = null, IWitReference? disputes = null, IWitReference? resolved = null, IWitReference? options = null)
+    public static async Task<CorpusLedger> LedgerAsync(IWitBlobService blobs, IWitVariablesCollection pool, IWitReference? tasks, IWitReference? executions, IWitReference? repairs = null, IWitReference? repaired = null, IWitReference? disputes = null, IWitReference? resolved = null, IWitReference? options = null, IWitReference? again = null, IWitReference? settled = null)
     {
         var first = await CorpusRoundSourceBlobs.OpenAsync(CorpusRoundKind.First, Items(Required(pool, tasks, "Tasks")), Items(Required(pool, executions, "Executions")), blobs);
         var repair = await RoundAsync(blobs, pool, CorpusRoundKind.Repair, repairs, repaired);
         var dispute = await RoundAsync(blobs, pool, CorpusRoundKind.Dispute, disputes, resolved);
+        var secondDispute = await RoundAsync(blobs, pool, CorpusRoundKind.DisputeAgain, again, settled);
         var rate = SamplingRate(pool, options);
 
         // The first reading of the run, for its counts: off the caller's thread.
-        return await Task.Run(() => CorpusLedger.Build(ControllerBuildInfo.VERSION, first, repair, dispute, rate));
+        return await Task.Run(() => CorpusLedger.Build(ControllerBuildInfo.VERSION, first, repair, dispute, rate, secondDispute));
     }
 
     /// <summary>The share of the packages the run asked to run twice, as the script's options state it.</summary>

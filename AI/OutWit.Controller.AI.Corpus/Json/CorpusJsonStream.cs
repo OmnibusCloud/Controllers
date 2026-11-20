@@ -24,6 +24,14 @@ public static class CorpusJsonStream
     /// <summary>The most bytes one value of a document may be: an item of the array, or a property of the root beside it.</summary>
     public const int MAX_VALUE_BYTES = 4 * 1024 * 1024;
 
+    /// <summary>
+    /// The most keys the root of a document may hold: a manifest has three and a report some
+    /// fifteen. The keys seen are kept to refuse one that comes twice, so without a bound a
+    /// document of nothing but unknown keys cost about six times its size; past the bound the
+    /// document is refused at once.
+    /// </summary>
+    public const int MAX_ROOT_KEYS = 64;
+
     /// <summary>The message of the exception thrown for a document whose root is not an object.</summary>
     public const string NOT_AN_OBJECT = "The document must be a JSON object.";
 
@@ -45,7 +53,7 @@ public static class CorpusJsonStream
     /// <param name="onItem">Receives every item of the named array: its index from 0 and the item. The element is valid during the call only.</param>
     /// <param name="options">How the document is read (comments, trailing commas).</param>
     /// <returns>True when the root holds the named property and its value is an array (an empty one included).</returns>
-    /// <exception cref="JsonException">The stream is no JSON document, its root is no object, a property of the root appears twice, a value is larger than <see cref="MAX_VALUE_BYTES"/>, or a string or a key is no Unicode text.</exception>
+    /// <exception cref="JsonException">The stream is no JSON document, its root is no object, a property of the root appears twice, the root holds more than <see cref="MAX_ROOT_KEYS"/> keys, a value is larger than <see cref="MAX_VALUE_BYTES"/>, or a string or a key is no Unicode text.</exception>
     public static bool Read(Stream stream, string arrayName, Action<string, JsonElement> onProperty, Action<int, JsonElement> onItem, JsonReaderOptions options = default)
     {
         var buffer = new byte[FIRST_BUFFER_BYTES];
@@ -208,6 +216,9 @@ public static class CorpusJsonStream
 
     private static void Once(HashSet<string> seen, string name)
     {
+        if (seen.Count >= MAX_ROOT_KEYS && !seen.Contains(name))
+            throw new JsonException($"The root of the document holds more than {MAX_ROOT_KEYS} keys.");
+
         if (!seen.Add(name))
             throw new JsonException($"The key '{name}' appears more than once.");
     }

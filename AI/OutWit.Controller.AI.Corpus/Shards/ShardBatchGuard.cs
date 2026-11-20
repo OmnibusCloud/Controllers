@@ -44,7 +44,7 @@ public static class ShardBatchGuard
     {
         ThrowIfJobRefused(jobId);
 
-        var refusal = Check(task, ControllerBuildInfo.VERSION, () => PdfSandboxHost.Problem, () => ShardDisk.HasRoom(workDirectory, ShardBytes(task)));
+        var refusal = Check(task, ControllerBuildInfo.VERSION, () => PdfSandboxHost.Problem, () => ShardDisk.HasRoom(workDirectory, RoomBytes(task), task.Pipeline));
         if (refusal == null)
             return;
 
@@ -61,7 +61,7 @@ public static class ShardBatchGuard
     {
         ThrowIfJobRefused(jobId);
 
-        var refusal = Check(package, ControllerBuildInfo.VERSION, () => PdfSandboxHost.Problem, () => ShardDisk.HasRoom(workDirectory, package.LargestShardBytes));
+        var refusal = Check(package, ControllerBuildInfo.VERSION, () => PdfSandboxHost.Problem, () => ShardDisk.HasRoom(workDirectory, LargestShardBytes(package)));
         if (refusal == null)
             return;
 
@@ -200,6 +200,23 @@ public static class ShardBatchGuard
     {
         var size = task.Source?.SizeBytes ?? 0;
         return size <= 0 ? 0 : Math.Min(size, Manifests.CorpusTaskPlanner.NodeShardCap(task.MaxShardBytes));
+    }
+
+    /// <summary>
+    /// The most a task's shard may be on this node, the size its room is reserved for: what the
+    /// node accepts for it on the wire (<see cref="ShardLimits.FetchCap"/>: its declared size and
+    /// the slack, held to the node's own cap; the cap alone for a shard without a size).
+    /// </summary>
+    internal static long RoomBytes(CorpusTaskData task)
+    {
+        return ShardLimits.FetchCap(task);
+    }
+
+    /// <summary>The most the largest shard of a package may be on this node: its declared size and the slack within the node's own cap, the cap when a shard of the package has no size.</summary>
+    internal static long LargestShardBytes(CorpusTaskPackageData package)
+    {
+        var cap = Manifests.CorpusTaskPlanner.NodeShardCap(0);
+        return package.UnsizedShards > 0 || package.LargestShardBytes <= 0 ? cap : Math.Min(ShardLimits.DeclaredCap(package.LargestShardBytes), cap);
     }
 
     #endregion
