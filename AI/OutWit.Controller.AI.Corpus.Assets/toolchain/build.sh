@@ -53,6 +53,13 @@ fetch "$RUSTC_URL" "$RUSTC_SHA256" "$WORK/rustc.tar.xz"
 fetch "$CARGO_URL" "$CARGO_SHA256" "$WORK/cargo.tar.xz"
 fetch "$RUST_STD_HOST_URL" "$RUST_STD_HOST_SHA256" "$WORK/rust-std-host.tar.xz"
 fetch "$RUST_STD_TARGET_URL" "$RUST_STD_TARGET_SHA256" "$WORK/rust-std-target.tar.xz"
+# A download without a pin is hashed and named above, and that is all that is done with it:
+# nothing is unpacked or run before every download has matched its pin.
+if [ "$UNPINNED" -ne 0 ]; then
+  echo "some downloads are not pinned (see UNPINNED above): nothing was unpacked or run"
+  exit 3
+fi
+echo "every download matched its pin"
 
 echo "== Rust $RUST_VERSION"
 # Each archive holds <package>/components and a folder per component, the layout its own
@@ -145,10 +152,3 @@ EOF
 
 echo "== built"
 ( cd "$OUT" && sha256sum pdftext.wasm LICENSE-pdftext.txt corpus-pdftext-wasm.zip | tee SHA256SUMS && ls -l pdftext.wasm LICENSE-pdftext.txt corpus-pdftext-wasm.zip | awk '{ print $5, $9 }' )
-
-echo "== pins"
-if [ "$UNPINNED" -ne 0 ]; then
-  echo "some downloads are not pinned (see UNPINNED above)"
-  exit 3
-fi
-echo "every download matched its pin"
