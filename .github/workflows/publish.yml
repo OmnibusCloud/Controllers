@@ -92,7 +92,7 @@ on:
         required: true
         default: true
       createGitHubRelease:
-        description: 'Create GitHub Release with prepared assets (no-op for projects without external assets; from main only, after the release environment approves)'
+        description: 'Create GitHub Release with prepared assets (no-op for projects without external assets; from main only, after the release environment approves; from any other branch pass false)'
         type: boolean
         required: true
         default: true
@@ -195,18 +195,19 @@ jobs:
       - name: Build
         shell: bash
         # Credentials for the private WitMath feed, which nuget.config reads
-        # from GITHUB_USER and GITHUB_TOKEN. Only the two Simulation controllers
-        # restore from it, so only their build is handed the token; everything
-        # else here comes from nuget.org. For those the two variables are not
-        # set at all: set to an empty value, they fail every restore
-        # ("Value cannot be null or empty string. (Parameter 'password')").
+        # from GITHUB_USER and GITHUB_TOKEN. Only the Simulation projects restore
+        # from it (the two controllers, and their Scripts packages, which restore
+        # the controller and with it OutWit.Math.*), so only their build is
+        # handed the token; everything else here comes from nuget.org. For those
+        # the two variables are not set at all: set to an empty value, they fail
+        # every restore ("Value cannot be null or empty string. (Parameter 'password')").
         #
         # WitMath belongs to a personal account rather than to this
         # organization, so this repository's built-in GITHUB_TOKEN has no read
         # access to it: WITMATH_PACKAGES_TOKEN must be a PAT with read:packages
         # on that account. Scoped to this step on purpose.
         env:
-          WITMATH_TOKEN: ${{ (inputs.project == 'OutWit.Controller.Simulation.Schwarz' || inputs.project == 'OutWit.Controller.Simulation.Parareal') && secrets.WITMATH_PACKAGES_TOKEN || '' }}
+          WITMATH_TOKEN: ${{ startsWith(inputs.project, 'OutWit.Controller.Simulation.') && secrets.WITMATH_PACKAGES_TOKEN || '' }}
         run: |
           if [ -n "$WITMATH_TOKEN" ]; then
             export GITHUB_USER="${{ github.actor }}" GITHUB_TOKEN="$WITMATH_TOKEN"
@@ -508,18 +509,10 @@ jobs:
         with:
           name: ${{ env.PROJECT }}-v${{ needs.build.outputs.version }}
 
-      - name: Create GitHub Release
-        if: inputs.createGitHubRelease && needs.build.outputs.hasAssets == 'true'
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
-        with:
-          tag_name: ${{ needs.build.outputs.asset_tag }}
-          target_commitish: ${{ github.sha }}
-          name: "${{ env.PROJECT }} v${{ needs.build.outputs.version }}"
-          body_path: dist-release-body.md
-          files: dist/*
-          fail_on_unmatched_files: true
-          make_latest: legacy
-
+      # Everything that can fail comes before anything is published: the nuget.org login
+      # first, so that a failed login leaves no release and no tag behind; then the release
+      # (a package that names its assets must not reach nuget.org before they are there);
+      # then the pushes.
       - name: Setup .NET 10
         if: inputs.pushToNuGet
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
@@ -534,6 +527,18 @@ jobs:
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         with:
           user: ${{ secrets.NUGET_USER }}   # the nuget.org account that holds the policy
+
+      - name: Create GitHub Release
+        if: inputs.createGitHubRelease && needs.build.outputs.hasAssets == 'true'
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ needs.build.outputs.asset_tag }}
+          target_commitish: ${{ github.sha }}
+          name: "${{ env.PROJECT }} v${{ needs.build.outputs.version }}"
+          body_path: dist-release-body.md
+          files: dist/*
+          fail_on_unmatched_files: true
+          make_latest: legacy
 
       - name: Push nupkg to nuget.org
         if: inputs.pushToNuGet && needs.build.outputs.hasNupkg == 'true'
