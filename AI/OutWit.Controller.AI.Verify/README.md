@@ -36,7 +36,8 @@ prices were missing (see "Determinism"). What it changed:
   byte it moves; a wait (`poll_oneoff`) costs the bytes of its records, and the arguments and
   the environment cost their bytes each time a program copies them. A program that did nothing
   but wait held a core until the node's own clock ended it; it is now out of fuel.
-- The deadline of a run is known by the trap's code, never by the words of an error. A module
+- The deadline of a run is known by the trap's code, and by the engine's own words for it only
+  once the run's time is over by the host's clock: before that, no error's words count. A module
   that wrote those words into an error ended as the node's fault; it now has its own verdict.
 - How deep a recursion goes before the engine's stack ends depends on the node; that is a
   stated limit now (see "Runtimes"), and the comparison of the two trap modes runs a deep

@@ -610,7 +610,11 @@ sources or arguments than the table allows, whoever made the package.
   (`poll_oneoff`) reads or writes (48 a subscription, 32 an event), of the arguments or the
   environment each time a program copies them. A byte is the rate the engine charges for a
   guest's own bulk memory copy; the thousand is half a microsecond at the reference rate, about
-  what the host's own part of a call takes.
+  what the host's own part of most calls takes. Three file calls take far longer on Windows
+  (`path_filestat_get`, `path_open` and `fd_filestat_get`: 45 to 190 µs each where measured),
+  so a program that loops on them burns some 7 million units a second there, and the node's
+  backstop ends it before its fuel does: no verdict (`NoResult` with reason `wall_clock` if no
+  node does better), never a wrong one.
 - **The reference rate** is 2,000 million units a second: what a plain busy loop burns on the
   slowest node the fleet has shown. The default budget is ten seconds of such a loop, the
   ceiling two minutes.
