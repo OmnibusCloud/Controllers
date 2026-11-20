@@ -18,31 +18,44 @@
   </UsingTask>
 
   <!-- Default metadata for ControllerDataAsset items (Step 6 of the asset-architecture work).
-       Authors only need to set Include + Uri + Sha256; the rest pick up sensible defaults
-       matching the AssetEntry defaults in OutWit.Engine.Assets. -->
+       Authors set Include + Uri + Sha256 + Size; the rest pick up sensible defaults
+       matching the AssetEntry defaults in OutWit.Engine.Assets. Size has no default: an
+       asset without its length in bytes is refused (ControllerValidateDataAssets). -->
   <ItemDefinitionGroup>
     <ControllerDataAsset>
       <RuntimeIdentifier>any</RuntimeIdentifier>
       <Uri></Uri>
       <Sha256></Sha256>
-      <Size>0</Size>
+      <Size></Size>
       <ExtractTo>.</ExtractTo>
       <Required>true</Required>
     </ControllerDataAsset>
   </ItemDefinitionGroup>
 
-  <Target Name="GenerateControllerBuildArtifacts" BeforeTargets="BeforeCompile">
+  <!-- Every declared data asset is pinned before a manifest is written from it: an address, a
+       SHA-256 of 64 lower-case hex digits (the form a consumer's resolver and the publish guard
+       compare) that is not the all-zero hash of a template, and the length in bytes, a whole
+       number above zero. A hash of another form, the template's zeros (or its Size of 0) or a
+       missing length would otherwise be written into controller.json and fail at every
+       consumer instead of here. Any other well-formed hash is taken as written: whether it is
+       the archive's own is for the publish guard and the consumer to find out.
+       The Identity!='' guard skips the validation when the ItemGroup is empty (MSBuild
+       metadata-batched tasks fire once with empty values in that case). -->
+  <Target Name="ControllerValidateDataAssets">
+    <Error Condition="'%(ControllerDataAsset.Identity)' != '' AND '%(ControllerDataAsset.Uri)' == ''"
+           Text="ControllerDataAsset '%(ControllerDataAsset.Identity)' must have a Uri metadata value." />
+    <Error Condition="'%(ControllerDataAsset.Identity)' != '' AND !$([System.Text.RegularExpressions.Regex]::IsMatch('%(ControllerDataAsset.Sha256)', '^[0-9a-f]{64}\z'))"
+           Text="ControllerDataAsset '%(ControllerDataAsset.Identity)' must have a Sha256 of 64 lower-case hex digits; it has '%(ControllerDataAsset.Sha256)'." />
+    <Error Condition="'%(ControllerDataAsset.Identity)' != '' AND '%(ControllerDataAsset.Sha256)' == '0000000000000000000000000000000000000000000000000000000000000000'"
+           Text="ControllerDataAsset '%(ControllerDataAsset.Identity)' has the all-zero Sha256 of a template, not the archive's own: pin the archive (outwit-assets-pack --apply writes its SHA-256 and its Size)." />
+    <Error Condition="'%(ControllerDataAsset.Identity)' != '' AND !$([System.Text.RegularExpressions.Regex]::IsMatch('%(ControllerDataAsset.Size)', '^[1-9][0-9]{0,17}\z'))"
+           Text="ControllerDataAsset '%(ControllerDataAsset.Identity)' must have a Size: its length in bytes, a whole number above zero; it has '%(ControllerDataAsset.Size)'." />
+  </Target>
+
+  <Target Name="GenerateControllerBuildArtifacts" BeforeTargets="BeforeCompile" DependsOnTargets="ControllerValidateDataAssets">
     <Error Condition="'$(ControllerName)' == ''" Text="ControllerName must be defined in the project file." />
     <Error Condition="'$(Version)' == ''" Text="Version must be defined in the project file." />
     <Error Condition="'$(Description)' == ''" Text="Description must be defined in the project file." />
-
-    <!-- Validate ControllerDataAsset items: every declared asset needs Uri + Sha256.
-         The Identity!='' guard skips the validation when the ItemGroup is empty
-         (MSBuild metadata-batched tasks fire once with empty values in that case). -->
-    <Error Condition="'%(ControllerDataAsset.Identity)' != '' AND '%(ControllerDataAsset.Uri)' == ''"
-           Text="ControllerDataAsset '%(ControllerDataAsset.Identity)' must have a Uri metadata value." />
-    <Error Condition="'%(ControllerDataAsset.Identity)' != '' AND '%(ControllerDataAsset.Sha256)' == ''"
-           Text="ControllerDataAsset '%(ControllerDataAsset.Identity)' must have a Sha256 metadata value." />
 
     <ItemGroup>
       <_ControllerAuthor Include="$(Authors)" Condition="'$(Authors)' != ''" />

@@ -112,8 +112,12 @@
 
   <!-- Zips the module into $(SolutionDir)@Zips/<Cfg>/<name>.zip.
        Used by the BlobCacheService path on WitCloud server-side. Packed by our own task
-       (sorted entries, fixed timestamps): the same module gives the same bytes on every
-       machine, so a cloud that compares archives sees no phantom rebuilds.
+       (sorted entries, fixed timestamps): the same module packed by the same build tools with
+       the same build stamp gives the same bytes. Not on every machine (the compression is the
+       build runtime's own, and the stamp in controller.json carries the minute of the build):
+       what can be reproduced is the content digest in the manifest, for a build made as the
+       publish workflow makes it (see OutWit.Controller.BuildTasks.cs), so a cloud compares
+       builds by it, not by the archive.
 
        The archive holds the files the build's records list (ControllerRecordStaged) and what
        lies under a folder one of the controller's data assets extracts to, where a copy for

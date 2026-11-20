@@ -280,6 +280,7 @@ canonical minimal Model shape.
 │   └── sweep.yml                            # Sweep, CalculiX and OpenFOAM tests on Linux, macOS and Windows
 │
 ├── OutWit.slnx                              # Solution file (SLNX format, .NET 10)
+├── global.json                              # The exact .NET SDK every build uses (no roll-forward)
 ├── LICENSE                                  # MIT
 └── README.md                                # this file
 ```
@@ -299,12 +300,14 @@ time is roughly:
    dependencies (`OutWit.Engine.Data`, `OutWit.Engine.Assets.MSBuild`),
    icon / readme / license packaging.
 3. `Build/OutWit.Controller.Manifest.targets` validates the declarations
-   (Sha256/Uri required on every asset, etc.), then **emits the
-   `controller.json`** for the build.
+   (every asset needs a Uri, a Sha256 of 64 lower-case hex digits that is
+   not all zeros, and a Size, etc.), then **emits the `controller.json`**
+   for the build.
 4. `Build/OutWit.Controller.targets` stages the controller's outputs
    into `$(SolutionDir)@Controllers/<Cfg>/<name>.module/`, produces an
    `@Zips/<Cfg>/<name>.zip` (used by the BlobCacheService path on
-   the OmnibusCloud server side), and packs the staged module dir into the
+   the OmnibusCloud server side), and packs the files the build's records
+   list for the module (not whatever else lies in the folder) into the
    nupkg's `content/module/` plus a `lib/<tfm>/_._` marker (so NuGet
    considers the package framework-compatible).
 5. The consumer-side `build/OutWit.Controller.<Name>.targets` ships
@@ -355,7 +358,7 @@ See [Tools/OutWit.Controller.Pack/README.md](Tools/OutWit.Controller.Pack/README
 
 | Workflow                            | Trigger                       | Purpose                                                                                           |
 | ----------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------- |
-| [`publish.yml`](.github/workflows/publish.yml)                       | `workflow_dispatch`             | Publish any project. Tier-2 controllers (Render, ParaView, OpenFOAM) have a release-assets-exist guard before the nuget.org push. |
+| [`publish.yml`](.github/workflows/publish.yml)                       | `workflow_dispatch`             | Publish any project: GitHub Packages from any branch; nuget.org (trusted publishing, off by default) and GitHub Releases from `main` only, through the `release` environment. Tier-2 controllers (Render, ParaView, OpenFOAM) have a release-assets-exist guard before the nuget.org push; the AI controllers' data assets are fetched and held to their pins before any push. |
 | [`verify-render-consumer.yml`](.github/workflows/verify-render-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference the published Render package, assert every external asset materialised. |
 | [`verify-scripts-consumer.yml`](.github/workflows/verify-scripts-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference a published Scripts package, assert the staged `@Scripts/*.wit` layout matches what WitCloud's ScriptSeeder expects. |
 | [`openfoam-oracle.yml`](.github/workflows/openfoam-oracle.yml) | PR touching `OpenFOAM/**`, `workflow_dispatch` | The OpenFOAM controller against the real v2606 kits downloaded from OmnibusCloud/OpenFOAM: pitzDaily through `Foam.Run` serially and on two ranks (Linux, macOS), serially on Windows, plus the whole ordinary test run per platform. |

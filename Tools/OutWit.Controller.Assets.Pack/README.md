@@ -55,6 +55,11 @@ each asset needs two author-only fields that this tool reads:
 </ControllerDataAsset>
 ```
 
+The all-zero `Sha256` and the `Size` of 0 above are a template's placeholders: run the
+tool with `--apply` before building, because the controller build refuses an asset whose
+`Sha256` is all zeros or not 64 lower-case hex digits, or whose `Size` is not a whole
+number above zero.
+
 | Field | What it means |
 | --- | --- |
 | `PackSource` | Path relative to `--prerequisites`. For `zip-folder` it must be a directory; for `single-file` it must be a file. |

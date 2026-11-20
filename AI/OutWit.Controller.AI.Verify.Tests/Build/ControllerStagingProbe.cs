@@ -88,7 +88,7 @@ internal sealed class ControllerStagingProbe : IDisposable
                  <ControllerModuleFile Include="$(MSBuildProjectDirectory)\{SWAPPED_FILE}" Condition="Exists('$(MSBuildProjectDirectory)\{SWAPPED_FILE}')" />
                  <ControllerDataAsset Include="probe-tool">
                    <Uri>gh-release://example/example/probe-v1/probe-tool.zip</Uri>
-                   <Sha256>0000000000000000000000000000000000000000000000000000000000000000</Sha256>
+                   <Sha256>ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad</Sha256>
                    <Size>1</Size>
                    <ExtractTo>{ASSET_FOLDER}</ExtractTo>
                  </ControllerDataAsset>

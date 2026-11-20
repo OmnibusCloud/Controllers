@@ -7,13 +7,29 @@ run-name: "AI Corpus toolchain: ${{ github.ref_name }}"
 # tested under the pinned wasmtime command line: the generated contract set, the generated
 # hostile set, and the PDF responses of one Common Crawl WARC file, fetched by range from
 # data.commoncrawl.org (never committed). The data asset goes out as a workflow artifact
-# with its SHA-256.
+# with its SHA-256, and the compare job holds it to the pin of the controller's project file
+# (its SHA-256 and its size): a pin that names another archive than the one built here fails
+# this workflow. It is not a required check.
+#
+# It runs on a pull request, and after a push to main or ai-controllers, for a change to the
+# toolchain or to the project file, which holds the pin; a branch with a pull request is
+# built once, by the pull request's run (another branch is run by hand). It also runs for
+# a pdftext-v* tag, so that the module of a release is built from the tagged commit.
 
 on:
   workflow_dispatch:
   push:
+    branches: [main, ai-controllers]
+    tags: ['pdftext-v*']
     paths:
       - 'AI/OutWit.Controller.AI.Corpus.Assets/toolchain/**'
+      - 'AI/OutWit.Controller.AI.Corpus/OutWit.Controller.AI.Corpus.csproj'
+      - '.github/workflows/ai-corpus-toolchain.yml'
+  # The same paths as above.
+  pull_request:
+    paths:
+      - 'AI/OutWit.Controller.AI.Corpus.Assets/toolchain/**'
+      - 'AI/OutWit.Controller.AI.Corpus/OutWit.Controller.AI.Corpus.csproj'
       - '.github/workflows/ai-corpus-toolchain.yml'
 
 permissions:
@@ -41,15 +57,17 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       # Build b runs the scripts from a copy in another folder, with its work folder at
       # another depth: if any path reached the module, the two builds would differ.
+      # A download without a pin stops the build before anything is unpacked or run (exit 3,
+      # with the hash that was seen on an UNPINNED line), and nothing is published.
       - name: Build
-        id: build
         env:
           BUILD: ${{ matrix.name }}
         run: |
-          set +e
           if [ "$BUILD" = a ]; then
             bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/work"
           else
@@ -57,10 +75,6 @@ jobs:
             cp -R "$TOOLCHAIN" "$RUNNER_TEMP/elsewhere/copy/toolchain"
             bash "$RUNNER_TEMP/elsewhere/copy/toolchain/build.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/b/second/work"
           fi
-          code=$?
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          # 3 = built, but a download has no pin yet: the module is still published.
-          [ "$code" -eq 0 ] || [ "$code" -eq 3 ] || exit "$code"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -68,17 +82,21 @@ jobs:
           path: ${{ runner.temp }}/out
           if-no-files-found: error
 
-      - name: Every download is pinned
-        if: steps.build.outputs.code != '0'
-        run: |
-          echo "::error::a download has no pin yet (UNPINNED lines in the build step)"
-          exit 1
-
   compare:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      # The project file, for the pin; before the downloads, which land beside it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # The SDK global.json pins, exactly: it reads the pin as the controller's build does.
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: pdftext-build-*
@@ -104,6 +122,32 @@ jobs:
             fi
           done
 
+      # The archive a node is sent is pinned in the controller's project file. It must be the
+      # one built here: a pin that names another archive, or a toolchain that no longer builds
+      # the pinned one, fails the workflow. The pin is read as the build evaluates it (the
+      # ControllerDataAsset item MSBuild sees, whatever form the project file writes it in).
+      # After a change that is meant to move the archive, the hash printed here is the new pin.
+      - name: The asset is the archive the project file pins
+        run: |
+          project=AI/OutWit.Controller.AI.Corpus/OutWit.Controller.AI.Corpus.csproj
+          dotnet msbuild "$project" -nologo -getItem:ControllerDataAsset > "$RUNNER_TEMP/assets.json"
+          pinned=$(python3 -I -c 'import json, sys
+          items = json.load(open(sys.argv[1], encoding="utf-8"))["Items"]["ControllerDataAsset"]
+          found = [item for item in items if item.get("Identity") == "corpus-pdftext-wasm"]
+          print(found[0].get("Sha256", "") + " " + found[0].get("Size", "") if len(found) == 1 else "")' "$RUNNER_TEMP/assets.json")
+          pin=$(printf '%s' "$pinned" | cut -s -d' ' -f1)
+          size=$(printf '%s' "$pinned" | cut -s -d' ' -f2)
+          seen=$(sha256sum builds/pdftext-build-a/corpus-pdftext-wasm.zip | cut -d' ' -f1)
+          bytes=$(wc -c < builds/pdftext-build-a/corpus-pdftext-wasm.zip | tr -d ' ')
+          echo "built:   $seen  $bytes bytes"
+          echo "pinned:  $pin  $size bytes"
+          echo "| corpus-pdftext-wasm.zip | built $seen, $bytes bytes | pinned $pin, $size bytes |" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$pin" ] || [ "$seen" != "$pin" ] || [ "$bytes" != "$size" ]; then
+            echo "::error::corpus-pdftext-wasm.zip as built here is not the archive the project file pins"
+            exit 1
+          fi
+          echo "the asset is the pinned archive"
+
       - name: Publish the data asset
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -121,6 +165,8 @@ jobs:
       TESTS: AI/OutWit.Controller.AI.Corpus.Assets/toolchain/tests
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -191,7 +237,8 @@ jobs:
           exit $code
 
       # Verdicts, page counts, text hashes and fuel per document; no text of a third-party
-      # document leaves the runner.
+      # document is uploaded as an artifact. The fetched Common Crawl PDFs themselves are kept
+      # in this repository's Actions cache between runs (the cache step above).
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

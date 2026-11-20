@@ -60,7 +60,10 @@
   </ItemGroup>
 
   <!-- Tier-2 data assets, fetched by consumers at build time from GitHub releases of this
-       repository, each held to the SHA-256 and the size stated here.
+       repository, each pinned here by its SHA-256 and its size. The publish workflow holds every
+       released archive to both before a push. A consumer's resolver (OutWit.Engine.Assets.MSBuild,
+       pinned in Build/OutWit.Controller.props) holds a download to its SHA-256; the pinned 1.0.1
+       does not compare the size and takes a file already in its cache by its name.
 
        Three native wasmtime libraries, one per RID, from the neutral asset release
        wasmtime-v48.0.8-2: the libraries of wasmtime-v48.0.8, byte for byte, packed again with
