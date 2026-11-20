@@ -200,7 +200,7 @@ public sealed class CorpusDocsNumbersTests
 
             // The same numbers where the README states them.
             Assert.That(Readme, Does.Contain($"({manifestBytes} and {shards} shards at most)"), "the split's row");
-            Assert.That(Readme, Does.Contain($"| a manifest | {manifestBytes}, {shards} sources, {value} a value, read a source at a time;"));
+            Assert.That(Readme, Does.Contain($"| a manifest | {manifestBytes}, {shards} sources, {value} a value, read a source at a time, {CorpusJsonStream.MAX_ROOT_KEYS} keys at its root;"));
             Assert.That(Readme, Does.Contain($"| a shard on the wire, with a declared size | the size it was declared with and {slack} more, {slackMin} at least"));
             Assert.That(Readme, Does.Contain($"up to {ShardSizeProbe.MAX_PROBES} shards, {Spelled(ShardSizeProbe.CONCURRENCY)} at a time, {(int)ShardSizeProbe.TIMEOUT.TotalSeconds} s each"));
             Assert.That(Readme, Does.Contain($"| a report given to `Corpus.Dedup` | {report} ({perShard} bytes for each shard a job may have)"));
