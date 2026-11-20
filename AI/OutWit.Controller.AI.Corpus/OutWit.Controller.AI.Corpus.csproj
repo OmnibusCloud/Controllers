@@ -92,7 +92,7 @@
       <RuntimeIdentifier>any</RuntimeIdentifier>
       <Uri>gh-release://OmnibusCloud/Controllers/pdftext-v1.0.0/corpus-pdftext-wasm.zip</Uri>
       <Sha256>02e7d700cc43eaff8c5b882321cf008edf1020cb7f5283f19562e05917448200</Sha256>
-      <Size>5932477</Size>
+      <Size>5932476</Size>
       <ExtractTo>.</ExtractTo>
     </ControllerDataAsset>
   </ItemGroup>
