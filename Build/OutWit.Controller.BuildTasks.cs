@@ -15,8 +15,9 @@
 //                              digest, not by the zip's bytes.
 //
 // The content digest, not the zip, is what is the same on every machine: one commit, built
-// with the SDK that global.json pins and on one kind of system (a deps.json takes the line ends
-// of the system it is written on), states one digest wherever it is built.
+// with the SDK that global.json pins, states one digest on every machine of one system. The
+// publish workflow builds on Linux. A build on Windows states another digest: the build writes
+// deps.json and controller.json with the system's line ends, and the assemblies differ too.
 //
 // Both take the module as a list of files (ListedFilesOnly): what the build's own records say
 // it staged (OutWit.Controller.StagedFiles.cs), not whatever lies in the folder. Without a list
