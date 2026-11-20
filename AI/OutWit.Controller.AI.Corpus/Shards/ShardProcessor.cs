@@ -155,9 +155,7 @@ public sealed class ShardProcessor
 
         // What the product may be, from the bytes fetched alone: held at every document, so a
         // shard of a few kilobytes cannot write gigabytes before it is stopped.
-        var ceiling = TextCeiling is { } text
-            ? new ProductCeiling(ShardProductLimits.MaxDocuments(shard.Length), text)
-            : new ProductCeiling(ShardProductLimits.MaxDocuments(shard.Length), ShardProductLimits.MaxTextBytes(shard.Length));
+        var ceiling = new ProductCeiling(ShardProductLimits.MaxDocuments(shard.Length), TextCeiling ?? ShardProductLimits.MaxTextBytes(shard.Length));
         using var counted = new ShardCountingStream(text);
 
         if (m_sign)

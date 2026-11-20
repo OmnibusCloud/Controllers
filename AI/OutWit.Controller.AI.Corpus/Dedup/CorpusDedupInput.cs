@@ -195,7 +195,11 @@ public sealed record CorpusDedupInput(IReadOnlyList<CorpusDedupSource> Shards, M
             order[at] = at;
 
         // By key, and by place between equal keys: the second of a run is the first repeat of its key.
-        Array.Sort(order, (first, second) => key(shards[first], shards[second]) is var compared and not 0 ? compared : first.CompareTo(second));
+        Array.Sort(order, (first, second) =>
+        {
+            var compared = key(shards[first], shards[second]);
+            return compared != 0 ? compared : first.CompareTo(second);
+        });
 
         var repeat = -1;
         for (var at = 1; at < order.Length; at++)

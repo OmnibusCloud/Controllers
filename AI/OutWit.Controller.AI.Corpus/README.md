@@ -63,12 +63,12 @@ and the PDF stage proven on the fleet.
 | `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, what the origin answered for a random sample of the shards, the traffic estimate part by part and the ceiling the nodes enforce (see *What a run promises before it starts*), the server storage estimate and the headroom it is held to (see *Server storage*), the busiest node's share of the work and how many nodes the plan uses (see *The busiest share*), what the run keeps and whether its signatures can be merged, the problems by manifest line (the first hundred, then how many more) |
 | `Corpus.ProcessPackage` | node | `(CorpusTaskPackage) → CorpusResultPackage` | a task package start to finish: its blob downloaded and held to the size and the hash its reference states, then for every shard of it the allowlist re-check, the pinned model, the fetch capped by the job's cap and by the shard's declared size, the pipeline (a WARC shard's PDFs through the sandboxed extractor), the uploads; the results go into one blob and its reference is returned. A shard's result is one of two kinds: a **verdict** on the shard, which any honest node gives for the same bytes (`Completed`, `OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), or a **node fault** (this node's disk, link, memory, sandbox or upload), which answers nothing and sends the shard out again. Either carries a fixed code, never a text. A node that cannot read its task package answers the whole package with the fault `tasks`. What a node can know before any work (its version against the job's, its PDF sandbox, room on its disk) it checks first, from the reference alone, and refuses the whole batch, with nothing fetched; several shards may run on one client at once |
 | `Corpus.Repairs` | host | `(CorpusTaskPackageCollection tasks, CorpusResultPackageCollection executions) → CorpusTaskPackageCollection` | the shards the first round left without a result (a node fault, a dropped value, no answer), as new tasks with new tickets in new packages; empty when there are none |
-| `Corpus.Disputes` | host | `(tasks, executions, repairs, repaired) → CorpusTaskPackageCollection` | the shards whose copies disagree, as new tasks in new packages for three machines; empty when there are none |
-| `Corpus.Collect` | host | `(tasks, executions, repairs, repaired, disputes, resolved, CorpusOptions) → Blob report` | the job report from the server's own account of the run (see *Trust and integrity*): every shard of the task list in task order with its accepted result, `Disputed` or `NoResult`, the aggregate counters over the accepted results and the run's funnel, what the run kept and the MinHash parameters of its signatures; written a shard at a time, never held |
+| `Corpus.Disputes` | host | `(tasks, executions, repairs, repaired) → CorpusTaskPackageCollection`, or `(…, disputes, resolved)` | the shards whose copies disagree, as new tasks in new packages for three machines; given the dispute round too, the disputes it left with too few copies or a lead that may be one machine's, once more; empty when there are none |
+| `Corpus.Collect` | host | `(tasks, executions, repairs, repaired, disputes, resolved, [undecided, settled,] CorpusOptions) → Blob report` | the job report from the server's own account of the run (see *Trust and integrity*): every shard of the task list in task order with its accepted result, `Disputed` or `NoResult`, the aggregate counters over the accepted results and the run's funnel, what the run kept and the MinHash parameters of its signatures; written a shard at a time, never held |
 | `Corpus.SamplingRate` | host | `(CorpusOptions) → Double` | `SamplingRate` clamped to 0..1, the share of the packages (a shard each in a job of up to 1,024 shards) `Grid.Replicas` runs twice |
 | `Corpus.RepairRate` | host | `(CorpusOptions) → Double` | the share of the repair round's packages that run twice: 1 when `SamplingRate` is above 0, else 0 (see *A round that came back short*) |
 | `Corpus.Dedup` | host | `(Blob report, CorpusOptions) → Blob dedup` | the near-duplicate merge over the signature blobs a report names: LSH over the MinHash signatures (the run's band layout, 16 bands of 8 by default), a candidate pair joins a cluster at a Jaccard estimate of `DedupThreshold` (0.8 by default), the lowest document of a cluster is kept; per shard a keep mask, plus the clusters. The report is read a shard at a time; its document counts are added up before any blob is read and a run past the capacity is refused there; each blob is held to the length, the header and the hash the report states for it, and a shard whose blob fails one is left out and named (`excluded`). A run without signatures (statistics and hashes only, or `sign` off), a report that names one blob twice and a run whose signatures were made with different MinHash parameters are refused by name |
-| `Corpus.Integrity` | host | `(tasks, executions, repairs, repaired, disputes, resolved, CorpusOptions) → Blob integrity` | the integrity document from the same account: the sampling the run asked for and how each round came back, the pairs compared, the values dropped by reason, the disputes with what three machines returned and how each ended, the shards without a result. The options are the last argument since 0.7.0; without them the document says the sampling asked for is not known |
+| `Corpus.Integrity` | host | `(tasks, executions, repairs, repaired, disputes, resolved, [undecided, settled,] CorpusOptions) → Blob integrity` | the integrity document from the same account: the sampling the run asked for and how each round came back, the pairs compared, the values dropped by reason, the disputes with what three machines returned and how each ended, the shards without a result. The options are the last argument since 0.7.0; without them the document says the sampling asked for is not known |
 | `Corpus.RuntimeDiagnostics` | host | `() → CorpusRuntimeDiagnostics` | what the module of the answering process carries (see *Diagnostics and capabilities*) |
 | `Corpus.Capabilities` | host | `() → Blob capabilities` | what an application can know before a run, as a JSON document (`docs/corpus-capabilities.schema.json`) |
 
@@ -96,8 +96,12 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
     CorpusResultPackageCollection:resolved = Grid.ForEach(package in disputes, majority)
         => Corpus.ProcessPackage(package);
 
-    Blob:report = Corpus.Collect(tasks, executions, repairs, repaired, disputes, resolved, opts);
-    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, opts);
+    CorpusTaskPackageCollection:undecided = Corpus.Disputes(tasks, executions, repairs, repaired, disputes, resolved);
+    CorpusResultPackageCollection:settled = Grid.ForEach(package in undecided, majority)
+        => Corpus.ProcessPackage(package);
+
+    Blob:report = Corpus.Collect(tasks, executions, repairs, repaired, disputes, resolved, undecided, settled, opts);
+    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, undecided, settled, opts);
 }
 ```
 
@@ -518,7 +522,7 @@ stay.
   the one the report states (missing, another length, another header, another
   hash) is in `excluded` with the reason and takes no part in the merge.
 - **Report** (`corpus-report.json`, `docs/corpus-report.schema.json`,
-  `corpus-report/5`): one entry for every shard of the job's task list, whatever
+  `corpus-report/6`): one entry for every shard of the job's task list, whatever
   came back — the index and the URL are the server's own. Per
   shard the verdict (a node's verdict on the shard, or `Disputed`, or `NoResult`
   with a `reason`), how many executions the result rests on (`executions`), the
@@ -779,7 +783,8 @@ follow from that.
   | `none` | second executions were asked for and no shard was compared: the checking did not happen (a pool of one machine ends here too) |
   | `unknown` | the script did not hand the run's options to the activity that wrote the document |
 
-  and `rounds`: for the first round, the repair round and the dispute round,
+  and `rounds`: for the first round, the repair round, the dispute round and
+  the second dispute round (`dispute_again`),
   the task packages that went out (`packages`), the answers that came back
   (`answers`), and the packages by the answers each got (`unanswered`,
   `answered_once`, `answered_twice`, `answered_thrice`, `answered_more`). The
@@ -787,7 +792,7 @@ follow from that.
   answered what.
 
 **The documents.** `corpus-integrity.json`
-(`docs/corpus-integrity.schema.json`, `corpus-integrity/7`): `sampling` and
+(`docs/corpus-integrity.schema.json`, `corpus-integrity/8`): `sampling` and
 `rounds` as above; `pairs` — every
 shard that came back twice in the first round or in the repair round (`round`
 says which), its two results compared, or `incomplete` when a

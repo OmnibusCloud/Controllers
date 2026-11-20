@@ -127,8 +127,8 @@ public sealed class ShardDiskReservationsTests
         var blobs = new CorpusTestBlobService(Path.Combine(m_directory, "blobs"));
         var fetcher = new ShardFetcher(ShardFetchPolicy.Immediate, CorpusTestOrigin.Policy);
 
-        var sized = Task(origin, size);
-        var unsized = Task(origin, 0);
+        var sized = TaskFor(origin, size);
+        var unsized = TaskFor(origin, 0);
         ShardDiskReservations.FreeBytes = _ => ShardDisk.Needed(ShardBatchGuard.RoomBytes(sized), sized.Pipeline) + MIB;
 
         var withSize = await ShardTaskRunner.RunAsync(sized, fetcher, blobs, Path.Combine(m_directory, "w1"), CancellationToken.None);
@@ -162,7 +162,7 @@ public sealed class ShardDiskReservationsTests
 
     #region Tools
 
-    private static CorpusTaskData Task(CorpusTestOrigin origin, long size)
+    private static CorpusTaskData TaskFor(CorpusTestOrigin origin, long size)
     {
         return new CorpusTaskData
         {

@@ -101,7 +101,7 @@ public sealed class ShardFetcherNodeNetworkTests
         using var origin = new CorpusRawOrigin(async (_, _, _, cancellationToken) => await Task.Delay(Timeout.Infinite, cancellationToken));
         using var job = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
-        var result = await ShardTaskRunner.RunAsync(Task(origin.Url("silent.gz"), origin.Host), Fetcher(), m_blobs, Work(), job.Token);
+        var result = await ShardTaskRunner.RunAsync(TaskFor(origin.Url("silent.gz"), origin.Host), Fetcher(), m_blobs, Work(), job.Token);
 
         AssertNetworkFault(result);
     }
@@ -123,7 +123,7 @@ public sealed class ShardFetcherNodeNetworkTests
         using var origin = new CorpusRawOrigin(async (_, _, stream, cancellationToken) =>
             await stream.WriteAsync(CorpusRawOrigin.Head($"{status} Not Now", "Content-Length: 0", "Connection: close"), cancellationToken));
 
-        var result = await ShardTaskRunner.RunAsync(Task(origin.Url("gated.gz"), origin.Host), Fetcher(), m_blobs, Work(), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(TaskFor(origin.Url("gated.gz"), origin.Host), Fetcher(), m_blobs, Work(), CancellationToken.None);
 
         // A request for proxy credentials is not tried again: it will not change by itself.
         if (status == 407)
@@ -141,7 +141,7 @@ public sealed class ShardFetcherNodeNetworkTests
         using var origin = new CorpusRawOrigin(async (_, _, stream, cancellationToken) =>
             await stream.WriteAsync(CorpusRawOrigin.Head($"{status} No", "Content-Length: 0", "Connection: close"), cancellationToken));
 
-        var result = await ShardTaskRunner.RunAsync(Task(origin.Url("refused.gz"), origin.Host), Fetcher(), m_blobs, Work(), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(TaskFor(origin.Url("refused.gz"), origin.Host), Fetcher(), m_blobs, Work(), CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -166,7 +166,7 @@ public sealed class ShardFetcherNodeNetworkTests
         var fetcher = new ShardFetcher(new ShardFetchPolicy(2, TimeSpan.Zero, STALL), policy);
         var host = ShardOriginPolicy.PUBLIC_ORIGINS[0];
 
-        var result = await ShardTaskRunner.RunAsync(Task($"https://{host}/crawl-data/x.warc.wet.gz", host), fetcher, m_blobs, Work(), CancellationToken.None);
+        var result = await ShardTaskRunner.RunAsync(TaskFor($"https://{host}/crawl-data/x.warc.wet.gz", host), fetcher, m_blobs, Work(), CancellationToken.None);
 
         Assert.That(asked, Is.GreaterThanOrEqualTo(1), "the node's resolver gave the answer");
         AssertNetworkFault(result);
@@ -198,7 +198,7 @@ public sealed class ShardFetcherNodeNetworkTests
         return new ShardFetcher(new ShardFetchPolicy(2, TimeSpan.Zero, STALL, ThrottleAttempts: 2), CorpusTestOrigin.Policy);
     }
 
-    private static CorpusTaskData Task(string url, string host)
+    private static CorpusTaskData TaskFor(string url, string host)
     {
         return new CorpusTaskData
         {

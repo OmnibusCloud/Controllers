@@ -172,7 +172,7 @@ internal sealed class NgramIndex
     {
         var positions = m_ids.Length - length;
         if (positions <= 0)
-            return ([], 0);
+            return (Array.Empty<int>(), 0);
 
         // By the next word: a counting sort over the word ids.
         var byWord = new int[positions];

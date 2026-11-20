@@ -25,11 +25,11 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
         => Corpus.ProcessPackage(package);
 
     ~ A dispute that came back with too few copies, or with a lead that may be one machine's second answers, runs once more on three machines. ~
-    CorpusTaskPackageCollection:again = Corpus.Disputes(tasks, executions, repairs, repaired, disputes, resolved);
+    CorpusTaskPackageCollection:undecided = Corpus.Disputes(tasks, executions, repairs, repaired, disputes, resolved);
 
-    CorpusResultPackageCollection:settled = Grid.ForEach(package in again, majority)
+    CorpusResultPackageCollection:settled = Grid.ForEach(package in undecided, majority)
         => Corpus.ProcessPackage(package);
 
-    Blob:report = Corpus.Collect(tasks, executions, repairs, repaired, disputes, resolved, again, settled, opts);
-    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, again, settled, opts);
+    Blob:report = Corpus.Collect(tasks, executions, repairs, repaired, disputes, resolved, undecided, settled, opts);
+    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, undecided, settled, opts);
 }
