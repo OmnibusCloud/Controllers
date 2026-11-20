@@ -347,8 +347,11 @@ public static class ShardTaskRunner
             TryDelete(shardPath);
 
             // An upload call a transfer left running (its schedule spent, or the job cancelled)
-            // still reads its product: the products and their room on the disk go when it ends,
-            // not before.
+            // still reads its product: the products go when it ends, not before. Their room is
+            // given back now: the task is over, its products are on the volume at their size, and
+            // the volume's free room counts them. Room held for a call that may never end would
+            // make every later shard that does not fit beside it wait for it instead of being
+            // refused.
             var held = new[] { ShardBlobTransfer.HeldBy(textPath), ShardBlobTransfer.HeldBy(signaturesPath) }.OfType<Task>().ToArray();
             if (held.Length == 0)
             {
@@ -358,12 +361,11 @@ public static class ShardTaskRunner
             }
             else
             {
-                var heldRoom = room;
+                room?.Dispose();
                 _ = Task.WhenAll(held).ContinueWith(_ =>
                 {
                     TryDelete(textPath);
                     TryDelete(signaturesPath);
-                    heldRoom?.Dispose();
                 }, TaskScheduler.Default);
             }
 

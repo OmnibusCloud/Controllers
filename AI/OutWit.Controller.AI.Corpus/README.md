@@ -15,7 +15,7 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.9.0 — the sixth hardening release, about what one machine, one origin or one manifest can cost a run or a node: a dispute one machine left without enough copies goes out once more, and a value under no ticket no longer unsettles the others (see *Trust and integrity*); a node's own network is a fault of the node, run elsewhere, and a fetch has a limit before the answer's head too (see *Node behaviour*); a shard's product is held to what its fetched bytes may give, and that bound is what a node reserves on its disk and what the preflight states as the most the uploads and the storage may be (see *What a run promises before it starts*); a shard's PDFs have a number of runs as well as a fuel; a blob transfer has a time to finish in; one record and one manifest cost a bounded amount of memory whatever the manifest opens (see *What hostile input meets*). Three of its rules can change a product, and none changes one of Common Crawl's files or of the files the tests pin: a document past the controller's own length is not judged in full, a shard whose product passes its ceiling is Oversized, and a shard's PDFs past 4,096 runs are not run. 0.8.0 was the fifth, about the near-duplicate merge: what a merge costs and how long it runs do not depend on what a node wrote into the signatures of its shard, a merge that was stopped is left at the next document, and a merge holds four million documents at the most whatever the length of their signatures. It changes no stage, and a merge keeps what it kept. 0.7.0 was the fourth, about what the server takes from a node and what
+**Status: 0.9.1 — a fix of 0.9.0: a node gives back the disk room of a shard when its task ends, also when an upload call the task gave up still reads its products, so later shards are refused or run instead of waiting for a call that may never end (see *Node behaviour*); the preflight's words on what a dispute may fetch again count its second round. It changes no stage, no document and no verdict. 0.9.0 was the sixth hardening release, about what one machine, one origin or one manifest can cost a run or a node: a dispute one machine left without enough copies goes out once more, and a value under no ticket no longer unsettles the others (see *Trust and integrity*); a node's own network is a fault of the node, run elsewhere, and a fetch has a limit before the answer's head too (see *Node behaviour*); a shard's product is held to what its fetched bytes may give, and that bound is what a node reserves on its disk and what the preflight states as the most the uploads and the storage may be (see *What a run promises before it starts*); a shard's PDFs have a number of runs as well as a fuel; a blob transfer has a time to finish in; one record and one manifest cost a bounded amount of memory whatever the manifest opens (see *What hostile input meets*). Three of its rules can change a product, and none changes one of Common Crawl's files or of the files the tests pin: a document past the controller's own length is not judged in full, a shard whose product passes its ceiling is Oversized, and a shard's PDFs past 4,096 runs are not run. 0.8.0 was the fifth, about the near-duplicate merge: what a merge costs and how long it runs do not depend on what a node wrote into the signatures of its shard, a merge that was stopped is left at the next document, and a merge holds four million documents at the most whatever the length of their signatures. It changes no stage, and a merge keeps what it kept. 0.7.0 was the fourth, about what the server takes from a node and what
 it says when a round comes back short: a result frame is walked before it is decoded, a result's
 counters are held to the bytes of its shard, a shard that goes out again goes out on two machines
 when the run asked for sampling, and both documents state the sampling that was asked for and how
@@ -39,7 +39,7 @@ under both, the demo kit's identity byte for byte, and, with one machine of the 
 another product for every shard it held, all 24 products the honest ones and every dispute
 settled by three machines when two machines ran each shard (with one machine a shard, what the
 lying machine returned for a shard of its own stands: one or two of the 24, the limit stated
-under *Trust and integrity*). 0.6.0 gave the same identity on the test fleet. 0.7.0, 0.8.0 and 0.9.0 have not run
+under *Trust and integrity*). 0.6.0 gave the same identity on the test fleet. 0.7.0, 0.8.0, 0.9.0 and 0.9.1 have not run
 on the fleet yet; not yet
 released to nuget.org.** The full reference for lab engineers and application
 developers is [docs/capabilities.md](docs/capabilities.md).
@@ -896,7 +896,13 @@ nobody: raise `SamplingRate` for what must be checked.
 A shard is whatever a crawl found, a manifest and a language pack are a lab's
 files, and a result is a node's. Each is read within limits that sit where the
 resource is spent, and each limit is a function of the input alone, so two
-honest nodes meet it at the same place:
+honest nodes meet it at the same place. One exception: a WARC record's
+`Content-Length` and an HTTP response's status code are read with the node's
+own number format, so a signed form (`Content-Length: +1024`,
+`HTTP/1.1 +200 OK`) is read on most nodes and refused on a node whose culture
+writes its plus sign with a direction mark (Arabic, Persian, Hebrew, Pashto):
+the record makes the shard `Malformed` there, the response the page's
+`http_status`. Common Crawl writes neither form.
 
 | Input | Limit | Past it |
 |---|---|---|
@@ -1259,7 +1265,10 @@ admits no other to the work):
   each fit alone is not told there is room for all of them: a shard whose room
   is not there waits for the others to give theirs back, and a shard that does
   not fit with nothing else reserved is the node fault `disk_space` and runs
-  elsewhere. The preflight states the figure for the run's largest shard
+  elsewhere. A task gives its room back when it ends, also when an upload call
+  it gave up still reads its products: they stay until the call ends, and the
+  free space counts their bytes, so no shard waits for a call that may never
+  end. The preflight states the figure for the run's largest shard
   (`NodeDiskBytesPerShard`), and a node without that room refuses its batch.
 - The language pack (or model) arrives as a blob (the engine caches it per node) and is
   trusted only when its bytes hash to the pipeline's pin; a model that does
@@ -1274,9 +1283,13 @@ admits no other to the work):
   that transfers that failed together do not come back together. Every
   attempt has a time to finish in — two minutes and the time of its bytes at
   32 KiB/s — and the job's token ends the wait for it: the channel's calls take
-  no token, and one that never returns counts as a failed attempt when its
-  time is up, so it cannot hold the node's other transfers behind it. (The
-  call itself is left to end on its own: a token for the channel's calls is the
+  no token, and one that does not return in its time frees the node's
+  transfer gate, so it cannot hold the node's other transfers behind it. The
+  call itself cannot be stopped: it is waited for, each further time of an
+  attempt counting as an attempt of the schedule, and no second attempt of the
+  same transfer starts beside it; a call that outlasts the schedule fails the
+  transfer (a fault of the node) and is left to end on its own, a product it
+  reads staying until it does. (A token for the channel's calls is the
   platform's to add.)
 - Processing is one streaming pass: one record in memory at a time, the
   product hashed and compressed as it is written, on a thread below normal
@@ -1317,7 +1330,11 @@ admits no other to the work):
 - **Benchmark.** `Corpus.ProcessPackage` measures a node on a synthetic
   reference shard (400 documents generated from a fixed seed, menus and
   short pages among them), one copy per slot of the node's degree at once;
-  the product's hash is checked, so a node that computes wrong cannot score.
+  the product's hash is checked, so a node that computes the WET stages wrong
+  (the record reader, the line cleaning, the quality filter, the signatures)
+  cannot score. The reference is WET with the language stage off: a node wrong
+  only in reading WARC files, identifying languages or extracting PDFs scores
+  all the same, and only a second copy of its shards (sampling) catches it.
   The rate is megabytes of real Common Crawl WET per second
   (`corpus-wet-mb@synthetic-v2`), the unit of the work estimate — the bytes
   of a package's shards, by the manifest's sizes or the origin's answers — so

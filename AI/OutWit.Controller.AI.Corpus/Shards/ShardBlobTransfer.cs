@@ -19,7 +19,8 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// attempt spent on it counting as an attempt of the schedule, and what it comes to is that
 /// attempt's outcome — a file is never sent twice at once. When the schedule is spent, or the job
 /// is cancelled, while the call still runs, the transfer ends and the call holds its file
-/// (<see cref="HeldBy"/>): the task keeps the file and its room on the disk until the call ends.
+/// (<see cref="HeldBy"/>): the task keeps the file until the call ends. Its room on the disk is
+/// given back when the task ends: the file's bytes are on the volume, and its free room counts them.
 /// </summary>
 public static class ShardBlobTransfer
 {

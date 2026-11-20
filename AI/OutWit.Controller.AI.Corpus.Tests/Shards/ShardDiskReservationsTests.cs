@@ -145,10 +145,10 @@ public sealed class ShardDiskReservationsTests
     }
 
     [Test]
-    public async Task AProductAnUploadStillReadsKeepsItsRoomUntilTheUploadEndsTest()
+    public async Task AProductAnUploadStillReadsStaysUntilTheUploadEndsTest()
     {
         // The job ends while the upload of a product still runs (its call takes no token): the
-        // product stays on the disk until the call ends, and so does its room.
+        // product stays on the disk until the call ends; its room is given back with the task.
         var held = new CorpusHeldBlobService(new CorpusTestBlobService(Path.Combine(m_directory, "blobs")));
         var (task, fetcher, origin) = HeldShard();
         var work = Path.Combine(m_directory, "held");
@@ -171,10 +171,11 @@ public sealed class ShardDiskReservationsTests
     }
 
     [Test]
-    public async Task AProductAnUploadGaveUpOnKeepsItsRoomUntilTheCallEndsTest()
+    public async Task AProductAnUploadGaveUpOnStaysUntilTheCallEndsTest()
     {
         // The upload's call outlasts its schedule: the task is the fault `upload`, and the call
-        // still reads the product, so the product and its room stay until the call ends.
+        // still reads the product, so the product stays until the call ends; its room is given
+        // back with the task.
         var held = new CorpusHeldBlobService(new CorpusTestBlobService(Path.Combine(m_directory, "blobs")));
         var (task, fetcher, origin) = HeldShard();
         var work = Path.Combine(m_directory, "given-up");
@@ -197,6 +198,52 @@ public sealed class ShardDiskReservationsTests
         }
         finally
         {
+            ShardBlobTransfer.BaseTime = baseTime;
+            ShardBlobTransfer.Delays = delays;
+            held.Release();
+            origin.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task AnUploadCallThatNeverEndsLeavesNoShardWaitingForItsRoomTest()
+    {
+        // A disk with room for the shard and a mebibyte more. The shard's upload call never ends
+        // (until the test lets it go): the task is the fault `upload`, its product stays for the
+        // call. Its room held until the call ended, a later shard that did not fit waited for it
+        // until its job was cancelled, neither refused nor run.
+        var held = new CorpusHeldBlobService(new CorpusTestBlobService(Path.Combine(m_directory, "blobs")));
+        var (task, fetcher, origin) = HeldShard();
+        var work = Path.Combine(m_directory, "never-ends");
+        var needed = ShardDisk.Needed(ShardBatchGuard.RoomBytes(task), task.Pipeline);
+        ShardDiskReservations.FreeBytes = _ => needed + MIB;
+        var baseTime = ShardBlobTransfer.BaseTime;
+        var delays = ShardBlobTransfer.Delays;
+        ShardBlobTransfer.BaseTime = TimeSpan.FromMilliseconds(200);
+        ShardBlobTransfer.Delays = [];
+        using var job = new CancellationTokenSource();
+
+        try
+        {
+            var result = await ShardTaskRunner.RunAsync(task, fetcher, held, work, CancellationToken.None);
+            var later = ShardDiskReservations.ReserveAsync(m_directory, needed + 2 * MIB, job.Token);
+            var answered = await Task.WhenAny(later, Task.Delay(TimeSpan.FromSeconds(5))) == later;
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(result.Error, Is.EqualTo(CorpusResultCodes.FAULT_UPLOAD));
+                Assert.That(ShardBlobTransfer.HeldBy(Path.Combine(work, "text.jsonl.zst")), Is.Not.Null, "the call still reads the product");
+                Assert.That(answered, Is.True, "a shard that does not fit is answered at once, not left waiting for the call");
+                Assert.That(answered && later.Result == null, Is.True, "and refused (disk_space): nothing holds room it could wait for");
+            });
+
+            var fits = await ShardDiskReservations.ReserveAsync(m_directory, needed, CancellationToken.None);
+            Assert.That(fits, Is.Not.Null, "a shard that fits is taken");
+            fits!.Dispose();
+        }
+        finally
+        {
+            job.Cancel();
             ShardBlobTransfer.BaseTime = baseTime;
             ShardBlobTransfer.Delays = delays;
             held.Release();
@@ -286,23 +333,19 @@ public sealed class ShardDiskReservationsTests
         return (TaskFor(origin, size), new ShardFetcher(ShardFetchPolicy.Immediate, CorpusTestOrigin.Policy), origin);
     }
 
-    /// <summary>The product and its room are held while the upload's call runs, and go when it ends.</summary>
+    /// <summary>The product stays while the upload's call runs and goes when it ends; its room went with the task.</summary>
     private static async Task HeldUntilReleasedAsync(CorpusHeldBlobService held, string work)
     {
         Assert.Multiple(() =>
         {
-            Assert.That(ShardDiskReservations.Reserved, Is.GreaterThan(0), "the room is held while the upload's call runs");
-            Assert.That(File.Exists(Path.Combine(work, "text.jsonl.zst")), Is.True, "and the product it reads");
+            Assert.That(File.Exists(Path.Combine(work, "text.jsonl.zst")), Is.True, "the product stays while the upload's call reads it");
+            Assert.That(ShardDiskReservations.Reserved, Is.Zero, "its room is given back with the task: the product's bytes are on the volume, which the free room counts");
         });
 
         held.Release();
-        await WaitFor(() => ShardDiskReservations.Reserved == 0 && !File.Exists(Path.Combine(work, "text.jsonl.zst")));
+        await WaitFor(() => !File.Exists(Path.Combine(work, "text.jsonl.zst")));
 
-        Assert.Multiple(() =>
-        {
-            Assert.That(ShardDiskReservations.Reserved, Is.Zero, "given back when the call ended");
-            Assert.That(File.Exists(Path.Combine(work, "text.jsonl.zst")), Is.False);
-        });
+        Assert.That(File.Exists(Path.Combine(work, "text.jsonl.zst")), Is.False, "the product goes when the call ends");
     }
 
     private static CorpusTaskData TaskFor(CorpusTestOrigin origin, long size)
