@@ -4,18 +4,38 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// Reads the shape of a module a task brought (the raw WASI runtime) or that the compiler built
 /// from a task's sources, before the engine compiles it. Compiling is work on the node that no
 /// fuel meters and nothing can stop, and for some shapes it is far from linear in the module's
-/// size: a function whose locals are read inside nested loops costs the engine's compiler time
-/// with the square of the locals times the depth of the loops (6.9 KB took 1.5 s, 28 KB took 81 s
-/// and 1.5 GiB), and a branch table over deeply nested blocks grows the same way. So the shape is
-/// priced before anything is compiled: the price is taken from the task's fuel budget, a task
-/// that cannot pay it is out of fuel without the module ever being compiled, and blocks nested
-/// deeper than <see cref="MAX_NESTING"/> are refused. The scan itself is one pass over the code.
+/// size. So the shape is bounded and priced before anything is compiled: a module past a bound
+/// is refused with fixed words, the price is taken from the task's fuel budget, and a task that
+/// cannot pay it is out of fuel without the module ever being compiled. The scan itself is one
+/// pass over the code.
 /// <para>
-/// The prices were fitted to the engine as measured (wasmtime 48.0.8, one thread, a desktop of
-/// 2025): the modules the controller ships compile at 0.6 to 0.8 MiB a second, which a byte's
-/// price covers at the reference rate; the loop shape takes 1.8 ns a unit and costs 4 units of
-/// fuel, 2 ns at that rate. They are an estimate that holds for the shapes that were tried, not
-/// a proof about every module the engine accepts.
+/// What the engine's compiler was measured to grow with (wasmtime 48.0.8, one thread), and what
+/// is done about each:
+/// <list type="bullet">
+/// <item>the square of a function's locals times the depth of its loops (6.9 KB took 1.5 s, 28 KB
+/// took 81 s and 1.5 GiB), and a branch table's targets times the blocks around it: priced;</item>
+/// <item>the values a call or a block passes: 16 values through 80,000 calls took 29 s and
+/// 1.6 GiB, 1,000 results through 2,000 nested blocks 8 GiB. A function type has at most
+/// <see cref="MAX_PARAMETERS"/> parameters and <see cref="MAX_RESULTS"/> results, a block passes
+/// at most <see cref="MAX_BLOCK_VALUES"/> values, and a block of two values or more is priced by
+/// its values times the blocks around it;</item>
+/// <item>the square of a function's branches (32,000 took 6.6 s, 128,000 took 76 s and 1 GiB),
+/// and its locals times its branches (2,000 locals live across 20,000 branches took 31 s):
+/// priced past what an ordinary function has;</item>
+/// <item>a function, whatever is in it (80 microseconds and 6 KB while the module is compiled:
+/// 400,000 empty ones took 33 s and 2.2 GiB), and a declared local (65 nanoseconds: 20,000
+/// functions of 50,000 locals took 67 s): a function is priced as
+/// <see cref="FUNCTION_FLOOR_BYTES"/> bytes at the least, a local past
+/// <see cref="FREE_LOCALS"/> is priced, and both have a bound;</item>
+/// <item>the size of one function (up to 4 KB of the compiler's memory a byte for the densest
+/// code: 40 KB of calls that pass eight values took 180 MiB): bounded.</item>
+/// </list>
+/// </para>
+/// <para>
+/// The prices were fitted to the engine as measured: the modules the controller ships compile at
+/// 0.6 to 0.8 MiB a second, which a byte's price covers at the reference rate, and each shape's
+/// price is its measured time in the same proportion. The bounds and the prices hold for the
+/// shapes that were measured; they are not a proof about every module the engine accepts.
 /// </para>
 /// <para>
 /// The module was validated by the engine before it comes here, so its structure is sound; an
@@ -36,6 +56,39 @@ internal static class VerifyModuleShape
     public const long COMPILE_FUEL_PER_TABLE_UNIT = 100;
 
     /// <summary>
+    /// What one unit of a function's branches costs, in fuel: (its branches)² units, for a
+    /// function of more than <see cref="FREE_BRANCHES"/> branches.
+    /// </summary>
+    public const long COMPILE_FUEL_PER_BRANCH_UNIT = 4;
+
+    /// <summary>The branches a function has before their square is priced: its bytes pay for them.</summary>
+    public const int FREE_BRANCHES = 1024;
+
+    /// <summary>
+    /// What one unit of locals live across branches costs, in fuel: (the function's locals in
+    /// use) × (its branches) units, past <see cref="FREE_LIVE_UNITS"/> a function.
+    /// </summary>
+    public const long COMPILE_FUEL_PER_LIVE_UNIT = 128;
+
+    /// <summary>The units of locals times branches a function has before they are priced.</summary>
+    public const long FREE_LIVE_UNITS = 16_384;
+
+    /// <summary>
+    /// What one unit of a block that passes values costs, in fuel: (its values) × (the blocks it
+    /// sits in) units, for a block of two values or more.
+    /// </summary>
+    public const long COMPILE_FUEL_PER_BLOCK_UNIT = 4;
+
+    /// <summary>What a declared local costs, in fuel, past <see cref="FREE_LOCALS"/> a function.</summary>
+    public const long COMPILE_FUEL_PER_LOCAL = 64;
+
+    /// <summary>The locals a function has before each one more is priced.</summary>
+    public const int FREE_LOCALS = 256;
+
+    /// <summary>The least a function is priced as, in bytes of its body: the engine's own work for any function.</summary>
+    public const int FUNCTION_FLOOR_BYTES = 24;
+
+    /// <summary>
     /// The deepest blocks, loops and ifs may nest in one function. The interpreters the controller
     /// ships nest 115 (Lua), 316 (QuickJS), 616 (Ruby) and 781 (CPython) deep; the limit is two and
     /// a half times the deepest of them. Past it a branch table over the nest costs the engine's
@@ -43,8 +96,60 @@ internal static class VerifyModuleShape
     /// </summary>
     public const int MAX_NESTING = 2048;
 
+    /// <summary>
+    /// The most parameters a function type of the module may have: the interpreters the controller
+    /// ships and its compiler have 28 at the most. Parameters cost what the bytes that push them
+    /// cost, so the bound is wide.
+    /// </summary>
+    public const int MAX_PARAMETERS = 128;
+
+    /// <summary>
+    /// The most results a function type of the module may have. A compiler for C, C++ or Rust
+    /// gives a function one; past eight the cost of a call that passes them on grows several
+    /// times with every doubling.
+    /// </summary>
+    public const int MAX_RESULTS = 8;
+
+    /// <summary>The most values a block, a loop or an if may take and give together.</summary>
+    public const int MAX_BLOCK_VALUES = 8;
+
+    /// <summary>
+    /// The most locals one function may have, its parameters included: the interpreters the
+    /// controller ships and its compiler have 188 at the most.
+    /// </summary>
+    public const int MAX_LOCALS = 16_384;
+
+    /// <summary>The most locals the functions of a module may declare together.</summary>
+    public const long MAX_MODULE_LOCALS = 4_194_304;
+
+    /// <summary>The most functions a module may define: CPython has 18,104, Ruby 17,746, QuickJS 1,522.</summary>
+    public const int MAX_FUNCTIONS = 32_768;
+
+    /// <summary>
+    /// The largest body one function may have, bytes. The largest of QuickJS is 78 KB and of Lua
+    /// 31 KB; CPython's and Ruby's own (163 KB, 138 KB) belong to modules several times the size a
+    /// task's module may have.
+    /// </summary>
+    public const int MAX_BODY_BYTES = 128 << 10;
+
+    /// <summary>What the compiler holds whatever the module, bytes.</summary>
+    public const long COMPILE_MEMORY_BASE_BYTES = 16L << 20;
+
+    /// <summary>What the compiler holds a byte of the module, bytes: the module and its image.</summary>
+    public const long COMPILE_MEMORY_PER_BYTE = 2;
+
+    /// <summary>What the compiler holds a function until the module is done, bytes.</summary>
+    public const long COMPILE_MEMORY_PER_FUNCTION = 8 << 10;
+
+    /// <summary>What the compiler takes a byte of the function it works on, bytes.</summary>
+    public const long COMPILE_MEMORY_PER_BODY_BYTE = 4096;
+
+    /// <summary>What the compiler takes a unit of a block that passes values, bytes.</summary>
+    public const long COMPILE_MEMORY_PER_BLOCK_UNIT = 8;
+
     private const int SECTION_TYPE = 1;
     private const int SECTION_FUNCTION = 3;
+    private const int SECTION_START = 8;
     private const int SECTION_CODE = 10;
     private const int HEADER_LENGTH = 8;
 
@@ -54,7 +159,11 @@ internal static class VerifyModuleShape
     private const byte OP_LOOP = 0x03;
     private const byte OP_IF = 0x04;
     private const byte OP_END = 0x0B;
+    private const byte OP_BR = 0x0C;
+    private const byte OP_BR_IF = 0x0D;
     private const byte OP_BR_TABLE = 0x0E;
+
+    private const long BLOCK_TYPE_EMPTY = -64;
 
     private const byte KIND_BLOCK = 0;
     private const byte KIND_LOOP = 1;
@@ -62,124 +171,190 @@ internal static class VerifyModuleShape
     private const string UNKNOWN_INSTRUCTION = "the module uses an instruction the sandbox does not take";
     private const string UNREADABLE = "the module's code cannot be read";
 
+    /// <summary>Why a module with a start function is refused.</summary>
+    public const string START_FUNCTION = "the module has a start function, which a task's module may not have: a program starts at _start";
+
+    #endregion
+
+    #region Fields
+
+    private static readonly Bounds TASK = new(MAX_NESTING, MAX_PARAMETERS, MAX_RESULTS, MAX_BLOCK_VALUES, MAX_LOCALS, MAX_MODULE_LOCALS, MAX_FUNCTIONS, MAX_BODY_BYTES, false);
+    private static readonly Bounds NONE = new(1 << 20, int.MaxValue, int.MaxValue, int.MaxValue, int.MaxValue, long.MaxValue, int.MaxValue, int.MaxValue, true);
+
     #endregion
 
     #region Functions
 
     /// <summary>
-    /// Prices a module and checks its nesting.
+    /// Prices a module and holds it to the bounds of a task's module.
     /// </summary>
     /// <param name="module">The module's bytes, already validated by the engine.</param>
     /// <returns>What compiling it costs in fuel, or why it is not compiled at all (fixed words).</returns>
     public static VerifyModuleShapeReport Scan(ReadOnlySpan<byte> module)
     {
-        return Scan(module, MAX_NESTING);
+        return Scan(module, TASK);
     }
 
     /// <summary>
-    /// Prices a module and checks its nesting against a limit of the caller's: for measuring
-    /// what modules are like.
+    /// Prices a module without any bound but the deepest nesting the scan can follow: for
+    /// measuring what modules are like.
     /// </summary>
     /// <param name="module">The module's bytes, already validated by the engine.</param>
-    /// <param name="maxNesting">The deepest blocks may nest.</param>
-    /// <returns>What compiling it costs in fuel, or why it is not compiled at all (fixed words).</returns>
-    internal static VerifyModuleShapeReport Scan(ReadOnlySpan<byte> module, int maxNesting)
+    /// <returns>The price and what the module's shape is.</returns>
+    public static VerifyModuleShapeReport Measure(ReadOnlySpan<byte> module)
+    {
+        return Scan(module, NONE);
+    }
+
+    /// <summary>What the compiler may take for a module at every bound, bytes: what a node sets aside for one such compile.</summary>
+    /// <param name="moduleBytes">The largest module, bytes.</param>
+    /// <returns>Bytes.</returns>
+    public static long CompileMemoryAtTheBounds(long moduleBytes)
+    {
+        return CompileMemory(moduleBytes, MAX_FUNCTIONS, MAX_BODY_BYTES, (long)MAX_BLOCK_VALUES * MAX_NESTING * (MAX_NESTING + 1) / 2);
+    }
+
+    private static VerifyModuleShapeReport Scan(ReadOnlySpan<byte> module, Bounds bounds)
     {
         var bytes = Saturate(module.Length, COMPILE_FUEL_PER_BYTE);
-        var cost = bytes;
+        var tally = new Tally { Cost = bytes };
         if (module.Length < HEADER_LENGTH)
-            return new VerifyModuleShapeReport(cost, UNREADABLE);
+            return new VerifyModuleShapeReport(tally.Cost, UNREADABLE);
 
-        var deepest = 0;
-
-        var types = new List<int>();
-        var functionTypes = new List<int>();
         var position = HEADER_LENGTH;
+        string? problem = null;
 
         try
         {
-            while (position < module.Length)
+            while (position < module.Length && problem == null)
             {
                 var id = module[position++];
-                var size = (int)ReadU32(module, ref position);
+                var size = (int)VerifyModuleCode.ReadU32(module, ref position);
                 if (size < 0 || size > module.Length - position)
-                    return new VerifyModuleShapeReport(cost, UNREADABLE);
+                    return new VerifyModuleShapeReport(tally.Cost, UNREADABLE);
 
                 var section = module.Slice(position, size);
                 position += size;
 
-                switch (id)
+                problem = id switch
                 {
-                    case SECTION_TYPE:
-                        if (!ReadTypes(section, types))
-                            return new VerifyModuleShapeReport(cost, UNKNOWN_INSTRUCTION);
-                        break;
-                    case SECTION_FUNCTION:
-                        ReadFunctionTypes(section, functionTypes);
-                        break;
-                    case SECTION_CODE:
-                        var problem = ScanCode(section, types, functionTypes, maxNesting, ref cost, ref deepest);
-                        if (problem != null)
-                            return new VerifyModuleShapeReport(cost, problem) { DeepestNesting = deepest };
-                        break;
-                }
+                    SECTION_TYPE => ReadTypes(section, tally, bounds),
+                    SECTION_FUNCTION => ReadFunctionTypes(section, tally, bounds),
+                    SECTION_START => Start(tally, bounds),
+                    SECTION_CODE => ScanCode(section, tally, bounds),
+                    _ => null
+                };
             }
         }
         catch (IndexOutOfRangeException)
         {
-            return new VerifyModuleShapeReport(cost, UNREADABLE);
+            return new VerifyModuleShapeReport(tally.Cost, UNREADABLE);
         }
         catch (ArgumentOutOfRangeException)
         {
-            return new VerifyModuleShapeReport(cost, UNREADABLE);
+            return new VerifyModuleShapeReport(tally.Cost, UNREADABLE);
         }
 
-        return new VerifyModuleShapeReport(cost, null) { DeepestNesting = deepest, ShapeFuel = cost - bytes };
+        return new VerifyModuleShapeReport(tally.Cost, problem)
+        {
+            DeepestNesting = tally.DeepestNesting,
+            ShapeFuel = tally.Cost - bytes,
+            Functions = tally.FunctionTypes.Count,
+            WidestParameters = tally.WidestParameters,
+            WidestResults = tally.WidestResults,
+            WidestBlock = tally.WidestBlock,
+            MostLocals = tally.MostLocals,
+            Locals = tally.Locals,
+            LargestBody = tally.LargestBody,
+            MostBranches = tally.MostBranches,
+            HasStartFunction = tally.HasStartFunction,
+            CompileMemoryBytes = CompileMemory(module.Length, tally.FunctionTypes.Count, tally.LargestBody, tally.MostBlockUnits)
+        };
     }
 
-    private static bool ReadTypes(ReadOnlySpan<byte> section, List<int> parameterCounts)
+    private static string? Start(Tally tally, Bounds bounds)
+    {
+        tally.HasStartFunction = true;
+        return bounds.StartAllowed ? null : START_FUNCTION;
+    }
+
+    private static long CompileMemory(long moduleBytes, long functions, long largestBody, long blockUnits)
+    {
+        var memory = COMPILE_MEMORY_BASE_BYTES;
+        memory = AddSaturating(memory, Saturate(moduleBytes, COMPILE_MEMORY_PER_BYTE));
+        memory = AddSaturating(memory, Saturate(functions, COMPILE_MEMORY_PER_FUNCTION));
+        memory = AddSaturating(memory, Saturate(largestBody, COMPILE_MEMORY_PER_BODY_BYTE));
+        return AddSaturating(memory, Saturate(blockUnits, COMPILE_MEMORY_PER_BLOCK_UNIT));
+    }
+
+    private static string? ReadTypes(ReadOnlySpan<byte> section, Tally tally, Bounds bounds)
     {
         var position = 0;
-        var count = ReadU32(section, ref position);
+        var count = VerifyModuleCode.ReadU32(section, ref position);
         for (var index = 0u; index < count; index++)
         {
             // Function types only: the engine is configured without the proposals that add others.
             if (section[position++] != FORM_FUNCTION)
-                return false;
+                return UNKNOWN_INSTRUCTION;
 
-            var parameters = (int)ReadU32(section, ref position);
+            var parameters = (int)Math.Min(int.MaxValue, VerifyModuleCode.ReadU32(section, ref position));
             position += parameters;
-            parameterCounts.Add(parameters);
 
-            var results = (int)ReadU32(section, ref position);
+            var results = (int)Math.Min(int.MaxValue, VerifyModuleCode.ReadU32(section, ref position));
             position += results;
+
+            if (parameters > bounds.Parameters)
+                return $"a function type of the module has more than {bounds.Parameters} parameters";
+
+            if (results > bounds.Results)
+                return $"a function type of the module has more than {bounds.Results} results";
+
+            tally.WidestParameters = Math.Max(tally.WidestParameters, parameters);
+            tally.WidestResults = Math.Max(tally.WidestResults, results);
+            tally.Types.Add((parameters, results));
         }
 
-        return true;
+        return null;
     }
 
-    private static void ReadFunctionTypes(ReadOnlySpan<byte> section, List<int> functionTypes)
+    private static string? ReadFunctionTypes(ReadOnlySpan<byte> section, Tally tally, Bounds bounds)
     {
         var position = 0;
-        var count = ReadU32(section, ref position);
+        var count = VerifyModuleCode.ReadU32(section, ref position);
+        if (count > (uint)bounds.Functions)
+            return $"the module has more than {bounds.Functions} functions";
+
         for (var index = 0u; index < count; index++)
-            functionTypes.Add((int)ReadU32(section, ref position));
+            tally.FunctionTypes.Add((int)VerifyModuleCode.ReadU32(section, ref position));
+
+        return null;
     }
 
-    private static string? ScanCode(ReadOnlySpan<byte> section, List<int> types, List<int> functionTypes, int maxNesting, ref long cost, ref int deepest)
+    private static string? ScanCode(ReadOnlySpan<byte> section, Tally tally, Bounds bounds)
     {
         var position = 0;
-        var count = ReadU32(section, ref position);
-        var kinds = new byte[maxNesting + 2];
+        var count = VerifyModuleCode.ReadU32(section, ref position);
+        if (count > (uint)bounds.Functions)
+            return $"the module has more than {bounds.Functions} functions";
+
+        var kinds = new byte[bounds.Nesting + 2];
 
         for (var index = 0; index < count; index++)
         {
-            var size = (int)ReadU32(section, ref position);
+            var size = (int)VerifyModuleCode.ReadU32(section, ref position);
+            if (size > bounds.BodyBytes)
+                return $"a function of the module is larger than {bounds.BodyBytes >> 10} KiB";
+
             var body = section.Slice(position, size);
             position += size;
 
-            var parameters = index < functionTypes.Count && functionTypes[index] >= 0 && functionTypes[index] < types.Count ? types[functionTypes[index]] : 0;
-            var problem = ScanFunction(body, parameters, types, kinds, maxNesting, ref cost, ref deepest);
+            // A function is the engine's work whatever is in it: the smallest are priced as a few bytes more.
+            tally.Cost = AddSaturating(tally.Cost, Saturate(Math.Max(0, FUNCTION_FLOOR_BYTES - size), COMPILE_FUEL_PER_BYTE));
+            tally.LargestBody = Math.Max(tally.LargestBody, size);
+
+            var type = index < tally.FunctionTypes.Count ? tally.FunctionTypes[index] : -1;
+            var parameters = type >= 0 && type < tally.Types.Count ? tally.Types[type].Parameters : 0;
+            var problem = ScanFunction(body, parameters, kinds, tally, bounds);
             if (problem != null)
                 return problem;
         }
@@ -187,17 +362,28 @@ internal static class VerifyModuleShape
         return null;
     }
 
-    private static string? ScanFunction(ReadOnlySpan<byte> body, int parameters, List<int> types, byte[] kinds, int maxNesting, ref long cost, ref int deepest)
+    private static string? ScanFunction(ReadOnlySpan<byte> body, int parameters, byte[] kinds, Tally tally, Bounds bounds)
     {
         var position = 0;
 
         long locals = parameters;
-        var groups = ReadU32(body, ref position);
+        long declared = 0;
+        var groups = VerifyModuleCode.ReadU32(body, ref position);
         for (var group = 0u; group < groups; group++)
         {
-            locals += ReadU32(body, ref position);
+            declared += VerifyModuleCode.ReadU32(body, ref position);
             position++; // the group's value type: one byte without the proposals that widen it
         }
+
+        locals += declared;
+        if (locals > bounds.Locals)
+            return $"a function of the module has more than {bounds.Locals} locals";
+
+        tally.Locals += declared;
+        if (tally.Locals > bounds.ModuleLocals)
+            return $"the functions of the module declare more than {bounds.ModuleLocals} locals together";
+
+        tally.MostLocals = (int)Math.Max(tally.MostLocals, locals);
 
         var depth = 1;
         var loops = 0;
@@ -205,6 +391,8 @@ internal static class VerifyModuleShape
         long localUses = 0;
         long widestLoop = 0;
         long tableUnits = 0;
+        long blockUnits = 0;
+        long branches = 0;
         kinds[0] = KIND_BLOCK;
 
         while (depth > 0)
@@ -215,11 +403,27 @@ internal static class VerifyModuleShape
                 case OP_BLOCK:
                 case OP_LOOP:
                 case OP_IF:
-                    var blockType = ReadS64(body, ref position);
-                    if (depth > maxNesting)
-                        return $"a function of the module nests blocks deeper than {maxNesting}";
+                    var blockType = VerifyModuleCode.ReadS64(body, ref position);
+                    if (depth > bounds.Nesting)
+                        return $"a function of the module nests blocks deeper than {bounds.Nesting}";
 
-                    deepest = Math.Max(deepest, depth);
+                    tally.DeepestNesting = Math.Max(tally.DeepestNesting, depth);
+
+                    // What the block takes and gives: nothing, one value, or a function type's.
+                    long taken = 0;
+                    long values = blockType == BLOCK_TYPE_EMPTY ? 0 : 1;
+                    if (blockType >= 0 && blockType < tally.Types.Count)
+                    {
+                        taken = tally.Types[(int)blockType].Parameters;
+                        values = taken + tally.Types[(int)blockType].Results;
+                    }
+
+                    if (values > bounds.BlockValues)
+                        return $"a block of the module takes and gives more than {bounds.BlockValues} values";
+
+                    tally.WidestBlock = (int)Math.Max(tally.WidestBlock, values);
+                    if (values > 1)
+                        blockUnits = AddSaturating(blockUnits, Saturate(values, depth));
 
                     if (op == OP_LOOP)
                     {
@@ -227,9 +431,11 @@ internal static class VerifyModuleShape
                         deepestLoops = Math.Max(deepestLoops, loops);
 
                         // A loop that takes values takes them as the engine's compiler takes locals.
-                        if (blockType >= 0 && blockType < types.Count)
-                            widestLoop = Math.Max(widestLoop, types[(int)blockType]);
+                        widestLoop = Math.Max(widestLoop, taken);
                     }
+
+                    if (op == OP_IF)
+                        branches++;
 
                     kinds[depth++] = op == OP_LOOP ? KIND_LOOP : KIND_BLOCK;
                     break;
@@ -237,20 +443,26 @@ internal static class VerifyModuleShape
                     if (kinds[--depth] == KIND_LOOP)
                         loops--;
                     break;
+                case OP_BR:
+                case OP_BR_IF:
+                    VerifyModuleCode.ReadU32(body, ref position);
+                    branches++;
+                    break;
                 case OP_BR_TABLE:
-                    var targets = ReadU32(body, ref position);
+                    var targets = VerifyModuleCode.ReadU32(body, ref position);
                     for (var target = 0u; target <= targets; target++)
-                        ReadU32(body, ref position);
+                        VerifyModuleCode.ReadU32(body, ref position);
                     tableUnits = AddSaturating(tableUnits, Saturate(targets + 1, depth));
+                    branches += targets + 1;
                     break;
                 case 0x20:
                 case 0x21:
                 case 0x22:
-                    ReadU32(body, ref position);
+                    VerifyModuleCode.ReadU32(body, ref position);
                     localUses++;
                     break;
                 default:
-                    if (!SkipImmediates(op, body, ref position))
+                    if (!VerifyModuleCode.SkipImmediates(op, body, ref position))
                         return UNKNOWN_INSTRUCTION;
                     break;
             }
@@ -261,177 +473,19 @@ internal static class VerifyModuleShape
 
         var live = Math.Min(locals, localUses) + widestLoop;
         var loopUnits = Saturate(Saturate(live, live), deepestLoops);
+        var liveUnits = Math.Max(0, Saturate(live, branches) - FREE_LIVE_UNITS);
+        var branchUnits = branches > FREE_BRANCHES ? Saturate(branches, branches) : 0;
 
-        cost = AddSaturating(cost, Saturate(loopUnits, COMPILE_FUEL_PER_LOOP_UNIT));
-        cost = AddSaturating(cost, Saturate(tableUnits, COMPILE_FUEL_PER_TABLE_UNIT));
+        tally.MostBranches = Math.Max(tally.MostBranches, branches);
+        tally.MostBlockUnits = Math.Max(tally.MostBlockUnits, blockUnits);
+
+        tally.Cost = AddSaturating(tally.Cost, Saturate(loopUnits, COMPILE_FUEL_PER_LOOP_UNIT));
+        tally.Cost = AddSaturating(tally.Cost, Saturate(tableUnits, COMPILE_FUEL_PER_TABLE_UNIT));
+        tally.Cost = AddSaturating(tally.Cost, Saturate(branchUnits, COMPILE_FUEL_PER_BRANCH_UNIT));
+        tally.Cost = AddSaturating(tally.Cost, Saturate(liveUnits, COMPILE_FUEL_PER_LIVE_UNIT));
+        tally.Cost = AddSaturating(tally.Cost, Saturate(blockUnits, COMPILE_FUEL_PER_BLOCK_UNIT));
+        tally.Cost = AddSaturating(tally.Cost, Saturate(Math.Max(0, locals - FREE_LOCALS), COMPILE_FUEL_PER_LOCAL));
         return null;
-    }
-
-    /// <summary>Steps over the immediates of an instruction that neither opens nor closes a block; false for one the scan does not know.</summary>
-    private static bool SkipImmediates(byte op, ReadOnlySpan<byte> body, ref int position)
-    {
-        switch (op)
-        {
-            case 0x00: // unreachable
-            case 0x01: // nop
-            case 0x05: // else
-            case 0x0F: // return
-            case 0x1A: // drop
-            case 0x1B: // select
-            case 0xD1: // ref.is_null
-                return true;
-            case 0x0C: // br
-            case 0x0D: // br_if
-            case 0x10: // call
-            case 0x12: // return_call
-            case 0x23: // global.get
-            case 0x24: // global.set
-            case 0x25: // table.get
-            case 0x26: // table.set
-            case 0x3F: // memory.size
-            case 0x40: // memory.grow
-            case 0xD2: // ref.func
-                ReadU32(body, ref position);
-                return true;
-            case 0x11: // call_indirect
-            case 0x13: // return_call_indirect
-                ReadU32(body, ref position);
-                ReadU32(body, ref position);
-                return true;
-            case 0x1C: // select with types
-                position += (int)ReadU32(body, ref position);
-                return true;
-            case 0x41: // i32.const
-            case 0x42: // i64.const
-            case 0xD0: // ref.null
-                ReadS64(body, ref position);
-                return true;
-            case 0x43: // f32.const
-                position += 4;
-                return true;
-            case 0x44: // f64.const
-                position += 8;
-                return true;
-            case 0xFC:
-                return SkipSaturatingAndBulk(body, ref position);
-            case 0xFD:
-                return SkipVector(body, ref position);
-        }
-
-        if (op is >= 0x28 and <= 0x3E)
-        {
-            SkipMemoryArgument(body, ref position);
-            return true;
-        }
-
-        // Comparisons, arithmetic, conversions and sign extension: no immediates.
-        return op is >= 0x45 and <= 0xC4;
-    }
-
-    private static bool SkipSaturatingAndBulk(ReadOnlySpan<byte> body, ref int position)
-    {
-        var sub = ReadU32(body, ref position);
-        switch (sub)
-        {
-            case <= 7: // saturating conversions
-                return true;
-            case 9: // data.drop
-            case 11: // memory.fill
-            case 13: // elem.drop
-            case 15: // table.grow
-            case 16: // table.size
-            case 17: // table.fill
-                ReadU32(body, ref position);
-                return true;
-            case 8: // memory.init
-            case 10: // memory.copy
-            case 12: // table.init
-            case 14: // table.copy
-                ReadU32(body, ref position);
-                ReadU32(body, ref position);
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private static bool SkipVector(ReadOnlySpan<byte> body, ref int position)
-    {
-        var sub = ReadU32(body, ref position);
-        switch (sub)
-        {
-            case <= 11: // loads and the store
-            case 92:
-            case 93:
-                SkipMemoryArgument(body, ref position);
-                return true;
-            case 12: // v128.const
-            case 13: // i8x16.shuffle
-                position += 16;
-                return true;
-            case >= 21 and <= 34: // lane access
-                position++;
-                return true;
-            case >= 84 and <= 91: // lane loads and stores
-                SkipMemoryArgument(body, ref position);
-                position++;
-                return true;
-            default:
-                // Everything else of the vector and relaxed vector instructions has no immediates.
-                return sub <= 0x113;
-        }
-    }
-
-    private static void SkipMemoryArgument(ReadOnlySpan<byte> body, ref int position)
-    {
-        // Bit 6 of the alignment says a memory index follows (a module with one memory never sets it).
-        var alignment = ReadU32(body, ref position);
-        if ((alignment & 0x40) != 0)
-            ReadU32(body, ref position);
-
-        ReadU64(body, ref position);
-    }
-
-    private static uint ReadU32(ReadOnlySpan<byte> bytes, ref int position)
-    {
-        return (uint)ReadU64(bytes, ref position);
-    }
-
-    private static ulong ReadU64(ReadOnlySpan<byte> bytes, ref int position)
-    {
-        ulong value = 0;
-        for (var shift = 0; shift < 70; shift += 7)
-        {
-            var part = bytes[position++];
-            if (shift < 64)
-                value |= (ulong)(part & 0x7F) << shift;
-
-            if ((part & 0x80) == 0)
-                return value;
-        }
-
-        throw new ArgumentOutOfRangeException(nameof(bytes), "a number of the module is longer than ten bytes");
-    }
-
-    private static long ReadS64(ReadOnlySpan<byte> bytes, ref int position)
-    {
-        long value = 0;
-        for (var shift = 0; shift < 70; shift += 7)
-        {
-            var part = bytes[position++];
-            if (shift < 64)
-                value |= (long)(part & 0x7F) << shift;
-
-            if ((part & 0x80) != 0)
-                continue;
-
-            if (shift < 57 && (part & 0x40) != 0)
-                value |= -1L << (shift + 7);
-
-            return value;
-        }
-
-        throw new ArgumentOutOfRangeException(nameof(bytes), "a number of the module is longer than ten bytes");
     }
 
     private static long Saturate(long left, long right)
@@ -445,6 +499,43 @@ internal static class VerifyModuleShape
     private static long AddSaturating(long left, long right)
     {
         return left > long.MaxValue - right ? long.MaxValue : left + right;
+    }
+
+    #endregion
+
+    #region Nested Types
+
+    /// <summary>The bounds one scan holds a module to.</summary>
+    private readonly record struct Bounds(int Nesting, int Parameters, int Results, int BlockValues, int Locals, long ModuleLocals, int Functions, int BodyBytes, bool StartAllowed);
+
+    /// <summary>What one scan has counted so far.</summary>
+    private sealed class Tally
+    {
+        public List<(int Parameters, int Results)> Types { get; } = [];
+
+        public List<int> FunctionTypes { get; } = [];
+
+        public long Cost { get; set; }
+
+        public int DeepestNesting { get; set; }
+
+        public int WidestParameters { get; set; }
+
+        public int WidestResults { get; set; }
+
+        public int WidestBlock { get; set; }
+
+        public int MostLocals { get; set; }
+
+        public long Locals { get; set; }
+
+        public int LargestBody { get; set; }
+
+        public long MostBranches { get; set; }
+
+        public long MostBlockUnits { get; set; }
+
+        public bool HasStartFunction { get; set; }
     }
 
     #endregion

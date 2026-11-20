@@ -23,7 +23,7 @@ What a program has inside the box:
 
 | | |
 |---|---|
-| Processor | a fixed budget of instructions for every run: 20 thousand million by default, never more than 240 thousand million. The default is about 10 seconds of a plain busy loop on a slow machine, the largest two minutes of one. When the budget runs out the program is stopped. What the sandbox does at a program's request (reading a file, printing, making random bytes) is paid from the same budget, one unit a byte. A task that comes with test cases is run once for each case, 1,024 cases at most, and every run has the budget |
+| Processor | a fixed budget of instructions for every run: 20 thousand million by default, never more than 240 thousand million. The default is about 10 seconds of a plain busy loop on a slow machine, the largest two minutes of one. When the budget runs out the program is stopped. What the sandbox does at a program's request (reading a file, printing, making random bytes, a sleep) is paid from the same budget: a thousand units a request, and one unit a byte it moves. A task that comes with test cases is run once for each case, 1,024 cases at most, and every run has the budget |
 | A run that drags | the budget counts work, not time, and some work is slow. So your computer also keeps a clock of its own on every run and ends it after 50 seconds for the default budget, a little over 8 minutes for the largest. That stop is your computer's own and says nothing about the program: the task is sent out once more, and if no computer does better it is reported as having no result |
 | Memory | 256 MB by default (never more than 2 GB), one block of it. Asking for more fails inside the program |
 | Files | only the language's own library, or the task's own files, read-only, and only under the exact names they have. It cannot write, change, delete or rename a file, and cannot list a folder. What it can read about a file says nothing of your computer: the file's times and its disk read as zero, and its file number follows from its name inside the sandbox |
@@ -42,7 +42,9 @@ What a program has inside the box:
   another number (never more than your cores), and fewer when memory is short: the limit
   is three quarters of the memory that is free when a batch starts, divided by the memory
   one program may take (for C and C++ tasks the compiler's 1 GB counts when it is the
-  larger). The work runs below normal priority: on Windows your own programs go first.
+  larger). For tasks whose program is turned into machine code on your computer (below),
+  what that work may take is counted too: 64 MB a program, and about 1.3 GB set aside
+  once. The work runs below normal priority: on Windows your own programs go first.
   Linux does not honour that setting for threads; there the cap on the number of programs
   is the protection.
 - **Compiling C and C++.** A C or C++ task is compiled on your computer. The compiler is
@@ -50,15 +52,25 @@ What a program has inside the box:
   instructions for all the steps of a build and 1 GB of memory a step. It can read only
   the task's sources and the language's own library. What it produces (the object files
   and the program) is written to files in the client's own folder, each cut at 64 MB at
-  the write, and deleted after the task ends.
+  the write and all of one build together at 128 MB, and deleted after the task ends.
 - **Turning a module into machine code.** A program built from C or C++, and a module a
   lab compiled itself, is turned into machine code on your computer before it runs. That
   work takes the one thread of the worker that runs the task, so it stays within the
-  cores counted above. Before it starts, the module is checked and its shape is priced,
-  and the price is taken from the task's budget of instructions: a task that cannot pay
-  is stopped and nothing is compiled. A budget buys about as much of this work as it buys
-  of running: some ten seconds on a slow machine at the default budget, about two minutes
-  at the largest. A module that nests its blocks deeper than 2,048,
+  cores counted above. Before it starts, the module is checked: its shape is held to
+  bounds (how many values a call or a block passes, how many locals a function has and
+  how large it is, how many functions there are, how deep blocks nest) and priced, and
+  the price is taken from the task's budget of instructions: a task that cannot pay is
+  stopped and nothing is compiled. The prices were fitted to what the engine was measured
+  to take for each shape, so that a budget buys about as much of this work as it buys of
+  running, to within a few times either way: some ten seconds on a slow machine at the
+  default budget, about two minutes at the largest. That holds for the shapes that were
+  measured; it is not a proof about every module, and a compile cannot be stopped once it
+  has started. While it compiles, the engine also takes memory that is in no program's
+  256 MB: little for an ordinary program, up to about 1 GB for a module at every bound.
+  Compiles that may take 64 MB or more share about 1 GB between them, so the largest runs
+  alone, and the number of programs run at once is lowered for that gigabyte (above). The machine code of the programs of a batch is
+  kept in memory while the batch may need it again, 256 MB of it at most. A module past
+  a bound (blocks nested deeper than 2,048 among them),
   or one a lab brings that is larger than 8 MB, is refused. The first use of a language
   in a process compiles that language's own module (the controller's, checked by its
   SHA-256) on the engine's threads, once.

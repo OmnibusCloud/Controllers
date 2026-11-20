@@ -23,7 +23,7 @@ namespace OutWit.Controller.AI.Wasm;
 /// program has on Linux (<see cref="WasmHostGuestThread.ENGINE_STACK_BYTES"/>).</item>
 /// </list>
 /// The binding is pinned (<see cref="WasmHostBinding.BUILT_AGAINST"/>), and these are the only calls
-/// made past it; a binding that no longer has the native handle makes the host refuse to start, not
+/// made past it besides the question of a compiled module's size (<see cref="WasmHostModuleImage"/>); a binding that no longer has the native handle makes the host refuse to start, not
 /// run unprotected.
 /// </summary>
 internal static class WasmHostEngineNative
@@ -104,7 +104,9 @@ internal static class WasmHostEngineNative
         }
     }
 
-    private static IntPtr TheBindingsLibrary()
+    /// <summary>The wasmtime library the binding loaded.</summary>
+    /// <returns>Its handle.</returns>
+    internal static IntPtr TheBindingsLibrary()
     {
         // The library the binding's own calls loaded (the natives guard has checked it): the one a
         // copy of the host loaded for the binding (this controller's or another's, in a cloud

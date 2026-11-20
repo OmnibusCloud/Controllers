@@ -12,6 +12,14 @@ namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
 /// each. The same tasks run here in two sandboxes of one process, one in each mode, and every
 /// field a result has but the wall time is compared.
 /// <para>
+/// One thing does depend on the mode, and on the processor: how deep a recursion goes before the
+/// engine's stack ends (finding N-6 of the audit of 2026-11-18: a small C function returned from
+/// 104,850 levels with hardware traps and from 87,375 with explicit checks, on one machine). That
+/// is a stated limit, not a bug of a test: a recursion of up to <see cref="RECURSION_WITHIN"/>
+/// levels returns in both modes, one of <see cref="RECURSION_BEYOND"/> or more overflows in both,
+/// and between the two a program's end may depend on the node that runs it.
+/// </para>
+/// <para>
 /// A process that itself enforces shadow stacks has no hardware traps to compare with: there
 /// the fixture says that the comparison did not run.
 /// </para>
@@ -39,6 +47,25 @@ public sealed class VerifyTrapModeTests : VerifySandboxTestBase
     private const string OUT_OF_FUEL = """(module (memory (export "memory") 1) (func (export "_start") (local $i i64) (loop $n (local.set $i (i64.add (local.get $i) (i64.const 1))) (br $n))))""";
 
     private const long SMALL_FUEL = 200_000_000;
+
+    /// <summary>
+    /// A depth every node returns from: a quarter of the least a small function was measured to
+    /// reach (87,375 levels of a C function with explicit checks, 96 bytes of the engine's stack
+    /// a level).
+    /// </summary>
+    private const int RECURSION_WITHIN = 20_000;
+
+    /// <summary>
+    /// A depth no node returns from: a frame is 16 bytes of the engine's stack at the least and
+    /// the stack is 8 MiB, 524,288 such frames (the most a small function was measured to reach
+    /// is 174,755 levels).
+    /// </summary>
+    private const int RECURSION_BEYOND = 1_000_000;
+
+    // Each level takes a frame of the C stack and of the engine's: the audit's program.
+    private const string RECURSION_C = "#include <stdlib.h>\n"
+                                       + "__attribute__((noinline)) static int f(int n, volatile int *sink) { volatile int x = n; if (n == 0) return *sink; return f(n - 1, (volatile int *)&x) + x; }\n"
+                                       + "int main(int argc, char **argv) { volatile int zero = 0; int r = f(atoi(argv[1]), &zero); return r == -1 ? 1 : 0; }\n";
 
     #endregion
 
@@ -129,6 +156,71 @@ public sealed class VerifyTrapModeTests : VerifySandboxTestBase
                 TestContext.Out.WriteLine($"{runtime.Descriptor.Id}: {hardware.Verdict}, fuel {hardware.FuelConsumed} in both modes: {hardware.FuelConsumed == checks.FuelConsumed}");
                 AssertSameResult(checks, hardware);
             }
+        });
+    }
+
+    [TestCase(RECURSION_WITHIN, VerifyVerdict.Pass)]
+    [TestCase(RECURSION_BEYOND, VerifyVerdict.RuntimeError)]
+    public void N6AFiniteDeepRecursionOutsideTheStatedBandIsTheSameResultInBothTrapModesTest(int depth, VerifyVerdict verdict)
+    {
+        var runtime = VerifyRuntimeCatalog.Resolve(null, VerifyRuntimeCatalog.WASI, out var reason);
+        Assert.That(runtime, Is.Not.Null, reason);
+
+        // The audit's module: every level loads from an address it computes, as compiled C does.
+        var module = HostileModules.Bytes($$"""
+            (module
+              (memory (export "memory") 1)
+              (func $f (param $n i32) (result i32)
+                (local $a i64)
+                (local.set $a (i64.load (i32.and (i32.mul (local.get $n) (i32.const 8)) (i32.const 0xFFF8))))
+                (if (result i32) (i32.eqz (local.get $n))
+                  (then (i32.const 0))
+                  (else
+                    (i32.add (call $f (i32.sub (local.get $n) (i32.const 1)))
+                             (i32.wrap_i64 (local.get $a))))))
+              (func (export "_start")
+                (drop (call $f (i32.const {{depth}})))))
+            """);
+        var task = new VerifyTaskData
+        {
+            RuntimeId = VerifyRuntimeCatalog.WASI,
+            EntryPoint = "m.wasm",
+            Sources = [new VerifySourceFileData { Name = "m.wasm", Content = Convert.ToBase64String(module) }]
+        };
+        var limits = VerifySandboxDefaults.Resolve(new VerifyLimitsData { FuelBudget = SMALL_FUEL }, null);
+
+        var hardware = Sandbox.Execute(runtime!, task, limits);
+        var checks = m_explicit.Execute(runtime!, task, limits);
+
+        TestContext.Out.WriteLine($"{depth} levels: {hardware.Verdict}, fuel {hardware.FuelConsumed} (hardware traps) and {checks.FuelConsumed} (explicit checks); {hardware.Stderr.Split('\n')[0]}");
+        Assert.Multiple(() =>
+        {
+            Assert.That(hardware.Verdict, Is.EqualTo(verdict), hardware.Stderr);
+            AssertSameResult(checks, hardware);
+        });
+    }
+
+    [TestCase(RECURSION_WITHIN, VerifyVerdict.Pass)]
+    [TestCase(RECURSION_BEYOND, VerifyVerdict.RuntimeError)]
+    public void N6AFiniteDeepRecursionOfACProgramOutsideTheStatedBandIsTheSameResultInBothTrapModesTest(int depth, VerifyVerdict verdict)
+    {
+        var task = new VerifyTaskData
+        {
+            RuntimeId = VerifyRuntimeCatalog.CLANG_22_1_0,
+            EntryPoint = "main.c",
+            Sources = [new VerifySourceFileData { Name = "main.c", Content = RECURSION_C }],
+            Args = [depth.ToString()]
+        };
+        var limits = VerifySandboxDefaults.Resolve(null, null);
+
+        var hardware = Sandbox.Execute(Clang, task, limits);
+        var checks = m_explicit.Execute(Clang, task, limits);
+
+        TestContext.Out.WriteLine($"{depth} levels of a C function: {hardware.Verdict}, fuel {hardware.FuelConsumed} in both modes: {hardware.FuelConsumed == checks.FuelConsumed}; {hardware.Stderr.Split('\n')[0]}");
+        Assert.Multiple(() =>
+        {
+            Assert.That(hardware.Verdict, Is.EqualTo(verdict), hardware.Stderr);
+            AssertSameResult(checks, hardware);
         });
     }
 

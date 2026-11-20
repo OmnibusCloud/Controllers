@@ -61,20 +61,31 @@ internal static class WasmHostLimits
 
     /// <summary>
     /// The fuel instantiation runs under when a run's budget is given after it
-    /// (<see cref="WasmHostRunRequest.FuelAfterInstantiation"/>): the budget plus the most that
-    /// copying data and element segments can cost — a unit per byte of the memory cap and per
-    /// element of the table cap — so that instantiation never runs out of fuel on a platform that
-    /// copies (Windows) where it would not on one that maps a copy-on-write image, while a start
-    /// function of the module's own is still bounded.
+    /// (<see cref="WasmHostRunRequest.FuelAfterInstantiation"/>): the most that copying data and
+    /// element segments can cost, a unit per byte of the memory cap and per element of the table
+    /// cap, so that instantiation never runs out of fuel on a platform that copies (Windows) where
+    /// it would not on one that maps a copy-on-write image. Nothing of the run's budget is in it:
+    /// a start function of the module's own has this allowance and no more, and what it burns is
+    /// in no budget and in no fuel reported. The controllers ship no module with a start
+    /// function, and a controller that runs a module it did not ship refuses one that has it.
     /// </summary>
-    /// <param name="fuel">The run's budget.</param>
     /// <param name="memoryBytes">The cap of the guest's linear memory.</param>
     /// <returns>The fuel to give the store before instantiation.</returns>
-    public static long InstantiationFuel(long fuel, long memoryBytes)
+    public static long InstantiationFuel(long memoryBytes)
     {
-        var copies = Math.Max(1, memoryBytes) + MAX_TABLES * MAX_TABLE_ELEMENTS;
-        var budget = Math.Max(1, fuel);
-        return budget > long.MaxValue - copies ? long.MaxValue : budget + copies;
+        return Math.Max(1, memoryBytes) + MAX_TABLES * MAX_TABLE_ELEMENTS;
+    }
+
+    /// <summary>
+    /// Whether a run's wall time is over, by the ticks of its deadline: the engine's clock moves
+    /// in ticks, so a deadline may fire up to two ticks before the time is out.
+    /// </summary>
+    /// <param name="elapsedMs">The time since the run's envelope was set, milliseconds.</param>
+    /// <param name="wallMs">The wall time the run may take, milliseconds.</param>
+    /// <returns>True when the deadline may have fired.</returns>
+    public static bool DeadlineReached(long elapsedMs, int wallMs)
+    {
+        return elapsedMs >= ((long)WallToTicks(wallMs) - 2) * EPOCH_TICK_MS;
     }
 
     /// <summary>The epoch deadline of a wall-time budget: whole ticks, rounded up, at least one.</summary>

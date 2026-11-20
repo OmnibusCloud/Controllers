@@ -38,12 +38,21 @@ public sealed class VerifyWasmSandbox : IDisposable
     public const int MAX_TASK_MODULE_BYTES = 8 << 20;
 
     /// <summary>
-    /// The price of a module's shape from which its compile waits for its turn: one such compile
-    /// at a time in the process. What a compile of that kind takes in memory (hundreds of
-    /// megabytes, over a gigabyte at the largest budget) is in no task's memory cap, so the
-    /// workers of a batch must not all be in one at once.
+    /// The price of a module's shape from which its compile runs alone: one such compile at a
+    /// time in the process, and no other of the larger kind beside it. A compile of that price
+    /// takes seconds of a core that nothing can interrupt.
     /// </summary>
     public const long HEAVY_COMPILE_FUEL = 1_000_000_000;
+
+    /// <summary>
+    /// The memory a module's compile may take (<see cref="VerifyModuleShapeReport.CompileMemoryBytes"/>)
+    /// from which it is of the larger kind. A compile under it is counted with its task
+    /// (<see cref="VerifyBatchExecutor.MemoryPerTask"/>); one at or over it goes through the
+    /// gate (<see cref="VerifyCompileGate"/>), which holds <see cref="CompileGateBytes"/> for all
+    /// such compiles of the process together and is counted once
+    /// (<see cref="VerifyBatchExecutor.MemoryAside"/>).
+    /// </summary>
+    public const long HEAVY_COMPILE_BYTES = 64L << 20;
 
     private const string BUILT_PROGRAM = "program";
 
@@ -58,7 +67,7 @@ public sealed class VerifyWasmSandbox : IDisposable
     private readonly WasmHost m_taskHost;
     private readonly string m_ioDir;
     private readonly object m_modulesLock = new();
-    private readonly object m_heavyCompile = new();
+    private readonly VerifyCompileGate m_compileGate = new(CompileGateBytes);
     private readonly Dictionary<string, WasmModule> m_modules = new();
     private readonly VerifyTaskModuleCache m_taskModules;
     private readonly VerifyToolRunner m_tools;
@@ -270,9 +279,12 @@ public sealed class VerifyWasmSandbox : IDisposable
         {
             // The lease keeps the compiled module alive for the whole task while other workers
             // churn the cache.
-            if (shape.ShapeFuel >= HEAVY_COMPILE_FUEL)
+            if (shape.ShapeFuel >= HEAVY_COMPILE_FUEL || shape.CompileMemoryBytes >= HEAVY_COMPILE_BYTES)
             {
-                lock (m_heavyCompile)
+                // A long compile takes the whole gate and runs alone; a large one takes what it
+                // may need and runs beside the others for as long as they fit together.
+                var room = shape.ShapeFuel >= HEAVY_COMPILE_FUEL ? m_compileGate.Capacity : shape.CompileMemoryBytes;
+                using (m_compileGate.Enter(room))
                 {
                     lease = m_taskModules.Lease(name, bytes);
                 }
@@ -355,6 +367,7 @@ public sealed class VerifyWasmSandbox : IDisposable
             StopAtStdoutLimit = true,
             StderrLimitBytes = limits.StderrLimitBytes,
             ChargeHostCalls = true,
+            Census = Census,
             DiscardInBackground = true,
             OutOfMemory = LooksLikeOutOfMemory
         });
@@ -521,6 +534,19 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// <summary>Compiled task-supplied modules held right now (bounded by <see cref="TaskModuleCacheCapacity"/>).</summary>
     public int TaskModuleCacheCount => m_taskModules.Count;
 
+    /// <summary>The bytes of compiled code the task-supplied modules held right now take (idle ones are bounded by <see cref="TaskModuleCacheBytes"/>).</summary>
+    public long TaskModuleCacheHeldBytes => m_taskModules.Bytes;
+
+    /// <summary>The most bytes of compiled code the sandbox keeps for task-supplied modules nobody runs.</summary>
+    public static long TaskModuleCacheBytes => VerifyTaskModuleCache.DEFAULT_BYTE_CAPACITY;
+
+    /// <summary>
+    /// The memory the compiles of the larger kind may take together in one process: what one
+    /// compile may take at every bound of a task's module, for the largest program a build may
+    /// write. One such compile fills it; several of ordinary programs share it.
+    /// </summary>
+    public static long CompileGateBytes => VerifyModuleShape.CompileMemoryAtTheBounds(VerifyClangBuild.PRODUCT_LIMIT_BYTES);
+
     /// <summary>The most task-supplied modules the sandbox keeps compiled at once.</summary>
     public static int TaskModuleCacheCapacity => VerifyTaskModuleCache.DEFAULT_CAPACITY;
 
@@ -529,6 +555,18 @@ public sealed class VerifyWasmSandbox : IDisposable
     /// run's fuel (<see cref="VerifyBackstop"/>); null for that one. For tests of the backstop.
     /// </summary>
     internal int? BackstopMs { get; set; }
+
+    /// <summary>
+    /// Where the calls of every run into the host are counted by name, or null. For finding where
+    /// two machines answer a program differently; set it for one task at a time.
+    /// </summary>
+    internal WasmHostCallCensus? Census { get; set; }
+
+    /// <summary>
+    /// The gate the compiles of the larger kind take their place in (<see cref="HEAVY_COMPILE_BYTES"/>,
+    /// <see cref="HEAVY_COMPILE_FUEL"/>). For tests of which compiles go through it.
+    /// </summary>
+    internal VerifyCompileGate CompileGate => m_compileGate;
 
     #endregion
 }

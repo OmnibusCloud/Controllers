@@ -179,24 +179,29 @@ internal sealed class WasmHost : IDisposable
         var storeDisposed = false;
         try
         {
-            syscalls = new WasmHostSyscalls(m_engine, m_shim, request);
+            var meter = new WasmHostMeter(request.ChargeHostCalls, request.Census);
+            syscalls = new WasmHostSyscalls(m_engine, m_shim, request, meter);
 
             store.SetWasiConfiguration(Wasi(request, stdinPath, stdoutPath, stderrPath));
             WasmHostLimits.Apply(store, request.Fuel, request.MemoryBytes, request.WallMs);
 
-            // With the budget given after instantiation, instantiation gets the budget and what
-            // copying segments can cost, whatever the platform charges for it.
-            if (request.FuelAfterInstantiation)
-                store.Fuel = (ulong)WasmHostLimits.InstantiationFuel(request.Fuel, request.MemoryBytes);
+            // The run's deadline counts from here; the host's own clock says when it may have fired.
+            var envelope = System.Diagnostics.Stopwatch.StartNew();
+            var wall = request.WallMs;
+            Func<bool> late = () => WasmHostLimits.DeadlineReached(envelope.ElapsedMilliseconds, wall);
 
-            using var linker = WasmHostLinker.Create(m_engine);
+            // With the budget given after instantiation, instantiation gets what copying segments
+            // can cost, whatever the platform charges for it, and nothing of the budget.
+            if (request.FuelAfterInstantiation)
+                store.Fuel = (ulong)WasmHostLimits.InstantiationFuel(request.MemoryBytes);
+
+            using var linker = WasmHostLinker.Create(m_engine, meter);
             syscalls.Define(linker);
-            var exit = WasmHostExit.Define(linker);
+            var exit = WasmHostExit.Define(linker, meter);
 
             var start = DateTime.UtcNow;
             var refuel = request.FuelAfterInstantiation ? request.Fuel : (long?)null;
-            var calls = syscalls;
-            var invocation = WasmHostGuestThread.Run(() => Invoke(linker, store, module, exit, calls, refuel));
+            var invocation = WasmHostGuestThread.Run(() => Invoke(linker, store, module, exit, meter, refuel, late));
             var wallMs = (int)(DateTime.UtcNow - start).TotalMilliseconds;
 
             var fuelConsumed = request.FuelAfterInstantiation
@@ -259,7 +264,7 @@ internal sealed class WasmHost : IDisposable
         return wasi.WithStandardOutput(stdoutPath).WithStandardError(stderrPath);
     }
 
-    private static Invocation Invoke(Linker linker, Store store, WasmModule module, WasmHostExit exit, WasmHostSyscalls syscalls, long? refuel)
+    private static Invocation Invoke(Linker linker, Store store, WasmModule module, WasmHostExit exit, WasmHostMeter meter, long? refuel, Func<bool> late)
     {
         Instance instance;
         try
@@ -271,7 +276,7 @@ internal sealed class WasmHost : IDisposable
             // A guest that exits during module init (a start function, before _start) lands here.
             return new(WasmHostVerdict.Exited, status, null, 0);
         }
-        catch (WasmtimeException) when (syscalls.End is { } end)
+        catch (WasmtimeException) when (meter.End is { } end)
         {
             return Ended(end, 0);
         }
@@ -279,7 +284,7 @@ internal sealed class WasmHost : IDisposable
         {
             return Trapped(trap, 0);
         }
-        catch (WasmtimeException exception) when (WasmHostTraps.IsInterrupt(exception))
+        catch (WasmtimeException exception) when (WasmHostTraps.IsInterrupt(exception, late()))
         {
             // The clock, inside a call of the guest's initialisation: the machine, not the module.
             return Interrupted(0);
@@ -312,19 +317,20 @@ internal sealed class WasmHost : IDisposable
             // success), 126 and more included.
             return new(WasmHostVerdict.Exited, status, null, PeakMemory(instance));
         }
-        catch (WasmtimeException) when (syscalls.End is { } end)
+        catch (WasmtimeException) when (meter.End is { } end)
         {
+            // One of the host's calls ended the run, the clock inside such a call included: the
+            // host saw that trap by its code before the engine wrapped it in the call's error.
             return Ended(end, PeakMemory(instance));
         }
         catch (TrapException trap)
         {
             return Trapped(trap, PeakMemory(instance));
         }
-        catch (WasmtimeException exception) when (WasmHostTraps.IsInterrupt(exception))
+        catch (WasmtimeException exception) when (WasmHostTraps.IsInterrupt(exception, late()))
         {
-            // The clock's trap, stopping the guest inside a call that passes through the host: it
-            // arrives wrapped in an error of that call ("Caused by: wasm trap: interrupt") instead
-            // of as a trap. Where the clock fires is the machine's matter; the stop is the same.
+            // The clock's trap by another way than the two above: never by words alone, which a
+            // module can write, but by the engine's last line once the deadline has come.
             return Interrupted(PeakMemory(instance));
         }
         catch (WasmtimeException exception)
@@ -338,10 +344,13 @@ internal sealed class WasmHost : IDisposable
 
     /// <summary>
     /// A run one of the host's own calls ended: out of fuel in a call that costs fuel (a budget
-    /// stop like the engine's own), or stdout past its cap.
+    /// stop like the engine's own), stdout past its cap, or the clock inside the call.
     /// </summary>
     private static Invocation Ended(WasmHostVerdict end, long peakMemory)
     {
+        if (end == WasmHostVerdict.Interrupted)
+            return Interrupted(peakMemory);
+
         return new(end, -1, end == WasmHostVerdict.OutOfFuel ? TrapCode.OutOfFuel : null, peakMemory);
     }
 

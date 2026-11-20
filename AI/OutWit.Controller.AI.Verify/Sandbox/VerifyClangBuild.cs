@@ -14,7 +14,9 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// header is found under the exact name it has and under no other, on every node. The command
 /// lines are fixed (the driver's plan, captured once); every step runs under one compile budget
 /// for the task, apart from the program's own limits. Fuel is what ends a build that is too
-/// large, the same on every node; a step's product is capped where it is written. A file's time
+/// large, the same on every node; a step's product is capped where it is written, and so is
+/// everything the build writes together, objects and program (<see cref="BUILD_LIMIT_BYTES"/>):
+/// a build never holds more than that on the node's disk. A file's time
 /// reads as zero in the sandbox, so <c>__TIMESTAMP__</c> is the same text everywhere, like
 /// <c>__DATE__</c> and <c>__TIME__</c>.
 /// </summary>
@@ -36,6 +38,13 @@ internal static class VerifyClangBuild
 
     /// <summary>The largest object or program a step may produce; the write that passes it ends the step.</summary>
     public const int PRODUCT_LIMIT_BYTES = 64 << 20;
+
+    /// <summary>
+    /// The most bytes one build may write, all its objects and its program together: twice the
+    /// largest product, so that a program of the largest size still has room for its objects. A
+    /// step may write what is left of it and no more; the write that passes it ends the build.
+    /// </summary>
+    public const long BUILD_LIMIT_BYTES = 2L * PRODUCT_LIMIT_BYTES;
 
     /// <summary>How much of a step's diagnostics a failed build reports.</summary>
     public const int DIAGNOSTICS_LIMIT_BYTES = 64 * 1024;
@@ -122,6 +131,7 @@ internal static class VerifyClangBuild
 
         var fuelLeft = COMPILE_FUEL;
         var wallLeft = COMPILE_WALL_MS;
+        var bytesLeft = BUILD_LIMIT_BYTES;
         var objectFiles = new List<string>();
 
         for (var i = 0; i < units.Count; i++)
@@ -130,7 +140,7 @@ internal static class VerifyClangBuild
             var (name, kind) = units[i];
             var objectName = $"{i}.o";
             var argv = CompileArgv(name, kind!);
-            var step = Step(tools, llvm, argv, [sources, sysroot], Path.Combine(objects, objectName), workDir, ref fuelLeft, ref wallLeft);
+            var step = Step(tools, llvm, argv, [sources, sysroot], Path.Combine(objects, objectName), workDir, ref fuelLeft, ref wallLeft, ref bytesLeft);
             if (step != null)
                 return (null, step);
 
@@ -141,7 +151,7 @@ internal static class VerifyClangBuild
         var program = Path.Combine(workDir, "program.wasm");
         string[] link = ["llvm", .. LINK_HEAD, .. objectFiles.Select(file => $"{OBJECTS}/{file}"), .. LINK_TAIL];
         var objectFolder = new WasmHostPreopen(objects, OBJECTS, Names: new WasmHostNames(objectFiles));
-        var linked = Step(tools, llvm, link, [sysroot, objectFolder], program, workDir, ref fuelLeft, ref wallLeft);
+        var linked = Step(tools, llvm, link, [sysroot, objectFolder], program, workDir, ref fuelLeft, ref wallLeft, ref bytesLeft);
         if (linked != null)
             return (null, linked);
 
@@ -175,11 +185,20 @@ internal static class VerifyClangBuild
     }
 
     private static string? Step(VerifyToolRunner tools, WasmModule llvm, IReadOnlyList<string> argv,
-        IReadOnlyList<WasmHostPreopen> folders, string product, string workDir, ref long fuelLeft, ref int wallLeft)
+        IReadOnlyList<WasmHostPreopen> folders, string product, string workDir, ref long fuelLeft, ref int wallLeft, ref long bytesLeft)
     {
-        var outcome = tools.Run(llvm, argv, folders, product, PRODUCT_LIMIT_BYTES, DIAGNOSTICS_LIMIT_BYTES, workDir, fuelLeft, Math.Max(1, wallLeft), STEP_MEMORY_BYTES);
+        // A build that has written all it may write has no room left for the product of a step.
+        if (bytesLeft <= 0)
+            return BuildOverItsBudget();
+
+        // The step's own cap, or what the build has left when that is less: checked at the write.
+        var total = bytesLeft < PRODUCT_LIMIT_BYTES;
+        var limit = (int)Math.Min(PRODUCT_LIMIT_BYTES, bytesLeft);
+
+        var outcome = tools.Run(llvm, argv, folders, product, limit, DIAGNOSTICS_LIMIT_BYTES, workDir, fuelLeft, Math.Max(1, wallLeft), STEP_MEMORY_BYTES);
         fuelLeft -= outcome.Fuel;
         wallLeft -= outcome.WallMs;
+        bytesLeft -= Math.Min(bytesLeft, outcome.ProductBytes);
 
         var tool = argv[1];
         switch (outcome.Verdict)
@@ -190,6 +209,8 @@ internal static class VerifyClangBuild
                 return outcome.Diagnostics is { Length: > 0 } text ? text : $"{tool} exited with {outcome.ExitCode}";
             case WasmHostVerdict.OutOfFuel:
                 return $"the build did not finish within its budget ({COMPILE_FUEL / 1_000_000_000} G fuel for all its steps)";
+            case WasmHostVerdict.OutputLimit when total:
+                return BuildOverItsBudget();
             case WasmHostVerdict.OutputLimit:
                 return $"{tool} produced more than {PRODUCT_LIMIT_BYTES >> 20} MiB";
             case WasmHostVerdict.Trap:
@@ -203,6 +224,11 @@ internal static class VerifyClangBuild
                 // The pinned tool did not start: nothing the sources could have caused.
                 throw new VerifyNodeFaultException(VerifyFault.NODE_FAULT);
         }
+    }
+
+    private static string BuildOverItsBudget()
+    {
+        return $"the build wrote more than {BUILD_LIMIT_BYTES >> 20} MiB, its objects and its program together";
     }
 
     #endregion

@@ -75,7 +75,7 @@ public static class VerifyBatchExecutor
         var runtime = EnsureRunnable(runtimesRoot, batch);
         var results = new VerifyResultData[batch.Tasks.Count];
 
-        var degree = VerifySandboxDegree.ForCurrentMachine(MemoryPerTask(batch, runtime), batch.MaxDegree);
+        var degree = VerifySandboxDegree.ForCurrentMachine(MemoryPerTask(batch, runtime), batch.MaxDegree, memoryAsideBytes: MemoryAside(runtime));
         var completed = 0;
 
         VerifyWorkerPool.Run(batch.Tasks.Count, degree,
@@ -156,7 +156,10 @@ public static class VerifyBatchExecutor
 
     /// <summary>
     /// The most memory one task of the batch may take while it runs: its own cap, or the cap of
-    /// the compiler's steps when the batch is of the C/C++ runtime and that is the larger.
+    /// the compiler's steps when the batch is of the C/C++ runtime and that is the larger. A task
+    /// whose module the engine compiles on the node (a module the task brought, a program built
+    /// from its sources) counts for a compile of the lighter kind besides: the worker that runs it
+    /// compiles it.
     /// </summary>
     internal static long MemoryPerTask(VerifyTaskBatchData batch, VerifyResolvedRuntime runtime)
     {
@@ -167,7 +170,28 @@ public static class VerifyBatchExecutor
         if (cap <= 0)
             cap = VerifySandboxDefaults.DEFAULT_MEMORY_BYTES;
 
-        return runtime.Descriptor.Language == VerifyRuntimeLanguage.C ? Math.Max(cap, VerifyClangBuild.STEP_MEMORY_BYTES) : cap;
+        if (runtime.Descriptor.Language == VerifyRuntimeLanguage.C)
+            cap = Math.Max(cap, VerifyClangBuild.STEP_MEMORY_BYTES);
+
+        return CompilesTaskModules(runtime) ? cap + VerifyWasmSandbox.HEAVY_COMPILE_BYTES : cap;
+    }
+
+    /// <summary>
+    /// The memory a batch takes whatever its degree, for a runtime whose tasks bring or build
+    /// their modules: what the compiles of the larger kind may take together (they share a gate
+    /// of that size, <see cref="VerifyCompileGate"/>), and the compiled modules the sandbox keeps
+    /// for the tasks to come. Nothing for a runtime whose module the controller ships.
+    /// </summary>
+    /// <param name="runtime">The batch's runtime.</param>
+    /// <returns>Bytes.</returns>
+    internal static long MemoryAside(VerifyResolvedRuntime runtime)
+    {
+        return CompilesTaskModules(runtime) ? VerifyWasmSandbox.CompileGateBytes + VerifyTaskModuleCache.DEFAULT_BYTE_CAPACITY : 0;
+    }
+
+    private static bool CompilesTaskModules(VerifyResolvedRuntime runtime)
+    {
+        return runtime.Descriptor.TaskSupplied || runtime.Descriptor.Language == VerifyRuntimeLanguage.C;
     }
 
     /// <summary>A runtime id as a message may show it: bounded, and only the characters an id has.</summary>

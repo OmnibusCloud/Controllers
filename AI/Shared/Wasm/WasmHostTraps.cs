@@ -45,28 +45,44 @@ internal static class WasmHostTraps
 
     /// <summary>
     /// Whether an error of the engine is the epoch deadline. The clock's trap reaches the host as
-    /// a trap when it stops the guest's own code, and as an error of another kind when it stops
-    /// the guest inside a call that passes through the host (its text then ends with the cause,
-    /// <see cref="INTERRUPT_CAUSE"/>). Where the clock fires is a matter of the machine, so both
-    /// are the same stop: the clock, never a verdict about the program.
+    /// a trap with its code when it stops the guest's own code, and that code is the answer. It
+    /// can also stop the guest inside a call that passes through the host: the host notes that
+    /// where it sees the trap (<see cref="WasmHostMeter.Interrupted"/>); what is left for this
+    /// test is an error of the engine whose text ends with the cause
+    /// (<see cref="INTERRUPT_CAUSE"/>). A module can put any words into an error's text (the name
+    /// of an import, the name of a function in a backtrace), so the text counts only as the
+    /// engine's own last line, and only once the run's deadline has come by the host's clock:
+    /// before that no deadline can have fired, whatever an error says.
     /// </summary>
     /// <param name="exception">What the engine threw.</param>
-    /// <returns>True when the exception, or one it wraps, is the deadline's trap or names it as its cause.</returns>
-    public static bool IsInterrupt(Exception exception)
+    /// <param name="deadlineReached">Whether the run's wall time is over by the host's own clock.</param>
+    /// <returns>True when the exception is the deadline's trap, or names it as its cause after the deadline.</returns>
+    public static bool IsInterrupt(Exception exception, bool deadlineReached)
     {
         for (var current = exception; current != null; current = current.InnerException)
         {
             if (current is TrapException { Type: TrapCode.Interrupt })
                 return true;
 
-            foreach (var line in current.Message.Split((char)10))
-            {
-                if (string.Equals(line.Trim(), INTERRUPT_CAUSE, StringComparison.Ordinal))
-                    return true;
-            }
+            if (deadlineReached && string.Equals(LastLine(current.Message), INTERRUPT_CAUSE, StringComparison.Ordinal))
+                return true;
         }
 
         return false;
+    }
+
+    /// <summary>The last line of a text that holds anything, without the blanks around it.</summary>
+    private static string LastLine(string text)
+    {
+        var lines = text.Split((char)10);
+        for (var index = lines.Length - 1; index >= 0; index--)
+        {
+            var line = lines[index].Trim();
+            if (line.Length > 0)
+                return line;
+        }
+
+        return "";
     }
 
     /// <summary>The words for one kind of trap.</summary>

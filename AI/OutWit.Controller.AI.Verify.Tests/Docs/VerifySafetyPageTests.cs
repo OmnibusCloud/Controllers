@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using OutWit.Controller.AI.Verify.Runtimes;
 using OutWit.Controller.AI.Verify.Sandbox;
 
 namespace OutWit.Controller.AI.Verify.Tests.Docs;
@@ -63,6 +64,17 @@ public sealed class VerifySafetyPageTests
             Assert.That(page, Does.Contain($"and {VerifyLimitCeilings.MAX_MEMORY_BYTES / GIBIBYTE} GB for a run"));
             Assert.That(page, Does.Contain($"{VerifyClangBuild.STEP_MEMORY_BYTES / GIBIBYTE} GB of memory a step"));
             Assert.That(page, Does.Contain($"{VerifyClangBuild.PRODUCT_LIMIT_BYTES / MEBIBYTE} MB"));
+            Assert.That(page, Does.Contain($"all of one build together at {VerifyClangBuild.BUILD_LIMIT_BYTES / MEBIBYTE} MB"));
+            Assert.That(page, Does.Contain($"Compiles that may take {VerifyWasmSandbox.HEAVY_COMPILE_BYTES / MEBIBYTE} MB or more share about 1 GB between them"));
+            Assert.That(page, Does.Contain($"{VerifyWasmSandbox.HEAVY_COMPILE_BYTES / MEBIBYTE} MB a program, and about 1.3 GB set aside"));
+            Assert.That(VerifyBatchExecutor.MemoryAside(VerifyRuntimeCatalog.Resolve(null, VerifyRuntimeCatalog.WASI, out _)!), Is.InRange(1250 * MEBIBYTE, 1350 * MEBIBYTE), "the page says about 1.3 GB");
+            Assert.That(VerifyWasmSandbox.CompileGateBytes, Is.InRange(950 * MEBIBYTE, 1100 * MEBIBYTE), "the page says about 1 GB, twice");
+            Assert.That(page, Does.Contain($"{VerifyTaskModuleCache.DEFAULT_BYTE_CAPACITY / MEBIBYTE} MB of it at most"));
+            Assert.That(page, Does.Contain("a thousand units a request, and one unit a byte it moves"));
+            Assert.That(OutWit.Controller.AI.Wasm.WasmHostMeter.CALL_FUEL, Is.EqualTo(1000), "the page writes this number as a word: a thousand");
+            Assert.That(page, Does.Contain($"blocks nested deeper than {VerifyModuleShape.MAX_NESTING.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)}"));
+            Assert.That(page, Does.Contain("to within a few times either way"));
+            Assert.That(page, Does.Contain("it is not a proof about every module"));
 
             // What a task may hold, and what a node refuses a package for.
             var cases = OutWit.Controller.AI.Verify.Tasksets.VerifyTasksetLimits.MAX_SUITE_CASES.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);

@@ -18,6 +18,10 @@ namespace OutWit.Controller.AI.Wasm;
 /// Four calls are taken away, each for a stated reason: renumbering a descriptor, listing a
 /// folder, and setting a file's times (by descriptor and by path) answer with an error and
 /// do nothing.
+///
+/// Every call defined here costs the run what any call into the host costs, and a wait costs the
+/// bytes of the records it reads and writes besides (<see cref="WasmHostMeter"/>): a wait returns
+/// at once, so a program could otherwise ask for thousands of them a second for almost no fuel.
 /// </summary>
 internal static class WasmHostLinker
 {
@@ -35,6 +39,12 @@ internal static class WasmHostLinker
 
     private const string WASI_MODULE = "wasi_snapshot_preview1";
     private const string GUEST_MEMORY = "memory";
+    private const string CLOCK_TIME_GET = "clock_time_get";
+    private const string POLL_ONEOFF = "poll_oneoff";
+    private const string FD_RENUMBER = "fd_renumber";
+    private const string FD_READDIR = "fd_readdir";
+    private const string FD_FILESTAT_SET_TIMES = "fd_filestat_set_times";
+    private const string PATH_FILESTAT_SET_TIMES = "path_filestat_set_times";
     private const int ERRNO_SUCCESS = 0;
     private const int ERRNO_ACCES = 2;
     private const int ERRNO_FAULT = 21;
@@ -46,15 +56,15 @@ internal static class WasmHostLinker
     // the kind at 8 (0 = clock, 1 = descriptor readable, 2 = descriptor writable) and, for a
     // clock, the timeout at 24 and the flags at 40 (bit 0: the timeout is an instant, not a
     // duration). An event is 32 bytes: the userdata at 0, the error at 8, the kind at 10.
-    private const int SUBSCRIPTION_SIZE = 48;
+    internal const int SUBSCRIPTION_SIZE = 48;
     private const int SUBSCRIPTION_KIND_OFFSET = 8;
     private const int SUBSCRIPTION_TIMEOUT_OFFSET = 24;
     private const int SUBSCRIPTION_FLAGS_OFFSET = 40;
     private const byte SUBSCRIPTION_KIND_CLOCK = 0;
     private const ushort SUBSCRIPTION_FLAG_ABSOLUTE = 1;
-    private const int EVENT_SIZE = 32;
+    internal const int EVENT_SIZE = 32;
     private const int EVENT_KIND_OFFSET = 10;
-    private const int MAX_SUBSCRIPTIONS = 4096;
+    internal const int MAX_SUBSCRIPTIONS = 4096;
 
     #endregion
 
@@ -64,8 +74,9 @@ internal static class WasmHostLinker
     /// Creates the linker for one run.
     /// </summary>
     /// <param name="engine">The host's engine.</param>
+    /// <param name="meter">The run's meter.</param>
     /// <returns>A linker with WASI defined and the run's own time in it; the caller disposes it.</returns>
-    public static Linker Create(WasmEngine engine)
+    public static Linker Create(WasmEngine engine, WasmHostMeter meter)
     {
         var linker = new Linker(engine) { AllowShadowing = true };
         linker.DefineWasi();
@@ -75,9 +86,11 @@ internal static class WasmHostLinker
         // spike, and with it any sight of the host's time. The pointer is the guest's: one
         // outside its memory answers "bad address".
         var clock = new GuestClock(PINNED_CLOCK_NS);
-        linker.DefineFunction(WASI_MODULE, "clock_time_get",
+        linker.DefineFunction(WASI_MODULE, CLOCK_TIME_GET,
             (Caller caller, int clockId, long precision, int timePtr) =>
             {
+                meter.Call(caller, CLOCK_TIME_GET);
+
                 var memory = caller.GetMemory(GUEST_MEMORY);
                 if (memory == null || (long)(uint)timePtr + sizeof(long) > memory.GetLength())
                     return ERRNO_FAULT;
@@ -89,41 +102,53 @@ internal static class WasmHostLinker
         // A wait is a call into the host, where neither fuel nor the wall limit reaches: the
         // real one would hold a worker for as long as the program asked. Here it returns at
         // once and moves the run's clock instead.
-        linker.DefineFunction(WASI_MODULE, "poll_oneoff",
+        linker.DefineFunction(WASI_MODULE, POLL_ONEOFF,
             (Caller caller, int subscriptionsPtr, int eventsPtr, int count, int storedPtr) =>
-                Poll(caller.GetMemory(GUEST_MEMORY), clock, subscriptionsPtr, eventsPtr, count, storedPtr));
+            {
+                meter.Call(caller, POLL_ONEOFF);
+                return Poll(caller, meter, clock, subscriptionsPtr, eventsPtr, count, storedPtr);
+            });
 
         // No descriptor juggling. Nothing a guest does needs fd_renumber (the C library's dup2),
         // and it is where wasmtime up to 44.0.2 leaked host descriptors (GHSA-3p27-qvp9-27qf):
         // it answers "not implemented".
-        linker.DefineFunction(WASI_MODULE, "fd_renumber", (Caller caller, int from, int to) => ERRNO_NOSYS);
+        linker.DefineFunction(WASI_MODULE, FD_RENUMBER, (Caller caller, int from, int to) => Answer(caller, meter, FD_RENUMBER, ERRNO_NOSYS));
 
         // No directory listing. The order of a listing is the host file system's (two nodes
         // would print it differently), and before wasmtime 48.0.4 every entry carried three
         // bytes of uninitialized host memory to the guest (GHSA-96f6-r43r-8c24). "Permission
         // denied" is what the interpreters' own importers take for an empty folder.
-        linker.DefineFunction(WASI_MODULE, "fd_readdir",
-            (Caller caller, int fd, int buffer, int bufferLength, long cookie, int usedPtr) => ERRNO_ACCES);
+        linker.DefineFunction(WASI_MODULE, FD_READDIR,
+            (Caller caller, int fd, int buffer, int bufferLength, long cookie, int usedPtr) => Answer(caller, meter, FD_READDIR, ERRNO_ACCES));
 
         // No file times to set: the times of a file are the host's clock, which no run may see
         // or leave behind, and before wasmtime 48.0.3 an out-of-range time panicked the host
         // (GHSA-j2g9-4prp-pf6h).
-        linker.DefineFunction(WASI_MODULE, "fd_filestat_set_times",
-            (Caller caller, int fd, long accessed, long modified, int flags) => ERRNO_ROFS);
-        linker.DefineFunction(WASI_MODULE, "path_filestat_set_times",
-            (Caller caller, int fd, int lookupFlags, int pathPtr, int pathLength, long accessed, long modified, int flags) => ERRNO_ROFS);
+        linker.DefineFunction(WASI_MODULE, FD_FILESTAT_SET_TIMES,
+            (Caller caller, int fd, long accessed, long modified, int flags) => Answer(caller, meter, FD_FILESTAT_SET_TIMES, ERRNO_ROFS));
+        linker.DefineFunction(WASI_MODULE, PATH_FILESTAT_SET_TIMES,
+            (Caller caller, int fd, int lookupFlags, int pathPtr, int pathLength, long accessed, long modified, int flags) => Answer(caller, meter, PATH_FILESTAT_SET_TIMES, ERRNO_ROFS));
 
         return linker;
+    }
+
+    /// <summary>A call the host answers with one fixed answer: paid for like any call.</summary>
+    private static int Answer(Caller caller, WasmHostMeter meter, string name, int errno)
+    {
+        meter.Call(caller, name);
+        return errno;
     }
 
     /// <summary>
     /// poll_oneoff without waiting. A descriptor is always ready (stdin is a file, stdout and
     /// stderr are files), so when the program asks about any, those are answered and no time
     /// passes. When it asks for timers only, the clock moves to the earliest of them (by a
-    /// nanosecond at the least) and that one, with any other due by then, is answered.
+    /// nanosecond at the least) and that one, with any other due by then, is answered. The
+    /// records cost their bytes: every subscription read, every event written.
     /// </summary>
-    private static int Poll(Memory? memory, GuestClock clock, int subscriptionsPtr, int eventsPtr, int count, int storedPtr)
+    private static int Poll(Caller caller, WasmHostMeter meter, GuestClock clock, int subscriptionsPtr, int eventsPtr, int count, int storedPtr)
     {
+        var memory = caller.GetMemory(GUEST_MEMORY);
         if (memory == null)
             return ERRNO_FAULT;
 
@@ -139,6 +164,8 @@ internal static class WasmHostLinker
             || events + (long)count * EVENT_SIZE > length
             || stored + sizeof(int) > length)
             return ERRNO_FAULT;
+
+        meter.Bytes(caller, POLL_ONEOFF, (long)count * SUBSCRIPTION_SIZE);
 
         var descriptors = false;
         var earliest = long.MaxValue;
@@ -176,6 +203,7 @@ internal static class WasmHostLinker
         }
 
         BinaryPrimitives.WriteInt32LittleEndian(memory.GetSpan(stored, sizeof(int)), written);
+        meter.Bytes(caller, POLL_ONEOFF, (long)written * EVENT_SIZE);
         return ERRNO_SUCCESS;
     }
 

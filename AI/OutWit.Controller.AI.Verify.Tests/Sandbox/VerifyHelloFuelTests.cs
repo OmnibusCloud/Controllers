@@ -1,5 +1,6 @@
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
+using OutWit.Controller.AI.Wasm;
 
 namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
 
@@ -9,31 +10,45 @@ namespace OutWit.Controller.AI.Verify.Tests.Sandbox;
 /// segments, which wasmtime charged a unit a byte for where it copies them and not where Linux maps
 /// a copy-on-write image, is out of it, and with it the fixed step earlier versions showed between
 /// Linux and the other systems (a Lua hello was 32,769 more on Windows and macOS). The build server
-/// runs these on Windows, Linux and macOS against the same pins: one number for every runtime but
-/// the two CPython ones that read their library from files, which still drift between hosts by up to
-/// a few hundredths of a percent with how each host's WASI answers the interpreter's file queries
-/// (measured: equal on this desktop and on macOS, 40 units less on the Windows build server, 1,113
-/// and 969,160 less on Linux); the numpy runtime starts from a snapshot and does not.
+/// runs these on Windows, Linux and macOS against the same pins: one number for every runtime.
+/// <para>
+/// The two CPython runtimes that read their library from files are held to that as well since
+/// 0.17.0. Up to 0.12.0 their fuel drifted between hosts by a few hundredths of a percent (on the
+/// build server the hello cost 1,153 units and sympy's import 968,240 units less on Linux than on
+/// Windows and macOS), because the interpreter's imports read the host's file records: times, a
+/// device, a file number. Since 0.13.0 a record says nothing of the host, and the build server has
+/// given the same figures on the three systems since; the listing of a hello's calls into the host
+/// (below) is the same on the three, call by call, with the same fuel used before every call.
+/// </para>
+/// <para>
+/// Every pin moved with 0.17.0, for two reasons, both of them prices that were missing. A call
+/// into the host costs a thousand units whatever it moves, and the arguments and the environment
+/// cost their bytes each time a program copies them: a hello pays for the calls its interpreter
+/// makes to start (counted: CPython 118, sympy's import 7,814, the raw module 1; by the
+/// difference of the figures the others make between 3 and 97). And a function of a task's
+/// module is priced as 24 bytes at the least, so the two programs whose module the engine
+/// compiles on the node pay for their smallest functions: the raw hello 22,528 units more (one
+/// function of 13 bytes), the C hello about 311,000. Before and after:
+/// CPython 122,363,490 and 122,481,638; sympy 3,205,340,541 and 3,213,154,830; numpy 24,920,091
+/// and 24,941,299; QuickJS 2,359,037 and 2,367,084; Ruby 153,868,237 and 153,965,549; Lua 571,435
+/// and 588,454; TypeScript 333,353,693 and 333,420,186; C 8,314,372 and 8,628,668; the raw module
+/// 458,764 and 482,292. No verdict and no output of these programs moved.
+/// </para>
 /// </summary>
 [TestFixture]
 public sealed class VerifyHelloFuelTests : VerifySandboxTestBase
 {
-    #region Constants
-
-    /// <summary>The most a CPython task's fuel drifts between hosts: 0.06 % (documented since 0.6; measured up to 0.032 %).</summary>
-    private const double CPYTHON_DRIFT = 0.0006;
-
-    #endregion
-
     #region Tests
 
-    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6_NUMPY_2_5_4, "m.py", "import numpy; print(numpy.__version__)", 24_920_091L)]
-    [TestCase(VerifyRuntimeCatalog.QUICKJS_0_15_1, "m.js", "console.log('hello')", 2_359_037L)]
-    [TestCase(VerifyRuntimeCatalog.RUBY_3_4_1, "m.rb", "puts 'hello'", 153_868_237L)]
-    [TestCase(VerifyRuntimeCatalog.LUA_5_4_8, "m.lua", "print('hello')", 571_435L)]
-    [TestCase(VerifyRuntimeCatalog.TYPESCRIPT_SUCRASE_3_35_1, "m.ts", "const x: string = 'hello';\nconsole.log(x);", 333_353_693L)]
-    [TestCase(VerifyRuntimeCatalog.CLANG_22_1_0, "m.c", "#include <stdio.h>\nint main(void) { puts(\"hello\"); return 0; }\n", 8_314_372L)]
-    [TestCase(VerifyRuntimeCatalog.WASI, "hello.wasm", global::OutWit.Controller.AI.Verify.Sandbox.VerifySelfCheck.HELLO_WASM_BASE64, 458_764L)]
+    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6, "m.py", "print('hello')", 122_481_638L)]
+    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6_SYMPY_1_14_0, "m.py", "import sympy; print(sympy.__version__)", 3_213_154_830L)]
+    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6_NUMPY_2_5_4, "m.py", "import numpy; print(numpy.__version__)", 24_941_299L)]
+    [TestCase(VerifyRuntimeCatalog.QUICKJS_0_15_1, "m.js", "console.log('hello')", 2_367_084L)]
+    [TestCase(VerifyRuntimeCatalog.RUBY_3_4_1, "m.rb", "puts 'hello'", 153_965_549L)]
+    [TestCase(VerifyRuntimeCatalog.LUA_5_4_8, "m.lua", "print('hello')", 588_454L)]
+    [TestCase(VerifyRuntimeCatalog.TYPESCRIPT_SUCRASE_3_35_1, "m.ts", "const x: string = 'hello';\nconsole.log(x);", 333_420_186L)]
+    [TestCase(VerifyRuntimeCatalog.CLANG_22_1_0, "m.c", "#include <stdio.h>\nint main(void) { puts(\"hello\"); return 0; }\n", 8_628_668L)]
+    [TestCase(VerifyRuntimeCatalog.WASI, "hello.wasm", global::OutWit.Controller.AI.Verify.Sandbox.VerifySelfCheck.HELLO_WASM_BASE64, 482_292L)]
     public void AHelloCostsOnePinnedFuelEverywhereTest(string runtimeId, string entry, string source, long fuel)
     {
         var result = Hello(runtimeId, entry, source);
@@ -45,18 +60,45 @@ public sealed class VerifyHelloFuelTests : VerifySandboxTestBase
         });
     }
 
-    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6, "m.py", "print('hello')", 122_363_490L, 3_170_305L)]
-    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6_SYMPY_1_14_0, "m.py", "import sympy; print(sympy.__version__)", 3_205_340_541L, 3_170_305L)]
-    public void ACPythonHelloCostsItsPinnedFuelWithinTheFileDriftTest(string runtimeId, string entry, string source, long fuel, long instantiation)
+    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6, "m.py", "print('hello')", 1)]
+    [TestCase(VerifyRuntimeCatalog.PYTHON_3_14_6_SYMPY_1_14_0, "m.py", "import sympy; print(sympy.__version__)", 200)]
+    public void TheCallsOfACPythonHelloIntoTheHostAreListedTest(string runtimeId, string entry, string source, int every)
     {
-        var result = Hello(runtimeId, entry, source);
-        var drift = (long)(fuel * CPYTHON_DRIFT);
+        // Where two hosts would part. A CPython task's calls into the host, in order: the name, the
+        // fuel the program had used when it made the call, the bytes the call was charged for.
+        // The listing of one system's run is held against another's: where two hosts answered the
+        // interpreter differently, the fuel used before the next call is no longer the same. The
+        // three systems of the build server give one listing (0.17.0).
+        var census = new WasmHostCallCensus(trace: true);
+        VerifyResultData result;
+        Sandbox.Census = census;
+        try
+        {
+            result = Hello(runtimeId, entry, source);
+        }
+        finally
+        {
+            Sandbox.Census = null;
+        }
+
+        var target = VerifyRuntimeDiagnosticsBuilder.RuntimeTarget();
+        var trace = census.Trace(global::OutWit.Controller.AI.Verify.Sandbox.VerifySandboxDefaults.DEFAULT_FUEL_BUDGET);
+        TestContext.Out.WriteLine($"census {runtimeId} on {target}: fuel {result.FuelConsumed}, calls {census.Calls}, bytes {census.Charged}, the program's own instructions {result.FuelConsumed - census.Calls * WasmHostMeter.CALL_FUEL - census.Charged}");
+        foreach (var line in census.Lines())
+            TestContext.Out.WriteLine($"census {runtimeId} on {target}: {line}");
+
+        for (var index = 0; index < trace.Count; index++)
+        {
+            if (index % every == 0 || index == trace.Count - 1)
+                TestContext.Out.WriteLine($"trace {runtimeId} on {target}: {index} {trace[index]}");
+        }
 
         Assert.Multiple(() =>
         {
             Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.Pass), result.Stderr);
-            Assert.That(result.FuelConsumed, Is.EqualTo(fuel).Within(drift), "the pin (Windows and macOS), within the drift between hosts");
-            Assert.That(drift, Is.LessThan(instantiation), "the drift allowed is smaller than the instantiation term the fuel no longer carries");
+            Assert.That(census.Calls, Is.GreaterThan(0));
+            Assert.That(trace, Has.Count.EqualTo(census.Calls));
+            Assert.That(result.FuelConsumed, Is.GreaterThan(census.Calls * WasmHostMeter.CALL_FUEL + census.Charged), "the calls and their bytes are in the fuel");
         });
     }
 

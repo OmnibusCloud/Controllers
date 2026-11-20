@@ -72,7 +72,7 @@ internal sealed class VerifyToolRunner
 
         // A budget stop reports the whole budget, as a program's does.
         var used = outcome.Verdict == WasmHostVerdict.OutOfFuel ? fuel : outcome.FuelConsumed;
-        return new VerifyToolOutcome(outcome.Verdict, outcome.ExitCode, outcome.Trap, used, outcome.WallMs, outcome.Fault == null ? outcome.Stderr : "");
+        return new VerifyToolOutcome(outcome.Verdict, outcome.ExitCode, outcome.Trap, used, outcome.WallMs, outcome.Fault == null ? outcome.Stderr : "", outcome.StdoutBytes);
     }
 
     #endregion

@@ -29,10 +29,14 @@ public sealed class VerifyModuleShapeTests
 
         var report = VerifyModuleShape.Scan(module);
 
+        // Its one function has a body of 13 bytes, priced as the least a function is.
+        var floor = (VerifyModuleShape.FUNCTION_FLOOR_BYTES - 13) * VerifyModuleShape.COMPILE_FUEL_PER_BYTE;
+
         Assert.Multiple(() =>
         {
             Assert.That(report.Problem, Is.Null);
-            Assert.That(report.CompileFuel, Is.EqualTo(module.Length * VerifyModuleShape.COMPILE_FUEL_PER_BYTE));
+            Assert.That(report.CompileFuel, Is.EqualTo(module.Length * VerifyModuleShape.COMPILE_FUEL_PER_BYTE + floor));
+            Assert.That(report.LargestBody, Is.EqualTo(13));
         });
     }
 
@@ -45,13 +49,16 @@ public sealed class VerifyModuleShapeTests
         var wide = VerifyModuleShape.Scan(HostileModules.NestedLoops(4000, 1000));
         var shallow = VerifyModuleShape.Scan(HostileModules.NestedLoops(4000, 1));
 
+        // What 4,000 declared locals cost by themselves, whatever the loops.
+        var locals = (4000L - VerifyModuleShape.FREE_LOCALS) * VerifyModuleShape.COMPILE_FUEL_PER_LOCAL;
+
         Assert.Multiple(() =>
         {
             Assert.That(thousand.Problem, Is.Null, "within the nesting limit: priced, not refused");
             Assert.That(thousand.CompileFuel, Is.GreaterThan(1000L * 1000 * 1000 * VerifyModuleShape.COMPILE_FUEL_PER_LOOP_UNIT));
             Assert.That(threeThousand.Problem, Is.Not.Null, "deeper than the limit: refused");
             Assert.That(wide.CompileFuel, Is.GreaterThan(15 * thousand.CompileFuel), "four times the locals: sixteen times the price");
-            Assert.That(Shape(shallow, HostileModules.NestedLoops(4000, 1)), Is.EqualTo(Shape(wide, HostileModules.NestedLoops(4000, 1000)) / 1000), "a thousandth of the depth: a thousandth of the price of the shape");
+            Assert.That(Shape(shallow, HostileModules.NestedLoops(4000, 1)) - locals, Is.EqualTo((Shape(wide, HostileModules.NestedLoops(4000, 1000)) - locals) / 1000), "a thousandth of the depth: a thousandth of the price of the loops");
         });
     }
 
@@ -137,17 +144,29 @@ public sealed class VerifyModuleShapeTests
         foreach (var path in modules)
         {
             var module = File.ReadAllBytes(path);
-            var measured = VerifyModuleShape.Scan(module, 1 << 20);
+            var measured = VerifyModuleShape.Measure(module);
             var report = VerifyModuleShape.Scan(module);
 
-            TestContext.Out.WriteLine($"{Path.GetFileName(path)}: {module.Length} bytes, nesting {measured.DeepestNesting}, {measured.CompileFuel / 1_000_000} M fuel, {measured.CompileFuel / (double)module.Length:F0} a byte");
-            if (report.Problem != null)
+            TestContext.Out.WriteLine($"{Path.GetFileName(path)}: {module.Length} bytes, {measured.Functions} functions, nesting {measured.DeepestNesting}, parameters {measured.WidestParameters}, results {measured.WidestResults}, "
+                                      + $"block values {measured.WidestBlock}, locals {measured.MostLocals} in a function and {measured.Locals} in all, largest body {measured.LargestBody}, branches {measured.MostBranches}, "
+                                      + $"{measured.CompileFuel / 1_000_000} M fuel, {measured.CompileFuel / (double)module.Length:F0} a byte{(report.Problem == null ? "" : "; as a task's module: " + report.Problem)}");
+
+            Assert.That(measured.Problem, Is.Null, path);
+            if (report.Problem != null && module.Length <= VerifyWasmSandbox.MAX_TASK_MODULE_BYTES)
                 refused.Add($"{Path.GetFileName(path)}: {report.Problem}");
+
+            // What the bounds were set against: no module of the set, the compiler included, is wider than this.
+            Assert.That(measured.WidestParameters, Is.LessThanOrEqualTo(VerifyModuleShape.MAX_PARAMETERS / 4), path);
+            Assert.That(measured.WidestResults, Is.LessThanOrEqualTo(1), path);
+            Assert.That(measured.WidestBlock, Is.LessThanOrEqualTo(1), path);
+            Assert.That(measured.MostLocals, Is.LessThanOrEqualTo(VerifyModuleShape.FREE_LOCALS), path);
         }
 
-        // The compiler itself is the one module here that nests deeper than a task's module may:
-        // it is the controller's own, compiled by the engine for shipped modules, and never scanned.
-        Assert.That(refused.Where(line => !line.StartsWith(COMPILER, StringComparison.Ordinal)), Is.Empty);
+        // A module a task could bring (one within the size a task's module may have: the fixtures,
+        // Lua, QuickJS) is within every bound. CPython, Ruby and the compiler are several times
+        // that size, the controller's own, compiled by the engine for shipped modules and never
+        // scanned: the largest function of each is larger than a task's may be.
+        Assert.That(refused, Is.Empty);
     }
 
     #endregion

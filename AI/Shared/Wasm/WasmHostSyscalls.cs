@@ -14,12 +14,12 @@ namespace OutWit.Controller.AI.Wasm;
 /// <item>a file's record says nothing of the host: no times, no device, a file number that
 /// follows from the guest's path;</item>
 /// <item>what a guest writes into its writable folders is counted against one budget;</item>
-/// <item>when the run asks for it, a call costs fuel a byte it moves, so the host's time is
-/// inside the fuel budget;</item>
+/// <item>when the run asks for it, a call costs fuel: a fixed amount, and a unit a byte it moves
+/// (<see cref="WasmHostMeter"/>), so the host's time is inside the fuel budget;</item>
 /// <item>a pointer outside the guest's memory answers "bad address", never an error of the engine.</item>
 /// </list>
 /// What the host lets through reaches WASI's own definition through the shim
-/// (<see cref="WasmHostShim"/>), at no cost in fuel to the guest.
+/// (<see cref="WasmHostWasi"/>); the way through costs the guest nothing.
 /// </summary>
 internal sealed class WasmHostSyscalls : IDisposable
 {
@@ -42,37 +42,29 @@ internal sealed class WasmHostSyscalls : IDisposable
     /// <summary>The resolution every clock of a run reports, nanoseconds.</summary>
     public const long CLOCK_RESOLUTION_NS = 1;
 
-    // The fuel the shim's own instructions may take in one call; given before and taken back
-    // after, so that a call through the shim costs the guest nothing.
-    private const ulong SHIM_FUEL = 4096;
+    private const string RANDOM_GET = "random_get";
+    private const string CLOCK_RES_GET = "clock_res_get";
+    private const string PATH_CREATE_DIRECTORY = "path_create_directory";
+    private const string PATH_REMOVE_DIRECTORY = "path_remove_directory";
+    private const string PATH_UNLINK_FILE = "path_unlink_file";
+    private const string PATH_RENAME = "path_rename";
+    private const string PATH_SYMLINK = "path_symlink";
+    private const string PATH_LINK = "path_link";
+    private const string PATH_READLINK = "path_readlink";
 
     #endregion
 
     #region Fields
 
-    private readonly WasmEngine m_engine;
-    private readonly WasmHostShim m_shimModule;
     private readonly WasmHostRunRequest m_request;
+    private readonly WasmHostMeter m_meter;
+    private readonly WasmHostWasi m_wasi;
     private readonly WasmHostFiles m_files;
     private readonly WasmHostOutput m_stdout;
     private readonly WasmHostOutput m_stderr;
     private readonly WasmHostRandom m_random;
 
-    private Linker? m_wasi;
-    private Instance? m_shim;
     private long m_written;
-
-    private Func<int, int, int, int, int>? m_fdWrite;
-    private Func<int, int, int, long, int, int>? m_fdPwrite;
-    private Func<int, int, int, int, int>? m_fdRead;
-    private Func<int, int, int, long, int, int>? m_fdPread;
-    private Func<int, int>? m_fdClose;
-    private Func<int, long, int, int, int>? m_fdSeek;
-    private Func<int, int, int>? m_fdFilestatGet;
-    private Func<int, long, int>? m_fdFilestatSetSize;
-    private Func<int, long, long, int>? m_fdAllocate;
-    private Func<int, int, int, int, int, long, long, int, int, int>? m_pathOpen;
-    private Func<int, int, int, int, int, int>? m_pathFilestatGet;
 
     #endregion
 
@@ -84,13 +76,14 @@ internal sealed class WasmHostSyscalls : IDisposable
     /// <param name="engine">The host's engine.</param>
     /// <param name="shim">The engine's shim.</param>
     /// <param name="request">The run.</param>
+    /// <param name="meter">The run's meter.</param>
     /// <exception cref="ArgumentException">Some of the run's folders have a table of names and some have none.</exception>
     /// <exception cref="IOException">The file the run's stdout goes to cannot be made.</exception>
-    public WasmHostSyscalls(WasmEngine engine, WasmHostShim shim, WasmHostRunRequest request)
+    public WasmHostSyscalls(WasmEngine engine, WasmHostShim shim, WasmHostRunRequest request, WasmHostMeter meter)
     {
-        m_engine = engine;
-        m_shimModule = shim;
         m_request = request;
+        m_meter = meter;
+        m_wasi = new WasmHostWasi(engine, shim, meter);
         m_files = new WasmHostFiles(request.Preopens);
         m_random = new WasmHostRandom(request.RandomSeed);
         m_stderr = new WasmHostOutput(request.StderrLimitBytes);
@@ -109,12 +102,17 @@ internal sealed class WasmHostSyscalls : IDisposable
     /// <param name="linker">The run's linker.</param>
     public void Define(Linker linker)
     {
-        linker.DefineFunction(WASI_MODULE, "random_get", (Caller caller, int buffer, int length) =>
+        // What WASI still answers by itself costs fuel as well: defined first, so that the host's
+        // own definitions below stand over them.
+        if (m_meter.Charges)
+            WasmHostPlainCalls.Define(linker, m_meter, m_wasi, m_request);
+
+        linker.DefineFunction(WASI_MODULE, RANDOM_GET, (Caller caller, int buffer, int length) =>
         {
             try { return RandomGet(caller, buffer, length); }
             catch (Exception exception) when (Note(exception)) { throw; }
         });
-        linker.DefineFunction(WASI_MODULE, "clock_res_get", (Caller caller, int clock, int result) => ClockResolution(caller, result));
+        linker.DefineFunction(WASI_MODULE, CLOCK_RES_GET, (Caller caller, int clock, int result) => ClockResolution(caller, result));
 
         linker.DefineFunction(WASI_MODULE, WasmHostShim.FD_WRITE, (Caller caller, int descriptor, int buffers, int count, int written) =>
         {
@@ -191,20 +189,27 @@ internal sealed class WasmHostSyscalls : IDisposable
     /// </summary>
     private void DefineReadOnlyNames(Linker linker)
     {
-        linker.DefineFunction(WASI_MODULE, "path_create_directory", (Caller caller, int folder, int path, int pathLength) => WasmHostErrno.PERM);
-        linker.DefineFunction(WASI_MODULE, "path_remove_directory", (Caller caller, int folder, int path, int pathLength) => WasmHostErrno.PERM);
-        linker.DefineFunction(WASI_MODULE, "path_unlink_file", (Caller caller, int folder, int path, int pathLength) => WasmHostErrno.PERM);
-        linker.DefineFunction(WASI_MODULE, "path_rename",
-            (Caller caller, int folder, int path, int pathLength, int newFolder, int newPath, int newPathLength) => WasmHostErrno.PERM);
-        linker.DefineFunction(WASI_MODULE, "path_symlink",
-            (Caller caller, int target, int targetLength, int folder, int path, int pathLength) => WasmHostErrno.PERM);
-        linker.DefineFunction(WASI_MODULE, "path_link",
-            (Caller caller, int folder, int lookup, int path, int pathLength, int newFolder, int newPath, int newPathLength) => WasmHostErrno.PERM);
-        linker.DefineFunction(WASI_MODULE, "path_readlink", (Caller caller, int folder, int path, int pathLength, int buffer, int bufferLength, int used) =>
+        linker.DefineFunction(WASI_MODULE, PATH_CREATE_DIRECTORY, (Caller caller, int folder, int path, int pathLength) => Refused(caller, PATH_CREATE_DIRECTORY));
+        linker.DefineFunction(WASI_MODULE, PATH_REMOVE_DIRECTORY, (Caller caller, int folder, int path, int pathLength) => Refused(caller, PATH_REMOVE_DIRECTORY));
+        linker.DefineFunction(WASI_MODULE, PATH_UNLINK_FILE, (Caller caller, int folder, int path, int pathLength) => Refused(caller, PATH_UNLINK_FILE));
+        linker.DefineFunction(WASI_MODULE, PATH_RENAME,
+            (Caller caller, int folder, int path, int pathLength, int newFolder, int newPath, int newPathLength) => Refused(caller, PATH_RENAME));
+        linker.DefineFunction(WASI_MODULE, PATH_SYMLINK,
+            (Caller caller, int target, int targetLength, int folder, int path, int pathLength) => Refused(caller, PATH_SYMLINK));
+        linker.DefineFunction(WASI_MODULE, PATH_LINK,
+            (Caller caller, int folder, int lookup, int path, int pathLength, int newFolder, int newPath, int newPathLength) => Refused(caller, PATH_LINK));
+        linker.DefineFunction(WASI_MODULE, PATH_READLINK, (Caller caller, int folder, int path, int pathLength, int buffer, int bufferLength, int used) =>
         {
             try { return ReadLink(caller, folder, path, pathLength); }
             catch (Exception exception) when (Note(exception)) { throw; }
         });
+    }
+
+    /// <summary>A call that changes names, in a folder where nothing can be changed: paid for like any call, and refused.</summary>
+    private int Refused(Caller caller, string name)
+    {
+        m_meter.Call(caller, name);
+        return WasmHostErrno.PERM;
     }
 
     #endregion
@@ -213,12 +218,14 @@ internal sealed class WasmHostSyscalls : IDisposable
 
     private int RandomGet(Caller caller, int buffer, int length)
     {
+        m_meter.Call(caller, RANDOM_GET);
+
         var memory = caller.GetMemory(WasmHostShim.MEMORY);
         long count = (uint)length;
         if (memory == null || !WasmHostMemory.InRange(memory, buffer, count))
             return WasmHostErrno.FAULT;
 
-        Charge(caller, count);
+        m_meter.Bytes(caller, RANDOM_GET, count);
 
         // A span holds two gigabytes less a byte; a memory holds no more than four.
         long start = (uint)buffer;
@@ -233,8 +240,10 @@ internal sealed class WasmHostSyscalls : IDisposable
         return WasmHostErrno.SUCCESS;
     }
 
-    private static int ClockResolution(Caller caller, int result)
+    private int ClockResolution(Caller caller, int result)
     {
+        m_meter.Call(caller, CLOCK_RES_GET);
+
         var memory = caller.GetMemory(WasmHostShim.MEMORY);
         if (memory == null || !WasmHostMemory.InRange(memory, result, sizeof(long)))
             return WasmHostErrno.FAULT;
@@ -245,13 +254,16 @@ internal sealed class WasmHostSyscalls : IDisposable
 
     private int Write(Caller caller, int descriptor, int buffers, int count, long? offset, int written)
     {
+        var name = offset == null ? WasmHostShim.FD_WRITE : WasmHostShim.FD_PWRITE;
+        m_meter.Call(caller, name);
+
         var standard = descriptor is STDOUT or STDERR;
         var counted = m_request.WritableLimitBytes > 0 && m_files.IsWritable(descriptor);
 
-        if (!standard && !counted && !m_request.ChargeHostCalls)
+        if (!standard && !counted && !m_meter.Charges)
             return offset is { } at
-                ? Forward(caller, () => m_fdPwrite!(descriptor, buffers, count, at, written))
-                : Forward(caller, () => m_fdWrite!(descriptor, buffers, count, written));
+                ? m_wasi.Forward(caller, () => m_wasi.FdPwrite!(descriptor, buffers, count, at, written))
+                : m_wasi.Forward(caller, () => m_wasi.FdWrite!(descriptor, buffers, count, written));
 
         var memory = caller.GetMemory(WasmHostShim.MEMORY);
         if (memory == null)
@@ -268,7 +280,7 @@ internal sealed class WasmHostSyscalls : IDisposable
         if (standard && offset != null)
             return WasmHostErrno.SPIPE;
 
-        Charge(caller, length);
+        m_meter.Bytes(caller, name, length);
 
         if (standard)
         {
@@ -279,7 +291,7 @@ internal sealed class WasmHostSyscalls : IDisposable
             memory.WriteInt32((uint)written, length);
 
             if (descriptor == STDOUT && output.Cut && m_request.StopAtStdoutLimit)
-                throw Ended(WasmHostVerdict.OutputLimit);
+                throw m_meter.Ended(WasmHostVerdict.OutputLimit);
 
             return WasmHostErrno.SUCCESS;
         }
@@ -294,31 +306,36 @@ internal sealed class WasmHostSyscalls : IDisposable
         }
 
         return offset is { } place
-            ? Forward(caller, () => m_fdPwrite!(descriptor, buffers, count, place, written))
-            : Forward(caller, () => m_fdWrite!(descriptor, buffers, count, written));
+            ? m_wasi.Forward(caller, () => m_wasi.FdPwrite!(descriptor, buffers, count, place, written))
+            : m_wasi.Forward(caller, () => m_wasi.FdWrite!(descriptor, buffers, count, written));
     }
 
     private int Read(Caller caller, int descriptor, int buffers, int count, long? offset, int read)
     {
-        // What a read costs is what it gave: WASI fills the first buffer that has room, and no
-        // more than the file holds.
+        var name = offset == null ? WasmHostShim.FD_READ : WasmHostShim.FD_PREAD;
+        m_meter.Call(caller, name);
+
+        // What a read costs besides is what it gave: WASI fills the first buffer that has room,
+        // and no more than the file holds.
         if ((uint)count > WasmHostMemory.MAX_BUFFERS)
             return WasmHostErrno.INVAL;
 
         var result = offset is { } at
-            ? Forward(caller, () => m_fdPread!(descriptor, buffers, count, at, read))
-            : Forward(caller, () => m_fdRead!(descriptor, buffers, count, read));
+            ? m_wasi.Forward(caller, () => m_wasi.FdPread!(descriptor, buffers, count, at, read))
+            : m_wasi.Forward(caller, () => m_wasi.FdRead!(descriptor, buffers, count, read));
 
         var memory = caller.GetMemory(WasmHostShim.MEMORY);
         if (result == WasmHostErrno.SUCCESS && memory != null && WasmHostMemory.InRange(memory, read, sizeof(int)))
-            Charge(caller, (uint)memory.ReadInt32((uint)read));
+            m_meter.Bytes(caller, name, (uint)memory.ReadInt32((uint)read));
 
         return result;
     }
 
     private int Close(Caller caller, int descriptor)
     {
-        var result = Forward(caller, () => m_fdClose!(descriptor));
+        m_meter.Call(caller, WasmHostShim.FD_CLOSE);
+
+        var result = m_wasi.Forward(caller, () => m_wasi.FdClose!(descriptor));
         if (result == WasmHostErrno.SUCCESS)
             m_files.Closed(descriptor);
 
@@ -327,7 +344,9 @@ internal sealed class WasmHostSyscalls : IDisposable
 
     private int Seek(Caller caller, int descriptor, long offset, int whence, int result)
     {
-        var errno = Forward(caller, () => m_fdSeek!(descriptor, offset, whence, result));
+        m_meter.Call(caller, WasmHostShim.FD_SEEK);
+
+        var errno = m_wasi.Forward(caller, () => m_wasi.FdSeek!(descriptor, offset, whence, result));
         if (errno != WasmHostErrno.SUCCESS || !m_files.IsWritable(descriptor))
             return errno;
 
@@ -336,29 +355,35 @@ internal sealed class WasmHostSyscalls : IDisposable
         if (memory == null || !WasmHostMemory.InRange(memory, result, sizeof(long)) || memory.ReadInt64((uint)result) <= m_request.WritableLimitBytes)
             return errno;
 
-        Forward(caller, () => m_fdSeek!(descriptor, 0, WHENCE_SET, result));
+        m_wasi.Forward(caller, () => m_wasi.FdSeek!(descriptor, 0, WHENCE_SET, result));
         return WasmHostErrno.INVAL;
     }
 
     private int SetSize(Caller caller, int descriptor, long size)
     {
+        m_meter.Call(caller, WasmHostShim.FD_FILESTAT_SET_SIZE);
+
         if (m_files.IsWritable(descriptor) && (size < 0 || !Spend(size)))
             return WasmHostErrno.NOSPC;
 
-        return Forward(caller, () => m_fdFilestatSetSize!(descriptor, size));
+        return m_wasi.Forward(caller, () => m_wasi.FdFilestatSetSize!(descriptor, size));
     }
 
     private int Allocate(Caller caller, int descriptor, long offset, long length)
     {
+        m_meter.Call(caller, WasmHostShim.FD_ALLOCATE);
+
         if (m_files.IsWritable(descriptor) && (offset < 0 || length < 0 || offset > long.MaxValue - length || !Spend(offset + length)))
             return WasmHostErrno.NOSPC;
 
-        return Forward(caller, () => m_fdAllocate!(descriptor, offset, length));
+        return m_wasi.Forward(caller, () => m_wasi.FdAllocate!(descriptor, offset, length));
     }
 
     private int Stat(Caller caller, int descriptor, int record)
     {
-        var result = Forward(caller, () => m_fdFilestatGet!(descriptor, record));
+        m_meter.Call(caller, WasmHostShim.FD_FILESTAT_GET);
+
+        var result = m_wasi.Forward(caller, () => m_wasi.FdFilestatGet!(descriptor, record));
 
         var memory = caller.GetMemory(WasmHostShim.MEMORY);
         if (result == WasmHostErrno.SUCCESS && memory != null && WasmHostMemory.InRange(memory, record, WasmHostFiles.FILESTAT_SIZE))
@@ -369,7 +394,9 @@ internal sealed class WasmHostSyscalls : IDisposable
 
     private int Open(Caller caller, int folder, int lookup, int path, int pathLength, int open, long rights, long inheriting, int flags, int opened)
     {
-        var errno = Resolve(caller, folder, path, pathLength, out var memory, out var target);
+        m_meter.Call(caller, WasmHostShim.PATH_OPEN);
+
+        var errno = Resolve(caller, WasmHostShim.PATH_OPEN, folder, path, pathLength, out var memory, out var target);
         if (errno != WasmHostErrno.SUCCESS)
             return errno;
 
@@ -389,7 +416,7 @@ internal sealed class WasmHostSyscalls : IDisposable
             return WasmHostErrno.NOSPC;
         }
 
-        var result = Forward(caller, () => m_pathOpen!(folder, lookup, path, pathLength, open, rights, inheriting, flags, opened));
+        var result = m_wasi.Forward(caller, () => m_wasi.PathOpen!(folder, lookup, path, pathLength, open, rights, inheriting, flags, opened));
         if (result == WasmHostErrno.SUCCESS && WasmHostMemory.InRange(memory, opened, sizeof(int)))
             m_files.Opened(memory.ReadInt32((uint)opened), target, WasmHostFiles.IsFolder(target));
 
@@ -398,14 +425,16 @@ internal sealed class WasmHostSyscalls : IDisposable
 
     private int StatPath(Caller caller, int folder, int lookup, int path, int pathLength, int record)
     {
-        var errno = Resolve(caller, folder, path, pathLength, out var memory, out var target);
+        m_meter.Call(caller, WasmHostShim.PATH_FILESTAT_GET);
+
+        var errno = Resolve(caller, WasmHostShim.PATH_FILESTAT_GET, folder, path, pathLength, out var memory, out var target);
         if (errno != WasmHostErrno.SUCCESS)
             return errno;
 
         if (target.Preopen.Names is { } names && !names.IsFile(target.Relative) && !names.IsFolder(target.Relative))
             return WasmHostErrno.NOENT;
 
-        var result = Forward(caller, () => m_pathFilestatGet!(folder, lookup, path, pathLength, record));
+        var result = m_wasi.Forward(caller, () => m_wasi.PathFilestatGet!(folder, lookup, path, pathLength, record));
         if (result == WasmHostErrno.SUCCESS && WasmHostMemory.InRange(memory, record, WasmHostFiles.FILESTAT_SIZE))
             WasmHostFiles.Neutralize(memory.GetSpan((uint)record, WasmHostFiles.FILESTAT_SIZE), target);
 
@@ -414,7 +443,9 @@ internal sealed class WasmHostSyscalls : IDisposable
 
     private int ReadLink(Caller caller, int folder, int path, int pathLength)
     {
-        var errno = Resolve(caller, folder, path, pathLength, out _, out var target);
+        m_meter.Call(caller, PATH_READLINK);
+
+        var errno = Resolve(caller, PATH_READLINK, folder, path, pathLength, out _, out var target);
         if (errno != WasmHostErrno.SUCCESS)
             return errno;
 
@@ -427,7 +458,7 @@ internal sealed class WasmHostSyscalls : IDisposable
 
     #region Tools
 
-    private int Resolve(Caller caller, int folder, int path, int pathLength, out Memory memory, out WasmHostFiles.Target target)
+    private int Resolve(Caller caller, string name, int folder, int path, int pathLength, out Memory memory, out WasmHostFiles.Target target)
     {
         target = default;
         memory = caller.GetMemory(WasmHostShim.MEMORY)!;
@@ -436,7 +467,7 @@ internal sealed class WasmHostSyscalls : IDisposable
         if (memory == null || !WasmHostMemory.InRange(memory, path, length) || length > int.MaxValue)
             return WasmHostErrno.FAULT;
 
-        Charge(caller, length);
+        m_meter.Bytes(caller, name, length);
         return m_files.Resolve(folder, memory.GetSpan((uint)path, (int)length), out target);
     }
 
@@ -450,76 +481,6 @@ internal sealed class WasmHostSyscalls : IDisposable
         return true;
     }
 
-    /// <summary>Takes a call's cost from the run's fuel, a unit a byte, and ends the run when it does not hold it.</summary>
-    private void Charge(Caller caller, long bytes)
-    {
-        if (!m_request.ChargeHostCalls || bytes <= 0)
-            return;
-
-        var fuel = caller.Fuel;
-        if ((ulong)bytes > fuel)
-        {
-            caller.Fuel = 0;
-            throw Ended(WasmHostVerdict.OutOfFuel);
-        }
-
-        caller.Fuel = fuel - (ulong)bytes;
-    }
-
-    private RunEnded Ended(WasmHostVerdict verdict)
-    {
-        End = verdict;
-        return new RunEnded(verdict);
-    }
-
-    /// <summary>
-    /// Calls WASI's own definition through the shim. The shim's instructions run on fuel lent for
-    /// the call and taken back after it, so the guest pays nothing for the way through.
-    /// </summary>
-    private int Forward(Caller caller, Func<int> call)
-    {
-        var fuel = caller.Fuel;
-        caller.Fuel = fuel > ulong.MaxValue - SHIM_FUEL ? ulong.MaxValue : fuel + SHIM_FUEL;
-        try
-        {
-            return Shim(caller) ? call() : WasmHostErrno.FAULT;
-        }
-        finally
-        {
-            caller.Fuel = fuel;
-        }
-    }
-
-    private bool Shim(Caller caller)
-    {
-        if (m_shim != null)
-            return true;
-
-        // WASI reads and writes the memory of the module that calls it: a guest without one has
-        // nothing a file call could touch.
-        var memory = caller.GetMemory(WasmHostShim.MEMORY);
-        if (memory == null)
-            return false;
-
-        m_wasi = new Linker(m_engine);
-        m_wasi.DefineWasi();
-
-        var shim = m_shimModule.Instantiate(m_wasi, caller.Store, memory);
-        m_fdWrite = shim.GetFunction<int, int, int, int, int>(WasmHostShim.FD_WRITE);
-        m_fdPwrite = shim.GetFunction<int, int, int, long, int, int>(WasmHostShim.FD_PWRITE);
-        m_fdRead = shim.GetFunction<int, int, int, int, int>(WasmHostShim.FD_READ);
-        m_fdPread = shim.GetFunction<int, int, int, long, int, int>(WasmHostShim.FD_PREAD);
-        m_fdClose = shim.GetFunction<int, int>(WasmHostShim.FD_CLOSE);
-        m_fdSeek = shim.GetFunction<int, long, int, int, int>(WasmHostShim.FD_SEEK);
-        m_fdFilestatGet = shim.GetFunction<int, int, int>(WasmHostShim.FD_FILESTAT_GET);
-        m_fdFilestatSetSize = shim.GetFunction<int, long, int>(WasmHostShim.FD_FILESTAT_SET_SIZE);
-        m_fdAllocate = shim.GetFunction<int, long, long, int>(WasmHostShim.FD_ALLOCATE);
-        m_pathOpen = shim.GetFunction<int, int, int, int, int, long, long, int, int, int>(WasmHostShim.PATH_OPEN);
-        m_pathFilestatGet = shim.GetFunction<int, int, int, int, int, int>(WasmHostShim.PATH_FILESTAT_GET);
-        m_shim = shim;
-        return true;
-    }
-
     /// <summary>
     /// Looks at an exception on its way out of one of the host's calls, and lets it go on. One
     /// that is neither the end of the run nor the engine's is a fault of the host (a disk that is
@@ -529,7 +490,7 @@ internal sealed class WasmHostSyscalls : IDisposable
     /// <returns>False, always: the exception is not caught here.</returns>
     private bool Note(Exception exception)
     {
-        if (exception is not RunEnded and not WasmtimeException)
+        if (exception is not WasmHostRunEnded and not WasmtimeException)
             Fault ??= exception;
 
         return false;
@@ -539,12 +500,12 @@ internal sealed class WasmHostSyscalls : IDisposable
 
     #region IDisposable
 
-    /// <summary>Closes the run's streams and the linker the shim was made with.</summary>
+    /// <summary>Closes the run's streams and the way to WASI's own calls.</summary>
     public void Dispose()
     {
         m_stdout.Dispose();
         m_stderr.Dispose();
-        m_wasi?.Dispose();
+        m_wasi.Dispose();
     }
 
     #endregion
@@ -557,18 +518,8 @@ internal sealed class WasmHostSyscalls : IDisposable
     /// <summary>The guest's stderr as kept.</summary>
     public WasmHostOutput Stderr => m_stderr;
 
-    /// <summary>How one of the host's calls ended the run (out of fuel, the output limit), or null when none did.</summary>
-    public WasmHostVerdict? End { get; private set; }
-
     /// <summary>The host's own failure inside one of its calls, or null.</summary>
     public Exception? Fault { get; private set; }
-
-    #endregion
-
-    #region Nested Types
-
-    /// <summary>The way out of the guest when one of the host's calls ends the run; never seen outside a run.</summary>
-    private sealed class RunEnded(WasmHostVerdict verdict) : Exception($"the host ended the run: {verdict}");
 
     #endregion
 }
