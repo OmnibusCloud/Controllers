@@ -16,6 +16,23 @@ run-name: "Publish: ${{ inputs.project }}"
 #
 #   * Tools         (OutWit.Controller.Pack)
 #       Global .NET tools. No GH Release.
+#
+# Three jobs, so that the code a build runs (the repository's own MSBuild tasks, restored
+# packages and their build targets) never runs where a credential that publishes is held:
+#
+#   build              reads the repository, builds, packs and runs the guards; holds no
+#                      token that can write anything. The private WitMath feed's token is
+#                      handed to the build of the two Simulation controllers only, which
+#                      restore from it.
+#   github-packages    pushes the built package to GitHub Packages; holds packages: write.
+#                      Runs from any branch, with no reviewer: the test rollouts take their
+#                      packages from there.
+#   release            pushes to nuget.org and creates the GitHub Release. Runs in the
+#                      "release" environment (a required reviewer, main as its only branch)
+#                      and only from main; nuget.org takes a key that lives for this run only
+#                      (trusted publishing), so no nuget.org key is stored anywhere.
+#
+# nuget.org is off by default: it is asked for by name, from main, and approved.
 
 on:
   workflow_dispatch:
@@ -65,38 +82,49 @@ on:
           # Tools
           - OutWit.Controller.Pack
       pushToNuGet:
-        description: 'Push nupkg + snupkg to nuget.org'
+        description: 'Push nupkg + snupkg to nuget.org (from main only, after the release environment approves)'
         type: boolean
         required: true
-        default: true
+        default: false
       pushToGitHubPackages:
         description: 'Push nupkg to GitHub Packages'
         type: boolean
         required: true
         default: true
       createGitHubRelease:
-        description: 'Create GitHub Release with prepared assets (no-op for projects without external assets)'
+        description: 'Create GitHub Release with prepared assets (no-op for projects without external assets; from main only, after the release environment approves)'
         type: boolean
         required: true
         default: true
 
-permissions:
-  contents: write   # action-gh-release needs to create tags + releases
-  packages: write   # GitHub Packages push
+# Nothing by default: each job asks for what it needs.
+permissions: {}
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
-      PROJECT: ${{ github.event.inputs.project }}
+      PROJECT: ${{ inputs.project }}
+    outputs:
+      version: ${{ steps.paths.outputs.version }}
+      asset_tag: ${{ steps.paths.outputs.asset_tag }}
+      sdk: ${{ steps.paths.outputs.sdk }}
+      hasNupkg: ${{ steps.collect.outputs.hasNupkg }}
+      hasSnupkg: ${{ steps.collect.outputs.hasSnupkg }}
+      hasAssets: ${{ steps.assets.outputs.hasAssets }}
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
+      # The SDK global.json pins, exactly: a module's content digest depends on it.
       - name: Setup .NET 10
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Cache NuGet
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -143,16 +171,21 @@ jobs:
           asset_tag=$(grep -oP 'gh-release://[^/]+/[^/]+/\K[^/]+' "$csproj" | head -1 || true)
           if [ -z "$asset_tag" ]; then asset_tag="$tag_prefix-v$version"; fi
 
+          # The pinned SDK, for the jobs that push and check nothing out.
+          sdk=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["sdk"]["version"])' global.json)
+
           echo "csproj=$csproj"        >> $GITHUB_OUTPUT
           echo "version=$version"      >> $GITHUB_OUTPUT
           echo "tag=$tag_prefix-v$version" >> $GITHUB_OUTPUT
           echo "asset_tag=$asset_tag"  >> $GITHUB_OUTPUT
+          echo "sdk=$sdk"              >> $GITHUB_OUTPUT
 
           echo "Resolved:"
           echo "  csproj    = $csproj"
           echo "  version   = $version"
           echo "  tag       = $tag_prefix-v$version"
           echo "  asset_tag = $asset_tag  (from csproj gh-release:// URIs)"
+          echo "  sdk       = $sdk  (global.json; this job runs $(dotnet --version))"
 
       # SolutionDir is referenced by controller csprojs (PostBuild + PackZip
       # targets stage into $(SolutionDir)@Controllers/ and $(SolutionDir)@Zips/).
@@ -163,18 +196,16 @@ jobs:
         shell: bash
         # Credentials for the private WitMath feed, which nuget.config reads
         # from these two variables. Only the two Simulation controllers restore
-        # from it — everything else here comes from nuget.org and builds fine
-        # when the secret is absent.
+        # from it, so only their build is handed the token; everything else
+        # here comes from nuget.org and builds with the variable empty.
         #
         # WitMath belongs to a personal account rather than to this
         # organization, so this repository's built-in GITHUB_TOKEN has no read
         # access to it: WITMATH_PACKAGES_TOKEN must be a PAT with read:packages
-        # on that account. Scoped to this step on purpose — setting GITHUB_TOKEN
-        # for the whole job would also hand it to the release step, which needs
-        # this repository's own token to create tags.
+        # on that account. Scoped to this step on purpose.
         env:
           GITHUB_USER: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.WITMATH_PACKAGES_TOKEN }}
+          GITHUB_TOKEN: ${{ (inputs.project == 'OutWit.Controller.Simulation.Schwarz' || inputs.project == 'OutWit.Controller.Simulation.Parareal') && secrets.WITMATH_PACKAGES_TOKEN || '' }}
         run: dotnet build "${{ steps.paths.outputs.csproj }}" -c Release -p:ContinuousIntegrationBuild=true -p:SolutionDir="${GITHUB_WORKSPACE}/"
 
       - name: Pack
@@ -279,17 +310,6 @@ jobs:
               done
             } > dist-release-body.md
           fi
-
-      - name: Create GitHub Release
-        if: inputs.createGitHubRelease && steps.assets.outputs.hasAssets == 'true'
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
-        with:
-          tag_name: ${{ steps.paths.outputs.asset_tag }}
-          name: "${{ env.PROJECT }} v${{ steps.paths.outputs.version }}"
-          body_path: dist-release-body.md
-          files: dist/*
-          fail_on_unmatched_files: true
-          make_latest: legacy
 
       # Render (and any future Tier-2 controller that author-uploads its
       # release) ships a nupkg whose controller.json references gh-release://
@@ -400,70 +420,12 @@ jobs:
       # A package whose asset is not on its release, or is another file than the pinned one, is
       # broken for every consumer and every node. So before a push to any feed every asset is
       # fetched and held to its pin: the package goes out only when what it names is there.
+      # The assets are read from the manifest the built package ships, not from the project
+      # file's text: what the build evaluated is what a consumer gets.
       - name: Verify the data assets are released and are the pinned files (AI controllers)
         if: (inputs.pushToNuGet || inputs.pushToGitHubPackages) && (env.PROJECT == 'OutWit.Controller.AI.Verify' || env.PROJECT == 'OutWit.Controller.AI.Corpus')
         shell: bash
-        run: |
-          csproj="${{ steps.paths.outputs.csproj }}"
-          checked=0
-          failed=0
-          while read -r block; do
-            [ -n "$block" ] || continue
-            uri=$(printf '%s' "$block" | sed -n 's#.*<Uri>gh-release://\([^<]*\)</Uri>.*#\1#p')
-            pin=$(printf '%s' "$block" | sed -n 's#.*<Sha256>\([0-9a-f]*\)</Sha256>.*#\1#p')
-            size=$(printf '%s' "$block" | sed -n 's#.*<Size>\([0-9]*\)</Size>.*#\1#p')
-            [ -n "$uri" ] || continue
-            checked=$((checked+1))
-            url="https://github.com/$(echo "$uri" | cut -d/ -f1-2)/releases/download/$(echo "$uri" | cut -d/ -f3)/$(echo "$uri" | cut -d/ -f4-)"
-            file="$RUNNER_TEMP/asset-$checked"
-            if ! curl -fsSL --retry 3 -o "$file" "$url"; then
-              echo "  FAIL $uri  (not at $url)"
-              failed=$((failed+1))
-              continue
-            fi
-            seen=$(sha256sum "$file" | cut -d' ' -f1)
-            bytes=$(wc -c < "$file" | tr -d ' ')
-            if [ "$seen" = "$pin" ] && [ "$bytes" = "$size" ]; then
-              echo "  OK   $uri  $seen  $bytes bytes"
-            else
-              echo "  FAIL $uri  (the release has $seen, $bytes bytes; the project file pins $pin, $size bytes)"
-              failed=$((failed+1))
-            fi
-            rm -f "$file"
-          done < <(tr -d '\r' < "$csproj" | awk '/<ControllerDataAsset /{block=""; inside=1} inside{block=block $0 " "} /<\/ControllerDataAsset>/{if (inside) print block; inside=0}')
-          if [ "$checked" -eq 0 ]; then
-            echo "::error::no data asset with a gh-release:// address found in $csproj"
-            exit 1
-          fi
-          if [ "$failed" -gt 0 ]; then
-            echo "::error::$failed of $checked data asset(s) are not released as pinned. Release the archives the toolchain workflows built, then publish."
-            exit 1
-          fi
-
-      - name: Add GitHub Packages source
-        if: inputs.pushToGitHubPackages
-        run: >
-          dotnet nuget add source
-          --username ${{ github.actor }}
-          --password ${{ secrets.GITHUB_TOKEN }}
-          --store-password-in-clear-text
-          --name github
-          "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
-
-      - name: Push nupkg to nuget.org
-        if: inputs.pushToNuGet && steps.collect.outputs.hasNupkg == 'true'
-        shell: bash
-        run: dotnet nuget push NuGet/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-
-      - name: Push snupkg to nuget.org
-        if: inputs.pushToNuGet && steps.collect.outputs.hasSnupkg == 'true'
-        shell: bash
-        run: dotnet nuget push NuGet/*.snupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-
-      - name: Push nupkg to GitHub Packages
-        if: inputs.pushToGitHubPackages && steps.collect.outputs.hasNupkg == 'true'
-        shell: bash
-        run: dotnet nuget push NuGet/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source github --skip-duplicate
+        run: bash .github/scripts/released-data-assets.sh "NuGet/${{ env.PROJECT }}.${{ steps.paths.outputs.version }}.nupkg"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -475,3 +437,104 @@ jobs:
             dist-release-body.md
           if-no-files-found: ignore
           retention-days: 7
+
+  # The package as the build job made it, to GitHub Packages. No checkout: nothing of the
+  # repository runs here.
+  github-packages:
+    needs: build
+    if: inputs.pushToGitHubPackages && needs.build.outputs.hasNupkg == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    env:
+      PROJECT: ${{ inputs.project }}
+
+    steps:
+      - name: Download the build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ env.PROJECT }}-v${{ needs.build.outputs.version }}
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: ${{ needs.build.outputs.sdk }}
+
+      - name: Add GitHub Packages source
+        run: >
+          dotnet nuget add source
+          --username ${{ github.actor }}
+          --password ${{ secrets.GITHUB_TOKEN }}
+          --store-password-in-clear-text
+          --name github
+          "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+
+      - name: Push nupkg to GitHub Packages
+        shell: bash
+        run: dotnet nuget push NuGet/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source github --skip-duplicate
+
+  # nuget.org and the GitHub Release: in the "release" environment, whose reviewer approves
+  # the run and which allows main only, and from main only whatever the environment says.
+  release:
+    needs: build
+    if: >-
+      (inputs.pushToNuGet && (needs.build.outputs.hasNupkg == 'true' || needs.build.outputs.hasSnupkg == 'true'))
+      || (inputs.createGitHubRelease && needs.build.outputs.hasAssets == 'true')
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write   # the GitHub Release and its tag
+      id-token: write   # the OIDC token nuget.org exchanges for a key that lives for this run
+    env:
+      PROJECT: ${{ inputs.project }}
+
+    steps:
+      - name: Publishing goes from main only
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::nuget.org and GitHub Releases are published from main only; this run is on $GITHUB_REF"
+            exit 1
+          fi
+
+      - name: Download the build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ env.PROJECT }}-v${{ needs.build.outputs.version }}
+
+      - name: Create GitHub Release
+        if: inputs.createGitHubRelease && needs.build.outputs.hasAssets == 'true'
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ needs.build.outputs.asset_tag }}
+          target_commitish: ${{ github.sha }}
+          name: "${{ env.PROJECT }} v${{ needs.build.outputs.version }}"
+          body_path: dist-release-body.md
+          files: dist/*
+          fail_on_unmatched_files: true
+          make_latest: legacy
+
+      - name: Setup .NET 10
+        if: inputs.pushToNuGet
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: ${{ needs.build.outputs.sdk }}
+
+      # Trusted publishing: nuget.org holds a policy for this repository, this workflow file
+      # and this environment, and hands out a key that lives for one run.
+      - name: Log in to nuget.org
+        id: login
+        if: inputs.pushToNuGet
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ secrets.NUGET_USER }}   # the nuget.org account that holds the policy
+
+      - name: Push nupkg to nuget.org
+        if: inputs.pushToNuGet && needs.build.outputs.hasNupkg == 'true'
+        shell: bash
+        run: dotnet nuget push NuGet/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Push snupkg to nuget.org
+        if: inputs.pushToNuGet && needs.build.outputs.hasSnupkg == 'true'
+        shell: bash
+        run: dotnet nuget push NuGet/*.snupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
