@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 
@@ -162,7 +163,8 @@ public sealed class WarcReader : IDisposable
 
                 if (Text.Casing.CorpusCasing.EqualsIgnoreAsciiCase(name, CONTENT_LENGTH))
                 {
-                    if (!long.TryParse(value, out contentLength) || contentLength < 0)
+                    // Decimal digits only, read alike on every node: no sign, no culture.
+                    if (!long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out contentLength) || contentLength < 0)
                         throw new WarcFormatException($"bad Content-Length '{Clip(value)}' at offset {recordOffset}");
                 }
             }

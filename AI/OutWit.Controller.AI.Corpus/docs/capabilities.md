@@ -35,7 +35,8 @@ limit before the answer's head (sections 7 and 10), a shard's product has a ceil
 reserves on its disk and the preflight states (sections 8 and 11), a shard's PDFs have a number
 of runs, a blob transfer has a time to finish in, and one record or one manifest costs a bounded
 amount of memory (section 11); 0.9.1 fixes 0.9.0: a node gives back a shard's disk room when
-its task ends, also when an upload call still reads its products (section 10). What changed for
+its task ends, also when an upload call still reads its products (section 10), and reads a
+record's `Content-Length` and a response's status code alike on every node (section 14). What changed for
 an application is listed in section 14. 0.7.0, 0.8.0, 0.9.0 and 0.9.1 have not run on the fleet
 yet. Nothing is on
 nuget.org or on the live network yet.
@@ -1076,10 +1077,15 @@ beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
 - **One preflight message changed its words** for a run that samples: `... a shard whose two
   copies disagree is fetched again by up to 3 machines, and by up to 3 more when they leave it
   unsettled (a dispute and its second round; N shard(s) are sampled here), ...`.
-- **The documents correct three sentences** that said more than the code does: what the
-  preflight does not measure (section 8), the two numbers read with the node's own number format
-  (the README's *What hostile input meets*), and what the benchmark's self-check covers
-  (section 10). No stage, product, document or verdict changed.
+- **Two numbers a shard states for itself are read alike on every node.** A WARC record's
+  `Content-Length` and an HTTP response's status code are decimal digits with no sign: a signed
+  form (`Content-Length: +5`, `HTTP/1.1 +200 OK`) was read with the node's own number format,
+  so on most nodes and not on one whose culture writes its plus sign with a direction mark
+  (Arabic, Persian, Hebrew, Pashto). It is now refused on every node: the record makes its shard
+  `Malformed`, the response's page is dropped as `http_status`. Common Crawl writes neither form,
+  and no product, verdict or hash of the demo kit or of the tests' pinned shards moves.
+- **The documents correct two sentences** that said more than the code does: what the preflight
+  does not measure (section 8) and what the benchmark's self-check covers (section 10).
 
 **What changed for an application in 0.9.0** (from 0.8.0):
 

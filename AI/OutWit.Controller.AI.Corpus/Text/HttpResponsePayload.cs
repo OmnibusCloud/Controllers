@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using OutWit.Controller.AI.Corpus.Text.Casing;
@@ -215,8 +216,8 @@ public sealed partial class HttpResponsePayload
     /// <summary>The body bytes.</summary>
     public ReadOnlyMemory<byte> Body { get; }
 
-    /// <summary>The status code, or 0 when the status line does not carry one.</summary>
-    public int StatusCode => StatusLine.Split(' ') is { Length: > 1 } parts && int.TryParse(parts[1], out var code) ? code : 0;
+    /// <summary>The status code, or 0 when the status line does not carry one: decimal digits only, read alike on every node (no sign, no culture).</summary>
+    public int StatusCode => StatusLine.Split(' ') is { Length: > 1 } parts && int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var code) ? code : 0;
 
     /// <summary>The media type of the body (lower-case, no parameters), or "" when absent.</summary>
     public string MediaType
