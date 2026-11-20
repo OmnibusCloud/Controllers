@@ -29,7 +29,9 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// a tie, returned the same), <c>no_majority</c>, <c>too_few_copies</c> or
 /// <c>surplus_copies</c>. A dispute that came back with too few copies, or with a lead that may be
 /// one machine's second answers, went out once more on three machines: its record then holds
-/// that round as well (<c>again</c>), and <c>outcome</c> is how the second round ended.</item>
+/// that round as well (<c>again</c>), and <c>outcome</c> and <c>accepted</c> are how the second
+/// round ended; <c>copies</c>, <c>agreeing</c> and <c>results</c> stay the dispute round's, and a
+/// dispute the second round resolved rests on <c>again.agreeing</c>.</item>
 /// <item><b>no_result</b>: every shard no machine returned an acceptable result for, with the
 /// fixed reason and the fault codes the nodes gave.</item>
 /// <item><b>rejected</b>: the values dropped, by reason: no ticket of this job and round

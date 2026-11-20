@@ -37,8 +37,9 @@ public static class CorpusStorageEstimator
     /// <param name="inputBytes">The bytes of the manifest and the language model.</param>
     /// <param name="capBytes">The size a shard of unknown size is counted at: the cap the nodes hold it to. 0 leaves such shards out of the estimate (and the estimate says how many).</param>
     /// <param name="measuredThresholds">Whether the language model's rule data is the one the ratios were measured with (<see cref="CorpusStorageRatios.For"/>).</param>
+    /// <param name="bounds">The most each shard may be on the wire, aligned with the sources, as the nodes hold it (its declared size and the slack, the cap without one); null to take them from the sources' sizes. The product ceiling is counted from these.</param>
     /// <returns>The estimate.</returns>
-    public static CorpusStorageEstimate Estimate(IReadOnlyList<CorpusSourceData> sources, CorpusPipelineData pipeline, double samplingRate, long inputBytes, long capBytes = 0, bool measuredThresholds = true)
+    public static CorpusStorageEstimate Estimate(IReadOnlyList<CorpusSourceData> sources, CorpusPipelineData pipeline, double samplingRate, long inputBytes, long capBytes = 0, bool measuredThresholds = true, IReadOnlyList<long>? bounds = null)
     {
         var products = new List<long>(sources.Count);
         var ceilings = new List<long>(sources.Count);
@@ -48,8 +49,9 @@ public static class CorpusStorageEstimator
         var signs = ShardProcessor.KeepsSignatures(pipeline);
         var minHash = MinHashParameters.Resolve(pipeline.MinHash);
 
-        foreach (var source in sources)
+        for (var index = 0; index < sources.Count; index++)
         {
+            var source = sources[index];
             var size = source.SizeBytes;
             if (size <= 0)
             {
@@ -64,8 +66,11 @@ public static class CorpusStorageEstimator
                 size = capBytes;
             }
 
-            // The most the shard is fetched as, and the most a shard of that size may give.
-            var bound = source.SizeBytes > 0 && capBytes > 0 ? Math.Min(capBytes, ShardLimits.DeclaredCap(size)) : source.SizeBytes > 0 ? ShardLimits.DeclaredCap(size) : size;
+            // The most the shard is fetched as, as the nodes hold it, and the most a shard of that size may give.
+            var bound = bounds != null && index < bounds.Count && bounds[index] > 0 ? bounds[index]
+                : source.SizeBytes > 0 && capBytes > 0 ? Math.Min(capBytes, ShardLimits.DeclaredCap(size))
+                : source.SizeBytes > 0 ? ShardLimits.DeclaredCap(size)
+                : size;
             ceilings.Add(ShardProductLimits.MaxUploadBytes(bound, pipeline));
 
             var ratio = CorpusStorageRatios.For(source.Format, pipeline, measuredThresholds);

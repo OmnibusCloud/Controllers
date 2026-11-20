@@ -53,7 +53,7 @@ bin/Release/net10.0/corpus-live dedup demo-out/cc/report-1.json
    and an eighth more), and what no figure covers (a node that fails has its share fetched again
    elsewhere; many disputes or repairs go past the allowance). The work split line gives the
    busiest node's share of the work at this fleet, as a percentage: no node is named. And the
-   disk a node needs: it holds its degree and two more shards at a time, 414,219,894 bytes free
+   disk a node needs: it holds its degree and two more shards at a time, 457,609,025 bytes free
    for each (the largest shard, the most its products may be, and a margin), reserved before
    the shard is fetched.
 2. **The run.** Each node fetches its shards straight from Common Crawl; the progress shows the

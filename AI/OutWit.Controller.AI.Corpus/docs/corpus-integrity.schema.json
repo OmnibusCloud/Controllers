@@ -88,7 +88,7 @@
           "first_copies": { "type": "integer", "description": "The results with a verdict the first round returned for the shard." },
           "repair_copies": { "type": "integer", "description": "The results with a verdict the repair round returned for the shard; 0 for a shard the first round sent to the dispute round." },
           "copies": { "type": "integer", "description": "The results with a verdict the dispute round returned for it; 0 when more than three values came back (none is taken) or the round did not run." },
-          "agreeing": { "type": "integer", "description": "The most of those that agree with one another; when resolved, the results the accepted one rests on (executions in the report)." },
+          "agreeing": { "type": "integer", "description": "The most of the dispute round's results that agree with one another; when the dispute round resolved the dispute, the results the accepted one rests on (executions in the report). A dispute resolved in the second dispute round rests on again.agreeing." },
           "outcome": { "type": "string", "enum": ["resolved", "no_majority", "too_few_copies", "surplus_copies"], "description": "How the dispute ended: in the second dispute round when it went out again (again). resolved: one result was returned by the most machines, two at least, without a tie, and it is the shard's. The others leave the shard Disputed in the report. no_majority: no result was returned by more copies than any other, and by two at least. too_few_copies: fewer than two copies came back with a verdict (the round did not run, or more than three values came back and none was taken). surplus_copies: the leading result does not lead by two machines once the values that may be one machine's second are left out; as many of them may be as the other shards of the round are short of their three, and no more than the slots of the round that brought nothing at all. A dispute round that ends too_few_copies or surplus_copies sends the shard out once more." },
           "results": { "type": "array", "items": { "$ref": "#/$defs/side" }, "description": "What came back in the dispute round, in the order the platform handed it over." },
           "again": {
@@ -99,11 +99,11 @@
             "properties": {
               "after": { "type": "string", "enum": ["too_few_copies", "surplus_copies"], "description": "How the dispute round ended: why the shard went out again." },
               "copies": { "type": "integer", "description": "The results with a verdict the second dispute round returned." },
-              "agreeing": { "type": "integer", "description": "The most of those that agree with one another." },
+              "agreeing": { "type": "integer", "description": "The most of those that agree with one another; when the second round resolved the dispute, the results the accepted one rests on (executions in the report)." },
               "results": { "type": "array", "items": { "$ref": "#/$defs/side" }, "description": "What came back in the second dispute round, in the order the platform handed it over." }
             }
           },
-          "accepted": { "$ref": "#/$defs/side", "description": "Present when resolved: the accepted result." }
+          "accepted": { "$ref": "#/$defs/side", "description": "Present when resolved, in the dispute round or in the second: the accepted result." }
         }
       }
     },

@@ -135,11 +135,11 @@ internal static class CorpusPlanning
             sized.Add(new CorpusSourceData { Format = sources[index].Format, SizeBytes = sizes.Sizes[index] > 0 ? Math.Min(sizes.Sizes[index], cap) : 0 });
         }
 
-        var storage = CorpusStorageEstimator.Estimate(sized, planned.Plan.Pipeline, rate, planned.InputBytes, cap, planned.Model?.MeasuredThresholds ?? true);
+        var storage = CorpusStorageEstimator.Estimate(sized, planned.Plan.Pipeline, rate, planned.InputBytes, cap, planned.Model?.MeasuredThresholds ?? true, bounds);
         var uploadCeiling = storage.ProductCeilingBytes > long.MaxValue - storage.ResultPackageBytes ? long.MaxValue : storage.ProductCeilingBytes + storage.ResultPackageBytes;
         var traffic = CorpusTrafficEstimate.Of(counted, rate, bounds, storage.UploadBytes, planned.ModelBytes, nodes, uploadCeiling);
 
-        return new CorpusEstimates(storage, traffic, counted);
+        return new CorpusEstimates(storage, traffic, counted) { Bounds = bounds };
     }
 
     /// <summary>Asks the deployment for the room one job has and holds an estimate to it.</summary>

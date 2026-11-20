@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using OutWit.Controller.AI.Corpus.Activities;
 using OutWit.Controller.AI.Corpus.Logging;
+using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Engine.Data.ActivityAdapters;
 using OutWit.Engine.Data.Status;
 using OutWit.Engine.Data.Utils;
@@ -26,6 +27,10 @@ internal sealed class WitActivityAdapterCorpusDisputes : WitActivityAdapterFunct
     {
         var packages = await CorpusRounds.HostAsync("Corpus.Disputes", async () =>
         {
+            // A dispute round that sent nothing out leaves nothing to send out again: the run is not read.
+            if (activity.Disputes != null && IsEmpty(pool, activity.Disputes))
+                return new List<CorpusTaskPackageData>();
+
             var ledger = await CorpusRounds.LedgerAsync(BlobService, pool, activity.Tasks, activity.Executions, activity.Repairs, activity.Repaired, activity.Disputes, activity.Resolved);
 
             // Given the dispute round, the disputes it could not settle for want of copies go out once more.
@@ -45,6 +50,16 @@ internal sealed class WitActivityAdapterCorpusDisputes : WitActivityAdapterFunct
 
         if (!pool.TrySetCollection(activity.ReturnReference, packages))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");
+    }
+
+    #endregion
+
+    #region Tools
+
+    /// <summary>Whether a round's task collection holds no package.</summary>
+    private static bool IsEmpty(IWitVariablesCollection pool, IWitReference reference)
+    {
+        return pool.TryGetObject(reference, out var value) && value is System.Collections.ICollection { Count: 0 };
     }
 
     #endregion

@@ -622,7 +622,7 @@ shard. `CorpusPreflightData`:
 | `UnsizedSources` | shards with no size of their own, the manifest's or the origin's: counted at the mean of the origin's answers, or at the cap, and held to the cap only |
 | `EstimatedStorageBytes`, `StorageHeadroomBytes`, `StorageRetentionDays` | what the job leaves on the server, and the deployment's limit (below) |
 | `BusiestNodeShare`, `PlannedNodes` | the busiest node's share of the work, 0 to 1, and how many nodes would take shards (below); 0 when the host has no pool to ask |
-| `NodeDiskBytesPerShard` | the disk a node reserves for each shard it holds before the shard is fetched: the run's largest shard (the cap when no size is known), the most its products may be under the product ceiling (section 11), and 64 MiB. A node holds its degree and two more shards at a time, never its whole share; a shard whose room is held by the node's other shards waits for it, and a node without room for one shard refuses its batch |
+| `NodeDiskBytesPerShard` | the disk a node reserves for each shard it holds before the shard is fetched: the run's largest shard at the most a node fetches it as (its declared size and an eighth more, the cap when no size is known), the most its products may be under the product ceiling (section 11), and 64 MiB. A node holds its degree and two more shards at a time, never its whole share; a shard whose room is held by the node's other shards waits for it, and a node without room for one shard refuses its batch |
 | `Messages` | the problems by manifest line (the first hundred, then how many more), and the notes: the pack described, target languages it lacks, hosts that are not public origins, what the run keeps and whether `CorpusDedup` can run over it, MinHash parameters that are not the defaults, how many shards a package holds in a job of more than 1,024, what the origin answered for the sample, the traffic line, the line on what the nodes enforce, the line on what the estimate leaves out, the node disk line, the storage line, the work split |
 
 **A declared size binds.** A node holds a shard to the size it was declared with — the manifest's
@@ -837,9 +837,11 @@ Integrity — what the server accepts from a node, and what a run does when node
     counted as `surplus` and the dispute ends as `too_few_copies`. Otherwise the leading result
     must have been returned by two machines: of its values, as many as the other packages of the
     round are short of their three answers may be one machine's second, and do not count — no
-    more than the slots of the round that brought nothing at all, since a value under no ticket
-    of the round lent nothing to another package; when what is left is not two, or not more than
-    the next result has, the dispute ends as `surplus_copies`;
+    more than that shortfall less the values that came back under no ticket of the round, since
+    such a value lent nothing to another package (an honest copy that came back as a value that
+    is not taken, a blob that cannot be read or another version, still leaves room for a lent
+    one); when what is left is not two, or not more than the next result has, the dispute ends
+    as `surplus_copies`;
   - the second dispute round is ruled the same way.
 
   With one lying machine among the copies, whatever the others lose, a result accepted in a
@@ -910,12 +912,17 @@ stage's included.
 - **The disk.** A node holds its degree and two more shards at a time, whatever its share: a
   task waits for a place before it fetches, then reserves the most its shard may take (the
   shard, at the cap when it has no size, and the most its products may be) against the free room
-  less what the node's other shards hold; it waits while they hold it, and a shard that does not
-  fit alone is the node fault `disk_space`. The preflight states the room each held shard needs.
+  less what the node's other shards hold; it waits while they hold it. A node whose disk cannot
+  take what the largest task of a batch reserves refuses the batch once it has read the tasks,
+  before a byte is fetched (`disk_space`), and a shard that does not fit alone all the same is
+  the node fault `disk_space`. The preflight states the room each held shard needs.
 - **The language pack** arrives as a blob (cached per node) and is used only when its bytes hash to
   the pin. Blob transfers that fail are tried again for about five minutes; every attempt has two
-  minutes and the time of its bytes at 32 KiB/s to finish in, and the job's token ends the wait,
-  so a transfer that never returns does not hold the node's others behind it.
+  minutes and the time of its bytes at 32 KiB/s to hold the node's transfer gate, so a transfer
+  that never returns does not hold the node's others behind it. Its call cannot be stopped: it
+  is waited for, the job's token ending the wait, and no second attempt of the same transfer
+  starts beside it; a product an upload still reads keeps its file and its room until the call
+  ends.
 - **Processing.** One streaming pass on a thread below normal priority, the PDF extractor's
   guest code included; one shard per core at most, fewer when memory is short. A node's memory is
   budgeted once: half of it to shards (256 MB each), a quarter to PDFs (1 GiB each), the rest
@@ -1051,7 +1058,8 @@ beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
   (the second dispute round; no package under a script written for an earlier controller); the
   integrity document's summary gains `disputes_again` and `disputes_again_resolved`, and a
   dispute's record gains `again` (present when it went out once more: `after`, `copies`,
-  `agreeing`, `results`), its `outcome` being how the second round ended. Nothing was removed or
+  `agreeing`, `results`), its `outcome` and `accepted` being how the second round ended (its
+  `copies`, `agreeing` and `results` stay the dispute round's). Nothing was removed or
   renamed: a reader of `/5` and `/7` that ignores unknown fields only has to accept the new
   numbers. `Corpus.Dedup` reads `/1` to `/6`.
 - **The scripts.** Scripts 0.1.7 run the second dispute round: `Corpus.Disputes` with six
@@ -1071,14 +1079,21 @@ beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
   past 4,096 drop as `pdf_shard_runs`. The stage set's fingerprint moves with these limits. No
   content hash, signatures hash or verdict of the demo kit or of the tests' pinned shards moved.
 - **The preflight.** `NodeDiskBytesPerShard` is the shard, the most its products may be and
-  64 MiB (it was the shard and half of it again): the kit's figure is 414,219,894 bytes (it was
-  171,242,293). The ceiling line states the most the uploads may be, and the storage line the
-  most the products may be; the storage refusal is still held to the estimate. A manifest whose
-  root holds more than 64 keys is not valid JSON for the preflight.
+  64 MiB (it was the shard and half of it again), the shard counted at the most a node fetches
+  it as (its declared size and an eighth more, the cap without a size), which is what a node
+  reserves: the kit's figure is 457,609,025 bytes (it was 171,242,293). The ceiling line states
+  the most the first round's uploads may be, and the storage line the most the first round's
+  products may be (a repair or a dispute uploads again, under the same bound per shard); the
+  storage refusal is still held to the estimate. A manifest whose root holds more than 64 keys
+  is not valid JSON for the preflight.
 - **On a node.** A shard reserves its room on the disk before it is fetched and waits while the
-  node's other shards hold it; a shard without a size reserves the cap's. A blob transfer
-  attempt that does not finish in two minutes and the time of its bytes at 32 KiB/s counts as
-  failed.
+  node's other shards hold it; a shard without a size reserves the cap's. A node refuses a batch
+  for room once it has read the tasks, before a byte is fetched, when its disk cannot take what
+  the largest of them reserves under its own pipeline. A blob transfer attempt that does not
+  finish in two minutes and the time of its bytes at 32 KiB/s frees the node's transfer gate;
+  the call goes on and is waited for (the job's cancellation ends the wait), and no second
+  attempt of the same transfer starts beside it. A product an upload still reads keeps its file
+  and its room until the call ends.
 
 **What changed for an application in 0.8.0** (from 0.7.0):
 

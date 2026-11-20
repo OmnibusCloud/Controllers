@@ -263,7 +263,7 @@ public sealed class CorpusDocsNumbersTests
         TestContext.Out.WriteLine(traffic.DescribeCeiling(sizes.Unsized, CorpusTaskPlanner.ShardCap(options)));
         TestContext.Out.WriteLine(traffic.DescribeRounds());
         TestContext.Out.WriteLine(CorpusStorageCheck.Describe(storage, CorpusStorageLimit.NONE));
-        TestContext.Out.WriteLine($"full: {CorpusStorageCheck.Bytes(full.TotalBytes)}; documents {storage.DocumentBytes}, packages {storage.PackageBytes}, inputs {storage.InputBytes}; disk {ShardDisk.Needed(largest)}");
+        TestContext.Out.WriteLine($"full: {CorpusStorageCheck.Bytes(full.TotalBytes)}; documents {storage.DocumentBytes}, packages {storage.PackageBytes}, inputs {storage.InputBytes}; disk {ShardDisk.Needed(ShardLimits.DeclaredCap(largest))}");
 
         Assert.Multiple(() =>
         {
@@ -278,13 +278,13 @@ public sealed class CorpusDocsNumbersTests
             Assert.That(KitExpected, Does.Contain($"| Traffic at `--sampling 0.25` | {N(traffic.TotalBytes)} bytes: fetches {N(traffic.FetchBytes)} (every shard once, {N(traffic.OnceBytes)}, the manifest's sizes, and the second fetch of the {traffic.SampledShards} largest shards, sampled for integrity, {N(traffic.CopyBytes)}), uploads {N(traffic.UploadBytes)}"));
             Assert.That(KitExpected, Does.Contain($"an allowance of {N(traffic.RetryBytes)}"));
             Assert.That(KitExpected, Does.Contain($"| Server storage | {N(storage.TotalBytes)} bytes at `--sampling 0.25`: the report and the integrity document ({N(storage.DocumentBytes)}), the task and result packages ({N(storage.PackageBytes)}), the manifest and the pack ({N(storage.InputBytes)}). The same run with `\"output\": \"full\"`: {N(full.TotalBytes)} bytes"));
-            Assert.That(KitExpected, Does.Contain($"| Node disk | {N(ShardDisk.Needed(largest))} bytes free for each shard a node holds (the largest shard, {N(largest)} bytes,"));
+            Assert.That(KitExpected, Does.Contain($"| Node disk | {N(ShardDisk.Needed(ShardLimits.DeclaredCap(largest)))} bytes free for each shard a node holds (the largest shard, {N(largest)} bytes, at the most a node fetches it as: {N(ShardLimits.DeclaredCap(largest))} bytes"));
 
             // The script page and the reference repeat the headline numbers.
             Assert.That(KitScript, Does.Contain($"{N(traffic.TotalBytes)} bytes"));
             Assert.That(KitScript, Does.Contain(N(traffic.FetchBytes)));
             Assert.That(KitScript, Does.Contain(N(traffic.CeilingBytes)));
-            Assert.That(KitScript, Does.Contain(N(ShardDisk.Needed(largest))));
+            Assert.That(KitScript, Does.Contain(N(ShardDisk.Needed(ShardLimits.DeclaredCap(largest)))));
             Assert.That(Reference, Does.Contain($"| Fetches at sampling 0.25 | {N(traffic.FetchBytes)} bytes: every file once ({N(traffic.OnceBytes)}) and the six largest a second time ({N(traffic.CopyBytes)}); the nodes accept {N(traffic.CeilingBytes)} at the most |"));
             Assert.That(Reference, Does.Contain($"| Traffic estimate at sampling 0.25 | {N(traffic.TotalBytes)} bytes: the fetches, uploads of {N(traffic.UploadBytes)} (the result packages: nothing else leaves a node) and an allowance of {N(traffic.RetryBytes)};"));
             Assert.That(Reference, Does.Contain($"({N(packBytes)} bytes)"));

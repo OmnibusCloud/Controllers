@@ -145,7 +145,7 @@ public sealed record CorpusTrafficEstimate(long OnceBytes, long CopyBytes, int S
 
         if (UploadCeilingBytes > 0)
             line += string.Create(CultureInfo.InvariantCulture,
-                $" They upload at most {UploadCeilingBytes} bytes for them: a shard's product is held to {ShardProductLimits.DOCUMENTS_PER_MIB} documents a fetched mebibyte ({ShardProductLimits.MIN_DOCUMENTS} at least) and {ShardProductLimits.TEXT_PER_BYTE} bytes of compressed text a fetched byte ({ShardProductLimits.MIN_TEXT_BYTES} at least), and one past that is refused as Oversized ({Trust.CorpusResultCodes.OVERSIZED_PRODUCT}).");
+                $" In the first round they upload at most {UploadCeilingBytes} bytes for them (a repair or a dispute uploads again, under the same bound): a shard's product is held to {ShardProductLimits.DOCUMENTS_PER_MIB} documents a fetched mebibyte ({ShardProductLimits.MIN_DOCUMENTS} at least) and {ShardProductLimits.TEXT_PER_BYTE} bytes of compressed text a fetched byte ({ShardProductLimits.MIN_TEXT_BYTES} at least), and one past that is refused as Oversized ({Trust.CorpusResultCodes.OVERSIZED_PRODUCT}).");
 
         if (unsizedShards > 0)
             line += string.Create(CultureInfo.InvariantCulture, $" {unsizedShards} shard(s) have no size of their own and are held to the cap of {capBytes} bytes only: declare their sizes to make the estimate a bound for them.");
@@ -175,7 +175,7 @@ public sealed record CorpusTrafficEstimate(long OnceBytes, long CopyBytes, int S
     /// <summary>The most the nodes accept for the fetches: every shard at the size it is held to; 0 when no ceiling was asked for.</summary>
     public long CeilingBytes { get; init; }
 
-    /// <summary>The most every execution may upload together: the products at the most a shard may give and the result packages; 0 when not known.</summary>
+    /// <summary>The most the first round's executions may upload together: the products at the most a shard may give and the result packages; 0 when not known.</summary>
     public long UploadCeilingBytes { get; init; }
 
     /// <summary>The fetches: every shard once and the sampled ones a second time.</summary>

@@ -113,11 +113,12 @@ public sealed class CorpusStorageEstimate : ModelBase
     public long ResultPackageBytes { get; init; }
 
     /// <summary>
-    /// The most the products of every execution may be, whoever wrote the manifest and whatever the
-    /// origins serve: each shard at the most it is fetched as (its declared size and the slack, the
-    /// cap without a size) and its product at the most a shard of that size may give
-    /// (<see cref="Shards.ShardProductLimits.MaxUploadBytes"/>); the largest packages twice for the
-    /// sampled ones. 0 for statistics and hashes only, and for shards left out of the estimate.
+    /// The most the products of the first round's executions may be, whoever wrote the manifest and
+    /// whatever the origins serve: each shard at the most the nodes fetch it as (its declared size
+    /// and the slack, the cap without a size) and its product at the most a shard of that size may
+    /// give (<see cref="Shards.ShardProductLimits.MaxUploadBytes"/>); the largest packages twice for
+    /// the sampled ones. A repair or a dispute uploads its products again, each held to the same
+    /// ceiling. 0 for statistics and hashes only, and for shards left out of the estimate.
     /// </summary>
     public long ProductCeilingBytes { get; init; }
 
