@@ -6,9 +6,10 @@ run-name: "AI Verify: ${{ github.event.pull_request.title || github.ref_name }}"
 # runtime set (built from its pins by verify-assets, so nothing is Assert.Ignore'd here),
 # the worker pool and the benchmark, the taskset pipelines, every bundled script end to
 # end through the engine on in-process nodes, and the module self-containment proof.
-# Load tests (Category=Load) are not part of the sweep: they run once a week and on request
-# (the "load" input of a manual run), on Linux, as a job of their own. A schedule runs on the
-# repository's default branch only; on another branch the load job is run by hand.
+# Load tests (Category=Load) are not part of the sweep: they run on Linux as a job of their
+# own, on request (the "load" input of a manual run) and on the weekly schedule below. A
+# schedule runs on the repository's default branch only, so the weekly run starts once this
+# workflow is on main; until then, and on any other branch, the load job runs only by hand.
 
 on:
   workflow_dispatch:

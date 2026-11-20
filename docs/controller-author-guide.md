@@ -844,7 +844,7 @@ The shared MSBuild logic runs in this order at every controller build:
 4. **`ControllerPostBuild`** (AfterTargets=`PostBuildEvent`) — copies the controller's DLL + `.deps.json` + `controller.json` + any locale-resource DLLs into `$(SolutionDir)@Controllers/$(Configuration)/<name>.module/`.
 5. **`ControllerStageSourceResources`** (AfterTargets=`ControllerPostBuild`) — copies `<csproj>/Resources/**` into `<module>/Resources/`. Skipped silently when the folder doesn't exist.
 6. **Companion `ModelPostBuild`** in the `.Model` csproj — copies the Model DLL into the SAME `<module>` directory.
-7. **`ControllerRecordStaged`** (`Build/OutWit.Controller.Staging.targets`, after the staging targets of every project that stages) — writes the project's record of what it staged to `$(SolutionDir)@Controllers/.staged/$(Configuration)/<project>.txt`, outside the module folders, and removes from the modules what the project's previous record lists and this build no longer stages (only while the file still has the bytes that build put there). For the controller's project it also returns the module's files: what the records of all projects list under `<module>/`.
+7. **`ControllerRecordStaged`** (`Build/OutWit.Controller.Staging.targets`, after the staging targets of every project that stages) — writes the project's record of what it staged to `$(SolutionDir)@Controllers/.staged/$(Configuration)/<project>.txt`, outside the module folders, and removes from the modules what the project's previous record lists and this build no longer stages (only while the file still has the bytes that build put there). One file is the exception: a controller's `controller.json` is recorded before step 8 rewrites it, so it is never removed this way and stays in a module its project no longer stages into. For the controller's project it also returns the module's files: what the records of all projects list under `<module>/`.
 8. **`ControllerStampManifest`** — writes the build stamp and the content digest into the staged `controller.json`. The digest is taken over the files the package ships.
 9. **`ControllerPackZip`** (AfterTargets=`ControllerPostBuild`) — zips the module into `$(SolutionDir)@Zips/$(Configuration)/<name>.zip`: the recorded files, and what lies under a folder one of the controller's data assets extracts to (`ExtractTo`), where a copy for local runs may be kept. The zip is used by the OmnibusCloud server's BlobCacheService.
 10. **`ControllerPackModuleContents`** (runs during `dotnet pack`) — packages the recorded files of the module (minus `Resources/`) into the nupkg's `content/module/` + writes an empty `lib/<tfm>/_._` marker so NuGet considers the package framework-compatible.
@@ -872,6 +872,8 @@ The staged module folder is written by several projects and is also where prereq
 Final on-disk layout after a Release build of the full solution:
 
 ```
+<repo>/@Controllers/.staged/Release/   # the build's records: one <project>.txt for each project
+                                     # that stages (step 7); not a module, never packed
 <repo>/@Controllers/Release/
   variables.module/
     OutWit.Controller.Variables.dll
@@ -886,9 +888,10 @@ Final on-disk layout after a Release build of the full solution:
     benchmark_scene.blend       # Debug-only: staged from @Prerequisites for tests
     benchmark_scene_still.blend
     benchmark_scene_video.blend
-    # Note: blender/ and ffmpeg/ subfolders are NOT here in the source tree —
-    # they're materialised in CONSUMER builds via ResolveControllerAssetsTask
-    # when a downstream csproj PackageReferences OutWit.Controller.Render.
+    # blender/ and ffmpeg/ are not staged by this build: CONSUMER builds materialise
+    # them via ResolveControllerAssetsTask when a csproj PackageReferences
+    # OutWit.Controller.Render. A copy kept here by hand for local runs is left
+    # alone (see "A module folder is not the build's alone").
 
 <repo>/@Zips/Release/
   variables.zip
@@ -919,7 +922,7 @@ OutWit.Controller.Render.<version>.nupkg
 
 1. **build** (`contents: read` only): builds in Release with the SDK `global.json` pins, packs the nupkg, and runs the guards. **Tier-2**: HEAD-checks every expected GitHub Release asset before a nuget.org push and refuses to publish if one is missing. The asset list is hard-coded for Render in the workflow ([`publish.yml:331-341`](../.github/workflows/publish.yml#L331-L341)); a new Tier-2 controller needs a guard of its own. **The AI controllers**: every data asset the built package's manifest declares is fetched and held to its `Sha256` and its `Size` before a push to any feed (`.github/scripts/released-data-assets.sh`). The package goes on as a workflow artifact.
 2. **github-packages** (`packages: write`): pushes the built package to GitHub Packages with `pushToGitHubPackages: true` (default). It runs from any branch.
-3. **release** (the `release` environment: a reviewer approves the run, and `main` is its only branch): logs in to nuget.org by trusted publishing (no stored key) when `pushToNuGet: true` (**off by default**), creates the GitHub Release (`<name.lower-no-dots>-v<version>`) with `createGitHubRelease: true` (the default), then pushes to nuget.org. It refuses any ref but `main`. A dispatch from any other branch passes `createGitHubRelease: false` and `pushToNuGet: false`: otherwise, for a project with new release assets, the release job fails after GitHub Packages has taken the package.
+3. **release** (runs from `main` only, in the `release` environment; that environment's required reviewer and its `main`-only branch rule are repository settings the owner makes, and until they are made the job's main-only step is its only gate): logs in to nuget.org by trusted publishing (no stored key) when `pushToNuGet: true` (**off by default**), creates the GitHub Release (`<name.lower-no-dots>-v<version>`) with `createGitHubRelease: true` (the default), then pushes to nuget.org. It refuses any ref but `main`. A dispatch from any other branch passes `createGitHubRelease: false` and `pushToNuGet: false`: otherwise, for a project with new release assets, the release job fails after GitHub Packages has taken the package.
 
 For Path-A distribution this is fully automated. For Path-B (third-party authors without nuget.org rights), use [`outwit-controller-pack`](../Tools/OutWit.Controller.Pack/README.md) to produce a self-contained zip that gets uploaded through the OmnibusCloud admin UI.
 

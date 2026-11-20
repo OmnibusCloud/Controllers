@@ -300,12 +300,14 @@ time is roughly:
    dependencies (`OutWit.Engine.Data`, `OutWit.Engine.Assets.MSBuild`),
    icon / readme / license packaging.
 3. `Build/OutWit.Controller.Manifest.targets` validates the declarations
-   (Sha256/Uri required on every asset, etc.), then **emits the
-   `controller.json`** for the build.
+   (every asset needs a Uri, a Sha256 of 64 lower-case hex digits that is
+   not all zeros, and a Size, etc.), then **emits the `controller.json`**
+   for the build.
 4. `Build/OutWit.Controller.targets` stages the controller's outputs
    into `$(SolutionDir)@Controllers/<Cfg>/<name>.module/`, produces an
    `@Zips/<Cfg>/<name>.zip` (used by the BlobCacheService path on
-   the OmnibusCloud server side), and packs the staged module dir into the
+   the OmnibusCloud server side), and packs the files the build's records
+   list for the module (not whatever else lies in the folder) into the
    nupkg's `content/module/` plus a `lib/<tfm>/_._` marker (so NuGet
    considers the package framework-compatible).
 5. The consumer-side `build/OutWit.Controller.<Name>.targets` ships

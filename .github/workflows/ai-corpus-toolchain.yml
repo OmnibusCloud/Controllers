@@ -8,8 +8,8 @@ run-name: "AI Corpus toolchain: ${{ github.ref_name }}"
 # hostile set, and the PDF responses of one Common Crawl WARC file, fetched by range from
 # data.commoncrawl.org (never committed). The data asset goes out as a workflow artifact
 # with its SHA-256, and the compare job holds it to the pin of the controller's project file
-# (its SHA-256 and its size): what a node is sent is then what this workflow builds, or the
-# workflow fails.
+# (its SHA-256 and its size): a pin that names another archive than the one built here fails
+# this workflow. It is not a required check.
 #
 # It runs on a pull request, and after a push to main or ai-controllers, for a change to the
 # toolchain or to the project file, which holds the pin; a branch with a pull request is
@@ -237,7 +237,8 @@ jobs:
           exit $code
 
       # Verdicts, page counts, text hashes and fuel per document; no text of a third-party
-      # document leaves the runner.
+      # document is uploaded as an artifact. The fetched Common Crawl PDFs themselves are kept
+      # in this repository's Actions cache between runs (the cache step above).
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

@@ -14,21 +14,26 @@
 //                              zip also carries the build stamp. Compare builds by the content
 //                              digest, not by the zip's bytes.
 //
-// The content digest, not the zip, is what is the same on every machine: one commit, built
-// with the SDK that global.json pins, states one digest on every machine of one system. The
-// publish workflow builds on Linux. A build on Windows states another digest: the build writes
-// deps.json and controller.json with the system's line ends, and the assemblies differ too.
+// The content digest, not the zip, is what can be reproduced, and only for a build made as the
+// publish workflow makes it: one commit, built on Linux with the SDK that global.json pins and
+// with ContinuousIntegrationBuild=true, states one digest wherever its checkout lies. Without
+// that flag the assemblies carry the checkout's path, so the digest follows the folder. A build
+// on Windows states another digest again: the build writes deps.json and controller.json with
+// the system's line ends, and the assemblies differ too.
 //
 // Both take the module as a list of files (ListedFilesOnly): what the build's own records say
 // it staged (OutWit.Controller.StagedFiles.cs), not whatever lies in the folder. Without a list
 // they take the folder, as a caller outside the controller build gets it.
 //
-// The content digest is the identity of a controller build that WitCloud compares (its
-// ControllerContentDigest class implements the same definition; the two must not drift):
+// The content digest is the identity of a controller build that WitCloud compares:
 //   every file of the module except controller.json (and, at pack time, Resources/**, which the
 //   nupkg leaves out), ordered by relative path (forward slashes, ordinal, case-sensitive);
 //   SHA-256 over, per file, UTF-8 path + LF + the 32 raw bytes of the file's SHA-256 + LF;
 //   written as "sha256:" + lower-case hex.
+// WitCloud's ControllerContentDigest computes a digest of the same form over the archive it
+// holds, taking every file of the archive but the manifest. The two agree only for an archive
+// without Resources/ and without the files of an extracted data asset: the build leaves
+// Resources/ out and takes the files its records list. The forms must not drift.
 
 using System;
 using System.Collections.Generic;

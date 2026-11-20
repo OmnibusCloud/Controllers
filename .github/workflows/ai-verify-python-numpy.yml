@@ -7,7 +7,9 @@ run-name: "AI Verify python-numpy: ${{ github.ref_name }}"
 # data asset verify-python-numpy.zip (snapshot.sh). Two builds run side by side in folders of
 # different names; the compare job checks that they made the same bytes, the asset included,
 # and that the asset is the archive the controller's project file pins (its SHA-256 and its
-# size): what a node is sent is then what this workflow builds, or the workflow fails.
+# size): a pin that names another archive than the one built here fails this workflow. It is
+# not a required check, and it runs for a change to the paths below only; the toolchain's own
+# pins.env, which the build reads, is not among them.
 # The first build also runs the probes under the pinned wasmtime the way the sandbox runs a
 # task. The asset is published as a workflow artifact; it reaches a release only by hand, and
 # the release takes this artifact.

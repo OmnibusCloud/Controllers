@@ -22,17 +22,21 @@ run-name: "Publish: ${{ inputs.project }}"
 #
 #   build              reads the repository, builds, packs and runs the guards; holds no
 #                      token that can write anything. The private WitMath feed's token is
-#                      handed to the build of the two Simulation controllers only, which
-#                      restore from it.
+#                      handed to the build of the Simulation projects only, which restore
+#                      from it.
 #   github-packages    pushes the built package to GitHub Packages; holds packages: write.
 #                      Runs from any branch, with no reviewer: the test rollouts take their
 #                      packages from there.
-#   release            pushes to nuget.org and creates the GitHub Release. Runs in the
-#                      "release" environment (a required reviewer, main as its only branch)
-#                      and only from main; nuget.org takes a key that lives for this run only
-#                      (trusted publishing), so no nuget.org key is stored anywhere.
+#   release            pushes to nuget.org and creates the GitHub Release. Its first step
+#                      refuses any ref but main. It names the "release" environment, and the
+#                      gate is that environment's settings, which are the repository owner's
+#                      to make: a required reviewer and main as its only deployment branch.
+#                      Until they are made the environment approves nothing and restricts
+#                      nothing, and the main-only step is the job's only gate. nuget.org
+#                      takes a key that lives for this run only (trusted publishing): the
+#                      workflow reads no stored nuget.org key.
 #
-# nuget.org is off by default: it is asked for by name, from main, and approved.
+# nuget.org is off by default: it is asked for by name, and only a run from main reaches it.
 
 on:
   workflow_dispatch:
@@ -82,7 +86,7 @@ on:
           # Tools
           - OutWit.Controller.Pack
       pushToNuGet:
-        description: 'Push nupkg + snupkg to nuget.org (from main only, after the release environment approves)'
+        description: 'Push nupkg + snupkg to nuget.org (from main only, through the release environment)'
         type: boolean
         required: true
         default: false
@@ -92,7 +96,7 @@ on:
         required: true
         default: true
       createGitHubRelease:
-        description: 'Create GitHub Release with prepared assets (no-op for projects without external assets; from main only, after the release environment approves; from any other branch pass false)'
+        description: 'Create GitHub Release with prepared assets (no-op for projects without external assets; from main only, through the release environment; from any other branch pass false)'
         type: boolean
         required: true
         default: true
@@ -480,8 +484,8 @@ jobs:
         shell: bash
         run: dotnet nuget push NuGet/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source github --skip-duplicate
 
-  # nuget.org and the GitHub Release: in the "release" environment, whose reviewer approves
-  # the run and which allows main only, and from main only whatever the environment says.
+  # nuget.org and the GitHub Release: from main only (the first step), and in the "release"
+  # environment, whose reviewer and branch rule are the repository owner's settings.
   release:
     needs: build
     if: >-
@@ -519,8 +523,9 @@ jobs:
         with:
           dotnet-version: ${{ needs.build.outputs.sdk }}
 
-      # Trusted publishing: nuget.org holds a policy for this repository, this workflow file
-      # and this environment, and hands out a key that lives for one run.
+      # Trusted publishing: nuget.org holds a policy for this repository and this workflow
+      # file (the owner adds the release environment to it) and hands out a key that lives
+      # for one run.
       - name: Log in to nuget.org
         id: login
         if: inputs.pushToNuGet

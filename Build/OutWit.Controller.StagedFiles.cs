@@ -12,7 +12,11 @@
 //   - the next build of that project removes from the modules only what its own record lists
 //     and it no longer stages, and only while the file still has the bytes that build put
 //     there. A file no record lists, or one somebody has put other bytes into, is never
-//     touched: the build cannot show that it wrote it;
+//     touched: the build cannot show that it wrote it. One file the build wrote is never
+//     removed this way either: a controller's controller.json is recorded before the stamp
+//     (ControllerStampManifest) rewrites it in the module, so the recorded bytes are never
+//     the ones in the folder; when a project stops staging into a module, that module's
+//     controller.json stays, and is reported as a file that is not the build's;
 //   - a module is, for everything that leaves the machine (the zip, the package, the content
 //     digest), the files the records list, not the files the folder holds.
 //
