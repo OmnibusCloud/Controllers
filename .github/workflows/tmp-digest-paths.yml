@@ -1,0 +1,85 @@
+name: Temporary digest against checkout path
+run-name: "Temporary digest against checkout path"
+
+# Builds the twelve controllers from two checkouts of one commit at two different paths, with
+# the pinned SDK on one Linux runner: once with ContinuousIntegrationBuild=true (as the publish
+# workflow builds) and once without it (as a local build does), and compares the content
+# digests the builds state. Information for the comment on the digest in BuildTasks.cs.
+# Removed before the merge.
+
+on:
+  push:
+    branches: [fix/d6-build]
+    paths:
+      - '.github/workflows/tmp-digest-paths.yml'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  paths:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          path: one/Controllers
+          persist-credentials: false
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          path: elsewhere/at/another/depth/ctl
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: one/Controllers/global.json
+
+      - name: Build at two paths, with and without the CI flag
+        run: |
+          set +e
+          projects="Grid/OutWit.Controller.Grid/OutWit.Controller.Grid.csproj
+          Variables/OutWit.Controller.Variables/OutWit.Controller.Variables.csproj
+          Special/OutWit.Controller.Special/OutWit.Controller.Special.csproj
+          Matrices/OutWit.Controller.Matrices/OutWit.Controller.Matrices.csproj
+          CalculiX/OutWit.Controller.CalculiX/OutWit.Controller.CalculiX.csproj
+          OpenFOAM/OutWit.Controller.OpenFOAM/OutWit.Controller.OpenFOAM.csproj
+          Sweep/OutWit.Controller.Sweep/OutWit.Controller.Sweep.csproj
+          Render/OutWit.Controller.Render/OutWit.Controller.Render.csproj
+          Render/OutWit.Controller.Render.Dcc/OutWit.Controller.Render.Dcc.csproj
+          Visualization/OutWit.Controller.Visualization.ParaView/OutWit.Controller.Visualization.ParaView.csproj
+          AI/OutWit.Controller.AI.Verify/OutWit.Controller.AI.Verify.csproj
+          AI/OutWit.Controller.AI.Corpus/OutWit.Controller.AI.Corpus.csproj"
+          failed=0
+          build() {
+            local dir="$1" label="$2"; shift 2
+            local log="$RUNNER_TEMP/$label.log"
+            : > "$log"
+            for p in $projects; do
+              (cd "$GITHUB_WORKSPACE/$dir" && dotnet build "$p" -c Release -nologo -v:m -p:ControllerBuildStamp=fixed "$@") >> "$log" 2>&1 || { echo "FAILED $label $p"; failed=1; }
+            done
+            grep "content digest" "$log" | sed 's/^ *//; s/: build .fixed., content digest / /' | sort -u > "$RUNNER_TEMP/$label.txt"
+            echo "$label: $(wc -l < "$RUNNER_TEMP/$label.txt") digests"
+          }
+          dotnet --version
+          build one/Controllers ci-one -p:ContinuousIntegrationBuild=true
+          build elsewhere/at/another/depth/ctl ci-two -p:ContinuousIntegrationBuild=true
+          for d in one/Controllers elsewhere/at/another/depth/ctl; do git -C "$GITHUB_WORKSPACE/$d" clean -xfdq; done
+          build one/Controllers local-one
+          build elsewhere/at/another/depth/ctl local-two
+          cd "$RUNNER_TEMP"
+          echo "=== with the CI flag, path one against path two"
+          diff ci-one.txt ci-two.txt && echo "RESULT ci-flag: the same digests at both paths" || echo "RESULT ci-flag: the digests differ by path"
+          echo "=== without the CI flag, path one against path two"
+          diff local-one.txt local-two.txt && echo "RESULT no-flag: the same digests at both paths" || echo "RESULT no-flag: the digests differ by path"
+          echo "=== path one, with the CI flag against without"
+          diff ci-one.txt local-one.txt && echo "RESULT flag-vs-none: the same digests" || echo "RESULT flag-vs-none: the digests differ"
+          exit $failed
