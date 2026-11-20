@@ -388,6 +388,15 @@ public static class CorpusManifestParser
             return null;
         }
 
+        // The server takes no result whose URL is longer than this (CorpusResultCheck): a shard
+        // with such a URL would be fetched and processed and could only end without a result.
+        var length = url.Trim().Length;
+        if (length > Trust.CorpusResultCheck.MAX_URL_CHARS)
+        {
+            errors.Add($"{where}: the URL is {length} characters long; a source URL has {Trust.CorpusResultCheck.MAX_URL_CHARS} at the most.");
+            return null;
+        }
+
         CorpusSourceFormat? resolved;
         if (format == null)
         {

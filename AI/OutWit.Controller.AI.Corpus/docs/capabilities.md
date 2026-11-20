@@ -35,8 +35,9 @@ limit before the answer's head (sections 7 and 10), a shard's product has a ceil
 reserves on its disk and the preflight states (sections 8 and 11), a shard's PDFs have a number
 of runs, a blob transfer has a time to finish in, and one record or one manifest costs a bounded
 amount of memory (section 11); 0.9.1 fixes 0.9.0: a node gives back a shard's disk room when
-its task ends, also when an upload call still reads its products (section 10), and reads a
-record's `Content-Length` and a response's status code alike on every node (section 14). What changed for
+its task ends, also when an upload call still reads its products (section 10), reads a record's
+`Content-Length` and a response's status code alike on every node, and refuses a source URL the
+server could not take (sections 8 and 14). What changed for
 an application is listed in section 14. 0.7.0, 0.8.0, 0.9.0 and 0.9.1 have not run on the fleet
 yet. Nothing is on
 nuget.org or on the live network yet.
@@ -610,12 +611,11 @@ A document that does not reach the product is counted under one rule:
 ## 8. Before a run: preflight and storage
 
 `CorpusPreflight` runs the checks of `Corpus.Split` and reports instead of failing; it fetches no
-shard. It does not measure what the split will write, so two manifests pass it that the run
-cannot carry: a source URL longer than 4,096 characters (the server drops every result for that
-shard as not well formed, so the shard ends `NoResult` after its repair; a URL long enough to
-fill the task's frame of 16 KiB makes `Corpus.Split` fail), and shared parts
-(`pipeline.version` among them) larger than the job's frame of 256 KiB (`Corpus.Split` fails,
-saying the server could not read or write the run's blobs). `CorpusPreflightData`:
+shard. A source URL longer than 4,096 characters is a problem of its line (the server would drop
+every result for such a shard). What the split will write is not measured: shared parts
+(`pipeline.version` and the allowed origins among them) larger than the job's frame of 256 KiB
+pass the preflight, and `Corpus.Split` then fails, saying the server could not read or write the
+run's blobs. `CorpusPreflightData`:
 
 | Field | Meaning |
 |---|---|
@@ -1084,8 +1084,13 @@ beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
   (Arabic, Persian, Hebrew, Pashto). It is now refused on every node: the record makes its shard
   `Malformed`, the response's page is dropped as `http_status`. Common Crawl writes neither form,
   and no product, verdict or hash of the demo kit or of the tests' pinned shards moves.
+- **A source URL longer than 4,096 characters is a problem of the manifest** (`sources[N]: the
+  URL is L characters long; a source URL has 4096 at the most.`), in the preflight and in the
+  split. Such a shard passed before, was packaged, fetched and processed, and ended `NoResult`:
+  the server takes no result whose URL is that long.
 - **The documents correct two sentences** that said more than the code does: what the preflight
-  does not measure (section 8) and what the benchmark's self-check covers (section 10).
+  does not measure, the job's frame (section 8), and what the benchmark's self-check covers
+  (section 10).
 
 **What changed for an application in 0.9.0** (from 0.8.0):
 

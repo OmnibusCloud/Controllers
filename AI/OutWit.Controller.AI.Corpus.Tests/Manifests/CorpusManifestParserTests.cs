@@ -1,5 +1,6 @@
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Trust;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Manifests;
 
@@ -136,6 +137,27 @@ public sealed class CorpusManifestParserTests
         var manifest = CorpusManifestParser.Parse(json);
 
         Assert.That(manifest.Errors, Has.Some.Contains(expected), string.Join(" | ", manifest.Errors));
+    }
+
+    [Test]
+    public void ASourceUrlLongerThanTheServerTakesIsAProblemOfItsLineTest()
+    {
+        // The server drops a result whose URL is over 4,096 characters: such a source passed the
+        // manifest, was packaged, fetched and processed twice, and ended without a result.
+        var at = "https://h/" + new string('a', CorpusResultCheck.MAX_URL_CHARS - "https://h/".Length - ".warc.wet.gz".Length) + ".warc.wet.gz";
+        var past = "https://h/" + new string('a', CorpusResultCheck.MAX_URL_CHARS + 1 - "https://h/".Length - ".warc.wet.gz".Length) + ".warc.wet.gz";
+
+        var taken = CorpusManifestParser.Parse($$"""{"pipeline":{"version":"v"},"allowed_origins":["h"],"sources":["{{at}}"]}""");
+        var refused = CorpusManifestParser.Parse($$"""{"pipeline":{"version":"v"},"allowed_origins":["h"],"sources":["https://h/a.warc.wet.gz",{"url":"{{past}}"}]}""");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(at, Has.Length.EqualTo(CorpusResultCheck.MAX_URL_CHARS));
+            Assert.That(taken.Errors, Is.Empty, "4,096 characters are taken");
+            Assert.That(taken.Sources, Has.Count.EqualTo(1));
+            Assert.That(refused.Errors, Is.EqualTo(new[] { "sources[1]: the URL is 4097 characters long; a source URL has 4096 at the most." }), "named by its line, without the URL itself");
+            Assert.That(refused.Sources, Has.Count.EqualTo(1), "the other source parses");
+        });
     }
 
     [Test]
