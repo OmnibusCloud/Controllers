@@ -52,21 +52,62 @@ public static class ShardBatchGuard
         throw refusal;
     }
 
-    /// <summary>Checks a task package on this node, from its reference alone, and throws when the node must refuse its batch.</summary>
+    /// <summary>
+    /// Checks a task package on this node, from its reference alone, and throws when the node must
+    /// refuse its batch: the job's version and the PDF sandbox. The reference does not say what a
+    /// task's shard will reserve on the disk (the pipeline's signatures, the job's cap), so the disk
+    /// is asked once the tasks are read (<see cref="ThrowIfNoRoom"/>), before a byte is fetched.
+    /// </summary>
     /// <param name="jobId">The job the package belongs to.</param>
     /// <param name="package">The package's reference.</param>
-    /// <param name="workDirectory">The folder its shards would be fetched into.</param>
+    /// <param name="workDirectory">The folder its shards would be fetched into (not asked here).</param>
     /// <exception cref="ShardBatchRefusedException">The node refuses the batch.</exception>
     public static void ThrowIfRefused(Guid jobId, CorpusTaskPackageData package, string workDirectory)
     {
         ThrowIfJobRefused(jobId);
 
-        var refusal = Check(package, ControllerBuildInfo.VERSION, () => PdfSandboxHost.Problem, () => ShardDisk.HasRoom(workDirectory, LargestShardBytes(package)));
+        var refusal = Check(package, ControllerBuildInfo.VERSION, () => PdfSandboxHost.Problem, () => true);
         if (refusal == null)
             return;
 
         Remember(jobId, refusal);
         throw refusal;
+    }
+
+    /// <summary>
+    /// Asks the disk what the package's tasks will reserve: the room of the largest of them
+    /// (<see cref="ShardDisk.Needed"/> of <see cref="RoomBytes"/> under the task's own pipeline),
+    /// exactly what each task reserves before it fetches. A node whose disk cannot take that with
+    /// nothing else reserved refuses its batch here, before a byte of a shard is fetched, and the
+    /// platform moves the work; a node that can take it never sees a task fail for room it would
+    /// have had alone.
+    /// </summary>
+    /// <param name="jobId">The job the package belongs to.</param>
+    /// <param name="tasks">The package's tasks, read.</param>
+    /// <param name="workDirectory">The folder their shards would be fetched into.</param>
+    /// <exception cref="ShardBatchRefusedException">The node refuses the batch.</exception>
+    public static void ThrowIfNoRoom(Guid jobId, IReadOnlyList<CorpusTaskData> tasks, string workDirectory)
+    {
+        var refusal = Guarded(() => ShardDisk.HasRoomFor(workDirectory, RoomNeeded(tasks))
+            ? null
+            : new ShardBatchRefusedException(ShardBatchRefusedException.DISK_SPACE, "This node's disk has no room for a shard of the batch: another node takes the batch."));
+        if (refusal == null)
+            return;
+
+        Remember(jobId, refusal);
+        throw refusal;
+    }
+
+    /// <summary>The room the largest of a package's tasks reserves: what the disk is asked for the package.</summary>
+    /// <param name="tasks">The package's tasks.</param>
+    /// <returns>The bytes; 0 for no task.</returns>
+    internal static long RoomNeeded(IReadOnlyList<CorpusTaskData> tasks)
+    {
+        long needed = 0;
+        foreach (var task in tasks)
+            needed = Math.Max(needed, ShardDisk.Needed(RoomBytes(task), task.Pipeline));
+
+        return needed;
     }
 
     /// <summary>Throws when this node refused a batch of the job a moment ago: the batch is lost, and its other tasks stop here.</summary>
@@ -210,13 +251,6 @@ public static class ShardBatchGuard
     internal static long RoomBytes(CorpusTaskData task)
     {
         return ShardLimits.FetchCap(task);
-    }
-
-    /// <summary>The most the largest shard of a package may be on this node: its declared size and the slack within the node's own cap, the cap when a shard of the package has no size.</summary>
-    internal static long LargestShardBytes(CorpusTaskPackageData package)
-    {
-        var cap = Manifests.CorpusTaskPlanner.NodeShardCap(0);
-        return package.UnsizedShards > 0 || package.LargestShardBytes <= 0 ? cap : Math.Min(ShardLimits.DeclaredCap(package.LargestShardBytes), cap);
     }
 
     #endregion

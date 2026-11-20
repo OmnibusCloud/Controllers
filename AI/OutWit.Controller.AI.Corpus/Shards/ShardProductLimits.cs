@@ -75,7 +75,18 @@ public static class ShardProductLimits
     /// <returns>The bound.</returns>
     public static long MaxSignatureBytes(long fetchedBytes, MinHashParameters minHash)
     {
-        return ShardSignatureWriter.HeaderSize(minHash) + MaxDocuments(fetchedBytes) * minHash.SignatureBytes;
+        var documents = MaxDocuments(fetchedBytes);
+        var each = Math.Max(1, minHash.SignatureBytes);
+        return documents > (long.MaxValue - ShardSignatureWriter.HeaderSize(minHash)) / each ? long.MaxValue : ShardSignatureWriter.HeaderSize(minHash) + documents * each;
+    }
+
+    /// <summary>A sum of byte counts that stops at the largest number instead of wrapping.</summary>
+    /// <param name="first">A count.</param>
+    /// <param name="second">Another.</param>
+    /// <returns>The sum, or <see cref="long.MaxValue"/> past it.</returns>
+    public static long Saturated(long first, long second)
+    {
+        return first > long.MaxValue - second ? long.MaxValue : first + second;
     }
 
     /// <summary>The most bytes a shard's products may take on the node's disk: the compressed text and, when the pipeline signs, the signatures.</summary>
@@ -88,7 +99,7 @@ public static class ShardProductLimits
         if (pipeline != null && !ShardProcessor.Signs(pipeline))
             return text;
 
-        return text + MaxSignatureBytes(fetchedBytes, MinHashParameters.Resolve(pipeline?.MinHash));
+        return Saturated(text, MaxSignatureBytes(fetchedBytes, MinHashParameters.Resolve(pipeline?.MinHash)));
     }
 
     /// <summary>The most bytes a shard's products send to the server: nothing under statistics and hashes only, the text and the kept signatures otherwise.</summary>
@@ -101,7 +112,7 @@ public static class ShardProductLimits
             return 0;
 
         var text = MaxTextBytes(fetchedBytes);
-        return ShardProcessor.KeepsSignatures(pipeline) ? text + MaxSignatureBytes(fetchedBytes, MinHashParameters.Resolve(pipeline.MinHash)) : text;
+        return ShardProcessor.KeepsSignatures(pipeline) ? Saturated(text, MaxSignatureBytes(fetchedBytes, MinHashParameters.Resolve(pipeline.MinHash))) : text;
     }
 
     #endregion

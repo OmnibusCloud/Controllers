@@ -51,23 +51,66 @@ public sealed class ShardBlobTransferTimeoutTests
     #region Tests
 
     [Test]
-    public async Task ATransferThatNeverReturnsFailsWhenItsTimeIsUpAndHoldsNoOtherJobTest()
+    public async Task ATransferThatNeverReturnsHoldsNoOtherJobWhenItsTimeIsUpTest()
     {
         ShardBlobTransfer.BaseTime = TimeSpan.FromMilliseconds(300);
         var blobId = await UploadAsync();
         CloseTheGate(blobId);
 
+        using var job = new CancellationTokenSource();
         var hanging = new CorpusHangingBlobService(m_blobs, hangs: 1);
-        var stuck = ShardBlobTransfer.DownloadAsync(hanging, blobId, 0, null, CancellationToken.None);
+        var stuck = ShardBlobTransfer.DownloadAsync(hanging, blobId, 0, null, job.Token);
         var other = ShardBlobTransfer.DownloadAsync(m_blobs, blobId, 0, null, CancellationToken.None);
 
         var finished = await Task.WhenAny(other, Task.Delay(TimeSpan.FromSeconds(15)));
 
         Assert.Multiple(() =>
         {
-            Assert.That(hanging.Hung, Is.EqualTo(1), "the first call was taken and never answered");
-            Assert.That(finished, Is.SameAs(other), "another job's transfer went through");
-            Assert.That(async () => await stuck, Throws.InstanceOf<IOException>(), "the attempt that never returned counts as failed: its shard becomes a fault of this node");
+            Assert.That(hanging.Hung, Is.EqualTo(1), "the first call was taken and never answered, and not called again");
+            Assert.That(finished, Is.SameAs(other), "another job's transfer went through: the gate is free");
+            Assert.That(stuck.IsCompleted, Is.False, "its own transfer waits for the call it gave up, and starts no second one beside it");
+        });
+
+        job.Cancel();
+        Assert.That(async () => await stuck, Throws.InstanceOf<OperationCanceledException>(), "the job's token ends that wait");
+    }
+
+    [Test]
+    public async Task AnAttemptThatRanOutOfItsTimeIsWaitedForAndNoSecondOneStartsBesideItTest()
+    {
+        // An upload that takes longer than its attempt's time and then succeeds: retried at once,
+        // the same file went up twice side by side (nine times with every retry), each a blob.
+        ShardBlobTransfer.BaseTime = TimeSpan.FromMilliseconds(200);
+        ShardBlobTransfer.Delays = [TimeSpan.Zero, TimeSpan.Zero];
+        var path = Path.Combine(m_directory, "product.bin");
+        await File.WriteAllBytesAsync(path, [1, 2, 3]);
+        var slow = new CorpusSlowBlobService(m_blobs, TimeSpan.FromMilliseconds(900));
+
+        var blobId = await ShardBlobTransfer.UploadAsync(slow, path, null, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(slow.Uploads, Is.EqualTo(1), "one call for the file: the one that ran out of its time was waited for");
+            Assert.That(blobId, Is.EqualTo(slow.First), "and its answer is the transfer's");
+            Assert.That(ShardBlobTransfer.HeldBy(path), Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task AnUploadTheJobLeftRunningHoldsItsFileUntilItEndsTest()
+    {
+        ShardBlobTransfer.BaseTime = TimeSpan.FromMilliseconds(200);
+        var path = Path.Combine(m_directory, "held.bin");
+        await File.WriteAllBytesAsync(path, [1, 2, 3]);
+        var hanging = new CorpusHangingBlobService(m_blobs, hangs: 1);
+        using var job = new CancellationTokenSource(TimeSpan.FromMilliseconds(800));
+
+        Assert.That(async () => await ShardBlobTransfer.UploadAsync(hanging, path, null, job.Token), Throws.InstanceOf<OperationCanceledException>());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(hanging.Hung, Is.EqualTo(1));
+            Assert.That(ShardBlobTransfer.HeldBy(path), Is.Not.Null, "the call still reads the file");
         });
     }
 

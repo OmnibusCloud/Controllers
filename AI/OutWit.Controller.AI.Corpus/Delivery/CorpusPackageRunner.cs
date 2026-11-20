@@ -52,6 +52,10 @@ public static class CorpusPackageRunner
             return Fault(package, CorpusResultCodes.FAULT_TASKS, exception, logger);
         }
 
+        // The disk, asked what the tasks will reserve, before a byte of a shard is fetched: a node
+        // without that room refuses its batch and the platform moves the work.
+        ShardBatchGuard.ThrowIfNoRoom(jobId, tasks, scope);
+
         // The whole package enters the node's picture of its share at once; each shard leaves it when it is over.
         var places = tasks.Select(task => ShardShareProgress.Enter(jobId, task.Source?.SizeBytes ?? 0, report, logger)).ToArray();
         var results = new CorpusResultData[tasks.Count];

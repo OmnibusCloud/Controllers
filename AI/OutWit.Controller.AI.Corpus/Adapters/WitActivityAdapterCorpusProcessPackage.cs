@@ -70,9 +70,9 @@ internal sealed class WitActivityAdapterCorpusProcessPackage : WitActivityAdapte
         try
         {
             // What this node can know before any work, from the package's reference alone: its
-            // version against the job's, its PDF sandbox when a shard needs one, room on its disk
-            // for the largest shard. A node that fails one refuses the batch here, with nothing
-            // fetched, and the platform moves the work.
+            // version against the job's, its PDF sandbox when a shard needs one. Room on its disk
+            // is asked once the tasks are read, for what they will reserve (the runner). A node
+            // that fails one refuses the batch, with nothing fetched, and the platform moves the work.
             ShardBatchGuard.ThrowIfRefused(jobId, package, scope);
         }
         catch (ShardBatchRefusedException exception)
@@ -87,7 +87,12 @@ internal sealed class WitActivityAdapterCorpusProcessPackage : WitActivityAdapte
         {
             answer = await CorpusPackageRunner.RunAsync(package, Fetcher, BlobService, scope, jobId, CorpusActivityProgressReporter.Create(ProcessingManager, jobId), Logger, () => ShardBatchGuard.ThrowIfJobRefused(jobId), cancellationToken);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException and not ShardBatchRefusedException)
+        catch (ShardBatchRefusedException exception)
+        {
+            Logger.LogWarning("Corpus.ProcessPackage: the batch is refused ({Code}).", exception.Code);
+            throw;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // Whatever was not foreseen is this node's: the package goes back as a fault, in a
             // fixed word. What a node throws is the job's message for the lab.

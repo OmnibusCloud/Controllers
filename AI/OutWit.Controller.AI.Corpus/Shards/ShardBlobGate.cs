@@ -13,7 +13,8 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// one slot, and with it every Corpus transfer of every job on the node, for as long as the
 /// process lives. An attempt that runs out of its time counts as failed and one that is
 /// cancelled stops being waited for: either way the slot is free again. The call itself cannot
-/// be stopped from here; what it comes to later is looked at and dropped.
+/// be stopped from here: the caller is handed it (<c>abandoned</c>) and decides what to wait for;
+/// whatever it comes to is looked at.
 /// </para>
 /// </summary>
 public sealed class ShardBlobGate
@@ -42,16 +43,17 @@ public sealed class ShardBlobGate
     /// <param name="transfer">One attempt of the transfer.</param>
     /// <param name="timeout">The time the attempt has to finish in.</param>
     /// <param name="cancellationToken">Stops waiting for the gate and for the transfer.</param>
+    /// <param name="abandoned">Handed the call when it is given up while it still runs (out of its time, or the job cancelled); null for none.</param>
     /// <returns>What the transfer returned.</returns>
     /// <exception cref="TimeoutException">The attempt did not finish in its time; the gate is free again.</exception>
     /// <exception cref="OperationCanceledException">The job was cancelled; the gate is free again.</exception>
-    public async Task<T> RunAsync<T>(Func<Task<T>> transfer, TimeSpan timeout, CancellationToken cancellationToken)
+    public async Task<T> RunAsync<T>(Func<Task<T>> transfer, TimeSpan timeout, CancellationToken cancellationToken, Action<Task<T>>? abandoned = null)
     {
         if (m_open)
         {
             try
             {
-                return await Bounded(transfer, timeout, cancellationToken);
+                return await Bounded(transfer, timeout, cancellationToken, abandoned);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -63,7 +65,7 @@ public sealed class ShardBlobGate
         await m_single.WaitAsync(cancellationToken);
         try
         {
-            var result = await Bounded(transfer, timeout, cancellationToken);
+            var result = await Bounded(transfer, timeout, cancellationToken, abandoned);
             m_open = true;
             return result;
         }
@@ -74,7 +76,7 @@ public sealed class ShardBlobGate
     }
 
     /// <summary>Waits for an attempt within its time and the job's token.</summary>
-    private static async Task<T> Bounded<T>(Func<Task<T>> transfer, TimeSpan timeout, CancellationToken cancellationToken)
+    private static async Task<T> Bounded<T>(Func<Task<T>> transfer, TimeSpan timeout, CancellationToken cancellationToken, Action<Task<T>>? abandoned)
     {
         var running = transfer();
         try
@@ -84,8 +86,10 @@ public sealed class ShardBlobGate
         catch (Exception exception) when ((exception is TimeoutException or OperationCanceledException) && !running.IsCompleted)
         {
             // The call itself cannot be stopped: whatever it comes to later is looked at, so
-            // that it does not end as an exception nobody saw.
-            _ = running.ContinueWith(static abandoned => _ = abandoned.Exception, TaskScheduler.Default);
+            // that it does not end as an exception nobody saw, and the caller decides what to
+            // wait for.
+            _ = running.ContinueWith(static given => _ = given.Exception, TaskScheduler.Default);
+            abandoned?.Invoke(running);
             throw;
         }
     }

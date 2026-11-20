@@ -145,22 +145,122 @@ public sealed class ShardDiskReservationsTests
     }
 
     [Test]
-    public void ThePackageGuardAsksForTheCapWhenAShardOfThePackageHasNoSizeTest()
+    public async Task AProductAnUploadStillReadsKeepsItsRoomUntilTheUploadEndsTest()
     {
-        var package = new CorpusTaskPackageData { LargestShardBytes = 10 * MIB, UnsizedShards = 1 };
-        var sized = new CorpusTaskPackageData { LargestShardBytes = 10 * MIB, UnsizedShards = 0 };
+        // The job ends while the upload of a product still runs (its call takes no token): the
+        // product stays on the disk until the call ends, and so does its room.
+        var shards = Path.Combine(m_directory, "shards");
+        Directory.CreateDirectory(shards);
+        WarcSynth.WriteWetShard(Path.Combine(shards, "s.warc.wet.gz"), 40, 200, 5);
+        var size = new FileInfo(Path.Combine(shards, "s.warc.wet.gz")).Length;
+        using var origin = new CorpusTestOrigin(shards);
+        var held = new CorpusHeldBlobService(new CorpusTestBlobService(Path.Combine(m_directory, "blobs")));
+        var fetcher = new ShardFetcher(ShardFetchPolicy.Immediate, CorpusTestOrigin.Policy);
+        var work = Path.Combine(m_directory, "held");
+        var baseTime = ShardBlobTransfer.BaseTime;
+        ShardBlobTransfer.BaseTime = TimeSpan.FromMilliseconds(200);
+        using var job = new CancellationTokenSource();
+
+        try
+        {
+            var running = ShardTaskRunner.RunAsync(TaskFor(origin, size), fetcher, held, work, job.Token);
+            await WaitFor(() => held.Uploads > 0);
+            await Task.Delay(500);
+            job.Cancel();
+
+            Assert.That(async () => await running, Throws.InstanceOf<OperationCanceledException>());
+            Assert.Multiple(() =>
+            {
+                Assert.That(ShardDiskReservations.Reserved, Is.GreaterThan(0), "the room is held while the upload runs");
+                Assert.That(File.Exists(Path.Combine(work, "text.jsonl.zst")), Is.True, "and the product it reads");
+            });
+
+            held.Release();
+            await WaitFor(() => ShardDiskReservations.Reserved == 0);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(ShardDiskReservations.Reserved, Is.Zero, "given back when the upload ended");
+                Assert.That(File.Exists(Path.Combine(work, "text.jsonl.zst")), Is.False);
+            });
+        }
+        finally
+        {
+            ShardBlobTransfer.BaseTime = baseTime;
+            held.Release();
+        }
+    }
+
+    [Test]
+    public void TheBatchIsRefusedForTheRoomItsTasksWillReserveTest()
+    {
+        // A shard without a size signed with 1,024 hashes reserves the cap, twice the cap in text
+        // and a 1,024-hash signature for every document the cap may give: about 19 GiB. Asked
+        // what a 128-hash shard needs (about 5 GiB), a node with 10 GiB took the batch and then
+        // faulted every task for room.
+        var job = Guid.NewGuid();
+        var wide = new CorpusTaskData
+        {
+            TaskIndex = 0,
+            Source = new CorpusSourceData { Url = "https://data.commoncrawl.org/x.warc.wet.gz", Format = CorpusSourceFormat.Wet },
+            Pipeline = new CorpusPipelineData { Version = "room", MinHash = new CorpusMinHashData { Hashes = 1024, ShingleWords = 5, Bands = 32 } },
+            MaxShardBytes = 1L << 30,
+            Ticket = CorpusTickets.New(),
+            RequiredControllerVersion = CorpusTestRun.VERSION
+        };
+        ShardDiskReservations.FreeBytes = _ => 10L << 30;
+
+        try
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(ShardBatchGuard.RoomNeeded([wide]), Is.GreaterThan(18L << 30));
+                Assert.That(() => ShardBatchGuard.ThrowIfNoRoom(job, [wide], m_directory), Throws.TypeOf<ShardBatchRefusedException>().With.Property("Code").EqualTo(ShardBatchRefusedException.DISK_SPACE));
+                Assert.That(() => ShardBatchGuard.ThrowIfJobRefused(job), Throws.TypeOf<ShardBatchRefusedException>(), "the batch's other tasks stop too");
+            });
+        }
+        finally
+        {
+            ShardBatchGuard.Clear();
+        }
+    }
+
+    [Test]
+    public void ABatchThatFitsIsNotRefusedForRoomItWillNotReserveTest()
+    {
+        // An unsigned pipeline and a job cap of 10 MiB, shards without a size: each reserves the
+        // job's cap and its text, a few dozen MiB. Asked about the node's own cap and 128-hash
+        // signatures, the node refused the batch, and the job's other packages with it.
+        var job = Guid.NewGuid();
+        var narrow = new CorpusTaskData
+        {
+            TaskIndex = 0,
+            Source = new CorpusSourceData { Url = "https://data.commoncrawl.org/x.warc.wet.gz", Format = CorpusSourceFormat.Wet },
+            Pipeline = new CorpusPipelineData { Version = "room", Sign = false },
+            MaxShardBytes = 10 * MIB,
+            Ticket = CorpusTickets.New(),
+            RequiredControllerVersion = CorpusTestRun.VERSION
+        };
+        var needed = ShardBatchGuard.RoomNeeded([narrow]);
+        ShardDiskReservations.FreeBytes = _ => needed + MIB;
 
         Assert.Multiple(() =>
         {
-            Assert.That(ShardBatchGuard.LargestShardBytes(package), Is.EqualTo(1L << 30));
-            Assert.That(ShardBatchGuard.LargestShardBytes(sized), Is.EqualTo(10 * MIB + 10 * MIB / 8), "the declared size and its slack, an eighth of it");
-            Assert.That(ShardDisk.Needed(1L << 30), Is.EqualTo((1L << 30) + ShardProductLimits.MaxProductBytes(1L << 30, null) + ShardDisk.MARGIN_BYTES));
+            Assert.That(needed, Is.EqualTo(10 * MIB + ShardProductLimits.MaxTextBytes(10 * MIB) + ShardDisk.MARGIN_BYTES), "the job's cap, its text, the margin: no signatures");
+            Assert.That(() => ShardBatchGuard.ThrowIfNoRoom(job, [narrow], m_directory), Throws.Nothing);
+            Assert.That(() => ShardBatchGuard.ThrowIfJobRefused(job), Throws.Nothing);
         });
     }
 
     #endregion
 
     #region Tools
+
+    private static async Task WaitFor(Func<bool> condition)
+    {
+        for (var waited = 0; waited < 200 && !condition(); waited++)
+            await Task.Delay(50);
+    }
 
     private static CorpusTaskData TaskFor(CorpusTestOrigin origin, long size)
     {

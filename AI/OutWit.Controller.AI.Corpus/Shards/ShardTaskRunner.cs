@@ -345,9 +345,27 @@ public static class ShardTaskRunner
             // The shard's place in the window is its place on the disk: the shard and its
             // products go before the place is given to the next one.
             TryDelete(shardPath);
-            TryDelete(textPath);
-            TryDelete(signaturesPath);
-            room?.Dispose();
+
+            // An upload the job left running still reads its product: the products and their
+            // room on the disk go when it ends, not before.
+            var held = new[] { ShardBlobTransfer.HeldBy(textPath), ShardBlobTransfer.HeldBy(signaturesPath) }.OfType<Task>().ToArray();
+            if (held.Length == 0)
+            {
+                TryDelete(textPath);
+                TryDelete(signaturesPath);
+                room?.Dispose();
+            }
+            else
+            {
+                var heldRoom = room;
+                _ = Task.WhenAll(held).ContinueWith(_ =>
+                {
+                    TryDelete(textPath);
+                    TryDelete(signaturesPath);
+                    heldRoom?.Dispose();
+                }, TaskScheduler.Default);
+            }
+
             WINDOW.Release();
         }
     }

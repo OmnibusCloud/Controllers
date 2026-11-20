@@ -29,7 +29,7 @@ public static class ShardDisk
     public static long Needed(long shardBytes, CorpusPipelineData? pipeline = null)
     {
         var size = Math.Max(0, shardBytes);
-        return size + ShardProductLimits.MaxProductBytes(size, pipeline) + MARGIN_BYTES;
+        return ShardProductLimits.Saturated(ShardProductLimits.Saturated(size, ShardProductLimits.MaxProductBytes(size, pipeline)), MARGIN_BYTES);
     }
 
     /// <summary>The bytes a node needs free for its part of a run: the shards it holds at once, each at <see cref="Needed"/>.</summary>
@@ -39,11 +39,13 @@ public static class ShardDisk
     /// <returns>The bytes.</returns>
     public static long NeededByNode(long largestShardBytes, int degree, CorpusPipelineData? pipeline = null)
     {
-        return (Math.Max(1, degree) + (long)ShardTaskRunner.FETCH_AHEAD) * Needed(largestShardBytes, pipeline);
+        var shards = Math.Max(1, degree) + (long)ShardTaskRunner.FETCH_AHEAD;
+        var each = Needed(largestShardBytes, pipeline);
+        return each > long.MaxValue / shards ? long.MaxValue : shards * each;
     }
 
     /// <summary>The preflight's line on the disk a node needs for a run.</summary>
-    /// <param name="largestShardBytes">The run's largest shard; 0 or less when no size is known.</param>
+    /// <param name="largestShardBytes">The most the run's largest shard may be on the wire, as the nodes hold it (its declared size and the slack, the cap without one); 0 or less when nothing is known.</param>
     /// <param name="capBytes">The cap a shard is held to on the wire.</param>
     /// <param name="pipeline">The pipeline; null for the default one.</param>
     /// <returns>For example "Node disk: a node holds at most its degree and 2 more shards at a time ...".</returns>
@@ -55,7 +57,7 @@ public static class ShardDisk
 
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
             $"Node disk: a node holds at most its degree and {ShardTaskRunner.FETCH_AHEAD} more shards at a time (its degree is the shards it processes at once: one per core, within its memory), never its whole share. " +
-            $"Each held shard reserves {perShard} bytes before it is fetched ({(known ? $"the largest shard, {largestShardBytes} bytes" : $"no shard size is known: the cap, {capBytes} bytes")}, the most its products may be, and a margin): " +
+            $"Each held shard reserves {perShard} bytes before it is fetched ({(known ? $"the most the largest shard may be on the wire, {largestShardBytes} bytes" : $"no shard size is known: the cap, {capBytes} bytes")}, the most its products may be, and a margin): " +
             $"{NeededByNode(known ? largestShardBytes : capBytes, exampleDegree, pipeline)} bytes for a node of degree {exampleDegree}. A shard waits while the node's other shards hold the room; a node without room for one shard refuses its batch and the platform moves the work.");
     }
 
@@ -92,8 +94,17 @@ public static class ShardDisk
     /// <returns>False only when the volume states less free room than the shard needs.</returns>
     public static bool HasRoom(string directory, long shardBytes, CorpusPipelineData? pipeline = null)
     {
+        return HasRoomFor(directory, Needed(shardBytes, pipeline));
+    }
+
+    /// <summary>Whether a folder's volume has a number of bytes free, with nothing else reserved; a volume that does not say has.</summary>
+    /// <param name="directory">The folder.</param>
+    /// <param name="neededBytes">The bytes.</param>
+    /// <returns>False only when the volume states less free room.</returns>
+    public static bool HasRoomFor(string directory, long neededBytes)
+    {
         var free = ShardDiskReservations.FreeBytes(directory);
-        return free < 0 || free >= Needed(shardBytes, pipeline);
+        return free < 0 || free >= neededBytes;
     }
 
     #endregion

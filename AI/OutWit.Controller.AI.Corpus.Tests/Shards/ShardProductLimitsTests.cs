@@ -69,6 +69,22 @@ public sealed class ShardProductLimitsTests
         });
     }
 
+    [Test]
+    public void NoBoundWrapsWhateverTheBytesTest()
+    {
+        var wide = Unfiltered(1024);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ShardProductLimits.MaxSignatureBytes(long.MaxValue, OutWit.Controller.AI.Corpus.Signatures.MinHashParameters.Resolve(wide.MinHash)), Is.EqualTo(long.MaxValue));
+            Assert.That(ShardProductLimits.MaxProductBytes(long.MaxValue, wide), Is.EqualTo(long.MaxValue));
+            Assert.That(ShardProductLimits.MaxProductBytes(long.MaxValue / 4, wide), Is.EqualTo(long.MaxValue), "its signatures at 1,024 hashes are past the largest number");
+            Assert.That(ShardProductLimits.MaxUploadBytes(long.MaxValue / 2, wide), Is.EqualTo(long.MaxValue));
+            Assert.That(ShardDisk.Needed(long.MaxValue / 4, wide), Is.EqualTo(long.MaxValue));
+            Assert.That(ShardDisk.NeededByNode(long.MaxValue / 4, 8, wide), Is.EqualTo(long.MaxValue));
+        });
+    }
+
     [TestCase(128)]
     [TestCase(1024)]
     public void AShardOfOneWordPagesStopsAtTheDocumentsItsBytesMayGiveTest(int hashes)

@@ -14,7 +14,11 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// (<see cref="ShardBlobGate"/>), and retries are spread so that transfers that failed
 /// together do not come back together. Every attempt has a time to finish in, by the size of
 /// what it moves (<see cref="TransferTimeout"/>): the channel's calls take no token, so an
-/// attempt that never returns counts as failed when its time is up and frees the gate.
+/// attempt that never returns frees the gate when its time is up. Its call goes on, and no other
+/// attempt of the same transfer starts beside it: it is waited for, the job's token bounding the
+/// wait, and what it comes to is that attempt's outcome — a file is never sent twice at once. A
+/// call the job leaves running holds its file (<see cref="HeldBy"/>): the task keeps the file and
+/// its room on the disk until the call ends.
 /// </summary>
 public static class ShardBlobTransfer
 {
@@ -42,6 +46,9 @@ public static class ShardBlobTransfer
     public const long TRANSFER_SLOWEST_BYTES_PER_SECOND = 32 * 1024;
 
     private static readonly ShardBlobGate GATE = new();
+
+    /// <summary>The calls a job left running, by the full path of the file each moves.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Task> HELD = new(StringComparer.Ordinal);
 
     #endregion
 
@@ -77,7 +84,15 @@ public static class ShardBlobTransfer
     /// <returns>The blob's id.</returns>
     public static Task<Guid> UploadAsync(IWitBlobService blobs, string localFilePath, ILogger? logger, CancellationToken cancellationToken)
     {
-        return WithRetryAsync(() => blobs.UploadFileAsync(localFilePath), TransferTimeout(Size(localFilePath)), "upload of a product", logger, cancellationToken);
+        return WithRetryAsync(() => blobs.UploadFileAsync(localFilePath), TransferTimeout(Size(localFilePath)), "upload of a product", logger, cancellationToken, localFilePath);
+    }
+
+    /// <summary>The upload call that still reads a file after its job was cancelled; null when none does.</summary>
+    /// <param name="localFilePath">The file.</param>
+    /// <returns>The call, which ends on its own; null when no call holds the file.</returns>
+    public static Task? HeldBy(string localFilePath)
+    {
+        return HELD.TryGetValue(Key(localFilePath), out var call) && !call.IsCompleted ? call : null;
     }
 
     /// <summary>
@@ -104,7 +119,7 @@ public static class ShardBlobTransfer
         }
     }
 
-    private static async Task<T> WithRetryAsync<T>(Func<Task<T>> transfer, TimeSpan timeout, string what, ILogger? logger, CancellationToken cancellationToken)
+    private static async Task<T> WithRetryAsync<T>(Func<Task<T>> transfer, TimeSpan timeout, string what, ILogger? logger, CancellationToken cancellationToken, string? file = null)
     {
         // A warning that cannot be written must not fail the transfer it is about.
         logger = logger == null ? null : CorpusLogger.Wrap(logger);
@@ -115,26 +130,79 @@ public static class ShardBlobTransfer
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            Task<T>? abandoned = null;
+            Exception failure;
             try
             {
-                return await GATE.RunAsync(transfer, timeout, cancellationToken);
+                return await GATE.RunAsync(transfer, timeout, cancellationToken, running => abandoned = running);
             }
-            catch (Exception exception) when (exception is not OperationCanceledException && attempt < Delays.Count)
+            catch (OperationCanceledException)
             {
-                var delay = Spread(Delays[attempt]);
-
-                // The kind of the failure, not its message: a transfer's error can name a path or a host.
-                logger?.LogWarning("Corpus: the {What} failed ({Kind}; attempt {Attempt} of {Attempts}); the next one starts in {Delay:F1} s",
-                    what, exception.GetType().Name, attempt + 1, Delays.Count + 1, delay.TotalSeconds);
-
-                await Task.Delay(delay, cancellationToken);
+                Hold(file, abandoned);
+                throw;
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception)
+            {
+                failure = exception;
+            }
+
+            // An attempt that ran out of its time goes on outside the gate (its call takes no
+            // token): it is waited for, and no other attempt starts beside it. What it comes to
+            // is this attempt's outcome.
+            if (abandoned != null)
+            {
+                try
+                {
+                    return await abandoned.WaitAsync(cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    Hold(file, abandoned);
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                }
+            }
+
+            if (attempt >= Delays.Count)
             {
                 // The last attempt. The caller turns this into a node fault with a fixed code; the
                 // text stays on the node.
-                throw new IOException($"The {what} failed {attempt + 1} time(s) over {clock.Elapsed.TotalSeconds:F0} s.", exception);
+                throw new IOException($"The {what} failed {attempt + 1} time(s) over {clock.Elapsed.TotalSeconds:F0} s.", failure);
             }
+
+            var delay = Spread(Delays[attempt]);
+
+            // The kind of the failure, not its message: a transfer's error can name a path or a host.
+            logger?.LogWarning("Corpus: the {What} failed ({Kind}; attempt {Attempt} of {Attempts}); the next one starts in {Delay:F1} s",
+                what, failure.GetType().Name, attempt + 1, Delays.Count + 1, delay.TotalSeconds);
+
+            await Task.Delay(delay, cancellationToken);
+        }
+    }
+
+    /// <summary>Records a call the job left running on a file, until it ends.</summary>
+    private static void Hold(string? file, Task? call)
+    {
+        if (file == null || call == null || call.IsCompleted)
+            return;
+
+        var key = Key(file);
+        HELD[key] = call;
+        _ = call.ContinueWith(_ => HELD.TryRemove(new KeyValuePair<string, Task>(key, call)), TaskScheduler.Default);
+    }
+
+    private static string Key(string file)
+    {
+        try
+        {
+            return Path.GetFullPath(file);
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return file;
         }
     }
 

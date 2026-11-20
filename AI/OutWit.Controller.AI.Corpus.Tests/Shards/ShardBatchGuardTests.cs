@@ -175,7 +175,7 @@ public sealed class ShardBatchGuardTests
             Assert.That(ShardDisk.NeededByNode(1L << 30, 8), Is.EqualTo(10 * ShardDisk.Needed(1L << 30)), "the degree and two more shards");
             Assert.That(free, Is.GreaterThan(0), "the volume of a folder that does not exist yet is its nearest ancestor's");
             Assert.That(ShardDisk.HasRoom(here, 1), Is.True);
-            Assert.That(ShardDisk.HasRoom(here, 1L << 50), Is.False);
+            Assert.That(ShardDisk.HasRoom(here, long.MaxValue / 4), Is.False, "the room of a shard past any disk does not wrap");
             Assert.That(ShardBatchGuard.RoomBytes(new CorpusTaskData { Source = new CorpusSourceData(), MaxShardBytes = 1L << 30 }), Is.EqualTo(1L << 30), "a shard of unknown size is asked for the cap it is held to");
         });
     }
