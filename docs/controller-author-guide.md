@@ -626,14 +626,15 @@ Emitted at build time by [`Build/OutWit.Controller.Manifest.targets:64-85`](../B
 2. `@Controllers/<Cfg>/<name>.module/controller.json` — copied by `ControllerPostBuild`.
 3. `nupkg!/content/module/controller.json` — packed by `ControllerPackModuleContents`. At consumer build time the consumer-side build/.targets copies this back into the consumer's own `@Controllers/<Cfg>/<name>.module/`.
 
-The full schema with field-by-field constraints lives at [`docs/controller.schema.json`](controller.schema.json). The build-time emitter only enforces five things:
+The full schema with field-by-field constraints lives at [`docs/controller.schema.json`](controller.schema.json). The build-time emitter only enforces six things:
 - `ControllerName` not empty
 - `Version` not empty
 - `Description` not empty
 - Every `ControllerDataAsset` has a non-empty `Uri`
-- Every `ControllerDataAsset` has a non-empty `Sha256`
+- Every `ControllerDataAsset` has a `Sha256` of exactly 64 lower-case hex digits
+- Every `ControllerDataAsset` has a `Size`: its length in bytes, a whole number above zero
 
-The schema's semver pattern, 64-hex-char SHA pattern, RID enum, etc. are *documentation only* — there is no JSON Schema validation step in the build. You can verify the schema against your built manifest by hand:
+The schema's semver pattern, RID enum, etc. are *documentation only* — there is no JSON Schema validation step in the build. You can verify the schema against your built manifest by hand:
 
 ```sh
 pip install jsonschema
@@ -681,8 +682,8 @@ The fields:
 - `Identity` (the `Include="..."` value) — stable id for diagnostics and disambiguation across platforms.
 - `RuntimeIdentifier` — defaults to `any` (every host fetches). Specific RID gates to that platform.
 - `Uri` — required. Built-in schemes: `gh-release://`, `https://`, `file://`. Add your own resolver via the `OutWit.Engine.Assets` interfaces.
-- `Sha256` — required. 64 hex chars. The `outwit-assets-pack` tool fills this in automatically; mismatch aborts fetch.
-- `Size` — informational, drives progress reporting.
+- `Sha256` — required. 64 lower-case hex digits; the build refuses any other form. The `outwit-assets-pack` tool fills this in automatically; mismatch aborts fetch.
+- `Size` — required. The archive's length in bytes, a whole number above zero; the build refuses an asset without it. The publish workflow's guard for the AI controllers fetches each released archive and holds it to its `Sha256` and its `Size` before a push.
 - `ExtractTo` — defaults to `.` (module root). `.zip` files get extracted into the path; everything else is copied verbatim.
 - `Required` — defaults to `true`. When `false`, fetch failures are tolerated (used for optional benchmark fixtures).
 - `PackSource` and `PackKind` — **author-only**; these are stripped before manifest emission and only used by the `outwit-assets-pack` tool to know what to package.
