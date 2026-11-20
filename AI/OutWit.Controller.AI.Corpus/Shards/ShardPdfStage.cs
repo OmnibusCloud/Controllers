@@ -37,11 +37,14 @@ public sealed class ShardPdfStage
     /// <summary>A PDF met after the shard's PDFs had burned the fuel one shard may spend on them (<see cref="PdfStageLimits.SHARD_FUEL"/>): not run.</summary>
     public const string DROP_PDF_SHARD_FUEL = "pdf_shard_fuel";
 
-    /// <summary>Every drop rule of the stage, in the order of <see cref="PdfVerdict"/> (then <c>pdf_empty</c> and <c>pdf_shard_fuel</c>).</summary>
+    /// <summary>A PDF met after as many of the shard's PDFs were run as one shard may run (<see cref="PdfStageLimits.SHARD_RUNS"/>): not run.</summary>
+    public const string DROP_PDF_SHARD_RUNS = "pdf_shard_runs";
+
+    /// <summary>Every drop rule of the stage, in the order of <see cref="PdfVerdict"/> (then <c>pdf_empty</c>, <c>pdf_shard_fuel</c> and <c>pdf_shard_runs</c>).</summary>
     public static readonly IReadOnlyList<string> DROPS =
     [
         DROP_PDF_ENCRYPTED, DROP_PDF_UNREADABLE, DROP_PDF_NO_PAGES, DROP_PDF_FUEL, DROP_PDF_MEMORY,
-        DROP_PDF_TRAP, DROP_PDF_ERROR, DROP_PDF_OVERSIZED, DROP_PDF_EMPTY, DROP_PDF_SHARD_FUEL
+        DROP_PDF_TRAP, DROP_PDF_ERROR, DROP_PDF_OVERSIZED, DROP_PDF_EMPTY, DROP_PDF_SHARD_FUEL, DROP_PDF_SHARD_RUNS
     ];
 
     private const string IDENTIFIED_PAYLOAD_TYPE = "WARC-Identified-Payload-Type";
@@ -111,10 +114,15 @@ public sealed class ShardPdfStage
                       ?? throw new PdfSandboxException(CorpusResultCodes.FAULT_PDF_SANDBOX, $"this node cannot run the PDF stage ({m_problem}); the shard holds a PDF, so another node must make its product");
 
         // One shard's PDFs have one budget together: a shard of documents that each burn their
-        // whole fuel must not cost a node a budget per document without end.
+        // whole fuel must not cost a node a budget per document without end, and a shard of
+        // documents that each cost a run and almost no fuel must not cost it a run without end.
         if (stats.PdfFuelSpent() >= ShardFuel)
             return Drop(stats, DROP_PDF_SHARD_FUEL);
 
+        if (stats.PdfRuns >= ShardRuns)
+            return Drop(stats, DROP_PDF_SHARD_RUNS);
+
+        stats.PdfRun();
         var extraction = Run(sandbox, payload.Body.Span, cancellationToken);
         stats.PdfFuel(extraction.Fuel);
         if (extraction.Verdict != PdfVerdict.Text)
@@ -207,6 +215,9 @@ public sealed class ShardPdfStage
 
     /// <summary>The fuel the PDFs of one shard may burn together (tests of a shard past it take a smaller one).</summary>
     internal long ShardFuel { get; init; } = PdfStageLimits.SHARD_FUEL;
+
+    /// <summary>The PDFs of one shard the stage runs (tests of a shard past it take fewer).</summary>
+    internal int ShardRuns { get; init; } = PdfStageLimits.SHARD_RUNS;
 
     #endregion
 }

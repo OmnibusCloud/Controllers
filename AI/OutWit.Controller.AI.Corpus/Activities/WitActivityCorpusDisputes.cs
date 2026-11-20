@@ -11,6 +11,9 @@ namespace OutWit.Controller.AI.Corpus.Activities;
 /// Host-side: the shards whose copies disagreed (or that came back more often than they were sent
 /// out) as task packages for the dispute round, each shard and each package under a new ticket;
 /// the script runs them on three machines (<c>Grid.Replicas(3)</c>). Empty when no copies disagreed.
+/// Given the dispute round as well (six arguments), the disputes that round left with too few
+/// copies or with a lead that may be one machine's second answers, for a second dispute round on
+/// three machines once more; empty when there are none.
 /// </summary>
 [Activity("Corpus.Disputes")]
 [MemoryPackable]
@@ -20,7 +23,9 @@ public sealed partial class WitActivityCorpusDisputes : WitActivityFunction
 
     protected override string InnerString()
     {
-        return $"{Tasks}, {Executions}, {Repairs}, {Repaired}";
+        return Disputes == null
+            ? $"{Tasks}, {Executions}, {Repairs}, {Repaired}"
+            : $"{Tasks}, {Executions}, {Repairs}, {Repaired}, {Disputes}, {Resolved}";
     }
 
     #endregion
@@ -40,7 +45,9 @@ public sealed partial class WitActivityCorpusDisputes : WitActivityFunction
                && Tasks.Check(activity.Tasks)
                && Executions.Check(activity.Executions)
                && Repairs.Check(activity.Repairs)
-               && Repaired.Check(activity.Repaired);
+               && Repaired.Check(activity.Repaired)
+               && Disputes.Check(activity.Disputes)
+               && Resolved.Check(activity.Resolved);
     }
 
     protected override WitActivityCorpusDisputes InnerClone()
@@ -50,7 +57,9 @@ public sealed partial class WitActivityCorpusDisputes : WitActivityFunction
             Tasks = Tasks?.Clone() as IWitReference,
             Executions = Executions?.Clone() as IWitReference,
             Repairs = Repairs?.Clone() as IWitReference,
-            Repaired = Repaired?.Clone() as IWitReference
+            Repaired = Repaired?.Clone() as IWitReference,
+            Disputes = Disputes?.Clone() as IWitReference,
+            Resolved = Resolved?.Clone() as IWitReference
         };
     }
 
@@ -73,6 +82,14 @@ public sealed partial class WitActivityCorpusDisputes : WitActivityFunction
     /// <summary>Reference to what the repair round returned.</summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Repaired { get; init; }
+
+    /// <summary>Reference to the dispute round's tasks; null for the dispute round itself (four arguments).</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Disputes { get; init; }
+
+    /// <summary>Reference to what the dispute round returned; null for the dispute round itself.</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Resolved { get; init; }
 
     #endregion
 }

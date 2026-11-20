@@ -1,6 +1,4 @@
 using OutWit.Controller.AI.Corpus.Model;
-using OutWit.Controller.AI.Corpus.Shards;
-using OutWit.Controller.AI.Corpus.Signatures;
 
 namespace OutWit.Controller.AI.Corpus.Trust;
 
@@ -55,6 +53,20 @@ namespace OutWit.Controller.AI.Corpus.Trust;
 /// platform — Grid 1.3.0 and later — keeps, of what a node's batch returns, one value at most for
 /// each return variable its tasks asked for. With an older Grid a node could return several
 /// answers for one task and this ruling would count them as machines.
+/// </para>
+/// <para>
+/// <b>A machine that answers nothing.</b> A value that came back under no ticket of the round, or
+/// that is no answer at all, was given by a slot that lent nothing to another package: of a
+/// shard's leading result no more values count as borrowed than the round's shortfall that such
+/// values do not explain (<see cref="CorpusRoundSource.Unexplained"/>: the slots that brought
+/// nothing, and the answers past three a package got, since an honest copy that came back
+/// rejected hides a lent value as a silent one does). A machine that leaves the slots of two dispute packages it holds without any answer still
+/// cannot be told from honest machines that fell silent, and every dispute of that round may then
+/// end <c>surplus_copies</c>: such disputes, and the ones that came back with too few copies, go
+/// out once more on three machines (<see cref="CorpusRoundKind.DisputeAgain"/>), where the platform
+/// draws the machines anew. A machine that holds two packages of that round as well and answers
+/// neither leaves them disputed: the shards have no product, never a wrong one. Closing it needs a
+/// ticket for each copy of a package, which the platform does not give.
 /// </para>
 /// <para>
 /// What is left: a shard that was not sampled rests on the machine that ran it, and a machine
@@ -148,6 +160,7 @@ public sealed class CorpusLedger
     private readonly CorpusRoundSource m_first;
     private readonly CorpusRoundSource? m_repair;
     private readonly CorpusRoundSource? m_dispute;
+    private readonly CorpusRoundSource? m_again;
     private readonly CorpusLedgerShards m_shards;
     private readonly CorpusLedgerTally m_tally;
 
@@ -155,12 +168,13 @@ public sealed class CorpusLedger
 
     #region Constructors
 
-    private CorpusLedger(string controllerVersion, CorpusRoundSource first, CorpusRoundSource? repair, CorpusRoundSource? dispute, double? samplingRate)
+    private CorpusLedger(string controllerVersion, CorpusRoundSource first, CorpusRoundSource? repair, CorpusRoundSource? dispute, double? samplingRate, CorpusRoundSource? again)
     {
         ControllerVersion = controllerVersion;
         m_first = first;
         m_repair = repair;
         m_dispute = dispute;
+        m_again = again;
         m_shards = new CorpusLedgerShards(first.Shards, () => Judge(new CorpusLedgerTally()));
 
         // One reading of the run for everything that is a count: the shards themselves are not kept.
@@ -181,15 +195,17 @@ public sealed class CorpusLedger
     /// <param name="repair">The repair round, or null when it has not run.</param>
     /// <param name="dispute">The dispute round, or null when it has not run.</param>
     /// <param name="samplingRate">The share of the packages the run asked to run twice, 0 to 1 (<see cref="CorpusSampling.RateOf"/>); null when the caller does not know it. No ruling reads it: it is stated beside what came back (<see cref="Sampling"/>).</param>
+    /// <param name="again">The second dispute round, or null when it has not run.</param>
     /// <returns>The ledger.</returns>
-    public static CorpusLedger Build(string controllerVersion, CorpusRound first, CorpusRound? repair = null, CorpusRound? dispute = null, double? samplingRate = null)
+    public static CorpusLedger Build(string controllerVersion, CorpusRound first, CorpusRound? repair = null, CorpusRound? dispute = null, double? samplingRate = null, CorpusRound? again = null)
     {
         return Build(
             controllerVersion,
             new CorpusRoundSourceMemory(first),
             repair == null ? null : new CorpusRoundSourceMemory(repair),
             dispute == null ? null : new CorpusRoundSourceMemory(dispute),
-            samplingRate);
+            samplingRate,
+            again == null ? null : new CorpusRoundSourceMemory(again));
     }
 
     /// <summary>
@@ -202,11 +218,12 @@ public sealed class CorpusLedger
     /// <param name="repair">The repair round, or null when it has not run.</param>
     /// <param name="dispute">The dispute round, or null when it has not run.</param>
     /// <param name="samplingRate">The share of the packages the run asked to run twice, 0 to 1 (<see cref="CorpusSampling.RateOf"/>); null when the caller does not know it. No ruling reads it: it is stated beside what came back (<see cref="Sampling"/>).</param>
+    /// <param name="again">The second dispute round, or null when it has not run.</param>
     /// <returns>The ledger.</returns>
     /// <exception cref="InvalidOperationException">A round's task packages are not in ascending shard order: they are not the ones this controller wrote.</exception>
-    public static CorpusLedger Build(string controllerVersion, CorpusRoundSource first, CorpusRoundSource? repair = null, CorpusRoundSource? dispute = null, double? samplingRate = null)
+    public static CorpusLedger Build(string controllerVersion, CorpusRoundSource first, CorpusRoundSource? repair = null, CorpusRoundSource? dispute = null, double? samplingRate = null, CorpusRoundSource? again = null)
     {
-        return new CorpusLedger(controllerVersion, first, repair, dispute, samplingRate);
+        return new CorpusLedger(controllerVersion, first, repair, dispute, samplingRate, again);
     }
 
     /// <summary>Whether a round's values for a shard are a pair that was compared: the first two are both results with a verdict.</summary>
@@ -243,6 +260,18 @@ public sealed class CorpusLedger
     public IEnumerable<CorpusTaskData> EnumerateDisputeTasks()
     {
         return m_shards.Where(shard => shard.NeedsDispute && !shard.SentToDispute).Select(Reissue);
+    }
+
+    /// <summary>
+    /// The tasks of the second dispute round, made one at a time as they are asked for
+    /// (<see cref="PendingDisputesAgain"/> says how many there are): the disputes the dispute
+    /// round left with too few copies or with a lead that may be one machine's second answers,
+    /// each under a new ticket.
+    /// </summary>
+    /// <returns>The tasks, in shard order.</returns>
+    public IEnumerable<CorpusTaskData> EnumerateDisputeAgainTasks()
+    {
+        return m_shards.Where(shard => shard.NeedsDisputeAgain && !shard.SentToDisputeAgain).Select(Reissue);
     }
 
     /// <summary>The fields two results of one shard disagree on; empty when they agree.</summary>
@@ -299,10 +328,11 @@ public sealed class CorpusLedger
         tally.Add(m_first.Unbound);
         tally.Add(m_repair?.Unbound);
         tally.Add(m_dispute?.Unbound);
+        tally.Add(m_again?.Unbound);
 
         using var repair = new CorpusLedgerCursor(m_repair, tally);
         using var dispute = new CorpusLedgerCursor(m_dispute, tally);
-        var missing = m_dispute?.Missing ?? 0;
+        using var again = new CorpusLedgerCursor(m_again, tally);
         var last = -1;
 
         foreach (var package in m_first.Read())
@@ -320,7 +350,7 @@ public sealed class CorpusLedger
                 last = task.TaskIndex;
                 var shard = new CorpusLedgerShard(task);
                 for (; at < package.Slots.Count && package.Slots[at].Task.TaskIndex == last; at++)
-                    Take(package.Slots[at], shard.First, tally);
+                    CorpusLedgerIntake.Take(package.Slots[at], shard.First, tally, ControllerVersion);
 
                 CorpusLedgerRuling.JudgeFirst(shard);
 
@@ -328,7 +358,7 @@ public sealed class CorpusLedger
                 {
                     shard.SentToRepair = true;
                     foreach (var slot in repairSlots)
-                        Take(slot, shard.Repair, tally);
+                        CorpusLedgerIntake.Take(slot, shard.Repair, tally, ControllerVersion);
 
                     if (shard.NeedsRepair)
                         CorpusLedgerRuling.JudgeRepair(shard);
@@ -338,11 +368,20 @@ public sealed class CorpusLedger
                 {
                     shard.SentToDispute = true;
                     foreach (var slot in disputeSlots)
-                        Take(slot, shard.Dispute, tally);
+                        CorpusLedgerIntake.Take(slot, shard.Dispute, tally, ControllerVersion);
 
-                    // What the other packages of the round are short of: every one was asked for in three copies.
                     if (shard.NeedsDispute)
-                        CorpusLedgerRuling.JudgeDispute(shard, missing - Math.Max(0, DISPUTE_COPIES - disputePackage!.Returned), tally);
+                        CorpusLedgerRuling.JudgeDispute(shard, Borrowable(m_dispute!, disputePackage!), tally);
+                }
+
+                if (again.Take(last, out var againSlots, out var againPackage))
+                {
+                    shard.SentToDisputeAgain = true;
+                    foreach (var slot in againSlots)
+                        CorpusLedgerIntake.Take(slot, shard.Again, tally, ControllerVersion);
+
+                    if (shard.NeedsDisputeAgain)
+                        CorpusLedgerRuling.JudgeDisputeAgain(shard, Borrowable(m_again!, againPackage!), tally);
                 }
 
                 CorpusLedgerRuling.Close(shard);
@@ -352,110 +391,22 @@ public sealed class CorpusLedger
 
         repair.Finish();
         dispute.Finish();
-    }
-
-    #endregion
-
-    #region Binding
-
-    /// <summary>Checks every value under a task's ticket and adds it to the shard's entries of the round.</summary>
-    private void Take(CorpusRoundSlot slot, List<CorpusLedgerEntry> entries, CorpusLedgerTally tally)
-    {
-        foreach (var value in slot.Values)
-        {
-            switch (value.Kind)
-            {
-                case CorpusLedgerEntryKind.Execution when value.Result != null:
-                    entries.Add(Entry(value.Result, slot.Task, tally));
-                    break;
-                case CorpusLedgerEntryKind.Fault when CorpusResultCodes.IsFault(value.Code):
-                    entries.Add(new CorpusLedgerEntry(CorpusLedgerEntryKind.Fault, null, value.Code));
-                    break;
-                case CorpusLedgerEntryKind.Rejected when REJECTION_REASONS.Contains(value.Code):
-                    tally.Reject(value.Code);
-                    entries.Add(new CorpusLedgerEntry(CorpusLedgerEntryKind.Rejected, null, value.Code));
-                    break;
-                default:
-                    tally.Reject(REJECTED_UNREADABLE);
-                    entries.Add(new CorpusLedgerEntry(CorpusLedgerEntryKind.Rejected, null, REJECTED_UNREADABLE));
-                    break;
-            }
-        }
-    }
-
-    private CorpusLedgerEntry Entry(CorpusResultData result, CorpusTaskData task, CorpusLedgerTally tally)
-    {
-        var reason = Reason(result, task);
-        if (reason != null)
-        {
-            tally.Reject(reason);
-            return new CorpusLedgerEntry(CorpusLedgerEntryKind.Rejected, null, reason);
-        }
-
-        return result.Verdict == CorpusShardVerdict.NodeFault
-            ? new CorpusLedgerEntry(CorpusLedgerEntryKind.Fault, result, result.Error)
-            : new CorpusLedgerEntry(CorpusLedgerEntryKind.Execution, result, "");
+        again.Finish();
     }
 
     /// <summary>
-    /// Why a value is dropped, or null for one that is taken. A node shaped the value, so whatever
-    /// a check throws over it is that value's: it is unreadable, and the run goes on.
+    /// Of a dispute's leading result, how many values may be one machine's second answer: what the
+    /// other packages of the round are short of (every one was asked for in three copies), and no
+    /// more than the round's shortfall that values under no ticket do not explain
+    /// (<see cref="CorpusRoundSource.Unexplained"/>). A value under no ticket lent nothing; one
+    /// machine can only borrow for a shard where an honest copy of it fell silent or came back as
+    /// a value that is not taken, and either leaves the round a slot short or a package an answer
+    /// over its three.
     /// </summary>
-    private string? Reason(CorpusResultData result, CorpusTaskData task)
+    private static int Borrowable(CorpusRoundSource round, CorpusRoundPackage package)
     {
-        try
-        {
-            return !CorpusResultCheck.IsWellFormed(result) ? REJECTED_UNREADABLE
-                : result.TaskIndex != task.TaskIndex || !string.Equals(result.SourceUrl, task.Source?.Url ?? "", StringComparison.Ordinal) ? REJECTED_CONTENT
-                : !string.Equals(result.ControllerVersion, ControllerVersion, StringComparison.Ordinal) ? REJECTED_VERSION
-                : !Fits(result, task) ? REJECTED_CONTENT
-                : null;
-        }
-        catch (Exception exception) when (exception is not OutOfMemoryException)
-        {
-            return REJECTED_UNREADABLE;
-        }
-    }
-
-    /// <summary>Whether a checked result is one the task's pipeline can have produced.</summary>
-    private static bool Fits(CorpusResultData result, CorpusTaskData task)
-    {
-        var pipeline = task.Pipeline;
-        if (pipeline == null)
-            return result.Verdict != CorpusShardVerdict.Completed;
-
-        if (result.Output != pipeline.Output)
-            return false;
-
-        if (result.Verdict != CorpusShardVerdict.Completed)
-            return true;
-
-        var keeps = pipeline.Output == CorpusOutputMode.Full;
-        if ((result.TextBlobId != Guid.Empty) != keeps || (result.SignaturesBlobId != Guid.Empty) != (keeps && pipeline.Sign))
-            return false;
-
-        if (pipeline.Sign != (result.MinHash != null))
-            return false;
-
-        if (result.MinHash != null && MinHashParameters.Resolve(result.MinHash) != MinHashParameters.Resolve(pipeline.MinHash))
-            return false;
-
-        // More bytes than the node was to accept for the shard: the cap, or the size it was declared with.
-        var stats = result.Stats!;
-        if (stats.BytesFetched > ShardLimits.FetchCap(task))
-            return false;
-
-        // The PDF stage runs on a WARC shard of a pipeline that has it on, and nowhere else.
-        if (stats.Pdf != null && (task.Source?.Format != CorpusSourceFormat.Warc || !pipeline.ExtractPdf))
-            return false;
-
-        if (!pipeline.IdentifyLanguage)
-            return stats.UnsupportedLanguages.Count == 0 && stats.Languages.All(language => language.Name.Length == 0);
-
-        if (stats.Languages.Any(language => language.Name.Length == 0))
-            return false;
-
-        return pipeline.TargetLanguages.Count == 0 || stats.Languages.All(language => pipeline.TargetLanguages.Contains(language.Name, StringComparer.Ordinal));
+        var shortElsewhere = round.Missing - Math.Max(0, DISPUTE_COPIES - package.Returned);
+        return round.Unexplained is { } unexplained ? Math.Min(shortElsewhere, unexplained) : shortElsewhere;
     }
 
     #endregion
@@ -540,6 +491,15 @@ public sealed class CorpusLedger
     /// <summary>Shards whose copies disagreed that no dispute round has taken yet: how many tasks <see cref="EnumerateDisputeTasks"/> gives.</summary>
     public int PendingDisputes => m_tally.PendingDisputes;
 
+    /// <summary>Disputes the dispute round left with too few copies or a lead that may be one machine's, that no second dispute round has taken yet: how many tasks <see cref="EnumerateDisputeAgainTasks"/> gives.</summary>
+    public int PendingDisputesAgain => m_tally.PendingDisputesAgain;
+
+    /// <summary>Disputes that went out once more, to the second dispute round.</summary>
+    public int DisputesAgain => m_tally.DisputesAgain;
+
+    /// <summary>Of those, the ones the second dispute round settled.</summary>
+    public int DisputesAgainResolved => m_tally.DisputesAgainResolved;
+
     /// <summary>What the run asked for in second executions and what came back of it in the first round.</summary>
     public CorpusSampling Sampling { get; }
 
@@ -551,6 +511,9 @@ public sealed class CorpusLedger
 
     /// <summary>How the dispute round's fan-out came back; no package when the round has not run.</summary>
     public CorpusRoundAnswers DisputeRound => m_dispute?.Answers ?? CorpusRoundAnswers.NONE;
+
+    /// <summary>How the second dispute round's fan-out came back; no package when the round has not run.</summary>
+    public CorpusRoundAnswers DisputeAgainRound => m_again?.Answers ?? CorpusRoundAnswers.NONE;
 
     #endregion
 }

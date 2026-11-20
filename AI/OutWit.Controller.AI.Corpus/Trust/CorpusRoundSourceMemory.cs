@@ -53,9 +53,14 @@ public sealed class CorpusRoundSourceMemory : CorpusRoundSource
 
         var returned = new Dictionary<int, int>();
         var dropped = new Dictionary<int, Dictionary<string, int>>();
+        long values = 0;
 
         foreach (var value in round.Results)
         {
+            // A null is no value: the slot it stands for brought nothing.
+            if (value != null)
+                values++;
+
             if (value is not CorpusResultData result)
             {
                 Count(m_unbound, CorpusLedger.REJECTED_UNREADABLE);
@@ -91,6 +96,9 @@ public sealed class CorpusRoundSourceMemory : CorpusRoundSource
         }
 
         Answers = CorpusRoundAnswers.Of(m_packages.Select(package => package.Returned));
+        // A value that is not bound to a package of the round: every value but the ones a package got.
+        var unbound = values - returned.Values.Sum(count => (long)count);
+        Unexplained = UnexplainedOf(m_packages.Count, Asked, values, Missing, unbound);
     }
 
     #endregion
@@ -123,6 +131,9 @@ public sealed class CorpusRoundSourceMemory : CorpusRoundSource
 
     /// <inheritdoc />
     public override CorpusRoundAnswers Answers { get; }
+
+    /// <inheritdoc />
+    public override int? Unexplained { get; }
 
     #endregion
 }

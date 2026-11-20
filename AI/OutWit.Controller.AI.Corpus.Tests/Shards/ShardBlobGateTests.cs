@@ -125,6 +125,62 @@ public sealed class ShardBlobGateTests
 
     #endregion
 
+    #region Time Limit Tests
+
+    [Test]
+    public async Task AnAttemptThatNeverReturnsFreesTheGateWhenItsTimeIsUpTest()
+    {
+        // The gate is closed (a new process, or after a failure): the first attempt holds it
+        // alone, and its call never comes back.
+        var gate = new ShardBlobGate();
+        var never = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = gate.RunAsync(() => never.Task, TimeSpan.FromMilliseconds(200), CancellationToken.None);
+        var second = gate.RunAsync(() => TransferAsync(Task.CompletedTask), TimeSpan.FromSeconds(30), CancellationToken.None);
+
+        Assert.That(async () => await first, Throws.InstanceOf<TimeoutException>());
+        var finished = await Task.WhenAny(second, Task.Delay(TimeSpan.FromSeconds(10)));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(finished, Is.SameAs(second), "another job's transfer is not held behind the call that never returned");
+            Assert.That(second.Result, Is.EqualTo(1));
+            Assert.That(gate.IsOpen, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ACancelledJobFreesTheGateItsAttemptHeldTest()
+    {
+        // No time limit of the gate's own: the job's token alone ends the wait.
+        var gate = new ShardBlobGate();
+        var never = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var job = new CancellationTokenSource();
+        var first = gate.RunAsync(() => never.Task, job.Token);
+        var second = gate.RunAsync(() => TransferAsync(Task.CompletedTask), CancellationToken.None);
+
+        await Task.Delay(100);
+        Assert.That(second.IsCompleted, Is.False, "the gate is closed and held");
+
+        job.Cancel();
+
+        Assert.That(async () => await first, Throws.InstanceOf<OperationCanceledException>());
+        var finished = await Task.WhenAny(second, Task.Delay(TimeSpan.FromSeconds(10)));
+        Assert.That(finished, Is.SameAs(second), "the cancelled job's slot is free again");
+    }
+
+    [Test]
+    public void AnAttemptThatRanOutOfItsTimeClosesAnOpenGateTest()
+    {
+        var gate = new ShardBlobGate();
+        Assert.That(async () => await gate.RunAsync(() => TransferAsync(Task.CompletedTask), CancellationToken.None), Throws.Nothing);
+
+        var never = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Assert.That(async () => await gate.RunAsync(() => never.Task, TimeSpan.FromMilliseconds(100), CancellationToken.None), Throws.InstanceOf<TimeoutException>());
+        Assert.That(gate.IsOpen, Is.False, "a call that never returned is what a lost channel looks like");
+    }
+
+    #endregion
+
     #region Tools
 
     private async Task<int> TransferAsync(Task hold)

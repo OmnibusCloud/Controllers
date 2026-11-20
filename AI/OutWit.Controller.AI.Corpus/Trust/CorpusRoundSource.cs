@@ -26,7 +26,7 @@ public abstract class CorpusRoundSource
     /// <summary>
     /// The most answers a round asks of a package: itself and one copy in the first round (of the
     /// packages the run's sampling picks) and in the repair round (of every package, when the run
-    /// asked for sampling at all), three in the dispute round.
+    /// asked for sampling at all), three in either dispute round.
     /// </summary>
     /// <param name="kind">The round.</param>
     /// <returns>The count.</returns>
@@ -84,6 +84,32 @@ public abstract class CorpusRoundSource
 
     /// <summary>How the round's fan-out came back: its packages by the answers each got, known before any is opened.</summary>
     public abstract CorpusRoundAnswers Answers { get; }
+
+    /// <summary>
+    /// What the round is short of (<see cref="Missing"/>) less the values that came back under no
+    /// ticket of the round: such a value was given by a slot that lent nothing to another package,
+    /// so it explains a package's missing answer without one machine's second answer behind it.
+    /// What is left is the slots that brought nothing at all and the answers past three a package
+    /// got: an honest copy that came back rejected (a blob that cannot be read, another version)
+    /// counts as an answer of its package and can hide a value lent to it, as a silent one can.
+    /// Null when more values came back than the round had slots: the platform then kept more than
+    /// one value of a task, and nothing is read from the count. The ledger reads it of the dispute
+    /// rounds only.
+    /// </summary>
+    public abstract int? Unexplained { get; }
+
+    /// <summary>A round's shortfall less the values bound to no package; null when more values came back than the round had slots.</summary>
+    /// <param name="packages">The round's packages.</param>
+    /// <param name="asked">The answers it asks of a package.</param>
+    /// <param name="values">The values that came back, of any kind but null.</param>
+    /// <param name="missing">What the round is short of (<see cref="Missing"/>).</param>
+    /// <param name="unbound">The values, not nulls, that came back under no ticket of the round.</param>
+    /// <returns>The shortfall no unbound value explains, or null.</returns>
+    protected static int? UnexplainedOf(int packages, int asked, long values, int missing, long unbound)
+    {
+        var slots = (long)packages * asked;
+        return values > slots ? null : (int)Math.Max(0, missing - unbound);
+    }
 
     #endregion
 }

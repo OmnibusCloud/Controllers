@@ -11,7 +11,7 @@ Every number on this page is a constant of the code or was measured, in the cont
 or on a test fleet; the [README](../README.md) explains how things work inside, and the JSON
 schemas in this folder are the documents' contracts.
 
-Version described: **Corpus 0.8.0** (Model 0.2.0, Scripts 0.1.6). Corpus 0.2.1 is proven on a
+Version described: **Corpus 0.9.0** (Model 0.2.0, Scripts 0.1.7). Corpus 0.2.1 is proven on a
 six-node test fleet (Windows, Linux, macOS); 0.3.0 added what an application's studio needs
 (sections 4, 6 and 8); 0.4.0 was the first hardening release — what the server accepts from a
 node, what a run does when nodes disagree or fail, what hostile input costs, and what a lab can
@@ -28,8 +28,14 @@ out on two machines when the run asked for sampling, and both documents state th
 was asked for and how each round came back (sections 6 and 9); 0.8.0 is the fifth and moves no
 product either: the near-duplicate merge costs the same whatever a node wrote into its signatures,
 is left at the next document when its job is stopped, and holds 4,000,000 documents at the most
-whatever the length of their signatures (sections 6 and 11). What changed for an application is
-listed in section 14. 0.7.0 and 0.8.0 have not run on the fleet yet. Nothing is on
+whatever the length of their signatures (sections 6 and 11); 0.9.0 is the sixth: a dispute one
+machine left without enough copies goes out once more and a value under no ticket no longer
+unsettles the others (section 9), a node's own network is a fault of the node and a fetch has a
+limit before the answer's head (sections 7 and 10), a shard's product has a ceiling that a node
+reserves on its disk and the preflight states (sections 8 and 11), a shard's PDFs have a number
+of runs, a blob transfer has a time to finish in, and one record or one manifest costs a bounded
+amount of memory (section 11). What changed for an application is listed in section 14. 0.7.0,
+0.8.0 and 0.9.0 have not run on the fleet yet. Nothing is on
 nuget.org or on the live network yet.
 
 ## Contents
@@ -143,8 +149,11 @@ Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
     ProcessingOptions:majority = Grid.Replicas(3);
     CorpusResultPackageCollection:resolved = Grid.ForEach(package in disputes, majority)
         => Corpus.ProcessPackage(package);
-    Blob:report = Corpus.Collect(tasks, executions, repairs, repaired, disputes, resolved, opts);
-    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, opts);
+    CorpusTaskPackageCollection:undecided = Corpus.Disputes(tasks, executions, repairs, repaired, disputes, resolved);
+    CorpusResultPackageCollection:settled = Grid.ForEach(package in undecided, majority)
+        => Corpus.ProcessPackage(package);
+    Blob:report = Corpus.Collect(tasks, executions, repairs, repaired, disputes, resolved, undecided, settled, opts);
+    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, undecided, settled, opts);
 }
 ```
 
@@ -165,7 +174,7 @@ Pass an empty blob (`Guid.Empty`) as `languageModel` when the pipeline's `identi
 | `Corpus.SamplingRate` | server | the options' `SamplingRate` clamped to 0..1 |
 | `Corpus.Repairs` | server | the shards the first round left without a result, as new tasks in new packages |
 | `Corpus.RepairRate` | server | the share of the repair round's packages that run on two machines: 1 when the options' `SamplingRate` is above 0, else 0 |
-| `Corpus.Disputes` | server | the shards whose copies disagree (in the first round or in the repair round), as new tasks in new packages for three machines |
+| `Corpus.Disputes` | server | the shards whose copies disagree (in the first round or in the repair round), as new tasks in new packages for three machines; with the dispute round as two more arguments, the disputes it left with too few copies or a lead that may be one machine's second answers, for a second dispute round |
 | `Corpus.Collect` | server | the report, from the server's account of every round |
 | `Corpus.Integrity` | server | the integrity document, from the same account; the run's options are its last argument (without them the document's `sampling.state` is `unknown`) |
 | `Corpus.Dedup` | server | the near-duplicate merge |
@@ -372,6 +381,7 @@ network, a pinned clock and seeded randomness.
 |---|---|
 | fuel | 8·10¹⁰ per PDF, counted from `_start` (given after instantiation, so it does not depend on the platform) |
 | fuel per shard | 8·10¹² for all the PDFs of one shard together (a hundred full budgets; a Common Crawl WARC file's PDFs burn seven and a half): a PDF met after it is spent is not run and drops as `pdf_shard_fuel` |
+| runs per shard | 4,096 PDFs of one shard (a Common Crawl WARC file holds about 220 a gigabyte): a PDF met after them is not run and drops as `pdf_shard_runs`. A run costs some 7 ms of a core beside its fuel; with the fuel alone a shard of bodies that only start as PDFs held a core for hours. Together: 11 to 15 minutes of a core in fuel at the worst, and about half a minute of runs |
 | linear memory | 1 GiB |
 | input | 64 MiB (a PDF Common Crawl truncated at 5 MiB is read all the same, and counted) |
 | text | 16 MiB of UTF-8 |
@@ -446,8 +456,8 @@ from one constant through splitmix64) each keeping its minimum.
 |---|---|---|---|
 | `text.jsonl.zst` | shard execution | `full` | JSON lines, below |
 | `signatures.bin` | shard execution | `full` | binary, below |
-| `corpus-report.json` | run | both | [`corpus-report.schema.json`](corpus-report.schema.json), `corpus-report/5` |
-| `corpus-integrity.json` | run | both | [`corpus-integrity.schema.json`](corpus-integrity.schema.json), `corpus-integrity/7` |
+| `corpus-report.json` | run | both | [`corpus-report.schema.json`](corpus-report.schema.json), `corpus-report/6` |
+| `corpus-integrity.json` | run | both | [`corpus-integrity.schema.json`](corpus-integrity.schema.json), `corpus-integrity/8` |
 | `corpus-dedup.json` | dedup run | `full` | [`corpus-dedup.schema.json`](corpus-dedup.schema.json), `corpus-dedup/2` |
 | `corpus-capabilities.json` | diagnostics run | — | [`corpus-capabilities.schema.json`](corpus-capabilities.schema.json), `corpus-capabilities/4` |
 
@@ -501,7 +511,7 @@ Beside the summary stand two objects the integrity document carries too, in the 
   `short` (fewer came back twice: some of the checking did not happen), `none` (second executions
   were asked for and no shard was compared: the checking did not happen), `unknown` (the rate is
   not known to the activity). `statement` says the same in a sentence, with the numbers in it;
-- `rounds`: `first`, `repair` and `dispute`, each with `packages` (the task packages that went
+- `rounds`: `first`, `repair`, `dispute` and `dispute_again` (the second dispute round), each with `packages` (the task packages that went
   out), `answers` (the answers that came back under their tickets), and the packages by the
   answers each got: `unanswered`, `answered_once`, `answered_twice`, `answered_thrice`,
   `answered_more`. A round that was not run has zeros. An answer is counted whatever it held (a
@@ -555,9 +565,9 @@ never a text:
 | Verdict | When | `error` |
 |---|---|---|
 | `Completed` | fetched and processed; under `full` its products uploaded | "" or `truncated` (the file ended inside a record, in its payload or in its headers: the records before it are the product) |
-| `OriginRefused` | the URL is not one the task's list permits, or not one this machine fetches from; a redirect led off the list; nothing of the shard was read | `origin_not_allowed`, `origin_not_listed`, `origin_address`, `origin_redirect` |
-| `FetchFailed` | the origin answered and its answer is not the shard: an HTTP status, bytes that do not hash to the manifest's `sha256`, a body without a length that ended inside a record | `http_NNN` (the status), `hash_mismatch`, `body_truncated` |
-| `Oversized` | more bytes on the wire than the cap, more than the size the shard was declared with allows (section 8), or more unpacked than a shard may hold | `oversized`, `oversized_declared`, `oversized_unpacked` |
+| `OriginRefused` | the URL is not one the task's list permits, or not one this machine fetches from; a redirect led off the list; nothing of the shard was read | `origin_not_allowed`, `origin_not_listed`, `origin_redirect` |
+| `FetchFailed` | the origin answered and its answer is not the shard: an HTTP status that is the origin's word (a 4xx other than 407 and 429; a 5xx or 429 past the retries is a fault of the node since 0.9.0), bytes that do not hash to the manifest's `sha256`, a body without a length that ended inside a record | `http_NNN` (the status), `hash_mismatch`, `body_truncated` |
+| `Oversized` | more bytes on the wire than the cap, more than the size the shard was declared with allows (section 8), more unpacked than a shard may hold, or a product past what the bytes fetched may give (section 11) | `oversized`, `oversized_declared`, `oversized_unpacked`, `oversized_product` |
 | `Malformed` | the bytes are not a WARC file, or the compression is damaged; a file that stops inside a record is not malformed (`truncated`, `body_truncated`) | `not_warc`, `bad_compression` |
 | `PipelineUnavailable` | the pipeline identifies languages and names no model, or the model is not one the controller reads within its limits | `no_language_model`, `language_model_refused` |
 | `Failed` | a task that is no task (no source, no pipeline, parameters no pipeline may have) | `task_invalid` |
@@ -575,7 +585,7 @@ are not lost with it:
 | Fault | What happened on the node |
 |---|---|
 | `disk`, `disk_space` | a local file could not be written or read; less room than the shard needs |
-| `network` | the origin did not answer this node after every retry (the node cannot tell its link from the origin) |
+| `network` | the origin did not answer this node with the shard after every retry: no connection, no answer head within the stall limit, a stalled or broken body, a server error (5xx) or a request to slow down (429) that outlasted the retries, a request for proxy credentials (407), or a public origin's name that the node's resolver turned into an address that is not public. The node cannot tell its own link, a gateway or a proxy in front of it from the origin. (Up to 0.8.0 a 5xx or 429 past the retries was `FetchFailed` and the resolver's answer `OriginRefused`/`origin_address`) |
 | `language_model` | the pack did not arrive, or arrived with other bytes than its pin |
 | `pdf_sandbox`, `pdf_backstop` | the sandbox failed to run a document; a PDF reached the wall-clock backstop with fuel left |
 | `upload` | a product could not be uploaded |
@@ -589,7 +599,7 @@ A document that does not reach the product is counted under one rule:
 
 | Stage | Rules |
 |---|---|
-| extract | `record_oversized` (a record larger than a record may be), `http_unparsable`, `http_status`, `not_html`, `unsupported_charset` (a charset the runtime will not decode), `html_refused` (the pre-scan's caps), `html_too_complex` (the parser's budget), `html_error` (the decoder or the parser failed on the page in a way of their own), `empty_text`, `pdf_encrypted` (a password is needed), `pdf_unreadable`, `pdf_no_pages`, `pdf_fuel` (out of fuel), `pdf_memory` (a refused allocation), `pdf_trap` (the module crashed), `pdf_error` (any other failure, or output that breaks the module's contract), `pdf_oversized` (more than 16 MiB of text), `pdf_empty` (text, but no line once shaped), `pdf_shard_fuel` (met after the shard's PDFs had spent their fuel together; not run) |
+| extract | `record_oversized` (a record larger than a record may be), `http_unparsable`, `http_status`, `not_html`, `unsupported_charset` (a charset the runtime will not decode), `html_refused` (the pre-scan's caps), `html_too_complex` (the parser's budget), `html_error` (the decoder or the parser failed on the page in a way of their own), `empty_text`, `pdf_encrypted` (a password is needed), `pdf_unreadable`, `pdf_no_pages`, `pdf_fuel` (out of fuel), `pdf_memory` (a refused allocation), `pdf_trap` (the module crashed), `pdf_error` (any other failure, or output that breaks the module's contract), `pdf_oversized` (more than 16 MiB of text), `pdf_empty` (text, but no line once shaped), `pdf_shard_fuel` (met after the shard's PDFs had spent their fuel together; not run), `pdf_shard_runs` (met after 4,096 of the shard's PDFs had been run; not run) |
 | language | `language_unknown` (fewer than 20 letters), `language_unsupported`, `language_not_target` |
 | lines | `curly_bracket`, `no_prose_lines` |
 | quality | `min_words`, `max_words`, `mean_word_length`, `symbol_to_word_ratio`, `alphabetic_words`, `bullet_lines`, `ellipsis_lines`, `duplicate_lines`, `duplicate_line_chars`, `top_ngram_chars_2`, `top_ngram_chars_3`, `top_ngram_chars_4`, `duplicate_ngram_chars_5` to `duplicate_ngram_chars_10`, `stop_words`, `lorem_ipsum` |
@@ -612,7 +622,7 @@ shard. `CorpusPreflightData`:
 | `UnsizedSources` | shards with no size of their own, the manifest's or the origin's: counted at the mean of the origin's answers, or at the cap, and held to the cap only |
 | `EstimatedStorageBytes`, `StorageHeadroomBytes`, `StorageRetentionDays` | what the job leaves on the server, and the deployment's limit (below) |
 | `BusiestNodeShare`, `PlannedNodes` | the busiest node's share of the work, 0 to 1, and how many nodes would take shards (below); 0 when the host has no pool to ask |
-| `NodeDiskBytesPerShard` | the disk a node needs free for each shard it holds: the run's largest shard (the cap when no size is known), half of it again for the products, and 64 MiB. A node holds its degree and two more shards at a time, never its whole share; a node without room for a shard refuses its batch |
+| `NodeDiskBytesPerShard` | the disk a node reserves for each shard it holds before the shard is fetched: the run's largest shard at the most a node fetches it as (its declared size and an eighth more, the cap when no size is known), the most its products may be under the product ceiling (section 11), and 64 MiB. A node holds its degree and two more shards at a time, never its whole share; a shard whose room is held by the node's other shards waits for it, and a node without room for one shard refuses its batch |
 | `Messages` | the problems by manifest line (the first hundred, then how many more), and the notes: the pack described, target languages it lacks, hosts that are not public origins, what the run keeps and whether `CorpusDedup` can run over it, MinHash parameters that are not the defaults, how many shards a package holds in a job of more than 1,024, what the origin answered for the sample, the traffic line, the line on what the nodes enforce, the line on what the estimate leaves out, the node disk line, the storage line, the work split |
 
 **A declared size binds.** A node holds a shard to the size it was declared with — the manifest's
@@ -769,7 +779,7 @@ Integrity — what the server accepts from a node, and what a run does when node
   `unknown` when the script did not hand the options over); `rounds` states for every round the
   packages that went out and the answers that came back. A first round that lost its answers
   cannot pass for a run that was checked.
-- **The comparison.** `corpus-integrity.json` (`corpus-integrity/7`) pairs the copies and compares
+- **The comparison.** `corpus-integrity.json` (`corpus-integrity/8`) pairs the copies and compares
   what an honest node cannot vary: the verdict, the content hash, the signatures hash, the
   document counts, the drop histogram with the unsupported breakdown, the language histogram, the
   PDF counts (not the fuel: a cost, compared through the documents it produced). `differs` names
@@ -790,7 +800,14 @@ Integrity — what the server accepts from a node, and what a run does when node
   `disputes` lists what the three returned and how each dispute ended (`outcome`, beside
   `first_copies`, `repair_copies`, `copies` and `agreeing`): `resolved`; `no_majority` (no result was returned by
   more copies than any other, and by two at least); `too_few_copies` (fewer than two copies came
-  back with a verdict); `surplus_copies` (below).
+  back with a verdict); `surplus_copies` (below). A dispute that ends `too_few_copies` or
+  `surplus_copies` goes out once more on three machines under new tickets (`Corpus.Disputes`
+  with the dispute round as two more arguments) and is ruled as the dispute round is; its record
+  then holds that round too (`again`: `after`, the first round's outcome, and `copies`,
+  `agreeing`, `results`), and `outcome` is how the second round ended. The summary counts them
+  (`disputes_again`, `disputes_again_resolved`), and `rounds.dispute_again` says how that round's
+  fan-out came back. A dispute that ends `no_majority` does not go out again: its copies
+  disagree.
 - **Repairs.** A shard a node returned as a fault of its own, or returned nothing acceptable for,
   is sent out once more; still without a result it is `NoResult` with its reason (`node_fault` or
   `no_answer`). The integrity document's `no_result` lists them with the fault codes met.
@@ -819,9 +836,13 @@ Integrity — what the server accepts from a node, and what a run does when node
   - in the dispute round more than three values under the ticket mean none is taken: each is
     counted as `surplus` and the dispute ends as `too_few_copies`. Otherwise the leading result
     must have been returned by two machines: of its values, as many as the other packages of the
-    round are short of their three answers may be one machine's second, and do not count; when
-    what is left is not two, or not more than the next result has, the dispute ends as
-    `surplus_copies`.
+    round are short of their three answers may be one machine's second, and do not count — no
+    more than that shortfall less the values that came back under no ticket of the round, since
+    such a value lent nothing to another package (an honest copy that came back as a value that
+    is not taken, a blob that cannot be read or another version, still leaves room for a lent
+    one); when what is left is not two, or not more than the next result has, the dispute ends
+    as `surplus_copies`;
+  - the second dispute round is ruled the same way.
 
   With one lying machine among the copies, whatever the others lose, a result accepted in a
   dispute was returned by an honest machine; three machines that agree still settle their shard
@@ -840,8 +861,14 @@ Integrity — what the server accepts from a node, and what a run does when node
   answer cannot win, but it can deny a result (four values end a dispute as `too_few_copies`; a
   round short of values elsewhere can end two against one as `surplus_copies`); and a machine
   that holds a sampled package's copy and a package of its own can spend the copy's slot on its
-  own package, whose shards then show `executions: 2` that are one machine's. Closing both needs
-  a ticket per copy from the platform.
+  own package, whose shards then show `executions: 2` that are one machine's. A machine that
+  holds copies of two or more dispute packages and answers none of them cannot be told from
+  honest machines that fell silent: every dispute of that round may end `surplus_copies`, the
+  ones three honest machines agreed on included. They go out once more on machines drawn anew;
+  a machine that holds two packages of that round too and answers neither leaves them
+  `Disputed`. That is what one machine can deny: the products of such disputes, loudly, never a
+  wrong product. Answering under no ticket of the round no longer does it (up to 0.8.0 it did,
+  for the whole round). Closing it needs a ticket per copy from the platform.
 
 On the test fleet every sampled pair has agreed, Windows against Linux and macOS, the PDF
 stage's included.
@@ -874,15 +901,29 @@ stage's included.
   `Content-Length` over the cap ends the request before a byte is read, a streamed body is cut), three attempts with back-off from 2 s and jitter on connection failures
   and 5xx; an origin that says it is busy (429, 503) is waited for: up to six such answers, 5 to
   80 s apart or the origin's `Retry-After`, two minutes at most each. A read that stalls 60 s
-  counts as a failure, and so does a fetch slower than 32 KiB/s over its whole length; a 4xx
-  other than 429 is final; a broken body is resumed with a Range request; a body without a length
+  counts as a failure, before the answer's head as after it and on every hop of a redirect, and
+  so does a fetch slower than 32 KiB/s over its whole length; a 4xx other than 407 and 429 is
+  final; a 5xx or 429 that outlasts the retries, a 407, and a public origin's name that the
+  node's resolver turns into an address that is not public are the node fault `network`, and the
+  shard runs once more elsewhere; a broken body is resumed with a Range request; a body without a length
   that ends inside a record, in its payload or in its headers, is `FetchFailed`
   (`body_truncated`); one that ends exactly between two records cannot be told from a whole
   file (section 5). At most two shards download at once per node.
 - **The disk.** A node holds its degree and two more shards at a time, whatever its share: a
-  task waits for a place before it fetches. The preflight states the room each held shard needs.
+  task waits for a place before it fetches, then reserves the most its shard may take (the
+  shard, at the cap when it has no size, and the most its products may be) against the free room
+  less what the node's other shards hold; it waits while they hold it. A node whose disk cannot
+  take what the largest task of a batch reserves refuses the batch once it has read the tasks,
+  before a byte is fetched (`disk_space`), and a shard that does not fit alone all the same is
+  the node fault `disk_space`. The preflight states the room each held shard needs.
 - **The language pack** arrives as a blob (cached per node) and is used only when its bytes hash to
-  the pin. Blob transfers that fail are tried again for about five minutes.
+  the pin. Blob transfers that fail are tried again for about five minutes; every attempt has two
+  minutes and the time of its bytes at 32 KiB/s to hold the node's transfer gate, so a transfer
+  that never returns does not hold the node's others behind it. Its call cannot be stopped: it
+  is waited for, each further time of an attempt counting as an attempt of the schedule, and no
+  second attempt of the same transfer starts beside it; a call that outlasts the schedule fails
+  the transfer (a fault of the node), and the job's token ends the wait. A product an upload
+  still reads keeps its file and its room until the call ends.
 - **Processing.** One streaming pass on a thread below normal priority, the PDF extractor's
   guest code included; one shard per core at most, fewer when memory is short. A node's memory is
   budgeted once: half of it to shards (256 MB each), a quarter to PDFs (1 GiB each), the rest
@@ -905,9 +946,11 @@ stage's included.
 |---|---|
 | shard on the wire | 1 GiB (`MaxShardBytes` may lower it); a shard with a declared size, that size and an eighth more, 1 MiB at least (more: `Oversized`, `oversized_declared`) |
 | manifest | 256 MiB; 1,048,576 sources; 4 MiB a value; the first 100 problems listed (512 characters each), 20 hosts named |
+| a document's root (a manifest, a report given to `Corpus.Dedup`) | 64 keys (more: not valid JSON, by name) |
 | packages | 1,024 a round; 1,024 shards a package; a frame of 256 KiB for what the tasks share, 16 KiB a task, 128 KiB a result |
 | record | 8 MiB in a WET shard, 64 MiB in a WARC shard (larger: skipped and counted, `record_oversized`) |
 | unpacked shard | 32 times its size on the wire, 64 MiB at least, 16 GiB at most (more: `Oversized`, `oversized_unpacked`) |
+| a shard's product | 2,048 documents for every fetched MiB, 4,096 at least, and twice the bytes fetched in compressed text, 16 MiB at least; the signatures follow from the documents (more: `Oversized`, `oversized_product`; a result that claims more is dropped). A node reserves the shard and this ceiling on its disk before it fetches; the preflight states the most the uploads and the products may be under it |
 | HTML | the first 16 MiB of a body are decoded and the first 4 Mi characters parsed; the pre-scan allows nesting 512 and 60,000 tags (more: `html_refused`); the parser's tree may not reach depth 512 or hold more than 120,000 elements (`html_too_complex`) |
 | language pack | 16 MiB; 512 profiles of at most 16,384 n-grams, 524,288 n-grams together; 4,096 stop words per language; a node keeps the last four it used |
 | redirects | 5, each hop put to the origin rule |
@@ -915,7 +958,8 @@ stage's included.
 | traffic allowance | a tenth of the fetches |
 | downloads per node | 2 at once |
 | shards on a node's disk | its degree and 2 more |
-| memory per shard | 256 MB budgeted within half the machine's memory; a budget for the stages' working set, held by the record caps above (a WET record is at most 8 MiB) |
+| memory per shard | 256 MB budgeted within half the machine's memory; a budget for the stages' working set, held by the record caps above (a WET record is at most 8 MiB) and by the most words a document is judged in full by: 100,000 (1,000,000 letters of a script without spaces), whatever a manifest's `max_words` or a pack's rule data says (more: `max_words`, counted, not split). Measured: a WET record of 7 MiB with every threshold a manifest can set opened allocates under 256 MB (it was 1,246 MiB, the heap 658 MiB higher) |
+| tables keyed by input | none keyed by a value a node, a report or a pack chose: the report's repeated shards and blobs, the run's MinHash parameters, a pack's n-grams and a page's n-grams are sorted; string keys are hashed by the runtime's per-process hashing |
 | language identification | the first 4,000 characters; 20 letters at least |
 | PDF | section 5 |
 | MinHash | 1 to 1,024 hashes, 1 to 32 shingle words, bands dividing the hashes |
@@ -991,9 +1035,9 @@ and a merge over the first 12 of the 24 shards finds 7,292: why no figure "so fa
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 0.8.0 | `OutWit.Controller.AI.Corpus` (GitHub Packages; nuget.org at 1.0.0) |
+| The controller | 0.9.0 | `OutWit.Controller.AI.Corpus` (GitHub Packages; nuget.org at 1.0.0) |
 | The wire types | 0.2.0 | `OutWit.Controller.AI.Corpus.Model`: the server restores it from the feed, so it is published before a controller that needs it |
-| The scripts | 0.1.6 | `OutWit.Controller.AI.Corpus.Scripts` |
+| The scripts | 0.1.7 | `OutWit.Controller.AI.Corpus.Scripts` |
 | The PDF extractor | pdftext 1.0.0 (pdf_oxide 0.3.78) | `corpus-pdftext-wasm.zip`, release `pdftext-v1.0.0` (5.9 MB, extracted to `wasm/` beside the controller) |
 | The sandbox engine | wasmtime binding 48.0.2 over the native library 48.0.8 | natives per platform, release `wasmtime-v48.0.8-2` (8 to 10 MB each; the libraries of 48.0.8 with the engine's third-party notices), the bytes Verify ships |
 | The reference language pack | `cc-2026-43-16` | a job input; built by `corpus-assets` from Common Crawl WET files and the rule data in `OutWit.Controller.AI.Corpus.Assets/languages/`. That rule data holds FineWeb-2's stop-word lists and repetition thresholds (Apache-2.0): `LICENSE-fineweb-2.txt` is beside the pack wherever the repository hands it out as a file, and the module's notices name the pack |
@@ -1008,6 +1052,50 @@ LLVM-exception), FineWeb-2's stop-word lists (Apache-2.0) and the Unicode Charac
 `LICENSE-unicode.txt` and the controller's own `LICENSE.txt`: twelve files, held to that list by
 a test. The two data assets carry their own notices (`LICENSE-wasmtime.txt` and `NOTICE.txt`
 beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
+
+**What changed for an application in 0.9.0** (from 0.8.0):
+
+- **Documents.** `corpus-report/6` and `corpus-integrity/8`: `rounds` gains `dispute_again`
+  (the second dispute round; no package under a script written for an earlier controller); the
+  integrity document's summary gains `disputes_again` and `disputes_again_resolved`, and a
+  dispute's record gains `again` (present when it went out once more: `after`, `copies`,
+  `agreeing`, `results`), its `outcome` and `accepted` being how the second round ended (its
+  `copies`, `agreeing` and `results` stay the dispute round's). Nothing was removed or
+  renamed: a reader of `/5` and `/7` that ignores unknown fields only has to accept the new
+  numbers. `Corpus.Dedup` reads `/1` to `/6`.
+- **The scripts.** Scripts 0.1.7 run the second dispute round: `Corpus.Disputes` with six
+  arguments, `Corpus.Collect` and `Corpus.Integrity` with nine (the second round's tasks and
+  answers before the options). They need controller 0.9.0. A script written for 0.7.0 or 0.8.0
+  runs on 0.9.0 as it did, without the second round.
+- **Verdicts and faults.** A 5xx or 429 that outlasts the retries, a 407, and a public origin's
+  name that the node's resolver turns into an address that is not public are the node fault
+  `network` (run once more elsewhere), no longer `FetchFailed`/`http_5NN` or
+  `OriginRefused`/`origin_address`; `origin_address` is no code of a result any more. New:
+  `Oversized`/`oversized_product`, and the drop `pdf_shard_runs`. A fetch whose origin never
+  sends an answer head is given up at the stall limit (60 s) and is the fault `network`.
+- **What can move a product, and does not for Common Crawl's files.** A document of more than
+  100,000 words (1,000,000 letters of a script without spaces) fails `max_words` whatever a
+  manifest's `max_words` or a pack's rule data says: a run that opened `max_words` past that keeps
+  fewer such documents. A shard whose product passes its ceiling is `Oversized`; a shard's PDFs
+  past 4,096 drop as `pdf_shard_runs`. The stage set's fingerprint moves with these limits. No
+  content hash, signatures hash or verdict of the demo kit or of the tests' pinned shards moved.
+- **The preflight.** `NodeDiskBytesPerShard` is the shard, the most its products may be and
+  64 MiB (it was the shard and half of it again), the shard counted at the most a node fetches
+  it as (its declared size and an eighth more, the cap without a size), which is what a node
+  reserves: the kit's figure is 457,609,025 bytes (it was 171,242,293). The ceiling line states
+  the most the first round's uploads may be, and the storage line the most the first round's
+  products may be (a repair or a dispute uploads again, under the same bound per shard); the
+  storage refusal is still held to the estimate. A manifest whose root holds more than 64 keys
+  is not valid JSON for the preflight.
+- **On a node.** A shard reserves its room on the disk before it is fetched and waits while the
+  node's other shards hold it; a shard without a size reserves the cap's. A node refuses a batch
+  for room once it has read the tasks, before a byte is fetched, when its disk cannot take what
+  the largest of them reserves under its own pipeline. A blob transfer attempt that does not
+  finish in two minutes and the time of its bytes at 32 KiB/s frees the node's transfer gate;
+  the call goes on and is waited for, each further time of an attempt counting as an attempt of
+  the schedule, and no second attempt of the same transfer starts beside it; once the schedule
+  is spent the transfer fails as before. A product an upload still reads keeps its file and its
+  room until the call ends.
 
 **What changed for an application in 0.8.0** (from 0.7.0):
 

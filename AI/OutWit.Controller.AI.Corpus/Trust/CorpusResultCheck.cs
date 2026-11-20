@@ -118,6 +118,12 @@ public static class CorpusResultCheck
         if (stats.RecordsIn > ShardLimits.MaxRecords(stats.BytesFetched))
             return false;
 
+        // No more documents and no more compressed text than a shard of those bytes may give:
+        // a node stops there, so no honest count is past it.
+        if (stats.DocumentsOut > ShardProductLimits.MaxDocuments(stats.BytesFetched)
+            || stats.BytesProduced > ShardProductLimits.MaxTextBytes(stats.BytesFetched))
+            return false;
+
         if (!IsCounts(stats.Drops, MaxDrops, DROP_RULES.Contains, out var drops)
             || !IsCounts(stats.Languages, MAX_LANGUAGES, name => name.Length == 0 || LanguageModelLimits.IsCode(name), out var languages)
             || !IsCounts(stats.UnsupportedLanguages, MAX_UNSUPPORTED, IsUnsupportedKey, out var unsupported))
@@ -163,7 +169,7 @@ public static class CorpusResultCheck
     {
         return pdf.In > 0 && pdf.In <= records
                && pdf.Truncated >= 0 && pdf.Truncated <= pdf.In
-               && pdf.Extracted >= 0 && pdf.Extracted <= pdf.In
+               && pdf.Extracted >= 0 && pdf.Extracted <= pdf.In && pdf.Extracted <= Pdf.PdfStageLimits.SHARD_RUNS
                && pdf.Pages >= pdf.Extracted && pdf.Pages <= pdf.Extracted * MAX_PDF_PAGES
                && pdf.Documents >= pdf.Extracted && pdf.Documents <= pdf.Pages
                && pdf.PagesCut >= 0 && pdf.PagesCut <= pdf.Documents

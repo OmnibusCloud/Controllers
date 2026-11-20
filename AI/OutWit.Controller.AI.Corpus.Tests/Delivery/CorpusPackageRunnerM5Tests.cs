@@ -252,6 +252,27 @@ public sealed class CorpusPackageRunnerM5Tests
         });
     }
 
+    [Test]
+    public void ANodeWithoutRoomForWhatItsTasksReserveRefusesTheBatchBeforeAFetchTest()
+    {
+        // The disk is asked what the package's tasks will reserve once they are read, before a
+        // byte of a shard is fetched.
+        var package = Package([Task(0), Task(1)]);
+        var free = ShardDiskReservations.FreeBytes;
+        var before = m_origin.Requests;
+        ShardDiskReservations.FreeBytes = _ => ShardBatchGuard.RoomNeeded([Task(0)]) - 1;
+        try
+        {
+            Assert.That(async () => await RunAsync(package), Throws.TypeOf<ShardBatchRefusedException>().With.Property("Code").EqualTo(ShardBatchRefusedException.DISK_SPACE));
+            Assert.That(m_origin.Requests, Is.EqualTo(before), "nothing was fetched");
+        }
+        finally
+        {
+            ShardDiskReservations.FreeBytes = free;
+            ShardBatchGuard.Clear();
+        }
+    }
+
     #endregion
 
     #region Tools

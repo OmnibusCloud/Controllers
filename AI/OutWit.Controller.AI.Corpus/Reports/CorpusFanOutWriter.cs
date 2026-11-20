@@ -12,9 +12,9 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// (<c>answered_twice</c>), how many shards had two results that were compared
 /// (<c>compared</c>), and the account of it in a word (<c>state</c>: one of
 /// <see cref="CorpusSampling.STATES"/>) and in a sentence (<c>statement</c>).</item>
-/// <item><c>rounds</c>: for the first round, the repair round and the dispute round, the task
-/// packages that went out and the answers that came back, the packages counted by the answers
-/// each got: none (<c>unanswered</c>), one, two, three, more.</item>
+/// <item><c>rounds</c>: for the first round, the repair round, the dispute round and the second
+/// dispute round, the task packages that went out and the answers that came back, the packages
+/// counted by the answers each got: none (<c>unanswered</c>), one, two, three, more.</item>
 /// </list>
 /// A run whose checking did not happen says so here, and a round that came back short shows as
 /// one: the numbers need not be held against the options the run was started with. The counts
@@ -32,6 +32,9 @@ internal static class CorpusFanOutWriter
 
     /// <summary>The name of the dispute round in the documents.</summary>
     public const string ROUND_DISPUTE = "dispute";
+
+    /// <summary>The name of the second dispute round in the documents: the disputes the first left with too few copies, once more.</summary>
+    public const string ROUND_DISPUTE_AGAIN = "dispute_again";
 
     #endregion
 
@@ -62,6 +65,7 @@ internal static class CorpusFanOutWriter
         WriteRound(writer, ROUND_FIRST, ledger.FirstRound);
         WriteRound(writer, ROUND_REPAIR, ledger.RepairRound);
         WriteRound(writer, ROUND_DISPUTE, ledger.DisputeRound);
+        WriteRound(writer, ROUND_DISPUTE_AGAIN, ledger.DisputeAgainRound);
         writer.WriteEndObject();
     }
 

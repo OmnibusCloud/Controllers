@@ -22,7 +22,8 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// MinHash parameters; none when the pipeline does not sign), the blob hashed as it is written. A
 /// pure function of the shard bytes and the pipeline: two nodes produce the same hashes or one of
 /// them is wrong; the output mode changes neither (statistics and hashes only keeps the products on
-/// the node, it makes them all the same).
+/// the node, it makes them all the same). The product is held to what a shard of its fetched size
+/// may give (<see cref="ShardProductLimits"/>): past it the shard is <c>Oversized</c>.
 /// </summary>
 public sealed class ShardProcessor
 {
@@ -141,6 +142,7 @@ public sealed class ShardProcessor
     /// <returns>The product's identity and counters.</returns>
     /// <exception cref="WarcFormatException">The bytes are not a WARC file.</exception>
     /// <exception cref="PdfSandboxException">The shard holds a PDF this node cannot run (no sandbox in the process, the wall-clock backstop): no document gets a verdict, another node makes the product.</exception>
+    /// <exception cref="ShardProductOversizedException">The product passes what a shard of this fetched size may give: more documents or more compressed text (<see cref="ShardProductLimits"/>).</exception>
     public ShardProduct Process(Stream shard, CorpusSourceFormat format, Stream text, Stream signatures, CancellationToken cancellationToken = default)
     {
         var stats = new ShardStatsBuilder();
@@ -151,10 +153,15 @@ public sealed class ShardProcessor
         using var reader = new WarcReader(shard, ShardLimits.MaxRecordBytes(format), ownsStream: false, ShardLimits.MaxUnpackedBytes(shard.Length), cancellationToken);
         using var signed = new ShardHashingStream(signatures);
 
+        // What the product may be, from the bytes fetched alone: held at every document, so a
+        // shard of a few kilobytes cannot write gigabytes before it is stopped.
+        var ceiling = new ProductCeiling(ShardProductLimits.MaxDocuments(shard.Length), TextCeiling ?? ShardProductLimits.MaxTextBytes(shard.Length));
+        using var counted = new ShardCountingStream(text);
+
         if (m_sign)
             ShardSignatureWriter.WriteHeader(signed, m_minHash);
 
-        using (var compressor = CorpusCompressor.CompressTo(text))
+        using (var compressor = CorpusCompressor.CompressTo(counted))
         {
             var buffer = new MemoryStream();
             foreach (var record in reader.ReadRecords())
@@ -166,6 +173,7 @@ public sealed class ShardProcessor
                 {
                     stats.Extracted();
                     Judge(url, document, stats, buffer, hash, compressor, signed);
+                    ceiling.Hold(stats, counted);
                 }
             }
 
@@ -177,6 +185,9 @@ public sealed class ShardProcessor
                 stats.Drop(DROP_RECORD_OVERSIZED);
             }
         }
+
+        // The end of the frame is text too.
+        ceiling.Hold(stats, counted);
 
         text.Flush();
         signatures.Flush();
@@ -375,6 +386,27 @@ public sealed class ShardProcessor
 
     /// <summary>Reads a page in the HTML parser's place (tests of a parser that fails); null for the parser.</summary>
     internal Func<string, (HtmlReading Reading, string Text)>? HtmlReader { get; init; }
+
+    /// <summary>The most bytes of compressed text in the bound's place (tests of the text's bound, which no shard of a test's size reaches); null for the bound.</summary>
+    internal long? TextCeiling { get; init; }
+
+    #endregion
+
+    #region Types
+
+    /// <summary>What one shard's product may be: its documents and its compressed text.</summary>
+    private readonly record struct ProductCeiling(long Documents, long TextBytes)
+    {
+        /// <summary>Throws once the product passes either bound.</summary>
+        public void Hold(ShardStatsBuilder stats, ShardCountingStream text)
+        {
+            if (stats.DocumentsOut > Documents)
+                throw new ShardProductOversizedException("documents", Documents);
+
+            if (text.Written > TextBytes)
+                throw new ShardProductOversizedException("bytes of compressed text", TextBytes);
+        }
+    }
 
     #endregion
 }

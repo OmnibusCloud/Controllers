@@ -231,8 +231,8 @@ public sealed class CorpusShortFanOutTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(report.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-report/5"));
-            Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/7"));
+            Assert.That(report.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-report/6"));
+            Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/8"));
             Assert.That(CorpusSchemaCheck.Validate(reportSchema.RootElement, report.RootElement), Is.Empty);
             Assert.That(CorpusSchemaCheck.Validate(integritySchema.RootElement, integrity.RootElement), Is.Empty);
             Assert.That(report.RootElement.GetProperty("sampling").GetRawText(), Is.EqualTo(sampling.GetRawText()), "the report says of the sampling what the integrity document says");

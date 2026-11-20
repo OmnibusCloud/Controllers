@@ -42,20 +42,24 @@ public sealed class CorpusRoundSourceBlobs : CorpusRoundSource
 
     private readonly List<Package> m_packages;
     private readonly SortedDictionary<string, int> m_unbound;
+    private readonly int m_nulls;
 
     #endregion
 
     #region Constructors
 
-    private CorpusRoundSourceBlobs(CorpusRoundKind kind, List<Package> packages, SortedDictionary<string, int> unbound)
+    private CorpusRoundSourceBlobs(CorpusRoundKind kind, List<Package> packages, SortedDictionary<string, int> unbound, int nulls)
         : base(kind)
     {
         m_packages = packages;
         m_unbound = unbound;
+        m_nulls = nulls;
 
         Shards = packages.Sum(package => package.Reference.ShardCount);
         Missing = packages.Sum(package => Math.Max(0, Asked - package.Returned));
         Answers = CorpusRoundAnswers.Of(packages.Select(package => package.Returned));
+        var unboundValues = unbound.Values.Sum(count => (long)count) - nulls;
+        Unexplained = UnexplainedOf(packages.Count, Asked, packages.Sum(package => (long)package.Returned) + unboundValues, Missing, unboundValues);
     }
 
     #endregion
@@ -89,10 +93,15 @@ public sealed class CorpusRoundSourceBlobs : CorpusRoundSource
         }
 
         var opened = OpenedOf(kind);
+        var nulls = 0;
         foreach (var value in answers ?? [])
         {
             if (value is not CorpusResultPackageData answer)
             {
+                // A null is no value: the slot it stands for brought nothing.
+                if (value == null)
+                    nulls++;
+
                 Count(unbound, CorpusLedger.REJECTED_UNREADABLE);
                 continue;
             }
@@ -116,7 +125,7 @@ public sealed class CorpusRoundSourceBlobs : CorpusRoundSource
                 answer.Path = await ResolveAsync(blobs, answer.Reference);
         }
 
-        return new CorpusRoundSourceBlobs(kind, bound, unbound);
+        return new CorpusRoundSourceBlobs(kind, bound, unbound, nulls);
     }
 
     /// <inheritdoc />
@@ -287,6 +296,9 @@ public sealed class CorpusRoundSourceBlobs : CorpusRoundSource
 
     /// <inheritdoc />
     public override CorpusRoundAnswers Answers { get; }
+
+    /// <inheritdoc />
+    public override int? Unexplained { get; }
 
     #endregion
 

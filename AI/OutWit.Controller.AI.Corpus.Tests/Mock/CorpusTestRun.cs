@@ -112,7 +112,8 @@ internal static class CorpusTestRun
                 DocumentsOut = documentsOut,
                 Languages = Counts(languages),
                 Drops = Counts(drops),
-                BytesFetched = 1000,
+                // More documents than any shard may give need the bytes a shard gives them from (one a 512 bytes).
+                BytesFetched = documentsOut > ShardProductLimits.MIN_DOCUMENTS ? (long)documentsOut * 512 : 1000,
                 BytesProduced = 300,
                 FetchMs = 10,
                 ProcessMs = 20
@@ -143,14 +144,15 @@ internal static class CorpusTestRun
     }
 
     /// <summary>The ledger of a run: the first round, and the later rounds when given; with the sampling rate the run asked for when a test states one.</summary>
-    public static CorpusLedger Ledger(IReadOnlyList<CorpusTaskData> tasks, IEnumerable<object?> executions, (IReadOnlyList<CorpusTaskData> Tasks, IEnumerable<object?> Results)? repair = null, (IReadOnlyList<CorpusTaskData> Tasks, IEnumerable<object?> Results)? dispute = null, double? samplingRate = null)
+    public static CorpusLedger Ledger(IReadOnlyList<CorpusTaskData> tasks, IEnumerable<object?> executions, (IReadOnlyList<CorpusTaskData> Tasks, IEnumerable<object?> Results)? repair = null, (IReadOnlyList<CorpusTaskData> Tasks, IEnumerable<object?> Results)? dispute = null, double? samplingRate = null, (IReadOnlyList<CorpusTaskData> Tasks, IEnumerable<object?> Results)? again = null)
     {
         return CorpusLedger.Build(
             VERSION,
             new CorpusRound(CorpusRoundKind.First, tasks, executions.ToList()),
             repair is { } repaired ? new CorpusRound(CorpusRoundKind.Repair, repaired.Tasks, repaired.Results.ToList()) : null,
             dispute is { } disputed ? new CorpusRound(CorpusRoundKind.Dispute, disputed.Tasks, disputed.Results.ToList()) : null,
-            samplingRate);
+            samplingRate,
+            again is { } settled ? new CorpusRound(CorpusRoundKind.DisputeAgain, settled.Tasks, settled.Results.ToList()) : null);
     }
 
     /// <summary>Named counts in the order a node writes them: by name, ordinal.</summary>

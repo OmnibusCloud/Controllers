@@ -21,11 +21,12 @@ public sealed class CorpusScriptsCompatibilityTests
     private const string CONTROLLER = "OutWit.Controller.AI.Corpus";
 
     /// <summary>
-    /// The first controller with everything the bundled script calls: <c>Corpus.RepairRate</c>,
-    /// and <c>Corpus.Integrity</c> with the run's options as its seventh argument
-    /// (<c>Corpus.ProcessPackage</c> and the packages are from 0.5.0).
+    /// The first controller with everything the bundled script calls: <c>Corpus.Disputes</c> with
+    /// six arguments (the second dispute round) and <c>Corpus.Collect</c> and
+    /// <c>Corpus.Integrity</c> with nine (<c>Corpus.RepairRate</c> is from 0.7.0,
+    /// <c>Corpus.ProcessPackage</c> and the packages from 0.5.0).
     /// </summary>
-    private const string FIRST_WITH_THE_SCRIPTS_ACTIVITIES = "0.7.0";
+    private const string FIRST_WITH_THE_SCRIPTS_ACTIVITIES = "0.9.0";
 
     /// <summary>The release the candidates become.</summary>
     private const string RELEASE = "1.0.0";
@@ -45,7 +46,8 @@ public sealed class CorpusScriptsCompatibilityTests
             Assert.That(low, Is.EqualTo(Version.Parse(FIRST_WITH_THE_SCRIPTS_ACTIVITIES)), "the range starts at the first controller that has the scripts' activities");
             Assert.That(Script, Does.Contain("Corpus.ProcessPackage("));
             Assert.That(Script, Does.Contain("Corpus.RepairRate(opts)"), "which is why it starts there");
-            Assert.That(Script, Does.Contain("Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, opts)"), "and the options handed to the integrity document");
+            Assert.That(Script, Does.Contain("Corpus.Disputes(tasks, executions, repairs, repaired, disputes, resolved)"), "the second dispute round, which is why it starts at 0.9.0");
+            Assert.That(Script, Does.Contain("Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, undecided, settled, opts)"), "and that round and the options handed to the integrity document");
             Assert.That(build, Is.GreaterThanOrEqualTo(low).And.LessThan(high), "the controller of this build is inside the range");
             Assert.That(Version.Parse(RELEASE), Is.GreaterThanOrEqualTo(low).And.LessThan(high), "and so is the release: a range that ends at 1.0.0 refuses it");
             Assert.That(high, Is.EqualTo(new Version(2, 0, 0)), "the next major after the 1.x line, exclusive");

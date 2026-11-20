@@ -43,5 +43,13 @@ public sealed class ShardOriginRefusedException : Exception
     /// <summary>The refusal's code.</summary>
     public string Code { get; }
 
+    /// <summary>
+    /// Whether the refusal rests on this node's own resolver: a public origin whose name resolved
+    /// here to no public address (a filtering resolver, a captive network). The name of a public
+    /// origin is the same for every node, its addresses are what this node was told: a fault of
+    /// the node, run again elsewhere, never a verdict on the shard.
+    /// </summary>
+    public bool IsTheNodesResolver => string.Equals(Code, Trust.CorpusResultCodes.ORIGIN_ADDRESS, StringComparison.Ordinal);
+
     #endregion
 }

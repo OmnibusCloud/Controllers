@@ -164,7 +164,7 @@ public static class ShardTaskRunner
 
             try
             {
-                var modelPath = await ShardBlobTransfer.DownloadAsync(blobs, task.Pipeline.LanguageModelBlobId, logger, cancellationToken);
+                var modelPath = await ShardBlobTransfer.DownloadAsync(blobs, task.Pipeline.LanguageModelBlobId, LanguageModelLimits.MAX_BYTES, logger, cancellationToken);
                 model = ShardLanguageModels.Load(modelPath, task.Pipeline.LanguageModelSha256 ?? "");
             }
             catch (FormatException)
@@ -188,11 +188,16 @@ public static class ShardTaskRunner
         var windowQueued = Stopwatch.StartNew();
         await WINDOW.WaitAsync(cancellationToken);
         var windowWait = windowQueued.Elapsed;
+        ShardDiskReservation? room = null;
         try
         {
             beforeFetch?.Invoke();
 
-            if (!ShardDisk.HasRoom(workDirectory, ShardBatchGuard.ShardBytes(task)))
+            // The room the shard may take at the most, reserved before a byte is fetched and
+            // held until its files are gone: the shard (the cap when it has no size) and the most
+            // its products may be. It waits while the node's other shards hold the room.
+            room = await ShardDiskReservations.ReserveAsync(workDirectory, ShardDisk.Needed(ShardBatchGuard.RoomBytes(task), task.Pipeline), cancellationToken);
+            if (room == null)
                 return Fault(result, CorpusResultCodes.FAULT_DISK_SPACE, null, logger);
 
             try
@@ -215,20 +220,28 @@ public static class ShardTaskRunner
                 // Past the cap, or past what the manifest declared for it: the shard's, on any node.
                 return Verdict(result, CorpusShardVerdict.Oversized, ShardLimits.DeclaredBinds(task) ? CorpusResultCodes.OVERSIZED_DECLARED : CorpusResultCodes.OVERSIZED);
             }
+            catch (ShardOriginRefusedException exception) when (exception.IsTheNodesResolver)
+            {
+                // A public origin's name resolved here to no public address: this node's resolver
+                // said so, not the shard. Another node runs it.
+                return Fault(result, CorpusResultCodes.FAULT_NETWORK, exception, logger);
+            }
             catch (ShardOriginRefusedException exception)
             {
-                // A redirect off the list, or a name that resolves into the machine's own network.
+                // A redirect off the list or off what this machine fetches from.
                 return Verdict(result, CorpusShardVerdict.OriginRefused, exception.Code);
             }
-            catch (ShardFetchException exception) when (exception.Status is { } status)
+            catch (ShardFetchException exception) when (exception.Status is { } status && !exception.MayBeTheNodes)
             {
                 // The origin answered, and its answer is not the shard.
                 return Verdict(result, CorpusShardVerdict.FetchFailed, CorpusResultCodes.Http((int)status));
             }
             catch (ShardFetchException exception)
             {
-                // Nobody answered this node: its link or the origin, and it cannot tell which.
-                return Fault(result, CorpusResultCodes.FAULT_NETWORK, exception.InnerException, logger);
+                // Nobody answered this node, or a server error or a request to slow down outlasted
+                // the retries: its link, a gateway or proxy in front of it, or the origin, and it
+                // cannot tell which. Another node runs the shard.
+                return Fault(result, CorpusResultCodes.FAULT_NETWORK, exception.InnerException ?? exception, logger);
             }
             catch (ShardLocalFaultException exception)
             {
@@ -274,6 +287,11 @@ public static class ShardTaskRunner
             catch (ShardUnpackedOversizedException)
             {
                 return Verdict(result, CorpusShardVerdict.Oversized, CorpusResultCodes.OVERSIZED_UNPACKED);
+            }
+            catch (ShardProductOversizedException)
+            {
+                // More documents or more text than a shard of its size may give: the shard's, on any node.
+                return Verdict(result, CorpusShardVerdict.Oversized, CorpusResultCodes.OVERSIZED_PRODUCT);
             }
             finally
             {
@@ -327,8 +345,28 @@ public static class ShardTaskRunner
             // The shard's place in the window is its place on the disk: the shard and its
             // products go before the place is given to the next one.
             TryDelete(shardPath);
-            TryDelete(textPath);
-            TryDelete(signaturesPath);
+
+            // An upload call a transfer left running (its schedule spent, or the job cancelled)
+            // still reads its product: the products and their room on the disk go when it ends,
+            // not before.
+            var held = new[] { ShardBlobTransfer.HeldBy(textPath), ShardBlobTransfer.HeldBy(signaturesPath) }.OfType<Task>().ToArray();
+            if (held.Length == 0)
+            {
+                TryDelete(textPath);
+                TryDelete(signaturesPath);
+                room?.Dispose();
+            }
+            else
+            {
+                var heldRoom = room;
+                _ = Task.WhenAll(held).ContinueWith(_ =>
+                {
+                    TryDelete(textPath);
+                    TryDelete(signaturesPath);
+                    heldRoom?.Dispose();
+                }, TaskScheduler.Default);
+            }
+
             WINDOW.Release();
         }
     }

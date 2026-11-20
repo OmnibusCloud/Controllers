@@ -2,18 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-integrity.schema.json",
   "title": "Corpus integrity",
-  "description": "The integrity blob of CorpusProcess.wit, written from the server's own account of the run: what the results rest on and everything that did not go the plain way. sampling and rounds: the share of the packages the run asked to run on two machines and what came back of it, in a word and in a sentence, and for each round the packages that went out and the answers that came back, so that a run whose checking did not happen says so. pairs: the shards that came back twice, in the first round (the share CorpusOptions.SamplingRate asks for) or in the repair round (every shard of it, when the run asked for sampling), their two results compared on everything an honest node cannot vary (verdict, content hash, the hash of the signatures, document counts, drop and language histograms, the PDF counts). disputes: the shards whose copies disagreed, what up to three machines returned for each, and how each ended (outcome). no_result: the shards no machine returned an acceptable result for. rejected: the values dropped, by reason. A shard in none of these was run once and its result is one machine's word (single_execution). The platform keeps the copies of a shard on different machines and the document does not say which. The server sees values, not machines: in the first round and the repair round more values under a ticket than the round sent out are a dispute, in the dispute round they settle nothing, and there a value counts towards two machines only as far as it cannot be the second answer of a machine that left another package of the round short (outcome surplus_copies; a package is one shard in a job of up to 1,024 shards). Counting values as machines rests on the platform: Grid 1.3.0 and later keep, of what a node's batch returns, one value at most for each return variable its tasks asked for. With an older Grid a node could return several values for one task and this ruling would count them as machines. Version 7: version 6 with sampling and rounds, the repair round's pairs beside the first round's (round in every pair; repair_pairs, repair_compared and repair_mismatches in the summary) and repair_copies in a dispute's record: a shard that goes out again goes out on two machines when the run asked for sampling, and is ruled as a sampled shard of the first round is (up to version 6 it went to one machine, and two values under its ticket left it without a result). Version 6: the shape of version 5; tasks and results travel in packages, so a node that could not answer a package as a whole returns every shard of it as a fault (one more fault code, tasks: its task package did not arrive), and surplus also counts an answer beyond the ones a round opens for a package and two results for one shard in one answer. Version 5: version 4 let a result opt out of the comparison by the version it claimed, and chose the execution that stood for a shard by its own content hash.",
+  "description": "The integrity blob of CorpusProcess.wit, written from the server's own account of the run: what the results rest on and everything that did not go the plain way. sampling and rounds: the share of the packages the run asked to run on two machines and what came back of it, in a word and in a sentence, and for each round the packages that went out and the answers that came back, so that a run whose checking did not happen says so. pairs: the shards that came back twice, in the first round (the share CorpusOptions.SamplingRate asks for) or in the repair round (every shard of it, when the run asked for sampling), their two results compared on everything an honest node cannot vary (verdict, content hash, the hash of the signatures, document counts, drop and language histograms, the PDF counts). disputes: the shards whose copies disagreed, what up to three machines returned for each, and how each ended (outcome). no_result: the shards no machine returned an acceptable result for. rejected: the values dropped, by reason. A shard in none of these was run once and its result is one machine's word (single_execution). The platform keeps the copies of a shard on different machines and the document does not say which. The server sees values, not machines: in the first round and the repair round more values under a ticket than the round sent out are a dispute, in the dispute round they settle nothing, and there a value counts towards two machines only as far as it cannot be the second answer of a machine that left another package of the round short (outcome surplus_copies; a package is one shard in a job of up to 1,024 shards). Counting values as machines rests on the platform: Grid 1.3.0 and later keep, of what a node's batch returns, one value at most for each return variable its tasks asked for. With an older Grid a node could return several values for one task and this ruling would count them as machines. Version 8: version 7 with the second dispute round: a dispute the dispute round left with too few copies, or with a lead that may be one machine's second answers, goes out once more on three machines (again in its record, disputes_again and disputes_again_resolved in the summary, dispute_again in rounds), and a value under no ticket of the round no longer counts as a second answer one machine may have given. Version 7: version 6 with sampling and rounds, the repair round's pairs beside the first round's (round in every pair; repair_pairs, repair_compared and repair_mismatches in the summary) and repair_copies in a dispute's record: a shard that goes out again goes out on two machines when the run asked for sampling, and is ruled as a sampled shard of the first round is (up to version 6 it went to one machine, and two values under its ticket left it without a result). Version 6: the shape of version 5; tasks and results travel in packages, so a node that could not answer a package as a whole returns every shard of it as a fault (one more fault code, tasks: its task package did not arrive), and surplus also counts an answer beyond the ones a round opens for a package and two results for one shard in one answer. Version 5: version 4 let a result opt out of the comparison by the version it claimed, and chose the execution that stood for a shard by its own content hash.",
   "type": "object",
   "required": ["schema", "controller", "summary", "sampling", "rounds", "rejected", "pairs", "disputes", "no_result"],
   "additionalProperties": false,
   "properties": {
-    "schema": { "const": "corpus-integrity/7" },
+    "schema": { "const": "corpus-integrity/8" },
     "controller": { "type": "string", "description": "The server's controller version: the only one a result of this run carries." },
     "sampling": { "$ref": "#/$defs/sampling" },
     "rounds": { "$ref": "#/$defs/rounds" },
     "summary": {
       "type": "object",
-      "required": ["shards", "single_execution", "sampled", "compared", "version_skew", "incomplete", "mismatches", "mismatch_rate", "signatures_compared", "signature_mismatches", "rejected_results", "node_faults", "repairs", "repaired", "repair_pairs", "repair_compared", "repair_mismatches", "no_result", "disputes", "disputes_resolved", "disputed"],
+      "required": ["shards", "single_execution", "sampled", "compared", "version_skew", "incomplete", "mismatches", "mismatch_rate", "signatures_compared", "signature_mismatches", "rejected_results", "node_faults", "repairs", "repaired", "repair_pairs", "repair_compared", "repair_mismatches", "no_result", "disputes", "disputes_resolved", "disputed", "disputes_again", "disputes_again_resolved"],
       "additionalProperties": false,
       "properties": {
         "shards": { "type": "integer", "description": "The shards of the job." },
@@ -36,7 +36,9 @@
         "no_result": { "type": "integer", "description": "Shards that ended without a result (NoResult in the report)." },
         "disputes": { "type": "integer", "description": "Shards whose copies disagreed, or that came back more often than they were sent out, in the first round or in the repair round." },
         "disputes_resolved": { "type": "integer", "description": "Of those, the ones settled by the most machines, two at least, without a tie." },
-        "disputed": { "type": "integer", "description": "Of those, the ones that stayed open (Disputed in the report): out of the counts and the products." }
+        "disputed": { "type": "integer", "description": "Of those, the ones that stayed open (Disputed in the report): out of the counts and the products." },
+        "disputes_again": { "type": "integer", "description": "Of the disputes, the ones that went out once more: the dispute round left them with too few copies, or with a lead that may be one machine's second answers." },
+        "disputes_again_resolved": { "type": "integer", "description": "Of those, the ones the second dispute round settled (they are in disputes_resolved too)." }
       }
     },
     "rejected": {
@@ -86,10 +88,22 @@
           "first_copies": { "type": "integer", "description": "The results with a verdict the first round returned for the shard." },
           "repair_copies": { "type": "integer", "description": "The results with a verdict the repair round returned for the shard; 0 for a shard the first round sent to the dispute round." },
           "copies": { "type": "integer", "description": "The results with a verdict the dispute round returned for it; 0 when more than three values came back (none is taken) or the round did not run." },
-          "agreeing": { "type": "integer", "description": "The most of those that agree with one another; when resolved, the results the accepted one rests on (executions in the report)." },
-          "outcome": { "type": "string", "enum": ["resolved", "no_majority", "too_few_copies", "surplus_copies"], "description": "resolved: one result was returned by the most machines, two at least, without a tie, and it is the shard's. The others leave the shard Disputed in the report. no_majority: no result was returned by more copies than any other, and by two at least. too_few_copies: fewer than two copies came back with a verdict (the round did not run, or more than three values came back and none was taken). surplus_copies: the leading result does not lead by two machines once the values that may be one machine's second are left out; as many of them may be as the other shards of the dispute round are short of their three." },
+          "agreeing": { "type": "integer", "description": "The most of the dispute round's results that agree with one another; when the dispute round resolved the dispute, the results the accepted one rests on (executions in the report). A dispute resolved in the second dispute round rests on again.agreeing." },
+          "outcome": { "type": "string", "enum": ["resolved", "no_majority", "too_few_copies", "surplus_copies"], "description": "How the dispute ended: in the second dispute round when it went out again (again). resolved: one result was returned by the most machines, two at least, without a tie, and it is the shard's. The others leave the shard Disputed in the report. no_majority: no result was returned by more copies than any other, and by two at least. too_few_copies: fewer than two copies came back with a verdict (the round did not run, or more than three values came back and none was taken). surplus_copies: the leading result does not lead by two machines once the values that may be one machine's second are left out; as many of them may be as the other shards of the round are short of their three, and no more than the slots of the round that brought nothing at all. A dispute round that ends too_few_copies or surplus_copies sends the shard out once more." },
           "results": { "type": "array", "items": { "$ref": "#/$defs/side" }, "description": "What came back in the dispute round, in the order the platform handed it over." },
-          "accepted": { "$ref": "#/$defs/side", "description": "Present when resolved: the accepted result." }
+          "again": {
+            "type": "object",
+            "description": "Present when the dispute round left the shard with too few copies or a lead that may be one machine's, and it went out once more on three machines: that round.",
+            "required": ["after", "copies", "agreeing", "results"],
+            "additionalProperties": false,
+            "properties": {
+              "after": { "type": "string", "enum": ["too_few_copies", "surplus_copies"], "description": "How the dispute round ended: why the shard went out again." },
+              "copies": { "type": "integer", "description": "The results with a verdict the second dispute round returned." },
+              "agreeing": { "type": "integer", "description": "The most of those that agree with one another; when the second round resolved the dispute, the results the accepted one rests on (executions in the report)." },
+              "results": { "type": "array", "items": { "$ref": "#/$defs/side" }, "description": "What came back in the second dispute round, in the order the platform handed it over." }
+            }
+          },
+          "accepted": { "$ref": "#/$defs/side", "description": "Present when resolved, in the dispute round or in the second: the accepted result." }
         }
       }
     },
@@ -127,12 +141,13 @@
     "rounds": {
       "type": "object",
       "description": "How each round's fan-out came back, counted before any answer is opened: an answer counts whatever it held (results, a fault of its node, nothing readable). A round that was not run has zeros.",
-      "required": ["first", "repair", "dispute"],
+      "required": ["first", "repair", "dispute", "dispute_again"],
       "additionalProperties": false,
       "properties": {
         "first": { "$ref": "#/$defs/round", "description": "The first round: every package once, and the ones the platform picked for the run's sampling a second time on another machine." },
         "repair": { "$ref": "#/$defs/round", "description": "The repair round: the shards the first round left without a result, on two machines when the run asked for sampling, on one otherwise." },
-        "dispute": { "$ref": "#/$defs/round", "description": "The dispute round: the shards whose copies disagreed, on three machines." }
+        "dispute": { "$ref": "#/$defs/round", "description": "The dispute round: the shards whose copies disagreed, on three machines." },
+        "dispute_again": { "$ref": "#/$defs/round", "description": "The second dispute round: the disputes the dispute round left with too few copies, or with a lead that may be one machine's second answers, on three machines once more (no package under a script written for a controller before 0.9.0)." }
       }
     },
     "round": {
@@ -152,7 +167,7 @@
     "fault": {
       "type": "string",
       "enum": ["disk", "disk_space", "network", "language_model", "pdf_sandbox", "pdf_backstop", "upload", "memory", "internal", "tasks"],
-      "description": "A node's fault, a fixed code: disk (a local file could not be written or read), disk_space (no room for the shard), network (the origin did not answer this node after every retry), language_model (the model did not arrive or does not match its pin), pdf_sandbox (the PDF sandbox failed to run a document), pdf_backstop (a PDF ran into the wall-clock backstop with fuel left), upload (a product or the results could not be uploaded), memory (out of memory), internal (anything else inside the node), tasks (the task package did not arrive on the node, or arrived as other bytes than its reference names: every shard of that package)."
+      "description": "A node's fault, a fixed code: disk (a local file could not be written or read), disk_space (no room for the shard), network (the origin did not answer this node with the shard after every retry: no connection or answer head, a broken body, a 5xx or 429 that outlasted the retries, a 407, a public origin's name the node's resolver turned into an address that is not public), language_model (the model did not arrive or does not match its pin), pdf_sandbox (the PDF sandbox failed to run a document), pdf_backstop (a PDF ran into the wall-clock backstop with fuel left), upload (a product or the results could not be uploaded), memory (out of memory), internal (anything else inside the node), tasks (the task package did not arrive on the node, or arrived as other bytes than its reference names: every shard of that package)."
     },
     "side": {
       "type": "object",

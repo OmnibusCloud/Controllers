@@ -112,6 +112,12 @@ public sealed class ShardStatsBuilder
         return m_pdf.Fuel;
     }
 
+    /// <summary>Counts one PDF the stage hands to its sandbox (not on the wire: the PDF counts say how each ended).</summary>
+    public void PdfRun()
+    {
+        PdfRuns++;
+    }
+
     /// <summary>Counts one PDF that gave documents.</summary>
     /// <param name="pages">Its pages.</param>
     /// <param name="documents">The page-range documents it gave.</param>
@@ -172,6 +178,9 @@ public sealed class ShardStatsBuilder
 
     /// <summary>Documents in the product so far.</summary>
     public int DocumentsOut { get; private set; }
+
+    /// <summary>The shard's PDFs handed to the sandbox so far.</summary>
+    public int PdfRuns { get; private set; }
 
     #endregion
 }

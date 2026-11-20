@@ -68,7 +68,7 @@ public sealed class ShardFetcherM4Tests
     }
 
     [Test]
-    public void M4AnOriginThatNeverStopsAskingIsAVerdictWithItsStatusTest()
+    public void M4AnOriginThatNeverStopsAskingGivesUpWithItsStatusTest()
     {
         using var origin = new CorpusTestOrigin(Fixtures());
         var fetcher = new ShardFetcher(new ShardFetchPolicy(3, TimeSpan.Zero, TimeSpan.FromSeconds(60), ThrottleAttempts: 4), CorpusTestOrigin.Policy);

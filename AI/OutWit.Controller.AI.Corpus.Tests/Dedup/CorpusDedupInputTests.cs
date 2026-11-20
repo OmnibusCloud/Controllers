@@ -218,7 +218,7 @@ public sealed class CorpusDedupInputTests
         Assert.Multiple(() =>
         {
             foreach (var text in hostile)
-                Assert.That(() => CorpusDedupInput.Read(Encoding.UTF8.GetBytes(text)), Throws.InvalidOperationException.With.Message.EqualTo("The report is not a corpus-report/5 document."), text);
+                Assert.That(() => CorpusDedupInput.Read(Encoding.UTF8.GetBytes(text)), Throws.InvalidOperationException.With.Message.EqualTo("The report is not a corpus-report/6 document."), text);
         });
     }
 

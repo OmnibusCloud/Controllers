@@ -45,8 +45,8 @@ public static class CorpusStageSet
     /// <summary>The format of the language data the language stage reads (WITLID1 models are still read, with Corpus 0.1.14's rule data).</summary>
     public const string LANGUAGE_FORMAT = Language.LanguageModelFormat.WITLID2;
 
-    /// <summary>The first line of the text the fingerprint hashes; moves when what it covers changes (<c>/3</c>: the case table and the reading limits).</summary>
-    public const string FINGERPRINT_SCHEMA = "corpus-stage-set/3";
+    /// <summary>The first line of the text the fingerprint hashes; moves when what it covers changes (<c>/3</c>: the case table and the reading limits; <c>/4</c>: the product's ceiling and the most words a document is judged in full by).</summary>
+    public const string FINGERPRINT_SCHEMA = "corpus-stage-set/4";
 
     /// <summary>
     /// The case handling of the stages as one line: the Unicode version and the hash of the
@@ -66,8 +66,16 @@ public static class CorpusStageSet
         $"html chars<={HtmlTextExtractor.MAX_HTML_CHARS} decoded bytes<={HttpResponsePayload.MAX_DECODE_BYTES} tags<={HtmlTextExtractor.MAX_TAGS} nesting<{HtmlTextExtractor.MAX_NESTING} elements<={HtmlTextExtractor.MAX_ELEMENTS} " +
         $"(pre-scan: {ShardProcessor.DROP_HTML_REFUSED}; parser: {ShardProcessor.DROP_HTML_TOO_COMPLEX}; a failure of the parser's own: {ShardProcessor.DROP_HTML_ERROR}); charset utf-7: {ShardProcessor.DROP_UNSUPPORTED_CHARSET}");
 
+    /// <summary>
+    /// The limits a shard's product is held to, as one line: a product past the ceiling is a
+    /// verdict, and a document past the most words judged in full drops, whatever a manifest or
+    /// a pack says; each decides what a shard's product is, so each is a part of the fingerprint.
+    /// </summary>
+    public static readonly string PRODUCT = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+        $"{ShardProductLimits.DESCRIPTOR}; judged in full<={ShardQualityRules.MAX_WORDS} words, {ShardQualityRules.MAX_LETTERS} letters of a script without spaces (more: max_words)");
+
     /// <summary>The pinned fingerprint: <see cref="Compose"/> of the benchmark's reference product and this controller's PDF stage.</summary>
-    public const string PINNED_SHA256 = "2f691cec7accdc309207b9859a3193636b2809119020d846fb6c30b0af994678";
+    public const string PINNED_SHA256 = "a2c14bd7eb7e181488f7876dde68fa3edf16be20316cf4dedcbfd27c2dcc4523";
 
     #endregion
 
@@ -87,7 +95,7 @@ public static class CorpusStageSet
     /// <returns>Lower-case hex SHA-256.</returns>
     public static string Compose(string referenceSha256)
     {
-        var text = $"{FINGERPRINT_SCHEMA}\nreference {referenceSha256}\npdf {PdfStageLimits.DESCRIPTOR}\ncasing {CASING}\nreading {READING}\n";
+        var text = $"{FINGERPRINT_SCHEMA}\nreference {referenceSha256}\npdf {PdfStageLimits.DESCRIPTOR}\ncasing {CASING}\nreading {READING}\nproduct {PRODUCT}\n";
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
     }
 

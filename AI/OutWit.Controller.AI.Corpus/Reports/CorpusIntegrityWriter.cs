@@ -27,7 +27,11 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// <item><b>disputes</b>: every shard whose copies disagreed, what three machines returned for it
 /// and how it ended (<c>outcome</c>): <c>resolved</c> (the most of them, two at least and without
 /// a tie, returned the same), <c>no_majority</c>, <c>too_few_copies</c> or
-/// <c>surplus_copies</c>.</item>
+/// <c>surplus_copies</c>. A dispute that came back with too few copies, or with a lead that may be
+/// one machine's second answers, went out once more on three machines: its record then holds
+/// that round as well (<c>again</c>), and <c>outcome</c> and <c>accepted</c> are how the second
+/// round ended; <c>copies</c>, <c>agreeing</c> and <c>results</c> stay the dispute round's, and a
+/// dispute the second round resolved rests on <c>again.agreeing</c>.</item>
 /// <item><b>no_result</b>: every shard no machine returned an acceptable result for, with the
 /// fixed reason and the fault codes the nodes gave.</item>
 /// <item><b>rejected</b>: the values dropped, by reason: no ticket of this job and round
@@ -36,7 +40,10 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// under one ticket than a round takes (<c>surplus</c>). Every reason is written, 0 included.</item>
 /// </list>
 /// A shard in none of these lists was run once, and its result is one machine's word
-/// (<c>single_execution</c> says how many). Schema <c>corpus-integrity/7</c>: <c>/6</c> with
+/// (<c>single_execution</c> says how many). Schema <c>corpus-integrity/8</c>: <c>/7</c> with the
+/// second dispute round (<c>again</c> in a dispute's record, <c>disputes_again</c> and
+/// <c>disputes_again_resolved</c> in the summary, <c>dispute_again</c> in <c>rounds</c>).
+/// <c>/7</c> was <c>/6</c> with
 /// <c>sampling</c> and <c>rounds</c>, the repair round's pairs beside the first round's (each
 /// pair says its <c>round</c>; three more counters in the summary), and <c>repair_copies</c> in
 /// a dispute's record, since a shard that goes out again goes out on two machines when the run
@@ -53,7 +60,7 @@ public static class CorpusIntegrityWriter
     #region Constants
 
     /// <summary>The document schema name.</summary>
-    public const string SCHEMA = "corpus-integrity/7";
+    public const string SCHEMA = "corpus-integrity/8";
 
     /// <summary>A compared pair's signatures: both sides made the same.</summary>
     public const string SIGNATURES_MATCH = "match";
@@ -158,6 +165,8 @@ public static class CorpusIntegrityWriter
         writer.WriteNumber("disputes", ledger.Disputes);
         writer.WriteNumber("disputes_resolved", ledger.DisputesResolved);
         writer.WriteNumber("disputed", ledger.Disputes - ledger.DisputesResolved);
+        writer.WriteNumber("disputes_again", ledger.DisputesAgain);
+        writer.WriteNumber("disputes_again_resolved", ledger.DisputesAgainResolved);
         writer.WriteEndObject();
 
         // What the run asked for in second executions, and how each round came back.
@@ -294,6 +303,21 @@ public static class CorpusIntegrityWriter
         foreach (var entry in shard.Dispute)
             WriteSide(writer, null, entry);
         writer.WriteEndArray();
+
+        // The second dispute round, for a dispute the first left with too few copies.
+        if (shard.SentToDisputeAgain && shard.AgainAfter.Length > 0)
+        {
+            writer.WriteStartObject("again");
+            writer.WriteString("after", shard.AgainAfter);
+            writer.WriteNumber("copies", shard.Again.Count(entry => entry.Kind == CorpusLedgerEntryKind.Execution));
+            writer.WriteNumber("agreeing", shard.AgainAgreeing);
+            writer.WriteStartArray("results");
+            foreach (var entry in shard.Again)
+                WriteSide(writer, null, entry);
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
         if (resolved)
             WriteSide(writer, "accepted", new CorpusLedgerEntry(CorpusLedgerEntryKind.Execution, shard.Accepted, ""));
         writer.WriteEndObject();

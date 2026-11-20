@@ -12,12 +12,15 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// reading. A retry after a broken body asks for the rest with a Range request and appends when
 /// the origin honours it (206); an origin that answers 200 starts the file over. Redirects are
 /// followed one hop at a time, each checked against the task's list and the machine's policy; a
-/// refusal there is final. A body must keep a floor rate over the whole attempt, so an origin that
-/// trickles cannot hold a download slot for ever.
+/// refusal there is final. Every hop has the stall limit to send its answer's head, so an origin
+/// that takes the request and never answers is a broken answer like a body that stalls. A body
+/// must keep a floor rate over the whole attempt, so an origin that trickles cannot hold a
+/// download slot for ever.
 /// <para>
 /// Three ways it can fail, kept apart because they mean different things to a run: the origin
-/// answered with a status that is not a success (<see cref="ShardFetchException.Status"/>: a
-/// statement about the shard), nobody answered or the answer kept breaking
+/// answered with a status that is not a success (<see cref="ShardFetchException.Status"/>; the
+/// caller decides whether it is a statement about the shard or may be this node's own trouble:
+/// <see cref="ShardFetchException.MayBeTheNodes"/>), nobody answered or the answer kept breaking
 /// (<see cref="ShardFetchException"/> without a status: possibly this node's own link), and a file
 /// of the node's own could not be written (<see cref="ShardLocalFaultException"/>: this node's
 /// disk).
@@ -212,7 +215,9 @@ public sealed class ShardFetcher
     {
         var have = resume ? Local(() => File.Exists(destinationPath) ? new FileInfo(destinationPath).Length : 0) : 0;
 
-        using var response = await ShardHttp.SendAsync(m_client, HttpMethod.Get, uri, have, allowedOrigins, m_origins, cancellationToken);
+        // The stall limit holds before the answer's head as after it, on every hop of a redirect:
+        // an origin that takes the request and never answers is a broken answer, not a wait.
+        using var response = await ShardHttp.SendAsync(m_client, HttpMethod.Get, uri, have, allowedOrigins, m_origins, cancellationToken, m_policy.ReadStall);
 
         if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
         {

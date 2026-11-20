@@ -37,18 +37,21 @@ public static class CorpusStorageEstimator
     /// <param name="inputBytes">The bytes of the manifest and the language model.</param>
     /// <param name="capBytes">The size a shard of unknown size is counted at: the cap the nodes hold it to. 0 leaves such shards out of the estimate (and the estimate says how many).</param>
     /// <param name="measuredThresholds">Whether the language model's rule data is the one the ratios were measured with (<see cref="CorpusStorageRatios.For"/>).</param>
+    /// <param name="bounds">The most each shard may be on the wire, aligned with the sources, as the nodes hold it (its declared size and the slack, the cap without one); null to take them from the sources' sizes. The product ceiling is counted from these.</param>
     /// <returns>The estimate.</returns>
-    public static CorpusStorageEstimate Estimate(IReadOnlyList<CorpusSourceData> sources, CorpusPipelineData pipeline, double samplingRate, long inputBytes, long capBytes = 0, bool measuredThresholds = true)
+    public static CorpusStorageEstimate Estimate(IReadOnlyList<CorpusSourceData> sources, CorpusPipelineData pipeline, double samplingRate, long inputBytes, long capBytes = 0, bool measuredThresholds = true, IReadOnlyList<long>? bounds = null)
     {
         var products = new List<long>(sources.Count);
+        var ceilings = new List<long>(sources.Count);
         long text = 0, signatures = 0, documents = 0;
         var unsized = 0;
         var keeps = pipeline.Output == CorpusOutputMode.Full;
         var signs = ShardProcessor.KeepsSignatures(pipeline);
         var minHash = MinHashParameters.Resolve(pipeline.MinHash);
 
-        foreach (var source in sources)
+        for (var index = 0; index < sources.Count; index++)
         {
+            var source = sources[index];
             var size = source.SizeBytes;
             if (size <= 0)
             {
@@ -56,11 +59,19 @@ public static class CorpusStorageEstimator
                 if (capBytes <= 0)
                 {
                     products.Add(0);
+                    ceilings.Add(0);
                     continue;
                 }
 
                 size = capBytes;
             }
+
+            // The most the shard is fetched as, as the nodes hold it, and the most a shard of that size may give.
+            var bound = bounds != null && index < bounds.Count && bounds[index] > 0 ? bounds[index]
+                : source.SizeBytes > 0 && capBytes > 0 ? Math.Min(capBytes, ShardLimits.DeclaredCap(size))
+                : source.SizeBytes > 0 ? ShardLimits.DeclaredCap(size)
+                : size;
+            ceilings.Add(ShardProductLimits.MaxUploadBytes(bound, pipeline));
 
             var ratio = CorpusStorageRatios.For(source.Format, pipeline, measuredThresholds);
             var shardText = keeps ? (long)Math.Ceiling(size * ratio.TextPerByte) : 0;
@@ -79,6 +90,8 @@ public static class CorpusStorageEstimator
         var sampled = SampledShards(packages.Count, samplingRate);
         var replicas = packages.OrderByDescending(bytes => bytes).Take(sampled).Sum();
         var sampledShards = Math.Min(sources.Count, sampled * perPackage);
+        var ceilingPackages = CorpusPackagePlanner.PackageSums(ceilings);
+        var ceiling = Saturated(ceilingPackages.Sum(), ceilingPackages.OrderByDescending(bytes => bytes).Take(sampled).Sum());
 
         return new CorpusStorageEstimate
         {
@@ -94,8 +107,15 @@ public static class CorpusStorageEstimator
             UnsizedSources = unsized,
             UnsizedAtCap = capBytes > 0,
             ProductsKept = keeps,
-            MeasuredFilter = !pipeline.FilterQuality || CorpusStorageRatios.FiltersAsMeasured(pipeline, measuredThresholds)
+            MeasuredFilter = !pipeline.FilterQuality || CorpusStorageRatios.FiltersAsMeasured(pipeline, measuredThresholds),
+            ProductCeilingBytes = ceiling
         };
+    }
+
+    /// <summary>A sum that stops at the largest number instead of wrapping.</summary>
+    private static long Saturated(long first, long second)
+    {
+        return first > long.MaxValue - second ? long.MaxValue : first + second;
     }
 
     /// <summary>How many items run twice: the platform's rule (a share above 0 selects at least one item, rounded up). The items are the job's packages: its shards, up to <see cref="CorpusPackagePlanner.MAX_PACKAGES"/> of them.</summary>

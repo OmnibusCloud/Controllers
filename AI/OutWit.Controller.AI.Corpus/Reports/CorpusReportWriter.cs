@@ -23,7 +23,8 @@ namespace OutWit.Controller.AI.Corpus.Reports;
 /// <see cref="CorpusFanOutWriter"/>): a run whose checking did not happen says so. No
 /// document says which machine ran what or what that machine is (its platform is named,
 /// <c>runtime_target</c>; its cores and memory are not), and no ticket is written. Schema
-/// <c>corpus-report/5</c>: the shape of <c>/4</c> with <c>sampling</c> and <c>rounds</c>;
+/// <c>corpus-report/6</c>: the shape of <c>/5</c> with the second dispute round in <c>rounds</c>
+/// (<c>dispute_again</c>). <c>corpus-report/5</c>: the shape of <c>/4</c> with <c>sampling</c> and <c>rounds</c>;
 /// <c>/3</c> also said how many shards the machine of each result ran at once (<c>degree</c>).
 /// </summary>
 public static class CorpusReportWriter
@@ -31,10 +32,10 @@ public static class CorpusReportWriter
     #region Constants
 
     /// <summary>The report schema name.</summary>
-    public const string SCHEMA = "corpus-report/5";
+    public const string SCHEMA = "corpus-report/6";
 
     /// <summary>The earlier report schemas Corpus.Dedup still reads: <c>/4</c> did not state the sampling asked for or how the rounds came back, <c>/3</c> said the degree of the node that ran each shard, <c>/2</c> chose between executions by what they said, <c>/1</c> also named the nodes.</summary>
-    public static readonly IReadOnlyList<string> PREVIOUS_SCHEMAS = ["corpus-report/4", "corpus-report/3", "corpus-report/2", "corpus-report/1"];
+    public static readonly IReadOnlyList<string> PREVIOUS_SCHEMAS = ["corpus-report/5", "corpus-report/4", "corpus-report/3", "corpus-report/2", "corpus-report/1"];
 
     /// <summary>The bytes the writer holds before it hands them to the stream.</summary>
     private const int FLUSH_BYTES = 1 << 16;
@@ -283,7 +284,10 @@ public static class CorpusReportWriter
     }
 
     /// <summary>A sum that stops at the largest number: the values are counts and bytes, never below zero.</summary>
-    private static long Sum(long sum, long value)
+    /// <param name="sum">The sum so far.</param>
+    /// <param name="value">The value to add.</param>
+    /// <returns>The sum, or <see cref="long.MaxValue"/> past it.</returns>
+    internal static long Sum(long sum, long value)
     {
         return value > long.MaxValue - sum ? long.MaxValue : sum + value;
     }

@@ -1,13 +1,15 @@
-using System.Runtime.InteropServices;
-
 namespace OutWit.Controller.AI.Corpus.Quality;
 
 /// <summary>
 /// A document's words as ids, so its n-grams can be counted without building a string for
-/// each: an n-gram is named by the position it starts at, and two positions name the same
-/// n-gram exactly when their id sequences are equal — the same equality as comparing the
-/// words joined by a space (a word never contains one). One dictionary of counts per n, keyed
-/// by the first position of each distinct n-gram, answers for any position.
+/// each: two positions hold the same n-gram exactly when their id sequences are equal — the same
+/// equality as comparing the words joined by a space (a word never contains one). Every position
+/// gets the class of its n-gram, numbered from 0: the classes of the n-grams are the ranks of the
+/// pairs (class of the (n-1)-gram at the position, id of the n-th word), sorted with two counting
+/// passes. No table is keyed by a hash of the words' ids: the words are the page's, and a hash
+/// the page could choose its words against would put every n-gram in one chain. The words are
+/// numbered by a table of the words themselves, whose string hashing the runtime draws per
+/// process.
 /// </summary>
 internal sealed class NgramIndex
 {
@@ -15,6 +17,11 @@ internal sealed class NgramIndex
 
     private readonly int[] m_ids;
     private readonly int[] m_lengths;
+    private readonly int m_distinct;
+
+    private int m_classesOf;
+    private int[] m_classes;
+    private int m_classCount;
 
     #endregion
 
@@ -34,23 +41,16 @@ internal sealed class NgramIndex
             m_ids[i] = id;
             m_lengths[i] = words[i].Length;
         }
+
+        m_distinct = ids.Count;
+        m_classesOf = 1;
+        m_classes = m_ids;
+        m_classCount = m_distinct;
     }
 
     #endregion
 
     #region Functions
-
-    /// <summary>The occurrence count of every n-gram, answerable by any position it starts at.</summary>
-    /// <param name="n">The n-gram length.</param>
-    /// <returns>Counts keyed by start position under sequence equality.</returns>
-    public Dictionary<int, int> Occurrences(int n)
-    {
-        var counts = new Dictionary<int, int>(Math.Max(0, m_ids.Length - n + 1), new SequenceComparer(m_ids, n));
-        for (var i = 0; i + n <= m_ids.Length; i++)
-            CollectionsMarshal.GetValueRefOrAddDefault(counts, i, out _)++;
-
-        return counts;
-    }
 
     /// <summary>
     /// The most frequent n-gram: the one with the most occurrences, overlapping ones included; on
@@ -61,14 +61,28 @@ internal sealed class NgramIndex
     /// <returns>The position it first occurs at and its occurrence count; (-1, 0) when the document has fewer than n words.</returns>
     public (int Start, int Count) MostFrequent(int n)
     {
+        if (n < 1 || m_ids.Length < n)
+            return (-1, 0);
+
+        var (classes, count) = ClassesOf(n);
+        var occurrences = new int[count];
+        var first = new int[count];
+        Array.Fill(first, -1);
+        for (var i = 0; i + n <= m_ids.Length; i++)
+        {
+            occurrences[classes[i]]++;
+            if (first[classes[i]] < 0)
+                first[classes[i]] = i;
+        }
+
         var start = -1;
         var top = 0;
-        foreach (var (first, count) in Occurrences(n))
+        for (var c = 0; c < count; c++)
         {
-            if (count > top || (count == top && first < start))
+            if (occurrences[c] > top || (occurrences[c] == top && first[c] < start))
             {
-                start = first;
-                top = count;
+                start = first[c];
+                top = occurrences[c];
             }
         }
 
@@ -86,19 +100,23 @@ internal sealed class NgramIndex
     /// <returns>The characters of the repeats' words (separators not included).</returns>
     public long RepeatedChars(int n)
     {
-        var seen = new HashSet<int>(Math.Max(0, m_ids.Length - n + 1), new SequenceComparer(m_ids, n));
+        if (n < 1 || m_ids.Length < n)
+            return 0;
+
+        var (classes, count) = ClassesOf(n);
+        var seen = new bool[count];
         long chars = 0;
         var index = 0;
         while (index + n <= m_ids.Length)
         {
-            if (seen.Contains(index))
+            if (seen[classes[index]])
             {
                 chars += Chars(index, n);
                 index += n;
             }
             else
             {
-                seen.Add(index);
+                seen[classes[index]] = true;
                 index++;
             }
         }
@@ -120,31 +138,86 @@ internal sealed class NgramIndex
 
     #endregion
 
+    #region Tools
+
+    /// <summary>
+    /// The class of the n-gram at every position where one starts, and how many classes there
+    /// are. The filter asks for n = 2, 3, 4, then 5 to 10: each is made from the last one asked
+    /// for, a smaller n from the words again.
+    /// </summary>
+    private (int[] Classes, int Count) ClassesOf(int n)
+    {
+        if (n < m_classesOf)
+        {
+            m_classesOf = 1;
+            m_classes = m_ids;
+            m_classCount = m_distinct;
+        }
+
+        while (m_classesOf < n)
+        {
+            (m_classes, m_classCount) = Extend(m_classes, m_classCount, m_classesOf);
+            m_classesOf++;
+        }
+
+        return (m_classes, m_classCount);
+    }
+
+    /// <summary>
+    /// The classes of the (length + 1)-grams from those of the length-grams: the pairs (class at
+    /// i, id of the word at i + length) ranked by a counting sort on the word, then a stable one
+    /// on the class; equal pairs, equal class.
+    /// </summary>
+    private (int[] Classes, int Count) Extend(int[] classes, int classCount, int length)
+    {
+        var positions = m_ids.Length - length;
+        if (positions <= 0)
+            return (Array.Empty<int>(), 0);
+
+        // By the next word: a counting sort over the word ids.
+        var byWord = new int[positions];
+        var counts = new int[Math.Max(m_distinct, classCount) + 1];
+        for (var i = 0; i < positions; i++)
+            counts[m_ids[i + length] + 1]++;
+        for (var v = 1; v <= m_distinct; v++)
+            counts[v] += counts[v - 1];
+        for (var i = 0; i < positions; i++)
+            byWord[counts[m_ids[i + length]]++] = i;
+
+        // Then by the class of what comes before it, keeping the order by word between equals.
+        Array.Clear(counts);
+        for (var i = 0; i < positions; i++)
+            counts[classes[i] + 1]++;
+        for (var v = 1; v <= classCount; v++)
+            counts[v] += counts[v - 1];
+        var sorted = new int[positions];
+        foreach (var i in byWord)
+            sorted[counts[classes[i]]++] = i;
+
+        var next = new int[positions];
+        var count = 0;
+        for (var at = 0; at < positions; at++)
+        {
+            var i = sorted[at];
+            if (at > 0)
+            {
+                var previous = sorted[at - 1];
+                if (classes[previous] != classes[i] || m_ids[previous + length] != m_ids[i + length])
+                    count++;
+            }
+
+            next[i] = count;
+        }
+
+        return (next, count + 1);
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>Words in the document.</summary>
     public int Count => m_ids.Length;
-
-    #endregion
-
-    #region Types
-
-    /// <summary>Two start positions are equal when the n ids from each are equal.</summary>
-    private sealed class SequenceComparer(int[] ids, int n) : IEqualityComparer<int>
-    {
-        public bool Equals(int first, int second)
-        {
-            return first == second || ids.AsSpan(first, n).SequenceEqual(ids.AsSpan(second, n));
-        }
-
-        public int GetHashCode(int start)
-        {
-            var hash = 17;
-            for (var i = start; i < start + n; i++)
-                hash = unchecked(hash * 31 + ids[i]);
-            return hash;
-        }
-    }
 
     #endregion
 }

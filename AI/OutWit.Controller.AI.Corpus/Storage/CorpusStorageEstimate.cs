@@ -35,7 +35,8 @@ public sealed class CorpusStorageEstimate : ModelBase
                && UnsizedSources.Is(other.UnsizedSources)
                && UnsizedAtCap.Is(other.UnsizedAtCap)
                && ProductsKept.Is(other.ProductsKept)
-               && MeasuredFilter.Is(other.MeasuredFilter);
+               && MeasuredFilter.Is(other.MeasuredFilter)
+               && ProductCeilingBytes.Is(other.ProductCeilingBytes);
     }
 
     /// <summary>Deep copy.</summary>
@@ -56,7 +57,8 @@ public sealed class CorpusStorageEstimate : ModelBase
             UnsizedSources = UnsizedSources,
             UnsizedAtCap = UnsizedAtCap,
             ProductsKept = ProductsKept,
-            MeasuredFilter = MeasuredFilter
+            MeasuredFilter = MeasuredFilter,
+            ProductCeilingBytes = ProductCeilingBytes
         };
     }
 
@@ -109,6 +111,16 @@ public sealed class CorpusStorageEstimate : ModelBase
 
     /// <summary>Of <see cref="PackageBytes"/>, the result packages: the part the nodes upload (the task packages are the server's).</summary>
     public long ResultPackageBytes { get; init; }
+
+    /// <summary>
+    /// The most the products of the first round's executions may be, whoever wrote the manifest and
+    /// whatever the origins serve: each shard at the most the nodes fetch it as (its declared size
+    /// and the slack, the cap without a size) and its product at the most a shard of that size may
+    /// give (<see cref="Shards.ShardProductLimits.MaxUploadBytes"/>); the largest packages twice for
+    /// the sampled ones. A repair or a dispute uploads its products again, each held to the same
+    /// ceiling. 0 for statistics and hashes only, and for shards left out of the estimate.
+    /// </summary>
+    public long ProductCeilingBytes { get; init; }
 
     /// <summary>What the nodes upload: the products of every execution (text, signatures, the second copies of the sampled shards) and the result packages. The server writes the task packages and the documents itself.</summary>
     public long UploadBytes => TextBytes + SignatureBytes + ReplicaBytes + ResultPackageBytes;
