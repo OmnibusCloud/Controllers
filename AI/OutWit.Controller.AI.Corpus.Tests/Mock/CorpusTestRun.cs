@@ -112,7 +112,8 @@ internal static class CorpusTestRun
                 DocumentsOut = documentsOut,
                 Languages = Counts(languages),
                 Drops = Counts(drops),
-                BytesFetched = 1000,
+                // More documents than any shard may give need the bytes a shard gives them from (one a 512 bytes).
+                BytesFetched = documentsOut > ShardProductLimits.MIN_DOCUMENTS ? (long)documentsOut * 512 : 1000,
                 BytesProduced = 300,
                 FetchMs = 10,
                 ProcessMs = 20

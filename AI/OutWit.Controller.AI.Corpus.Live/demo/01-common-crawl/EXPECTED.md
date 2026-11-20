@@ -3,7 +3,9 @@
 Measured locally with Corpus 0.3.0 and measured again with 0.4.0, with 0.5.0 and with 0.6.0, which give the
 same 24 content hashes, signatures hashes and counters (the stages' diagnostics test
 `DemoKitPinsDiagnosticsTests` runs the files against `shards.tsv`); 0.7.0 and 0.8.0 change no stage, and their
-stage set's fingerprint is the one of those. The 24 files of `manifest.json` (their SHA-256 checked
+stage set's fingerprint is the one of those; 0.9.0 adds limits to the stages (a document judged in full up to
+100,000 words, a ceiling on a shard's product, 4,096 PDF runs a shard) that no file of the kit comes near, so
+its numbers are these too, under another fingerprint. The 24 files of `manifest.json` (their SHA-256 checked
 against the manifest) through the stage pipeline of the controller, the manifest's pipeline and
 the reference language pack `cc-2026-43-16`. A shard's product is a function of its bytes and the
 pipeline, so these numbers are the fleet's: the same content hashes and counters on any node and
@@ -12,7 +14,7 @@ platform. What only a fleet can measure is marked *fleet*, to be filled in from 
 ## The report
 
 ```
-report     : corpus-report/5, controller 0.8.0, output stats_and_hashes
+report     : corpus-report/6, controller 0.9.0, output stats_and_hashes
 shards     : 24 (Completed 24)
 fetched    : 1,584,054,229 bytes; the product would be 448,706,065 bytes compressed
 funnel     : records 515,379 > extracted 515,355 > language 453,528 > lines 427,293 > quality 273,891 = out 273,891
@@ -68,7 +70,7 @@ shards the kit does not expect: 0
 | Content hashes | the 24 of `shards.tsv`, identity `c4b62530…f9eb50d9f4aa72` | the same |
 | Signatures hashes | the 24 of `shards.tsv`, identity `f661f7a9…cfd4fbb7` | the same |
 | Text and signature blobs | none (the signatures are made and hashed on the nodes: their hashes are in `shards.tsv`) | none |
-| Integrity at `--sampling 0.25` (`corpus-integrity/7`) | 6 shards run twice, *fleet*: 6 compared, 6 with their signatures compared, 0 mismatches expected; `sampling.state` `as_asked` (6 asked twice, 6 answered twice), no package unanswered in any round; rejected results 0, node faults 0, repairs 0, no result 0, disputes 0 expected of an honest fleet with a working link | the same |
+| Integrity at `--sampling 0.25` (`corpus-integrity/8`) | 6 shards run twice, *fleet*: 6 compared, 6 with their signatures compared, 0 mismatches expected; `sampling.state` `as_asked` (6 asked twice, 6 answered twice), no package unanswered in any round; rejected results 0, node faults 0, repairs 0, no result 0, disputes 0 expected of an honest fleet with a working link | the same |
 | Wall time | *fleet* (about 50 s of processing at the test fleet's 30.6 MB/s of WET, plus the fetch) | *fleet* |
 | `corpus-live dedup` | refused: "The run kept statistics and hashes only (pipeline output "stats_and_hashes"): it has no signatures, …" | — |
 

@@ -937,7 +937,8 @@ stage's included.
 | | Value |
 |---|---|
 | shard on the wire | 1 GiB (`MaxShardBytes` may lower it); a shard with a declared size, that size and an eighth more, 1 MiB at least (more: `Oversized`, `oversized_declared`) |
-| manifest | 256 MiB; 1,048,576 sources; 4 MiB a value; 64 keys at its root; the first 100 problems listed (512 characters each), 20 hosts named |
+| manifest | 256 MiB; 1,048,576 sources; 4 MiB a value; the first 100 problems listed (512 characters each), 20 hosts named |
+| a document's root (a manifest, a report given to `Corpus.Dedup`) | 64 keys (more: not valid JSON, by name) |
 | packages | 1,024 a round; 1,024 shards a package; a frame of 256 KiB for what the tasks share, 16 KiB a task, 128 KiB a result |
 | record | 8 MiB in a WET shard, 64 MiB in a WARC shard (larger: skipped and counted, `record_oversized`) |
 | unpacked shard | 32 times its size on the wire, 64 MiB at least, 16 GiB at most (more: `Oversized`, `oversized_unpacked`) |

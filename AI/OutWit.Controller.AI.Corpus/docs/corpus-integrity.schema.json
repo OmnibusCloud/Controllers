@@ -167,7 +167,7 @@
     "fault": {
       "type": "string",
       "enum": ["disk", "disk_space", "network", "language_model", "pdf_sandbox", "pdf_backstop", "upload", "memory", "internal", "tasks"],
-      "description": "A node's fault, a fixed code: disk (a local file could not be written or read), disk_space (no room for the shard), network (the origin did not answer this node after every retry), language_model (the model did not arrive or does not match its pin), pdf_sandbox (the PDF sandbox failed to run a document), pdf_backstop (a PDF ran into the wall-clock backstop with fuel left), upload (a product or the results could not be uploaded), memory (out of memory), internal (anything else inside the node), tasks (the task package did not arrive on the node, or arrived as other bytes than its reference names: every shard of that package)."
+      "description": "A node's fault, a fixed code: disk (a local file could not be written or read), disk_space (no room for the shard), network (the origin did not answer this node with the shard after every retry: no connection or answer head, a broken body, a 5xx or 429 that outlasted the retries, a 407, a public origin's name the node's resolver turned into an address that is not public), language_model (the model did not arrive or does not match its pin), pdf_sandbox (the PDF sandbox failed to run a document), pdf_backstop (a PDF ran into the wall-clock backstop with fuel left), upload (a product or the results could not be uploaded), memory (out of memory), internal (anything else inside the node), tasks (the task package did not arrive on the node, or arrived as other bytes than its reference names: every shard of that package)."
     },
     "side": {
       "type": "object",

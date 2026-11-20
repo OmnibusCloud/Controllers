@@ -10,6 +10,7 @@ using OutWit.Controller.AI.Corpus.Diagnostics;
 using OutWit.Controller.AI.Corpus.Json;
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Pdf;
 using OutWit.Controller.AI.Corpus.Reports;
 using OutWit.Controller.AI.Corpus.Shards;
 using OutWit.Controller.AI.Corpus.Storage;
@@ -189,7 +190,13 @@ public sealed class CorpusDocsNumbersTests
             Assert.That(Reference, Does.Contain($"| size probes | {ShardSizeProbe.MAX_PROBES} sources drawn at random (half without a size, half with one), {probe} |"));
             Assert.That(Reference, Does.Contain($"| traffic allowance | {allowance} of the fetches |"));
             Assert.That(Reference, Does.Contain($"a report of {report} at most ({perShard} bytes for each shard a job may have)"));
-            Assert.That(Reference, Does.Contain($"`{CorpusResultCodes.OVERSIZED}`, `{CorpusResultCodes.OVERSIZED_DECLARED}`, `{CorpusResultCodes.OVERSIZED_UNPACKED}` |"));
+            Assert.That(Reference, Does.Contain($"`{CorpusResultCodes.OVERSIZED}`, `{CorpusResultCodes.OVERSIZED_DECLARED}`, `{CorpusResultCodes.OVERSIZED_UNPACKED}`, `{CorpusResultCodes.OVERSIZED_PRODUCT}` |"));
+            Assert.That(Reference, Does.Contain($"| a document's root (a manifest, a report given to `Corpus.Dedup`) | {CorpusJsonStream.MAX_ROOT_KEYS} keys"));
+            Assert.That(Reference, Does.Contain($"| a shard's product | {N(ShardProductLimits.DOCUMENTS_PER_MIB)} documents for every fetched MiB, {N(ShardProductLimits.MIN_DOCUMENTS)} at least, and twice the bytes fetched in compressed text, {ShardProductLimits.MIN_TEXT_BYTES / MIB} MiB at least"));
+            Assert.That(Reference, Does.Contain($"| runs per shard | {N(PdfStageLimits.SHARD_RUNS)} PDFs of one shard"));
+            Assert.That(Readme, Does.Contain($"| runs per shard | {N(PdfStageLimits.SHARD_RUNS)} |"));
+            Assert.That(Readme, Does.Contain($"judged in full only up to {N(ShardQualityRules.MAX_WORDS)} words ({N(ShardQualityRules.MAX_LETTERS)} letters of a script without spaces)"));
+            Assert.That(ShardProductLimits.TEXT_PER_BYTE, Is.EqualTo(2), "the documents write it as twice");
 
             // The same numbers where the README states them.
             Assert.That(Readme, Does.Contain($"({manifestBytes} and {shards} shards at most)"), "the split's row");

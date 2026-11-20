@@ -57,8 +57,8 @@ public sealed class CorpusResultCountersTests
         {
             Assert.That(result.Stats!.BytesFetched, Is.EqualTo(1000));
             Assert.That(CorpusResultCheck.IsWellFormed(result), Is.False, "two thousand million records in a thousand bytes");
-            Assert.That(CorpusResultCheck.IsWellFormed(Counted(most, most)), Is.True, "the most records a shard of this size can unpack to");
-            Assert.That(CorpusResultCheck.IsWellFormed(Counted(most + 1, most)), Is.False, "one more");
+            Assert.That(CorpusResultCheck.IsWellFormed(Counted(most, 1)), Is.True, "the most records a shard of this size can unpack to (and documents its product may hold)");
+            Assert.That(CorpusResultCheck.IsWellFormed(Counted(most + 1, 1)), Is.False, "one more");
         });
     }
 
@@ -187,8 +187,10 @@ public sealed class CorpusResultCountersTests
     [Test]
     public void ASumPastTheLargestNumberStopsThereTest()
     {
-        // Nothing bounds the bytes a node says its product has; two such numbers must not add up
-        // to a negative one.
+        // A product's bytes are held to what the bytes fetched may give since 0.9.0: a result that
+        // says its product has the largest number of bytes is dropped. The report's sums still stop
+        // at the largest number, whatever they are handed: two such numbers must not add up to a
+        // negative one.
         var tasks = CorpusTestRun.Tasks(2);
         var results = tasks.Select(task =>
         {
@@ -198,12 +200,13 @@ public sealed class CorpusResultCountersTests
         }).ToList();
 
         var ledger = CorpusTestRun.Ledger(tasks, results);
-        using var report = JsonDocument.Parse(CorpusReportWriter.Write(ledger));
 
         Assert.Multiple(() =>
         {
-            Assert.That(ledger.RejectedResults, Is.Zero);
-            Assert.That(report.RootElement.GetProperty("summary").GetProperty("bytes_produced").GetInt64(), Is.EqualTo(long.MaxValue));
+            Assert.That(ledger.RejectedResults, Is.EqualTo(2), "more than the bytes fetched may give");
+            Assert.That(CorpusReportWriter.Sum(long.MaxValue, long.MaxValue), Is.EqualTo(long.MaxValue));
+            Assert.That(CorpusReportWriter.Sum(long.MaxValue - 1, 1), Is.EqualTo(long.MaxValue));
+            Assert.That(CorpusReportWriter.Sum(40, 2), Is.EqualTo(42));
         });
     }
 

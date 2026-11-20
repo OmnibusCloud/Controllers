@@ -284,7 +284,10 @@ public static class CorpusReportWriter
     }
 
     /// <summary>A sum that stops at the largest number: the values are counts and bytes, never below zero.</summary>
-    private static long Sum(long sum, long value)
+    /// <param name="sum">The sum so far.</param>
+    /// <param name="value">The value to add.</param>
+    /// <returns>The sum, or <see cref="long.MaxValue"/> past it.</returns>
+    internal static long Sum(long sum, long value)
     {
         return value > long.MaxValue - sum ? long.MaxValue : sum + value;
     }

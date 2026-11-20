@@ -121,13 +121,13 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
         await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData { SamplingRate = 0.5 });
         var report = (CorpusPreflightData)job.Variables["result"].Value!;
         var largest = Math.Max(Size(WET_FIXTURE), Size(WARC_FIXTURE));
-        var perShard = largest + largest / 2 + (64L << 20);
+        var perShard = largest + ShardProductLimits.MaxProductBytes(largest, null) + (64L << 20);
 
         Assert.Multiple(() =>
         {
-            Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(perShard), "the largest shard, half of it again for its products, 64 MiB");
-            Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(ShardDisk.Needed(largest)), "what a node asks of its own disk before it fetches");
-            Assert.That(report.Messages, Has.Some.StartsWith("Node disk: a node holds at most its degree and 2 more shards at a time").And.Contains($"Each held shard needs {perShard} bytes free"));
+            Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(perShard), "the largest shard, the most its products may be (the manifest's pipeline signs with 128 hashes), 64 MiB");
+            Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(ShardDisk.Needed(largest)), "what a node reserves on its own disk before it fetches");
+            Assert.That(report.Messages, Has.Some.StartsWith("Node disk: a node holds at most its degree and 2 more shards at a time").And.Contains($"Each held shard reserves {perShard} bytes before it is fetched"));
             Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a node that fails or falls silent has its whole share fetched again by other nodes. The allowance is not a bound: a shard whose two copies disagree is fetched again by up to 3 machines (a dispute; 1 shard(s) are sampled here), and a shard a node returns as a fault of its own is fetched again by 2 machines (a repair); the report's counters (repairs, disputes) say what a run added."));
         });
     }
