@@ -34,9 +34,11 @@
 
   <!-- Every declared data asset is pinned before a manifest is written from it: an address, a
        SHA-256 of 64 lower-case hex digits (the form a consumer's resolver and the publish guard
-       compare) and the length in bytes, a whole number above zero. A placeholder, a hash of
-       another form or a missing length would otherwise be written into controller.json and fail
-       at every consumer instead of here.
+       compare) that is not the all-zero hash of a template, and the length in bytes, a whole
+       number above zero. A hash of another form, the template's zeros (or its Size of 0) or a
+       missing length would otherwise be written into controller.json and fail at every
+       consumer instead of here. Any other well-formed hash is taken as written: whether it is
+       the archive's own is for the publish guard and the consumer to find out.
        The Identity!='' guard skips the validation when the ItemGroup is empty (MSBuild
        metadata-batched tasks fire once with empty values in that case). -->
   <Target Name="ControllerValidateDataAssets">
@@ -44,6 +46,8 @@
            Text="ControllerDataAsset '%(ControllerDataAsset.Identity)' must have a Uri metadata value." />
     <Error Condition="'%(ControllerDataAsset.Identity)' != '' AND !$([System.Text.RegularExpressions.Regex]::IsMatch('%(ControllerDataAsset.Sha256)', '^[0-9a-f]{64}\z'))"
            Text="ControllerDataAsset '%(ControllerDataAsset.Identity)' must have a Sha256 of 64 lower-case hex digits; it has '%(ControllerDataAsset.Sha256)'." />
+    <Error Condition="'%(ControllerDataAsset.Identity)' != '' AND '%(ControllerDataAsset.Sha256)' == '0000000000000000000000000000000000000000000000000000000000000000'"
+           Text="ControllerDataAsset '%(ControllerDataAsset.Identity)' has the all-zero Sha256 of a template, not the archive's own: pin the archive (outwit-assets-pack --apply writes its SHA-256 and its Size)." />
     <Error Condition="'%(ControllerDataAsset.Identity)' != '' AND !$([System.Text.RegularExpressions.Regex]::IsMatch('%(ControllerDataAsset.Size)', '^[1-9][0-9]{0,17}\z'))"
            Text="ControllerDataAsset '%(ControllerDataAsset.Identity)' must have a Size: its length in bytes, a whole number above zero; it has '%(ControllerDataAsset.Size)'." />
   </Target>

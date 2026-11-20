@@ -631,7 +631,7 @@ The full schema with field-by-field constraints lives at [`docs/controller.schem
 - `Version` not empty
 - `Description` not empty
 - Every `ControllerDataAsset` has a non-empty `Uri`
-- Every `ControllerDataAsset` has a `Sha256` of exactly 64 lower-case hex digits
+- Every `ControllerDataAsset` has a `Sha256` of exactly 64 lower-case hex digits, and not the all-zero hash of a template
 - Every `ControllerDataAsset` has a `Size`: its length in bytes, a whole number above zero
 
 The schema's semver pattern, RID enum, etc. are *documentation only* — there is no JSON Schema validation step in the build. You can verify the schema against your built manifest by hand:
@@ -682,7 +682,7 @@ The fields:
 - `Identity` (the `Include="..."` value) — stable id for diagnostics and disambiguation across platforms.
 - `RuntimeIdentifier` — defaults to `any` (every host fetches). Specific RID gates to that platform.
 - `Uri` — required. Built-in schemes: `gh-release://`, `https://`, `file://`. Add your own resolver via the `OutWit.Engine.Assets` interfaces.
-- `Sha256` — required. 64 lower-case hex digits; the build refuses any other form. The `outwit-assets-pack` tool fills this in automatically; mismatch aborts fetch.
+- `Sha256` — required. 64 lower-case hex digits; the build refuses any other form, and the all-zero hash a template carries. The `outwit-assets-pack` tool fills this in automatically; mismatch aborts fetch.
 - `Size` — required. The archive's length in bytes, a whole number above zero; the build refuses an asset without it. The publish workflow's guard for the AI controllers fetches each released archive and holds it to its `Sha256` and its `Size` before a push.
 - `ExtractTo` — defaults to `.` (module root). `.zip` files get extracted into the path; everything else is copied verbatim.
 - `Required` — defaults to `true`. When `false`, fetch failures are tolerated (used for optional benchmark fixtures).
@@ -919,7 +919,7 @@ OutWit.Controller.Render.<version>.nupkg
 
 1. **build** (`contents: read` only): builds in Release with the SDK `global.json` pins, packs the nupkg, and runs the guards. **Tier-2**: HEAD-checks every expected GitHub Release asset before a nuget.org push and refuses to publish if one is missing. The asset list is hard-coded for Render in the workflow ([`publish.yml:331-341`](../.github/workflows/publish.yml#L331-L341)); a new Tier-2 controller needs a guard of its own. **The AI controllers**: every data asset the built package's manifest declares is fetched and held to its `Sha256` and its `Size` before a push to any feed (`.github/scripts/released-data-assets.sh`). The package goes on as a workflow artifact.
 2. **github-packages** (`packages: write`): pushes the built package to GitHub Packages with `pushToGitHubPackages: true` (default). It runs from any branch.
-3. **release** (the `release` environment: a reviewer approves the run, and `main` is its only branch): creates the GitHub Release (`<name.lower-no-dots>-v<version>`) with `createGitHubRelease: true`, and pushes to nuget.org with `pushToNuGet: true` (**off by default**) by trusted publishing (no stored key). It refuses any ref but `main`.
+3. **release** (the `release` environment: a reviewer approves the run, and `main` is its only branch): logs in to nuget.org by trusted publishing (no stored key) when `pushToNuGet: true` (**off by default**), creates the GitHub Release (`<name.lower-no-dots>-v<version>`) with `createGitHubRelease: true` (the default), then pushes to nuget.org. It refuses any ref but `main`. A dispatch from any other branch passes `createGitHubRelease: false` and `pushToNuGet: false`: otherwise, for a project with new release assets, the release job fails after GitHub Packages has taken the package.
 
 For Path-A distribution this is fully automated. For Path-B (third-party authors without nuget.org rights), use [`outwit-controller-pack`](../Tools/OutWit.Controller.Pack/README.md) to produce a self-contained zip that gets uploaded through the OmnibusCloud admin UI.
 

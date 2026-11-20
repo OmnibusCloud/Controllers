@@ -5,11 +5,12 @@ namespace OutWit.Controller.AI.Verify.Tests.Build;
 /// <summary>
 /// What the shared build files demand of a declared data asset before they write it into a
 /// controller's manifest (<c>ControllerValidateDataAssets</c> in
-/// <c>Build/OutWit.Controller.Manifest.targets</c>): a SHA-256 of 64 lower-case hex digits and
-/// a size, the length in bytes, a whole number above zero. A placeholder or a hash of another
-/// form would be written into <c>controller.json</c> and fail at every consumer, whose resolver
-/// and whose publish guard compare exactly that form; an asset without its size could not be
-/// held to it. Held on a controller project of its own (<see cref="ControllerDataAssetProbe"/>).
+/// <c>Build/OutWit.Controller.Manifest.targets</c>): a SHA-256 of 64 lower-case hex digits that
+/// is not the all-zero hash of a template, and a size, the length in bytes, a whole number
+/// above zero. A placeholder or a hash of another form would be written into
+/// <c>controller.json</c> and fail at every consumer, whose resolver and whose publish guard
+/// compare exactly that form; an asset without its size could not be held to it. Held on a
+/// controller project of its own (<see cref="ControllerDataAssetProbe"/>).
 /// </summary>
 [TestFixture]
 public sealed class ControllerDataAssetPinTests
@@ -20,7 +21,11 @@ public sealed class ControllerDataAssetPinTests
     private const string PINNED = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
     private const string SIZE = "3";
 
+    // The all-zero hash a template carries until the asset tool writes the archive's own.
+    private const string TEMPLATE = "0000000000000000000000000000000000000000000000000000000000000000";
+
     private const string SHA_REFUSED = "ControllerDataAsset '" + ControllerDataAssetProbe.ASSET + "' must have a Sha256 of 64 lower-case hex digits";
+    private const string TEMPLATE_REFUSED = "ControllerDataAsset '" + ControllerDataAssetProbe.ASSET + "' has the all-zero Sha256 of a template";
     private const string SIZE_REFUSED = "ControllerDataAsset '" + ControllerDataAssetProbe.ASSET + "' must have a Size";
 
     #endregion
@@ -55,7 +60,8 @@ public sealed class ControllerDataAssetPinTests
 
     [TestCase(PINNED, SIZE)]
     [TestCase(PINNED, "1")]
-    [TestCase("0000000000000000000000000000000000000000000000000000000000000000", "999999999999999999")]
+    [TestCase("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "999999999999999999")]
+    [TestCase("0000000000000000000000000000000000000000000000000000000000000001", "1")]
     public void AnAssetPinnedByItsHashAndItsSizeIsWrittenIntoTheManifestTest(string sha256, string size)
     {
         var (code, output) = m_probe.Run(sha256, size);
@@ -85,6 +91,20 @@ public sealed class ControllerDataAssetPinTests
         {
             Assert.That(code, Is.Not.Zero, $"'{sha256}' is not a SHA-256 in the form a consumer compares, and the build went on:\n" + output);
             Assert.That(output, Does.Contain(SHA_REFUSED), "the build says which asset and why");
+            Assert.That(File.Exists(m_probe.Manifest), Is.False, "no manifest is written for a refused asset");
+        });
+    }
+
+    [TestCase(SIZE, TestName = "{m}(with a size)")]
+    [TestCase("1", TestName = "{m}(with a size of one)")]
+    public void TheAllZeroHashOfATemplateIsRefusedTest(string size)
+    {
+        var (code, output) = m_probe.Run(TEMPLATE, size);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(code, Is.Not.Zero, "the all-zero hash of a template pins no archive, and the build went on:\n" + output);
+            Assert.That(output, Does.Contain(TEMPLATE_REFUSED), "the build says which asset and why");
             Assert.That(File.Exists(m_probe.Manifest), Is.False, "no manifest is written for a refused asset");
         });
     }
