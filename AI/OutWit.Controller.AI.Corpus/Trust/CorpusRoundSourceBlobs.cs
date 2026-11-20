@@ -58,7 +58,8 @@ public sealed class CorpusRoundSourceBlobs : CorpusRoundSource
         Shards = packages.Sum(package => package.Reference.ShardCount);
         Missing = packages.Sum(package => Math.Max(0, Asked - package.Returned));
         Answers = CorpusRoundAnswers.Of(packages.Select(package => package.Returned));
-        Silent = SilentOf(packages.Count, Asked, packages.Sum(package => (long)package.Returned) + unbound.Values.Sum(count => (long)count) - nulls);
+        var unboundValues = unbound.Values.Sum(count => (long)count) - nulls;
+        Unexplained = UnexplainedOf(packages.Count, Asked, packages.Sum(package => (long)package.Returned) + unboundValues, Missing, unboundValues);
     }
 
     #endregion
@@ -297,7 +298,7 @@ public sealed class CorpusRoundSourceBlobs : CorpusRoundSource
     public override CorpusRoundAnswers Answers { get; }
 
     /// <inheritdoc />
-    public override int? Silent { get; }
+    public override int? Unexplained { get; }
 
     #endregion
 

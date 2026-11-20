@@ -48,6 +48,38 @@ public sealed class CorpusDisputeAgainTests
     }
 
     [Test]
+    public void ACopyThatCameBackRejectedLeavesNoRoomForASecondAnswerTest()
+    {
+        // Two disputes, A (shard 0) and B (shard 1). The liar holds a copy of each: it answers
+        // B with its forged result and spends its slot of A on B's ticket with the same. One
+        // honest copy of B comes back as a value that is not taken (another controller version:
+        // a blob that cannot be read does the same). B then has four values and three taken,
+        // two of them forged; A is short of one. Every slot brought a value, so counting the
+        // silent slots alone set nothing aside and the forged result led by two.
+        var run = Disputed(2);
+        var rejected = CorpusTestRun.Completed(run.Disputes[1], 'a');
+        rejected.ControllerVersion = "0.0.1";
+        var answers = new object?[]
+        {
+            CorpusTestRun.Completed(run.Disputes[0], 'a'), CorpusTestRun.Completed(run.Disputes[0], 'a'),
+            CorpusTestRun.Completed(run.Disputes[1], '0'), CorpusTestRun.Completed(run.Disputes[1], '0'),
+            CorpusTestRun.Completed(run.Disputes[1], 'a'), rejected
+        };
+
+        var ledger = CorpusTestRun.Ledger(run.Tasks, run.First, ([], []), (run.Disputes, answers));
+        var shards = ledger.Shards.ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(shards[1].Accepted, Is.Null, "two values of one machine are not two machines");
+            Assert.That(shards[1].DisputeOutcome, Is.EqualTo(CorpusLedger.DISPUTE_SURPLUS_COPIES));
+            Assert.That(shards[1].NeedsDisputeAgain, Is.True, "it goes out once more");
+            Assert.That(shards[0].Accepted!.ContentSha256, Is.EqualTo(CorpusTestRun.Hash('a')), "A's two are two machines': nobody could lend to it");
+            Assert.That(ledger.Rejected[CorpusLedger.REJECTED_VERSION], Is.EqualTo(1));
+        });
+    }
+
+    [Test]
     public void AMachineThatAnswersNothingLeavesTheRoundButNotTheDisputesTest()
     {
         // The same machine answers nothing for its two copies: the round cannot tell it from

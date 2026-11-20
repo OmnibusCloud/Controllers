@@ -57,9 +57,10 @@ namespace OutWit.Controller.AI.Corpus.Trust;
 /// <para>
 /// <b>A machine that answers nothing.</b> A value that came back under no ticket of the round, or
 /// that is no answer at all, was given by a slot that lent nothing to another package: of a
-/// shard's leading result no more values count as borrowed than the slots of the round that
-/// brought nothing at all (<see cref="CorpusRoundSource.Silent"/>), whatever the round is short
-/// of. A machine that leaves the slots of two dispute packages it holds without any answer still
+/// shard's leading result no more values count as borrowed than the round's shortfall that such
+/// values do not explain (<see cref="CorpusRoundSource.Unexplained"/>: the slots that brought
+/// nothing, and the answers past three a package got, since an honest copy that came back
+/// rejected hides a lent value as a silent one does). A machine that leaves the slots of two dispute packages it holds without any answer still
 /// cannot be told from honest machines that fell silent, and every dispute of that round may then
 /// end <c>surplus_copies</c>: such disputes, and the ones that came back with too few copies, go
 /// out once more on three machines (<see cref="CorpusRoundKind.DisputeAgain"/>), where the platform
@@ -396,14 +397,16 @@ public sealed class CorpusLedger
     /// <summary>
     /// Of a dispute's leading result, how many values may be one machine's second answer: what the
     /// other packages of the round are short of (every one was asked for in three copies), and no
-    /// more than the slots of the round that brought nothing at all. A slot whose value came back
-    /// under no ticket of the round lent nothing to another package; one machine can only borrow
-    /// for a shard where an honest copy of it fell silent.
+    /// more than the round's shortfall that values under no ticket do not explain
+    /// (<see cref="CorpusRoundSource.Unexplained"/>). A value under no ticket lent nothing; one
+    /// machine can only borrow for a shard where an honest copy of it fell silent or came back as
+    /// a value that is not taken, and either leaves the round a slot short or a package an answer
+    /// over its three.
     /// </summary>
     private static int Borrowable(CorpusRoundSource round, CorpusRoundPackage package)
     {
         var shortElsewhere = round.Missing - Math.Max(0, DISPUTE_COPIES - package.Returned);
-        return round.Silent is { } silent ? Math.Min(shortElsewhere, silent) : shortElsewhere;
+        return round.Unexplained is { } unexplained ? Math.Min(shortElsewhere, unexplained) : shortElsewhere;
     }
 
     #endregion
