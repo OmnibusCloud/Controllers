@@ -54,9 +54,10 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      # The SDK global.json pins, exactly: a module's content digest depends on it.
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
 
       # AspectInjector (a build-time dependency of OutWit.Common) ships a native
       # osx-arm64 helper that Apple Silicon kills on launch ("Killed: 9") when
@@ -238,9 +239,10 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      # The SDK global.json pins, exactly: a module's content digest depends on it.
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
 
       - name: Cache the runtime downloads
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0

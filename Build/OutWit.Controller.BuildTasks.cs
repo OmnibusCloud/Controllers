@@ -6,7 +6,17 @@
 //   StampControllerManifest  - computes the content digest of the staged module and writes it,
 //                              with the build stamp, into the module's controller.json.
 //   DeterministicZipDirectory - zips the module with sorted entries and a fixed timestamp, so
-//                              the same content gives the same bytes on every machine.
+//                              that the same content packed by the same build tools gives the
+//                              same bytes. Not on every machine: the entries are compressed by
+//                              the runtime the build runs on, whose deflate output differs
+//                              between SDKs and MSBuild hosts, and on Linux and macOS each entry
+//                              records another system and Unix permissions; the manifest in the
+//                              zip also carries the build stamp. Compare builds by the content
+//                              digest, not by the zip's bytes.
+//
+// The content digest, not the zip, is what is the same on every machine: one commit, built
+// with the SDK that global.json pins and on one kind of system (a deps.json takes the line ends
+// of the system it is written on), states one digest wherever it is built.
 //
 // Both take the module as a list of files (ListedFilesOnly): what the build's own records say
 // it staged (OutWit.Controller.StagedFiles.cs), not whatever lies in the folder. Without a list
