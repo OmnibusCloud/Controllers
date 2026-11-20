@@ -194,6 +194,7 @@ public sealed class ShardProductLimitsTests
         var bound = (int)ShardProductLimits.MaxDocuments(bytes);
         var atTheBound = CorpusTestRun.Completed(task, documentsOut: bound);
         var documents = CorpusTestRun.Completed(task, documentsOut: bound + 1);
+        documents.Stats!.BytesFetched = bytes;
 
         var text = CorpusTestRun.Completed(task);
         text.Stats!.BytesProduced = ShardProductLimits.MaxTextBytes(bytes) + 1;
