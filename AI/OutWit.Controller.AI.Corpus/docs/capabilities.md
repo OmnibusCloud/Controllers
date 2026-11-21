@@ -11,7 +11,7 @@ Every number on this page is a constant of the code or was measured, in the cont
 or on a test fleet; the [README](../README.md) explains how things work inside, and the JSON
 schemas in this folder are the documents' contracts.
 
-Version described: **Corpus 0.9.0** (Model 0.2.0, Scripts 0.1.7). Corpus 0.2.1 is proven on a
+Version described: **Corpus 0.9.1** (Model 0.2.0, Scripts 0.1.7). Corpus 0.2.1 is proven on a
 six-node test fleet (Windows, Linux, macOS); 0.3.0 added what an application's studio needs
 (sections 4, 6 and 8); 0.4.0 was the first hardening release — what the server accepts from a
 node, what a run does when nodes disagree or fail, what hostile input costs, and what a lab can
@@ -34,8 +34,12 @@ unsettles the others (section 9), a node's own network is a fault of the node an
 limit before the answer's head (sections 7 and 10), a shard's product has a ceiling that a node
 reserves on its disk and the preflight states (sections 8 and 11), a shard's PDFs have a number
 of runs, a blob transfer has a time to finish in, and one record or one manifest costs a bounded
-amount of memory (section 11). What changed for an application is listed in section 14. 0.7.0,
-0.8.0 and 0.9.0 have not run on the fleet yet. Nothing is on
+amount of memory (section 11); 0.9.1 fixes 0.9.0: a node gives back a shard's disk room when
+its task ends, also when an upload call still reads its products (section 10), reads a record's
+`Content-Length` and a response's status code alike on every node, and refuses a source URL the
+server could not take (sections 8 and 14). What changed for
+an application is listed in section 14. 0.7.0, 0.8.0, 0.9.0 and 0.9.1 have not run on the fleet
+yet. Nothing is on
 nuget.org or on the live network yet.
 
 ## Contents
@@ -607,7 +611,11 @@ A document that does not reach the product is counted under one rule:
 ## 8. Before a run: preflight and storage
 
 `CorpusPreflight` runs the checks of `Corpus.Split` and reports instead of failing; it fetches no
-shard. `CorpusPreflightData`:
+shard. A source URL longer than 4,096 characters is a problem of its line (the server would drop
+every result for such a shard). What the split will write is not measured: shared parts
+(`pipeline.version` and the allowed origins among them) larger than the job's frame of 256 KiB
+pass the preflight, and `Corpus.Split` then fails, saying the server could not read or write the
+run's blobs. `CorpusPreflightData`:
 
 | Field | Meaning |
 |---|---|
@@ -848,7 +856,8 @@ Integrity — what the server accepts from a node, and what a run does when node
   dispute was returned by an honest machine; three machines that agree still settle their shard
   when another package of the round lost a copy.
 - **Cost.** A run that goes well runs no extra round. A disputed shard is fetched again by up to
-  three machines, a repaired one once more (by two machines when the run samples); the traffic
+  three machines, and by up to three more when they leave it unsettled (the second dispute
+  round), a repaired one once more (by two machines when the run samples); the traffic
   estimate's allowance (a tenth of the
   fetches) is for these, and the preflight says that it is not a bound.
 - Under statistics and hashes only the copies are compared exactly the same way: the signatures
@@ -923,7 +932,9 @@ stage's included.
   is waited for, each further time of an attempt counting as an attempt of the schedule, and no
   second attempt of the same transfer starts beside it; a call that outlasts the schedule fails
   the transfer (a fault of the node), and the job's token ends the wait. A product an upload
-  still reads keeps its file and its room until the call ends.
+  still reads keeps its file until the call ends; its room is given back when its task ends, the
+  file's bytes being on the volume, whose free room counts them, so no shard waits for a call
+  that may never end.
 - **Processing.** One streaming pass on a thread below normal priority, the PDF extractor's
   guest code included; one shard per core at most, fewer when memory is short. A node's memory is
   budgeted once: half of it to shards (256 MB each), a quarter to PDFs (1 GiB each), the rest
@@ -931,7 +942,10 @@ stage's included.
   verdict, and the rest of the task's folder behind it.
 - **One plan, one send.** Each node gets a share of the packages by its benchmark rate (`corpus-wet-mb@synthetic-v2`:
   a synthetic reference shard of 400 documents per slot of the node's degree, its product's hash
-  checked so a node that computes wrong cannot score; MB of real WET per second). A run ends when
+  checked so a node that computes the WET stages wrong cannot score; MB of real WET per second;
+  the reference is WET with the language stage off, so a node wrong only in reading WARC files,
+  identifying languages or extracting PDFs scores all the same and only a second copy of its
+  shards catches it). A run ends when
   its slowest share ends; a node silent for 90 s loses its share, which is done again elsewhere.
 - **Measured.** On a Ryzen 9 5950X, every stage on: the benchmark's calibration (2026-11-08, one
   thread) puts a MB of WET at 0.75 s of one core; the demo kit's 24 files took 26 to 33 s each
@@ -1035,7 +1049,7 @@ and a merge over the first 12 of the 24 shards finds 7,292: why no figure "so fa
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 0.9.0 | `OutWit.Controller.AI.Corpus` (GitHub Packages; nuget.org at 1.0.0) |
+| The controller | 0.9.1 | `OutWit.Controller.AI.Corpus` (GitHub Packages; nuget.org at 1.0.0) |
 | The wire types | 0.2.0 | `OutWit.Controller.AI.Corpus.Model`: the server restores it from the feed, so it is published before a controller that needs it |
 | The scripts | 0.1.7 | `OutWit.Controller.AI.Corpus.Scripts` |
 | The PDF extractor | pdftext 1.0.0 (pdf_oxide 0.3.78) | `corpus-pdftext-wasm.zip`, release `pdftext-v1.0.0` (5.9 MB, extracted to `wasm/` beside the controller) |
@@ -1052,6 +1066,31 @@ LLVM-exception), FineWeb-2's stop-word lists (Apache-2.0) and the Unicode Charac
 `LICENSE-unicode.txt` and the controller's own `LICENSE.txt`: twelve files, held to that list by
 a test. The two data assets carry their own notices (`LICENSE-wasmtime.txt` and `NOTICE.txt`
 beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
+
+**What changed for an application in 0.9.1** (from 0.9.0):
+
+- **On a node.** A task gives its disk room back when it ends, also when an upload call it gave
+  up still reads its products: the products stay until the call ends, and the volume's free
+  room counts their bytes. In 0.9.0 the room stayed held until the call ended, so after a call
+  that never ended a later shard that did not fit beside it waited until its job was cancelled,
+  neither refused nor run; it is now the node fault `disk_space`, run elsewhere.
+- **One preflight message changed its words** for a run that samples: `... a shard whose two
+  copies disagree is fetched again by up to 3 machines, and by up to 3 more when they leave it
+  unsettled (a dispute and its second round; N shard(s) are sampled here), ...`.
+- **Two numbers a shard states for itself are read alike on every node.** A WARC record's
+  `Content-Length` and an HTTP response's status code are decimal digits with no sign: a signed
+  form (`Content-Length: +5`, `HTTP/1.1 +200 OK`) was read with the node's own number format,
+  so on most nodes and not on one whose culture writes its plus sign with a direction mark
+  (Arabic, Persian, Hebrew, Pashto). It is now refused on every node: the record makes its shard
+  `Malformed`, the response's page is dropped as `http_status`. Common Crawl writes neither form,
+  and no product, verdict or hash of the demo kit or of the tests' pinned shards moves.
+- **A source URL longer than 4,096 characters is a problem of the manifest** (`sources[N]: the
+  URL is L characters long; a source URL has 4096 at the most.`), in the preflight and in the
+  split. Such a shard passed before, was packaged, fetched and processed, and ended `NoResult`:
+  the server takes no result whose URL is that long.
+- **The documents correct two sentences** that said more than the code does: what the preflight
+  does not measure, the job's frame (section 8), and what the benchmark's self-check covers
+  (section 10).
 
 **What changed for an application in 0.9.0** (from 0.8.0):
 

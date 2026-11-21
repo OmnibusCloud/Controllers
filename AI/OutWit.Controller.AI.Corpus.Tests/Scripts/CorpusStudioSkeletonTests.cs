@@ -130,7 +130,7 @@ public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
             Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(perShard), "the largest shard at the most a node fetches it as, the most its products may be (the manifest's pipeline signs with 128 hashes), 64 MiB");
             Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(ShardDisk.Needed(room)), "what a node reserves on its own disk before it fetches");
             Assert.That(report.Messages, Has.Some.StartsWith("Node disk: a node holds at most its degree and 2 more shards at a time").And.Contains($"Each held shard reserves {perShard} bytes before it is fetched"));
-            Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a node that fails or falls silent has its whole share fetched again by other nodes. The allowance is not a bound: a shard whose two copies disagree is fetched again by up to 3 machines (a dispute; 1 shard(s) are sampled here), and a shard a node returns as a fault of its own is fetched again by 2 machines (a repair); the report's counters (repairs, disputes) say what a run added."));
+            Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a node that fails or falls silent has its whole share fetched again by other nodes. The allowance is not a bound: a shard whose two copies disagree is fetched again by up to 3 machines, and by up to 3 more when they leave it unsettled (a dispute and its second round; 1 shard(s) are sampled here), and a shard a node returns as a fault of its own is fetched again by 2 machines (a repair); the report's counters (repairs, disputes) say what a run added."));
         });
     }
 

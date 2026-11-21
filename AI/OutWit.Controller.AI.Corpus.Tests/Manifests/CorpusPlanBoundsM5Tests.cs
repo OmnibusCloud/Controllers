@@ -3,6 +3,7 @@ using OutWit.Controller.AI.Corpus.Delivery;
 using OutWit.Controller.AI.Corpus.Manifests;
 using OutWit.Controller.AI.Corpus.Model;
 using OutWit.Controller.AI.Corpus.Shards;
+using CorpusResultCheck = OutWit.Controller.AI.Corpus.Trust.CorpusResultCheck;
 
 namespace OutWit.Controller.AI.Corpus.Tests.Manifests;
 
@@ -43,19 +44,24 @@ public sealed class CorpusPlanBoundsM5Tests
     [Test]
     public void M5AProblemQuotesTheManifestWithinALengthTest()
     {
-        // Sources whose URL is a megabyte long, with no extension to tell a format from: the
-        // line that quotes one is not a megabyte.
-        var url = $"https://data.commoncrawl.org/{new string('x', 1 << 20)}.bin";
+        // Sources whose URL is as long as a source's may be, with no extension to tell a format
+        // from: the line that quotes one is not 4,096 characters. A URL of a megabyte is refused
+        // by its length, without being quoted.
+        var url = $"https://data.commoncrawl.org/{new string('x', CorpusResultCheck.MAX_URL_CHARS - 33)}.bin";
+        var huge = $"https://data.commoncrawl.org/{new string('x', 1 << 20)}.bin";
         var manifest = CorpusManifestParser.Parse($$"""{"pipeline":{"version":"v","identify_language":false},"allowed_origins":["data.commoncrawl.org"],"sources":["{{url}}","{{url}}"]}""");
+        var refused = CorpusManifestParser.Parse($$"""{"pipeline":{"version":"v","identify_language":false},"allowed_origins":["data.commoncrawl.org"],"sources":["{{huge}}"]}""");
 
         var plan = CorpusTaskPlanner.Plan(manifest, null, Guid.Empty, "");
 
         Assert.Multiple(() =>
         {
+            Assert.That(url, Has.Length.EqualTo(CorpusResultCheck.MAX_URL_CHARS));
             Assert.That(manifest.ErrorCount, Is.EqualTo(2));
             Assert.That(manifest.Errors[0], Does.StartWith("sources[0]: cannot tell the format of 'https://data.commoncrawl.org/xxxx"));
             Assert.That(manifest.Errors.Select(line => line.Length), Is.All.LessThanOrEqualTo(CorpusProblems.MAX_LINE_CHARS + 3));
             Assert.That(plan.Errors.Select(line => line.Length), Is.All.LessThanOrEqualTo(CorpusProblems.MAX_LINE_CHARS + 3));
+            Assert.That(refused.Errors, Is.EqualTo(new[] { $"sources[0]: the URL is {huge.Length} characters long; a source URL has 4096 at the most." }));
         });
     }
 

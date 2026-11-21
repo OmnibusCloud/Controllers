@@ -12,6 +12,10 @@ namespace OutWit.Controller.AI.Corpus.Shards;
 /// <item>A shard that does not fit with nothing else reserved never will: it is a fault of the
 /// node (<c>disk_space</c>) and another node runs it.</item>
 /// <item>A volume that does not say how much room it has takes every shard, as before.</item>
+/// <item>A task gives its room back when it ends, also when an upload call it gave up still
+/// reads its products: those stay until the call ends, and the volume's free room counts their
+/// bytes. So room is never held for a call that may not end, and a shard that does not fit
+/// beside such a file is refused, not left waiting.</item>
 /// </list>
 /// The room a shard holds counts in full until it is given back, also once part of it is used:
 /// the question errs on the side of too little room, never of too much.

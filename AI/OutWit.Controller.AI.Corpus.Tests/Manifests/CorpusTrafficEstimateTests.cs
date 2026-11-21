@@ -144,7 +144,7 @@ public sealed class CorpusTrafficEstimateTests
         Assert.Multiple(() =>
         {
             Assert.That(sampled, Does.StartWith("Not in the traffic estimate: a node that fails or falls silent has its whole share fetched again by other nodes."));
-            Assert.That(sampled, Does.Contain("The allowance is not a bound: a shard whose two copies disagree is fetched again by up to 3 machines (a dispute; 2 shard(s) are sampled here), and a shard a node returns as a fault of its own is fetched again by 2 machines (a repair); the report's counters (repairs, disputes) say what a run added."));
+            Assert.That(sampled, Does.Contain("The allowance is not a bound: a shard whose two copies disagree is fetched again by up to 3 machines, and by up to 3 more when they leave it unsettled (a dispute and its second round; 2 shard(s) are sampled here), and a shard a node returns as a fault of its own is fetched again by 2 machines (a repair); the report's counters (repairs, disputes) say what a run added."));
             Assert.That(sampled, Does.EndWith("The number of nodes is not known here: every node that takes part also downloads the language model once (50 bytes)."), "a model that could not be counted is named");
             Assert.That(plain, Does.Contain("The allowance is not a bound: a shard a node returns as a fault of its own is fetched once more (a repair); the report's counters (repairs, disputes) say what a run added."), "a run that samples nothing repairs on one machine");
             Assert.That(plain, Does.Not.Contain("(a dispute"), "nothing is sampled: nothing can be disputed");
