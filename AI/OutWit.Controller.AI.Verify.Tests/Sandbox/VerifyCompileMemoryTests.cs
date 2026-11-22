@@ -80,6 +80,9 @@ public sealed class VerifyCompileMemoryTests
         var wasi = VerifyRuntimeCatalog.Resolve(null, VerifyRuntimeCatalog.WASI, out var reason) ?? throw new InvalidOperationException(reason);
         var limits = VerifyLimitCeilings.Effective(new VerifyLimitsData { FuelBudget = long.MaxValue }, null);
 
+        // Without the refusal the sandbox would compile it: the scan's word is asked first.
+        Assert.That(report.Problem, Is.EqualTo(VerifyModuleShape.TOO_MUCH_MEMORY));
+
         using var sandbox = new VerifyWasmSandbox();
         var clock = Stopwatch.StartNew();
         var result = sandbox.Execute(wasi, ModuleTask(module), limits);
@@ -89,7 +92,6 @@ public sealed class VerifyCompileMemoryTests
             Assert.That(module, Has.Length.LessThanOrEqualTo(VerifyWasmSandbox.MAX_TASK_MODULE_BYTES));
             Assert.That(unbounded.Problem, Is.Null, "no other bound holds it");
             Assert.That(unbounded.CompileMemoryBytes, Is.GreaterThan(VerifyCompileMemory.MAX_BYTES));
-            Assert.That(report.Problem, Is.EqualTo(VerifyModuleShape.TOO_MUCH_MEMORY));
             Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.CompileError));
             Assert.That(result.Stderr, Is.EqualTo(VerifyModuleShape.TOO_MUCH_MEMORY));
             Assert.That(sandbox.TaskModuleCacheCount, Is.Zero, "nothing reached the engine's compiler");
