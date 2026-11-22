@@ -10,8 +10,10 @@ namespace OutWit.Controller.AI.Corpus.Tests.Docs;
 /// cannot work. The range used to end at 1.0.0, exclusive: it would have refused the release the
 /// scripts wait for. The marker cannot be on while no controller of the range is on the feed the
 /// repository restores from, so until then it sits in the project file commented out, and this
-/// test reads it there: the range must admit this build and 1.0.0, must start where the scripts'
-/// activities start, and a build of 1.0.0 or later must have it on.
+/// test reads it there: the range must admit this build and 1.0.0, must start at the first
+/// controller that feed has and no earlier than the scripts' activities, and a build after 1.0.0
+/// must have it on. A build of 1.0.0 itself may have it either way: the controller is version
+/// 1.0.0 before it is on nuget.org, and the marker is switched on once it is.
 /// </summary>
 [TestFixture]
 public sealed class CorpusScriptsCompatibilityTests
@@ -28,7 +30,7 @@ public sealed class CorpusScriptsCompatibilityTests
     /// </summary>
     private const string FIRST_WITH_THE_SCRIPTS_ACTIVITIES = "0.9.0";
 
-    /// <summary>The release the candidates become.</summary>
+    /// <summary>The release the candidates become, and the first controller version on nuget.org.</summary>
     private const string RELEASE = "1.0.0";
 
     #endregion
@@ -43,10 +45,11 @@ public sealed class CorpusScriptsCompatibilityTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(low, Is.EqualTo(Version.Parse(FIRST_WITH_THE_SCRIPTS_ACTIVITIES)), "the range starts at the first controller that has the scripts' activities");
+            Assert.That(low, Is.EqualTo(Version.Parse(RELEASE)), "the range starts at the first controller the feed has: a lower bound no feed has is noise at every restore");
+            Assert.That(low, Is.GreaterThanOrEqualTo(Version.Parse(FIRST_WITH_THE_SCRIPTS_ACTIVITIES)), "and no earlier than the first controller that has the scripts' activities");
             Assert.That(Script, Does.Contain("Corpus.ProcessPackage("));
-            Assert.That(Script, Does.Contain("Corpus.RepairRate(opts)"), "which is why it starts there");
-            Assert.That(Script, Does.Contain("Corpus.Disputes(tasks, executions, repairs, repaired, disputes, resolved)"), "the second dispute round, which is why it starts at 0.9.0");
+            Assert.That(Script, Does.Contain("Corpus.RepairRate(opts)"), "an activity of 0.7.0");
+            Assert.That(Script, Does.Contain("Corpus.Disputes(tasks, executions, repairs, repaired, disputes, resolved)"), "the second dispute round, a call of 0.9.0");
             Assert.That(Script, Does.Contain("Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, undecided, settled, opts)"), "and that round and the options handed to the integrity document");
             Assert.That(build, Is.GreaterThanOrEqualTo(low).And.LessThan(high), "the controller of this build is inside the range");
             Assert.That(Version.Parse(RELEASE), Is.GreaterThanOrEqualTo(low).And.LessThan(high), "and so is the release: a range that ends at 1.0.0 refuses it");
@@ -59,14 +62,24 @@ public sealed class CorpusScriptsCompatibilityTests
     {
         var (_, _, enabled) = Marker();
         var build = Version.Parse(CorpusTestRun.VERSION);
+        var release = Version.Parse(RELEASE);
 
-        if (build < Version.Parse(RELEASE))
+        if (build < release)
         {
             Assert.That(enabled, Is.False, "no controller of the range is on nuget.org before the release: the marker on would break the restore of the scripts project (if one is there now, enable the marker and move this expectation)");
             return;
         }
 
-        Assert.That(enabled, Is.True, $"the controller is {build}: the scripts package must carry its compatibility range. Remove the comment marks around the marker's ItemGroup in {CONTROLLER}.Scripts.csproj (the controller package must be on nuget.org first).");
+        if (build == release)
+        {
+            // The release is made in steps: the version moves to 1.0.0, the controller package
+            // goes to nuget.org, the marker is switched on, the scripts package is packed. Before
+            // the second step the marker on breaks the restore; after the third it is on.
+            TestContext.Out.WriteLine($"The controller is {build}, the release itself: the marker is {(enabled ? "on" : "off until the controller package is on nuget.org")}.");
+            return;
+        }
+
+        Assert.That(enabled, Is.True, $"the controller is {build}, after the first release: the scripts package must carry its compatibility range. Remove the comment marks around the marker's ItemGroup in {CONTROLLER}.Scripts.csproj (the controller package must be on nuget.org first).");
     }
 
     #endregion

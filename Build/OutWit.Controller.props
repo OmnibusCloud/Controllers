@@ -77,7 +77,10 @@
        Engine.Assets.MSBuild flows transitively to consumers (PrivateAssets=none
        + IncludeAssets=build;buildTransitive) so the ResolveControllerAssetsTask
        UsingTask reaches the consumer's build. It is the package that fetches a
-       controller's data assets and holds each to its SHA-256, so it does not float
+       controller's data assets and holds each to its SHA-256 and, where the asset
+       declares one, its size: 1.0.2 checks a download's length, and uses a file of
+       its cache only when its SHA-256 and its length match (1.0.1 took a cached file
+       by its name and read no size). So it does not float
        either: a version that appears on a feed must not be taken by the next build
        without anyone having chosen it. A plain version, as for Engine.Data: restore
        takes the lowest version a reference allows, which is exactly this one, and a
@@ -85,7 +88,7 @@
        controllers built a patch apart refuse to restore together). -->
   <ItemGroup>
     <PackageReference Include="OutWit.Engine.Data" Version="1.1.4" />
-    <PackageReference Include="OutWit.Engine.Assets.MSBuild" Version="1.0.1">
+    <PackageReference Include="OutWit.Engine.Assets.MSBuild" Version="1.0.2">
       <PrivateAssets>none</PrivateAssets>
       <IncludeAssets>build; buildTransitive</IncludeAssets>
     </PackageReference>
