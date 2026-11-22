@@ -102,7 +102,7 @@ public class SmtSanitizerRefusalTests
     [Test]
     public void NestingPastTheDepthLimitIsRefusedTest()
     {
-        // The command is the first level, its term the other 1,999 of the limit.
+        // The command is the first level, its term every other level of the limit.
         var deepest = "(assert " + new string('(', SmtReaderLimits.PROBLEM_DEPTH - 1) + new string(')', SmtReaderLimits.PROBLEM_DEPTH - 1) + ")";
         var deeper = "(assert " + new string('(', SmtReaderLimits.PROBLEM_DEPTH) + new string(')', SmtReaderLimits.PROBLEM_DEPTH) + ")";
 

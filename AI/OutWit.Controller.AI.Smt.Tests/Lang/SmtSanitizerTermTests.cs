@@ -108,8 +108,12 @@ public class SmtSanitizerTermTests
         Assert.That(SmtSanitizer.SanitizeTerm(atLimit + "  ").Refusal!.Code, Is.EqualTo(SmtRefusalCodes.TEXT_TOO_LONG));
 
         Assert.That(SmtSanitizer.SanitizeTerm(new string('7', 5_000)).Refusal!.Code, Is.EqualTo(SmtRefusalCodes.NUMERAL_TOO_LONG));
-        Assert.That(SmtSanitizer.SanitizeTerm(new string('(', 2_001) + new string(')', 2_001)).Refusal!.Code, Is.EqualTo(SmtRefusalCodes.NESTING_TOO_DEEP));
-        Assert.That(SmtSanitizer.SanitizeTerm(new string('(', 2_000) + new string(')', 2_000)).IsAccepted, Is.True);
+
+        // A term of so few characters cannot nest deeper than a problem may: as deep as its
+        // characters let it, it is taken.
+        var deepest = SmtSanitizer.TERM_CHARACTERS / 2;
+        Assert.That(deepest, Is.LessThan(SmtReaderLimits.PROBLEM_DEPTH));
+        Assert.That(SmtSanitizer.SanitizeTerm(new string('(', deepest) + new string(')', deepest)).IsAccepted, Is.True);
     }
 
     [Test]

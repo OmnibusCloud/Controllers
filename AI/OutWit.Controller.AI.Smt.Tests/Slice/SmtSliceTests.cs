@@ -36,14 +36,10 @@ public class SmtSliceTests
     private const int PROBLEMS = 469;
 
     /// <summary>
-    /// The problems of the slice the sanitizer refuses, by code: the ids of the list. Five of the
-    /// 469 nest their lists deeper than a problem may (between 3,038 and 11,033 levels, against
-    /// <see cref="SmtReaderLimits.PROBLEM_DEPTH"/>); the other 464 are taken.
+    /// The problems of the slice the sanitizer refuses, by code: the ids of the list. None: all
+    /// 469 are taken (the deepest nests its lists 11,033 levels deep).
     /// </summary>
-    private static readonly Dictionary<string, string[]> REFUSED = new(StringComparer.Ordinal)
-    {
-        [SmtRefusalCodes.NESTING_TOO_DEEP] = ["p141", "p198", "p242", "p243", "p244"]
-    };
+    private static readonly Dictionary<string, string[]> REFUSED = new(StringComparer.Ordinal);
 
     #endregion
 

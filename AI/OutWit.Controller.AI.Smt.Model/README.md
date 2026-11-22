@@ -49,13 +49,15 @@ A comment is dropped. A symbol between bars is the simple symbol of the same nam
 `abc`) and is written without bars, except a reserved word, which stays between them. Nesting is
 kept on a stack of the reader's own: a term two hundred thousand deep is read, written and
 compared without a deep call stack, and how deep a submitted problem may nest is a limit, not
-a property of the thread.
+a property of the thread. The limit is far from small: a term that is used many times is
+written as a chain of bindings, one inside the other, and real problems nest more than ten
+thousand levels deep.
 
 | Ceiling of a submitted problem | |
 |---|---|
 | Characters | 4,194,304 |
 | Tokens (atoms and parentheses) | 2,000,000 |
-| Nesting depth | 2,000 |
+| Nesting depth | 100,000 |
 | Digits of a numeral or a decimal | 4,096 |
 | Bits of a hexadecimal or binary literal | 65,536 |
 | Characters of a string literal | 65,536 |

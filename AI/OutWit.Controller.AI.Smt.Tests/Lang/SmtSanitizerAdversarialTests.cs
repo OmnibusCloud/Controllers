@@ -91,7 +91,7 @@ public class SmtSanitizerAdversarialTests
         // The other codes need a text of megabytes: SmtSanitizerRefusalTests makes those.
         Assert.That(expectations, Is.SupersetOf(new[]
         {
-            SmtRefusalCodes.SYNTAX_ERROR, SmtRefusalCodes.NESTING_TOO_DEEP, SmtRefusalCodes.NUMERAL_TOO_LONG, SmtRefusalCodes.NOT_A_COMMAND,
+            SmtRefusalCodes.SYNTAX_ERROR, SmtRefusalCodes.NUMERAL_TOO_LONG, SmtRefusalCodes.NOT_A_COMMAND,
             SmtRefusalCodes.COMMAND_NOT_ALLOWED, SmtRefusalCodes.COMMAND_MALFORMED, SmtRefusalCodes.RESERVED_SYMBOL, SmtRefusalCodes.AMBIGUOUS_TOKEN,
             SmtRefusalCodes.NON_ASCII_STRING, SmtRefusalCodes.INDEX_TOO_LARGE, SmtRefusalCodes.RESERVED_PREFIX
         }));
