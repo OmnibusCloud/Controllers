@@ -1,0 +1,357 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-capabilities.schema.json",
+  "title": "Corpus capabilities",
+  "description": "The capabilities blob of CorpusRuntimeDiagnostics (Corpus.Capabilities): what an application can know before a run. It takes no manifest. Nodes run the same controller version as the host (a node on another version refuses its batch, and a result that claims another version is dropped), so the stages, parsers and limits listed are the pool's. No node is named. Version 4: version 3 and, in trust, repair_copies (the machines a shard goes to when it goes out again in a run that samples) and sampling_states (the words in which the report and the integrity document say whether the sampling a run asked for happened). Version 3: version 2 and what bounds a job as a whole (the shards and the bytes of a manifest, the task packages of a round, the problems a preflight lists), the slack a declared size has, the traffic estimate's retry allowance, the bytes a shard takes in its packages, and two more fixed words (the verdict code oversized_declared, the fault code tasks). Version 2: version 1 and the limits a hostile shard meets, the case table, and trust (what a result rests on, and every fixed word a document carries in place of a text).",
+  "type": "object",
+  "required": ["schema", "controller", "benchmark_unit", "stages", "parsers", "language_model", "formats", "origins", "defaults", "ceilings", "traffic", "pipeline", "pdf", "signatures", "drop_rules", "casing", "trust", "products", "storage"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "string", "const": "corpus-capabilities/4" },
+    "controller": { "type": "string", "description": "The controller's version. The stages are built into the controller: one version, one stage set." },
+    "benchmark_unit": { "type": "string", "description": "The unit of the pool's rate: megabytes of Common Crawl WET per second." },
+    "stages": {
+      "type": "object",
+      "required": ["order", "sha256", "verified", "language_format"],
+      "additionalProperties": false,
+      "properties": {
+        "order": { "type": "array", "items": { "type": "string" }, "description": "The stages in the order a document meets them. A manifest's pipeline switches turn extract_pdf, identify_language, clean_lines, filter_quality and sign on and off." },
+        "sha256": { "type": "string", "description": "The stage set's fingerprint: the SHA-256 of the content hash the host computed for the controller's reference shard through the stages and of the PDF stage's contract (its module's pin, every limit and shaping rule), so a changed limit is a changed stage set." },
+        "verified": { "type": "boolean", "description": "The fingerprint is the one the controller pins: the stages compute on the host what they compute everywhere." },
+        "language_format": { "type": "string", "description": "The format of the language data the language stage reads (WITLID2, a language pack: profiles, acceptance limits and every language's rule data). It is a job's input pinned by language_model_sha256, so it is not in the fingerprint; WITLID1 models are still read." }
+      }
+    },
+    "parsers": {
+      "type": "object",
+      "required": ["warc", "html", "compressor"],
+      "additionalProperties": false,
+      "properties": {
+        "warc": { "type": "string", "description": "The WARC/WET reader." },
+        "html": { "type": "string", "description": "The HTML parser behind the WARC text extraction, name and version." },
+        "compressor": { "type": "string", "description": "The compressor of the text product, name, version and level." }
+      }
+    },
+    "language_model": {
+      "type": "object",
+      "description": "A language model is a job's input (a blob, pinned by hash in the manifest), not part of the controller: a language pack (WITLID2) carries every language's profile, acceptance limit and rule data (script, stop words, thresholds), so adding a language is a new pack, not a new controller. The reference pack is the one the controller's tests and fleet proofs use.",
+      "required": ["format", "formats", "method", "reference_name", "reference_sha256", "reference_trained_from", "reference_languages", "reference_known_languages", "witlid1_reference_sha256", "unsupported_drop", "unknown_drop"],
+      "additionalProperties": false,
+      "properties": {
+        "format": { "type": "string", "description": "The format of the reference pack (WITLID2, a language pack)." },
+        "formats": { "type": "array", "items": { "type": "string" }, "description": "Every model format the controller reads: WITLID1 (profiles only: the nearest profile always wins, the rule data is Corpus 0.1.14's, products as under 0.1.x) and WITLID2 (a language pack)." },
+        "method": { "type": "string" },
+        "reference_name": { "type": "string", "description": "The reference pack's name." },
+        "reference_sha256": { "type": "string", "description": "What a manifest's pipeline.language_model_sha256 names to pin the reference pack." },
+        "reference_trained_from": { "type": "string", "description": "The crawl the reference pack was built from." },
+        "reference_languages": { "type": "array", "items": { "type": "string" }, "description": "ISO 639-3 codes of the languages the reference pack supports: what pipeline.target_languages may name with it." },
+        "reference_known_languages": { "type": "array", "items": { "type": "string" }, "description": "ISO 639-3 codes of the languages the reference pack knows and does not support: a document in one of them is unknown and drops as unsupported_drop, not mislabelled." },
+        "witlid1_reference_sha256": { "type": "string", "description": "The 0.1.x reference model (WITLID1), still read; a manifest pinned to it keeps its products." },
+        "unsupported_drop": { "type": "string", "description": "The drop rule of a document in a language the pack does not support (language_unsupported)." },
+        "unknown_drop": { "type": "string", "description": "The drop rule of a document with too little text to tell its language (language_unknown)." }
+      }
+    },
+    "formats": { "type": "array", "items": { "type": "string", "enum": ["wet", "warc"] }, "description": "The source formats a manifest may name." },
+    "origins": {
+      "type": "object",
+      "description": "Where a machine fetches from. A manifest's allowed_origins narrows this rule; it cannot widen it.",
+      "required": ["public", "machine_variable", "max_redirects"],
+      "additionalProperties": false,
+      "properties": {
+        "public": { "type": "array", "items": { "type": "string" }, "description": "The public origins every machine fetches from: HTTPS, the default port, public addresses only." },
+        "machine_variable": { "type": "string", "description": "The environment variable in which a machine's owner lists further hosts; only that machine fetches from them." },
+        "max_redirects": { "type": "integer", "description": "Redirect hops followed, each put to the same rule." }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "description": "What applies when the options leave a value unset (0).",
+      "required": ["max_shard_bytes", "sampling_rate", "dedup_threshold", "downloads_per_node", "memory_per_shard_bytes", "shards_held_beyond_degree"],
+      "additionalProperties": false,
+      "properties": {
+        "max_shard_bytes": { "type": "integer" },
+        "sampling_rate": { "type": "number" },
+        "dedup_threshold": { "type": "number" },
+        "downloads_per_node": { "type": "integer", "description": "Shards a node downloads at once, whatever its degree." },
+        "memory_per_shard_bytes": { "type": "integer", "description": "Memory a node budgets per shard in flight; with its cores it bounds the node's degree." },
+        "shards_held_beyond_degree": { "type": "integer", "description": "The shards a node holds fetched and waiting beyond the ones it processes at once (its degree): a node's disk carries its degree and this many more shards at a time, never its whole share." }
+      }
+    },
+    "ceilings": {
+      "type": "object",
+      "description": "The most a job may ask for, and the limits a hostile input meets.",
+      "required": ["max_shard_bytes", "sampling_rate", "record_bytes", "wet_record_bytes", "unpack_ratio", "unpacked_bytes_min", "unpacked_bytes_max", "html_chars", "html_decode_bytes", "html_nesting", "html_tags", "html_elements", "language_model_bytes", "size_probes", "dedup_documents", "dedup_clusters_listed", "dedup_report_bytes", "manifest_bytes", "shards", "packages", "package_shards", "problems_listed", "declared_slack_divisor", "declared_slack_min_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "max_shard_bytes": { "type": "integer", "description": "A shard on the wire; the options can only lower it." },
+        "sampling_rate": { "type": "number" },
+        "record_bytes": { "type": "integer", "description": "A larger record of a WARC shard is skipped and counted (record_oversized)." },
+        "wet_record_bytes": { "type": "integer", "description": "A larger record of a WET shard is skipped and counted (record_oversized): a page's text, never a file." },
+        "unpack_ratio": { "type": "integer", "description": "A shard may unpack to this many times its size on the wire, within the two bounds below; past it the shard is Oversized (oversized_unpacked) on every node." },
+        "unpacked_bytes_min": { "type": "integer", "description": "What the smallest shard may unpack to." },
+        "unpacked_bytes_max": { "type": "integer", "description": "What no shard may unpack past." },
+        "html_chars": { "type": "integer", "description": "The characters of a page that are parsed; the rest is cut." },
+        "html_decode_bytes": { "type": "integer", "description": "The bytes of a response body that are decoded: enough for html_chars in any encoding." },
+        "html_nesting": { "type": "integer", "description": "No element of the parser's tree may sit this deep (html_refused by the pre-scan, html_too_complex by the parser)." },
+        "html_tags": { "type": "integer", "description": "The tags the pre-scan lets a page carry (html_refused)." },
+        "html_elements": { "type": "integer", "description": "The elements the parser's tree may hold for one page, the ones the parser makes without a tag included (html_too_complex)." },
+        "language_model_bytes": { "type": "integer", "description": "A larger language model or pack is refused before it is read." },
+        "size_probes": { "type": "integer", "description": "Sources the server asks the origin for a size per preflight and per split, drawn at random: half of them among the sources the manifest gives no size for, half among the ones it does (what one kind does not use goes to the other). A source without a size that was not asked is estimated at the mean of the answers." },
+        "dedup_documents": { "type": "integer", "description": "Documents one Corpus.Dedup holds in memory." },
+        "dedup_clusters_listed": { "type": "integer" },
+        "dedup_report_bytes": { "type": "integer", "description": "A larger report is refused by Corpus.Dedup before it is read. The report is read as a stream, a shard at a time." },
+        "manifest_bytes": { "type": "integer", "description": "A larger manifest is refused by name before a byte of it is read." },
+        "shards": { "type": "integer", "description": "The shards one job takes: a manifest that names more is refused by name." },
+        "packages": { "type": "integer", "description": "The task packages a round has at the most. Up to this many shards a job has one shard a package; beyond, a package holds as many consecutive shards as keep the round within the bound. A package is what the platform assigns to a node and samples for integrity." },
+        "package_shards": { "type": "integer", "description": "The shards a package holds at the most; a node refuses a package that holds more." },
+        "problems_listed": { "type": "integer", "description": "The problems of a manifest a preflight lists by line; one more line says how many more there are." },
+        "declared_slack_divisor": { "type": "integer", "description": "A shard may be larger than the size its manifest entry declares (or the origin answered when the server asked) by the declared size over this number, declared_slack_min_bytes at least; one past that is Oversized (oversized_declared) on every node." },
+        "declared_slack_min_bytes": { "type": "integer", "description": "The least slack a declared size has." }
+      }
+    },
+    "traffic": {
+      "type": "object",
+      "description": "What the preflight's traffic estimate is built on beside the shards' sizes and the storage ratios.",
+      "required": ["retry_allowance"],
+      "additionalProperties": false,
+      "properties": {
+        "retry_allowance": { "type": "number", "description": "The share of the fetches the estimate adds for fetches that start over and for shards fetched again in a repair or a dispute. An allowance, not a bound: a node that fails has its whole share fetched again elsewhere." }
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "description": "The stage parameters a manifest's pipeline may set, with the defaults that apply when it does not.",
+      "required": ["switches", "output", "minhash", "quality", "quality_fixed"],
+      "additionalProperties": false,
+      "properties": {
+        "switches": {
+          "type": "object",
+          "required": ["identify_language", "clean_lines", "filter_quality", "sign", "extract_pdf", "filter_curly_bracket"],
+          "additionalProperties": false,
+          "properties": {
+            "identify_language": { "type": "boolean" },
+            "clean_lines": { "type": "boolean" },
+            "filter_quality": { "type": "boolean" },
+            "sign": { "type": "boolean" },
+            "extract_pdf": { "type": "boolean", "description": "The PDF stage on WARC shards (see pdf)." },
+            "filter_curly_bracket": { "type": "boolean", "description": "C4's curly-bracket rule, off unless the manifest turns it on." }
+          }
+        },
+        "output": {
+          "type": "object",
+          "description": "pipeline.output: what a run keeps on the server. \"full\" keeps every shard's text and signatures; \"stats_and_hashes\" keeps the statistics, the content hashes, the report and the integrity document only (the text and the signatures stay on the node and are deleted with the task; no near-duplicate merge).",
+          "required": ["default", "values"],
+          "additionalProperties": false,
+          "properties": {
+            "default": { "type": "string" },
+            "values": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "minhash": {
+          "type": "object",
+          "description": "pipeline.minhash: the MinHash parameters of the signatures and the near-duplicate merge, with their defaults and ranges (0 or absent: the default). A signatures blob made with another hash count or shingle size than the defaults starts with WITSIG2 and states its shingle size; Corpus.Dedup refuses to merge signatures made with different parameters.",
+          "required": ["hashes", "shingle_words", "bands"],
+          "additionalProperties": false,
+          "properties": {
+            "hashes": { "$ref": "#/$defs/range", "description": "Hash functions per signature (8 bytes each, per document)." },
+            "shingle_words": { "$ref": "#/$defs/range", "description": "Words per shingle." },
+            "bands": {
+              "type": "object",
+              "description": "LSH bands of the merge; must divide the hash count.",
+              "required": ["default", "min", "divides"],
+              "additionalProperties": false,
+              "properties": {
+                "default": { "type": "integer" },
+                "min": { "type": "integer" },
+                "divides": { "type": "string", "const": "hashes" }
+              }
+            }
+          }
+        },
+        "quality": {
+          "type": "object",
+          "description": "pipeline.quality keys and their defaults: for scripts with word spacing and for those without (where a word is a letter). null: the rule does not apply to that kind of script.",
+          "additionalProperties": { "$ref": "#/$defs/limit" }
+        },
+        "quality_fixed": {
+          "type": "object",
+          "description": "Thresholds of the quality filter that a manifest cannot set (yet).",
+          "required": ["top_ngram_chars", "duplicate_ngram_chars"],
+          "additionalProperties": false,
+          "properties": {
+            "top_ngram_chars": { "type": "array", "items": { "type": "number" }, "description": "The most characters the single most frequent word n-gram may cover, n = 2, 3, 4." },
+            "duplicate_ngram_chars": { "type": "array", "items": { "type": "number" }, "description": "The most characters repeated word n-grams may cover, n = 5 to 10." }
+          }
+        }
+      }
+    },
+    "pdf": {
+      "type": "object",
+      "description": "The PDF stage (pipeline switch extract_pdf, WARC shards only): a response that is a PDF becomes text in the controller's own wasm sandbox, then page-range documents that go through the stages after it like a page of HTML. Every value here is part of the stage set's fingerprint.",
+      "required": ["stage", "formats", "extractor", "module_sha256", "engine", "available", "fuel", "fuel_after_instantiation", "shard_fuel", "memory_bytes", "input_bytes", "text_bytes", "document_words", "document_id", "running_lines", "drops"],
+      "additionalProperties": false,
+      "properties": {
+        "stage": { "type": "string", "const": "extract_pdf" },
+        "formats": { "type": "array", "items": { "type": "string" }, "description": "The shard formats that carry PDFs." },
+        "extractor": { "type": "string", "description": "The extractor module: what it is built from." },
+        "module_sha256": { "type": "string", "description": "SHA-256 of the extractor module; a module with other bytes is not run." },
+        "engine": { "type": "string", "description": "The sandbox: the wasmtime binding the controller is built against." },
+        "available": { "type": "boolean", "description": "Whether the host's process can run the stage. A node that cannot does not make the product of a shard that holds a PDF: the shard fails there as a fault of the node and runs on another; a shard without a PDF runs on it." },
+        "fuel": { "type": "integer", "description": "The fuel one PDF may burn, counted from the guest's _start." },
+        "fuel_after_instantiation": { "type": "boolean", "description": "The budget is given after the module is instantiated, so it does not depend on the platform." },
+        "shard_fuel": { "type": "integer", "description": "The fuel all the PDFs of one shard may burn together; a PDF met after it is spent is not run and drops as pdf_shard_fuel." },
+        "memory_bytes": { "type": "integer", "description": "The cap of the module's linear memory." },
+        "input_bytes": { "type": "integer", "description": "The largest PDF the stage runs." },
+        "text_bytes": { "type": "integer", "description": "The most text one PDF may give (more: pdf_oversized)." },
+        "document_words": { "type": "integer", "description": "The most words of one page-range document; pages are put together while they fit, a longer page is a document of its own cut after the last line that fits." },
+        "document_id": { "type": "string", "description": "How a page-range document is named in the product's url field." },
+        "running_lines": {
+          "type": "object",
+          "description": "Running headers and footers: a line that, with each run of digits folded, appears on half the pages or more of a PDF of min_pages pages or more is removed from every page.",
+          "required": ["min_pages", "share", "digits_folded"],
+          "additionalProperties": false,
+          "properties": {
+            "min_pages": { "type": "integer" },
+            "share": { "type": "number" },
+            "digits_folded": { "type": "boolean" }
+          }
+        },
+        "drops": { "type": "array", "items": { "type": "string" }, "description": "The drop rules a PDF that gives no document is counted under." }
+      }
+    },
+    "signatures": {
+      "type": "object",
+      "description": "The default MinHash parameters (pipeline.minhash sets others): the hashes, the shingle size, one document's signature in bytes, the merge's bands and rows per band.",
+      "required": ["hashes", "shingle_words", "bytes_per_document", "bands", "rows_per_band"],
+      "additionalProperties": false,
+      "properties": {
+        "hashes": { "type": "integer" },
+        "shingle_words": { "type": "integer" },
+        "bytes_per_document": { "type": "integer" },
+        "bands": { "type": "integer", "description": "LSH bands of the dedup merge." },
+        "rows_per_band": { "type": "integer" }
+      }
+    },
+    "drop_rules": {
+      "type": "array",
+      "description": "Every rule a shard's statistics can count a drop under, with the stage that applies it, in the order a document meets them: extract (records and PDFs that give no document), language, lines, quality. The report's funnel sums the drops by these stages.",
+      "items": {
+        "type": "object",
+        "required": ["name", "stage"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "stage": { "type": "string", "enum": ["extract", "language", "lines", "quality"] }
+        }
+      }
+    },
+    "casing": {
+      "type": "object",
+      "description": "The case handling that reaches a product (the language n-grams, the MinHash tokens): a table inside the controller, the same on every node whatever globalization library its system has. Names and phrases of ASCII are compared as ASCII.",
+      "required": ["unicode", "mapping", "table_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "unicode": { "type": "string", "description": "The Unicode version the table was generated from." },
+        "mapping": { "type": "string", "description": "simple_lowercase: UnicodeData.txt's Simple_Lowercase_Mapping, U+0130 kept as it is." },
+        "table_sha256": { "type": "string", "description": "The table's hash; a part of the stage set's fingerprint." }
+      }
+    },
+    "trust": {
+      "type": "object",
+      "description": "What a result rests on and how a run answers a node that lies or fails. A task carries a ticket only its node knows; the server accepts a result only under a ticket of that job and round, for that shard, from its own controller version, in a shape an honest node gives. Copies that agree are accepted; copies that disagree are run again on three machines; a shard no machine returned a result for is sent out once more, on two machines when the run asked for sampling. In the dispute round a ticket with more values than the round asked for settles nothing. Counting values as machines rests on the platform: Grid 1.3.0 and later keep, of what a node's batch returns, one value at most for each return variable its tasks asked for. With an older Grid a node could return several values for one task and this ruling would count them as machines.",
+      "required": ["copies", "repair_copies", "dispute_copies", "dispute_quorum", "outcomes", "no_result_reasons", "rejection_reasons", "dispute_outcomes", "sampling_states", "fault_codes", "verdict_codes", "batch_refusals", "dedup_exclusions"],
+      "additionalProperties": false,
+      "properties": {
+        "copies": { "type": "integer", "description": "The executions of a sampled shard, on different machines. A shard that is not sampled rests on one machine's word (single_execution in the report and the integrity document)." },
+        "repair_copies": { "type": "integer", "description": "The machines a shard goes to when it goes out again (the repair round) in a run whose sampling rate is above 0; in a run that asked for no sampling it goes to one. The server is not told which packages of the first round the platform picked for a second machine, so a round that came back short keeps its checking only if every shard that goes out again goes out twice." },
+        "dispute_copies": { "type": "integer", "description": "The machines a disputed shard is run on again." },
+        "dispute_quorum": { "type": "integer", "description": "The machines that must return the same result, and more of them than any other result has, for a dispute to be settled." },
+        "outcomes": { "type": "array", "items": { "type": "string" }, "description": "The report's two verdicts that are no node's: Disputed and NoResult." },
+        "no_result_reasons": { "type": "array", "items": { "type": "string" }, "description": "Why a shard has no result: a machine that held it returned it as a fault of its own (node_fault), or nothing that was accepted came back for it (no_answer)." },
+        "rejection_reasons": { "type": "array", "items": { "type": "string" }, "description": "Why a returned value was dropped (the integrity document's rejected): unknown_ticket, unreadable, version, content, surplus." },
+        "dispute_outcomes": { "type": "array", "items": { "type": "string" }, "description": "How a dispute ends (outcome in the integrity document's disputes): resolved, no_majority, too_few_copies, surplus_copies. Every one but resolved leaves the shard Disputed." },
+        "sampling_states": { "type": "array", "items": { "type": "string" }, "description": "The words of sampling.state in the report and the integrity document: not_asked (the run asked for no second execution), as_asked (as many packages came back twice as were asked for, and shards were compared), short (fewer came back twice: some of the checking did not happen), none (second executions were asked for and no shard was compared), unknown (the activity that wrote the document was not handed the run's options)." },
+        "fault_codes": { "type": "array", "items": { "type": "string" }, "description": "The codes of a node's own faults (the report's faults): never a verdict on the shard, never a text." },
+        "verdict_codes": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } }, "description": "Per verdict, the codes its error may hold beside the empty one. http_NNN stands for the origin's HTTP status." },
+        "batch_refusals": { "type": "array", "items": { "type": "string" }, "description": "Why a node refuses a whole batch before it does any of it; the platform moves the work to another node." },
+        "dedup_exclusions": { "type": "array", "items": { "type": "string" }, "description": "Why Corpus.Dedup leaves a shard out of the merge (the dedup document's excluded)." }
+      }
+    },
+    "products": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "file", "per", "schema", "outputs"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "file": { "type": "string", "description": "The blob's file name." },
+          "per": { "type": "string", "enum": ["shard", "job", "dedup"], "description": "One per shard execution, one per CorpusProcess job, or one per CorpusDedup run." },
+          "schema": { "type": "string", "description": "The schema tag of a JSON document; \"\" for a product with a fixed binary or JSON-lines layout (the README)." },
+          "outputs": { "type": "array", "items": { "type": "string", "enum": ["full", "stats_and_hashes"] }, "description": "The output modes that keep the product on the server." }
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "description": "What the preflight's storage estimate is built on, and the room the deployment gives one job.",
+      "required": ["ratios", "margin", "task_package_bytes_per_shard", "result_package_bytes_per_shard", "package_base_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "ratios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["format", "clean_lines", "filter_quality", "text_per_byte", "documents_per_mib"],
+            "additionalProperties": false,
+            "properties": {
+              "format": { "type": "string", "enum": ["wet", "warc"] },
+              "clean_lines": { "type": "boolean" },
+              "filter_quality": { "type": "boolean" },
+              "text_per_byte": { "type": "number", "description": "Bytes of compressed text product per byte of shard fetched." },
+              "documents_per_mib": { "type": "number", "description": "Documents in the product per MiB of shard fetched; each is one signature of signatures.bytes_per_document." }
+            }
+          }
+        },
+        "margin": { "type": "number", "description": "What the largest measured value was raised by." },
+        "task_package_bytes_per_shard": { "type": "integer", "description": "What one shard's task takes in a task package, as the storage estimate counts it." },
+        "result_package_bytes_per_shard": { "type": "integer", "description": "What one shard's result takes in a result package, for every execution." },
+        "package_base_bytes": { "type": "integer", "description": "A package blob's own bytes beside its shards." },
+        "headroom_bytes": { "type": "integer", "description": "The most one job may leave on the server, as the deployment states it. Absent when it states none: storage then refuses nothing." },
+        "retention_days": { "type": "integer", "description": "Days the server keeps a job's products after they are made. Absent when the deployment does not say." }
+      }
+    },
+    "pool": {
+      "type": "object",
+      "description": "The nodes that can take Corpus shards for this submitter now, as totals; absent when the host cannot say. No node is named.",
+      "required": ["nodes", "measured", "rate"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes": { "type": "integer" },
+        "measured": { "type": "integer", "description": "Nodes that have measured themselves on the reference shard; the next two numbers are theirs." },
+        "workers": { "type": "integer", "description": "Shards the measured nodes process at once, added up. Absent when the host does not carry the degree of every measured node." },
+        "rate": { "type": "number", "description": "Megabytes of Common Crawl WET per second, added up." }
+      }
+    }
+  },
+  "$defs": {
+    "range": {
+      "type": "object",
+      "required": ["default", "min", "max"],
+      "additionalProperties": false,
+      "properties": {
+        "default": { "type": "integer" },
+        "min": { "type": "integer" },
+        "max": { "type": "integer" }
+      }
+    },
+    "limit": {
+      "type": "object",
+      "required": ["spaced", "unspaced"],
+      "additionalProperties": false,
+      "properties": {
+        "spaced": { "type": ["number", "null"] },
+        "unspaced": { "type": ["number", "null"] }
+      }
+    }
+  }
+}

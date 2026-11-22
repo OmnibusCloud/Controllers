@@ -1,0 +1,33 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.AI.Vision NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+      Copies the package's content/module/* into the consumer's
+      $(OutputPath)@Controllers\vision.module\ so the controller runtime can
+      find the controller DLL and the manifest.
+      Tier-1: no external data assets, so no ResolveControllerAssetsTask step.
+  -->
+
+  <PropertyGroup>
+    <_OutWitVisionModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitVisionModulePackageContent>
+    <_OutWitVisionModuleOutputDir>$(OutputPath)@Controllers\vision.module\</_OutWitVisionModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyVisionModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitVisionModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitVisionFiles Include="$(_OutWitVisionModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitVisionFiles)"
+        DestinationFiles="@(_OutWitVisionFiles->'$(_OutWitVisionModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.AI.Vision: staged module to '$(_OutWitVisionModuleOutputDir)'." />
+  </Target>
+
+</Project>

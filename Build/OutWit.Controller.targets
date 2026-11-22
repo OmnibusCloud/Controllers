@@ -20,6 +20,15 @@
     <ControllerZipOutputDir>$(SolutionDir)@Zips\$(Configuration)\</ControllerZipOutputDir>
   </PropertyGroup>
 
+  <!-- The build's account of what it staged (see OutWit.Controller.Staging.targets): written
+       once this project's files are in the module, and the list the stamp, the zip and the
+       package below are made from. -->
+  <PropertyGroup>
+    <ControllerStagingTarget>ControllerPostBuild</ControllerStagingTarget>
+    <ControllerRecordModuleDir>$(ControllerModuleOutputDir)</ControllerRecordModuleDir>
+  </PropertyGroup>
+  <Import Project="$(MSBuildThisFileDirectory)OutWit.Controller.Staging.targets" />
+
   <!-- The set of build outputs that go into a controller's .module/ folder.
        Companion Model csprojs add their own DLL via OutWit.Controller.Model.targets. -->
   <ItemGroup>
@@ -55,12 +64,18 @@
   </Target>
 
   <!-- Stages the controller's outputs into $(SolutionDir)@Controllers/<Cfg>/<name>.module/.
-       Mirrors the legacy WitEngine layout so existing tooling keeps working. -->
+       Mirrors the legacy WitEngine layout so existing tooling keeps working. Nothing is
+       deleted here: the folder also holds what a Model project staged and what was put there
+       by hand. What this build staged goes onto ControllerStagedFile, from which the record
+       is written (ControllerRecordStaged). -->
   <Target Name="ControllerPostBuild" AfterTargets="PostBuildEvent">
     <Copy SourceFiles="@(ControllerModuleFile)"
           DestinationFolder="$(ControllerModuleOutputDir)"
           SkipUnchangedFiles="true"
           OverwriteReadOnlyFiles="true" />
+    <ItemGroup>
+      <ControllerStagedFile Include="@(ControllerModuleFile->'$(ControllerModuleOutputDir)%(Filename)%(Extension)')" />
+    </ItemGroup>
   </Target>
 
   <!-- Convention: any file under <ProjectDir>/Resources/ at build time gets
@@ -84,30 +99,47 @@
 
   <Target Name="ControllerStageSourceResources"
           AfterTargets="ControllerPostBuild"
+          BeforeTargets="ControllerRecordStaged"
           Condition="@(ControllerSourceResourceFile->Count()) &gt; 0">
     <Copy SourceFiles="@(ControllerSourceResourceFile)"
           DestinationFiles="@(ControllerSourceResourceFile->'$(ControllerModuleOutputDir)Resources\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true"
           OverwriteReadOnlyFiles="true" />
+    <ItemGroup>
+      <ControllerStagedFile Include="@(ControllerSourceResourceFile->'$(ControllerModuleOutputDir)Resources\%(RecursiveDir)%(Filename)%(Extension)')" />
+    </ItemGroup>
   </Target>
 
-  <!-- Zips the staged module dir into $(SolutionDir)@Zips/<Cfg>/<name>.zip.
+  <!-- Zips the module into $(SolutionDir)@Zips/<Cfg>/<name>.zip.
        Used by the BlobCacheService path on WitCloud server-side. Packed by our own task
-       (sorted entries, fixed timestamps): the same module gives the same bytes on every
-       machine, so a cloud that compares archives sees no phantom rebuilds. -->
-  <Target Name="ControllerPackZip" AfterTargets="ControllerPostBuild">
+       (sorted entries, fixed timestamps): the same module packed by the same build tools with
+       the same build stamp gives the same bytes. Not on every machine (the compression is the
+       build runtime's own, and the stamp in controller.json carries the minute of the build):
+       what can be reproduced is the content digest in the manifest, for a build made as the
+       publish workflow makes it (see OutWit.Controller.BuildTasks.cs), so a cloud compares
+       builds by it, not by the archive.
+
+       The archive holds the files the build's records list (ControllerRecordStaged) and what
+       lies under a folder one of the controller's data assets extracts to, where a copy for
+       local runs is kept. It does not hold whatever else is in the folder. -->
+  <Target Name="ControllerPackZip" AfterTargets="ControllerPostBuild" DependsOnTargets="ControllerRecordStaged">
     <MakeDir Directories="$(ControllerZipOutputDir)" />
     <DeterministicZipDirectory SourceDirectory="$(ControllerModuleOutputDir)"
                                DestinationFile="$(ControllerZipOutputDir)$(ControllerZipName)"
+                               Files="@(ControllerModuleStagedFile);@(ControllerModuleDataAssetFile)"
+                               ListedFilesOnly="true"
                                Overwrite="true" />
   </Target>
 
-  <!-- Packs the staged module dir into nupkg's content/module/ + writes an
+  <!-- Packs the module into nupkg's content/module/ + writes an
        empty lib/<tfm>/_._ marker so NuGet considers the package compatible
        with consumer projects (without IncludeBuildOutput=false there'd be
        nothing in lib/ otherwise). Registered into pack via
-       TargetsForTfmSpecificContentInPackage (set in OutWit.Controller.props). -->
-  <Target Name="ControllerPackModuleContents" DependsOnTargets="ControllerPostBuild;ControllerPackZip">
+       TargetsForTfmSpecificContentInPackage (set in OutWit.Controller.props).
+
+       The package ships the files the build's records list (ControllerRecordStaged), not
+       the folder: a file somebody left in the staged module stays on disk and is not packed. -->
+  <Target Name="ControllerPackModuleContents" DependsOnTargets="ControllerPostBuild;ControllerRecordStaged;ControllerPackZip">
     <PropertyGroup>
       <_EmptyLibMarker>$(IntermediateOutputPath)_._</_EmptyLibMarker>
     </PropertyGroup>
@@ -122,11 +154,10 @@
            assets) Resources/ is currently empty in source so nothing
            changes. If a controller ever needs to ship inline resources,
            it should opt in explicitly via a per-csproj <None Pack="true">
-           item rather than relying on the convention staging path. -->
-      <_PackedModuleFile Include="$(ControllerModuleOutputDir)**\*"
-                         Exclude="$(ControllerModuleOutputDir)Resources\**" />
-      <TfmSpecificPackageFile Include="@(_PackedModuleFile)">
-        <PackagePath>content/module/%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
+           item rather than relying on the convention staging path.
+           ControllerModulePackedFile is the recorded files without Resources/. -->
+      <TfmSpecificPackageFile Include="@(ControllerModulePackedFile)">
+        <PackagePath>content/module/%(ModulePath)</PackagePath>
       </TfmSpecificPackageFile>
       <TfmSpecificPackageFile Include="$(_EmptyLibMarker)">
         <PackagePath>lib/$(TargetFramework)/_._</PackagePath>

@@ -1,0 +1,4 @@
+Job:CorpusDedup(Blob:report, CorpusOptions:opts)
+{
+    Blob:dedup = Corpus.Dedup(report, opts);
+}

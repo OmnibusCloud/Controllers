@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.props" />
+
+  <PropertyGroup>
+    <ControllerName>Verify</ControllerName>
+    <Version>1.0.0</Version>
+    <Description>Bundled .wit scripts for the OutWit Verify controller — VerifyRun (sandboxed code-vs-tests verification with sampled re-execution), VerifyGenerate, VerifyGenerateAndCheck, VerifyPreflight, and VerifyRuntimeDiagnostics.</Description>
+    <PackageTags>verify;sandbox;wasm;scripts;rlvr;witengine;witcloud;controller</PackageTags>
+  </PropertyGroup>
+
+  <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md).
+       ENABLE WHEN THE CONTROLLER IS FIRST PUBLISHED TO NUGET.ORG, which is its 1.0.0: until
+       then the feed these packages are restored from has no controller package, and a
+       reference to a package a feed does not have breaks restore.
+       The range is the one to enable as it stands. Its lower bound is the first controller
+       version that feed will have (the decision record: a lower bound no feed has is noise at
+       every restore); its upper bound is the next major, exclusive. The scripts themselves
+       need the activities the controller has had since 0.13.0 (Verify.Repairs,
+       Verify.Disputes) in the form they have since 0.16.0 (Verify.Disputes with the repair
+       round, Verify.Settle with the sampling rate). The range this marker had, [0.1.0, 1.0.0), would have refused the
+       very 1.0.0 it was waiting for; a test holds the range to the release it waits for.
+  <ItemGroup>
+    <PackageReference Include="OutWit.Controller.AI.Verify" Version="[1.0.0, 2.0.0)" />
+  </ItemGroup>
+  -->
+
+  <ItemGroup>
+    <None Include="..\OutWit.Controller.AI.Verify\Scripts\*.wit"
+          Pack="true"
+          PackagePath="content/scripts/" />
+
+    <None Include="build\OutWit.Controller.AI.Verify.Scripts.targets"
+          Pack="true"
+          PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.targets" />
+
+</Project>

@@ -1,0 +1,561 @@
+{
+  "introduction": [
+    "This file is written by a tool (toolchain/notices in the controller's repository, https://github.com/OmnibusCloud/Controllers), and a build job fails when the committed file is not what the tool writes. No text here is written from memory: each is a file, or a named part of a file, at the address given with it, held to the SHA-256 given with it, or a file that lies beside this one. A text is unchanged but for its line ends.",
+    "The controller itself is its authors' work under the MIT licence. This file is about what it carries of others."
+  ],
+
+  "sources": {
+    "cpython": { "env": "python-numpy/pins.env", "key": "CPYTHON" },
+    "numpy": { "env": "python-numpy/pins.env", "key": "NUMPY" },
+    "wasmtime-src": { "env": "pins.env", "key": "WASMTIME_SRC" },
+
+    "wasi-libc-sdk23/LICENSE": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/3f43ea9abb24ed8d24d760989e1d87ea385f8eaa/LICENSE", "sha256": "673f577e363e80e0058bd78214683f045d1d0c63930969a87f01a1d87d7cf1d6" },
+    "wasi-libc-sdk23/LICENSE-APACHE-LLVM": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/3f43ea9abb24ed8d24d760989e1d87ea385f8eaa/LICENSE-APACHE-LLVM", "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5" },
+    "wasi-libc-sdk23/LICENSE-APACHE": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/3f43ea9abb24ed8d24d760989e1d87ea385f8eaa/LICENSE-APACHE", "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2" },
+    "wasi-libc-sdk23/LICENSE-MIT": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/3f43ea9abb24ed8d24d760989e1d87ea385f8eaa/LICENSE-MIT", "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3" },
+    "wasi-libc-sdk23/musl": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/3f43ea9abb24ed8d24d760989e1d87ea385f8eaa/libc-top-half/musl/COPYRIGHT", "sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af" },
+    "wasi-libc-sdk23/cloudlibc": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/3f43ea9abb24ed8d24d760989e1d87ea385f8eaa/libc-bottom-half/cloudlibc/LICENSE", "sha256": "c8b789cf5a746611e6300a0cc7750dbf92b61912a709d04e639245f7290656d0" },
+
+    "wasi-libc-sdk24/LICENSE": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/LICENSE", "sha256": "673f577e363e80e0058bd78214683f045d1d0c63930969a87f01a1d87d7cf1d6" },
+    "wasi-libc-sdk24/LICENSE-APACHE-LLVM": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/LICENSE-APACHE-LLVM", "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5" },
+    "wasi-libc-sdk24/LICENSE-APACHE": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/LICENSE-APACHE", "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2" },
+    "wasi-libc-sdk24/LICENSE-MIT": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/LICENSE-MIT", "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3" },
+    "wasi-libc-sdk24/musl": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/libc-top-half/musl/COPYRIGHT", "sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af" },
+    "wasi-libc-sdk24/cloudlibc": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/libc-bottom-half/cloudlibc/LICENSE", "sha256": "c8b789cf5a746611e6300a0cc7750dbf92b61912a709d04e639245f7290656d0" },
+
+    "wasi-libc-sdk34/LICENSE": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/LICENSE", "sha256": "2711a8b5a5cdfef0e639f96c1aca12ae23d7d64a02d0507f1bdf14d2b27bbc3a" },
+    "wasi-libc-sdk34/LICENSE-APACHE-LLVM": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/LICENSE-APACHE-LLVM", "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5" },
+    "wasi-libc-sdk34/LICENSE-APACHE": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/LICENSE-APACHE", "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2" },
+    "wasi-libc-sdk34/LICENSE-MIT": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/LICENSE-MIT", "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3" },
+    "wasi-libc-sdk34/musl": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/libc-top-half/musl/COPYRIGHT", "sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b" },
+    "wasi-libc-sdk34/musl-fts": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/fts/musl-fts/COPYING", "sha256": "55af87e4017668f54467a3380e7ebbac5e672d8c763bfe95e6fc882a6fdc4046" },
+    "wasi-libc-sdk34/cloudlibc": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/libc-bottom-half/cloudlibc/LICENSE", "sha256": "c8b789cf5a746611e6300a0cc7750dbf92b61912a709d04e639245f7290656d0" },
+
+    "wasi-libc-yowasp/LICENSE-APACHE": { "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/ac020b86fd44bafe60aa4fa12f407d16e3731329/LICENSE-APACHE", "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2" },
+
+    "llvm-18.1.2/compiler-rt": { "url": "https://raw.githubusercontent.com/llvm/llvm-project/26a1d6601d727a96f4301d0d8647b5a42760ae0c/compiler-rt/LICENSE.TXT", "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d" },
+    "llvm-18.1.2/libcxx": { "url": "https://raw.githubusercontent.com/llvm/llvm-project/26a1d6601d727a96f4301d0d8647b5a42760ae0c/libcxx/LICENSE.TXT", "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b" },
+    "llvm-18.1.2/libcxxabi": { "url": "https://raw.githubusercontent.com/llvm/llvm-project/26a1d6601d727a96f4301d0d8647b5a42760ae0c/libcxxabi/LICENSE.TXT", "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c" },
+    "llvm-sdk34/compiler-rt": { "url": "https://raw.githubusercontent.com/llvm/llvm-project/895aa2c896ada719451be2e3673c83da8ddf1141/compiler-rt/LICENSE.TXT", "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d" },
+
+    "ruby/LEGAL": { "url": "https://raw.githubusercontent.com/ruby/ruby/v3_4_1/LEGAL", "sha256": "39917f453428cba1f1054c6a1973f74599a30b8d92e752da94e205a213ef8f92" },
+    "openssl/LICENSE": { "url": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.2.0/LICENSE.txt", "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a" },
+    "libyaml/License": { "url": "https://raw.githubusercontent.com/yaml/libyaml/0.2.5/License", "sha256": "c40112449f254b9753045925248313e9270efa36d226b22d82d4cc6c43c57f29" },
+    "zlib/LICENSE": { "url": "https://raw.githubusercontent.com/madler/zlib/v1.3.1/LICENSE", "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243" },
+    "wasi-vfs/LICENSE": { "url": "https://raw.githubusercontent.com/kateinoigakukun/wasi-vfs/v0.6.2/LICENSE", "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5" },
+    "wasi-crate": { "url": "https://static.crates.io/crates/wasi/wasi-0.11.1+wasi-snapshot-preview1.crate", "sha256": "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b" },
+
+    "rust-1.92.0/COPYRIGHT": { "url": "https://raw.githubusercontent.com/rust-lang/rust/ded5c06cf21d2b93bffd5d884aa6e96934ee4234/COPYRIGHT", "sha256": "172020dbfd5b53a226dfde77616190a48dcff519b0bc0e6deb91a8450782c4af" },
+    "rust-1.92.0/LICENSE-MIT": { "url": "https://raw.githubusercontent.com/rust-lang/rust/ded5c06cf21d2b93bffd5d884aa6e96934ee4234/LICENSE-MIT", "sha256": "b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1" },
+    "rust-1.92.0/LICENSE-APACHE": { "url": "https://raw.githubusercontent.com/rust-lang/rust/ded5c06cf21d2b93bffd5d884aa6e96934ee4234/LICENSE-APACHE", "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a" },
+    "rust-1.97.0/COPYRIGHT": { "url": "https://raw.githubusercontent.com/rust-lang/rust/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/COPYRIGHT", "sha256": "172020dbfd5b53a226dfde77616190a48dcff519b0bc0e6deb91a8450782c4af" },
+    "rust-1.97.0/LICENSE-MIT": { "url": "https://raw.githubusercontent.com/rust-lang/rust/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/LICENSE-MIT", "sha256": "b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1" },
+    "rust-1.97.0/LICENSE-APACHE": { "url": "https://raw.githubusercontent.com/rust-lang/rust/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/LICENSE-APACHE", "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a" },
+
+    "binaryen/LICENSE": { "url": "https://raw.githubusercontent.com/WebAssembly/binaryen/version_133/LICENSE", "sha256": "64c0d02491e16eced74826440ecd2bcf7722d37fa586faf457b2494293afbffe" },
+    "esbuild/LICENSE": { "url": "https://raw.githubusercontent.com/evanw/esbuild/v0.25.10/LICENSE.md", "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681" },
+    "wasmtime-dotnet/LICENSE": { "url": "https://raw.githubusercontent.com/bytecodealliance/wasmtime-dotnet/d9db6b0005b93ba09a6ada8ddce2d5a3846511eb/LICENSE", "sha256": "a6c48161a09acc75a0e25503bab66a731eb5fba5392ed4bb4743e4ba5085327a" }
+  },
+
+  "groups": {
+    "cpython-incorporated": [
+      {
+        "name": "expat", "version": "2.8.1",
+        "licence": "MIT",
+        "in": "{module}, linked statically: the XML parser behind pyexpat, CPython's own copy",
+        "texts": [ { "from": "cpython", "member": "Python-3.14.6/Modules/expat/COPYING" } ]
+      },
+      {
+        "name": "libmpdec", "version": "2.5.1",
+        "licence": "BSD-2-Clause",
+        "in": "{module}, linked statically: the arithmetic behind decimal, CPython's own copy",
+        "texts": [ { "from": "cpython", "member": "Python-3.14.6/Modules/_decimal/libmpdec/mpdecimal.h", "cut": { "kind": "head-comment" } } ]
+      },
+      {
+        "name": "HACL*", "version": "revision 8ba599b2f6c9",
+        "licence": "MIT (its C support headers: Apache-2.0 and MIT)",
+        "in": "{module}, linked statically: the hash functions behind hashlib and hmac, CPython's own copy",
+        "notes": [ "The first text is the terms of the library's files. The second is the whole notice of its C support headers (include/krml), which name their terms without giving a text." ],
+        "texts": [
+          { "from": "cpython", "member": "Python-3.14.6/Modules/_hacl/Hacl_Hash_SHA2.c", "cut": { "kind": "head-comment" } },
+          { "from": "cpython", "member": "Python-3.14.6/Modules/_hacl/include/krml/internal/target.h", "cut": { "kind": "head-comment" } }
+        ]
+      },
+      {
+        "name": "mimalloc",
+        "licence": "MIT",
+        "in": "{module}, linked statically: an allocator, CPython's own copy",
+        "notes": [ "CPython's tree carries this text in its licence document only." ],
+        "texts": [ { "from": "cpython", "member": "Python-3.14.6/Doc/license.rst", "cut": { "kind": "rst-block", "heading": "mimalloc" } } ]
+      },
+      {
+        "name": "Other software CPython incorporates",
+        "licence": "several, each named in the text",
+        "in": "{module} and the standard library: the Mersenne Twister, SipHash, the conversion of decimal numbers (dtoa), and more",
+        "notes": [
+          "This is CPython's own account, the last chapter of its licence document, as it stands (reStructuredText). It repeats expat, libmpdec and mimalloc from above.",
+          "It also covers what this build leaves out: OpenSSL, libffi and zlib are not linked into a WASI build, and the test suite is not carried."
+        ],
+        "texts": [ { "from": "cpython", "member": "Python-3.14.6/Doc/license.rst", "cut": { "kind": "from-line", "line": "Licenses and Acknowledgements for Incorporated Software" } } ]
+      }
+    ],
+
+    "wasi-libc-sdk23": [
+      {
+        "name": "wasi-libc", "version": "as of wasi-sdk 23, commit 3f43ea9abb24",
+        "licence": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+        "in": "{module}, linked statically: the C library",
+        "notes": [
+          "wasi-sdk 23 is what ruby.wasm 2.10.1 builds with unless told otherwise; the module names its compiler as clang 18.1.2 of the same LLVM commit.",
+          "dlmalloc, the allocator inside wasi-libc, is CC0, as the first text says: it asks for no notice and none is given."
+        ],
+        "texts": [
+          { "from": "wasi-libc-sdk23/LICENSE" },
+          { "from": "wasi-libc-sdk23/LICENSE-APACHE-LLVM" },
+          { "from": "wasi-libc-sdk23/LICENSE-APACHE" },
+          { "from": "wasi-libc-sdk23/LICENSE-MIT" }
+        ]
+      },
+      {
+        "name": "musl", "version": "the part of it in wasi-libc",
+        "licence": "MIT",
+        "in": "{module}, linked statically: most of the C library's functions",
+        "texts": [ { "from": "wasi-libc-sdk23/musl" } ]
+      },
+      {
+        "name": "cloudlibc", "version": "the part of it in wasi-libc",
+        "licence": "BSD-2-Clause",
+        "in": "{module}, linked statically: the C library's calls to the system",
+        "texts": [ { "from": "wasi-libc-sdk23/cloudlibc" } ]
+      }
+    ],
+
+    "wasi-libc-sdk24": [
+      {
+        "name": "wasi-libc", "version": "as of wasi-sdk 24, commit b9ef79d7dbd4",
+        "licence": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+        "in": "{module}, linked statically: the C library",
+        "notes": [ "dlmalloc, the allocator inside wasi-libc, is CC0, as the first text says: it asks for no notice and none is given." ],
+        "texts": [
+          { "from": "wasi-libc-sdk24/LICENSE" },
+          { "from": "wasi-libc-sdk24/LICENSE-APACHE-LLVM" },
+          { "from": "wasi-libc-sdk24/LICENSE-APACHE" },
+          { "from": "wasi-libc-sdk24/LICENSE-MIT" }
+        ]
+      },
+      {
+        "name": "musl", "version": "the part of it in wasi-libc",
+        "licence": "MIT",
+        "in": "{module}, linked statically: most of the C library's functions",
+        "texts": [ { "from": "wasi-libc-sdk24/musl" } ]
+      },
+      {
+        "name": "cloudlibc", "version": "the part of it in wasi-libc",
+        "licence": "BSD-2-Clause",
+        "in": "{module}, linked statically: the C library's calls to the system",
+        "texts": [ { "from": "wasi-libc-sdk24/cloudlibc" } ]
+      }
+    ],
+
+    "wasi-libc-sdk34": [
+      {
+        "name": "wasi-libc", "version": "as of wasi-sdk 34, commit 2e6fb9d8ee0c",
+        "licence": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+        "in": "{module}, linked statically: the C library",
+        "notes": [
+          "dlmalloc, the allocator inside wasi-libc, is CC0, as the first text says: it asks for no notice and none is given."
+        ],
+        "texts": [
+          { "from": "wasi-libc-sdk34/LICENSE" },
+          { "from": "wasi-libc-sdk34/LICENSE-APACHE-LLVM" },
+          { "from": "wasi-libc-sdk34/LICENSE-APACHE" },
+          { "from": "wasi-libc-sdk34/LICENSE-MIT" }
+        ]
+      },
+      {
+        "name": "musl", "version": "the part of it in wasi-libc",
+        "licence": "MIT",
+        "in": "{module}, linked statically: most of the C library's functions",
+        "texts": [ { "from": "wasi-libc-sdk34/musl" } ]
+      },
+      {
+        "name": "cloudlibc", "version": "the part of it in wasi-libc",
+        "licence": "BSD-2-Clause",
+        "in": "{module}, linked statically: the C library's calls to the system",
+        "texts": [ { "from": "wasi-libc-sdk34/cloudlibc" } ]
+      },
+      {
+        "name": "musl-fts", "version": "the part of it in wasi-libc",
+        "licence": "BSD-3-Clause",
+        "in": "the C library {module} is linked with: its walk of a file tree, of which a module that walks none has nothing",
+        "texts": [ { "from": "wasi-libc-sdk34/musl-fts" } ]
+      }
+    ],
+
+    "compiler-rt-18.1.2": [
+      {
+        "name": "compiler-rt", "version": "the builtins of LLVM 18.1.2, commit 26a1d6601d72",
+        "licence": "Apache-2.0 WITH LLVM-exception, and the earlier terms of LLVM the text gives",
+        "in": "{module}, linked statically: the routines the compiler calls for what the machine has no instruction for",
+        "texts": [ { "from": "llvm-18.1.2/compiler-rt" } ]
+      }
+    ],
+
+    "compiler-rt-sdk34": [
+      {
+        "name": "compiler-rt", "version": "the builtins of the LLVM in wasi-sdk 34, commit 895aa2c896ad",
+        "licence": "Apache-2.0 WITH LLVM-exception, and the earlier terms of LLVM the text gives",
+        "in": "{module}, linked statically: the routines the compiler calls for what the machine has no instruction for",
+        "texts": [ { "from": "llvm-sdk34/compiler-rt" } ]
+      }
+    ]
+  },
+
+  "documents": [
+    {
+      "path": "AI/OutWit.Controller.AI.Verify.Assets/modules/python-3.14.6/THIRD-PARTY-NOTICES.txt",
+      "title": "python-3.14.6/ of the language runtimes of the OmnibusCloud Verify controller",
+      "module": "python.wasm",
+      "about": [
+        "What this folder carries: python.wasm, CPython 3.14.6 as the cpython-wasi-build project built it for WASI with wasi-sdk 24, taken unchanged; lib/python314.zip, that build's standard library as bytecode; lib/sympy-1.14.0.zip, sympy and mpmath as bytecode. The parts below are those programs and what is linked into python.wasm."
+      ],
+      "parts": [
+        {
+          "name": "CPython", "version": "3.14.6",
+          "licence": "PSF-2.0",
+          "in": "python.wasm, the interpreter, and lib/python314.zip, its standard library",
+          "files": [ "LICENSE" ]
+        },
+        { "group": "cpython-incorporated" },
+        {
+          "name": "sympy", "version": "1.14.0",
+          "licence": "BSD-3-Clause, and the terms of the parts its licence file names",
+          "in": "lib/sympy-1.14.0.zip",
+          "files": [ "LICENSE-sympy.txt" ]
+        },
+        {
+          "name": "mpmath", "version": "1.4.1",
+          "licence": "BSD-3-Clause",
+          "in": "lib/sympy-1.14.0.zip",
+          "files": [ "LICENSE-mpmath.txt" ]
+        },
+        { "group": "wasi-libc-sdk24" },
+        { "group": "compiler-rt-18.1.2" }
+      ]
+    },
+
+    {
+      "path": "AI/OutWit.Controller.AI.Verify.Assets/modules/python-3.14.6-numpy-2.5.4/THIRD-PARTY-NOTICES.txt",
+      "title": "python-3.14.6-numpy-2.5.4/ of the language runtimes of the OmnibusCloud Verify controller",
+      "module": "python.wasm and python-plain.wasm",
+      "about": [
+        "What this folder carries: python-plain.wasm, CPython 3.14.6 built for WASI by the controller's toolchain with wasi-sdk 24, with numpy 2.5.4's compiled modules linked in; python.wasm, the same interpreter caught after it started and imported numpy; lib/python314.zip, the standard library as bytecode; lib/numpy-2.5.4.zip, numpy's Python package as bytecode. The parts below are those programs and what is linked into the two modules.",
+        "BUILD.txt, beside this file, says how the modules were built and names the changes made to numpy's sources; the changes themselves are in patches/."
+      ],
+      "parts": [
+        {
+          "name": "CPython", "version": "3.14.6",
+          "licence": "PSF-2.0",
+          "in": "python.wasm and python-plain.wasm, the interpreter, and lib/python314.zip, its standard library",
+          "files": [ "LICENSE-python.txt" ]
+        },
+        { "group": "cpython-incorporated" },
+        {
+          "name": "numpy", "version": "2.5.4",
+          "licence": "BSD-3-Clause, and the terms of the parts named with it",
+          "in": "python.wasm and python-plain.wasm, its compiled modules linked statically, and lib/numpy-2.5.4.zip",
+          "notes": [ "The file holds numpy's licence and those of the parts of it this build compiles in: pocketfft, lapack_lite, the masked arrays, the random generators and libdivide." ],
+          "files": [ "LICENSE-numpy.txt" ]
+        },
+        {
+          "name": "Dragon4", "version": "numpy's copy",
+          "licence": "MIT",
+          "in": "python.wasm and python-plain.wasm, linked statically: how numpy prints floating-point numbers",
+          "texts": [ { "from": "numpy", "member": "numpy-2.5.4/numpy/_core/src/multiarray/dragon4_LICENSE.txt" } ]
+        },
+        {
+          "name": "pythoncapi-compat", "version": "numpy's copy",
+          "licence": "0BSD",
+          "in": "python.wasm and python-plain.wasm, compiled into numpy's modules: headers that even out CPython's versions",
+          "texts": [ { "from": "numpy", "member": "numpy-2.5.4/numpy/_core/src/common/pythoncapi-compat/COPYING" } ]
+        },
+        {
+          "name": "wasi-python", "version": "recipes and patches at commit 25e49df5",
+          "licence": "Apache-2.0",
+          "in": "the two patches to numpy and the headers put in front of its sources (patches/ and BUILD.txt say which)",
+          "files": [ "LICENSE-wasi-python.txt" ]
+        },
+        { "group": "wasi-libc-sdk24" },
+        { "group": "compiler-rt-18.1.2" },
+        {
+          "name": "libc++ and libc++abi", "version": "of LLVM 18.1.2, commit 26a1d6601d72",
+          "licence": "Apache-2.0 WITH LLVM-exception, and the earlier terms of LLVM the texts give",
+          "in": "python.wasm and python-plain.wasm, linked statically: the C++ library numpy's C++ sources need",
+          "texts": [ { "from": "llvm-18.1.2/libcxx" }, { "from": "llvm-18.1.2/libcxxabi" } ]
+        }
+      ]
+    },
+
+    {
+      "path": "AI/OutWit.Controller.AI.Verify.Assets/modules/quickjs-0.15.1/THIRD-PARTY-NOTICES.txt",
+      "title": "qjs-wasi.wasm of the language runtimes of the OmnibusCloud Verify controller",
+      "module": "qjs-wasi.wasm",
+      "about": [
+        "What this file is about: qjs-wasi.wasm, QuickJS-NG 0.15.1 built for WASI by the controller's toolchain with wasi-sdk 34 from the project's sources and one patch (toolchain/quickjs-wasi.patch in the repository). It lies at the top of the runtime set; every folder beside it has a file like this one of its own."
+      ],
+      "parts": [
+        {
+          "name": "QuickJS-NG", "version": "0.15.1",
+          "licence": "MIT",
+          "in": "qjs-wasi.wasm, the interpreter",
+          "files": [ "LICENSE-quickjs-ng.txt" ]
+        },
+        { "group": "wasi-libc-sdk34" },
+        { "group": "compiler-rt-sdk34" }
+      ]
+    },
+
+    {
+      "path": "AI/OutWit.Controller.AI.Verify.Assets/modules/lua-5.4.8/THIRD-PARTY-NOTICES.txt",
+      "title": "lua-5.4.8/ of the language runtimes of the OmnibusCloud Verify controller",
+      "module": "lua.wasm",
+      "about": [
+        "What this folder carries: lua.wasm, the stock Lua 5.4.8 interpreter built for WASI by the controller's toolchain with wasi-sdk 34 from lua.org's sources, unchanged; an error unwinds to its protected call by Binaryen's asyncify instead of WebAssembly's exception handling."
+      ],
+      "parts": [
+        {
+          "name": "Lua", "version": "5.4.8",
+          "licence": "MIT",
+          "in": "lua.wasm, the interpreter",
+          "files": [ "LICENSE-lua.txt" ]
+        },
+        { "group": "wasi-libc-sdk34" },
+        { "group": "compiler-rt-sdk34" },
+        {
+          "name": "Binaryen", "version": "133",
+          "licence": "Apache-2.0",
+          "in": "lua.wasm: its asyncify pass rewrote the module and wrote the few functions of the unwinding into it",
+          "texts": [ { "from": "binaryen/LICENSE" } ]
+        }
+      ]
+    },
+
+    {
+      "path": "AI/OutWit.Controller.AI.Verify.Assets/modules/typescript-sucrase-3.35.1/THIRD-PARTY-NOTICES.txt",
+      "title": "typescript-sucrase-3.35.1/ of the language runtimes of the OmnibusCloud Verify controller",
+      "module": "sucrase.js",
+      "about": [
+        "What this folder carries: sucrase.js, the transform of sucrase 3.35.1 with the packages it needs, from npm by the integrity hashes of the toolchain's lock file, bundled into one script by esbuild 0.25.10. QuickJS loads it before a TypeScript task."
+      ],
+      "parts": [
+        {
+          "name": "sucrase and the packages bundled with it",
+          "licence": "MIT (ts-interface-checker: Apache-2.0)",
+          "in": "sucrase.js",
+          "notes": [ "The file names every bundled package with its version and gives each one's licence text: sucrase, lines-and-columns, ts-interface-checker and four @jridgewell packages." ],
+          "files": [ "LICENSE-sucrase.txt" ]
+        },
+        {
+          "name": "esbuild", "version": "0.25.10",
+          "licence": "MIT",
+          "in": "sucrase.js: the bundler wrote the few functions that tie the bundled modules together",
+          "texts": [ { "from": "esbuild/LICENSE" } ]
+        }
+      ]
+    },
+
+    {
+      "path": "AI/OutWit.Controller.AI.Verify.Assets/modules/ruby-3.4.1/THIRD-PARTY-NOTICES.txt",
+      "title": "ruby-3.4.1/ of the language runtimes of the OmnibusCloud Verify controller",
+      "module": "ruby.wasm",
+      "about": [
+        "What this folder carries: ruby.wasm, Ruby 3.4.1 as the ruby.wasm project built it for WASI (release 2.10.1, the full profile), taken unchanged; root/, that build's standard library and the library folders of four bundled gems, as files, unchanged. The parts below are those programs and what is linked into ruby.wasm."
+      ],
+      "parts": [
+        {
+          "name": "Ruby", "version": "3.4.1",
+          "licence": "Ruby's own terms or BSD-2-Clause",
+          "in": "ruby.wasm, the interpreter, and root/, its standard library",
+          "files": [ "LICENSE-ruby.txt", "LICENSE-ruby-BSDL.txt" ]
+        },
+        {
+          "name": "Parts of Ruby under terms of their own",
+          "licence": "several, each named in the text",
+          "in": "ruby.wasm and root/: the regular expression engine, the encodings, the digests, RubyGems and Bundler in the standard library, and more",
+          "notes": [ "This is Ruby's own account (LEGAL), as it stands. It names files by their place in Ruby's sources." ],
+          "texts": [ { "from": "ruby/LEGAL" } ]
+        },
+        {
+          "name": "ruby.wasm", "version": "2.10.1",
+          "licence": "MIT",
+          "in": "ruby.wasm: the port of Ruby to WebAssembly",
+          "files": [ "LICENSE-ruby.wasm.txt" ]
+        },
+        {
+          "name": "The bundled gems base64 0.2.0, csv 3.3.2, matrix 0.4.2 and prime 0.1.3",
+          "licence": "BSD-2-Clause (prime: Ruby's own terms or BSD-2-Clause), as each gem's files say",
+          "in": "root/usr/local/lib/ruby/gems/3.4.0/gems/",
+          "files": [ "LICENSE-base64-0.2.0-LICENSE.txt", "LICENSE-csv-3.3.2-LICENSE.txt", "LICENSE-matrix-0.4.2-LICENSE.txt", "LICENSE-prime-0.1.3-BSDL.txt", "LICENSE-prime-0.1.3-COPYING.txt" ]
+        },
+        {
+          "name": "OpenSSL", "version": "3.2.0",
+          "licence": "Apache-2.0",
+          "in": "ruby.wasm, linked statically: behind Ruby's openssl library",
+          "texts": [ { "from": "openssl/LICENSE" } ]
+        },
+        {
+          "name": "libyaml", "version": "0.2.5",
+          "licence": "MIT",
+          "in": "ruby.wasm, linked statically: behind Ruby's psych library",
+          "texts": [ { "from": "libyaml/License" } ]
+        },
+        {
+          "name": "zlib", "version": "1.3.1",
+          "licence": "Zlib",
+          "in": "ruby.wasm, linked statically: behind Ruby's zlib library",
+          "texts": [ { "from": "zlib/LICENSE" } ]
+        },
+        {
+          "name": "wasi-vfs", "version": "0.6.2",
+          "licence": "Apache-2.0 WITH LLVM-exception",
+          "in": "ruby.wasm, linked statically: a file system kept inside the module, which ruby.wasm's builds link in",
+          "texts": [ { "from": "wasi-vfs/LICENSE" } ]
+        },
+        {
+          "name": "wasi", "version": "0.11.1 (the Rust crate)",
+          "licence": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+          "in": "ruby.wasm, linked statically: the crate wasi-vfs's library is built on",
+          "texts": [
+            { "from": "wasi-crate", "member": "wasi-0.11.1+wasi-snapshot-preview1/LICENSE-Apache-2.0_WITH_LLVM-exception" },
+            { "from": "wasi-crate", "member": "wasi-0.11.1+wasi-snapshot-preview1/LICENSE-APACHE" },
+            { "from": "wasi-crate", "member": "wasi-0.11.1+wasi-snapshot-preview1/LICENSE-MIT" }
+          ]
+        },
+        {
+          "name": "The Rust standard library", "version": "of Rust 1.92.0, commit ded5c06cf21d",
+          "licence": "MIT OR Apache-2.0",
+          "in": "ruby.wasm, linked statically with wasi-vfs, which is written in Rust; the module names this compiler",
+          "notes": [ "The first text points to a file of a Rust release (COPYRIGHT-library.html) for the parts of the standard library that came from others. That file is not reproduced here." ],
+          "texts": [ { "from": "rust-1.92.0/COPYRIGHT" }, { "from": "rust-1.92.0/LICENSE-MIT" }, { "from": "rust-1.92.0/LICENSE-APACHE" } ]
+        },
+        { "group": "wasi-libc-sdk23" },
+        { "group": "compiler-rt-18.1.2" }
+      ]
+    },
+
+    {
+      "path": "AI/OutWit.Controller.AI.Verify.Assets/modules/clang-22.1.0/THIRD-PARTY-NOTICES.txt",
+      "title": "clang-22.1.0/ of the language runtimes of the OmnibusCloud Verify controller",
+      "module": "llvm.wasm",
+      "about": [
+        "What this folder carries: llvm.wasm, LLVM 22.1.0 (clang and its linker) as the YoWASP project built it for WASI, taken unchanged from the npm package @yowasp/clang 22.0.0-git20542-10; usr/, the files that compiler reads while it builds a task's program (wasi-libc, libc++, libc++abi, compiler-rt and clang's own headers), from the same package, unchanged. The package carries no licence texts; the files beside this one are each project's own, taken at a pinned commit."
+      ],
+      "parts": [
+        {
+          "name": "LLVM", "version": "22.1.0",
+          "licence": "Apache-2.0 WITH LLVM-exception",
+          "in": "llvm.wasm (clang, lld) and usr/ (libc++, libc++abi, compiler-rt, clang's headers)",
+          "files": [ "LICENSE-llvm.txt" ]
+        },
+        {
+          "name": "YoWASP clang", "version": "22.0.0-git20542-10",
+          "licence": "Apache-2.0",
+          "in": "llvm.wasm and usr/: the packaging of LLVM as one WASI module",
+          "files": [ "LICENSE-yowasp-clang.txt" ]
+        },
+        {
+          "name": "wasi-libc", "version": "commit ac020b86fd44",
+          "licence": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+          "in": "llvm.wasm, linked statically, and usr/, as the library a task's program is linked with",
+          "notes": [ "dlmalloc, the allocator inside wasi-libc, is CC0, as LICENSE-wasi-libc.txt says: it asks for no notice and none is given." ],
+          "files": [ "LICENSE-wasi-libc.txt", "LICENSE-wasi-libc-APACHE-LLVM.txt", "LICENSE-wasi-libc-MIT.txt" ],
+          "texts": [ { "from": "wasi-libc-yowasp/LICENSE-APACHE" } ]
+        },
+        {
+          "name": "musl", "version": "the part of it in wasi-libc",
+          "licence": "MIT",
+          "in": "llvm.wasm and usr/: most of the C library's functions",
+          "files": [ "COPYRIGHT-musl.txt" ]
+        },
+        {
+          "name": "cloudlibc", "version": "the part of it in wasi-libc",
+          "licence": "BSD-2-Clause",
+          "in": "llvm.wasm and usr/: the C library's calls to the system",
+          "files": [ "LICENSE-cloudlibc.txt" ]
+        },
+        {
+          "name": "musl-fts", "version": "the part of it in wasi-libc",
+          "licence": "BSD-3-Clause",
+          "in": "usr/: the C library's walk of a file tree",
+          "files": [ "COPYING-musl-fts.txt" ]
+        }
+      ]
+    },
+
+    {
+      "path": "AI/OutWit.Controller.AI.Verify.Assets/modules/wasmtime-48.0.8/THIRD-PARTY-NOTICES.txt",
+      "title": "The native wasmtime library the OmnibusCloud controllers carry",
+      "module": "the library",
+      "about": [
+        "What this folder carries: the wasmtime engine, version 48.0.8, as one native library (wasmtime.dll, libwasmtime.so or libwasmtime.dylib), taken unchanged from the C API archive of the engine's own release. NOTICE.txt, beside this file, names that archive. This file is one for the three platforms the controllers ship the library for; a part that is linked on some of them only says so."
+      ],
+      "parts": [
+        {
+          "name": "wasmtime", "version": "48.0.8",
+          "licence": "Apache-2.0 WITH LLVM-exception",
+          "in": "the library",
+          "files": [ "LICENSE-wasmtime.txt" ]
+        },
+        {
+          "name": "The Rust standard library", "version": "of Rust 1.97.0, commit 2d8144b78805",
+          "licence": "MIT OR Apache-2.0",
+          "in": "the library, linked statically; the library names this compiler",
+          "notes": [ "The first text points to a file of a Rust release (COPYRIGHT-library.html) for the parts of the standard library that came from others. That file is not reproduced here." ],
+          "texts": [ { "from": "rust-1.97.0/COPYRIGHT" }, { "from": "rust-1.97.0/LICENSE-MIT" }, { "from": "rust-1.97.0/LICENSE-APACHE" } ]
+        },
+        {
+          "name": "Rust crates",
+          "licence": "each crate's own, named with it",
+          "in": "the library, linked statically",
+          "crates": {
+            "from": "wasmtime-src",
+            "root": "wasmtime-c-api",
+            "about": [
+              "The engine is built from Rust crates: its own, and those of others it depends on. The list below was made from the engine's own source archive, which holds every crate it is built from (vendor/) and the lock file that names each version. Starting at the C API library with the features it is released with, the tool followed the crates' manifests: a dependency counts when it is of the kind that is linked (not a build script's, not a procedural macro), when it is not optional or a feature that is on asks for it, and when it is for the platform. The walk was made for each of the three platforms: x86-64 Windows, x86-64 Linux and arm64 macOS.",
+              "It follows manifests, not the compiler. A crate can be listed of which the linker kept nothing; a listed crate's text can cover files the build did not use. A crate whose package carries no licence text is listed with the licence its manifest states."
+            ]
+          }
+        }
+      ]
+    },
+
+    {
+      "path": "AI/OutWit.Controller.AI.Verify/THIRD-PARTY-NOTICES.txt",
+      "title": "The module of the OmnibusCloud Verify controller",
+      "module": "Wasmtime.Dotnet.dll",
+      "about": [
+        "What the module carries of others: Wasmtime.Dotnet.dll. The other assemblies are the controller's own.",
+        "What reaches the module's folder on a node besides: the native wasmtime library under runtimes/, and the language runtimes under wasm/. They are fetched as archives of their own, and each folder of them has a THIRD-PARTY-NOTICES.txt of its own."
+      ],
+      "parts": [
+        {
+          "name": "Wasmtime.Dotnet", "version": "48.0.2",
+          "licence": "Apache-2.0 WITH LLVM-exception",
+          "in": "Wasmtime.Dotnet.dll",
+          "package": {
+            "what": "The managed binding over the native wasmtime library, on which the sandbox runs. Of the package only the managed assembly is in the module; the native library is a data asset (above) with notices of its own.",
+            "id": "Wasmtime",
+            "authors": "Peter Huene",
+            "file": "Wasmtime.Dotnet.dll",
+            "sha256": "a4d77b21aa30bc3218ea40c77810fad53f7d305dcf126c249c1b0434cb386396",
+            "source": "https://github.com/bytecodealliance/wasmtime-dotnet",
+            "commit": "d9db6b0005b93ba09a6ada8ddce2d5a3846511eb",
+            "text": "the file LICENSE of that repository at that commit"
+          },
+          "notes": [ "The package carries no licence text; it names this licence and the commit of its sources the text is taken at." ],
+          "texts": [ { "from": "wasmtime-dotnet/LICENSE" } ]
+        }
+      ]
+    }
+  ]
+}

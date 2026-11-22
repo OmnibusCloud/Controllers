@@ -1,0 +1,42 @@
+# Polish. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Strona główna
+Aktualności
+Wydarzenia
+Kontakt
+O nas
+Godziny otwarcia
+Dni targowe
+Pogoda
+[sentence]
+Biblioteka miejska jest otwarta w poniedziałek od dziewiątej rano do siódmej wieczorem.
+Piekarz na rogu ulicy piecze każdego ranka świeży chleb dla całej dzielnicy.
+Wiosną jabłonie kwitną wzdłuż starej drogi.
+Prom przepływa przez rzekę co dwadzieścia minut, kiedy pogoda jest dobra.
+Po długiej zimie ścieżki w parku zostały naprawione.
+Rada miasta postanowiła odnowić most w przyszłym roku.
+Na targu rolnicy sprzedają warzywa, ser i miód z okolicy.
+Uczniowie szkoły podstawowej zwiedzają dzisiaj małe muzeum w porcie.
+Z powodu silnego deszczu przejście pod dworcem jest zamknięte.
+Zegarmistrz od czterdziestu lat naprawia zegar na wieży kościoła.
+Jesienią sąsiedzi razem zbierają liście z chodników.
+Nowa linia autobusowa łączy wieś z miastem i ze szpitalem.
+W sobotę w domu kultury odbędzie się koncert chóru młodzieżowego.
+Leśniczy pokazuje gościom najstarsze dęby w lesie.
+Wielu mieszkańców jeździ do pracy na rowerze, ponieważ ulice są wąskie.
+Strażacy ćwiczą co miesiąc na brzegu jeziora.
+W warsztacie za ratuszem starannie odnawia się stare meble.
+Lekarz przeniósł swój gabinet do domu obok apteki.
+W czasie wakacji basen jest otwarty do późnego wieczora.
+Ogrodniczka sadzi róże i lawendę przed wejściem na dworzec.
+Nowa ścieżka rowerowa prowadzi teraz od rynku do młyna.
+Listonosz zna wszystkie rodziny na ulicach swojego rejonu.
+Wieczorem szachiści spotykają się w czytelni biblioteki.
+Woda w fontannie jest regularnie badana przez służbę zdrowia.
+Nauczycielka wyjaśnia dzieciom, jak czytać mapę.
+Zimą gmina najpierw usuwa śnieg z głównych ulic.
+Rybak przywozi swój połów do portu wcześnie rano.
+Mieszkańcy starego miasta chcieliby mieć więcej ławek i drzew.
+Na wzgórzu nad miastem stoi stara ceglana wieża ciśnień.
+Stowarzyszenie szuka ochotników, którzy pomogą podczas letniego festynu.

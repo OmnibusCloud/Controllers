@@ -1,0 +1,30 @@
+<Project>
+
+  <!-- The wasm host refuses a native wasmtime library other than the one the controllers ship
+       (WasmHostNatives.PINNED): the package's own copy (48.0.2) is not it. A project that runs the
+       host from its own output (the test projects, the trap host) imports this file, and after the
+       build the pinned library of the build machine's platform takes the package's place in
+       bin/.../runtimes/<rid>/native/ - when it is there: the asset tool's natives.sh lays it out in
+       OutWit.Controller.AI.Verify.Tests/@Data/natives/ (gitignored; the build server runs it before
+       the build), e.g.
+         bash AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh AI/OutWit.Controller.AI.Verify.Tests/@Data/natives
+       Without it the build warns and every run of the sandbox reports the natives guard's refusal. -->
+  <PropertyGroup>
+    <WasmHostPinnedNativesFolder>$(MSBuildThisFileDirectory)..\OutWit.Controller.AI.Verify.Tests\@Data\natives\</WasmHostPinnedNativesFolder>
+    <WasmHostPinnedNativesRid>$(NETCoreSdkPortableRuntimeIdentifier)</WasmHostPinnedNativesRid>
+    <WasmHostPinnedNativesRid Condition="'$(WasmHostPinnedNativesRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</WasmHostPinnedNativesRid>
+    <WasmHostPinnedNativesFile Condition="$([MSBuild]::IsOSPlatform('Windows'))">wasmtime.dll</WasmHostPinnedNativesFile>
+    <WasmHostPinnedNativesFile Condition="$([MSBuild]::IsOSPlatform('OSX'))">libwasmtime.dylib</WasmHostPinnedNativesFile>
+    <WasmHostPinnedNativesFile Condition="'$(WasmHostPinnedNativesFile)' == ''">libwasmtime.so</WasmHostPinnedNativesFile>
+    <WasmHostPinnedNativesSource>$(WasmHostPinnedNativesFolder)$(WasmHostPinnedNativesRid)\$(WasmHostPinnedNativesFile)</WasmHostPinnedNativesSource>
+  </PropertyGroup>
+
+  <Target Name="WasmHostPinnedNatives" AfterTargets="Build">
+    <Copy Condition="Exists('$(WasmHostPinnedNativesSource)')"
+          SourceFiles="$(WasmHostPinnedNativesSource)"
+          DestinationFolder="$(OutDir)runtimes\$(WasmHostPinnedNativesRid)\native\" />
+    <Warning Condition="!Exists('$(WasmHostPinnedNativesSource)')"
+             Text="No pinned wasmtime library at $(WasmHostPinnedNativesSource): the wasm host in $(MSBuildProjectName) will refuse the package's own library. Run toolchain/natives.sh of the asset tool into OutWit.Controller.AI.Verify.Tests/@Data/natives." />
+  </Target>
+
+</Project>

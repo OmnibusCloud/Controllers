@@ -1,0 +1,20 @@
+# Portuguese stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/por_Latn.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 5c1e94552bb697149440867fc625e15c4fbf2fbadcbef1fa935b152ef4bb490c.
+# In the order of the source; Corpus 0.1.14 shipped this list.
+de
+a
+e
+o
+em
+do
+da
+que
+um
+no
+uma
+com
+para
+na
+é
+foi

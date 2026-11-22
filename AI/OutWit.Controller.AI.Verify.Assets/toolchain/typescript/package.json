@@ -1,0 +1,10 @@
+{
+  "name": "verify-typescript-transpiler",
+  "private": true,
+  "description": "Build-time only: bundles sucrase's transform for the Verify TypeScript runtime (toolchain/build.sh).",
+  "license": "MIT",
+  "dependencies": {
+    "esbuild": "0.25.10",
+    "sucrase": "3.35.1"
+  }
+}

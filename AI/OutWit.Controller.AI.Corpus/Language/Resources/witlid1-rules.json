@@ -1,0 +1,411 @@
+{
+  "comment": [
+    "The rule data a WITLID1 language model gets: the per-language tables Corpus 0.1.14 had in its code, frozen as data.",
+    "A WITLID1 model carries profiles only, so a manifest pinned to one keeps producing the bytes it produced under 0.1.14.",
+    "Never edit: a language pack (WITLID2) carries its own rule data. The tests pin this file's SHA-256.",
+    "Stop words: Gopher's eight for eng (Rae et al. 2021, appendix A.1.1); FineWeb-2's per-language lists for the others",
+    "(huggingface/fineweb-2, configs/<language>_<script>.yml, Apache-2.0); zho and cmn share cmn_Hani's list.",
+    "jpn: FineWeb-2's jpn_Jpan.yml repetition thresholds. A script written without spaces takes the controller's letter-based defaults."
+  ],
+  "languages": {
+    "bod": {
+      "script": "Tibt"
+    },
+    "ces": {
+      "script": "Latn",
+      "stop_words": [
+        "v",
+        "a",
+        "se",
+        "na",
+        "je",
+        "z",
+        "s",
+        "do"
+      ],
+      "min_stop_words": 2
+    },
+    "cmn": {
+      "script": "Hani",
+      "stop_words": [
+        "的",
+        "年",
+        "在",
+        "月",
+        "是",
+        "和",
+        "日",
+        "了",
+        "於",
+        "·",
+        "為",
+        "有",
+        "被",
+        "人",
+        "中",
+        "为",
+        "他",
+        "與",
+        "後",
+        "也",
+        "而",
+        "由"
+      ],
+      "min_stop_words": 2
+    },
+    "deu": {
+      "script": "Latn",
+      "stop_words": [
+        "der",
+        "und",
+        "die",
+        "in",
+        "von",
+        "im",
+        "den",
+        "des",
+        "mit",
+        "das",
+        "er",
+        "dem",
+        "als",
+        "wurde",
+        "für"
+      ],
+      "min_stop_words": 2
+    },
+    "eng": {
+      "script": "Latn",
+      "stop_words": [
+        "the",
+        "be",
+        "to",
+        "of",
+        "and",
+        "that",
+        "have",
+        "with"
+      ],
+      "min_stop_words": 2
+    },
+    "fas": {
+      "script": "Arab",
+      "stop_words": [
+        "در",
+        "و",
+        "،",
+        "به",
+        "از",
+        "که",
+        "است",
+        "این",
+        "را",
+        "با",
+        "یک"
+      ],
+      "min_stop_words": 2
+    },
+    "fra": {
+      "script": "Latn",
+      "stop_words": [
+        "de",
+        "la",
+        "le",
+        "et",
+        "à",
+        "en",
+        "l'",
+        "des",
+        "du",
+        "les",
+        "est",
+        "d'",
+        "un",
+        "une",
+        "il",
+        "dans",
+        "par",
+        "au"
+      ],
+      "min_stop_words": 2
+    },
+    "ita": {
+      "script": "Latn",
+      "stop_words": [
+        "di",
+        "e",
+        "il",
+        "la",
+        "in",
+        "a",
+        "del",
+        "che",
+        "è",
+        "della",
+        "un",
+        "per",
+        "nel",
+        "l'",
+        "con",
+        "da",
+        "i",
+        "una"
+      ],
+      "min_stop_words": 2
+    },
+    "jpn": {
+      "script": "Jpan",
+      "stop_words": [
+        "の",
+        "に",
+        "を",
+        "は",
+        "た",
+        "て",
+        "が",
+        "と",
+        "で",
+        "年",
+        "し",
+        "・",
+        "月",
+        "れ",
+        "さ"
+      ],
+      "min_stop_words": 2,
+      "quality": {
+        "max_duplicate_line_ratio": 0.328,
+        "top_ngram_chars": [
+          0.239,
+          0.196,
+          0.172
+        ],
+        "duplicate_ngram_chars": [
+          0.243,
+          0.225,
+          0.207,
+          0.19,
+          0.175,
+          0.159
+        ]
+      }
+    },
+    "khm": {
+      "script": "Khmr"
+    },
+    "lao": {
+      "script": "Laoo"
+    },
+    "mya": {
+      "script": "Mymr"
+    },
+    "nld": {
+      "script": "Latn",
+      "stop_words": [
+        "de",
+        "van",
+        "in",
+        "het",
+        "een",
+        "en",
+        "is",
+        "op",
+        "voor",
+        "met",
+        "door",
+        "zijn",
+        "werd",
+        "hij",
+        "uit"
+      ],
+      "min_stop_words": 2
+    },
+    "pol": {
+      "script": "Latn",
+      "stop_words": [
+        "w",
+        "i",
+        "na",
+        "z",
+        "do",
+        "się",
+        "roku",
+        "od",
+        "a",
+        "jest",
+        "przez",
+        "po",
+        "jako",
+        "oraz",
+        "o",
+        "został",
+        "był",
+        "nie"
+      ],
+      "min_stop_words": 2
+    },
+    "por": {
+      "script": "Latn",
+      "stop_words": [
+        "de",
+        "a",
+        "e",
+        "o",
+        "em",
+        "do",
+        "da",
+        "que",
+        "um",
+        "no",
+        "uma",
+        "com",
+        "para",
+        "na",
+        "é",
+        "foi"
+      ],
+      "min_stop_words": 2
+    },
+    "rus": {
+      "script": "Cyrl",
+      "stop_words": [
+        "в",
+        "и",
+        "на",
+        "с",
+        "года",
+        "по",
+        "году",
+        "из",
+        "был",
+        "к",
+        "не",
+        "от",
+        "что",
+        "за",
+        "для",
+        "его",
+        "как",
+        "а",
+        "он",
+        "также",
+        "до",
+        "после"
+      ],
+      "min_stop_words": 2
+    },
+    "spa": {
+      "script": "Latn",
+      "stop_words": [
+        "de",
+        "la",
+        "en",
+        "el",
+        "y",
+        "a",
+        "que",
+        "del",
+        "los",
+        "se",
+        "por",
+        "un",
+        "con",
+        "una",
+        "las",
+        "su"
+      ],
+      "min_stop_words": 2
+    },
+    "tha": {
+      "script": "Thai"
+    },
+    "tur": {
+      "script": "Latn",
+      "stop_words": [
+        "ve",
+        "bir",
+        "olarak",
+        "bu",
+        "ile",
+        "için",
+        "olan",
+        "da",
+        "de",
+        "tarafından",
+        "yılında",
+        "sonra",
+        "en",
+        "daha",
+        "ilk",
+        "the"
+      ],
+      "min_stop_words": 2
+    },
+    "ukr": {
+      "script": "Cyrl",
+      "stop_words": [
+        "у",
+        "в",
+        "на",
+        "і",
+        "з",
+        "та",
+        "до",
+        "року",
+        "за",
+        "що"
+      ],
+      "min_stop_words": 2
+    },
+    "vie": {
+      "script": "Latn",
+      "stop_words": [
+        "là",
+        "và",
+        "của",
+        "một",
+        "được",
+        "trong",
+        "năm",
+        "các",
+        "có",
+        "loài",
+        "này",
+        "đã",
+        "người"
+      ],
+      "min_stop_words": 2
+    },
+    "yue": {
+      "script": "Hani"
+    },
+    "zho": {
+      "script": "Hani",
+      "stop_words": [
+        "的",
+        "年",
+        "在",
+        "月",
+        "是",
+        "和",
+        "日",
+        "了",
+        "於",
+        "·",
+        "為",
+        "有",
+        "被",
+        "人",
+        "中",
+        "为",
+        "他",
+        "與",
+        "後",
+        "也",
+        "而",
+        "由"
+      ],
+      "min_stop_words": 2
+    }
+  }
+}

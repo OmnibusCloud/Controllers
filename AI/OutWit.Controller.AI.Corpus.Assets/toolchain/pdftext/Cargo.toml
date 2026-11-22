@@ -1,0 +1,33 @@
+# The PDF extractor of the Corpus controller: pdf_oxide over one document, built for
+# wasm32-wasip1 by ../build.sh with the toolchain ../pins.env names. Cargo.lock is part of
+# the source: the build runs with --locked, so the module is a function of this folder and
+# the pins.
+
+[package]
+name = "pdftext"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+license = "MIT"
+description = "The text of one PDF as a WASI command: pdftext /in/doc.pdf /out"
+
+[dependencies]
+# No default features: "icc" is colour management for rendering, which text does not use.
+# "legacy-crypto" is the MD5 key derivation of the Standard security handler up to revision
+# 4 (RC4 and AES-128); without it every such document, the common case of a PDF that is
+# encrypted only to carry permissions and opens with the empty password, is refused.
+pdf_oxide = { version = "=0.3.78", default-features = false, features = ["legacy-crypto"] }
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = "fat"
+codegen-units = 1
+# A panic aborts: on wasm32-wasip1 the standard library is built to abort, and unwinding
+# would need the exception-handling proposal the sandbox turns off. An abort is the wasm
+# "unreachable" instruction, so a panic in the library ends the run as a trap: one
+# deterministic verdict for the host, the same on every node.
+panic = "abort"
+strip = "symbols"
+incremental = false

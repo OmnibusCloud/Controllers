@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-capabilities.schema.json",
+  "title": "Verify capabilities",
+  "description": "The capabilities blob of VerifyRuntimeDiagnostics: what a submitter can know before a run. It takes no taskset. Nodes run the same module as the host (the platform admits no other version to the work), so the runtimes listed are the pool's. An application reads its limits here instead of carrying copies of them. verify-capabilities/3 added the taskset section; every field of verify-capabilities/2 is there with the name and the meaning it had.",
+  "type": "object",
+  "required": ["schema", "controller", "wasmtime", "benchmark_unit", "runtimes", "defaults", "ceilings", "time", "sources", "modules", "packages", "taskset"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "string", "const": "verify-capabilities/3" },
+    "controller": { "type": "string", "description": "The controller's version." },
+    "wasmtime": { "type": "string", "description": "The engine the sandbox runs on: the version of the wasmtime .NET binding and of the native library under it, e.g. \"48.0.2.0 (native 48.0.8)\". A native library that is not one the controller ships is \"unpinned\" with the start of its SHA-256." },
+    "benchmark_unit": { "type": "string", "description": "The unit of the pool's rate: tasks of the reference workload per second." },
+    "runtimes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "language", "sha256", "available"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "description": "The runtime id a task names." },
+          "language": { "type": "string", "enum": ["python", "javascript", "wasi", "ruby", "lua", "typescript", "c", "unknown"] },
+          "sha256": { "type": "string", "description": "The pinned hash of the runtime module; empty for the raw wasi runtime, whose module comes with each task." },
+          "available": { "type": "boolean", "description": "The module is present and passed its hash pin in the host's copy of the controller." },
+          "notes": { "type": "array", "items": { "type": "string" }, "description": "What an author should know about the runtime before writing for it, one sentence each: a platform fact that changes an answer (numpy's 32-bit default integer), a feature that is absent (C++ exceptions, a type check). Absent when there is nothing beyond the language itself." }
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "description": "What applies when the options and the task leave a value unset. There is no wall time among them: it is not a limit since 0.13.0.",
+      "required": ["batch_size", "max_degree", "fuel", "memory_bytes", "stdout_bytes", "stderr_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "batch_size": { "type": "integer", "description": "Tasks per batch." },
+        "max_degree": { "type": "integer", "description": "The most sandboxes a node runs at once, when its cores and its free memory allow that many." },
+        "fuel": { "type": "integer", "description": "The fuel budget of a task: the one budget of a run's work." },
+        "memory_bytes": { "type": "integer" },
+        "stdout_bytes": { "type": "integer", "description": "The stdout a task keeps, all cases of a suite together." },
+        "stderr_bytes": { "type": "integer" }
+      }
+    },
+    "ceilings": {
+      "type": "object",
+      "description": "The most a task may ask for; a larger request is clamped when the taskset is split, and again on the node whatever the package says.",
+      "required": ["fuel", "memory_bytes", "stdout_bytes", "stderr_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "fuel": { "type": "integer" },
+        "memory_bytes": { "type": "integer" },
+        "stdout_bytes": { "type": "integer" },
+        "stderr_bytes": { "type": "integer" }
+      }
+    },
+    "time": {
+      "type": "object",
+      "description": "How fuel relates to time. Fuel is the one budget of a run's work and Timeout means out of fuel. The wall clock gives no verdict: a node keeps a backstop of its own, backstop_base_ms plus the time the run's fuel budget lasts at backstop_fuel_per_second, and a run the backstop ends is a fault of the node.",
+      "required": ["reference_fuel_per_second", "backstop_base_ms", "backstop_fuel_per_second"],
+      "additionalProperties": false,
+      "properties": {
+        "reference_fuel_per_second": { "type": "integer", "description": "The fuel a plain busy loop burns a second on the slowest node the fleet has shown: what turns a fuel budget into seconds. Fuel bounds work, not time: other instructions are slower or faster." },
+        "backstop_base_ms": { "type": "integer", "description": "What every run gets on the clock besides the time of its fuel, milliseconds." },
+        "backstop_fuel_per_second": { "type": "integer", "description": "The slowest a run may burn its fuel before a node's clock ends it: a quarter of the reference rate." }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "description": "The rule a task's source names are held to, for every runtime; a taskset with another name is refused when it is split.",
+      "required": ["name_pattern", "max_name_bytes", "max_depth"],
+      "additionalProperties": false,
+      "properties": {
+        "name_pattern": { "type": "string", "description": "The rule as a regular expression: the characters, the segments and the leading dash. The parser also refuses '.' and '..' segments, a segment that ends with '.', the names Windows reserves for a device, two names that differ only in case, and a name that is a file and a folder of another." },
+        "max_name_bytes": { "type": "integer", "description": "The most bytes a name may have, folders included." },
+        "max_depth": { "type": "integer", "description": "The most segments a name may have, folders and the file." }
+      }
+    },
+    "modules": {
+      "type": "object",
+      "description": "What a module a task brings (the raw wasi runtime) or the compiler builds from a task's sources is held to before the node compiles it.",
+      "required": ["max_bytes", "max_nesting", "compile_fuel_per_byte"],
+      "additionalProperties": false,
+      "properties": {
+        "max_bytes": { "type": "integer", "description": "The largest module a raw wasi task may bring, bytes." },
+        "max_nesting": { "type": "integer", "description": "The deepest blocks, loops and ifs may nest in one function; a deeper module is a CompileError." },
+        "compile_fuel_per_byte": { "type": "integer", "description": "What a byte of the module costs to compile, in fuel, taken from the task's budget once a task. The shape of its functions (locals read inside nested loops, branch tables over nested blocks) is priced on top." }
+      }
+    },
+    "packages": {
+      "type": "object",
+      "description": "How a run is cut into the blobs nodes download: one batch per package while the run is small, about `target` packages once it is large, every package and batch within the caps below. A node refuses a package or a batch that is larger.",
+      "required": ["target", "max_tasks", "max_bytes", "max_output_bytes", "max_batch_tasks", "max_batch_output_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "type": "integer" },
+        "max_tasks": { "type": "integer", "description": "The most tasks one package holds." },
+        "max_bytes": { "type": "integer", "description": "The most task text one package holds, in characters; also the most one task may have." },
+        "max_output_bytes": { "type": "integer", "description": "The most output the tasks of one package may keep together, by their caps: a task counts for twice its stdout cap plus its stderr cap." },
+        "max_batch_tasks": { "type": "integer", "description": "The most tasks one batch holds; a larger batch size in the options is clamped to it." },
+        "max_batch_output_bytes": { "type": "integer", "description": "The most output the tasks of one batch may keep together, by their caps; a batch is cut where they reach it." }
+      }
+    },
+    "taskset": {
+      "type": "object",
+      "description": "What a taskset may hold, and what a preflight answers: the bounds of what the server reads from a lab. A taskset outside the first five is refused whole when it is split, by the line and the name of what is too many or too long, and the preflight says so beforehand. The most text one task may have is packages.max_bytes. A node refuses a package with a task of more sources, arguments or cases than these, whoever made the package.",
+      "required": ["max_line_bytes", "max_tasks", "max_sources", "max_args", "max_suite_cases", "max_preflight_messages", "max_preflight_messages_per_kind", "max_preflight_message_length", "max_preflight_unknown_runtimes"],
+      "additionalProperties": false,
+      "properties": {
+        "max_line_bytes": { "type": "integer", "description": "The most bytes one line of a taskset (one task as JSON) may have; also the most a checker spec may have." },
+        "max_tasks": { "type": "integer", "description": "The most tasks one taskset may have." },
+        "max_sources": { "type": "integer", "description": "The most source files one task may have." },
+        "max_args": { "type": "integer", "description": "The most arguments a task may have, and a case of its suite besides them." },
+        "max_suite_cases": { "type": "integer", "description": "The most cases a suite may have. A task runs once a case, each run under the task's limits." },
+        "max_preflight_messages": { "type": "integer", "description": "The most messages a preflight's answer has, whatever the taskset." },
+        "max_preflight_messages_per_kind": { "type": "integer", "description": "The most messages of one kind (malformed lines, clamped limits, tasks that cannot be planned) a preflight shows; after them one line says how many more there are." },
+        "max_preflight_message_length": { "type": "integer", "description": "The most characters one message of a preflight has." },
+        "max_preflight_unknown_runtimes": { "type": "integer", "description": "The most unknown runtime ids a preflight lists; one line says that there are more." }
+      }
+    },
+    "pool": {
+      "type": "object",
+      "description": "The nodes that can take Verify work for this submitter now, as totals; absent when the host cannot say. No node is named.",
+      "required": ["nodes", "measured", "rate"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes": { "type": "integer" },
+        "measured": { "type": "integer", "description": "Nodes that have measured themselves on the reference workload; the next two numbers are theirs." },
+        "workers": { "type": "integer", "description": "Concurrent sandboxes of the measured nodes, added up. Absent when the host does not carry the degree of every measured node." },
+        "rate": { "type": "number", "description": "Reference tasks per second, added up. Real tasks are faster or slower than the reference ones." }
+      }
+    }
+  }
+}

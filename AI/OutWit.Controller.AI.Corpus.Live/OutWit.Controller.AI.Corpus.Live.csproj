@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The live proof runner of the Corpus controller: drives CorpusPreflight and CorpusProcess
+       on a real server through the public SDK, the way a lab's initiator does, and compares the
+       content hashes of repeated runs. A developer tool, not a package: never packed or
+       published. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>corpus-live</AssemblyName>
+    <RootNamespace>OutWit.Controller.AI.Corpus.Live</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OutWit.Cloud.SDK" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Corpus.Model\OutWit.Controller.AI.Corpus.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="manifests\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The reference language pack (the tests' fixture): what the bundled manifests pin and what
+       the model option defaults to. Its rule data holds FineWeb-2's stop-word lists and
+       repetition thresholds (Apache-2.0), so that project's licence text goes wherever the pack
+       goes: the two files are one item group, and a test holds every project that takes the pack
+       to taking the licence into the same folder. -->
+  <ItemGroup>
+    <None Include="..\OutWit.Controller.AI.Corpus.Tests\Fixtures\language-pack-cc-2026-43-16.bin" Link="models\language-pack-cc-2026-43-16.bin" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\OutWit.Controller.AI.Corpus.Tests\Fixtures\LICENSE-fineweb-2.txt" Link="models\LICENSE-fineweb-2.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

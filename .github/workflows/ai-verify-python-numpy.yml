@@ -1,0 +1,140 @@
+name: AI Verify python-numpy
+run-name: "AI Verify python-numpy: ${{ github.ref_name }}"
+
+# The numpy runtime of Verify (python-3.14.6-numpy-2.5.4), built from pinned sources by
+# toolchain/python-numpy: CPython 3.14.6 for wasm32-wasip1 with numpy 2.5.4 linked in
+# (build.sh), its start-up snapshot made by the pinned wasmtime's wizer and the controller's
+# data asset verify-python-numpy.zip (snapshot.sh). Two builds run side by side in folders of
+# different names; the compare job checks that they made the same bytes, the asset included,
+# and that the asset is the archive the controller's project file pins (its SHA-256 and its
+# size): a pin that names another archive than the one built here fails this workflow. It is
+# not a required check, and it runs for a change to the paths below only; the toolchain's own
+# pins.env, which the build reads, is not among them.
+# The first build also runs the probes under the pinned wasmtime the way the sandbox runs a
+# task. The asset is published as a workflow artifact; it reaches a release only by hand, and
+# the release takes this artifact.
+#
+# It runs on a pull request as well as after a merge, for a change to the toolchain, to what
+# the archive carries beside the build (the folder's third-party notices), or to the asset
+# tool's pins, among which is the archive's own.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/modules/python-3.14.6-numpy-2.5.4/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/AssetPins.cs'
+      - '.github/workflows/ai-verify-python-numpy.yml'
+  # The same paths as above.
+  pull_request:
+    paths:
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/modules/python-3.14.6-numpy-2.5.4/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/AssetPins.cs'
+      - '.github/workflows/ai-verify-python-numpy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        copy: [a, b]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      TOOLCHAIN: AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ "${{ matrix.copy }}" = a ]; then WORK="$RUNNER_TEMP/work"; else WORK="$RUNNER_TEMP/another/work-b"; fi
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
+          bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out" "$WORK"
+
+      - name: Snapshot and data asset
+        shell: bash
+        run: bash "$TOOLCHAIN/snapshot.sh" "$RUNNER_TEMP/out" "$WORK"
+
+      - name: Probe the way the sandbox runs a task
+        if: matrix.copy == 'a'
+        shell: bash
+        run: bash "$TOOLCHAIN/probe.sh" "$RUNNER_TEMP/out" "$WORK/wasmtime/wasmtime"
+
+      - name: Publish the build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: python-numpy-${{ matrix.copy }}
+          path: ${{ runner.temp }}/out/*
+          if-no-files-found: error
+
+      - name: Publish the logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: python-numpy-logs-${{ matrix.copy }}
+          path: |
+            ${{ env.WORK }}/logs/**
+            ${{ env.WORK }}/link/*.log
+            ${{ env.WORK }}/link/*.txt
+            ${{ env.WORK }}/link/*.h
+            ${{ env.WORK }}/numpy-build/meson-logs/**
+            ${{ env.WORK }}/snapshot/*.log
+            ${{ env.WORK }}/snapshot/*.txt
+            ${{ env.WORK }}/snapshot/*.err
+          if-no-files-found: ignore
+
+  compare:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      # The project file, for the pin; before the downloads, which land beside it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: python-numpy-a
+          path: a
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: python-numpy-b
+          path: b
+      - name: The two builds made the same bytes
+        shell: bash
+        run: |
+          status=0
+          for file in a/*; do
+            name="$(basename "$file")"
+            if cmp -s "$file" "b/$name"; then
+              echo "same bytes: $name  $(sha256sum "$file" | cut -d' ' -f1)  $(wc -c < "$file")"
+            else
+              echo "::error::$name differs between the two builds"
+              status=1
+            fi
+          done
+          exit $status
+
+      # The archive a node is sent is pinned in the controller's project file. It must be the
+      # one built here: a pin that names another archive, or a toolchain that no longer builds
+      # the pinned one, fails the workflow. After a change that is meant to move the archive,
+      # the hash printed here is the new pin.
+      - name: The asset is the archive the project file pins
+        shell: bash
+        run: |
+          project=AI/OutWit.Controller.AI.Verify/OutWit.Controller.AI.Verify.csproj
+          asset=$(sed -n '/<ControllerDataAsset Include="verify-python-numpy">/,/<\/ControllerDataAsset>/p' "$project")
+          pin=$(printf '%s\n' "$asset" | sed -n 's:.*<Sha256>\(.*\)</Sha256>.*:\1:p')
+          size=$(printf '%s\n' "$asset" | sed -n 's:.*<Size>\(.*\)</Size>.*:\1:p')
+          seen=$(sha256sum a/verify-python-numpy.zip | cut -d' ' -f1)
+          bytes=$(wc -c < a/verify-python-numpy.zip | tr -d ' ')
+          echo "built:   $seen  $bytes bytes"
+          echo "pinned:  $pin  $size bytes"
+          if [ -z "$pin" ] || [ "$seen" != "$pin" ] || [ "$bytes" != "$size" ]; then
+            echo "::error::verify-python-numpy.zip as built here is not the archive the project file pins"
+            exit 1
+          fi
+          echo "the asset is the pinned archive"

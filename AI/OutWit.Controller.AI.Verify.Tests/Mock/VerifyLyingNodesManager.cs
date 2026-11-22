@@ -1,0 +1,140 @@
+using OutWit.Controller.AI.Verify.Model;
+using OutWit.Controller.AI.Verify.Variables;
+using OutWit.Engine.Interfaces;
+
+namespace OutWit.Controller.AI.Verify.Tests.Mock;
+
+/// <summary>
+/// The rig's nodes with one liar among them: the first of the three does the work honestly (it is
+/// the same sandbox) and then returns something else in place of every result package, as told.
+/// What it returns is made by <see cref="Lie"/> from the honest reference; null leaves it honest.
+/// </summary>
+internal sealed class VerifyLyingNodesManager : IWitNodesManager
+{
+    #region Fields
+
+    private readonly VerifyTestNodesManager m_inner;
+
+    #endregion
+
+    #region Constructors
+
+    public VerifyLyingNodesManager(IWitEngineNode node)
+    {
+        m_inner = new VerifyTestNodesManager(node);
+    }
+
+    #endregion
+
+    #region IWitNodesManager
+
+    public Task<IReadOnlyList<IWitEngineActivityNode>> GetCompatibleNodes<TActivity>(IWitProcessingOptions options)
+        where TActivity : IWitActivity
+    {
+        return m_inner.GetCompatibleNodes<TActivity>(options);
+    }
+
+    public Task<IReadOnlyList<IWitEngineActivityNode>> GetCompatibleNodes(Type activityType, IWitProcessingOptions options)
+    {
+        return m_inner.GetCompatibleNodes(activityType, options);
+    }
+
+    public async Task<(IWitProcessingStatus, IReadOnlyList<IWitVariable>)> Process(Guid nodeId, Guid jobId, IWitActivity activity, IWitVariablesCollection pool, IReadOnlyList<string> returnVariables)
+    {
+        var (status, variables) = await m_inner.Process(nodeId, jobId, activity, pool, returnVariables);
+        return (status, await Returned(nodeId, variables));
+    }
+
+    public async Task<(IWitProcessingStatus, IReadOnlyList<IWitVariable>)> ProcessBatch(Guid nodeId, Guid jobId, IReadOnlyList<WitNodeTaskRequest> requests, bool canRunInParallelOnClient)
+    {
+        var (status, variables) = await m_inner.ProcessBatch(nodeId, jobId, requests, canRunInParallelOnClient);
+        return (status, await Returned(nodeId, variables));
+    }
+
+    #endregion
+
+    #region Tools
+
+    private async Task<IReadOnlyList<IWitVariable>> Returned(Guid nodeId, IReadOnlyList<IWitVariable> variables)
+    {
+        var lie = Lie;
+        var second = Second;
+        if ((lie == null && second == null && NoValues == 0) || nodeId != Liar)
+            return variables;
+
+        var returned = new List<IWitVariable>(variables.Count + 1);
+        IWitVariable? extra = null;
+        foreach (var variable in variables)
+        {
+            if (variable.Value is VerifyResultPackageData honest)
+            {
+                // An answer of no value in place of a result package, under the package's own
+                // return variable: the right type, the right name, nothing in it.
+                if (NoValues > 0)
+                {
+                    NoValues--;
+                    NoValuesSent++;
+                    returned.Add(new WitVariableVerifyResultPackage(variable.Name, null));
+                    continue;
+                }
+
+                // One more answer for the first package of the batch, under that package's own
+                // return variable; every package still gets its answer.
+                if (second != null && extra == null)
+                {
+                    SecondAnswers++;
+                    extra = new WitVariableVerifyResultPackage(variable.Name, await second(honest));
+                }
+
+                if (lie != null)
+                {
+                    Lies++;
+                    returned.Add(new WitVariableVerifyResultPackage(variable.Name, await lie(honest)));
+                    continue;
+                }
+            }
+
+            returned.Add(variable);
+        }
+
+        if (extra != null)
+            returned.Add(extra);
+
+        return returned;
+    }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>What the liar returns in place of an honest result reference; null for an honest rig.</summary>
+    public Func<VerifyResultPackageData, Task<VerifyResultPackageData>>? Lie { get; set; }
+
+    /// <summary>The node that lies.</summary>
+    public Guid Liar => m_inner.CompatibleNodes[0].NodeId;
+
+    /// <summary>
+    /// What the liar returns as one more answer for the first package of each of its batches, made
+    /// from the honest reference; null for no second answer. The value goes to Grid as a node
+    /// would send it: under the return variable of a task the node holds.
+    /// </summary>
+    public Func<VerifyResultPackageData, Task<VerifyResultPackageData>>? Second { get; set; }
+
+    /// <summary>The result packages the liar replaced since the manager was made or the count was reset.</summary>
+    public int Lies { get; set; }
+
+    /// <summary>
+    /// How many of its next result packages the liar answers with a variable of the right type
+    /// and name that holds no value; it does the work and answers honestly, or as
+    /// <see cref="Lie"/> says, after those.
+    /// </summary>
+    public int NoValues { get; set; }
+
+    /// <summary>The answers of no value the liar sent since the manager was made or the count was reset.</summary>
+    public int NoValuesSent { get; set; }
+
+    /// <summary>The second answers the liar sent since the manager was made or the count was reset.</summary>
+    public int SecondAnswers { get; set; }
+
+    #endregion
+}

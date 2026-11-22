@@ -1,0 +1,24 @@
+{
+  "name": "Chinese",
+  "script": "Hani",
+  "quality": {
+    "max_duplicate_line_ratio": 0.287,
+    "top_ngram_chars": [
+      0.256,
+      0.201,
+      0.171
+    ],
+    "duplicate_ngram_chars": [
+      0.198,
+      0.182,
+      0.167,
+      0.154,
+      0.14,
+      0.127
+    ]
+  },
+  "notes": [
+    "quality: FineWeb-2's Chinese repetition thresholds (configs/cmn_Hani.yml: dup_line_frac, top_n_grams, dup_n_grams), Apache-2.0; the same values the controller takes by default for a script written without spaces, stated here so the pack holds its own.",
+    "script: ISO 15924; written without spaces, so the quality stages count letters."
+  ]
+}

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Model.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ControllerName>Verify</ControllerName>
+    <Version>1.0.0</Version>
+    <Description>Data types for the OutWit Verify controller: tasks, batches, test suites, resource limits, and results for sandboxed execution.</Description>
+    <PackageTags>verify;sandbox;wasm;witengine;witcloud;controller;data-types</PackageTags>
+  </PropertyGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Model.targets" />
+
+</Project>

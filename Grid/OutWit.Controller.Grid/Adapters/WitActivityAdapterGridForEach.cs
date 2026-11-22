@@ -29,6 +29,10 @@ namespace OutWit.Controller.Grid.Adapters
 
         private const string ERROR_QUEUED_COPIES = "Grid.ForEach: copies need the Balanced strategy; the Queued strategy has no plan that keeps them on different machines.";
 
+        private const string ERROR_RESULTS_NOT_TAKEN = "Grid.ForEach => {0}: the return collection '{1}' did not take the {2} value(s) of the call; it holds {3} value(s). Its elements are of type {4}, and the engine reported the list as {5}. None of what the nodes returned is stored.";
+
+        private const string ERROR_FIRST_REFUSED = " The first value it would refuse is number {0} of the list: {1}.";
+
         #endregion
 
         #region Constructors
@@ -81,11 +85,16 @@ namespace OutWit.Controller.Grid.Adapters
             // holding the other copy. Reassignment below decides where the work goes instead.
             bool exactNode = tasks.Any(task => task.ReplicaOf != null);
 
+            // A typed return collection takes a list whole or not at all. Every value a node returns is
+            // therefore held to what the collection takes before it joins the results: one null or one
+            // value of another type must cost the call that value, not all of them.
+            GridValueRule values = GridValueRule.ForCollection(FindReturnCollection(pool, activity.ReturnReference));
+
             var resultList = new List<object?>();
 
             if (options.Strategy == ProcessingStrategy.Queued)
             {
-                var (queuedStatus, queuedVariables) = await NodesManager.ProcessQueued(nodes, tasks, status.JobId);
+                var (queuedStatus, queuedVariables) = await NodesManager.ProcessQueued(nodes, tasks, status.JobId, values, LogWarning);
                 status.AddChild(queuedStatus);
 
                 foreach (var variable in queuedVariables)
@@ -124,7 +133,8 @@ namespace OutWit.Controller.Grid.Adapters
                             return new GridReassignment.GroupProcessResult(false, null, Array.Empty<IWitVariable>());
                         }
                     },
-                    message => Logger.LogWarning("{Message}", message),
+                    LogWarning,
+                    values,
                     ProcessingManager.CancellationToken(status.JobId));
 
                 foreach (var groupStatus in outcome.CompletedStatuses)
@@ -137,8 +147,13 @@ namespace OutWit.Controller.Grid.Adapters
                 foreach (var value in outcome.Results)
                     resultList.Add(value);
             }
-            
-            pool.TrySetCollection(activity.ReturnReference, resultList);
+
+            StoreResults(activity, pool, resultList);
+        }
+
+        private void LogWarning(string message)
+        {
+            Logger.LogWarning("{Message}", message);
         }
 
         private IReadOnlyList<WitGridTask> BuildTasks(IEnumerable collection, IWitActivity transformer, IWitVariablesCollection pool,
@@ -155,6 +170,93 @@ namespace OutWit.Controller.Grid.Adapters
             return slots == null
                 ? ControllerManager.BuildTasks(items, transformer, pool, iterationVariableName)
                 : ControllerManager.BuildTasks(items, slots, transformer, pool, iterationVariableName);
+        }
+
+        #endregion
+
+        #region Results
+
+        /// <summary>
+        /// Finds the collection a call returns into: the variable under the return reference, when it
+        /// is a collection. A call that is not assigned, and one assigned to a variable that is not a
+        /// collection, have none.
+        /// </summary>
+        private static IWitCollection? FindReturnCollection(IWitVariablesCollection pool, string? returnReference)
+        {
+            if (string.IsNullOrEmpty(returnReference))
+                return null;
+
+            foreach (IWitVariable variable in pool)
+            {
+                if (string.Equals(variable.Name, returnReference, StringComparison.Ordinal))
+                    return variable as IWitCollection;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Puts the results of a call into its return collection and fails the call when the
+        /// collection does not hold them afterwards. Every value was held to what the collection takes
+        /// before it got here, so a refusal now means the collection and that check disagree, and the
+        /// script would go on with values it does not have (or with those of an earlier call). The
+        /// collection is read back, because an engine before Data 1.1.6 answers "taken" whatever the
+        /// collection did. A call with no return collection stores nothing, as before.
+        /// </summary>
+        private static void StoreResults(WitActivityGridForEach activity, IWitVariablesCollection pool, List<object?> results)
+        {
+            bool taken = pool.TrySetCollection(activity.ReturnReference, results);
+
+            IWitCollection? collection = FindReturnCollection(pool, activity.ReturnReference);
+            if (collection == null)
+                return;
+
+            List<object?> held = Held(collection);
+            if (Same(held, results))
+                return;
+
+            GridValueRule values = GridValueRule.ForCollection(collection);
+
+            string message = string.Format(ERROR_RESULTS_NOT_TAKEN,
+                activity.Transformer?.GetOperatorType(),
+                activity.ReturnReference,
+                results.Count,
+                held.Count,
+                values.ElementType?.Name ?? nameof(Object),
+                taken ? "taken" : "refused");
+
+            int refused = results.FindIndex(value => !values.Accepts(value));
+            if (refused >= 0)
+                message += string.Format(ERROR_FIRST_REFUSED, refused + 1, GridValueRule.Describe(results[refused]));
+
+            throw new InvalidOperationException(message);
+        }
+
+        private static List<object?> Held(IWitCollection collection)
+        {
+            var held = new List<object?>();
+
+            if (collection.Value is IEnumerable values)
+            {
+                foreach (object? value in values)
+                    held.Add(value);
+            }
+
+            return held;
+        }
+
+        private static bool Same(List<object?> held, List<object?> results)
+        {
+            if (held.Count != results.Count)
+                return false;
+
+            for (int index = 0; index < held.Count; index++)
+            {
+                if (!ReferenceEquals(held[index], results[index]) && !Equals(held[index], results[index]))
+                    return false;
+            }
+
+            return true;
         }
 
         #endregion

@@ -1,0 +1,4 @@
+Job:CorpusPreflight(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
+{
+    CorpusPreflight:result = Corpus.Preflight(manifest, languageModel, opts);
+}

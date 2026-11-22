@@ -354,7 +354,7 @@ Once that passes, you have a working controller. Continue with [Reference: Testi
 
 ### 9. Wire into the solution + publish workflow
 
-Add the three csprojs to [`OutWit.slnx`](../OutWit.slnx) under a new `<Folder Name="/Foo/">`. Add `OutWit.Controller.Foo` and `OutWit.Controller.Foo.Model` to the project-choice list in [`.github/workflows/publish.yml`](../.github/workflows/publish.yml#L28-L42).
+Add the three csprojs to [`OutWit.slnx`](../OutWit.slnx) under a new `<Folder Name="/Foo/">`. Add `OutWit.Controller.Foo` and `OutWit.Controller.Foo.Model` to the project-choice list in [`.github/workflows/publish.yml`](../.github/workflows/publish.yml#L45-L59).
 
 For Path-A (first-party, nuget.org) distribution, the publish workflow handles everything. For Path-B (third-party), see the [`outwit-controller-pack` README](../Tools/OutWit.Controller.Pack/README.md).
 
@@ -626,14 +626,15 @@ Emitted at build time by [`Build/OutWit.Controller.Manifest.targets:64-85`](../B
 2. `@Controllers/<Cfg>/<name>.module/controller.json` — copied by `ControllerPostBuild`.
 3. `nupkg!/content/module/controller.json` — packed by `ControllerPackModuleContents`. At consumer build time the consumer-side build/.targets copies this back into the consumer's own `@Controllers/<Cfg>/<name>.module/`.
 
-The full schema with field-by-field constraints lives at [`docs/controller.schema.json`](controller.schema.json). The build-time emitter only enforces five things:
+The full schema with field-by-field constraints lives at [`docs/controller.schema.json`](controller.schema.json). The build-time emitter only enforces six things:
 - `ControllerName` not empty
 - `Version` not empty
 - `Description` not empty
 - Every `ControllerDataAsset` has a non-empty `Uri`
-- Every `ControllerDataAsset` has a non-empty `Sha256`
+- Every `ControllerDataAsset` has a `Sha256` of exactly 64 lower-case hex digits, and not the all-zero hash of a template
+- Every `ControllerDataAsset` has a `Size`: its length in bytes, a whole number above zero
 
-The schema's semver pattern, 64-hex-char SHA pattern, RID enum, etc. are *documentation only* — there is no JSON Schema validation step in the build. You can verify the schema against your built manifest by hand:
+The schema's semver pattern, RID enum, etc. are *documentation only* — there is no JSON Schema validation step in the build. You can verify the schema against your built manifest by hand:
 
 ```sh
 pip install jsonschema
@@ -681,15 +682,15 @@ The fields:
 - `Identity` (the `Include="..."` value) — stable id for diagnostics and disambiguation across platforms.
 - `RuntimeIdentifier` — defaults to `any` (every host fetches). Specific RID gates to that platform.
 - `Uri` — required. Built-in schemes: `gh-release://`, `https://`, `file://`. Add your own resolver via the `OutWit.Engine.Assets` interfaces.
-- `Sha256` — required. 64 hex chars. The `outwit-assets-pack` tool fills this in automatically; mismatch aborts fetch.
-- `Size` — informational, drives progress reporting.
+- `Sha256` — required. 64 lower-case hex digits; the build refuses any other form, and the all-zero hash a template carries. The `outwit-assets-pack` tool fills this in automatically; mismatch aborts fetch.
+- `Size` — required. The archive's length in bytes, a whole number above zero; the build refuses an asset without it. The publish workflow's guard for the AI controllers fetches each released archive and holds it to its `Sha256` and its `Size` before a push.
 - `ExtractTo` — defaults to `.` (module root). `.zip` files get extracted into the path; everything else is copied verbatim.
 - `Required` — defaults to `true`. When `false`, fetch failures are tolerated (used for optional benchmark fixtures).
 - `PackSource` and `PackKind` — **author-only**; these are stripped before manifest emission and only used by the `outwit-assets-pack` tool to know what to package.
 
 `outwit-assets-pack` regenerates a Tier-2 controller's asset set in one command: bumps version, repacks zips, computes SHAs, updates the csproj, creates the GitHub Release with everything uploaded. See [its README](../Tools/OutWit.Controller.Assets.Pack/README.md).
 
-**GitHub Release tag convention**: the publish workflow ([`.github/workflows/publish.yml:107-108`](../.github/workflows/publish.yml#L107-L108)) computes the tag as `<ControllerName.lower-no-dots>-v<Version>`:
+**GitHub Release tag convention**: the publish workflow ([`.github/workflows/publish.yml:160-171`](../.github/workflows/publish.yml#L160-L171)) computes the tag as `<ControllerName.lower-no-dots>-v<Version>`:
 - `OutWit.Controller.Render` v1.15.3 → tag `render-v1.15.3`
 - `OutWit.Controller.Render.Dcc` v1.0.5 → tag `renderdcc-v1.0.5`
 
@@ -839,16 +840,40 @@ The shared MSBuild logic runs in this order at every controller build:
 
 1. **`Build/OutWit.Controller.props`** imported at the top of the csproj. Sets up identity defaults, common PackageReferences, content-only nupkg shape.
 2. **`Build/OutWit.Controller.targets`** imported at the bottom. Pulls in `OutWit.Controller.Manifest.targets`. Computes `ControllerModuleName`, `ControllerModuleOutputDir`, `ControllerZipOutputDir` from `ControllerName` and `Configuration`.
-3. **`GenerateControllerBuildArtifacts`** (BeforeTargets=`BeforeCompile`) — validates the five required fields, emits `obj/<Cfg>/net10.0/ControllerBuildInfo.g.cs` and `obj/<Cfg>/net10.0/controller.json`, then adds the .cs to `<Compile>`.
+3. **`GenerateControllerBuildArtifacts`** (BeforeTargets=`BeforeCompile`) — validates the required fields and every data asset's pin (`ControllerValidateDataAssets`), emits `obj/<Cfg>/net10.0/ControllerBuildInfo.g.cs` and `obj/<Cfg>/net10.0/controller.json`, then adds the .cs to `<Compile>`.
 4. **`ControllerPostBuild`** (AfterTargets=`PostBuildEvent`) — copies the controller's DLL + `.deps.json` + `controller.json` + any locale-resource DLLs into `$(SolutionDir)@Controllers/$(Configuration)/<name>.module/`.
 5. **`ControllerStageSourceResources`** (AfterTargets=`ControllerPostBuild`) — copies `<csproj>/Resources/**` into `<module>/Resources/`. Skipped silently when the folder doesn't exist.
 6. **Companion `ModelPostBuild`** in the `.Model` csproj — copies the Model DLL into the SAME `<module>` directory.
-7. **`ControllerPackZip`** (AfterTargets=`ControllerPostBuild`) — zips `$(ControllerModuleOutputDir)` into `$(SolutionDir)@Zips/$(Configuration)/<name>.zip`. The zip is used by the OmnibusCloud server's BlobCacheService.
-8. **`ControllerPackModuleContents`** (runs during `dotnet pack`) — packages the staged module (minus `Resources/`) into the nupkg's `content/module/` + writes an empty `lib/<tfm>/_._` marker so NuGet considers the package framework-compatible.
+7. **`ControllerRecordStaged`** (`Build/OutWit.Controller.Staging.targets`, after the staging targets of every project that stages) — writes the project's record of what it staged to `$(SolutionDir)@Controllers/.staged/$(Configuration)/<project>.txt`, outside the module folders, and removes from the modules what the project's previous record lists and this build no longer stages (only while the file still has the bytes that build put there). One file is the exception: a controller's `controller.json` is recorded before step 8 rewrites it, so it is never removed this way and stays in a module its project no longer stages into. For the controller's project it also returns the module's files: what the records of all projects list under `<module>/`.
+8. **`ControllerStampManifest`** — writes the build stamp and the content digest into the staged `controller.json`. The digest is taken over the files the package ships.
+9. **`ControllerPackZip`** (AfterTargets=`ControllerPostBuild`) — zips the module into `$(SolutionDir)@Zips/$(Configuration)/<name>.zip`: the recorded files, and what lies under a folder one of the controller's data assets extracts to (`ExtractTo`), where a copy for local runs may be kept. The zip is used by the OmnibusCloud server's BlobCacheService.
+10. **`ControllerPackModuleContents`** (runs during `dotnet pack`) — packages the recorded files of the module (minus `Resources/`) into the nupkg's `content/module/` + writes an empty `lib/<tfm>/_._` marker so NuGet considers the package framework-compatible.
+
+#### A module folder is not the build's alone
+
+The staged module folder is written by several projects and is also where prerequisites are kept by hand (a copy of Blender under `render.module/blender/`, of ParaView under `paraview.module/paraview/`). So the build never cleans it and never packs it as a folder:
+
+- **It removes only what it can show it put there**: a file its own previous record lists, that it no longer stages, and that still has the recorded bytes. A file no record lists is never touched.
+- **What ships is what was recorded.** A file that merely lies in the folder is in no package and no digest, and in the zip only when it lies under a declared data asset's folder.
+- **A target of your own that copies into a module** must say so, or its files are left out of the zip and the package: add every destination to the item `ControllerStagedFile` and run `BeforeTargets="ControllerRecordStaged"`.
+
+  ```xml
+  <Target Name="StageMyExtras" AfterTargets="ControllerPostBuild" BeforeTargets="ControllerRecordStaged">
+    <Copy SourceFiles="@(MyExtra)" DestinationFolder="$(ControllerModuleOutputDir)" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <ControllerStagedFile Include="@(MyExtra->'$(ControllerModuleOutputDir)%(Filename)%(Extension)')" />
+    </ItemGroup>
+  </Target>
+  ```
+
+- **After pulling this change**, build the solution once (or each project that stages): until a project has written its record, what it staged earlier is on disk but in no zip and no package. The build fails rather than ship a module without the assembly of a project the controller references.
+- The records belong to the folder they describe: delete `@Controllers/.staged/` only together with the modules.
 
 Final on-disk layout after a Release build of the full solution:
 
 ```
+<repo>/@Controllers/.staged/Release/   # the build's records: one <project>.txt for each project
+                                     # that stages (step 7); not a module, never packed
 <repo>/@Controllers/Release/
   variables.module/
     OutWit.Controller.Variables.dll
@@ -863,9 +888,10 @@ Final on-disk layout after a Release build of the full solution:
     benchmark_scene.blend       # Debug-only: staged from @Prerequisites for tests
     benchmark_scene_still.blend
     benchmark_scene_video.blend
-    # Note: blender/ and ffmpeg/ subfolders are NOT here in the source tree —
-    # they're materialised in CONSUMER builds via ResolveControllerAssetsTask
-    # when a downstream csproj PackageReferences OutWit.Controller.Render.
+    # blender/ and ffmpeg/ are not staged by this build: CONSUMER builds materialise
+    # them via ResolveControllerAssetsTask when a csproj PackageReferences
+    # OutWit.Controller.Render. A copy kept here by hand for local runs is left
+    # alone (see "A module folder is not the build's alone").
 
 <repo>/@Zips/Release/
   variables.zip
@@ -892,13 +918,11 @@ OutWit.Controller.Render.<version>.nupkg
 
 ### Reference: the publish workflow
 
-`.github/workflows/publish.yml` is a unified workflow for every nupkg in the repo (controllers, models, tools, the `Engine.Assets.MSBuild`). It takes a `workflow_dispatch` input with the project name and:
+`.github/workflows/publish.yml` is a unified workflow for every nupkg in the repo (controllers, models, tools). It takes a `workflow_dispatch` input with the project name and runs three jobs, so that the code a build runs never runs where a credential that publishes is held:
 
-1. **Tier-2 only**: HEAD-checks every expected GitHub Release asset before pushing the nupkg to nuget.org — refuses to publish if assets are missing. The asset list is currently hard-coded for Render in the workflow ([`publish.yml:237-246`](../.github/workflows/publish.yml#L237-L246)). If you add a new Tier-2 controller, the workflow needs a corresponding asset-existence guard.
-2. Builds in Release, packs the nupkg.
-3. Pushes to nuget.org with `pushToNuGet: true` (default).
-4. Pushes to GitHub Packages with `pushToGitHubPackages: true` (default).
-5. Creates the GitHub Release tag (`<name.lower-no-dots>-v<version>`) with `createGitHubRelease: true`.
+1. **build** (`contents: read` only): builds in Release with the SDK `global.json` pins, packs the nupkg, and runs the guards. **Tier-2**: HEAD-checks every expected GitHub Release asset before a nuget.org push and refuses to publish if one is missing. The asset list is hard-coded for Render in the workflow ([`publish.yml:331-341`](../.github/workflows/publish.yml#L331-L341)); a new Tier-2 controller needs a guard of its own. **The AI controllers**: every data asset the built package's manifest declares is fetched and held to its `Sha256` and its `Size` before a push to any feed (`.github/scripts/released-data-assets.sh`). The package goes on as a workflow artifact.
+2. **github-packages** (`packages: write`): pushes the built package to GitHub Packages with `pushToGitHubPackages: true` (default). It runs from any branch.
+3. **release** (runs from `main` only, in the `release` environment; that environment's required reviewer and its `main`-only branch rule are repository settings the owner makes, and until they are made the job's main-only step is its only gate): logs in to nuget.org by trusted publishing (no stored key) when `pushToNuGet: true` (**off by default**), creates the GitHub Release (`<name.lower-no-dots>-v<version>`) with `createGitHubRelease: true` (the default), then pushes to nuget.org. It refuses any ref but `main`. A dispatch from any other branch passes `createGitHubRelease: false` and `pushToNuGet: false`: otherwise, for a project with new release assets, the release job fails after GitHub Packages has taken the package.
 
 For Path-A distribution this is fully automated. For Path-B (third-party authors without nuget.org rights), use [`outwit-controller-pack`](../Tools/OutWit.Controller.Pack/README.md) to produce a self-contained zip that gets uploaded through the OmnibusCloud admin UI.
 

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnibuscloud.github.io/Controllers/ai/corpus-dedup.schema.json",
+  "title": "Corpus dedup",
+  "description": "The output of Corpus.Dedup over a corpus-report/6 (or /5, /4, /3, /2, /1) document: the near-duplicate merge across the completed shards of a run. Per shard a keep mask over the product's documents; the clusters of two or more as (shard, ordinal) pairs, listed up to a cap — the masks carry the complete decision. A signatures blob is used only when it is what the report says of it: its length that of one signature per document of the product, its bytes hashing to the report's signatures_sha256, its header the run's MinHash parameters; a shard whose blob is not is left out and named in excluded, with no mask. A run without signatures (output stats_and_hashes, or sign false), a report that names one shard or one blob twice, and a run with more documents than one merge holds are refused, by name, before any blob is read. Version 2: version 1 merged whatever a blob held.",
+  "type": "object",
+  "required": ["schema", "controller", "summary", "shards", "excluded", "clusters"],
+  "properties": {
+    "schema": { "const": "corpus-dedup/2" },
+    "controller": { "type": "string" },
+    "summary": {
+      "type": "object",
+      "required": ["threshold", "bands", "shards", "excluded", "documents", "duplicates", "kept", "clusters", "clusters_listed"],
+      "properties": {
+        "threshold": { "type": "number", "description": "The Jaccard estimate a pair needed to be one cluster." },
+        "bands": { "type": "integer", "description": "LSH bands over the signature (16 by default; pipeline.minhash.bands)." },
+        "hashes": { "type": "integer", "description": "Hashes per signature of the signatures merged (128 by default). Absent from documents of controllers before 0.3.0." },
+        "shingle_words": { "type": "integer", "description": "Words per shingle of the signatures merged (5 by default). Absent from documents of controllers before 0.3.0." },
+        "shards": { "type": "integer", "description": "Shards merged." },
+        "excluded": { "type": "integer", "description": "Completed shards left out: their signatures blob is not what the report says of it." },
+        "documents": { "type": "integer" },
+        "duplicates": { "type": "integer", "description": "Documents that are near-duplicates of an earlier one (the mask drops them)." },
+        "kept": { "type": "integer" },
+        "clusters": { "type": "integer", "description": "Clusters of two or more." },
+        "clusters_listed": { "type": "integer", "description": "How many of them the document lists." }
+      }
+    },
+    "shards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["index", "signatures_blob", "documents", "duplicates", "keep"],
+        "properties": {
+          "index": { "type": "integer" },
+          "signatures_blob": { "type": "string" },
+          "documents": { "type": "integer" },
+          "duplicates": { "type": "integer" },
+          "keep": { "type": "string", "contentEncoding": "base64", "description": "A bitset over the shard's product: bit i of byte i/8, least significant first, 1 = keep document i (the i-th JSON line of the text blob)." }
+        }
+      }
+    },
+    "excluded": {
+      "type": "array",
+      "description": "The completed shards the merge left out, in index order. Such a shard has no mask and its documents are in no cluster: keep it whole, drop it, or run it again.",
+      "items": {
+        "type": "object",
+        "required": ["index", "signatures_blob", "reason"],
+        "properties": {
+          "index": { "type": "integer" },
+          "signatures_blob": { "type": "string" },
+          "reason": { "type": "string", "enum": ["blob_missing", "blob_length", "blob_header", "blob_hash", "parameters"], "description": "blob_missing: the blob is not in the store. blob_length: not one signature per document of the product. blob_header: not a signatures blob of the run's parameters. blob_hash: its bytes do not hash to the report's signatures_sha256 (not the signatures integrity compared). parameters: the report states other MinHash parameters for this shard than for the run." }
+        }
+      }
+    },
+    "clusters": {
+      "type": "array",
+      "description": "Each cluster: its documents as [shard index, ordinal] pairs in ascending order, the representative (the kept one) first.",
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "items": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 }
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Verify/docs/verify-checker.schema.json",
+  "title": "Verify checker spec",
+  "description": "The checker of VerifyGenerateAndCheck: one JSON object (not JSON lines; it may be written over several lines), UTF-8, at most 67108864 bytes. A taskset line without index/stdin/seed/suite, plus the verdict rule at the top level. Every candidate that passed generation with output becomes one run of this program with the candidate's stdout on stdin, under the candidate's index. The candidates are the settled results of the generator run: one a generator, the same one the corpus holds. The controller accepts exactly what this schema allows, as for a taskset line (verify-taskset.schema.json): a field that is not listed here (a misspelt expected_stdout is such a field, and would leave only the exit code to count), a field given twice, a value of another type or a number outside its range fails the job, by the field's name.",
+  "type": "object",
+  "required": ["runtime", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "runtime": { "type": "string", "description": "The checker's runtime id, to the letter." },
+    "entry": { "type": "string", "pattern": "^[^\\u0000]*$", "description": "The checker's entry file. Defaults to the first source." },
+    "sources": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1024,
+      "propertyNames": {
+        "pattern": "^(?!-)[A-Za-z0-9._+-]+(/(?!-)[A-Za-z0-9._+-]+){0,7}$",
+        "maxLength": 128
+      },
+      "additionalProperties": { "type": "string", "pattern": "^[^\\u0000]*$" },
+      "description": "File name → file content, at most 1024 files, none with a NUL character. The names are held to the portable set, as in a taskset line (verify-taskset.schema.json)."
+    },
+    "args": { "type": "array", "maxItems": 1024, "items": { "type": "string", "pattern": "^[^\\u0000]*$" }, "description": "Arguments passed to every check; at most 1024, none with a NUL character." },
+    "limits": { "$ref": "verify-taskset.schema.json#/properties/limits" },
+    "expected_stdout": {
+      "type": "string",
+      "description": "The exact stdout of a passing check (the recommended contract: the checker prints its verdict and exits 0, so a crash stays distinguishable as a RuntimeError). Absent = only the exit code counts."
+    },
+    "expected_exit": {
+      "type": "integer",
+      "minimum": -2147483648,
+      "maximum": 2147483647,
+      "default": 0,
+      "description": "The exit code of a passing check."
+    }
+  }
+}

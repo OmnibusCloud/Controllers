@@ -1,0 +1,35 @@
+QuickJS-NG on WASI switches its stack limit off, and its release build places a 64 KiB C stack
+right after the data: a deep recursion then writes over the interpreter's own data, and a correct
+program can end with exit 0 and no output. The toolchain builds QuickJS with the stack below the
+data (an overflow traps at address 0) and this patch turns the limit back on, at JS_WASI_STACK_SIZE
+bytes (set by build.sh), so a recursion too deep is JavaScript's RangeError, the same on every node.
+
+--- a/quickjs.c
++++ b/quickjs.c
+@@ -2012,9 +2012,9 @@
+     rt->js_class_id_alloc = JS_CLASS_INIT_COUNT;
+
+     rt->stack_size = JS_DEFAULT_STACK_SIZE;
+ #ifdef __wasi__
+-    rt->stack_size = 0;
++    rt->stack_size = JS_WASI_STACK_SIZE;
+ #endif
+
+     JS_UpdateStackTop(rt);
+
+@@ -2758,15 +2758,11 @@
+
+ static void update_stack_limit(JSRuntime *rt)
+ {
+-#if defined(__wasi__)
+-    rt->stack_limit = 0; /* no limit */
+-#else
+     if (rt->stack_size == 0) {
+         rt->stack_limit = 0; /* no limit */
+     } else {
+         rt->stack_limit = rt->stack_top - rt->stack_size;
+     }
+-#endif
+ }
+
+ void JS_SetMaxStackSize(JSRuntime *rt, size_t stack_size)

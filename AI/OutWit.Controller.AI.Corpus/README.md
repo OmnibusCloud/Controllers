@@ -1,0 +1,1625 @@
+# OutWit.Controller.AI.Corpus
+
+Public-corpus processing at CPU scale on anonymous volunteer nodes: raw web
+data (Common Crawl first) becomes training-grade text — extraction (HTML, and
+PDF in a wasm sandbox), cleaning, language identification, quality filtering and
+deduplication signatures —
+with every stage deterministic by requirement, so the same shard through the
+same pipeline version gives byte-identical output on any node and a sampled
+re-execution can check it.
+
+The data path is the novelty: the task descriptor carries a URL and the node
+fetches its shard straight from the public origin (Pattern U); the platform
+transports descriptors and results only. That capability comes with its
+obligations — a shard cap and a traffic estimate the contributor sees before
+opting in, a rule about where a machine fetches from that a job cannot widen
+(see *Where a machine fetches from*), retries with jitter towards the origin.
+
+**Status: 1.0.0 — the first release; not on nuget.org or the live network yet.** Its code is
+the code of 0.9.1, which ran on the test fleet on Windows x64, Linux x64 and macOS arm64 nodes,
+with a node that lied and one that answered nothing among them; 1.0.0 changes the version and
+nothing a node or the server runs. What 1.0.0 is, after the 0.x line on the test server, is
+under *What changed in 1.0.0* below. The full reference for lab engineers and application
+developers is [docs/capabilities.md](docs/capabilities.md).
+
+The stage libraries are wired into twelve activities and four bundled scripts; the
+engine rig in the tests fetches generated shards from a loopback origin
+through mock nodes and reproduces a direct run's content hashes. On the test
+fleet the controller processed real Common Crawl WET and WARC shards, their
+PDFs through the sandboxed extractor included, with every sampled pair agreeing
+on the content hash, and the near-duplicate merge found the near-duplicates
+across twenty shards' signatures in seconds. Not measured yet: a run at the
+scale of a crawl segment, and the near-duplicate merge at that size; they are
+to run on the 1.0.0 builds.
+
+## What changed in 1.0.0
+
+1.0.0 is the 0.x line of the test server made one release. A lab that ran 0.9.1 sees the same
+products, verdicts, hashes and documents (`corpus-report/6`, `corpus-integrity/8`,
+`corpus-dedup/2`, `corpus-capabilities/4`), the same scripts and the same wire types; the
+documents name the controller version 1.0.0. What the 0.x releases made of the controller, in
+the words of what a lab can count on:
+
+- **A result is bound to its task.** Every shard and every task package has a ticket; the
+  server accepts a value only under a ticket of its job and round, from its own controller
+  version, in the shape an honest node gives, with its counters held to the bytes of its shard,
+  and drops anything else by a reason of a fixed list. A dropped value fails that value, never
+  the run, and a ticket is never written into a document.
+- **The server never chooses between executions by what a node says.** A share of the shards
+  (`SamplingRate`) runs twice on two machines; copies that agree are accepted, copies that
+  disagree go to three machines, and a result two of them return, with no tie, is accepted. A
+  dispute that came back with too few copies, or with a lead that may be one machine's second
+  answers, goes out once more; one that still does not settle is `Disputed`, named in the
+  report and out of the products.
+- **A node's own trouble is never a verdict.** Its disk, its memory, its sandbox, its uploads,
+  its own network (no answer, a server error or a request to slow down past the retries, a
+  proxy that asks for credentials, a resolver that turns a public origin into an address that is
+  not public) are faults of the node: the shard runs once more elsewhere, on two machines when
+  the run samples, and is `NoResult` with a reason if no machine gives a result.
+- **A run says what was asked and what came back.** Both documents state the sampling the run
+  asked for and how each round came back (`sampling`: `not_asked`, `as_asked`, `short`, `none`,
+  `unknown`; `rounds`), so a run whose checking did not happen says so.
+- **What one machine can and cannot do.** A shard that was not sampled rests on one machine's
+  word, and the documents count those (`single_execution`): a run that asks for no second
+  execution rests on one machine for every shard. One machine can deny products: the disputes
+  of a round it holds two packages of may end unsettled (`too_few_copies`, `surplus_copies`),
+  loudly, the shard `Disputed`. It cannot make a wrong product the accepted one. And it can make its own word look checked,
+  by spending the slot of a sampled copy on a package of its own.
+- **What a run promises before it starts holds whoever wrote the manifest.** The preflight
+  states the contributors' traffic part by part and the most the nodes accept; a node holds a
+  shard to the size it was declared with and an eighth more, and the origin is asked about a
+  random sample of the sizes. A shard's product is held to a ceiling of what its fetched bytes
+  may give, which a node reserves on its disk before it fetches and the preflight states. The
+  server storage estimate is held to the deployment's headroom.
+- **What hostile input costs is bounded where it is spent.** A shard, what it unpacks to, a
+  record, a page, the parser's tree, a document's words (judged in full up to 100,000), a PDF
+  and the PDFs of a shard (fuel and 4,096 runs), a language pack, a manifest (256 MiB, 1,048,576
+  sources, a source URL of 4,096 characters), a node's answer and a report given to
+  `Corpus.Dedup` each have a limit that is a function of the input alone, so two honest nodes
+  meet it at the same place. The near-duplicate merge costs the same whatever a node wrote into
+  its signatures, and holds 4,000,000 documents at the most.
+- **Tasks and results travel as blobs:** a node is handed a reference and returns one, whatever
+  the size of the job. A blob transfer has a time to finish in.
+- **A job cannot widen where a machine fetches from.** The public origins are compiled into the
+  controller; any other host is one the machine's owner listed.
+- **Nothing a node writes reaches a lab as text,** and a node's log that fails decides nothing.
+  The module carries the licence notices of everything of others it redistributes, and no page
+  of a real crawl is in the repository.
+- **On arm64 as on x64.** On a macOS arm64 node, with every shard on two machines and the other
+  copy on a Linux x64 node, every shard's product came from the arm64 node and was the x64
+  copy's on its content hash, its signatures hash and its verdict; the PDF stage gives the same
+  bytes there.
+
+Three rules of 0.9.0 can change a product, and none changes one of Common Crawl's files or of
+the files the tests pin: a document past the controller's own length is not judged in full, a
+shard whose product passes its ceiling is `Oversized`, and a shard's PDFs past 4,096 runs are not
+run. The limits that stay are stated where they belong: one machine's word and what one machine
+can deny (*What this does not close*, under *Trust and integrity*), the merge's capacity, and
+the others in the reference's known limits.
+
+## Activities
+
+| Activity | Runs on | Signature | What it does |
+|---|---|---|---|
+| `Corpus.Split` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusTaskPackageCollection` | reads the manifest a source at a time (256 MiB and 1,048,576 shards at most), checks every source against the allowlist and the byte cap, hashes the language model blob and pins it into the pipeline, reads it and refuses one this controller cannot use (a format it does not read, a truncated or non-canonical pack, a threshold it does not have) by name, asks the origin about a random sample of the shards (a declared size far below the origin's stops the job here), holds the server storage estimate to the deployment's headroom, and writes the tasks into task packages: blobs, of which the script gets the references (see *Tasks and results as blobs*). Any problem fails the job here — a bad manifest never reaches a node |
+| `Corpus.Preflight` | host | `(Blob manifest, Blob languageModel, CorpusOptions) → CorpusPreflight` | the same checks, reported instead of thrown: shard count, refused hosts, oversized sources, what the origin answered for a random sample of the shards, the traffic estimate part by part and the ceiling the nodes enforce (see *What a run promises before it starts*), the server storage estimate and the headroom it is held to (see *Server storage*), the busiest node's share of the work and how many nodes the plan uses (see *The busiest share*), what the run keeps and whether its signatures can be merged, the problems by manifest line (the first hundred, then how many more) |
+| `Corpus.ProcessPackage` | node | `(CorpusTaskPackage) → CorpusResultPackage` | a task package start to finish: its blob downloaded and held to the size and the hash its reference states, then for every shard of it the allowlist re-check, the pinned model, the fetch capped by the job's cap and by the shard's declared size, the pipeline (a WARC shard's PDFs through the sandboxed extractor), the uploads; the results go into one blob and its reference is returned. A shard's result is one of two kinds: a **verdict** on the shard, which any honest node gives for the same bytes (`Completed`, `OriginRefused`, `FetchFailed`, `Oversized`, `Malformed`, `PipelineUnavailable`, `Failed`), or a **node fault** (this node's disk, link, memory, sandbox or upload), which answers nothing and sends the shard out again. Either carries a fixed code, never a text. A node that cannot read its task package answers the whole package with the fault `tasks`. What a node can know before any work (its version against the job's, its PDF sandbox, room on its disk) it checks first, from the reference alone, and refuses the whole batch, with nothing fetched; several shards may run on one client at once |
+| `Corpus.Repairs` | host | `(CorpusTaskPackageCollection tasks, CorpusResultPackageCollection executions) → CorpusTaskPackageCollection` | the shards the first round left without a result (a node fault, a dropped value, no answer), as new tasks with new tickets in new packages; empty when there are none |
+| `Corpus.Disputes` | host | `(tasks, executions, repairs, repaired) → CorpusTaskPackageCollection`, or `(…, disputes, resolved)` | the shards whose copies disagree, as new tasks in new packages for three machines; given the dispute round too, the disputes it left with too few copies or a lead that may be one machine's, once more; empty when there are none |
+| `Corpus.Collect` | host | `(tasks, executions, repairs, repaired, disputes, resolved, [undecided, settled,] CorpusOptions) → Blob report` | the job report from the server's own account of the run (see *Trust and integrity*): every shard of the task list in task order with its accepted result, `Disputed` or `NoResult`, the aggregate counters over the accepted results and the run's funnel, what the run kept and the MinHash parameters of its signatures; written a shard at a time, never held |
+| `Corpus.SamplingRate` | host | `(CorpusOptions) → Double` | `SamplingRate` clamped to 0..1, the share of the packages (a shard each in a job of up to 1,024 shards) `Grid.Replicas` runs twice |
+| `Corpus.RepairRate` | host | `(CorpusOptions) → Double` | the share of the repair round's packages that run twice: 1 when `SamplingRate` is above 0, else 0 (see *A round that came back short*) |
+| `Corpus.Dedup` | host | `(Blob report, CorpusOptions) → Blob dedup` | the near-duplicate merge over the signature blobs a report names: LSH over the MinHash signatures (the run's band layout, 16 bands of 8 by default), a candidate pair joins a cluster at a Jaccard estimate of `DedupThreshold` (0.8 by default), the lowest document of a cluster is kept; per shard a keep mask, plus the clusters. The report is read a shard at a time; its document counts are added up before any blob is read and a run past the capacity is refused there; each blob is held to the length, the header and the hash the report states for it, and a shard whose blob fails one is left out and named (`excluded`). A run without signatures (statistics and hashes only, or `sign` off), a report that names one blob twice and a run whose signatures were made with different MinHash parameters are refused by name |
+| `Corpus.Integrity` | host | `(tasks, executions, repairs, repaired, disputes, resolved, [undecided, settled,] CorpusOptions) → Blob integrity` | the integrity document from the same account: the sampling the run asked for and how each round came back, the pairs compared, the values dropped by reason, the disputes with what three machines returned and how each ended, the shards without a result. The options are the last argument since 0.7.0; without them the document says the sampling asked for is not known |
+| `Corpus.RuntimeDiagnostics` | host | `() → CorpusRuntimeDiagnostics` | what the module of the answering process carries (see *Diagnostics and capabilities*) |
+| `Corpus.Capabilities` | host | `() → Blob capabilities` | what an application can know before a run, as a JSON document (`docs/corpus-capabilities.schema.json`) |
+
+## Scripts
+
+```
+Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
+{
+    CorpusTaskPackageCollection:tasks = Corpus.Split(manifest, languageModel, opts);
+
+    Double:rate = Corpus.SamplingRate(opts);
+    ProcessingOptions:checked = Grid.Replicas(2, rate);
+
+    CorpusResultPackageCollection:executions = Grid.ForEach(package in tasks, checked)
+        => Corpus.ProcessPackage(package);
+
+    CorpusTaskPackageCollection:repairs = Corpus.Repairs(tasks, executions);
+    Double:again = Corpus.RepairRate(opts);
+    ProcessingOptions:rechecked = Grid.Replicas(2, again);
+    CorpusResultPackageCollection:repaired = Grid.ForEach(package in repairs, rechecked)
+        => Corpus.ProcessPackage(package);
+
+    CorpusTaskPackageCollection:disputes = Corpus.Disputes(tasks, executions, repairs, repaired);
+    ProcessingOptions:majority = Grid.Replicas(3);
+    CorpusResultPackageCollection:resolved = Grid.ForEach(package in disputes, majority)
+        => Corpus.ProcessPackage(package);
+
+    CorpusTaskPackageCollection:undecided = Corpus.Disputes(tasks, executions, repairs, repaired, disputes, resolved);
+    CorpusResultPackageCollection:settled = Grid.ForEach(package in undecided, majority)
+        => Corpus.ProcessPackage(package);
+
+    Blob:report = Corpus.Collect(tasks, executions, repairs, repaired, disputes, resolved, undecided, settled, opts);
+    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, undecided, settled, opts);
+}
+```
+
+Every collection of the script holds references to blobs, never the tasks or the results
+themselves (see *Tasks and results as blobs*). The second, the third and the fourth
+`Grid.ForEach` run over nothing in a run that went well: a repair round exists only for shards a
+node returned as a fault of its own (or returned nothing acceptable for), a dispute round only for
+shards whose copies disagree, and a second dispute round only for disputes that came back with
+too few copies or with a lead that may be one machine's second answers (see *Two machines, not two
+values*). A shard of the repair round runs on two machines when the run asked for sampling (see
+*A round that came back short*).
+
+`CorpusPreflight.wit` runs `Corpus.Preflight` alone; `CorpusDedup.wit` runs
+`Corpus.Dedup` over a finished run's report (`Job:CorpusDedup(Blob:report, CorpusOptions:opts)`);
+`CorpusRuntimeDiagnostics.wit` takes nothing and returns `result` (the diagnostics) and
+`capabilities` (the document). `languageModel` is the
+blob of a language pack built by `corpus-assets` (see *Language packs*), or of a
+0.1.x model; pass an empty blob when the pipeline's `identify_language` is `false`. `CorpusOptions`: `MaxShardBytes`
+(0 = the controller's cap of 1 GiB; a smaller value lowers it), `SamplingRate`
+(the share of shards re-executed for integrity, 0 to 1; 0 by default),
+`DedupThreshold` (0 = 0.8) and `FetchConcurrency` (reserved; the node's own
+ceiling is two downloads at once).
+
+## Tasks and results as blobs
+
+Nothing that grows with the manifest is an activity parameter or a return value. `Corpus.Split`
+writes the tasks into **task packages**, blobs of consecutive shards, and hands the script their
+references (`CorpusTaskPackage`: the blob's id, size and SHA-256, how many shards it holds and
+their bytes, whether one needs the PDF sandbox, and a ticket). `Grid.ForEach` gives a node the
+references of its share; the node downloads each package, works through its shards and uploads
+one **result package** per task package, returning its reference (`CorpusResultPackage`). A
+reference is under 200 bytes whatever the size of the job.
+
+- **How many.** A round has at most 1,024 packages. A job of up to 1,024 shards has one shard
+  per package, and what this document says about a shard and its copies holds for it as
+  written. A larger job puts `ceil(shards / 1024)` consecutive shards into each package (98 for
+  a hundred thousand shards), 1,024 at the most: a job has 1,048,576 shards at most, and a
+  manifest with more is refused by name. The platform splits, samples and re-runs *packages*:
+  in such a job `SamplingRate` is the share of the packages that run twice, every shard of a
+  sampled package runs twice, and a share a node loses is lost and sent again by packages. The
+  preflight says how many shards a package of the job holds.
+- **The format.** A package is an 8-byte header (`WCPK`, the kind, the version) and a Brotli
+  stream of frames, each a kind, a length and a MemoryPack image: in a task package one frame
+  for what the tasks share (the pipeline and the origins, written once) and one per task; in a
+  result package one per result. A frame is bounded (256 KiB the shared one, 16 KiB a task, 128
+  KiB a result) and is refused by its stated length before it is read; a package never yields
+  more frames than its reference names shards. Measured: a task costs 93 bytes in a package
+  (the audit measured 509 as a parameter of its own), and a result with every drop rule, sixteen
+  languages, the unsupported breakdown and the PDF counts 568 (1,800 as a return value).
+- **On the node.** A task package is held to the size and the SHA-256 of its reference, to its
+  shard count and to the job's controller version before a shard is fetched; a package that
+  fails one is answered with the node fault `tasks`, which sends its shards out again. The node
+  works through a package's shards as it worked through its share: its degree and two more on
+  the disk at a time.
+- **On the server.** The rounds are read one package at a time: the account of a run keeps
+  counts, not shards; the report and the integrity document are written a shard at a time to a
+  file and uploaded from it; the manifest, and a report given to `Corpus.Dedup`, are read from a
+  stream, an entry at a time, and never held as text. What a job still holds per shard on the
+  server is its plan while `Corpus.Split` or `Corpus.Preflight` runs: the parsed sources and
+  their sizes, about 120 bytes a shard and two for every character of its URL (210 bytes a shard
+  measured with the rig's short URLs, 20 MB for the hundred thousand; some 40 MB with Common
+  Crawl's; the manifest's bounds keep it under 0.65 GB).
+- **Measured.** A synthetic job of 100,000 shards through the engine rig, the bundled script and
+  six mock nodes fetching from a loopback origin (`Category=Load`, sampling 0.05): 1,021 task
+  packages of 98 shards and 1,073 answers. A node was handed at most 175 bytes as the parameters
+  of a task, and the nodes returned 65,453 bytes as values in all (187,775 of parameters in all):
+  as values of their own the same tasks and results were 53,493,864 and 189,172,800 bytes. The
+  task blobs are 2,297,286 bytes together (23 a shard: one short URL repeated), the result blobs
+  3,168,767; the report is 79,807,047 bytes and the integrity document 3,450,110, each written a
+  shard at a time. The server's reading of the whole run — the account built from the blobs and
+  both documents written — took 16 MB of managed memory at its highest and holds 171,376 bytes of
+  it afterwards; planning the run (the manifest of 4,900,142 bytes parsed, planned, estimated and
+  written into packages) 42 MB at its highest and 20 MB while the plan is held. The whole
+  process, which is the server, the six nodes and the origin in one, peaked at 3,823 MB of
+  working set: the nodes' own working memory, up to 34 shards in flight at a time. The run took
+  262 s.
+
+## The manifest
+
+One JSON document (`docs/corpus-manifest.schema.json`):
+
+```json
+{
+  "pipeline": {
+    "version": "cc-text-v1",
+    "language_model_sha256": "74c6c348…",
+    "target_languages": ["eng", "deu"],
+    "identify_language": true,
+    "clean_lines": true,
+    "filter_quality": true,
+    "sign": true,
+    "extract_pdf": true,
+    "filter_curly_bracket": false,
+    "quality": { "min_words": 50, "max_duplicate_line_ratio": 0.3 },
+    "minhash": { "hashes": 128, "shingle_words": 5, "bands": 16 },
+    "output": "full"
+  },
+  "allowed_origins": ["data.commoncrawl.org"],
+  "sources": [
+    "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-43/segments/…/wet/CC-MAIN-…-00000.warc.wet.gz",
+    { "url": "https://data.commoncrawl.org/…/warc/CC-MAIN-…-00000.warc.gz", "format": "warc", "size": 1073741824, "sha256": "…" }
+  ]
+}
+```
+
+- `pipeline.version` is the lab's name for the contract and travels with every
+  task (a label: it does not enter the products' bytes); change a threshold,
+  change the version. Thresholds left out (or 0)
+  are the stage defaults; `language_model_sha256` is optional and, when given,
+  must match the model blob or the job does not start. A language pack carries
+  its languages' rule data and acceptance limits, so the pin covers them too.
+- `allowed_origins` are host names, matched exactly and case-insensitively
+  (ports and paths do not matter); a source whose host is not listed is
+  refused on the host and, should it ever get there, on the node. The list
+  narrows what a machine fetches from; it cannot widen it (see *Where a
+  machine fetches from*). A host is written in ASCII: one written with other
+  characters, in the list or in a source's URL, is refused by name (its
+  ASCII form, `xn--…`, is the way to write it), because each machine's own
+  library would map it to its wire form and two machines need not map it
+  alike.
+- A bare URL's format follows its extension (`.warc.wet.gz` → WET,
+  `.warc.gz` → WARC); an object may state `format`, a `size`, and the origin's
+  published `sha256`, which the node verifies after the fetch. A `size` is a
+  claim the nodes enforce: the estimates count it, and a node refuses a shard
+  that is far larger than it was declared (see *What a run promises before it
+  starts*). A manifest is 256 MiB and 1,048,576 sources at most, read a source
+  at a time; one value of it is 4 MiB at most.
+- The language stage (`identify_language`) labels a document with a language
+  of the job's language pack, or drops it: too little text to tell (fewer
+  than 20 letters) as `language_unknown`, a language the pack does not
+  support as `language_unsupported` (see *Language packs*), a supported
+  language `target_languages` does not list as `language_not_target`.
+- `clean_lines` (on unless the manifest turns it off) removes, before a
+  document is judged, the lines that do not read like prose — the C4 line
+  rules (Raffel et al. 2020), made script-aware: a line stays when it ends a
+  sentence and has five words (six letters in a script without word
+  spacing), or when it is long (twelve words, forty letters; C4 drops every
+  line without a final mark, and about half of the long ones are prose);
+  menus, prices, counters and footers go. A line that mentions JavaScript or
+  the site's terms of use or privacy policy goes whatever its shape (C4), and
+  so does a line that mentions cookies (ours: C4's phrases catch about half
+  of the consent banners, and only in English) and a line with a word longer
+  than 1,000 characters (C4). The judged text is the product, so a page
+  whose article outlives its navigation is kept, clean. A document with no
+  such line drops as `no_prose_lines`. WET documents keep their line
+  structure on the way in (one block per line), which the line stage and the
+  quality filter's line rules both rely on.
+- The quality filter (`filter_quality`) is the Gopher rule set (Rae et al.
+  2021) with every measure defined as DataTrove — the code behind FineWeb —
+  defines it: a repeated n-gram counts from its second occurrence on, the
+  most frequent n-gram is the one with the most occurrences, character
+  shares are of the whole text, hash marks and ellipses are judged
+  separately. A word is a whitespace-separated token; in a script without
+  word spacing it is a letter (a Latin word inside such text stays one
+  word), and Japanese and Chinese take FineWeb-2's repetition thresholds. A
+  document needs two distinct stop words of its language (Gopher's eight
+  for English, FineWeb-2's lists for the other languages of the reference
+  pack: the pack's rule data), which removes pages in a language the
+  identifier does not know that it labelled with one it does; a page with
+  "lorem ipsum" goes (C4). The drop
+  names are the rules': `min_words`, `max_words`, `mean_word_length`,
+  `symbol_to_word_ratio`, `alphabetic_words`, `bullet_lines`,
+  `ellipsis_lines`, `duplicate_lines`, `duplicate_line_chars`,
+  `top_ngram_chars_2..4`, `duplicate_ngram_chars_5..10`, `stop_words`,
+  `lorem_ipsum` — a document is counted under the first it fails, in that
+  order.
+- `extract_pdf` (on unless the manifest turns it off) runs the PDF stage on
+  WARC shards (see *PDFs*); off, a PDF response drops as `not_html`, exactly as
+  before the stage existed. WET shards carry no PDFs, so the switch does nothing
+  there.
+- `filter_curly_bracket` (off unless the manifest turns it on) is C4's
+  curly-bracket rule as C4 (TFDS `c4_utils.clean_page`) and DataTrove
+  (`C4QualityFilter`, `filter_curly_bracket`) define it: walking the lines,
+  a line with a word over 1,000 characters, a line without the shape of
+  prose and a line that mentions JavaScript are passed over, and the first
+  line left that holds `{` drops the document as `curly_bracket` — before
+  the policy and cookie lines are looked at, whether or not the line stage
+  is on. It catches code and template leftovers, and some prose that quotes
+  a brace; FineWeb keeps it on (−2.8 % of its tokens). On a held-out Common
+  Crawl WET file (00035, see *Language packs*) it drops 254 documents, and
+  the documents out fall by 1.4 % (11,151 to 10,996), the text by 2.1 %.
+  Whether a lab wants code-bearing pages is the lab's decision.
+- `output` says what the run keeps on the server: `"full"` (the default) keeps
+  every shard's text and signatures; `"stats_and_hashes"` keeps the statistics,
+  the content hashes, the report and the integrity document only. Every shard
+  is processed, signed and hashed exactly as under `"full"` — the same content
+  hashes, the same signatures hashes, the same counters, the same
+  `bytes_produced` — but its text and signatures stay on the node and are
+  deleted with the task's folder. For demonstrations and licensing, where a lab
+  must not hold third-party text. The sampled shards still run twice and their
+  hashes, of the text and of the signatures, are still compared across machines. The storage estimate drops the products, and
+  the preflight says so; `Corpus.Dedup` refuses such a run (no signatures).
+- `minhash` sets the signatures and the near-duplicate merge: `hashes`
+  (1 to 1,024; 128 by default), `shingle_words` (1 to 32; 5) and `bands` (a
+  divisor of `hashes`; 16). A key left out, or 0, is the default, and the
+  defaults sign byte for byte as before they were settings. A value out of its
+  range, or bands that do not divide the hashes, is refused by name. Signatures
+  made with different parameters cannot be compared: the blob, the result and
+  the report say how they were made, and `Corpus.Dedup` refuses to mix them.
+- Unknown keys are errors, so a typo cannot silently turn a stage off.
+
+## Language packs
+
+A language model is a job's input, pinned by `language_model_sha256`; the
+controller's code holds no per-language table. A **language pack** (format
+`WITLID2`, `Language/LanguageModelFormat.cs`) carries, as data, everything a
+language needs:
+
+- the character n-gram profiles (n = 1 to 4, 3,000 n-grams per language,
+  Cavnar–Trenkle out-of-place distance) of the languages it **supports**, and
+  of languages it **knows but does not support**;
+- per supported language, its **acceptance limit**: the largest distance from
+  its own profile a document may have, calibrated on labelled text;
+- per supported language, its **rule data**: the script (ISO 15924; it
+  decides whether the quality stages count words or letters), the stop words
+  and how many a document must hold, and the quality thresholds that differ
+  from the script's defaults (FineWeb-2's for Japanese and Chinese).
+
+A document is labelled with its nearest profile only when that profile is a
+supported language and the distance is inside the language's limit.
+Otherwise the document is **unknown** and drops as `language_unsupported`,
+so a report shows how much text a lab loses to languages outside the pack,
+and nothing is labelled with a language it merely resembles. A Swedish page
+finds the Swedish profile instead of the German one; a page in a language
+the pack has no profile for at all is usually too far from every supported
+profile. `language_unknown` keeps its meaning: too little text to tell.
+
+Which languages a lab loses is in the shard statistics and the report, as
+the map `unsupported_languages` next to the drops (the language histogram
+stays the documents out): the code of the known language a document was
+nearest to (`swe`), `past_limit:` and a supported language's code when the
+document lies past that language's limit (`past_limit:spa`: a language the
+pack has no profile for, or text too unlike its own), and `no_profile` for
+text that shares no n-gram with any profile (a script no profile has, where
+"nearest" would be a tie). The counts add up to `language_unsupported`.
+
+The host reads the pack before any task is sent: `Corpus.Split` refuses a
+model this controller cannot use, and `Corpus.Preflight` names the reason
+(a format it does not read, a truncated or non-canonical pack, a threshold
+it does not have); a node never meets it as `PipelineUnavailable`. The
+preflight also describes the model and names `target_languages` it does not
+have.
+
+A pack is a lab's file and is read as hostile input. It may be 16 MiB at most
+(the reference pack is 0.6 MiB), asked of the file before it is read; it may
+hold 512 profiles of 16,384 n-grams each and 524,288 n-grams together (the
+reference pack: 39 profiles, 117,000 n-grams), 4,096 stop words of 64
+characters per language, and no count in its header is ever allocated for
+before the bytes that back it are there. An n-gram is one to four characters
+and appears once in a profile. A pack past a limit is refused by name at the
+preflight and at `Corpus.Split`; a node that meets one anyway (a task not made
+by `Corpus.Split`) answers `PipelineUnavailable` (`language_model_refused`).
+A node keeps the last four models it used, not every model it ever saw.
+
+A document whose crawl label lists several languages is judged by the head
+the identifier reads (its first 4,000 characters): a page whose main language
+is supported but whose head is in another drops as unsupported (4.4 % of such
+pages on the evaluation files, 1.25 % of those the quality stages keep). That
+is the policy: the language of a document is the language of its head.
+
+A `WITLID1` model (0.1.x, profiles only) is still read and behaves exactly
+as under 0.1.14: the nearest profile always wins, and the rule data is
+0.1.14's, kept frozen as data (`Language/Resources/witlid1-rules.json`). A
+manifest pinned to the old model's hash keeps producing the same bytes on WET
+shards, and on WARC shards with `"extract_pdf": false`; with the PDF stage on
+(the default, which 0.1.14 did not have) a WARC shard's PDFs join its product.
+
+**The reference pack** — `Fixtures/language-pack-cc-2026-43-16.bin` in the
+tests, the default of the tests and of `corpus-live`: `cc-2026-43-16`,
+610,372 bytes, SHA-256
+`74c6c348b897998ca947e286cd673f41d20e9efc3c242befc575a852d8d8dbd3`. All
+input files are Common Crawl CC-MAIN-2026-43 WET files:
+
+- **training** — the 16 supported languages from segment 1791170053823.21,
+  files 00001 and 00002: the files of the 0.1.x model, so the 16 profiles are
+  that model's to the n-gram, and the pack never labels a document
+  differently from it, it can only say "unknown";
+- **known languages** — the 23 languages with at least 100 documents in
+  those two files and files 00020-00029 of the same segment: `ara aze ben bul
+  cat dan ell est fin heb hrv hun ind kor lav lit nor ron slk slv srp swe
+  tha`;
+- **calibration** — files 00030-00034 of the same segment, at a recall of
+  0.999 (a language's region holds 999 of 1,000 of its calibration
+  documents);
+- **rule data** — `OutWit.Controller.AI.Corpus.Assets/languages/`: Gopher's
+  eight English words, FineWeb-2's stop-word lists for the other fifteen
+  languages and its repetition thresholds for Japanese and Chinese
+  (Apache-2.0);
+- **evaluation** — nine files used for nothing else: 00000 and 00035-00039
+  of the same segment and file 00500 of segments 1791170054112.6,
+  1791170054429.52 and 1791170055137.36.
+
+With that rule data the pack carries data of another project, so it does not
+travel alone: wherever the repository hands the pack out as a file — the
+tests' `Fixtures/` and their output, the `models/` folder `corpus-live` runs
+from — `LICENSE-fineweb-2.txt` is beside it, a test holds every project that
+copies the pack to copying the licence text into the same folder, and the
+module's notices name the pack (see *What the module carries*). The pack's
+bytes are what they were: its hash is what manifests pin. Whoever hands the
+pack on hands the licence text on with it.
+
+On the evaluation files (128,699 documents labelled with a supported
+language, 10,126 with another), the supported languages keep their label at
+99.01 % (99.27 % without the test), and of the documents the line stage and
+the quality filter keep, the test loses 0.07 %. Documents in other languages
+become unknown at 98.5 %, and of those the quality stages would keep — the
+mislabelled text in 0.1.14's products — at 98.1 % (by characters 94.6 %):
+Swedish, Norwegian, Romanian, Hungarian and Bulgarian 100 %, Slovak 99.8 %,
+Danish and Catalan 99.3 %. What gets through is a close relative the pack
+has no profile for: Galician reads as Spanish, Belarusian as Ukrainian or
+Russian, Afrikaans and Frisian as Dutch, Luxembourgish as German — each
+fewer than 30 documents in nine files, too few to train a profile from the
+files used. One held-out file (00035) under the default pipeline: 11,737
+documents out with the 0.1.x model, 11,151 with the pack (−5.0 %; 2,559
+`language_unsupported`), the text product 7.4 % smaller. Of the 586
+documents no longer kept, 283 carry another language's label, 249 are mixed
+pages whose main language is another, 48 mixed pages whose main language is
+supported, 5 carry a supported language's label. The `stop_words` drops fall
+from 1,042 to 169: that rule was catching foreign text the pack now names.
+Identification against 39 profiles costs no more than against 16: the
+profiles are searched through one index (507 µs per document; 0.1.14 took
+557 µs with its 16).
+
+## Adding a language
+
+A language is data, not code: a folder of rule data, a pack built and
+evaluated with `corpus-assets`, and a manifest that pins the new pack's
+hash. No controller release.
+
+1. **Text.** Common Crawl labels every WET record with the language its
+   classifier identified (`WARC-Identified-Content-Language`), so any WET
+   file is labelled text. A supported language needs 200 single-language
+   documents in the training files (`--min-docs`) and 50 in the calibration
+   files; a CC-MAIN-2026-43 file holds about 15,500 single-language
+   documents, so a language with 1 % of them needs two training files, one
+   with 0.1 % about thirteen. Keep training, calibration and evaluation
+   files apart.
+2. **Rule data**, a folder `languages/<code>/` named by the crawl's label
+   (ISO 639-3):
+   - `language.json` — `{"name": "Swedish", "script": "Latn"}`; `"quality"`
+     with the thresholds the language has of its own (any of the manifest's
+     ten names, `top_ngram_chars` with three values, `duplicate_ngram_chars`
+     with six); `"min_stop_words"` (2 by default); `"notes"` saying where
+     each value comes from;
+   - `stopwords.txt` — one word per line, `#` comment lines, its source and
+     licence in the header. FineWeb-2 publishes a stop-word list and tuned
+     thresholds per language (`configs/<code>_<script>.yml`, Apache-2.0).
+     Without a list the stop-word rule is off for the language.
+3. **Build:**
+   ```
+   corpus-assets build-language-pack my-pack.bin --languages languages \
+     --train <wet.gz>... [--known-train <wet.gz>...] --calibrate <wet.gz>... [--recall 0.999]
+   ```
+   Every language with a folder is supported; every other label with
+   `--known-min-docs` (100) documents in the training and `--known-train`
+   files becomes a known profile, its text unknown instead of mislabelled
+   (rare languages need more files than the supported ones). The tool prints
+   the documents per language, the limits and the pack's SHA-256, and the
+   pack records its input files by name and hash. The same inputs give the
+   same bytes. A pack holds the lists of its folders: one built from the
+   folders of this repository carries FineWeb-2's, and
+   `languages/LICENSE-fineweb-2.txt` goes with it.
+4. **Evaluate** on files outside both sets:
+   ```
+   corpus-assets evaluate-language-pack my-pack.bin <wet.gz>...
+   ```
+   Per supported language: its documents, the recall without the
+   unsupported test and with it, how many it called unsupported, too short
+   or another supported language, and — `kept`, `kept lost` — of the
+   documents the line stage and the quality filter keep, how many the test
+   loses. Per other language: the share that becomes unknown and what the
+   rest was labelled as; `(k)` marks a known profile. Then the confusion
+   between supported languages and the documents with several labels. A
+   supported language should keep about 99 % and lose well under 1 % of its
+   kept documents; a known language should be about 99 % unknown. A close
+   relative without a profile shows up "labelled as" the language it
+   resembles: give `--known-train` more files until it has 100 documents.
+5. **Pin it.** `"language_model_sha256": "<the pack's SHA-256>"` in the
+   manifest, the pack as the job's `languageModel` blob (`corpus-live
+   --model my-pack.bin`). A new pack is a new pipeline: change
+   `pipeline.version` with it.
+
+**What still needs a controller release** is what is code. The word: a
+whitespace-separated token, or a letter in the scripts the controller knows
+to be written without spaces (`LanguageScripts.UNSPACED`: Han, Japanese,
+Thai, Lao, Khmer, Myanmar, Tibetan); a language in another script written
+without spaces, or one that needs a real word segmenter to be judged well,
+needs code. So does a new kind of quality rule (a threshold name the
+controller does not know makes it refuse the pack, never ignore the value),
+a change to the identification method, and the line stage's sentence ends:
+it knows `. ! ? 。 ． ！ ？ ‼ ⁇ ؟ ۔ । ॥`, so in a script that ends sentences
+otherwise (Ethiopic `።`, Burmese `။`, Armenian `։`, Thai with none) every
+line is judged as unterminated and needs twelve words, or forty letters, to
+stay.
+
+## The products
+
+- **Text blob** (`text.jsonl.zst`): zstd-compressed JSON lines, one per
+  document that passed every stage, `{"url","lang","text"}` in that order;
+  `lang` is the ISO 639-3 code the pipeline identified ("" when the stage is
+  off). A document of a PDF is a range of its pages, and its `url` says which:
+  `https://…/report.pdf#page=3-9` (see *PDFs*). The result's `ContentSha256` is
+  the SHA-256 of the *uncompressed* lines — the identity a re-execution on
+  another node must reproduce.
+- **Signatures blob** (`signatures.bin`): the magic `WITSIG1\n`, the hashes
+  per signature (int32 LE, 128), then one MinHash signature per document in
+  product order (128 × uint64 LE) — a fixed layout, document *i* at
+  `12 + i × 1024`. With another hash count or shingle size (`minhash`) the
+  magic is `WITSIG2\n` and the shingle size (int32 LE) follows the hash count:
+  document *i* at `16 + i × 8 × hashes`. Absent when `sign` is `false`; under
+  statistics and hashes only it is made and hashed on the node, not uploaded.
+  The result's `SignaturesSha256` (the report's `signatures_sha256`) is the
+  SHA-256 of the blob's bytes, kept or not: the signatures' identity.
+- **Dedup** (`corpus-dedup.json`, `docs/corpus-dedup.schema.json`,
+  `corpus-dedup/2`): per shard
+  a keep mask over the product (a base64 bitset, bit *i* = the *i*-th JSON line,
+  1 = keep) and the clusters of two or more as (shard, ordinal) pairs with the
+  kept document first; a lab assembles the corpus by reading each text blob
+  and skipping the lines whose bit is 0. A shard whose signatures blob is not
+  the one the report states (missing, another length, another header, another
+  hash) is in `excluded` with the reason and takes no part in the merge.
+- **Report** (`corpus-report.json`, `docs/corpus-report.schema.json`,
+  `corpus-report/6`): one entry for every shard of the job's task list, whatever
+  came back — the index and the URL are the server's own. Per
+  shard the verdict (a node's verdict on the shard, or `Disputed`, or `NoResult`
+  with a `reason`), how many executions the result rests on (`executions`), the
+  codes of the node faults met on the way (`faults`), blob ids, content hash,
+  `error` (a fixed code, never a text) and statistics (records in,
+  documents extracted and out, drops by rule, languages, the languages of the
+  `language_unsupported` drops, bytes, times, and the PDF stage's `pdf_*` counts
+  where a shard met a PDF), and the platform it ran on (`runtime_target`, e.g.
+  `linux-x64`: a platform, never a machine; the degree a node ran at is no
+  longer written, because it is the count of a machine's cores) and the
+  MinHash parameters of its signatures; the summary sums them over the fleet,
+  says what the run kept (`output`) and gives the run's **funnel**: the records
+  read, the documents extracted, the documents left after the language stage,
+  the line stage and the quality filter, the documents out, and the drops of
+  each stage (`extract` counts records and PDFs that gave no document; every
+  drop rule's stage is in the capabilities document). The summary also says
+  how many shards rest on one machine's word (`single_execution`) and counts
+  what did not go the plain way: `rejected_results`, `repairs`, `disputes`,
+  `disputes_resolved`. Beside the summary the report states the sampling the
+  run asked for and what came back of it (`sampling`) and how each round's
+  fan-out came back (`rounds`), as the integrity document does (see *A round
+  that came back short*).
+
+## PDFs
+
+A Common Crawl WARC file carries PDFs among its responses: about 1 % of them, a
+fifth of the file's bytes, and long texts. With `extract_pdf` on (the default),
+the PDF stage turns them into documents on the node, from the bytes the shard
+already holds: no other request, no other origin.
+
+**Which responses.** A WARC response with status 200 whose `Content-Type` or
+Common Crawl's `WARC-Identified-Payload-Type` is `application/pdf` and whose body
+starts with `%PDF-`. Common Crawl cuts a response at 5 MiB and says so in
+`WARC-Truncated`; such a PDF is read all the same (the extractor is lenient) and
+counted in `pdf_truncated`. A PDF larger than 64 MiB is not run.
+
+**The extractor and its sandbox.** `pdftext`, a WASI command module built from
+pdf_oxide 0.3.78 for wasm32-wasip1 (`OutWit.Controller.AI.Corpus.Assets`,
+`toolchain/`: a pinned Rust, a pinned lock file, two builds compared byte for
+byte), SHA-256 `13abba93015f27dac626fb4342cecf12641cf417246fd0f6639b0b05d450b5f6`.
+It travels as the data asset `corpus-pdftext-wasm.zip` (release `pdftext-v1.0.0`),
+which extracts to `wasm/pdftext.wasm` beside the controller; bytes that do not
+hash to the pin are not run. It runs in wasmtime inside the client's process, in
+the controller's own copy of the AI wasm host (binding 48.0.2, natives 48.0.8 —
+the bytes Verify ships, release `wasmtime-v48.0.8-2`): it sees only `/in/doc.pdf`
+and an empty `/out`, has no network, no clock of its own and seeded randomness,
+and is compiled once per process. Per PDF:
+
+| Limit | Value | Why |
+|---|---|---|
+| fuel | 8·10¹⁰, counted from `_start` (given after instantiation) | ten times the 99th percentile of the 210 complete PDFs of one Common Crawl WARC file (7.6·10⁹, the binding's own counter; the largest 1.9·10¹⁰); 6.5 to 9 s of a desktop core for a document that burns all of it (measured, the same run after run), the worst a hostile PDF can cost. Given after instantiation, it is the guest's alone: Windows pays a unit per byte of data segments at instantiation, Linux does not |
+| fuel per shard | 8·10¹², a hundred full budgets | the PDFs of one shard have one budget together: the 221 PDFs of one Common Crawl WARC file burn 6·10¹¹ (seven and a half budgets), and a shard made of documents that each burn their whole fuel would otherwise cost a node a budget per document without end. A PDF met after it is spent is not run (`pdf_shard_fuel`) |
+| runs per shard | 4,096 | a run costs more than its fuel: a folder, two files, an instance of the module and its teardown, some 7 ms of a core whatever the PDF, and a body that only starts as a PDF burns 1.5 million fuel, so the fuel alone let five million such bodies through (about ten hours). A Common Crawl WARC file holds about 220 PDFs a gigabyte. A PDF met after 4,096 were run is not run (`pdf_shard_runs`): a count, the same on every node, where a fuel charged for the run would have to guess what 7 ms are on each machine |
+| linear memory | 1 GiB | a grow past it is refused; the module then ends with Rust's allocation-failure message |
+| input | 64 MiB | the WARC reader's record cap |
+| text | 16 MiB of UTF-8 | a PDF with more drops as `pdf_oversized`; the module's whole output folder is held to it |
+| wall clock | 10 minutes | a backstop only, sized far above what the fuel takes on a slow core; a run that reaches it is a fault of the node (below), never a document's verdict |
+
+Every limit, the module's pin and the shaping rules below are part of the stage
+set's fingerprint: a changed limit is a changed pipeline.
+
+**A run's time is its fuel's.** Each run has a folder of its own in the task's
+scope (`pdf/<n>/in`, `out`, `io`; the guest sees `/in/doc.pdf` and `/out` on
+every run), and nothing on the run's path deletes it: the folder is handed to a
+cleanup thread and the shard goes on. Deleting the input on the run's own path
+is where 0.3.0 waited: on a machine that inspects new files (a real-time
+scanner), a delete that arrives while a document is still being inspected waits
+for the inspection, and a PDF whose one stream inflates to a gigabyte kept it
+busy for 90 s — the same document at the same fuel took 6.4 to 99.5 s. The wait
+needs no sandbox: the same bytes written, closed and deleted seven seconds later
+by a plain script hold the delete for 90 s.
+
+**Verdicts.** Every way a PDF ends is a verdict, the same on every node, counted
+among the shard's drops when it gives no document: `pdf_encrypted` (a password
+is needed; a PDF encrypted with the empty password is read), `pdf_unreadable`,
+`pdf_no_pages`, `pdf_fuel` (out of fuel), `pdf_memory` (a refused allocation),
+`pdf_trap` (the module crashed: a stack too deep, an abort), `pdf_error` (any
+other failure, or output that breaks the module's contract), `pdf_oversized`,
+`pdf_empty` (text, but no line once shaped), `pdf_shard_fuel` (the shard's PDFs
+had spent their fuel together; not run), `pdf_shard_runs` (4,096 of the shard's
+PDFs had been run; not run).
+
+**A node that cannot run the sandbox** — no module beside the controller, another
+wasmtime binding loaded first in the client's shared load context, a native
+library that does not load — makes no product of a WARC shard whose pipeline
+has the PDF stage on: a shard's product never depends on the node that made it.
+The node knows this before it does anything, so it says so at the start of its
+batch: the batch is refused with nothing fetched and nothing lost, and
+`Grid.ForEach` gives the node's tasks to another node (a fleet where no node can
+run the stage fails the job with that sentence rather than report products
+without their PDFs). Every WET shard, and a WARC shard with `extract_pdf` off,
+runs on such a node as on any other. A fault met mid-shard — a module that stops
+instantiating, a PDF run that reaches the wall-clock backstop with fuel left —
+returns that one shard as a node fault (`pdf_sandbox`, `pdf_backstop`): the
+node's finished shards stand, and the shard is sent out once more.
+
+**Shaping.** The module writes UTF-8 with LF line ends and U+000C between pages.
+pdf_oxide already joins the lines of a paragraph and removes a hyphen between two
+lower-case Latin parts, so the stage does neither again for Latin. It splits the
+pages, collapses whitespace as for a WET or HTML document, and removes running
+headers and footers: a line that, with every run of digits folded to one, appears
+on half the pages or more of a PDF of five pages or more ("Page 3 of 12", a
+journal's name, a bare page number) leaves every page. Five pages: "half or more"
+is then three pages or more — a line on two pages can be a heading and its entry
+in the contents. Left in, such a line is the repetition the quality filter drops
+a document for. Then, within a page, a Cyrillic or Greek word broken at a line
+end is joined again, which pdf_oxide does not do: a line that ends in a hyphen
+(or U+2010, or a soft hyphen) right after a lower-case letter, followed by a line
+that starts with a lower-case letter of the same script, becomes one line without
+the hyphen (lower case by Unicode category, the script by its Unicode blocks;
+never Latin, never across scripts). On Common Crawl's WARC file 00000 it joins 100
+breaks: 66 words made whole, 20 single-letter fragments the extractor had already
+split, 4 pairs from interleaved columns, and 10 compounds broken at their own
+hyphen (предметно-пространственной) joined as one word — the text cannot tell
+a compound's hyphen from a hyphenation. Known limit: such compounds come out as
+one word, the trade-off pdf_oxide makes for Latin, and no language-specific
+exception is made (language knowledge stays out of the code).
+
+**What a document is.** A PDF becomes one or more **page-range documents** of at
+most 5,000 words. Pages are taken in order and put together while the document
+still fits; the page that would not fit starts the next one. The document's
+`url` is the PDF's with the range, `#page=a-b` (1-based, inclusive; empty pages
+inside a range belong to it). A page longer than 5,000 words is a document of its
+own, cut after its last whole line that fits (pdf_oxide's lines are paragraphs;
+a single line that alone is too long is cut after its last word that fits) and
+the rest of the page dropped: a page is the smallest unit an id can name, and a
+page five times a dense page of prose is a table, an index or a text layer gone
+wrong. A word is what the quality filter counts in a mixed text: a run between
+spaces with a letter or a digit in it, and each letter of a script written
+without spaces. Each document then goes through language identification, the
+line stage, the quality filter and the signatures exactly like a page of HTML,
+and each counts as one document extracted.
+
+**Counters.** Per shard, beside the drops: `pdf_in` (PDFs taken),
+`pdf_truncated`, `pdf_extracted` (PDFs that gave a document), `pdf_pages` (their
+pages), `pdf_documents`, `pdf_pages_cut`, `pdf_running_lines` and `pdf_fuel` (the
+fuel the sandbox burned, the same on every node). They appear in the report only
+where a shard met a PDF.
+
+**What it costs.** On one core of a desktop CPU (Ryzen 9 5950X, every stage
+on), Common Crawl's WARC file 00000 of CC-MAIN-2026-43 (923.8 MB, 221 PDFs)
+takes 154 to 187 s with the PDF stage (two runs on a machine that is also a
+node) and 104 s without it. Its PDFs, a fifth of the file's bytes, give 314
+page-range documents from 195 PDFs (2,881 pages; 23 empty, 2 out of fuel, 1
+without a page); the product holds 11,160 documents instead of 10,946, and 6 %
+more text. The sandbox's 6.0·10¹¹ fuel is most of the time the PDFs add; the
+median PDF takes 3·10⁸ fuel (well under a second), the two that run out of fuel
+are truncated files that would give 3 and 19 characters. The process's peak
+working set is 841 to 890 MiB instead of 292 MiB: a PDF's linear memory comes on
+top of the shard's budget, which is why a node's memory is budgeted once: half
+of it to the shards in flight (256 MB each), a quarter to PDFs (no more at once
+than fit their 1 GiB ceilings into it), the rest left to the machine.
+
+## Trust and integrity
+
+A node is somebody's computer and may lie. What the server accepts from one, and
+what a run does when nodes disagree or fail, is decided on the server and
+written down in two documents.
+
+**A result is bound to its task.** `Corpus.Split` gives every shard a random
+128-bit **ticket** that travels in the task and comes back in the result, and
+every task package a ticket of its own that comes back with the answer; a
+repair or a dispute round gives new ones. An answer is bound to its package by
+the package's ticket before anything of it is opened, and `Corpus.Collect`
+accepts a result only under a ticket of this job and round, in the answer to
+the package that ticket's shard was sent in, for the shard that ticket was
+issued for, from the server's own controller version, in the shape an honest
+node gives (bounded strings, hashes that are hashes, counters that add up, a
+code of the fixed list, no product beside a verdict that has none), and
+consistent with the task (its output mode, its MinHash parameters). Anything
+else is dropped and counted by reason (`rejected_results`; `rejected` in the
+integrity document) — it fails that value, never the run:
+
+| Reason | The value |
+|---|---|
+| `unknown_ticket` | is under no ticket of this job and round: another job's, another round's, a package or a shard the node was not given, or none; an answer under no package ticket is not opened at all |
+| `unreadable` | is no result, or is not shaped as an honest node shapes one (counters the bytes of its shard cannot hold among it); a frame in which a length or a count points outside the frame or past the bound of its kind (it is not handed to the decoder); an answer whose blob is missing, damaged, will not open, is larger than an answer may be, or holds more results than its package had shards (what was read before the damage stands) |
+| `version` | claims another controller version than the server's |
+| `content` | does not hold what its task asked for: the ticket is one shard's and the index or URL another's, it is at odds with the task's pipeline (PDF counts where the task runs no PDF stage among it), or it reports more bytes fetched than the shard was held to |
+| `surplus` | is one of more values under one ticket than its round takes (*Two machines, not two values* below): an answer beyond the ones a round opens for a package, a second result for one shard in one answer |
+
+The words are the ones the Verify controller uses. Its `duplicate` (one results
+blob returned twice) has no counterpart here: two answers that name one blob
+are two answers, and are counted as any two under one ticket. A node knows only
+the tickets it was given, so it cannot answer for a shard it never had, and the report's shards, indexes and URLs are
+the server's task list, whatever came back. A ticket is never written into a
+document.
+
+**One controller version per job.** The task carries the server's controller
+version; a node on another version refuses its batch before doing anything, and
+a result that claims another version is dropped (`version`). `version_skew`
+stays in the integrity document for readers of `/4` and is always 0: a node can
+no longer leave the comparison by the version it claims.
+
+**The server never chooses between executions by what a node says.**
+`SamplingRate` runs a share of the shards twice, in the same `Grid.ForEach` call
+as the rest; the platform picks them at random and keeps the two copies on
+different machines, so a node cannot tell whether its shard is being checked.
+Two copies that agree on everything an honest node cannot vary — the verdict,
+the content hash of the product, the hash of its signatures, the document
+counts, the drop and language histograms (the drops with the languages of the
+`language_unsupported` ones), the PDF stage's counts; not times, bytes or fuel —
+are accepted. Copies that disagree are a **dispute**: the shard is run again on
+three machines (`Grid.Replicas(3)`), and the result returned by the most of
+them, two at least and with no tie, is accepted (`resolved`); otherwise the
+shard is **`Disputed`** — named in the report, out of the counters and the
+products — and the integrity document says how the dispute ended (`outcome`):
+`no_majority` (no result was returned by more copies than any other, and by two
+at least), `too_few_copies` (fewer than two copies came back with a verdict) or
+`surplus_copies` (*Two machines, not two values* below). Signatures that
+differ while the text agrees are a dispute like any other (`signatures` among
+the differences, counted in `signature_mismatches`), and the near-duplicate
+merge checks each blob against the hash that was compared (see `Corpus.Dedup`).
+A shard that was not sampled rests on one machine's word, and the documents say
+how many do (`single_execution`); with a single machine available nothing runs
+twice.
+
+**A node's own trouble is never a verdict.** A result is a verdict on the shard
+or a node fault (`disk`, `disk_space`, `network`, `language_model`,
+`pdf_sandbox`, `pdf_backstop`, `upload`, `memory`, `internal`, and `tasks` for a
+node that could not read its task package). A fault answers
+nothing: the shard is sent out once more (the repair round, on two machines when
+the run asked for sampling), and a shard still
+without a result is **`NoResult`** with a reason — `node_fault` (a machine that
+held it returned it as a fault of its own) or `no_answer` (nothing that was
+accepted came back: nothing at all, or only values that were dropped). An origin
+that answers with a status is the
+shard's verdict (`FetchFailed`, `http_404`); an origin that does not answer this
+node is the node's fault (`network`), because the node cannot tell its link from
+the origin.
+
+**A round that came back short.** The platform picks the packages that run
+twice and does not say which, so the server cannot tell a package that was
+picked and lost both its answers from one that was never picked. Two things
+follow from that.
+
+- *The repair round keeps the run's checking.* When the run asked for sampling
+  at all (`SamplingRate` above 0), every shard that goes out again goes out on
+  two machines (`Corpus.RepairRate`, `Grid.Replicas(2, 1)`), and the repair
+  round is ruled as the first: two copies that agree are accepted
+  (`executions: 2`), copies that disagree go to the dispute round. A machine
+  that returns nothing in the first round — or one value that is no answer,
+  for which Grid 1.3.0 leaves the whole round's answers out of the script's
+  collection — does not get the shards back to answer them alone. A run that
+  asked for no sampling has its repair round on one machine, as before.
+- *The documents say what was asked and what came back.* Both documents carry
+  `sampling`: the `rate` the run asked for, how many of the first round's
+  packages that comes to (`asked_twice`), how many came back with a second
+  answer (`answered_twice`), how many shards had two results that were compared
+  (`compared`), and the account of it in a word (`state`) and in a sentence
+  (`statement`):
+
+  | `state` | Means |
+  |---|---|
+  | `not_asked` | the run asked for no second execution |
+  | `as_asked` | as many packages came back twice as were asked for, and shards were compared |
+  | `short` | fewer packages came back twice than were asked for: some of the checking did not happen |
+  | `none` | second executions were asked for and no shard was compared: the checking did not happen (a pool of one machine ends here too) |
+  | `unknown` | the script did not hand the run's options to the activity that wrote the document |
+
+  and `rounds`: for the first round, the repair round, the dispute round and
+  the second dispute round (`dispute_again`),
+  the task packages that went out (`packages`), the answers that came back
+  (`answers`), and the packages by the answers each got (`unanswered`,
+  `answered_once`, `answered_twice`, `answered_thrice`, `answered_more`). The
+  counts are of packages and answers; nothing in them says which machine
+  answered what.
+
+**The documents.** `corpus-integrity.json`
+(`docs/corpus-integrity.schema.json`, `corpus-integrity/8`): `sampling` and
+`rounds` as above; `pairs` — every
+shard that came back twice in the first round or in the repair round (`round`
+says which), its two results compared, or `incomplete` when a
+side is no result (a fault, a dropped value); a pair whose sides made no
+signature (`sign` off) says so (`"signatures": "none"`); `disputes` — what three
+machines returned and how each ended (`outcome`, with `first_copies`,
+`repair_copies`, `copies`
+and `agreeing`); `no_result`; `rejected` by reason, every reason written, 0
+included; and the summary's counters (`sampled`, `compared`, `mismatches`,
+`signature_mismatches`, `rejected_results`, `node_faults`, `repairs`, `repaired`,
+`repair_pairs`, `repair_compared`, `repair_mismatches`,
+`no_result`, `disputes`, `disputes_resolved`, `disputed`, `single_execution`).
+The mismatch rate is over the compared pairs of the first round: those are the
+run's sample, and the repair round's pairs are counted apart. No document says
+which machine ran what.
+
+**Two machines, not two values.** The server sees values, not machines: the
+platform keeps the copies of a package on different machines and hands over what
+they returned, without saying which task each answer was for; the copies of a
+package carry one ticket, and so do the copies of each of its shards. Counting
+values as machines rests on two things. An answer gives a shard one value at
+most: a second result for one shard in one answer is dropped (`surplus`). And
+the platform — Grid 1.3.0 and later — keeps, of what a node's batch returns, one
+value at most for each return variable its tasks asked for. With an older Grid a
+node could return several answers for one task and this ruling would count them
+as machines.
+
+So a machine cannot add values. It can still spend a slot it holds on another
+ticket it holds — answer package X in the slot of package Y — which leaves Y an
+answer short. The rounds are ruled with that in mind. Of the answers under a
+package's ticket a round opens one more than it asked for (three in the first
+round, three in the repair round, four in the dispute round), so that one too many
+is seen; any further is counted (`surplus`) and not read.
+
+- *The first round.* More than two values under a shard's ticket send the shard
+  to a dispute, as copies that disagree do.
+- *The repair round* is ruled as the first: it sends a shard to two machines
+  at the most (to one when the run asked for no sampling). Two values that
+  agree are accepted, one value is accepted as one machine's word, and values
+  that disagree, or more than two, send the shard to a dispute. (Up to 0.6.0
+  the round asked one machine, and two values under its ticket left the shard
+  `NoResult`.)
+- *The dispute round* asks three machines. With more than three values under the
+  ticket none is taken: each is counted as `surplus`, and the dispute ends as
+  `too_few_copies`. Otherwise the leading result must have been returned by two
+  machines: of its values, as many as the *other* packages of the round are
+  short of their three answers may be one machine's second, and do not count —
+  but no more than the slots of the round that brought nothing at all: a value
+  that came back under no ticket of the round lent nothing to another package.
+  When what is left is not two, or not more than the next result has, the
+  dispute ends as `surplus_copies`.
+- *The second dispute round.* A dispute that ends as `too_few_copies` or
+  `surplus_copies` goes out once more on three machines, under new tickets, and
+  is ruled as the dispute round is; how it ends there is how the dispute ends
+  (the integrity document keeps both rounds). A dispute that ends `no_majority`
+  does not: its copies disagree. (Up to 0.8.0 there was one dispute round, and a
+  value under no ticket counted as a second answer one machine may have given.)
+
+With one lying machine among the copies, whatever the others lose, a result that
+is accepted in a dispute was returned by an honest machine; and three machines
+that agree still settle their shard when another package of the round lost a
+copy. A small pool pays for it: with two machines every disputed package is an
+answer short of its three, so one disputed package in a run is still settled by
+the two copies that came back, and two or more are not.
+
+**What this does not close.** A machine can spend a slot it holds on another
+ticket it holds. Two things follow, and both are stated here rather than hidden:
+
+- *It can deny a result.* A machine that holds a copy of a disputed package and
+  another ticket of the round can answer the disputed package twice: four values
+  end the dispute as `too_few_copies`, and a round that is short of values
+  elsewhere can end two against one as `surplus_copies`. The second answer
+  cannot win, but the shard has no product. And a machine that holds copies of
+  two or more disputed packages and answers none of them cannot be told from
+  honest machines that fell silent: every dispute of that round may end as
+  `surplus_copies`, the ones three honest machines agreed on included. Such
+  disputes go out once more, where the platform draws the machines anew; a
+  machine that holds two packages of that round as well and again answers
+  neither leaves them disputed. That is what one machine can deny: the products
+  of the disputes of the rounds it holds two packages of, never a wrong product,
+  and only loudly (`Disputed`, with the outcome and both rounds in the integrity
+  document). Answering under no ticket of the round no longer does it. Closing
+  it needs a ticket for each copy of a package, which the platform does not give.
+- *It can make its own word look checked.* A machine that holds the copy of a
+  sampled package and a package of its own can spend the copy's slot on its own
+  package: its shards then show two agreeing executions which are one machine's
+  (`executions: 2`), and the sampled package is left with its one honest answer.
+  The forged results would have stood anyway — their shards were not sampled —
+  but the report overstates how they were checked. The same holds in the repair
+  round, and the counts of `sampling` and `rounds` do not show it: as many
+  packages came back twice as were asked for.
+
+Closing both needs a ticket per copy from the platform (one more member in what
+`Grid.Replicas` hands a node). And a shard that is not sampled is checked by
+nobody: raise `SamplingRate` for what must be checked.
+
+## What hostile input meets
+
+A shard is whatever a crawl found, a manifest and a language pack are a lab's
+files, and a result is a node's. Each is read within limits that sit where the
+resource is spent, and each limit is a function of the input alone, so two
+honest nodes meet it at the same place (the numbers a shard states for itself,
+a record's `Content-Length` and a response's status code, are decimal digits
+read alike on every node: a signed form is refused everywhere):
+
+| Input | Limit | Past it |
+|---|---|---|
+| a shard on the wire | the task's cap, 1 GiB at most on the node itself whatever the task says | `Oversized` (`oversized`) |
+| a shard on the wire, with a declared size | the size it was declared with and an eighth more, 1 MiB at least (see *What a run promises before it starts*) | `Oversized` (`oversized_declared`) |
+| what a shard unpacks to | 32 times its size on the wire, 64 MiB at least, 16 GiB at most, counted exactly; a record whose stated length would pass it is refused before a byte of it is read | `Oversized` (`oversized_unpacked`) |
+| a record | 8 MiB in a WET shard (a page's text), 64 MiB in a WARC shard | skipped and counted (`record_oversized`) |
+| a page's charset | a name the runtime knows and will not decode (UTF-7, whatever a host's switch says); a name nobody knows falls through to the next source as before (the meta tag, then UTF-8) | `unsupported_charset` |
+| a page's bytes and characters | 16 MiB decoded, 4 Mi characters parsed | the rest is cut |
+| a page's markup, read once | nesting 512, 60,000 tags, read the way a tokenizer reads comments and text elements | `html_refused` |
+| the parser's own tree | no element at depth 512; 120,000 elements, the ones the parser makes without a tag included | `html_too_complex` |
+| a page its decoder or the parser fails on in a way of their own | an error of logic over the page's bytes, the same on every node; never memory, a library that does not load or the file system, which are the node's | `html_error` |
+| a document's words | counted before they are split; the first failed quality rule ends the judgement; a document is judged in full only up to 100,000 words (1,000,000 letters of a script without spaces), whatever a manifest's `max_words` or a pack's rule data says — a manifest or a pack may lower it | the rule's drop (`max_words`) |
+| a shard's product | its documents, 2,048 for every fetched mebibyte (4,096 at least), and its compressed text, twice the bytes fetched (16 MiB at least); the signatures follow from the documents | `Oversized` (`oversized_product`) |
+| a PDF | fuel, 1 GiB of memory, 64 MiB in, 16 MiB out | the `pdf_*` drops |
+| the PDFs of one shard | a hundred full fuel budgets and 4,096 runs together: 11 to 15 minutes of a core in fuel at the worst, and the runs' own cost beside it (a folder, two files, an instance of the module: some 7 ms a run here, half a minute for 4,096) | `pdf_shard_fuel`, `pdf_shard_runs` |
+| a language pack | 16 MiB, 512 profiles, 524,288 n-grams (see *Language packs*); its n-grams are sorted, not looked up in tables keyed by them | refused by name |
+| a manifest | 256 MiB, 1,048,576 sources, 4 MiB a value, read a source at a time, 64 keys at its root; a source URL of 4,096 characters; the problems listed are the first hundred and a count of the rest, the hosts named twenty; a string or a key that is no Unicode text (the escape of half a surrogate pair, bytes that are not UTF-8) is a problem like any other | refused by name |
+| a task package on a node | the size and the hash of its reference; a frame of 16 KiB a task (256 KiB what the tasks share); the shard count of its reference | the node fault `tasks` |
+| an answer from a node | bound to a package by its ticket before it is opened; one more answer opened than the round asked for; a blob of 128 KiB a result at most; a frame refused by its stated length; one value a shard; whatever fails while it is read costs that answer, never the run | dropped, counted |
+| a result frame from a node | walked before it is decoded: every object the members its type has, every string's lengths inside the frame, at one with one another and within 4,096 characters, every list within the most its kind holds, nothing left over | dropped, counted |
+| a result from a node | the shape of an honest result; its counters held to its shard: no more records than the bytes fetched can unpack to (24 bytes a record at the least), a document for each record that is no PDF, no more documents and no more compressed text than the product ceiling allows for the bytes fetched, the PDF stage's counts at one with one another, PDF counts only where the task runs that stage | dropped, counted |
+| a report given to `Corpus.Dedup` | 4 GiB (4,096 bytes for each shard a job may have), 64 keys at its root, read a shard at a time; a shard listed twice and a blob named twice found by sorting, not by a table keyed by them; the capacity asked of its counts before a blob is read: 4,000,000 documents whatever the length of their signatures, fewer above 128 hashes (512 million signature values) | refused by name |
+| the signatures a node wrote, in `Corpus.Dedup` | a band's keys are sorted, not looked up in a table keyed by them, so a merge costs the same whatever the signatures are; beside the signatures a document costs the merge under 48 bytes; the token is read at every document | the merge runs as for any other signatures; a job that was stopped is left at the next document |
+
+Cancellation is looked at inside a record, every 4,096 bytes of it, so a shard
+that never yields a record (512 MiB of line feeds) stops when its job does.
+
+## Where a machine fetches from
+
+A task says which URL to fetch, and a task is written by whoever submitted
+the job. So the task's word is not enough: without a rule of the machine's
+own, a job could send a contributor's computer to any address, the ones
+inside that contributor's network included, and read the answer back as
+"cleaned text". Every request therefore passes two questions, on a node and
+on the server alike (the server asks origins for shard sizes):
+
+1. **Does the task name the host?** The manifest's `allowed_origins`.
+2. **Does this machine fetch from the host at all?** Not something a
+   manifest can answer.
+
+A machine fetches from two kinds of host:
+
+- **The public origins compiled into the controller**: `data.commoncrawl.org`
+  today. Over HTTPS, on the default port, and only at public internet
+  addresses — a name that resolves into a private, loopback or link-local
+  range is not contacted, and the address that was checked is the address
+  that is connected to, on a machine that connects directly: behind a proxy
+  the proxy resolves the name, the address rule cannot apply, and what says
+  who answered is the certificate (the public origins are HTTPS).
+- **Hosts the machine's owner listed** in the environment variable
+  `OMNIBUSCLOUD_CORPUS_ORIGINS` (host names separated by `;`, `,` or spaces)
+  of the process that runs the controller. This is the owner's own decision
+  about the owner's own machine, so such a host is taken as written: HTTP or
+  HTTPS, any port, any address. A lab's data server inside its network is the
+  case; on the public network nobody needs to set it.
+
+Redirects are never followed blindly: each hop is put to both questions, at
+most five hops. A URL with a user name or password is refused, and so is a host
+that is not written in ASCII (`'…': a host that is not written in ASCII is not
+fetched; write it in its ASCII form (xn--...).`), on the server at the split and
+on a node alike.
+
+What a job sees when a host is not a public origin: `Corpus.Preflight` and
+`Corpus.Split` still plan the shards and name the host in a message, because
+the answer belongs to each machine. A machine whose owner listed the host
+processes the shard; any other answers `OriginRefused` without sending a
+request. The server does not ask such a host for sizes unless its own
+operator listed it, so the estimates for those shards come from the
+manifest's `size` values, which the nodes hold the shards to.
+
+## What a run promises before it starts
+
+A run makes two promises before a node is asked: what the contributors' links
+will carry and what the server will hold. Both are computed from the shards'
+sizes, and a size is somebody's word: the manifest's, or the origin's. Three
+things make the promises hold whoever wrote the manifest, for the fetches; a
+fourth, the product ceiling, bounds what the shards may produce whatever the
+origin serves.
+
+**A declared size binds.** A node holds a shard to the size it was declared
+with — the manifest's `size`, or the origin's answer when the server asked —
+and an eighth more, 1 MiB at least (room for a file that was replaced by a
+slightly larger one, not for another file): a `Content-Length` past that ends
+the request before a byte is read, a streamed body is cut there, and the
+shard's verdict is `Oversized` with the code `oversized_declared`. It is a
+verdict, a statement about the input that every honest node makes — the
+manifest said one thing and the origin served another — never a fault of the
+node. A result that reports more bytes fetched than its shard was held to is
+dropped on the server (`content`). A shard without a size of its own is held
+to the job's cap only (1 GiB, or the options' lower one), and the preflight
+says how many there are (`UnsizedSources`).
+
+**The origin is asked about a random sample.** `Corpus.Preflight` and
+`Corpus.Split` ask the origin (HEAD) for the size of up to 64 shards, four at
+a time, 15 s each: half of them shards the manifest gave no size for and half
+shards it did (what one half does not use goes to the other), drawn with the
+system's random generator, so a manifest cannot arrange which are asked. An
+unsized shard that was asked takes the origin's answer as its size and as its
+bound; one that was not asked is counted at the mean of the answers (at the cap
+when there is none) and bound by the cap only. A declared size the origin
+contradicts — the origin's own is past the bound above — is a problem of the
+manifest, by name (`sources[17]: the origin answers … bytes and the manifest
+declares …`): the preflight is not well-formed and `Corpus.Split` does not
+start the job. A sample finds a manifest that is wrong throughout; one wrong
+size among thousands is found by the node that fetches the shard.
+
+**The traffic estimate says what it counts.** `EstimatedTrafficBytes` is the
+sum of its parts, each a field of the preflight and a part of its line:
+
+| Part | Field | What it is |
+|---|---|---|
+| fetches | `EstimatedFetchBytes` | every shard once, and the sampled ones a second time by another machine (the largest taken as the sampled ones) |
+| uploads | `EstimatedUploadBytes` | the text and the signatures of every execution, by the storage table's ratios (none under statistics and hashes only), and the result packages |
+| the language model | in the total and in the line | once for each node the plan uses, when the server knows its pool; otherwise the line gives its size per node |
+| an allowance | `RetryAllowanceBytes` | a tenth of the fetches, for a fetch that starts over and for shards fetched again in a repair or a dispute |
+
+Beside it stands a ceiling, `FetchCeilingBytes`: what the nodes accept for the
+same fetches at the most, every shard at the bound it is held to. The estimate
+is what an honest manifest costs; the ceiling holds whoever wrote it, for the
+shards that have a size.
+
+**The product ceiling.** What a shard produces is held to a function of the
+bytes fetched for it: 2,048 documents for every fetched mebibyte (4,096 at
+least) and twice the bytes fetched in compressed text (16 MiB at least); the
+signatures follow from the documents. A shard whose product passes either is
+`Oversized` (`oversized_product`) on every node and nothing of it is kept, and
+a result that claims more is dropped on the server. Common Crawl's files give
+180 to 370 documents and 0.09 to 0.98 bytes of text for a fetched mebibyte or
+byte, far below; a shard of a few hundred kilobytes of one-word pages gave
+300,000 documents before. The ceiling line of the preflight states the most
+every execution may upload under it, and the storage line the most the
+products may be on the server; the storage refusal is still held to the
+estimate. A node reserves the ceiling on its disk before it fetches a shard
+(see *Node behaviour*). What no figure covers the preflight says in its own
+line: a node that fails or falls silent has its whole share fetched again by
+other nodes, and a run with many disputes or repairs goes past the allowance
+(the report's counters say what a run added). Not counted, and too small to
+matter: the task packages a node downloads, about a hundred bytes a shard.
+
+## Server storage
+
+The input does not touch the server; the products do. Every execution of a
+shard uploads its text blob and its signatures blob, the tasks and the results
+travel in blobs of their own, the job writes its report and its integrity
+document, a dedup run writes its own, and the server keeps
+all of it for the retention window (a product from its shard's completion, the
+documents from the job's). For a job of terabytes that is the real ceiling of a
+deployment, so the preflight estimates it and a deployment can set a limit.
+
+**The estimate** (`EstimatedStorageBytes` in the preflight) is built from each
+shard's size — the manifest's, or the origin's answer to HEAD, or the cap for a
+shard nobody could size — and ratios
+measured on real runs, per format and per setting of `clean_lines` and
+`filter_quality`; each is the largest value measured, raised by a fifth:
+
+| Format | `clean_lines` | `filter_quality` | Text per byte fetched | Documents per MiB |
+|---|---|---|---|---|
+| WET | on | on | 0.38 | 240 |
+| WET | on | off | 0.64 | 350 |
+| WET | off | on | 0.55 | 200 |
+| WET | off | off | 0.98 | 370 |
+| WARC | on | on | 0.09 | 50 |
+| WARC | on | off | 0.11 | 80 |
+| WARC | off | on | 0.12 | 60 |
+| WARC | off | off | 0.18 | 100 |
+
+The WARC rows hold with the PDF stage on (re-measured for 0.2.0): the head of
+a real WARC file (its first 1.5 MB) with its one PDF reaches at most 0.073, 0.086, 0.100 and 0.145 of text
+per byte and 39, 64, 44 and 79 documents per MiB in the four rows' settings, and
+Common Crawl's whole WARC file 00000 (923.8 MB, 221 PDFs) 0.020 to 0.039 and 13
+to 25 — a quarter of the head's, which stays the rows' basis.
+
+A document is 1,024 bytes of signatures (none when `sign` is off). The sampled
+shards count twice — the largest ones, so the estimate does not depend on which
+the platform picks — and the documents and the inputs (manifest, model) are
+added. Twenty Common Crawl WET shards with every stage on (1,265 MiB fetched,
+sampling 0.25) leave about 772 MiB under 0.1.14 (its products measured on one
+machine; 653 MiB on the test server under 0.1.13); the estimate for them is 983 MiB.
+A source whose size nobody knows is counted at the cap a node holds it to, and
+the message says how many there are: the refusal below applies to them too.
+
+The rows with the filter on hold for the thresholds they were measured with:
+the controller's defaults and the reference pack's rule data. A manifest that
+sets a `pipeline.quality` threshold of its own (the curly-bracket switch aside,
+which only drops more), and a language pack with rule data of its own (other
+than the reference pack's and the controller's frozen rules, which a `WITLID1`
+model takes), is estimated at the row of the same `clean_lines` setting with
+the filter off, and the line says so. Measured on the head of a real WET file (its first 1.5 MB): the ten thresholds a manifest can set,
+opened as wide as they go, keep 3.6 % more text than the defaults (the
+repetition rules and the stop words are not a manifest's to set); with a pack's
+rule data opened too, 22.5 % more, which is what a run with the filter off keeps.
+
+The task packages (1,024 bytes and 128 a shard) and the result packages of
+every execution (1,024 bytes and 768 a shard; measured 93 and 568 a shard) are
+blobs and are counted.
+The guard test over the heads of a real WET and a real WARC file (fetched by
+range when the tests run) fails when a stage makes products larger than the table
+allows. A run that keeps statistics and hashes only leaves no
+text, no signatures and no dedup document: its estimate is the report, the
+integrity document and the inputs, and the preflight line says the products stay
+on the nodes. A signature costs 8 bytes per hash and document (`minhash`).
+
+## The busiest share
+
+The preflight states what the contributor with the most work carries:
+`BusiestNodeShare`, the busiest node's share of the run's work (0 to 1), and
+`PlannedNodes`, how many nodes would take shards — as the platform's allocator
+would split the shards over the pool now. The host asks for the nodes that can
+take Corpus shards for the submitter (as the capabilities' pool) and plans as
+the Grid controller's allocator does, over the job's packages (a shard each in
+a job of up to 1,024 shards): nodes by benchmark rate (one that has not
+measured itself after every one that has, at the slowest measured rate), the
+packages largest first, each to the node that finishes it earliest, the two
+executions of a sampled package on different nodes, then one node fewer while
+the longest share grows by no more than 2 %. A package's work is its shards'
+size in megabytes. The platform samples packages at random; the plan takes the
+largest.
+The answer is a share and counts: no node is named. A host without a pool to
+ask leaves both at 0 and says so.
+
+**The limit.** The engine says nothing about storage to a controller, so the
+host asks two places and the smaller stated value holds:
+
+- the server's blob service, by reflection: a public
+  `Task<long> GetJobStorageHeadroomBytesAsync()` (meant to be backed by a server
+  setting `BlobStorage:JobStorageHeadroomBytes`) and `int JobBlobRetentionDays`
+  on it. A server without these members — every server so far — states nothing;
+- the environment variable `OMNIBUSCLOUD_CORPUS_STORAGE_HEADROOM_BYTES` of the
+  server process, in bytes: the operator's own word.
+
+When the estimate exceeds the headroom, `Corpus.Preflight` answers
+`WellFormed = false` with a message that names both numbers, and
+`Corpus.Split` fails the job before a node is asked. A deployment that states
+no headroom refuses nothing on storage; the preflight still reports the
+estimate.
+
+## Diagnostics and capabilities
+
+`CorpusRuntimeDiagnostics.wit` answers for the server's module (a plain
+script function runs on the host; the nodes run the same version, the platform
+admits no other to the work):
+
+- `result` (`CorpusRuntimeDiagnosticsData`): the controller version and
+  platform; the stages in order and the stage set's fingerprint — the content
+  hash of the benchmark's reference shard through the stages, computed there,
+  with `StagesVerified` when it is the pinned one; the HTML parser and the
+  compressor with their versions; the language-pack format (`WITLID2`; `WITLID1`
+  models are still read) and the
+  hash of the reference model the tests and fleet proofs use; the public
+  origins and how many hosts the server's operator lists beside them (a count:
+  the names are the operator's own); the shard cap, the
+  downloads per node and the memory per shard; the PDF extractor's pin and
+  whether the answering process can run the PDF stage (`PdfStageProblem`, ""
+  when it can). The fingerprint covers the PDF stage's contract too: the
+  module's pin and every limit and shaping rule, so a changed limit is a changed
+  stage set. So are the case table and the reading limits of *What hostile
+  input meets*.
+- `capabilities` (`corpus-capabilities.json`,
+  `docs/corpus-capabilities.schema.json`, `corpus-capabilities/4`): the same plus what an application
+  shows before a run — the formats, the defaults and the ceilings (the manifest's
+  bytes and shards, the packages of a round and the shards of a package, the
+  problems a preflight lists, the slack a declared size is given), the traffic
+  estimate's allowance, every
+  pipeline switch and quality threshold a manifest may set with its default
+  (for scripts with and without word spacing), the thresholds it cannot set, the
+  PDF stage (`pdf`: the module's hash, the engine, the fuel, memory, input, text
+  and document limits, the running-line rule, the drop rules, whether the host
+  can run it),
+  the signatures and dedup parameters (the output modes and the MinHash parameters'
+  defaults and ranges), every drop rule with the stage that applies it, the
+  products with their schemas and the output modes that keep them, the
+  storage ratios and the package constants with the deployment's headroom and
+  retention window, the case
+  table (`casing`), `trust` (the copies a result rests on, the two outcomes
+  without a result, and every fixed word a document may carry: the codes of each
+  verdict, of a node's faults, of a dropped value, of a refused batch, of a shard
+  the merge left out), and the
+  pool as totals: nodes, measured nodes, MB of WET per second (and shards at
+  once when the host carries every node's degree). No node is named.
+
+## Node behaviour
+
+- **The node's log is the node's, and it decides nothing.** Everything Corpus
+  writes to a host's log goes through one guard (`CorpusLogger`): one call at a
+  time for the whole controller in the process, and whatever the host's logger
+  throws ends there — the line is lost and counted, the shard goes on. It has
+  to: the logger a host hands a controller is the host's own, and on clients up
+  to 2.2.5 it is an in-memory list without a lock, which throws when the
+  packages of a share log at once (an `IndexOutOfRangeException` out of the
+  list, as it was seen once on a fleet) and, once broken, refuses every later
+  line. The engine's adapter base logs inside its own catch block before it
+  returns a status, so a logger that throws there let the bare exception leave
+  the node, past the fixed words of a refusal or a fault; every adapter of the
+  controller now hands the base the guard, not the host's logger. A log is not
+  a place the product depends on: no line of it reaches a lab either way.
+- **A shard that stops anywhere is its whole records.** The reader gives the
+  records that are complete before the place a file stops, and says the file
+  is truncated: `Completed` with the code `truncated` when the origin said
+  where its body ends (a length, chunks: its own file stops there, the same
+  for every node), `FetchFailed` (`body_truncated`) when it did not. Up to
+  0.5.0 that held for a file that stopped inside a payload or between two
+  header lines; one that
+  stopped inside a line (a version line without its end, a header's name
+  without its colon, a length without its digits) was read as a malformed
+  record, and the whole shard was `Malformed` (`not_warc`): 63 of 5,000
+  evenly spaced cuts of the head of a real WET file. The last line of a file
+  that has no line feed is the line the cut went through, and is the
+  truncated tail whatever is left of it: a carriage return alone after a
+  record too, which used to pass for the end of a whole file. A line that has
+  its line feed and is
+  malformed is `Malformed` as before, and so is a last line where a record
+  should start that is no beginning of a version line: a body that is no WARC
+  is not a truncated WARC. What a reader cannot see is a file that stops
+  exactly between two records: packed, the gzip frame between two members and
+  the first bytes of the next member unpack to nothing, so 2 to 4 % of the
+  places a cut can fall in a real file leave a shorter whole file.
+- The node fetches only what the task declares and the machine permits:
+  the URL's host must be on the task's allowlist and pass the machine's own
+  rule above, the scheme HTTP(S); nothing else is ever requested, a redirect
+  included.
+- The fetch is streamed to the task's own temp scope and capped — by the task's
+  cap, by the node's own ceiling of 1 GiB, whoever wrote the task, and by the
+  size the shard was declared with and an eighth more (`oversized_declared`): a
+  `Content-Length` past the cap ends the request before a byte is read, a
+  streamed body past it is cut. Three attempts with doubling back-off and
+  jitter on connection failures and 5xx; an origin that says it is busy (429,
+  503) is waited for instead — up to six such answers, with 5, 10, 20, 40 and
+  80 s between them or the origin's `Retry-After` when it asks for longer, two
+  minutes at most each; a stalled
+  read (60 s without a byte) counts as a failure, before the answer's head as
+  after it and on every hop of a redirect, and so does a fetch slower
+  than 32 KiB/s over its whole length (five minutes of slack); a 4xx other than
+  407 and 429 is final, and the verdict `FetchFailed` with its status. What a
+  node meets on its own link is no verdict: nobody answering, a server error or
+  a request to slow down that outlasts the retries (a gateway or a proxy in
+  front of the node says them as often as the origin), a request for proxy
+  credentials (407), and a public origin's name that the node's resolver turns
+  into an address that is not public (a filtering resolver, a captive
+  network) are the node fault `network`, and the shard is run once more
+  elsewhere. (Up to 0.8.0 a 5xx or 429 past the retries was `FetchFailed` and
+  the resolver's answer `OriginRefused`/`origin_address`, verdicts no other node
+  was asked to check.) A retry after a
+  broken body asks for the rest with a Range request and appends when the
+  origin honours it. A body the origin did not frame (no `Content-Length`, no
+  chunks) can end early unnoticed: a shard that ends inside a record after such
+  a fetch (its payload or its headers) is a fetch that failed
+  (`body_truncated`), not a shorter shard. At
+  most two shards download at once per node, whatever
+  the node's degree; the others wait their turn. The user agent names the
+  controller and its version.
+- **The disk.** A node holds its degree and two more shards at a time, never
+  its whole share: a task takes a place in the node's window before it fetches
+  and gives it back when its shard and products are deleted. Each held shard
+  reserves, before a byte of it is fetched, the most it may take: the most it
+  may be on the wire (its declared size and an eighth more, the cap for a shard
+  without a size), the most its products may be (the product ceiling under
+  *What hostile input meets*) and 64 MiB. The room is asked of the free space
+  less what the node's other shards hold reserved, so a window of shards that
+  each fit alone is not told there is room for all of them: a shard whose room
+  is not there waits for the others to give theirs back, and a shard that does
+  not fit with nothing else reserved is the node fault `disk_space` and runs
+  elsewhere. A task gives its room back when it ends, also when an upload call
+  it gave up still reads its products: they stay until the call ends, and the
+  free space counts their bytes, so no shard waits for a call that may never
+  end. The preflight states the figure for the run's largest shard
+  (`NodeDiskBytesPerShard`), and a node without that room refuses its batch.
+- The language pack (or model) arrives as a blob (the engine caches it per node) and is
+  trusted only when its bytes hash to the pipeline's pin; a model that does
+  not match is `PipelineUnavailable`, not a different result. A transfer over
+  the blob channel that fails — the model coming in, a product going out — is
+  tried again for about five minutes, so a link that drops for a while (a
+  server restart, a reconnect) does not become a failed shard; a transfer
+  that fails in the end says how many times and for how long it was tried.
+  The first transfer of a node goes alone and the rest wait for it (the
+  channel is connected by its first user; shards that start together would
+  each begin a connection of their own), and retries are spread at random so
+  that transfers that failed together do not come back together. Every
+  attempt has a time to finish in — two minutes and the time of its bytes at
+  32 KiB/s — and the job's token ends the wait for it: the channel's calls take
+  no token, and one that does not return in its time frees the node's
+  transfer gate, so it cannot hold the node's other transfers behind it. The
+  call itself cannot be stopped: it is waited for, each further time of an
+  attempt counting as an attempt of the schedule, and no second attempt of the
+  same transfer starts beside it; a call that outlasts the schedule fails the
+  transfer (a fault of the node) and is left to end on its own, a product it
+  reads staying until it does. (A token for the channel's calls is the
+  platform's to add.)
+- Processing is one streaming pass: one record in memory at a time, the
+  product hashed and compressed as it is written, on a thread below normal
+  priority (a worker is often a desktop), the PDF extractor's guest code
+  included: it runs on the shard's own thread. At most one shard per core
+  processes at once, fewer when memory is short (256 MB budgeted per shard
+  within half the machine's memory); the others of a batch wait their turn,
+  two of them already fetched. A PDF runs inline, in
+  the task's own temp scope (`pdf/<n>/`: nothing outside
+  the client's folders), and at most as many PDFs run at once in the process as
+  fit their 1 GiB memory ceilings into a quarter of its memory. The shard and
+  its products are deleted when the task ends, whatever the verdict; the rest of
+  the task's temp scope is deleted behind it, off the task's path (a delete can
+  wait on a machine's file inspection far longer than the work took).
+- **What a node says.** A result's `error` is a code of a fixed list, and the
+  node's log has the kind of a failure and its system code, never its message:
+  a message of the file system or the HTTP stack names paths and hosts. A batch
+  refusal is one of five fixed sentences (another version, no PDF sandbox, no
+  room on the disk, a work folder that cannot be made, a failure while the node
+  checked itself), and no failure's own words are thrown out of the node's
+  activity: what a node throws is the job's message. Nothing a node writes
+  reaches a lab as text.
+- **Progress.** The node reports its share, not one shard, about twice a
+  second through the host's activity progress sink: first the delivery
+  (`receiving shards: 3/12, 512.3/1888.0 MB; 1/12 processed`), then the work
+  (`7/12 shards processed`). Delivery stands for a fifth of the share's
+  progress, processing for the rest.
+- **The last share.** A run is split once and sent once: each node gets
+  its packages by its benchmark rate, a sampled package's copy goes to another
+  machine, and nothing is handed out again while the run goes well. So a run
+  ends when its slowest share ends. A node slower than its benchmark said, or
+  busy with its owner's work, holds the run until it finishes; a node that
+  goes silent loses its share after the silence window (90 s by default), and
+  the whole share is sent to another node and processed again from the start.
+  With a benchmark that represents the work and machines that are really free
+  the difference is small; on a fleet of desktops it is the price of sending
+  everything once.
+- **Benchmark.** `Corpus.ProcessPackage` measures a node on a synthetic
+  reference shard (400 documents generated from a fixed seed, menus and
+  short pages among them), one copy per slot of the node's degree at once;
+  the product's hash is checked, so a node that computes the WET stages wrong
+  (the record reader, the line cleaning, the quality filter, the signatures)
+  cannot score. The reference is WET with the language stage off: a node wrong
+  only in reading WARC files, identifying languages or extracting PDFs scores
+  all the same, and only a second copy of its shards (sampling) catches it.
+  The rate is megabytes of real Common Crawl WET per second
+  (`corpus-wet-mb@synthetic-v2`), the unit of the work estimate — the bytes
+  of a package's shards, by the manifest's sizes or the origin's answers — so
+  the allocator gives a 32-thread desktop the share its speed earns.
+
+## What the module carries
+
+`corpus.module` — the folder a build stages, the zip a node is given, the
+`content/module/` of the package — is twelve files, and a test holds it to that
+list: the controller's assembly and the wire types' with their dependency lists,
+`controller.json`, three libraries of others (`AngleSharp.dll`, `ZstdSharp.dll`,
+`Wasmtime.Dotnet.dll`), and four texts: `THIRD-PARTY-NOTICES.txt`,
+`LICENSE-fineweb-2.txt`, `LICENSE-unicode.txt` and the controller's own
+`LICENSE.txt`.
+
+`THIRD-PARTY-NOTICES.txt` is written by the build (`Notices/`) for everything
+in the module that is not the controller's own:
+
+| What | Licence | Where it is |
+|---|---|---|
+| AngleSharp 1.10.0 | MIT | `AngleSharp.dll` |
+| ZstdSharp.Port 0.8.8 | MIT | `ZstdSharp.dll` |
+| Zstandard 1.5.7, which ZstdSharp is a port of | BSD-3-Clause | inside `ZstdSharp.dll` |
+| Wasmtime 48.0.2, the .NET binding | Apache-2.0 WITH LLVM-exception | `Wasmtime.Dotnet.dll` |
+| FineWeb-2's stop-word lists and Japanese repetition thresholds | Apache-2.0 | data inside the controller's assembly (the rule data of a `WITLID1` model); the entry also names the reference language pack, which carries that project's lists and is a job's input, no file of the module |
+| The Unicode Character Database 16.0.0 | Unicode-3.0 | the lower-case table inside the controller's assembly |
+
+Each entry names the version, the source and its commit, the file and its
+SHA-256, and carries the licence text whole. The NuGet packages state a licence
+expression and the commit they were built from, not the text, so each text is
+the licence file of the package's repository at that commit, kept in
+`Notices/texts/` with its hash. The build refuses a notice it cannot stand
+behind: the package in the NuGet cache must state the version, the licence and
+the commit the notice declares, the staged assembly must be byte for byte a file
+of that package, every text must have its hash — and a library staged into the
+module that no notice names stops the build. A library that moves takes its
+notice with it or the build fails.
+
+The two data assets a node fetches beside the module carry their own notices,
+which the file names and does not repeat: `LICENSE-wasmtime.txt` and
+`NOTICE.txt` beside each native wasmtime library, and `wasm/LICENSE-pdftext.txt`
+(every crate linked into the extractor, and the Rust standard library) beside
+`pdftext.wasm`. The package's root holds the notices and the licence files too.
+
+## What is here
+
+| Piece | Where | What it does |
+|---|---|---|
+| `WarcReader` / `WarcRecord` | `Warc/` | streams the records of a gzip (one member per record, as Common Crawl writes them) or plain WARC/WET file, one record in memory at a time; oversized records skipped and counted; a truncated tail ends the file with the complete records, wherever the file stops (a last line without its line feed is the cut one and is not judged); malformed input is an error at an offset |
+| `PdfSandbox` / `PdfSandboxHost` / `PdfTextShaper` / `PdfTextChunker` / `PdfStageLimits` | `Pdf/` | the PDF extractor (pdftext, pdf_oxide for wasm32-wasip1) run in the controller's own copy of the AI wasm host (`AI/Shared/Wasm`, compiled in as source), the verdicts, the shaping of its text into pages without running lines, the page-range documents, the stage's contract; `ShardPdfStage` (`Shards/`) puts it in the pipeline |
+| `HttpResponsePayload` / `HtmlTextExtractor` / `HtmlTreeBudget` | `Text/` | a WARC response's HTTP headers and body, decoded by header charset → meta charset → UTF-8 (a charset the runtime does not carry drops the page); HTML to text on AngleSharp with a scoped rule set (scripts, styles, navigation, forms and hidden content dropped; blocks become lines; title first); a linear pre-scan refuses pages nested deeper than 512 or past 60k tags, and the parser itself is held to a budget on its own tree (depth and elements, the copies it makes on its own included). Agrees with Common Crawl's own WET text at a median Jaccard of 0.85 on the golden shard |
+| `CorpusCasing` / `CorpusCasingTable` | `Text/Casing/` | the lower-case table the language n-grams and the MinHash tokens are made with: Unicode 16.0.0 simple lower case, generated by the committed `generate_casing_table.py` from `UnicodeData.txt` (Unicode License v3, `LICENSE-unicode.txt`), and the ASCII-only comparisons of names and phrases — nothing that reaches a product asks the node's globalization library |
+| `LanguageIdentifier` / `LanguageModel` / `LanguageModelFormat` / `LanguageAcceptance` / `LanguageRules` / `LanguageRuleSet` | `Language/` | character n-gram profiles (Cavnar–Trenkle, integer rank distance, ordinal ties) and the unsupported-language test; the two model formats (`WITLID1` profiles only, `WITLID2` language packs) with one canonical serialization each; each language's rule data (script, stop words, thresholds) as data, and the frozen rule data of `WITLID1` models (`Resources/witlid1-rules.json`); `LanguageScripts`, the scripts written without spaces — the one piece of language knowledge in code |
+| `LanguageModelTrainer` / `LanguagePackBuilder` / `LanguagePackCalibrator` / `LanguagePackEvaluator` / `LanguagePackSource` | `Language/` | what `corpus-assets` runs: profiles trained from WET files' own language labels, the per-language source folders read, the limits calibrated, a pack measured against the crawl's labels |
+| `LineCleaner` / `QualityFilter` / `QualityRules` / `QualityRuleOverrides` | `Quality/` | the line stage (C4's line rules, script-aware; C4's curly-bracket rule) and the Gopher quality and repetition rules with DataTrove's definitions of every measure, each threshold with its source in the code (Gopher, C4, FineWeb-2), every failed rule named with its measurement; scripts without word spacing are judged by their letters; the thresholds a language's rule data may set, by name |
+| `MinHashSigner` / `MinHashParameters` | `Signatures/` | MinHash values over word shingles (FNV-1a + a seeded universal hash family; 128 over 5 words by default, a pipeline's own up to 1,024 and 32), LSH band keys, estimated Jaccard between signatures; the parameters resolved and checked |
+| `CorpusLogger` / `CorpusLoggerScope` | `Logging/` | the one way the controller writes to a host's log: one call at a time for the whole controller in the process, and a host's logger that throws loses the line and nothing else; every adapter hands the engine's adapter base this guard |
+| `CorpusNotices.targets` / `CorpusNoticesTask.cs` / `texts/` | `Notices/` | the build's part (not in the assembly): the third-party notices written and staged into the module, each component held to the package the build restored, each licence text to its hash |
+| `CorpusCompressor` | `Compression/` | zstd through the managed ZstdSharp port at one pinned level, buffer and stream forms; the frame is a function of the content |
+| `ShardProcessor` and friends | `Shards/` | the pipeline over one shard (`ShardProcessor`) within its reading limits (`ShardLimits`), the allowlist gate (`ShardOrigin`), the capped retrying fetch (`ShardFetcher`, `ShardFetchPolicy`), the bounded model cache (`ShardLanguageModels`), the signatures layout (`ShardSignatureWriter`), the canonical counters (`ShardStatsBuilder`), the node-side task start to finish (`ShardTaskRunner`: verdict or node fault, the window on the disk), what a node checks before a batch (`ShardBatchGuard`), the one memory budget (`ShardDegree`), the shard's thread (`ShardWorker`) and the deletions nobody waits for (`ShardCleanup`) |
+| `CorpusLedger` and friends | `Trust/` | the server's account of a run: tickets (`CorpusTickets`), the shape an honest result has (`CorpusResultCheck`), the fixed codes (`CorpusResultCodes`), a round read from its blobs one package at a time with every answer bound to its package (`CorpusRoundSource`, `CorpusRoundSourceBlobs`), the rulings of the three rounds (`CorpusLedgerRuling`) and what each shard came to (`CorpusLedger`: accepted, `Disputed`, `NoResult`), kept as counts (`CorpusLedgerTally`) |
+| `CorpusPackageCodec` and friends | `Delivery/` | the blobs the tasks and the results travel in: the format and its bounds (`CorpusPackageCodec`), how many shards a package holds (`CorpusPackagePlanner`), the server's writing of a round (`CorpusTaskPackages`) and the node's work through one package (`CorpusPackageRunner`) |
+| `CorpusJsonStream` | `Json/` | a JSON document read from a stream, one entry of its array at a time, within a bound on one value: the manifest and the report a dedup run is given |
+| `CorpusManifestParser` / `CorpusTaskPlanner` / `CorpusTrafficEstimate` | `Manifests/` | the manifest document read a source at a time, the host-side plan with its bounded lists of problems (`CorpusProblems`), and the traffic estimate part by part |
+| `CorpusReportWriter` / `CorpusIntegrityWriter` | `Reports/` | the job report, its funnel by the stages of the drop rules (`ShardDropRules`), and the integrity document, both written from the ledger |
+| `CorpusStorageEstimator` and friends | `Storage/` | the server storage estimate (`CorpusStorageEstimator` over the measured `CorpusStorageRatios`), the deployment's limit behind `ICorpusStorageHeadroom` (`CorpusStorageHeadroomHost`: the server's blob service, the operator's variable) and the refusal (`CorpusStorageCheck`) |
+| `CorpusRuntimeDiagnosticsBuilder` / `CorpusCapabilitiesWriter` | `Diagnostics/` | the module's diagnostics, the stage set and its fingerprint (`CorpusStageSet`), the reference language pack's facts, the pool as totals (`CorpusPoolProbe`), the busiest share (`CorpusSharePlanner`) and the capabilities document |
+| `OutWit.Controller.AI.Corpus.Model` | | the wire types: source, pipeline, quality thresholds, task, result, the task and result packages' references, statistics, options, preflight, runtime diagnostics — MemoryPack with every member's order, name, type and default pinned |
+
+`OutWit.Controller.AI.Corpus.Assets` (`corpus-assets`) builds and evaluates
+language packs from the per-language source data in its `languages/` folder
+and WET files (see *Adding a language*), and still trains and evaluates the
+profiles-only `WITLID1` model:
+
+```
+corpus-assets build-language-pack <out.bin> --languages <dir> --train <wet.gz>... [--known-train <wet.gz>...]
+              --calibrate <wet.gz>... [--recall 0.999] [--name NAME] [--profile 3000] [--min-docs 200] [--known-min-docs 100] [--threads N]
+corpus-assets evaluate-language-pack <pack.bin> <wet.gz>... [--no-judge] [--threads N]
+corpus-assets train-language-model <out.bin> <wet.gz>... [--profile N] [--min-docs N]
+corpus-assets evaluate-language-model <model.bin> <wet.gz>
+```
+
+The stop-word lists in `languages/` are Gopher's eight English words and
+FineWeb-2's lists (Apache-2.0, `languages/LICENSE-fineweb-2.txt`), each file
+naming its source.
+
+## Determinism
+
+Every stage is managed code with no platform-dependent path, or, for PDFs, a
+pinned WebAssembly module in a sandbox that counts instructions instead of time
+(fuel given after instantiation, NaN canonicalisation, a pinned clock and seeded
+randomness): the same shard through the same pipeline and the same controller
+version gives the same bytes on Windows, Linux and macOS, on one thread or many,
+the PDF stage's verdicts and fuel included. Case is the controller's own too:
+the language n-grams and the MinHash tokens are lower-cased by a table generated
+from Unicode 16.0.0 and pinned in the stage set's fingerprint, not by the node's
+globalization library (.NET answers from ICU, from Windows NLS or from its own
+table depending on the machine, and the three differ for hundreds of code
+points), and ASCII names and phrases are compared as ASCII. A controller release that
+changes a stage changes the product of an unchanged pipeline (0.1.5 keeps WET
+line structure and adds the line stage; 0.4.0 lower-cases the capitals Unicode
+16 added the same way everywhere; 0.5.0, 0.6.0, 0.7.0 and 0.8.0 change no stage, and their
+products are those of 0.4.0 byte for byte; 0.9.0 adds three limits — a document is judged in
+full up to 100,000 words, a shard's product is held to its ceiling, a shard's PDFs to 4,096
+runs — that change the product of no Common Crawl file and of no file the tests pin, and moves
+the stage set's fingerprint with them; 0.9.1 and 1.0.0 leave the stage set as it is), which is why a job runs on one controller
+version: a node on another refuses its batch. The tests pin a zstd frame digest and a MinHash signature digest,
+pin the records and the extracted text of a shard (a generated one, and the head
+of a real crawl file) and a pack's language answers to values
+the three platforms must all give, and prove the
+content hash of a shard through the engine equals a direct run's; the
+`AI Verify` workflow runs them on all three platforms.
+
+## Performance
+
+One streaming pass costs about 0.75 s of one core per megabyte of Common
+Crawl WET on a desktop CPU (Ryzen 9 5950X, every stage on); the stages count
+their n-grams over word ids and packed 64-bit keys, so nothing allocates per
+n-gram or per shingle and many shards on one machine do not stall each other
+in the garbage collector. A node runs one shard per core at most. A WARC file
+costs less per megabyte (0.11 s without its PDFs, 0.20 s with them: most of its
+bytes are not text); its PDFs nearly double it (see *PDFs*), and the work
+estimate, which counts a WARC megabyte as a WET one, still errs high.
+
+## Tests
+
+`OutWit.Controller.AI.Corpus.Tests`: the PDF stage on PDFs of our own making —
+the extractor's contract set, the 41-file hostile set (bombs, nesting, cycles,
+broken cross references, fonts) every file of which ends bounded in its verdict,
+and a WARC shard of HTML and PDFs (a book with running headers that splits, a
+truncated one, encrypted ones, a page too dense for one document, a Russian and
+a Greek one with words broken at every line end) — with their products pinned
+(text hash and fuel per file, the shard's content hash and counters), the module
+needed (in the test project's gitignored `@Data/wasm/`, where the asset
+extracts; the tests are ignored without it, and fail on the build server, which
+fetches it); a node without the sandbox, which refuses a WARC batch before it
+fetches anything (through the engine rig, where then no node has one, the job
+fails with the refusal's fixed sentence), a sandbox that fails mid-shard, which
+returns that shard as a node fault, and a shard without a PDF stage, which such
+a node makes as any node does; every stage on two generated shards (a WET
+shard of 429 pages and a WARC shard of its first 110 as HTML, written by the
+tests' own generator, see below) with the reference language pack and the 0.1.x
+model (committed under `Fixtures/`), on the heads of a real WET and a real WARC
+file (fetched, see below) and on
+hostile input
+(truncation, oversized records, garbage, hostile nesting, repetition); a shard
+cut at every byte of every record's headers, at five thousand places of each
+shard unpacked and at a thousand of each file as it is packed, held to a model
+of the framing that is the tests' own (`WarcCutModel`): the whole records
+before the cut, `Truncated`, and never a format error; the
+pipeline's determinism and counters; the language packs (the format and its
+refusals, the unsupported-language test on sentences written for the tests, the
+0.1.x model's products pinned unchanged, the build and evaluation on a small
+generated fixture, the frozen 0.1.14 rule data); the fetcher against a loopback origin
+(retries, caps, final refusals, stalls); the node-side task's verdicts; the
+manifest parser and planner; the report; the wire layout of every model type;
+the storage estimate against a measured run and the heads of a real crawl, the
+headroom sources and the refusal; the diagnostics and the capabilities
+document, with every published schema checked against what the writers write;
+the output modes (a run that keeps statistics and hashes only uploads nothing
+and hashes as the full output does) and the MinHash parameters (the shards'
+signatures blobs pinned under the defaults, the real heads' to 0.2.1's bytes, other parameters,
+the refusals, the merge's refusals); the busiest share against the Grid
+controller's allocator itself; the funnel over the generated shards;
+the hostile-input suite over synthetic shards (`WarcSynth` writes WARC/WET the
+way Common Crawl does: truncation mid-record, invalid UTF-8, hostile HTML,
+non-WARC records, corrupt gzip members); and the distributed gate — the bundled
+scripts through the engine SDK with in-process nodes fetching from the loopback
+origin. `Category=Load` (not run in CI): a 40k-document synthetic shard streams
+through the processor in bounded memory to the same hash twice, several
+shards on one process agree with the single run, and a synthetic job of a
+hundred thousand shards runs through the engine rig with six mock nodes, its
+payloads and its memory measured (see *Tasks and results as blobs*).
+
+**No page of anybody else is in the repository.** The two shards under
+`Fixtures/` are generated: `CrawlSynth` makes a crawl of sites that do not
+exist (every address is on the reserved `.example` domain) from text written
+for the tests (`Fixtures/synth/`: sentences in the sixteen languages the
+reference pack supports and four it knows and does not support), by its own
+integer random numbers, and `CrawlSynthShards` writes it the way Common Crawl
+writes its files. Most pages are articles; the rest are what a crawl is full of
+and a corpus does not want (too thin, links only, repeated, bullet lists,
+teasers, hash tags, two languages, unlabelled, empty, too few letters, a
+template left unfilled, a placeholder text, near copies) and a page with the
+letters whose lower case a platform's library decides. The WARC shard serves
+its pages in sixteen charsets, named in the header, in a meta tag or nowhere,
+some with their elements left open, between captures that are no page (a robots
+file, an image, JSON, a PDF of the tests' own making, a page that is gone, a
+redirect, a page in UTF-7, a page with cut bytes, a record that is no HTTP
+response). A test holds the committed shards to the generator record for
+record, the fixtures folder to a pinned list of files, and every address to the
+reserved domain; `CrawlSynthDefects` spoils the same crawl the way an origin or
+a link can.
+
+The tests that must see **real crawl data** — the products of an honest run on
+it, the storage table's ratios, the agreement with Common Crawl's own labels
+and with its own conversion of the same pages — fetch it when they run: the
+first 1.5 MB of one WET file of CC-MAIN-2026-43 and of the WARC file it was
+converted from, by a range request to `data.commoncrawl.org`, held to the
+SHA-256 of `Fixtures/crawl-heads.json` (names, ranges and hashes; nothing of the
+content) and kept in the test project's gitignored `@Data/crawl/` for the next
+run. They carry the category `Crawl`; on a machine that cannot reach the origin
+they are ignored, each with the reason, and on the build server they fail
+instead, so a green run has read the real data. Their pins are the ones the
+committed files had: `--filter Category=Crawl` runs them alone.
+
+The engine rigs load a named set of modules (`variables`, `blobs`, `grid`,
+`corpus`) from a folder of their own: each is copied there only when it is
+whole by its own manifest's digest and its assembly is the one this build made,
+so a module another controller staged, or one an older build left, cannot be
+picked up silently — the rig fails by name instead.
+
+The hardening tests are named by the audit finding they answer (`C1…`, `H1…` to
+`H9…`, `M1…` to `M4…`, `L3a…`, `L5…`, `A5…`): the ledger against every way a node
+can bend a result, and the engine rig with one of three nodes lying (a forged
+version, a foreign task index, an empty and a forged content hash, altered
+signatures, malformed results, a dropped shard); `Corpus.Dedup` against a report
+past its capacity and blobs that are not the ones the report states; hostile
+language packs; a page in UTF-7; the markup that hid nesting from the pre-scan
+and the markup no pre-scan sees through; shards that unpack without end; a node
+without room on its disk and a share of four times its degree; a fetch against
+an origin that is busy, slow or silent; the case table against Unicode's own
+file and the edge characters' golden values; a PDF's time against its fuel; and
+a scan of every document a lab can fetch, from hostile and failed runs, for a
+path, an account, a machine, a node id or a ticket.
+
+The second hardening batch's tests carry their findings' names too (`H8…`,
+`M5…`, `M8…`, `L1…`, `L7…`): a shard larger than it was declared, on the node and
+through the engine; the size probe's sample (random, sized sources included, a
+declared size the origin contradicts); the traffic estimate part by part and the
+storage estimate under thresholds of a manifest's or a pack's own; the package
+format against forged, oversized and truncated frames; a round read from its
+blobs against every way an answer can be bent (a foreign ticket, a second answer,
+a second result for one shard, a blob that is not one); the manifest and a
+report read from a stream in bounded memory; a job of 1,100 shards on six mock
+nodes; the wire guard, which holds every member of every wire type to its
+order, name, type and default; and the tests that used to compare a call with
+itself, which now compare it with a pinned value or with another way of asking.
+
+The third batch's tests: `M6…` (the generated shards against their generator,
+the fixtures folder against its list, a crawl head fetched by range against its
+hash), `M7…` (the staged module against its pinned list of files, every library
+noticed with the version and commit the file states of itself and the hash of
+the file staged, every licence text in the notices whole, the zip and the
+package holding what the module holds) and `C6…` (a node's adapter driven
+through the engine's own entry point, the packages of a batch started together,
+into a logger that fails every call, into one that is not thread safe and says
+so, and into the very logger clients up to 2.2.5 hand out: every package
+completes with the product of a quiet run, and a refused batch leaves in its
+fixed words).

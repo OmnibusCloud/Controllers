@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Model.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ControllerName>Corpus</ControllerName>
+    <Version>1.0.0</Version>
+    <Description>Data types for the OutWit Corpus controller: sources, the pipeline contract, shard tasks and results, the task and result packages they travel in, statistics (PDF stage included) and options for public-corpus processing.</Description>
+    <PackageTags>corpus;common-crawl;warc;witengine;witcloud;controller;data-types</PackageTags>
+  </PropertyGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Model.targets" />
+
+</Project>

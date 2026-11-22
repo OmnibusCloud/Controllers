@@ -1,0 +1,380 @@
+using System.IO.Compression;
+using System.Text;
+
+namespace OutWit.Controller.AI.Verify.Assets;
+
+/// <summary>
+/// verify-assets build &lt;out-dir&gt; [--cache DIR] [--work DIR] [--local DIR] [--offline] [--clean] [--without-numpy]
+///
+/// Rebuilds the Verify runtime set from its pins into out-dir (the layout the controller's
+/// data asset extracts to wasm/, and the layout the tests read from @Data/runtimes):
+///
+///   python-3.14.6/python.wasm                 CPython 3.14.6 for WASI, unchanged
+///   python-3.14.6/lib/python314.zip           the standard library, bytecode, one file
+///   python-3.14.6/lib/sympy-1.14.0.zip        sympy 1.14.0 + mpmath 1.4.1, bytecode, one file
+///   python-3.14.6/LICENSE, LICENSE-sympy.txt, LICENSE-mpmath.txt
+///   python-3.14.6-numpy-2.5.4/python.wasm     CPython 3.14.6 + numpy 2.5.4, the start-up snapshot (toolchain/python-numpy)
+///   python-3.14.6-numpy-2.5.4/python-plain.wasm  the same without the snapshot, for debugging
+///   python-3.14.6-numpy-2.5.4/lib/python314.zip, lib/numpy-2.5.4.zip  the layers the snapshot was made with
+///   python-3.14.6-numpy-2.5.4/LICENSE-*.txt, BUILD.txt
+///   qjs-wasi.wasm                             QuickJS-NG 0.15.1 for WASI, built by the toolchain (toolchain/build.sh)
+///   LICENSE-quickjs-ng.txt
+///   ruby-3.4.1/ruby.wasm                      Ruby 3.4.1 for WASI (ruby.wasm 2.10.1), unchanged
+///   ruby-3.4.1/root/usr/local/lib/ruby/...    its standard library and four bundled gems, as files
+///   ruby-3.4.1/LICENSE-*.txt
+///   lua-5.4.8/lua.wasm                        Lua 5.4.8 for WASI, built by the toolchain (toolchain/build.sh)
+///   lua-5.4.8/LICENSE-lua.txt
+///   typescript-sucrase-3.35.1/sucrase.js      sucrase 3.35.1's transform, bundled by the toolchain (toolchain/typescript)
+///   typescript-sucrase-3.35.1/LICENSE-sucrase.txt
+///   clang-22.1.0/llvm.wasm                    LLVM 22.1.0 for WASI (YoWASP's clang), unchanged
+///   clang-22.1.0/usr/...                      its sysroot (wasi-libc, libc++, compiler-rt), as files
+///   clang-22.1.0/LICENSE-*.txt, COPY*-*.txt
+///   NOTICE.txt                                what, from where, patched how, hashed to what
+///   THIRD-PARTY-NOTICES.txt                   in every folder: the third-party software in it and its terms
+///
+/// The build is reproducible: run it twice and the hashes it prints are the ones the
+/// runtime catalog pins.
+///
+/// A folder's THIRD-PARTY-NOTICES.txt is a committed file (modules/, next to this tool), written by
+/// toolchain/notices from pinned sources and compared with what that tool writes by the toolchain
+/// job; it is copied here as it is.
+///
+/// The numpy runtime's folder is the controller's own data asset (verify-python-numpy.zip, built
+/// by the AI Verify python-numpy workflow): it is extracted here unchanged from its pin, and it is
+/// not part of verify-wasm.zip. With --without-numpy the folder is left out, and what is written is
+/// exactly the content of verify-wasm.zip (toolchain/archives.sh packs it).
+/// </summary>
+internal static class Program
+{
+    #region Constants
+
+    private const string DEFAULT_CACHE = "@Downloads";
+    private const string NOTICE = "NOTICE.txt";
+
+    #endregion
+
+    #region Entry
+
+    private static async Task<int> Main(string[] args)
+    {
+        if (args.Length < 2 || args[0] != "build")
+            return Usage();
+
+        var outDir = Path.GetFullPath(args[1]);
+        var cacheDir = Path.GetFullPath(OptionValue(args, "--cache") ?? Path.Combine(Path.GetDirectoryName(outDir)!, DEFAULT_CACHE));
+        var workDir = Path.GetFullPath(OptionValue(args, "--work") ?? Path.Combine(Path.GetTempPath(), "verify-assets-work"));
+        var offline = args.Contains("--offline");
+        AssetDownloader.LocalDir = OptionValue(args, "--local") is { } local
+            ? Path.GetFullPath(local)
+            : Environment.GetEnvironmentVariable(AssetDownloader.LOCAL_DIR_ENV) is { Length: > 0 } fromEnvironment ? Path.GetFullPath(fromEnvironment) : null;
+        var clean = args.Contains("--clean");
+        var withNumpy = !args.Contains("--without-numpy");
+
+        try
+        {
+            await BuildAsync(outDir, cacheDir, workDir, offline, clean, withNumpy);
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine($"verify-assets: {exception.Message}");
+            return 1;
+        }
+    }
+
+    #endregion
+
+    #region Build
+
+    private static async Task BuildAsync(string outDir, string cacheDir, string workDir, bool offline, bool clean, bool withNumpy)
+    {
+        Console.WriteLine($"out:   {outDir}");
+        Console.WriteLine($"cache: {cacheDir}");
+        Console.WriteLine($"work:  {workDir}");
+
+        Console.WriteLine("downloads");
+        var cpythonZip = await AssetDownloader.FetchAsync(AssetPins.CPYTHON, cacheDir, offline);
+        var sympyWheel = await AssetDownloader.FetchAsync(AssetPins.SYMPY, cacheDir, offline);
+        var mpmathWheel = await AssetDownloader.FetchAsync(AssetPins.MPMATH, cacheDir, offline);
+        var rubyArchive = await AssetDownloader.FetchAsync(AssetPins.RUBY, cacheDir, offline);
+        var rubyLicense = await AssetDownloader.FetchAsync(AssetPins.RUBY_LICENSE, cacheDir, offline);
+        var rubyBsdl = await AssetDownloader.FetchAsync(AssetPins.RUBY_BSDL, cacheDir, offline);
+        var rubyWasmLicense = await AssetDownloader.FetchAsync(AssetPins.RUBY_WASM_LICENSE, cacheDir, offline);
+        var clangPackage = await AssetDownloader.FetchAsync(AssetPins.YOWASP_CLANG, cacheDir, offline);
+        var numpyAsset = withNumpy ? await AssetDownloader.FetchAsync(AssetPins.PYTHON_NUMPY, cacheDir, offline) : null;
+        var clangLicences = new List<(string Path, string FileName)>();
+        foreach (var licence in AssetPins.CLANG_LICENCES)
+            clangLicences.Add((await AssetDownloader.FetchAsync(licence, cacheDir, offline), licence.FileName));
+
+        Directory.CreateDirectory(workDir);
+        var cpythonDir = Path.Combine(workDir, "cpython");
+        if (Directory.Exists(cpythonDir))
+            Directory.Delete(cpythonDir, recursive: true);
+        ZipFile.ExtractToDirectory(cpythonZip, cpythonDir);
+
+        if (clean && Directory.Exists(outDir))
+            Directory.Delete(outDir, recursive: true);
+
+        var pythonDir = Path.Combine(outDir, AssetPins.PYTHON_RUNTIME_DIR);
+        var libDir = Path.Combine(pythonDir, "lib");
+        Directory.CreateDirectory(libDir);
+
+        Console.WriteLine("python314.zip (the standard library)");
+        var stdlib = PythonLayerBuilder.BuildStdlib(cpythonDir, workDir, Path.Combine(libDir, AssetPins.STDLIB_ZIP));
+        Console.WriteLine($"  {stdlib.Entries} entries, {stdlib.Bytes:N0} bytes");
+
+        Console.WriteLine($"{AssetPins.SYMPY_ZIP} (sympy {AssetPins.SYMPY_VERSION} + mpmath {AssetPins.MPMATH_VERSION})");
+        var sympy = PythonLayerBuilder.BuildSympy(cpythonDir, workDir, sympyWheel, mpmathWheel, Path.Combine(libDir, AssetPins.SYMPY_ZIP));
+        Console.WriteLine($"  {sympy.Entries} entries, {sympy.Bytes:N0} bytes");
+
+        Console.WriteLine("modules and licences");
+        File.Copy(Path.Combine(cpythonDir, "python.wasm"), Path.Combine(pythonDir, "python.wasm"), overwrite: true);
+        File.Copy(Path.Combine(cpythonDir, "LICENSE"), Path.Combine(pythonDir, "LICENSE"), overwrite: true);
+        PythonLayerBuilder.ExtractFile(sympyWheel, $"sympy-{AssetPins.SYMPY_VERSION}.dist-info/licenses/LICENSE", Path.Combine(pythonDir, "LICENSE-sympy.txt"));
+        PythonLayerBuilder.ExtractFile(mpmathWheel, $"mpmath-{AssetPins.MPMATH_VERSION}.dist-info/licenses/LICENSE", Path.Combine(pythonDir, "LICENSE-mpmath.txt"));
+        CopyNotices(AssetPins.PYTHON_RUNTIME_DIR, pythonDir);
+        CopyBuiltModule(AssetPins.QUICKJS_SOURCE_DIR, AssetPins.QUICKJS_MODULE, AssetPins.QUICKJS_MODULE_SHA256, Path.Combine(outDir, AssetPins.QUICKJS_FILE));
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "modules", AssetPins.QUICKJS_SOURCE_DIR, AssetPins.QUICKJS_LICENSE_FILE), Path.Combine(outDir, AssetPins.QUICKJS_LICENSE_FILE), overwrite: true);
+        CopyNotices(AssetPins.QUICKJS_SOURCE_DIR, outDir);
+
+        var numpyDir = Path.Combine(outDir, AssetPins.NUMPY_RUNTIME_DIR);
+        var numpyLibDir = Path.Combine(numpyDir, "lib");
+        if (Directory.Exists(numpyDir))
+            Directory.Delete(numpyDir, recursive: true);
+        if (numpyAsset != null)
+        {
+            Console.WriteLine($"{AssetPins.NUMPY_RUNTIME_DIR} (numpy {AssetPins.NUMPY_VERSION}, built by the toolchain)");
+            ZipFile.ExtractToDirectory(numpyAsset, numpyDir);
+            EnsureNotices(AssetPins.NUMPY_RUNTIME_DIR, numpyDir);
+        }
+
+        Console.WriteLine($"{AssetPins.RUBY_RUNTIME_DIR} (Ruby {AssetPins.RUBY_VERSION})");
+        var rubyDir = Path.Combine(outDir, AssetPins.RUBY_RUNTIME_DIR);
+        var ruby = RubyRuntimeBuilder.Build(rubyArchive, rubyDir);
+        File.Copy(rubyLicense, Path.Combine(rubyDir, AssetPins.RUBY_LICENSE.FileName), overwrite: true);
+        File.Copy(rubyBsdl, Path.Combine(rubyDir, AssetPins.RUBY_BSDL.FileName), overwrite: true);
+        File.Copy(rubyWasmLicense, Path.Combine(rubyDir, AssetPins.RUBY_WASM_LICENSE.FileName), overwrite: true);
+        CopyNotices(AssetPins.RUBY_RUNTIME_DIR, rubyDir);
+        var rubyTree = TreeHash.Compute(Path.Combine(rubyDir, RubyRuntimeBuilder.TREE_DIR));
+        Console.WriteLine($"  {ruby.LibraryFiles} library files, {ruby.GemFiles} files of {AssetPins.RUBY_BUNDLED_GEMS.Length} bundled gems, {rubyTree.Bytes:N0} bytes in the tree");
+
+        Console.WriteLine($"{AssetPins.LUA_RUNTIME_DIR} (Lua {AssetPins.LUA_VERSION}, built by the toolchain)");
+        var luaDir = Path.Combine(outDir, AssetPins.LUA_RUNTIME_DIR);
+        Directory.CreateDirectory(luaDir);
+        CopyBuiltModule(AssetPins.LUA_RUNTIME_DIR, AssetPins.LUA_MODULE, AssetPins.LUA_MODULE_SHA256, Path.Combine(luaDir, AssetPins.LUA_MODULE));
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "modules", AssetPins.LUA_RUNTIME_DIR, AssetPins.LUA_LICENSE), Path.Combine(luaDir, AssetPins.LUA_LICENSE), overwrite: true);
+        CopyNotices(AssetPins.LUA_RUNTIME_DIR, luaDir);
+
+        Console.WriteLine($"{AssetPins.TYPESCRIPT_RUNTIME_DIR} (sucrase, bundled by the toolchain)");
+        var typeScriptDir = Path.Combine(outDir, AssetPins.TYPESCRIPT_RUNTIME_DIR);
+        Directory.CreateDirectory(typeScriptDir);
+        CopyBuiltModule(AssetPins.TYPESCRIPT_RUNTIME_DIR, AssetPins.TYPESCRIPT_BUNDLE, AssetPins.TYPESCRIPT_BUNDLE_SHA256, Path.Combine(typeScriptDir, AssetPins.TYPESCRIPT_BUNDLE));
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "modules", AssetPins.TYPESCRIPT_RUNTIME_DIR, AssetPins.TYPESCRIPT_LICENSE), Path.Combine(typeScriptDir, AssetPins.TYPESCRIPT_LICENSE), overwrite: true);
+        CopyNotices(AssetPins.TYPESCRIPT_RUNTIME_DIR, typeScriptDir);
+
+        Console.WriteLine($"{AssetPins.CLANG_RUNTIME_DIR} (clang {AssetPins.CLANG_VERSION}, YoWASP {AssetPins.CLANG_PACKAGE_VERSION})");
+        var clangDir = Path.Combine(outDir, AssetPins.CLANG_RUNTIME_DIR);
+        var sysrootFiles = ClangRuntimeBuilder.Build(clangPackage, clangDir);
+        foreach (var (path, fileName) in clangLicences)
+            File.Copy(path, Path.Combine(clangDir, fileName), overwrite: true);
+        CopyNotices(AssetPins.CLANG_RUNTIME_DIR, clangDir);
+        var clangTree = TreeHash.Compute(Path.Combine(clangDir, ClangRuntimeBuilder.TREE_DIR));
+        Console.WriteLine($"  {sysrootFiles} sysroot files, {clangTree.Bytes:N0} bytes in the tree");
+
+        var hashes = new (string Name, string Path)[]
+        {
+            ($"{AssetPins.PYTHON_RUNTIME_DIR}/python.wasm", Path.Combine(pythonDir, "python.wasm")),
+            ($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.STDLIB_ZIP}", Path.Combine(libDir, AssetPins.STDLIB_ZIP)),
+            ($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.SYMPY_ZIP}", Path.Combine(libDir, AssetPins.SYMPY_ZIP)),
+            (AssetPins.QUICKJS_FILE, Path.Combine(outDir, AssetPins.QUICKJS_FILE)),
+            ($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.MODULE_FILE}", Path.Combine(rubyDir, RubyRuntimeBuilder.MODULE_FILE)),
+            ($"{AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_MODULE}", Path.Combine(luaDir, AssetPins.LUA_MODULE)),
+            ($"{AssetPins.TYPESCRIPT_RUNTIME_DIR}/{AssetPins.TYPESCRIPT_BUNDLE}", Path.Combine(typeScriptDir, AssetPins.TYPESCRIPT_BUNDLE)),
+            ($"{AssetPins.CLANG_RUNTIME_DIR}/{ClangRuntimeBuilder.MODULE_FILE}", Path.Combine(clangDir, ClangRuntimeBuilder.MODULE_FILE))
+        }.Select(Hashed).ToList();
+
+        // A folder pinned as a whole: the tree hash, the files' bytes.
+        hashes.Add(($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.TREE_DIR}/ (tree of {rubyTree.Files} files)", rubyTree.Sha256, rubyTree.Bytes));
+        hashes.Add(($"{AssetPins.CLANG_RUNTIME_DIR}/{ClangRuntimeBuilder.TREE_DIR}/ (tree of {clangTree.Files} files)", clangTree.Sha256, clangTree.Bytes));
+
+        // The notice is a file of verify-wasm.zip: it says nothing that depends on whether the
+        // numpy folder, an archive of its own, was laid out beside it.
+        File.WriteAllText(Path.Combine(outDir, NOTICE), Notice(hashes, ruby), new UTF8Encoding(false));
+
+        if (numpyAsset != null)
+        {
+            hashes.AddRange(new (string Name, string Path)[]
+            {
+                ($"{AssetPins.NUMPY_RUNTIME_DIR}/{AssetPins.NUMPY_MODULE}", Path.Combine(numpyDir, AssetPins.NUMPY_MODULE)),
+                ($"{AssetPins.NUMPY_RUNTIME_DIR}/{AssetPins.NUMPY_PLAIN_MODULE}", Path.Combine(numpyDir, AssetPins.NUMPY_PLAIN_MODULE)),
+                ($"{AssetPins.NUMPY_RUNTIME_DIR}/lib/{AssetPins.STDLIB_ZIP}", Path.Combine(numpyLibDir, AssetPins.STDLIB_ZIP)),
+                ($"{AssetPins.NUMPY_RUNTIME_DIR}/lib/{AssetPins.NUMPY_ZIP}", Path.Combine(numpyLibDir, AssetPins.NUMPY_ZIP))
+            }.Select(Hashed));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("the catalog pins (SHA-256):");
+        foreach (var (name, sha256, bytes) in hashes)
+            Console.WriteLine($"  {sha256}  {name}  ({bytes:N0} bytes)");
+    }
+
+    private static (string Name, string Sha256, long Bytes) Hashed((string Name, string Path) file)
+    {
+        return (file.Name, AssetDownloader.Sha256Hex(file.Path), new FileInfo(file.Path).Length);
+    }
+
+    /// <summary>
+    /// Copies a folder's third-party notices (modules/, next to this tool) into the set.
+    /// </summary>
+    /// <param name="sourceDir">The folder under modules/.</param>
+    /// <param name="destinationDir">The folder of the set.</param>
+    /// <exception cref="InvalidOperationException">The folder has no notices file: nothing is laid out without one.</exception>
+    private static void CopyNotices(string sourceDir, string destinationDir)
+    {
+        File.Copy(CommittedNotices(sourceDir), Path.Combine(destinationDir, AssetPins.NOTICES_FILE), overwrite: true);
+    }
+
+    /// <summary>
+    /// Holds a folder that came whole from an archive to the notices committed for it: the
+    /// archive must carry them, byte for byte.
+    /// </summary>
+    /// <param name="sourceDir">The folder under modules/.</param>
+    /// <param name="unpackedDir">The folder the archive was unpacked into.</param>
+    /// <exception cref="InvalidOperationException">The archive has no notices file, or another one.</exception>
+    private static void EnsureNotices(string sourceDir, string unpackedDir)
+    {
+        var unpacked = Path.Combine(unpackedDir, AssetPins.NOTICES_FILE);
+        if (!File.Exists(unpacked))
+            throw new InvalidOperationException($"{sourceDir}: its archive carries no {AssetPins.NOTICES_FILE}");
+
+        var committed = AssetDownloader.Sha256Hex(CommittedNotices(sourceDir));
+        var carried = AssetDownloader.Sha256Hex(unpacked);
+        if (!string.Equals(committed, carried, StringComparison.Ordinal))
+            throw new InvalidOperationException($"{sourceDir}: its archive carries a {AssetPins.NOTICES_FILE} that hashes to {carried}; the committed one is {committed}");
+    }
+
+    private static string CommittedNotices(string sourceDir)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "modules", sourceDir, AssetPins.NOTICES_FILE);
+        if (!File.Exists(path))
+            throw new InvalidOperationException($"{sourceDir}: no {AssetPins.NOTICES_FILE} beside the tool (toolchain/notices writes it)");
+
+        return path;
+    }
+
+    /// <summary>
+    /// Copies a module the toolchain built (modules/, next to this tool) into the set after
+    /// checking it against its pin, so a changed module cannot slip in.
+    /// </summary>
+    private static void CopyBuiltModule(string sourceDir, string module, string sha256, string destination)
+    {
+        var source = Path.Combine(AppContext.BaseDirectory, "modules", sourceDir, module);
+        var hash = AssetDownloader.Sha256Hex(source);
+        if (!string.Equals(hash, sha256, StringComparison.Ordinal))
+            throw new InvalidOperationException($"{source} is {hash}, the pin is {sha256}");
+
+        File.Copy(source, destination, overwrite: true);
+    }
+
+    private static string Notice(IReadOnlyList<(string Name, string Sha256, long Bytes)> hashes, RubyRuntimeSummary ruby)
+    {
+        var text = new StringBuilder();
+        text.Append("Language runtime modules for the OmnibusCloud Verify controller (WebAssembly/WASI,\n");
+        text.Append("platform-independent). Every file named under SHA-256 below is pinned by that hash in\n");
+        text.Append("the controller's runtime catalog and is rebuilt byte for byte from its pinned sources by\n");
+        text.Append("OutWit.Controller.AI.Verify.Assets (verify-assets build).\n\n");
+        text.Append($"Every folder has a {AssetPins.NOTICES_FILE}: the third-party software in it, what is\n");
+        text.Append("linked into its module included, and the terms of each part. The one beside this file is\n");
+        text.Append($"about {AssetPins.QUICKJS_FILE}.\n\n");
+        text.Append($"The numpy runtime ({AssetPins.NUMPY_RUNTIME_DIR}/) is an archive of its own,\n");
+        text.Append("verify-python-numpy.zip, with its own BUILD.txt and notices; nothing of it is listed here.\n\n");
+        text.Append($"{AssetPins.PYTHON_RUNTIME_DIR}/python.wasm\n");
+        text.Append($"    CPython {AssetPins.PYTHON_VERSION} built for WASI (wasi-sdk 24), taken unchanged from\n");
+        text.Append($"    {AssetPins.CPYTHON.Url}\n");
+        text.Append($"    Licence: {AssetPins.PYTHON_RUNTIME_DIR}/LICENSE (PSF).\n");
+        text.Append($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.STDLIB_ZIP}\n");
+        text.Append("    The standard library of that build as bytecode (unchecked-hash .pyc compiled by\n");
+        text.Append("    python.wasm itself; sources and site-packages left out), one stored zip on sys.path.\n");
+        text.Append($"{AssetPins.PYTHON_RUNTIME_DIR}/lib/{AssetPins.SYMPY_ZIP}\n");
+        text.Append($"    sympy {AssetPins.SYMPY_VERSION} and mpmath {AssetPins.MPMATH_VERSION} from their PyPI wheels\n");
+        text.Append($"    ({AssetPins.SYMPY.FileName}, {AssetPins.MPMATH.FileName}), as bytecode the same way,\n");
+        text.Append("    test suites left out. Licences: LICENSE-sympy.txt, LICENSE-mpmath.txt (BSD-3-Clause).\n");
+        text.Append("    Patched before compiling:\n");
+        foreach (var patch in LayerPatches.SYMPY)
+            text.Append($"      {patch.Path}: {patch.Note}\n");
+        text.Append($"{AssetPins.QUICKJS_FILE}\n");
+        text.Append($"    QuickJS-NG {AssetPins.QUICKJS_VERSION} (https://github.com/quickjs-ng/quickjs, tag v{AssetPins.QUICKJS_VERSION}), built for\n");
+        text.Append("    WASI by the controller's toolchain (wasi-sdk 34): the C stack (1 MiB) below the data, and one\n");
+        text.Append("    patch, toolchain/quickjs-wasi.patch, that turns the engine's stack limit back on (128 KiB),\n");
+        text.Append("    so a recursion too deep is a RangeError. The project's own WASI build placed a 64 KiB stack\n");
+        text.Append("    after its data with the limit off.\n");
+        text.Append($"    Licence: {AssetPins.QUICKJS_LICENSE_FILE} (MIT).\n");
+        text.Append($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.MODULE_FILE}\n");
+        text.Append($"    Ruby {AssetPins.RUBY_VERSION} built for WASI by the ruby.wasm project (release {AssetPins.RUBY_WASM_RELEASE}, the\n");
+        text.Append("    'full' profile), taken unchanged (usr/local/bin/ruby) from\n");
+        text.Append($"    {AssetPins.RUBY.Url}\n");
+        text.Append($"    Licences: {AssetPins.RUBY_RUNTIME_DIR}/{AssetPins.RUBY_LICENSE.FileName} and {AssetPins.RUBY_BSDL.FileName} (Ruby's own terms or\n");
+        text.Append($"    BSD-2-Clause), {AssetPins.RUBY_WASM_LICENSE.FileName} (the port, MIT).\n");
+        text.Append($"{AssetPins.RUBY_RUNTIME_DIR}/{RubyRuntimeBuilder.TREE_DIR}/\n");
+        text.Append($"    From the same archive, unchanged: the standard library (usr/local/lib/ruby/{AssetPins.RUBY_API_VERSION},\n");
+        text.Append($"    {ruby.LibraryFiles} files) and the library folders of the bundled gems\n");
+        text.Append($"    {string.Join(", ", AssetPins.RUBY_BUNDLED_GEMS)} ({ruby.GemFiles} files). Headers, the static\n");
+        text.Append("    library, man pages and the other gems are left out. Pinned as a tree: one SHA-256\n");
+        text.Append("    over the relative paths and the contents of every file.\n");
+        if (ruby.Licences.Count > 0)
+            text.Append($"    Licences of the gems: {string.Join(", ", ruby.Licences)}.\n");
+        text.Append($"{AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_MODULE}\n");
+        text.Append($"    Lua {AssetPins.LUA_VERSION} (https://www.lua.org/ftp/lua-{AssetPins.LUA_VERSION}.tar.gz), the stock interpreter built\n");
+        text.Append("    for WASI by the controller's toolchain (wasi-sdk 34, Binaryen 133): Lua's files unchanged, an\n");
+        text.Append("    error unwinds to its protected call by asyncify instead of WebAssembly's exception handling.\n");
+        text.Append($"    Licence: {AssetPins.LUA_RUNTIME_DIR}/{AssetPins.LUA_LICENSE} (MIT).\n");
+        text.Append($"{AssetPins.CLANG_RUNTIME_DIR}/{ClangRuntimeBuilder.MODULE_FILE} and {AssetPins.CLANG_RUNTIME_DIR}/{ClangRuntimeBuilder.TREE_DIR}/\n");
+        text.Append($"    LLVM {AssetPins.CLANG_VERSION} for WASI (clang, wasm-ld) and its sysroot (wasi-libc, libc++, libc++abi,\n");
+        text.Append($"    compiler-rt builtins, clang's headers) from YoWASP's npm package @yowasp/clang {AssetPins.CLANG_PACKAGE_VERSION}:\n");
+        text.Append($"    {AssetPins.YOWASP_CLANG.Url}\n");
+        text.Append("    gen/llvm.core.wasm unchanged as llvm.wasm, gen/llvm-resources.tar unpacked unchanged as usr/ (pinned as a tree).\n");
+        text.Append("    Licences (the package carries none; each text at a pinned commit): LICENSE-llvm.txt (Apache-2.0 WITH\n");
+        text.Append("    LLVM-exception, also libc++, libc++abi, compiler-rt), LICENSE-yowasp-clang.txt (the packaging, Apache-2.0),\n");
+        text.Append("    LICENSE-wasi-libc*.txt (Apache-2.0 WITH LLVM-exception, Apache-2.0 or MIT), LICENSE-cloudlibc.txt\n");
+        text.Append("    (BSD-2-Clause), COPYRIGHT-musl.txt (MIT), COPYING-musl-fts.txt (BSD-3-Clause); dlmalloc is CC0.\n");
+        text.Append($"{AssetPins.TYPESCRIPT_RUNTIME_DIR}/{AssetPins.TYPESCRIPT_BUNDLE}\n");
+        text.Append("    sucrase 3.35.1's transform with what it needs (lines-and-columns, ts-interface-checker,\n");
+        text.Append("    @jridgewell/*), from npm by the integrity hashes of toolchain/typescript/package-lock.json,\n");
+        text.Append("    bundled for QuickJS by esbuild 0.25.10 (toolchain/typescript/bundle.sh), unchanged otherwise.\n");
+        text.Append($"    Licences: {AssetPins.TYPESCRIPT_RUNTIME_DIR}/{AssetPins.TYPESCRIPT_LICENSE} (MIT; ts-interface-checker Apache-2.0).\n");
+        text.Append('\n');
+        text.Append("SHA-256:\n");
+        foreach (var (name, sha256, bytes) in hashes)
+            text.Append($"  {sha256}  {name}  ({bytes} bytes)\n");
+        return text.ToString();
+    }
+
+    #endregion
+
+    #region Tools
+
+    private static string? OptionValue(string[] args, string name)
+    {
+        var index = Array.IndexOf(args, name);
+        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+    }
+
+    private static int Usage()
+    {
+        Console.WriteLine("verify-assets build <out-dir> [--cache DIR] [--work DIR] [--local DIR] [--offline] [--clean] [--without-numpy]");
+        Console.WriteLine();
+        Console.WriteLine("  out-dir   the runtime set to write: @Prerequisites/wasm for a release,");
+        Console.WriteLine("            OutWit.Controller.AI.Verify.Tests/@Data/runtimes for the tests");
+        Console.WriteLine("  --cache   pinned downloads (default: <out-dir>/../@Downloads)");
+        Console.WriteLine("  --work    scratch folder (default: the temp folder)");
+        Console.WriteLine("  --local   a folder whose files stand in for downloads of the same name when they");
+        Console.WriteLine($"            match their pins (default: ${AssetDownloader.LOCAL_DIR_ENV}); a release asset before its release");
+        Console.WriteLine("  --offline never download; the cache must hold every pin");
+        Console.WriteLine("  --clean   wipe out-dir first");
+        Console.WriteLine("  --without-numpy  leave the numpy runtime's folder out: what is written is the content");
+        Console.WriteLine("            of verify-wasm.zip (the numpy folder is an archive of its own)");
+        return 2;
+    }
+
+    #endregion
+}

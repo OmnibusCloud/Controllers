@@ -1,0 +1,444 @@
+using System.Text.Json;
+using OutWit.Controller.AI.Corpus.Benchmark;
+using OutWit.Controller.AI.Corpus.Dedup;
+using OutWit.Controller.AI.Corpus.Delivery;
+using OutWit.Controller.AI.Corpus.Language;
+using OutWit.Controller.AI.Corpus.Manifests;
+using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Pdf;
+using OutWit.Controller.AI.Corpus.Quality;
+using OutWit.Controller.AI.Corpus.Reports;
+using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Controller.AI.Corpus.Signatures;
+using OutWit.Controller.AI.Corpus.Storage;
+using OutWit.Controller.AI.Corpus.Text;
+using OutWit.Controller.AI.Corpus.Text.Casing;
+using OutWit.Controller.AI.Corpus.Trust;
+
+namespace OutWit.Controller.AI.Corpus.Diagnostics;
+
+/// <summary>
+/// The capabilities document: what an application can know before a run. The controller's
+/// version and stage set, the parsers, the language-pack formats and the reference pack,
+/// where a machine fetches from, the defaults and the ceilings, the stage parameters a job may
+/// set with their defaults (the output mode and the MinHash parameters among them), the PDF stage's
+/// module and limits, every drop rule with the stage that applies it, the products and the output
+/// modes that keep them, the measured storage ratios with the deployment's headroom, and the pool as
+/// totals. A JSON document like every other output, so an
+/// application reads it without the controller's types. Schema <c>corpus-capabilities/4</c>:
+/// <c>/3</c> and, in <c>trust</c>, the machines a shard goes to when it goes out again in a run
+/// that samples (<c>repair_copies</c>) and the words in which a run's documents say whether the
+/// sampling it asked for happened (<c>sampling_states</c>). <c>/3</c> was
+/// <c>/2</c> and what bounds a job as a whole (the shards a manifest may name, its size, the
+/// packages its tasks travel in, the problems a preflight lists), the slack a declared size has
+/// before a node refuses its shard, what the traffic estimate adds for retries, and the bytes a
+/// shard's task and result take in their packages. <c>/2</c> brought the limits a hostile shard
+/// meets (the record caps per format, what a shard may unpack to, the HTML parser's budget, the
+/// language pack's size), the shards a node holds ahead, the case table, and <c>trust</c> — how
+/// many machines a result rests on, the two outcomes without a result, and every fixed word a
+/// document may carry in place of a text (the codes of each verdict, of a node's faults, of a
+/// dropped value, of a refused batch).
+/// </summary>
+public static class CorpusCapabilitiesWriter
+{
+    #region Constants
+
+    /// <summary>The document's schema tag.</summary>
+    public const string SCHEMA = "corpus-capabilities/4";
+
+    #endregion
+
+    #region Functions
+
+    /// <summary>Serializes the document as UTF-8 JSON.</summary>
+    /// <param name="diagnostics">The host module's diagnostics.</param>
+    /// <param name="pool">The pool's totals, or null when the host cannot say.</param>
+    /// <param name="limit">The deployment's storage limit (<see cref="CorpusStorageLimit.NONE"/> when nothing is stated).</param>
+    /// <returns>The JSON document bytes.</returns>
+    public static byte[] Write(CorpusRuntimeDiagnosticsData diagnostics, CorpusPoolSummary? pool, CorpusStorageLimit limit)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("schema", SCHEMA);
+            writer.WriteString("controller", diagnostics.ControllerVersion);
+            writer.WriteString("benchmark_unit", CorpusBenchmark.UNIT);
+
+            WriteStages(writer, diagnostics);
+            WriteParsers(writer, diagnostics);
+            WriteLanguageModel(writer);
+            WriteStrings(writer, "formats", Enum.GetNames<CorpusSourceFormat>().Select(name => name.ToLowerInvariant()));
+            WriteOrigins(writer, diagnostics);
+            WriteDefaults(writer);
+            WriteCeilings(writer);
+            WriteTraffic(writer);
+            WritePipeline(writer);
+            WritePdf(writer, diagnostics);
+            WriteSignatures(writer);
+            WriteDropRules(writer);
+            WriteCasing(writer);
+            WriteTrust(writer);
+            WriteProducts(writer);
+            WriteStorage(writer, limit);
+            WritePool(writer, pool);
+
+            writer.WriteEndObject();
+        }
+
+        return stream.ToArray();
+    }
+
+    /// <summary>The manifest's quality keys and the rule each sets, in the manifest's order.</summary>
+    /// <returns>Key and reader pairs.</returns>
+    public static IReadOnlyList<(string Key, Func<QualityRules, double> Read)> QualityKeys()
+    {
+        return
+        [
+            ("min_words", rules => rules.MinWords),
+            ("max_words", rules => rules.MaxWords),
+            ("min_mean_word_length", rules => rules.MinMeanWordLength),
+            ("max_mean_word_length", rules => rules.MaxMeanWordLength),
+            ("max_symbol_to_word_ratio", rules => rules.MaxSymbolToWordRatio),
+            ("max_bullet_line_ratio", rules => rules.MaxBulletLineRatio),
+            ("max_ellipsis_line_ratio", rules => rules.MaxEllipsisLineRatio),
+            ("min_alphabetic_word_ratio", rules => rules.MinAlphabeticWordRatio),
+            ("max_duplicate_line_ratio", rules => rules.MaxDuplicateLineRatio),
+            ("max_duplicate_line_char_ratio", rules => rules.MaxDuplicateLineCharRatio)
+        ];
+    }
+
+    private static void WriteStages(Utf8JsonWriter writer, CorpusRuntimeDiagnosticsData diagnostics)
+    {
+        writer.WriteStartObject("stages");
+        WriteStrings(writer, "order", diagnostics.Stages);
+        writer.WriteString("sha256", diagnostics.StageSetSha256);
+        writer.WriteBoolean("verified", diagnostics.StagesVerified);
+        writer.WriteString("language_format", CorpusStageSet.LANGUAGE_FORMAT);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteParsers(Utf8JsonWriter writer, CorpusRuntimeDiagnosticsData diagnostics)
+    {
+        writer.WriteStartObject("parsers");
+        writer.WriteString("warc", $"own streamed reader, controller {diagnostics.ControllerVersion}");
+        writer.WriteString("html", diagnostics.HtmlParser);
+        writer.WriteString("compressor", diagnostics.Compressor);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteLanguageModel(Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject("language_model");
+        writer.WriteString("format", CorpusReferenceLanguageModel.FORMAT);
+        WriteStrings(writer, "formats", LanguageModelFormat.READ);
+        writer.WriteString("method", CorpusReferenceLanguageModel.METHOD);
+        writer.WriteString("reference_name", CorpusReferenceLanguageModel.NAME);
+        writer.WriteString("reference_sha256", CorpusReferenceLanguageModel.SHA256);
+        writer.WriteString("reference_trained_from", CorpusReferenceLanguageModel.TRAINED_FROM);
+        WriteStrings(writer, "reference_languages", CorpusReferenceLanguageModel.LANGUAGES);
+        WriteStrings(writer, "reference_known_languages", CorpusReferenceLanguageModel.KNOWN_LANGUAGES);
+        writer.WriteString("witlid1_reference_sha256", CorpusReferenceLanguageModel.WITLID1_SHA256);
+        writer.WriteString("unsupported_drop", ShardProcessor.DROP_LANGUAGE_UNSUPPORTED);
+        writer.WriteString("unknown_drop", ShardProcessor.DROP_LANGUAGE_UNKNOWN);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteOrigins(Utf8JsonWriter writer, CorpusRuntimeDiagnosticsData diagnostics)
+    {
+        writer.WriteStartObject("origins");
+        WriteStrings(writer, "public", diagnostics.PublicOrigins);
+        writer.WriteString("machine_variable", ShardOriginPolicy.EXTRA_ORIGINS_VARIABLE);
+        writer.WriteNumber("max_redirects", ShardHttp.MAX_REDIRECTS);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteDefaults(Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject("defaults");
+        writer.WriteNumber("max_shard_bytes", CorpusTaskPlanner.MAX_SHARD_BYTES);
+        writer.WriteNumber("sampling_rate", 0);
+        writer.WriteNumber("dedup_threshold", CorpusDeduplicator.DEFAULT_THRESHOLD);
+        writer.WriteNumber("downloads_per_node", ShardFetchPolicy.Default.MaxConcurrent);
+        writer.WriteNumber("memory_per_shard_bytes", ShardDegree.MEMORY_PER_SHARD);
+        writer.WriteNumber("shards_held_beyond_degree", ShardTaskRunner.FETCH_AHEAD);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteCeilings(Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject("ceilings");
+        writer.WriteNumber("max_shard_bytes", CorpusTaskPlanner.MAX_SHARD_BYTES);
+        writer.WriteNumber("sampling_rate", 1);
+        writer.WriteNumber("record_bytes", ShardLimits.MAX_WARC_RECORD_BYTES);
+        writer.WriteNumber("wet_record_bytes", ShardLimits.MAX_WET_RECORD_BYTES);
+        writer.WriteNumber("unpack_ratio", ShardLimits.UNPACK_RATIO);
+        writer.WriteNumber("unpacked_bytes_min", ShardLimits.MIN_UNPACKED_BYTES);
+        writer.WriteNumber("unpacked_bytes_max", ShardLimits.MAX_UNPACKED_BYTES);
+        writer.WriteNumber("html_chars", HtmlTextExtractor.MAX_HTML_CHARS);
+        writer.WriteNumber("html_decode_bytes", HttpResponsePayload.MAX_DECODE_BYTES);
+        writer.WriteNumber("html_nesting", HtmlTextExtractor.MAX_NESTING);
+        writer.WriteNumber("html_tags", HtmlTextExtractor.MAX_TAGS);
+        writer.WriteNumber("html_elements", HtmlTextExtractor.MAX_ELEMENTS);
+        writer.WriteNumber("language_model_bytes", LanguageModelLimits.MAX_BYTES);
+        writer.WriteNumber("size_probes", ShardSizeProbe.MAX_PROBES);
+        writer.WriteNumber("dedup_documents", CorpusDeduplicator.MAX_DOCUMENTS);
+        writer.WriteNumber("dedup_clusters_listed", CorpusDedupWriter.MAX_CLUSTERS_LISTED);
+        writer.WriteNumber("dedup_report_bytes", CorpusDedupInput.MAX_REPORT_BYTES);
+        writer.WriteNumber("manifest_bytes", CorpusManifestParser.MAX_BYTES);
+        writer.WriteNumber("shards", CorpusPackagePlanner.MAX_SHARDS);
+        writer.WriteNumber("packages", CorpusPackagePlanner.MAX_PACKAGES);
+        writer.WriteNumber("package_shards", CorpusPackagePlanner.MAX_PACKAGE_SHARDS);
+        writer.WriteNumber("problems_listed", CorpusProblems.MAX_LISTED);
+        writer.WriteNumber("declared_slack_divisor", ShardLimits.DECLARED_SLACK_DIVISOR);
+        writer.WriteNumber("declared_slack_min_bytes", ShardLimits.DECLARED_SLACK_MIN_BYTES);
+        writer.WriteEndObject();
+    }
+
+    /// <summary>What the preflight's traffic estimate adds to the fetches and the uploads.</summary>
+    private static void WriteTraffic(Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject("traffic");
+        writer.WriteNumber("retry_allowance", CorpusTrafficEstimate.RETRY_ALLOWANCE);
+        writer.WriteEndObject();
+    }
+
+    /// <summary>The case handling that reaches a product: the controller's own table, not the node's library.</summary>
+    private static void WriteCasing(Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject("casing");
+        writer.WriteString("unicode", CorpusCasing.UNICODE_VERSION);
+        writer.WriteString("mapping", "simple_lowercase");
+        writer.WriteString("table_sha256", CorpusCasing.TABLE_SHA256);
+        writer.WriteEndObject();
+    }
+
+    /// <summary>What a result rests on, and every fixed word that stands where a node's text once stood.</summary>
+    private static void WriteTrust(Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject("trust");
+        writer.WriteNumber("copies", CorpusLedger.FIRST_ROUND_COPIES);
+        writer.WriteNumber("repair_copies", CorpusLedger.REPAIR_COPIES);
+        writer.WriteNumber("dispute_copies", CorpusLedger.DISPUTE_COPIES);
+        writer.WriteNumber("dispute_quorum", CorpusLedger.DISPUTE_QUORUM);
+        WriteStrings(writer, "outcomes", [CorpusReportWriter.VERDICT_DISPUTED, CorpusReportWriter.VERDICT_NO_RESULT]);
+        WriteStrings(writer, "no_result_reasons", CorpusLedger.NO_RESULT_REASONS);
+        WriteStrings(writer, "rejection_reasons", CorpusLedger.REJECTION_REASONS);
+        WriteStrings(writer, "dispute_outcomes", CorpusLedger.DISPUTE_OUTCOMES);
+        WriteStrings(writer, "sampling_states", CorpusSampling.STATES);
+        WriteStrings(writer, "fault_codes", CorpusResultCodes.FAULTS);
+
+        writer.WriteStartObject("verdict_codes");
+        foreach (var verdict in Enum.GetValues<CorpusShardVerdict>())
+        {
+            if (verdict != CorpusShardVerdict.NodeFault)
+                WriteStrings(writer, verdict.ToString(), CorpusResultCodes.CodesOf(verdict));
+        }
+
+        writer.WriteEndObject();
+        WriteStrings(writer, "batch_refusals", ShardBatchRefusedException.CODES);
+        WriteStrings(writer, "dedup_exclusions", CorpusDedupExclusion.REASONS);
+        writer.WriteEndObject();
+    }
+
+    private static void WritePipeline(Utf8JsonWriter writer)
+    {
+        var defaults = new CorpusPipelineData();
+
+        writer.WriteStartObject("pipeline");
+
+        writer.WriteStartObject("switches");
+        writer.WriteBoolean("identify_language", defaults.IdentifyLanguage);
+        writer.WriteBoolean("clean_lines", defaults.CleanLines);
+        writer.WriteBoolean("filter_quality", defaults.FilterQuality);
+        writer.WriteBoolean("sign", defaults.Sign);
+        writer.WriteBoolean("extract_pdf", defaults.ExtractPdf);
+        writer.WriteBoolean("filter_curly_bracket", new CorpusQualityData().FilterCurlyBracket);
+        writer.WriteEndObject();
+
+        writer.WriteStartObject("output");
+        writer.WriteString("default", CorpusOutputModeNames.Name(defaults.Output));
+        WriteStrings(writer, "values", CorpusOutputModeNames.ALL);
+        writer.WriteEndObject();
+
+        writer.WriteStartObject("minhash");
+        WriteRange(writer, "hashes", MinHashParameters.DEFAULT.Hashes, 1, MinHashSigner.MAX_HASHES);
+        WriteRange(writer, "shingle_words", MinHashParameters.DEFAULT.ShingleWords, 1, MinHashSigner.MAX_SHINGLE_WORDS);
+        writer.WriteStartObject("bands");
+        writer.WriteNumber("default", MinHashParameters.DEFAULT.Bands);
+        writer.WriteNumber("min", 1);
+        writer.WriteString("divides", "hashes");
+        writer.WriteEndObject();
+        writer.WriteEndObject();
+
+        writer.WriteStartObject("quality");
+        foreach (var (key, read) in QualityKeys())
+        {
+            writer.WriteStartObject(key);
+            WriteLimit(writer, "spaced", read(QualityRules.Spaced));
+            WriteLimit(writer, "unspaced", read(QualityRules.Unspaced));
+            writer.WriteEndObject();
+        }
+        writer.WriteEndObject();
+
+        writer.WriteStartObject("quality_fixed");
+        WriteNumbers(writer, "top_ngram_chars", QualityRules.Spaced.MaxTopNgramCharRatio);
+        WriteNumbers(writer, "duplicate_ngram_chars", QualityRules.Spaced.MaxDuplicateNgramCharRatio);
+        writer.WriteEndObject();
+
+        writer.WriteEndObject();
+    }
+
+    private static void WritePdf(Utf8JsonWriter writer, CorpusRuntimeDiagnosticsData diagnostics)
+    {
+        writer.WriteStartObject("pdf");
+        writer.WriteString("stage", "extract_pdf");
+        WriteStrings(writer, "formats", ["warc"]);
+        writer.WriteString("extractor", PdfStageLimits.EXTRACTOR);
+        writer.WriteString("module_sha256", diagnostics.PdfModuleSha256);
+        writer.WriteString("engine", PdfStageLimits.ENGINE);
+        writer.WriteBoolean("available", diagnostics.PdfStageProblem.Length == 0);
+        writer.WriteNumber("fuel", PdfStageLimits.FUEL);
+        writer.WriteBoolean("fuel_after_instantiation", true);
+        writer.WriteNumber("shard_fuel", PdfStageLimits.SHARD_FUEL);
+        writer.WriteNumber("memory_bytes", PdfStageLimits.MEMORY_BYTES);
+        writer.WriteNumber("input_bytes", PdfStageLimits.MAX_INPUT_BYTES);
+        writer.WriteNumber("text_bytes", PdfStageLimits.MAX_TEXT_BYTES);
+        writer.WriteNumber("document_words", PdfStageLimits.DOCUMENT_WORDS);
+        writer.WriteString("document_id", "url#page=a-b");
+        writer.WriteStartObject("running_lines");
+        writer.WriteNumber("min_pages", PdfStageLimits.RUNNING_LINE_MIN_PAGES);
+        writer.WriteNumber("share", 0.5);
+        writer.WriteBoolean("digits_folded", true);
+        writer.WriteEndObject();
+        WriteStrings(writer, "drops", ShardPdfStage.DROPS);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteSignatures(Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject("signatures");
+        writer.WriteNumber("hashes", MinHashSigner.HASHES);
+        writer.WriteNumber("shingle_words", MinHashSigner.SHINGLE_WORDS);
+        writer.WriteNumber("bytes_per_document", CorpusStorageRatios.SIGNATURE_BYTES_PER_DOCUMENT);
+        writer.WriteNumber("bands", CorpusDeduplicator.DEFAULT_BANDS);
+        writer.WriteNumber("rows_per_band", MinHashSigner.HASHES / CorpusDeduplicator.DEFAULT_BANDS);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteDropRules(Utf8JsonWriter writer)
+    {
+        writer.WriteStartArray("drop_rules");
+        foreach (var (rule, stage) in ShardDropRules.ALL)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("name", rule);
+            writer.WriteString("stage", stage);
+            writer.WriteEndObject();
+        }
+        writer.WriteEndArray();
+    }
+
+    private static void WriteProducts(Utf8JsonWriter writer)
+    {
+        string[] full = [CorpusOutputModeNames.FULL];
+
+        writer.WriteStartArray("products");
+        WriteProduct(writer, "text", "text.jsonl.zst", "shard", "", full);
+        WriteProduct(writer, "signatures", "signatures.bin", "shard", "", full);
+        WriteProduct(writer, "report", "corpus-report.json", "job", CorpusReportWriter.SCHEMA, CorpusOutputModeNames.ALL);
+        WriteProduct(writer, "integrity", "corpus-integrity.json", "job", CorpusIntegrityWriter.SCHEMA, CorpusOutputModeNames.ALL);
+        WriteProduct(writer, "dedup", "corpus-dedup.json", "dedup", CorpusDedupWriter.SCHEMA, full);
+        writer.WriteEndArray();
+    }
+
+    private static void WriteProduct(Utf8JsonWriter writer, string name, string file, string per, string schema, IEnumerable<string> outputs)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("name", name);
+        writer.WriteString("file", file);
+        writer.WriteString("per", per);
+        writer.WriteString("schema", schema);
+        WriteStrings(writer, "outputs", outputs);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteRange(Utf8JsonWriter writer, string name, int defaultValue, int min, int max)
+    {
+        writer.WriteStartObject(name);
+        writer.WriteNumber("default", defaultValue);
+        writer.WriteNumber("min", min);
+        writer.WriteNumber("max", max);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteStorage(Utf8JsonWriter writer, CorpusStorageLimit limit)
+    {
+        writer.WriteStartObject("storage");
+
+        writer.WriteStartArray("ratios");
+        foreach (var ratio in CorpusStorageRatios.TABLE)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("format", ratio.Format.ToString().ToLowerInvariant());
+            writer.WriteBoolean("clean_lines", ratio.CleanLines);
+            writer.WriteBoolean("filter_quality", ratio.FilterQuality);
+            writer.WriteNumber("text_per_byte", ratio.TextPerByte);
+            writer.WriteNumber("documents_per_mib", ratio.DocumentsPerMib);
+            writer.WriteEndObject();
+        }
+        writer.WriteEndArray();
+
+        writer.WriteNumber("margin", CorpusStorageRatios.MARGIN);
+        writer.WriteNumber("task_package_bytes_per_shard", CorpusStorageRatios.TASK_PACKAGE_BYTES_PER_SHARD);
+        writer.WriteNumber("result_package_bytes_per_shard", CorpusStorageRatios.RESULT_PACKAGE_BYTES_PER_SHARD);
+        writer.WriteNumber("package_base_bytes", CorpusStorageRatios.PACKAGE_BASE_BYTES);
+        if (limit.IsStated)
+            writer.WriteNumber("headroom_bytes", limit.HeadroomBytes);
+        if (limit.RetentionDays > 0)
+            writer.WriteNumber("retention_days", limit.RetentionDays);
+
+        writer.WriteEndObject();
+    }
+
+    private static void WritePool(Utf8JsonWriter writer, CorpusPoolSummary? pool)
+    {
+        if (pool == null)
+            return;
+
+        writer.WriteStartObject("pool");
+        writer.WriteNumber("nodes", pool.Nodes);
+        writer.WriteNumber("measured", pool.Measured);
+        if (pool.Workers is { } workers)
+            writer.WriteNumber("workers", workers);
+        writer.WriteNumber("rate", Math.Round(pool.Rate, 3));
+        writer.WriteEndObject();
+    }
+
+    private static void WriteLimit(Utf8JsonWriter writer, string name, double value)
+    {
+        // A rule that a script's base turns off carries no number: there is no limit to show.
+        if (double.IsInfinity(value) || value >= double.MaxValue)
+            writer.WriteNull(name);
+        else
+            writer.WriteNumber(name, value);
+    }
+
+    private static void WriteStrings(Utf8JsonWriter writer, string name, IEnumerable<string> values)
+    {
+        writer.WriteStartArray(name);
+        foreach (var value in values)
+            writer.WriteStringValue(value);
+        writer.WriteEndArray();
+    }
+
+    private static void WriteNumbers(Utf8JsonWriter writer, string name, IEnumerable<double> values)
+    {
+        writer.WriteStartArray(name);
+        foreach (var value in values)
+            writer.WriteNumberValue(value);
+        writer.WriteEndArray();
+    }
+
+    #endregion
+}
