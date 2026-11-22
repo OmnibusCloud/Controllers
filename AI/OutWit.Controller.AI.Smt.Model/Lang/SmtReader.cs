@@ -16,6 +16,10 @@ namespace OutWit.Controller.AI.Smt.Model.Lang;
 /// breaks, and no half of a surrogate pair.</item>
 /// </list>
 /// A comment runs from a semicolon to the end of its line and is dropped, whatever it holds.
+/// Its line ends at a line feed. The standard ends a comment at a carriage return as well, and
+/// a solver that ends a comment at the line feed only reads what follows a lone carriage return
+/// as comment still: two readers, two texts. So a carriage return in a comment that no line
+/// feed follows is refused, and no command is lost or found by the way a comment is read.
 /// <para>
 /// The limits are counted while reading (<see cref="SmtReaderLimits"/>). Nesting is kept on a
 /// stack of the reader's own, not on the call stack: how deep a text nests is bounded by its
@@ -143,9 +147,7 @@ public sealed class SmtReader
             var character = m_text[m_position];
             if (character == COMMENT)
             {
-                // To the end of the line, whatever is there: nothing of a comment is kept.
-                while (m_position < m_text.Length && m_text[m_position] != LINE_FEED)
-                    m_position++;
+                SkipComment();
             }
             else if (character == LINE_FEED)
             {
@@ -159,6 +161,22 @@ public sealed class SmtReader
             {
                 return;
             }
+        }
+    }
+
+    /// <summary>
+    /// Steps over a comment: to the end of its line, whatever is there, and nothing of it is
+    /// kept. A carriage return ends the line only together with the line feed after it; one
+    /// that no line feed follows would end the comment for one reader and not for another.
+    /// </summary>
+    private void SkipComment()
+    {
+        while (m_position < m_text.Length && m_text[m_position] != LINE_FEED)
+        {
+            if (m_text[m_position] == CARRIAGE_RETURN && (m_position + 1 >= m_text.Length || m_text[m_position + 1] != LINE_FEED))
+                throw Refuse(SmtSyntaxFault.BadCharacter, "a carriage return in a comment with no line feed after it");
+
+            m_position++;
         }
     }
 

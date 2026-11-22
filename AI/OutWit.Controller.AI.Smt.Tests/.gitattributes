@@ -1,0 +1,7 @@
+# The adversarial corpus of the sanitizer is bytes: a lone carriage return, a NUL character or a
+# byte order mark is the point of a file, and no checkout may repair it
+Fixtures/Adversarial/*.smt2 -text
+# The list of the SMT-LIB slice and its fetcher: LF on every checkout (the list's hash keys the
+# build server's cache of the fetched problems)
+Slice/fetch-list.tsv text eol=lf
+Slice/fetch.py text eol=lf

@@ -14,8 +14,11 @@ public sealed class SmtReaderLimits
     /// <summary>The most tokens of one problem, parentheses included.</summary>
     public const int PROBLEM_TOKENS = 2_000_000;
 
-    /// <summary>The deepest nesting of lists in one problem.</summary>
-    public const int PROBLEM_DEPTH = 2_000;
+    /// <summary>
+    /// The deepest nesting of lists in one problem. A term that is used many times is written as
+    /// a chain of bindings, one inside the other: real problems nest thousands of levels deep.
+    /// </summary>
+    public const int PROBLEM_DEPTH = 100_000;
 
     /// <summary>The most digits of one numeral or decimal of a problem.</summary>
     public const int PROBLEM_NUMERAL_DIGITS = 4_096;

@@ -98,13 +98,6 @@ public class SmtReaderTests
     }
 
     [Test]
-    public void ReadEndsACommentAtALineFeedOnlyTest()
-    {
-        // A carriage return alone ends no comment: what follows it on the line is still comment.
-        Assert.That(SmtReader.Read("a ; x\r(assert false)", SmtReaderLimits.Problem), Has.Count.EqualTo(1));
-    }
-
-    [Test]
     public void ReadSeparatesTokensAtEveryDelimiterTest()
     {
         var expressions = SmtReader.Read("a\"b\"c|d|(e)f;g\nh", SmtReaderLimits.Problem);
@@ -317,12 +310,12 @@ public class SmtReaderTests
     {
         Assert.That(SmtReaderLimits.Problem.MaxCharacters, Is.EqualTo(4 * 1024 * 1024));
         Assert.That(SmtReaderLimits.Problem.MaxTokens, Is.EqualTo(2_000_000));
-        Assert.That(SmtReaderLimits.Problem.MaxDepth, Is.EqualTo(2_000));
+        Assert.That(SmtReaderLimits.Problem.MaxDepth, Is.EqualTo(100_000));
         Assert.That(SmtReaderLimits.Problem.MaxNumeralDigits, Is.EqualTo(4_096));
         Assert.That(SmtReaderLimits.Problem.MaxLiteralBits, Is.EqualTo(65_536));
         Assert.That(SmtReaderLimits.Problem.MaxStringCharacters, Is.EqualTo(65_536));
 
-        var deepest = new string('(', 2_000) + new string(')', 2_000);
+        var deepest = new string('(', 100_000) + new string(')', 100_000);
         Assert.That(SmtReader.Read(deepest, SmtReaderLimits.Problem), Has.Count.EqualTo(1));
         AssertRefused("(" + deepest + ")", SmtReaderLimits.Problem, SmtSyntaxFault.NestingTooDeep);
 

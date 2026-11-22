@@ -1,0 +1,13 @@
+{
+  "comment": "The wire layout of OutWit.Controller.AI.Smt.Model: the Model package version and, for every MemoryPack type, its members in wire order with name, type and the value a new instance holds. Once a version of the package is published, a member is only ever appended, with the next order; a member that changes its name, its type, its place or its default is a wire change for a deployed fleet and for every application built against the package. Update this file in the same commit as the type (SmtModelWireLayoutTests prints the current layout when it differs).",
+  "modelVersion": "0.1.0",
+  "types": {
+    "SmtRefusalData": [
+      "0: File: String = \"\"",
+      "1: Line: Int32 = 0",
+      "2: Command: String = \"\"",
+      "3: Code: String = \"\"",
+      "4: Reason: String = \"\""
+    ]
+  }
+}

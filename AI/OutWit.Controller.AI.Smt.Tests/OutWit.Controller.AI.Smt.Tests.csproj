@@ -6,4 +6,13 @@
     <ProjectReference Include="..\OutWit.Controller.AI.Smt.Model\OutWit.Controller.AI.Smt.Model.csproj" />
   </ItemGroup>
 
+  <!-- The adversarial corpus of the sanitizer (written for these tests, kept as bytes: see
+       .gitattributes) and the list of the SMT-LIB slice. The problems of the slice are never
+       committed: Slice/fetch.py puts them into @Data/slice (gitignored), where the tests of the
+       category Slice read them. -->
+  <ItemGroup>
+    <None Update="Fixtures\Adversarial\*.smt2" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Slice\fetch-list.tsv" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

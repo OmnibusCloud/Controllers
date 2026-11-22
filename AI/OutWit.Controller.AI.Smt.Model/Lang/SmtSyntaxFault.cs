@@ -5,7 +5,7 @@ namespace OutWit.Controller.AI.Smt.Model.Lang;
 /// </summary>
 public enum SmtSyntaxFault
 {
-    /// <summary>A character the lexicon has no place for where it stands: a control character, a character outside ASCII in a bare token, a backslash in a quoted symbol, half of a surrogate pair.</summary>
+    /// <summary>A character the lexicon has no place for where it stands: a control character, a character outside ASCII in a bare token, a backslash in a quoted symbol, half of a surrogate pair, a carriage return in a comment that no line feed follows.</summary>
     BadCharacter = 0,
 
     /// <summary>A closing parenthesis with no list open, or a list still open at the end of the text.</summary>
