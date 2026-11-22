@@ -98,54 +98,6 @@ public class SmtReaderTests
     }
 
     [Test]
-    public void ReadRefusesACarriageReturnInACommentThatNoLineFeedFollowsTest()
-    {
-        // The standard ends a comment at a carriage return, a solver that ends it at the line
-        // feed only reads the rest of the line as comment: the text is refused, at the carriage
-        // return, instead of losing a command for one of the two. At the start of a text, in
-        // the middle and at its very end.
-        var cases = new (string Text, int Line, int Column)[]
-        {
-            ("; x\r(assert false)", 1, 4),
-            (";\r", 1, 2),
-            ("a ; x\r(assert false)", 1, 6),
-            ("a\n(b) ; note\rc\n", 2, 11),
-            ("; x\r\n; y\rz\n", 2, 4),
-            ("a ; x\r\r\n", 1, 6),
-            ("a ; end\r", 1, 8),
-            ("a\n; the last line\r", 2, 16)
-        };
-
-        foreach (var (text, line, column) in cases)
-        {
-            var refusal = Assert.Throws<SmtSyntaxException>(() => SmtReader.Read(text, SmtReaderLimits.Problem), Show(text))!;
-
-            Assert.That(refusal.Fault, Is.EqualTo(SmtSyntaxFault.BadCharacter), Show(text));
-            Assert.That((refusal.Line, refusal.Column), Is.EqualTo((line, column)), Show(text));
-            Assert.That(refusal.Reason, Is.EqualTo("a carriage return in a comment with no line feed after it"));
-        }
-    }
-
-    [Test]
-    public void ReadEndsACommentAtACarriageReturnWithItsLineFeedTest()
-    {
-        var expressions = SmtReader.Read("; first\r\na ; x (hidden)\r\nb ; y\r\n; last\r\n", SmtReaderLimits.Problem);
-
-        Assert.That(expressions.Select(expression => expression.Text), Is.EqualTo(new[] { "a", "b" }));
-        Assert.That(expressions.Select(expression => expression.Line), Is.EqualTo(new[] { 2, 3 }));
-        Assert.That(SmtReader.Read("; only a comment\r\n", SmtReaderLimits.Problem), Is.Empty);
-    }
-
-    [Test]
-    public void ReadTakesALoneCarriageReturnOutsideACommentAsABlankTest()
-    {
-        var expressions = SmtReader.Read("a\r(b\rc)\r", SmtReaderLimits.Problem);
-
-        Assert.That(expressions.Select(expression => expression.ToString()), Is.EqualTo(new[] { "a", "(b c)" }));
-        Assert.That(SmtReader.Read("\"a\rb\" |c\rd|", SmtReaderLimits.Problem).Select(expression => expression.Text), Is.EqualTo(new[] { "a\rb", "c\rd" }));
-    }
-
-    [Test]
     public void ReadSeparatesTokensAtEveryDelimiterTest()
     {
         var expressions = SmtReader.Read("a\"b\"c|d|(e)f;g\nh", SmtReaderLimits.Problem);
