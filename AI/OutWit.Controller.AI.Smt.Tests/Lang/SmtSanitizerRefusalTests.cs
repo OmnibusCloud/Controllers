@@ -62,6 +62,31 @@ public class SmtSanitizerRefusalTests
     }
 
     [Test]
+    public void CarriageReturnThatEndsNoLineOfACommentIsASyntaxErrorTest()
+    {
+        // One reader ends the comment at the carriage return and finds a command after it,
+        // another reads the command as comment: no problem is made of such a text.
+        var cases = new (string Text, int Line)[]
+        {
+            ("; a note\r(set-option :produce-proofs true)\n(assert true)", 1),
+            ("(declare-const p Bool)\n(assert p) ; a note\r(assert (not p))\n", 2),
+            ("(assert true)\n; the end\r", 2)
+        };
+
+        foreach (var (text, line) in cases)
+        {
+            var refusal = SmtSanitizerChecks.Refuse(text, SmtRefusalCodes.SYNTAX_ERROR);
+
+            Assert.That(refusal.Line, Is.EqualTo(line), Show(text));
+            Assert.That(refusal.Command, Is.Empty);
+            Assert.That(refusal.Reason, Is.EqualTo("a carriage return in a comment with no line feed after it"));
+        }
+
+        var problem = SmtSanitizerChecks.Accept("; a note\r\n(declare-const p Bool) ; another\r\n(assert p)\r(assert (not p))\r");
+        Assert.That(problem.Canonical, Is.EqualTo("(declare-const p Bool)\n(assert p)\n(assert (not p))\n"));
+    }
+
+    [Test]
     public void SyntaxErrorAnywhereComesBeforeEveryOtherRefusalTest()
     {
         // The whole text is read before a command is looked at: a text that is not SMT-LIB is

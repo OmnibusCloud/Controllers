@@ -39,6 +39,9 @@ readers are known to differ, so that a text means the same to it as to a conform
 - a bare token is a simple symbol, a keyword, a numeral, a decimal, or a hexadecimal or binary
   literal in full: `12abc`, `007`, `#x`, `a'b` and `1.5e3` are refused;
 - a quoted symbol holds no backslash;
+- a comment ends at a line feed, and a carriage return in a comment that no line feed follows
+  is refused: the standard ends the comment there, a solver that ends it at the line feed only
+  reads on, and the two would read different texts;
 - a string literal or a quoted symbol holds no control character but the tab and the line
   breaks, and no half of a surrogate pair.
 

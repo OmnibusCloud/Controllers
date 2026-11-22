@@ -1,8 +1,6 @@
-; expect: accepted
-; idea: a comment ends at a line feed only: what follows a lone carriage return is still comment, and is dropped
-; commands: 2
-; canonical-has: (assert p)
-; canonical-lacks: set-option
+; expect: syntax_error
+; idea: a command after a comment that ends with a carriage return only: a command to a reader that ends the comment there, comment to one that reads on to the line feed
+; line: 5
 (declare-const p Bool)
 ; a note(set-option :produce-proofs true)
 (assert p)
