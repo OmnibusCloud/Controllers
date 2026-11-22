@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Verify</ControllerName>
-    <Version>0.17.0</Version>
+    <Version>1.0.0</Version>
     <Description>Sandboxed, deterministic, resource-metered execution of untrusted programs against specifications (WASM/wasmtime): code-vs-tests verification, code and math corpus generation with checking — verification by construction on anonymous nodes.</Description>
     <PackageTags>verify;sandbox;wasm;wasmtime;rlvr;code-execution;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>verify-execute</ControllerFeatures>
@@ -62,8 +62,8 @@
   <!-- Tier-2 data assets, fetched by consumers at build time from GitHub releases of this
        repository, each pinned here by its SHA-256 and its size. The publish workflow holds every
        released archive to both before a push. A consumer's resolver (OutWit.Engine.Assets.MSBuild,
-       pinned in Build/OutWit.Controller.props) holds a download to its SHA-256; the pinned 1.0.1
-       does not compare the size and takes a file already in its cache by its name.
+       pinned in Build/OutWit.Controller.props) holds a download to both, and the pinned 1.0.2
+       uses a file already in its cache only when its SHA-256 and its length match.
 
        Three native wasmtime libraries, one per RID, from the neutral asset release
        wasmtime-v48.0.8-2: the libraries of wasmtime-v48.0.8, byte for byte, packed again with

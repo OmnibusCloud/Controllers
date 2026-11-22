@@ -15,45 +15,87 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 0.9.1 — a fix of 0.9.0: a node gives back the disk room of a shard when its task ends, also when an upload call the task gave up still reads its products, so later shards are refused or run instead of waiting for a call that may never end (see *Node behaviour*); the preflight's words on what a dispute may fetch again count its second round; a record's `Content-Length` and a response's status code are digits read alike on every node, a signed form refused everywhere (see *What hostile input meets*); a manifest's source URL longer than 4,096 characters is a problem of its line, not a shard that can only end without a result. Common Crawl's files and the files the tests pin give the same products, verdicts and hashes. 0.9.0 was the sixth hardening release, about what one machine, one origin or one manifest can cost a run or a node: a dispute one machine left without enough copies goes out once more, and a value under no ticket no longer unsettles the others (see *Trust and integrity*); a node's own network is a fault of the node, run elsewhere, and a fetch has a limit before the answer's head too (see *Node behaviour*); a shard's product is held to what its fetched bytes may give, and that bound is what a node reserves on its disk and what the preflight states as the most the uploads and the storage may be (see *What a run promises before it starts*); a shard's PDFs have a number of runs as well as a fuel; a blob transfer has a time to finish in; one record and one manifest cost a bounded amount of memory whatever the manifest opens (see *What hostile input meets*). Three of its rules can change a product, and none changes one of Common Crawl's files or of the files the tests pin: a document past the controller's own length is not judged in full, a shard whose product passes its ceiling is Oversized, and a shard's PDFs past 4,096 runs are not run. 0.8.0 was the fifth, about the near-duplicate merge: what a merge costs and how long it runs do not depend on what a node wrote into the signatures of its shard, a merge that was stopped is left at the next document, and a merge holds four million documents at the most whatever the length of their signatures. It changes no stage, and a merge keeps what it kept. 0.7.0 was the fourth, about what the server takes from a node and what
-it says when a round comes back short: a result frame is walked before it is decoded, a result's
-counters are held to the bytes of its shard, a shard that goes out again goes out on two machines
-when the run asked for sampling, and both documents state the sampling that was asked for and how
-each round came back, so a run whose checking did not happen says so (see *Trust and integrity*).
-It changes no stage either.
-0.6.0 was the third, about what travels with the controller and what
-does not: the module carries the licence notices of everything of others it redistributes (see
-*What the module carries*), no page of a real crawl is in the repository (the tests' shards are
-generated, see *Tests*), a line a node's log cannot take does not decide a shard's fate, and a
-shard that stops inside a header line ends as its whole records and not as a malformed file (see
-*Node behaviour*). It changes no stage: what 0.4.0 and 0.5.0 made a product of, it makes the same
-product of, byte for byte.
-0.5.0 was the second: what a run promises before it starts holds whoever wrote the manifest (see
-*What a run promises before it starts*), and the tasks and the results travel as blobs, so a node
-is handed a reference and returns one whatever the size of the job (see *Tasks and results as
-blobs*). 0.4.0 was the first (see *Trust and integrity* and *What hostile input meets*): a result
-is bound to its task on the server, copies that disagree are settled by three machines, a node's
-own trouble is never a shard's verdict, no text written by a node reaches a lab, and a hostile
-page, pack or shard costs a node a bounded amount. 0.4.0 and 0.5.0 are proven on the test fleet:
-under both, the demo kit's identity byte for byte, and, with one machine of the pool returning
-another product for every shard it held, all 24 products the honest ones and every dispute
-settled by three machines when two machines ran each shard (with one machine a shard, what the
-lying machine returned for a shard of its own stands: one or two of the 24, the limit stated
-under *Trust and integrity*). 0.6.0 gave the same identity on the test fleet. 0.7.0, 0.8.0, 0.9.0 and 0.9.1 have not run
-on the fleet yet; not yet
-released to nuget.org.** The full reference for lab engineers and application
+**Status: 1.0.0 — the first release; not on nuget.org or the live network yet.** Its code is
+the code of 0.9.1, which ran on the test fleet on Windows x64, Linux x64 and macOS arm64 nodes,
+with a node that lied and one that answered nothing among them; 1.0.0 changes the version and
+nothing a node or the server runs. What 1.0.0 is, after the 0.x line on the test server, is
+under *What changed in 1.0.0* below. The full reference for lab engineers and application
 developers is [docs/capabilities.md](docs/capabilities.md).
+
 The stage libraries are wired into twelve activities and four bundled scripts; the
 engine rig in the tests fetches generated shards from a loopback origin
 through mock nodes and reproduces a direct run's content hashes. On the test
-server the controller processed real Common Crawl WET shards on Windows and
-Linux nodes with every sampled pair agreeing on the content hash (0
-mismatches), and the dedup merge found the near-duplicates across twenty
-shards' signatures in seconds. 0.2.0 adds the PDF stage (see *PDFs*): the PDF
-responses of WARC shards become page-range documents through an extractor that runs
-in the controller's own wasm sandbox. What remains before 1.0: the quality thresholds
-tuned on real crawl text, the dedup merge measured at the scale of a crawl segment,
-and the PDF stage proven on the fleet.
+fleet the controller processed real Common Crawl WET and WARC shards, their
+PDFs through the sandboxed extractor included, with every sampled pair agreeing
+on the content hash, and the near-duplicate merge found the near-duplicates
+across twenty shards' signatures in seconds. Not measured yet: a run at the
+scale of a crawl segment, and the near-duplicate merge at that size; they are
+to run on the 1.0.0 builds.
+
+## What changed in 1.0.0
+
+1.0.0 is the 0.x line of the test server made one release. A lab that ran 0.9.1 sees the same
+products, verdicts, hashes and documents (`corpus-report/6`, `corpus-integrity/8`,
+`corpus-dedup/2`, `corpus-capabilities/4`), the same scripts and the same wire types; the
+documents name the controller version 1.0.0. What the 0.x releases made of the controller, in
+the words of what a lab can count on:
+
+- **A result is bound to its task.** Every shard and every task package has a ticket; the
+  server accepts a value only under a ticket of its job and round, from its own controller
+  version, in the shape an honest node gives, with its counters held to the bytes of its shard,
+  and drops anything else by a reason of a fixed list. A dropped value fails that value, never
+  the run, and a ticket is never written into a document.
+- **The server never chooses between executions by what a node says.** A share of the shards
+  (`SamplingRate`) runs twice on two machines; copies that agree are accepted, copies that
+  disagree go to three machines, and a result two of them return, with no tie, is accepted. A
+  dispute that came back with too few copies, or with a lead that may be one machine's second
+  answers, goes out once more; one that still does not settle is `Disputed`, named in the
+  report and out of the products.
+- **A node's own trouble is never a verdict.** Its disk, its memory, its sandbox, its uploads,
+  its own network (no answer, a server error or a request to slow down past the retries, a
+  proxy that asks for credentials, a resolver that turns a public origin into an address that is
+  not public) are faults of the node: the shard runs once more elsewhere, on two machines when
+  the run samples, and is `NoResult` with a reason if no machine gives a result.
+- **A run says what was asked and what came back.** Both documents state the sampling the run
+  asked for and how each round came back (`sampling`: `not_asked`, `as_asked`, `short`, `none`,
+  `unknown`; `rounds`), so a run whose checking did not happen says so.
+- **What one machine can and cannot do.** A shard that was not sampled rests on one machine's
+  word, and the documents count those (`single_execution`): a run that asks for no second
+  execution rests on one machine for every shard. One machine can deny products: the disputes
+  of a round it holds two packages of may end unsettled (`too_few_copies`, `surplus_copies`),
+  loudly, the shard `Disputed`. It cannot make a wrong product the accepted one. And it can make its own word look checked,
+  by spending the slot of a sampled copy on a package of its own.
+- **What a run promises before it starts holds whoever wrote the manifest.** The preflight
+  states the contributors' traffic part by part and the most the nodes accept; a node holds a
+  shard to the size it was declared with and an eighth more, and the origin is asked about a
+  random sample of the sizes. A shard's product is held to a ceiling of what its fetched bytes
+  may give, which a node reserves on its disk before it fetches and the preflight states. The
+  server storage estimate is held to the deployment's headroom.
+- **What hostile input costs is bounded where it is spent.** A shard, what it unpacks to, a
+  record, a page, the parser's tree, a document's words (judged in full up to 100,000), a PDF
+  and the PDFs of a shard (fuel and 4,096 runs), a language pack, a manifest (256 MiB, 1,048,576
+  sources, a source URL of 4,096 characters), a node's answer and a report given to
+  `Corpus.Dedup` each have a limit that is a function of the input alone, so two honest nodes
+  meet it at the same place. The near-duplicate merge costs the same whatever a node wrote into
+  its signatures, and holds 4,000,000 documents at the most.
+- **Tasks and results travel as blobs:** a node is handed a reference and returns one, whatever
+  the size of the job. A blob transfer has a time to finish in.
+- **A job cannot widen where a machine fetches from.** The public origins are compiled into the
+  controller; any other host is one the machine's owner listed.
+- **Nothing a node writes reaches a lab as text,** and a node's log that fails decides nothing.
+  The module carries the licence notices of everything of others it redistributes, and no page
+  of a real crawl is in the repository.
+- **On arm64 as on x64.** On a macOS arm64 node, with every shard on two machines and the other
+  copy on a Linux x64 node, every shard's product came from the arm64 node and was the x64
+  copy's on its content hash, its signatures hash and its verdict; the PDF stage gives the same
+  bytes there.
+
+Three rules of 0.9.0 can change a product, and none changes one of Common Crawl's files or of
+the files the tests pin: a document past the controller's own length is not judged in full, a
+shard whose product passes its ceiling is `Oversized`, and a shard's PDFs past 4,096 runs are not
+run. The limits that stay are stated where they belong: one machine's word and what one machine
+can deny (*What this does not close*, under *Trust and integrity*), the merge's capacity, and
+the others in the reference's known limits.
 
 ## Activities
 
@@ -1436,7 +1478,7 @@ line structure and adds the line stage; 0.4.0 lower-cases the capitals Unicode
 products are those of 0.4.0 byte for byte; 0.9.0 adds three limits — a document is judged in
 full up to 100,000 words, a shard's product is held to its ceiling, a shard's PDFs to 4,096
 runs — that change the product of no Common Crawl file and of no file the tests pin, and moves
-the stage set's fingerprint with them), which is why a job runs on one controller
+the stage set's fingerprint with them; 0.9.1 and 1.0.0 leave the stage set as it is), which is why a job runs on one controller
 version: a node on another refuses its batch. The tests pin a zstd frame digest and a MinHash signature digest,
 pin the records and the extracted text of a shard (a generated one, and the head
 of a real crawl file) and a pack's language answers to values

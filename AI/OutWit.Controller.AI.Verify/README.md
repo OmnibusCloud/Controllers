@@ -7,145 +7,13 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking — generation and verification are the
 same activity with different programs.
 
-**Status: 0.17.0 (Verify.Model 0.4.0, Verify.Scripts 0.7.0) — for the test server; 0.15.0 is
-the version proven on the test fleet. Not yet released to nuget.org or the live network.**
-0.17.0 is the fifth hardening release: what a task's module may cost a node before it runs,
-what a C build may write, and what every call into the host costs. No verdict and no output of
-an honest run moved and no document version changed; the fuel figures moved, because two
-prices were missing (see "Determinism"). What it changed:
-
-- A module a task brings, and a program built from its sources, is held to bounds before the
-  engine compiles it: a function type has at most 128 parameters and 8 results, a block passes
-  at most 8 values, a function has at most 16,384 locals and a body of 128 KiB, a module at
-  most 32,768 functions and 4,194,304 declared locals, 4,096 function types, 1,024 imports and
-  33,792 exports. A module past a bound is a
-  `CompileError` with fixed words. What is within the bounds is priced by what the engine was
-  measured to take for it: the square of a function's branches, its locals times its branches,
-  a block that passes values, declared locals, and 24 bytes at the least for any function. A
-  module of a few kilobytes could take the engine half a minute, or eight gigabytes, for the
-  price of a hello.
-- The memory the engine takes while it compiles such a module is counted where a node decides
-  how many tasks run at once: what a compile may take is estimated from the module (the code
-  of every function, by its kind) and a module estimated over 1,536 MiB is refused; the
-  compiles that may take 64 MiB or more share those 1,536 MiB between them (the largest runs
-  alone), and the degree sets them and the compiled modules the node keeps aside. Those kept modules are bounded by
-  their bytes (256 MiB of compiled code), not by their number.
-- A module with a start function is refused: a program starts at `_start`, and nothing of a
-  task's module runs outside its budget.
-- A C build has one budget for everything it writes, its objects and its program together:
-  128 MiB, checked at the write.
-- Every call into the host costs 1,000 units of fuel, whoever answers it, besides the unit a
-  byte it moves; a wait (`poll_oneoff`) costs the bytes of its records, and the arguments and
-  the environment cost their bytes each time a program copies them. A program that did nothing
-  but wait held a core until the node's own clock ended it; it is now out of fuel.
-- The deadline of a run is known by the trap's code, and by the engine's own words for it only
-  once the run's time is over by the host's clock: before that, no error's words count. A module
-  that wrote those words into an error ended as the node's fault; it now has its own verdict.
-- How deep a recursion goes before the engine's stack ends depends on the node; that is a
-  stated limit now (see "Runtimes"), and the comparison of the two trap modes runs a deep
-  recursion on either side of it.
-- The fuel of a CPython task is held to one number on Windows, Linux and macOS, as every other
-  runtime's is. The drift between hosts the documents allowed for it ended with 0.13.0 (see
-  "Determinism").
-
-0.16.0 was the fourth hardening release: what the server takes from a node, and what a run says
-of itself when a fan-out came back short. For a run without lying or failing nodes the
-verdicts, the fuel figures and the outputs are what they were under 0.15.0, and the provenance
-differs only in the controller version it names; the report and the integrity document carry
-more and are `verify-report/3` and `verify-integrity/3`. What it changed:
-
-- A result package is walked before it is decoded: every text and every list of a frame lies
-  inside the frame's own bytes, every count inside its bound (a result has at most 1,024 case
-  records), every text is valid Unicode and states its true length. Whatever fails while a
-  package is read, of whatever type, makes that package `unreadable` and never ends the run.
-- A result is held to its task. Fuel is from 0 to the task's budget for each of its runs, peak
-  memory from 0 to its cap, no time is below zero, stdout is within the task's cap, the case
-  records are those of the task's suite, and the verdict is the one the case records give. A
-  result outside that is refused as `content`; it used to be written into the documents. A
-  sum of what nodes reported stops at the largest value instead of failing the settlement.
-- A fan-out that came back short keeps its checking. The repair round runs under the sampling
-  of the first fan-out, its executions are compared, and where they disagree the task goes to
-  the dispute round like any other. Before, every task of a fan-out that came back empty was
-  repaired on one machine, with nothing compared.
-- The documents say what was asked for and what happened. Both summaries state the sampling
-  rate (`sampling_rate`), whether the sampling took place (`sampling`: `as_asked`, `short`,
-  `none` or `not_stated`) and the packages nothing answered (`unanswered_packages`); the
-  integrity document has a record for every fan-out (`fan_outs`). A run whose checking did
-  not happen says `short`.
-- `Verify.Disputes` takes the repair round as well (four arguments) and `Verify.Settle` the
-  sampling rate (a seventh argument); the bundled scripts pass them. The scripts of
-  Verify.Scripts 0.6.0 run as they did: their repair round is one execution a package, and the
-  documents say `not_stated`.
-- The duplicate check of a taskset's indices costs what the indices cost, not the range they
-  are spread over: a page of the index space with few indices in it is a short list, not 8 KiB
-  of bits.
-
-0.15.0 was the third hardening release: what the controller hands on of other people's work,
-and what stands between a change and what a node is sent. A run is what it was under 0.14.0:
-the same verdicts, fuel and reports, and documents that differ only in the controller version
-they name. What it changed:
-
-- Every folder a node is sent has a `THIRD-PARTY-NOTICES.txt`: each language runtime's
-  folder, the folder of the native engine library, and the module. It lists the third-party
-  software in the folder, what is linked statically into its module included (expat,
-  libmpdec, HACL\* and mimalloc in CPython; OpenSSL, libyaml and zlib in Ruby; wasi-libc with
-  musl and cloudlibc in every interpreter; the Rust crates of the engine), and gives the
-  terms of each part. The files are written by a tool from pinned sources, never from
-  memory, and a job fails when a committed file is not what the tool writes.
-- The archives a node is sent are packed the same way every time, and a job rebuilds each
-  from its pins and fails when it is not the archive the project file pins by SHA-256 and
-  size. The numpy runtime's archive is held to its pin by the workflow that builds it, and
-  carries the patches numpy is built with.
-- The committed runtime modules are compared with a rebuild on a pull request, before a
-  merge. Every action of every workflow is named by its commit. A download without a pin
-  stops a toolchain build before anything of it is unpacked. The Rust compiler of the
-  toolchain is two archives held to their SHA-256.
-- A logging call never decides what becomes of a package: every line the controller logs on
-  a node goes through one lock, and an exception of the host's logger goes no further. (A
-  cloud client up to 2.2.5 gives a controller a log that cannot take two lines at once.)
-- A Windows run of the tests states in one line of its log whether the proof of survival
-  under hardware stack protection ran: `stack-protection proof: shadow stacks on` or
-  `stack-protection proof: shadow stacks off`.
-- The clock gives no verdict, wherever it fires. The engine reports the wall-clock backstop as
-  a trap when it stops the program's own code, and as an error of another kind (whose cause is
-  the deadline) when it stops the program inside a call that passes through the host; the
-  second was a `RuntimeError` (a `CompileError` during instantiation), a verdict the machine's
-  timing chose. Both are now the clock: `NoResult` with the fault `wall_clock`, run again
-  elsewhere. Found by the build server; the backstop of an ordinary task is minutes past its
-  fuel, so an honest run does not reach it.
-
-0.14.0 was the second hardening release. What it changed:
-
-- A taskset is held to its schema, exactly: a field the schema does not have (a misspelt
-  `expected_stdout`), a field given twice, a value of another type, a number outside its
-  range, a NUL in a program or an argument and text that is not Unicode are refused by name,
-  at the preflight and at the split. A runtime id is matched to the letter.
-- What the server reads from a lab is bounded where it is read: a line (64 MiB), the sources,
-  arguments and cases of a task (1,024 each), the tasks of a taskset (4,194,304), and what a
-  preflight answers (32 messages of a kind, 240 characters each). The capabilities document
-  carries these bounds as numbers, in a section of their own (`taskset`), and is
-  `verify-capabilities/3` for it; nothing it had changed name or meaning.
-- Nothing that grows with the taskset is read whole into memory: a taskset is read a line at
-  a time and stored a package at a time, and the documents are written to files as they are
-  made. A run of 100,000 tasks from a 202 MiB taskset held 45 MiB at the most on the managed
-  heap, server and nodes together.
-- A taskset the schema allowed is cut into the same packages and gives the same documents as
-  under 0.13.0.
-
-0.13.0 was the first hardening release. What it changed:
-
-- Fuel is the one budget of a run's work. `Timeout` means out of fuel; the wall clock is a
-  node's own backstop and gives no verdict. A call into the host costs fuel by the bytes it
-  moves.
-- Output is capped at the write: a byte past a cap is never stored, in memory or on disk.
-- The caps on batches and packages hold on the node too, whatever a package says. The
-  single-task activity is removed.
-- A module a task brings, or the compiler builds, is priced before the node compiles it.
-- A program sees the same file names and file records on every node.
-- The server accepts a result only under the ticket of the package it answers. It never
-  chooses between two executions: a task nobody answers is sent out once more, and a task
-  whose executions disagree runs three more times.
-- Nothing of a node's own words reaches a lab.
+**Status: 1.0.0 (Verify.Model 1.0.0, Verify.Scripts 1.0.0) — the first release; not on
+nuget.org or the live network yet.** Its code is the code of 0.17.0, which ran on the test
+fleet on Windows x64, Linux x64 and macOS arm64 nodes, with a node that lied and one that
+answered nothing among them, and one change more: what compiling a task's own module may take
+in memory is estimated anew, and a module estimated over 1,536 MiB is refused before it
+compiles. What 1.0.0 is, after the 0.x line on the test server, is under "What changed in
+1.0.0" below.
 
 What the controller can do, for an application built on it:
 [docs/capabilities.md](docs/capabilities.md).
@@ -161,6 +29,123 @@ Isolation targets WASM (wasmtime): deterministic, cross-platform
 contributor machines, no ambient authority — network and filesystem do not
 exist inside the sandbox unless explicitly virtualized in. Verdicts are
 verifiable by construction: code passes its test suite or it does not.
+
+## What changed in 1.0.0
+
+1.0.0 is the 0.x line of the test server made one release, with one change of its own. A lab
+that ran 0.17.0 sees the same documents (`verify-report/3`, `verify-provenance/2`,
+`verify-integrity/3`, `verify-capabilities/3`), the same scripts and the same wire types, and
+the same verdicts, fuel figures and outputs for every task but a module the new estimate or
+bounds refuse; the documents name the controller version 1.0.0.
+
+- **New in 1.0.0: what a compile may take in memory is estimated by what the module holds.**
+  Before the engine compiles a task's own module, or a program built from its C/C++ sources,
+  the node estimates the memory that compile may take: by what the compiler keeps of every
+  function until the module is done (its calls, loads and stores, loops, branches, float and
+  vector instructions and the instructions that may trap) and by the code it makes for the
+  module's function types, imports and exports. A module estimated over 1,536 MiB is refused
+  before anything is compiled, a `CompileError` in the words `compiling the module may take more
+  than 1536 MiB of memory`, and a module may have at most 4,096 function types, 1,024
+  imports and 33,792 exports. The compiles that may take 64 MiB or more share those 1,536 MiB
+  in a node's process, so a node sets more memory aside for them than 0.17.0 did and may run
+  fewer such tasks at once. The cap leaves ordinary compiled code about 10 to 17 MB of a
+  program; C++ with many virtual functions reaches it sooner, because every function that
+  leaves the module, a virtual table's entry among them, counts.
+
+What the 0.x releases made of the controller, in the words of what a lab can count on:
+
+- **Fuel is the one budget of a run's work.** `Timeout` means out of fuel and nothing else, and
+  it is the same on every node. The wall clock is a node's own backstop and gives no verdict: a
+  run it ends is sent out once more and is `NoResult` (`wall_clock`) if no node does better,
+  wherever in the run the clock fired. Every call into the host costs 1,000 units of fuel,
+  whoever answers it, besides the unit a byte it moves; a wait (`poll_oneoff`) costs the bytes
+  of its records, and the arguments and the environment cost their bytes each time a program
+  copies them. A program that does nothing but wait runs out of fuel. Output is capped at the
+  write: a byte past a cap is never stored, in memory or on disk.
+- **What a task's own module may cost a node is bounded before it is compiled.** A module a task
+  brings, and a program built from its sources, is held to bounds: a function type has at most
+  128 parameters and 8 results, a block passes at most 8 values, a function has at most 16,384
+  locals and a body of 128 KiB, a module at most 32,768 functions and 4,194,304 declared locals,
+  4,096 function types, 1,024 imports and 33,792 exports, blocks nest at most 2,048 deep, and a
+  module with a start function is refused. A module past
+  a bound is a `CompileError` with fixed words. What is within the bounds is priced from the
+  task's fuel by what the engine was measured to take for its shape, and the memory the engine
+  takes while it compiles is estimated, refused over 1,536 MiB and counted where a node decides
+  how many tasks run at once. A C/C++
+  build has one budget for everything it writes, its objects and its program together: 128 MiB.
+- **What the server reads from a lab is held to its schema and bounded where it is read.** A
+  field a taskset's schema does not have (a misspelt `expected_stdout`), a field given twice, a
+  value of another type, a number outside its range, a NUL in a program or an argument and text
+  that is not Unicode are refused by name, at the preflight and at the split; a runtime id is
+  matched to the letter. The bounds: a line (64 MiB), the sources, arguments and cases of a task
+  (1,024 each), the tasks of a taskset (4,194,304), and what a preflight answers (32 messages of
+  a kind, 240 characters each). The capabilities document carries these bounds as numbers, in a
+  section of their own (`taskset`), and is `verify-capabilities/3` for it. Nothing that grows
+  with the taskset is read whole into memory: a run of 100,000 tasks from a 202 MiB taskset held
+  45 MiB at the most on the managed heap, server and nodes together.
+- **What the server takes from a node.** Tasks and results travel as blobs. A result package is
+  accepted only under the ticket of the package it answers, from the server's own controller
+  version, engine and runtime bytes, for exactly that package's tasks. It is walked before it is
+  decoded, and every result is held to its task: fuel within the budget of its runs, memory
+  within its cap, no time below zero, stdout within its cap, the case records of its suite and
+  the verdict they give. Anything else is refused and counted by reason (`rejected_results`),
+  and fails that package, never the run. A node, for its part, holds a package to the caps and
+  the ceilings whatever the package says, and refuses whole one it cannot run.
+- **The server never chooses between two executions.** A share of the packages
+  (`SamplingRate`) runs twice on two machines; executions that agree are accepted, executions
+  that disagree run three more times on different machines, and a result two of those three
+  return, with no tie, is accepted; otherwise the task is `Disputed`. A task nobody answered
+  goes out once more under the same sampling, and is `NoResult` with a reason if it still has
+  no verdict. A run whose checking came back short says so: both summaries state the rate that
+  was asked for (`sampling_rate`), whether the sampling took place (`sampling`: `as_asked`,
+  `short`, `none`, `not_stated`) and the packages nothing answered (`unanswered_packages`).
+- **What one machine can and cannot do.** A task that was not sampled rests on the one machine
+  that ran it, and the documents count those (`single_execution`): a run that asks for no
+  second execution rests on one machine for every task. Where the platform holds a node to one
+  answer for each package it was given (Grid 1.3.0 and later), one lying machine can keep a
+  dispute from being settled (`too_few_copies` or `surplus_copies`, the task `Disputed`), and it cannot make its
+  answer the accepted one. Two lying machines that hold two of a task's three copies are the
+  majority, and win.
+- **A program sees the same world on every node:** the same file names, file records that say
+  nothing of the host, the run's own clock, a random stream seeded by the task. Nothing of a
+  node's own words reaches a lab: a node's trouble travels as fixed words or a reason code, and
+  a node's log that fails decides nothing.
+- **What the module hands on, and what guards its way to a node.** Every folder a node is sent
+  has a `THIRD-PARTY-NOTICES.txt`; the archives are packed the same way every time and a job
+  builds each again from its pins; a download without a pin stops a toolchain build.
+- **On arm64 as on x64.** On a macOS arm64 node, with every task of the kits on two machines and
+  the other copy on a Linux x64 node, no pair of copies differed, every verdict was the one x64
+  gives, and the fuel of every batch was the same number on both: a budgeted task does not
+  change its verdict between the two architectures. The compile prices hold there too: they
+  were measured on an x64 Windows desktop and on an arm64 macOS laptop, and for the shapes that
+  were measured a budget buys about as much compiling on both, to within a few times either way
+  (the arm64 machine compiled them in 0.28 to 1.27 times the x64 time, 0.71 at the median), so
+  no price depends on the architecture. They are not a proof about every module.
+
+The limits that stay, each stated where it belongs below:
+
+- a task that was not sampled rests on one machine (see "Integrity");
+- one lying machine can leave a dispute unsettled and cannot take a result; with a Grid older
+  than 1.3.0 a second answer can take the place of an honest copy that did not come back (see
+  "Integrity");
+- the compile of a task's own module is priced, and its memory estimated, refused over 1,536
+  MiB and counted; the compile itself is not capped, and the bounds, the prices and the estimate
+  are fitted to measured shapes, not a proof about every module (see "Modules a task brings");
+- some code compiles far more slowly than its price says (calls through a table, loops, reads
+  of a table, traps, functions of many parameters that leave the module, and loads and stores
+  on a host with hardware stack protection): a module of many such functions can hold one core
+  of a node for minutes while it compiles, and no verdict is wrong because of it (see "Modules
+  a task brings");
+- three file calls take far longer on Windows than their price (`path_filestat_get`,
+  `path_open`, `fd_filestat_get`), so a program that loops on them reaches the node's backstop
+  there before its fuel: no verdict, `NoResult` (`wall_clock`), never a wrong one (see
+  "Determinism");
+- a trap is an explicit check in a host under hardware stack protection and a hardware fault
+  elsewhere; verdicts, outputs and fuel are the same in both modes, but how deep a recursion
+  goes before the engine's stack ends depends on the mode and the processor (see "What a program
+  can reach");
+- the scale runs on the fleet (a million tasks) were measured before 0.13.0, and are to be
+  repeated on the 1.0.0 builds.
 
 ## Activities
 
@@ -198,8 +183,7 @@ verifiable by construction: code passes its test suite or it does not.
 sandboxes per node, 0 = 16), `SamplingRate` (the share of packages executed
 twice for integrity, 0–1; 0 = none), `ReportFormat` (reserved).
 
-The job variables a caller reads are the same as before 0.13.0. The scripts as
-they are:
+The scripts as they are:
 
 ```
 Job:VerifyRun(Blob:taskset, VerifyOptions:opts)
@@ -600,8 +584,8 @@ The verdict report is the run's identity: it carries verdicts, exit codes and
 per-case outcomes — the fields two honest executions agree on wherever they
 ran — and is byte-identical for a taskset and its options regardless of which
 nodes ran which packages, as long as every node did its work and told the truth
-(proven on the test fleet across three placements, before 0.13.0). Since 0.16.0
-its summary also states the sampling rate and whether the sampling took place;
+(proven on the test fleet across three placements, before 0.13.0). Its summary
+also states the sampling rate and whether the sampling took place;
 in a pool of one machine nothing runs twice, and the report of a run that asked
 for sampling says `short` there. `Timeout` is out of fuel,
 which is the same on every node; a run a node's clock ended has no verdict.
@@ -620,7 +604,7 @@ percent (on the build server a hello cost 1,153 units and the import of sympy
 interpreter's imports read the host's file records (times, device, file
 number); since 0.13.0 those records say nothing of the host, and the build
 server has measured the same figure on the three systems since.
-Since 0.17.0 the tests also list a CPython hello's calls into the host in
+The tests also list a CPython hello's calls into the host in
 order, and the listings of the three systems are equal call by call. Fuel is
 reproducible per host; the peak linear memory of a CPython task can differ by
 one 64 KiB page between hosts; wall time is hardware. All three are metrics and live per task in the provenance
@@ -650,6 +634,14 @@ Windows x64, with the figure of 0.13.0 to 0.16.0 in brackets: `python-3.14.6`
 (8,314,372) and the 224-byte raw WASI hello 482,292 (458,764). The last two
 reported 710 and 6 before 0.13.0: the price of compiling the module is in the
 task's fuel, see below.
+
+The thousand units are half a microsecond at the reference rate, about what the
+host's own part of most calls takes. Three file calls take far longer on
+Windows (`path_filestat_get`, `path_open` and `fd_filestat_get`: 45 to 190 µs
+each where measured), so a program that loops on them burns some 7 million
+units a second there, and the node's backstop ends it before its fuel does: no
+verdict (`NoResult` with reason `wall_clock` if no node does better), never a
+wrong one.
 
 The clock is the run's own (it starts at a pinned instant and moves
 only when the program sleeps, and every clock reports a resolution of 1 ns) and
@@ -728,7 +720,7 @@ locals times the depth of its loops: 6.9 KB took 1.5 s, 28 KB took 81 s and
   units of fuel a byte of the module; plus 4 units for every unit of (locals of
   a function)² × (depth of its nested loops); plus 100 units for every unit of
   (targets of a branch table) × (blocks around it).
-- Since 0.17.0 the price also has what the compiler was measured to take for
+- The price also has what the compiler was measured to take for
   other shapes (modules of a few kilobytes were found that took it 30 s, or
   8 GiB, for the price of a hello): 4 units for every unit of
   (branches of a function)², for a function of more than 1,024 branches; 128
@@ -743,12 +735,13 @@ locals times the depth of its loops: 6.9 KB took 1.5 s, 28 KB took 81 s and
 - Blocks nested deeper than 2,048 in one function are refused: `CompileError`,
   with `a function of the module nests blocks deeper than 2048` on stderr. The
   shipped interpreters nest 115 to 781 deep.
-- Since 0.17.0 a module is also refused, with a `CompileError` that names the
+- A module is also refused, with a `CompileError` that names the
   bound, when a function type has more than 128 parameters or more than 8
   results, a block takes and gives more than 8 values, a function has more than
   16,384 locals or a body larger than 128 KiB, or the module has more than
   32,768 functions or its functions declare more than 4,194,304 locals
-  together. The interpreters the controller ships have at most 28 parameters,
+  together, or it has more than 4,096 function types, 1,024 imports or 33,792
+  exports. The interpreters the controller ships have at most 28 parameters,
   one result and 188 locals in a function; QuickJS has 1,522 functions and a
   largest body of 78 KB.
 - A module with a start function is refused (`the module has a start function,
@@ -1161,7 +1154,7 @@ nothing keeps compiled code past its process.
 The natives and the runtime modules are Tier-2 data assets (`ControllerDataAsset`),
 fetched by consumers at build time from releases of this repository and verified by
 hash: the natives from `wasmtime-v48.0.8-2` (the libraries of `wasmtime-v48.0.8`, byte for
-byte, packed again with their third-party notices), the runtimes from `verify-v<version>`; the nupkg itself stays small. The engine is the
+byte, packed again with their third-party notices), the runtimes from a `verify-v<version>` release (`verify-v0.15.0`: a release keeps its tag while its bytes do not change); the nupkg itself stays small. The engine is the
 long-term line 48 of wasmtime: the .NET binding 48.0.2 (the `Wasmtime` package) over
 the native library of its newest patch, 48.0.8, taken unchanged from the engine's own
 release archives (`toolchain/natives.sh` of the asset tool, pinned by the digests the

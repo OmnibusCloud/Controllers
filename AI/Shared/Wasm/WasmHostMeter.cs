@@ -20,10 +20,15 @@ internal sealed class WasmHostMeter
     #region Constants
 
     /// <summary>
-    /// What any call into the host costs, in fuel, before the bytes it moves. The host's own part
-    /// of a call (the way in and out, the look at the guest's memory, the way to WASI's own call
-    /// and back) was measured at 0.1 to 0.6 microseconds on a desktop of 2025; a thousand units
-    /// are half a microsecond at the rate a busy loop burns fuel on the slowest node.
+    /// What any call into the host costs, in fuel, before the bytes it moves. A thousand units
+    /// are half a microsecond at the rate a busy loop burns fuel on the slowest node: about what
+    /// the host's own part of most calls takes (the way in and out, the look at the guest's
+    /// memory, the way to WASI's own call and back), measured at 0.1 to 0.6 microseconds on a
+    /// desktop of 2025. Not of every call: three file calls take far longer on Windows
+    /// (<c>path_filestat_get</c>, <c>path_open</c> and <c>fd_filestat_get</c>, 45 to 190
+    /// microseconds each where measured), so a program that loops on them burns some 7 million
+    /// units a second there, and the run's wall-clock backstop ends it before its fuel does: an
+    /// end of the node's clock, which gives no verdict, never a wrong one.
     /// </summary>
     public const long CALL_FUEL = 1000;
 
