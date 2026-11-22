@@ -6,7 +6,12 @@ namespace OutWit.Controller.AI.Smt.Model.Lang;
 /// the solver's to check. While checking, the names a command declares are gathered: the name
 /// of a constant, a function or a sort, of a datatype, of its constructors and its selectors.
 /// <para>
-/// A name is a symbol that is no reserved word (a reserved word between bars is a symbol).
+/// A name is a symbol that is no general reserved word (<c>let</c>, <c>par</c>, <c>_</c> and
+/// the rest shape a term or a sort wherever they stand). A command name is an ordinary symbol
+/// everywhere but at the head of a top-level form: a solver takes <c>exit</c> or <c>push</c> as
+/// a name, tools that print for it write them bare, and reading them as symbols is reading
+/// them as the solver does. Bare or between bars, a command name is a name, and it is written
+/// back as it was read.
 /// </para>
 /// </summary>
 internal sealed class SmtCommandShapes
@@ -83,14 +88,14 @@ internal sealed class SmtCommandShapes
     }
 
     /// <summary>
-    /// A name: a symbol that is no reserved word. Between bars a reserved word is a symbol.
+    /// A name: a symbol that is no general reserved word. A command name is one, bare or between bars.
     /// </summary>
     private bool IsName(SmtExpression expression)
     {
         if (expression.Kind != SmtExpressionKind.Symbol)
             return false;
 
-        if (expression.IsQuoted || !SmtReservedWords.Contains(expression.Text))
+        if (expression.IsQuoted || !SmtReservedWords.IsGeneral(expression.Text))
             return true;
 
         m_reservedWord = true;

@@ -101,9 +101,14 @@ else
 | Refused | `echo`, and every other name: the solver's extensions (`include`, `eval`, `simplify`, `define-const`, ...) and names nobody has heard of | a command is never passed on because nothing was known against it |
 
 A kept command is held to the shape the standard gives it: how many parts it has, and that a
-name stands where a name must stand (a symbol that is no reserved word; between bars a command
-name is a symbol). A sort or a term is any s-expression here: what they mean is the solver's to
+name stands where a name must stand: a symbol that is no general reserved word (`let`, `par`,
+`_` and the rest). A sort or a term is any s-expression here: what they mean is the solver's to
 check.
+
+A command name is an ordinary symbol everywhere but at the head of a command:
+`(declare-const exit Bool)` declares a constant, as it does to a solver, and tools that print
+for a solver write such names bare. Bare or between bars, a command name is a name and a
+symbol of a term, and it is written back as it was read.
 
 ### Refusal codes
 

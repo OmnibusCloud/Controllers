@@ -145,14 +145,12 @@ public class SmtSanitizerShapeTests
         "(assert true false)"
     ];
 
-    /// <summary>A reserved word that is not between bars is no symbol, so no name.</summary>
+    /// <summary>A general reserved word that is not between bars is no symbol, so no name.</summary>
     private static readonly string[] RESERVED_WORD_AS_NAME =
     [
         "(set-logic let)",
         "(declare-sort par)",
         "(define-sort T (match) Int)",
-        "(declare-const assert Int)",
-        "(declare-const exit Int)",
         "(declare-const _ Int)",
         "(declare-const ! Int)",
         "(declare-const NUMERAL Int)",
@@ -160,10 +158,11 @@ public class SmtSanitizerShapeTests
         "(define-fun exists () Int 1)",
         "(define-fun f ((let Int)) Int 1)",
         "(define-fun-rec as () Int 1)",
-        "(define-funs-rec ((check-sat () Int)) (1))",
+        "(define-funs-rec ((let () Int)) (1))",
+        "(define-funs-rec ((f ((HEXADECIMAL Int)) Int)) (1))",
         "(declare-datatype STRING ((a)))",
-        "(declare-datatype D ((push)))",
-        "(declare-datatype D ((mk (pop Int))))",
+        "(declare-datatype D ((forall)))",
+        "(declare-datatype D ((mk (exists Int))))",
         "(declare-datatype D (par (DECIMAL) ((mk))))",
         "(declare-datatypes ((BINARY 0)) (((a))))"
     ];
@@ -205,18 +204,61 @@ public class SmtSanitizerShapeTests
     }
 
     [Test]
-    public void ReservedCommandNameBetweenBarsIsANameTest()
+    public void CommandNameIsAnOrdinarySymbolEverywhereButAtTheHeadOfACommandTest()
     {
-        // A command name between bars is an ordinary symbol to the standard and to the solver
-        // alike wherever no command is looked for; it keeps its bars when written.
+        // A solver takes exit, push or assert as a name wherever it looks for no command, and
+        // tools that print for it write them bare: read as symbols, they are read as the solver
+        // reads them. Bare or between bars, as the name of a constant, a function, a sort, a
+        // datatype, a constructor, a selector, a parameter and a bound variable, and in a term.
         foreach (var word in SmtReservedWords.Commands)
         {
-            var problem = SmtSanitizerChecks.Accept($"(declare-const |{word}| Int)\n(assert (> |{word}| 0))");
+            foreach (var name in new[] { word, $"|{word}|" })
+            {
+                var text =
+                    $"(set-logic {name})\n" +
+                    $"(declare-const {name} Int)\n" +
+                    $"(declare-fun {name} (Int {name}) {name})\n" +
+                    $"(declare-sort {name} 0)\n" +
+                    $"(define-sort {name} ({name}) (Array {name} Int))\n" +
+                    $"(define-fun {name} (({name} Int)) Int {name})\n" +
+                    $"(define-fun-rec {name} (({name} Int)) Int ({name} {name}))\n" +
+                    $"(define-funs-rec (({name} (({name} Int)) Int)) (({name} {name})))\n" +
+                    $"(declare-datatype {name} (({name} ({name} Int))))\n" +
+                    $"(declare-datatypes (({name} 0)) ((({name} ({name} Int)))))\n" +
+                    $"(declare-datatype P (par ({name}) ((mk (get {name})))))\n" +
+                    $"(assert (> {name} 0))\n" +
+                    $"(assert (let (({name} 1)) (forall (({name} Int)) (= {name} ({name} {name})))))\n" +
+                    $"(assert (! {name} :named {name}))\n";
 
-            Assert.That(problem.Canonical, Is.EqualTo($"(declare-const |{word}| Int)\n(assert (> |{word}| 0))\n"), word);
-            Assert.That(problem.Constants.Single().Name, Is.EqualTo(word));
-            SmtSanitizerChecks.HoldProperties(problem);
+                var problem = SmtSanitizerChecks.Accept(text);
+
+                Assert.That(problem.Canonical, Is.EqualTo(text), name);
+                Assert.That(problem.Logic, Is.EqualTo(word), name);
+                Assert.That(problem.Constants.Single().Name, Is.EqualTo(word), name);
+                Assert.That(problem.Functions.Single().Name, Is.EqualTo(word), name);
+                Assert.That(problem.DeclaredSymbolCount, Is.EqualTo(16), name);
+                SmtSanitizerChecks.HoldProperties(problem);
+            }
         }
+    }
+
+    [Test]
+    public void CommandNameIsWrittenBackAsItWasReadTest()
+    {
+        // Bare and between bars it is one symbol to a solver; the text keeps each spelling.
+        var problem = SmtSanitizerChecks.Accept("(declare-const exit Bool)\n(declare-const |push| Bool)\n(assert (and |exit| push))");
+
+        Assert.That(problem.Canonical, Is.EqualTo("(declare-const exit Bool)\n(declare-const |push| Bool)\n(assert (and |exit| push))\n"));
+        Assert.That(problem.Constants.Select(constant => constant.Name), Is.EqualTo(new[] { "exit", "push" }));
+        SmtSanitizerChecks.HoldProperties(problem);
+    }
+
+    [Test]
+    public void CommandNameAtTheHeadOfACommandIsTheCommandTest()
+    {
+        // Only there: a top-level form is looked up by its head.
+        Assert.That(SmtSanitizerChecks.Refuse("(declare-const exit Bool)\n(push 1)", SmtRefusalCodes.COMMAND_NOT_ALLOWED).Line, Is.EqualTo(2));
+        Assert.That(SmtSanitizerChecks.Accept("(declare-const exit Bool)\n(assert exit)\n(exit)").Stripped["exit"], Is.EqualTo(1));
     }
 
     [Test]
