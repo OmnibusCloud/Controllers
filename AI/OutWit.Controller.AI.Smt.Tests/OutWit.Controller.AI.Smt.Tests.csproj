@@ -6,4 +6,10 @@
     <ProjectReference Include="..\OutWit.Controller.AI.Smt.Model\OutWit.Controller.AI.Smt.Model.csproj" />
   </ItemGroup>
 
+  <!-- The adversarial corpus of the sanitizer (written for these tests, kept as bytes: see
+       .gitattributes). -->
+  <ItemGroup>
+    <None Update="Fixtures\Adversarial\*.smt2" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

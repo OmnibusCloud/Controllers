@@ -1,0 +1,3 @@
+# The adversarial corpus of the sanitizer is bytes: a lone carriage return, a NUL character or a
+# byte order mark is the point of a file, and no checkout may repair it
+Fixtures/Adversarial/*.smt2 -text
