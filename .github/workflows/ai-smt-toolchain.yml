@@ -1,0 +1,290 @@
+name: AI Smt toolchain
+run-name: "AI Smt toolchain: ${{ github.ref_name }}"
+
+# The solver module of the Smt controller: Z3 (the release toolchain/pins.env pins) built for
+# wasm32-wasip1 by the pinned wasi-sdk, with C++ exceptions as WebAssembly exceptions. Two
+# jobs build it, on two runner images, from two different folders, and the bytes are
+# compared. The compare job holds the module and the data asset that carries it to the pins
+# of toolchain/pins.env (the SHA-256 and the size of each): a build that gives another module
+# or another archive fails this workflow. The module is then taken out of the archive, checked
+# (what it imports, its exception tag, no trace of a build machine) and run under the pinned
+# wasmtime command line. The data asset goes out as a workflow artifact with its SHA-256;
+# nothing is released from here. It is not a required check.
+#
+# A build takes twenty to thirty minutes on a runner, so what it writes is kept in the Actions
+# cache, under the hash of everything the module is made from (build.sh --inputs: the build
+# script, the two source changes, the pins the build reads) and the runner image. A run that
+# changes none of them takes both modules from the cache, each built once on its own image,
+# and does the rest anew: the notices, the archive, the comparison, the checks, the smoke
+# test. To build anew without changing the build, delete the caches named smt-z3-module-*
+# (Actions, Caches) and run the workflow.
+#
+# It runs on a pull request, and after a push to main, for a change to the toolchain or to
+# this file; a branch with a pull request is built once, by the pull request's run (another
+# branch is run by hand).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'AI/OutWit.Controller.AI.Smt.Assets/toolchain/**'
+      - '.github/workflows/ai-smt-toolchain.yml'
+  # The same paths as above.
+  pull_request:
+    paths:
+      - 'AI/OutWit.Controller.AI.Smt.Assets/toolchain/**'
+      - '.github/workflows/ai-smt-toolchain.yml'
+
+permissions:
+  contents: read
+
+env:
+  TOOLCHAIN: AI/OutWit.Controller.AI.Smt.Assets/toolchain
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: build ${{ matrix.name }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: a
+            os: ubuntu-24.04
+          - name: b
+            os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # Build b runs the scripts from a copy in another folder, with its work folder at
+      # another depth: if any path reached the module or the archive, the two builds would
+      # differ.
+      - name: Where the scripts run from
+        env:
+          BUILD: ${{ matrix.name }}
+        run: |
+          if [ "$BUILD" = a ]; then
+            echo "SCRIPTS=$GITHUB_WORKSPACE/$TOOLCHAIN" >> "$GITHUB_ENV"
+            echo "WORK=$RUNNER_TEMP/work" >> "$GITHUB_ENV"
+          else
+            mkdir -p "$RUNNER_TEMP/elsewhere/copy"
+            cp -R "$TOOLCHAIN" "$RUNNER_TEMP/elsewhere/copy/toolchain"
+            echo "SCRIPTS=$RUNNER_TEMP/elsewhere/copy/toolchain" >> "$GITHUB_ENV"
+            echo "WORK=$RUNNER_TEMP/b/second/work" >> "$GITHUB_ENV"
+          fi
+
+      - name: What the module is made from
+        id: inputs
+        run: |
+          hash="$(bash "$TOOLCHAIN/build.sh" --inputs)"
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          echo "the build's inputs: $hash"
+
+      - name: The module of an earlier run with the same inputs
+        id: cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/module
+          key: smt-z3-module-${{ matrix.name }}-${{ matrix.os }}-${{ steps.inputs.outputs.hash }}
+
+      # A download without a pin stops the build before anything is unpacked or run (exit 3,
+      # with the hash that was seen on an UNPINNED line).
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash "$SCRIPTS/build.sh" "$RUNNER_TEMP/module" "$WORK"
+
+      # Kept as soon as it is built, whatever the later steps and jobs find: a build that the
+      # compare job refuses is the same build the next time, and need not be made again to be
+      # looked at.
+      - name: Keep the module
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/module
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      # Always anew: the notices from their pinned texts and the archive.
+      - name: Pack
+        run: bash "$SCRIPTS/pack.sh" "$RUNNER_TEMP/module" "$RUNNER_TEMP/out" "$WORK/notices"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: smt-z3-build-${{ matrix.name }}
+          path: ${{ runner.temp }}/out
+          if-no-files-found: error
+
+  compare:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # pins.env, for the pins; before the downloads, which land beside it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: smt-z3-build-*
+          path: builds
+
+      - name: The two builds are the same bytes
+        run: |
+          . "$TOOLCHAIN/pins.env"
+          {
+            echo "### z3: two builds"
+            echo
+            echo "| file | bytes | build a | build b |"
+            echo "|---|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for name in "z3-$Z3_VERSION.wasm" LICENSE-z3.txt THIRD-PARTY-NOTICES-z3.txt smt-z3-wasm.zip build-info.txt; do
+            a="$(sha256sum "builds/smt-z3-build-a/$name" | cut -d' ' -f1)"
+            b="$(sha256sum "builds/smt-z3-build-b/$name" | cut -d' ' -f1)"
+            bytes="$(wc -c < "builds/smt-z3-build-a/$name" | tr -d ' ')"
+            echo "| $name | $bytes | \`$a\` | \`$b\` |" >> "$GITHUB_STEP_SUMMARY"
+            if cmp -s "builds/smt-z3-build-a/$name" "builds/smt-z3-build-b/$name"; then
+              echo "same bytes: $name  $a  $bytes bytes"
+            else
+              echo "::error::$name differs between the two builds: $a and $b"
+              exit 1
+            fi
+          done
+          { echo; echo '```'; cat builds/smt-z3-build-a/build-info.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      # The module and the archive a node is sent are pinned in pins.env, each by its SHA-256
+      # and its size. They must be the ones built here: a pin that names another file, or a
+      # toolchain that no longer builds the pinned one, fails the workflow. After a change
+      # that is meant to move one of them, the values printed here are the new pins.
+      - name: The module and the asset are the ones pins.env pins
+        run: |
+          . "$TOOLCHAIN/pins.env"
+          {
+            echo
+            echo "| file | built | pinned |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          held() {
+            local seen bytes
+            seen="$(sha256sum "builds/smt-z3-build-a/$1" | cut -d' ' -f1)"
+            bytes="$(wc -c < "builds/smt-z3-build-a/$1" | tr -d ' ')"
+            echo "$1"
+            echo "  built:   $seen  $bytes bytes"
+            echo "  pinned:  ${2:-no pin}  ${3:-no size} bytes"
+            echo "| $1 | \`$seen\`, $bytes bytes | \`${2:-no pin}\`, ${3:-no size} bytes |" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$seen" != "$2" ] || [ "$bytes" != "$3" ]; then
+              echo "::error::$1 as built here is not the file pins.env pins"
+              status=1
+            fi
+          }
+          held "z3-$Z3_VERSION.wasm" "$Z3_MODULE_SHA256" "$Z3_MODULE_SIZE"
+          held smt-z3-wasm.zip "$SMT_Z3_WASM_SHA256" "$SMT_Z3_WASM_SIZE"
+          [ "$status" -eq 0 ] || exit 1
+          echo "the module and the asset are the pinned ones"
+
+      - name: The data asset, as a workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: smt-z3-wasm
+          path: |
+            builds/smt-z3-build-a/smt-z3-wasm.zip
+            builds/smt-z3-build-a/SHA256SUMS
+          if-no-files-found: error
+
+  # What is checked and run below is what a node is sent: the module out of the archive.
+  checks:
+    needs: compare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      TESTS: AI/OutWit.Controller.AI.Smt.Assets/toolchain/tests
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: smt-z3-wasm
+          path: ${{ runner.temp }}/asset
+
+      # The archive holds three files under wasm/ and nothing else, each the file the build
+      # hashed, and the module among them is the pinned one.
+      - name: What the archive holds
+        run: |
+          . "$TOOLCHAIN/pins.env"
+          cd "$RUNNER_TEMP/asset"
+          sha256sum -c --ignore-missing SHA256SUMS
+          unzip -Z1 smt-z3-wasm.zip | tee "$RUNNER_TEMP/names.txt"
+          printf '%s\n' "wasm/z3-$Z3_VERSION.wasm" wasm/LICENSE-z3.txt wasm/THIRD-PARTY-NOTICES-z3.txt > "$RUNNER_TEMP/expected.txt"
+          if ! cmp -s "$RUNNER_TEMP/names.txt" "$RUNNER_TEMP/expected.txt"; then
+            echo "::error::the archive does not hold exactly the module, its licence and its notices"
+            exit 1
+          fi
+          unzip -q smt-z3-wasm.zip -d "$RUNNER_TEMP/unpacked"
+          ( cd "$RUNNER_TEMP/unpacked/wasm" && sha256sum -c --ignore-missing "$RUNNER_TEMP/asset/SHA256SUMS" )
+          echo "$Z3_MODULE_SHA256  $RUNNER_TEMP/unpacked/wasm/z3-$Z3_VERSION.wasm" | sha256sum -c -
+          echo "MODULE=$RUNNER_TEMP/unpacked/wasm/z3-$Z3_VERSION.wasm" >> "$GITHUB_ENV"
+
+      # The texts are the folders a build on a runner works in, and the two a build by hand
+      # most likely would.
+      - name: What the module imports and carries
+        run: |
+          set +e
+          python3 -I "$TESTS/imports.py" "$MODULE" /home/ /tmp/ "$RUNNER_TEMP" "$GITHUB_WORKSPACE" > "$RUNNER_TEMP/module.txt" 2>&1
+          code=$?
+          cat "$RUNNER_TEMP/module.txt"
+          { echo "### the module"; echo; echo '```'; cat "$RUNNER_TEMP/module.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+
+  smoke:
+    needs: compare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TESTS: AI/OutWit.Controller.AI.Smt.Assets/toolchain/tests
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: smt-z3-wasm
+          path: ${{ runner.temp }}/asset
+
+      - name: The module out of the archive
+        run: |
+          . "$TOOLCHAIN/pins.env"
+          unzip -q "$RUNNER_TEMP/asset/smt-z3-wasm.zip" -d "$RUNNER_TEMP/unpacked"
+          echo "$Z3_MODULE_SHA256  $RUNNER_TEMP/unpacked/wasm/z3-$Z3_VERSION.wasm" | sha256sum -c -
+          echo "MODULE=$RUNNER_TEMP/unpacked/wasm/z3-$Z3_VERSION.wasm" >> "$GITHUB_ENV"
+
+      - name: wasmtime
+        run: |
+          . "$TOOLCHAIN/pins.env"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/wasmtime.tar.xz" "$WASMTIME_URL"
+          echo "$WASMTIME_SHA256  $RUNNER_TEMP/wasmtime.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/wasmtime"
+          tar -xJf "$RUNNER_TEMP/wasmtime.tar.xz" -C "$RUNNER_TEMP/wasmtime" --strip-components=1
+          "$RUNNER_TEMP/wasmtime/wasmtime" --version
+
+      # Under the engine's options of the sandbox with exceptions on: the version, sat with a
+      # model, unsat, an error the session survives, a resource limit answered as unknown, and
+      # Z3's memory ceiling ending the process with its code 101.
+      - name: Smoke
+        run: |
+          set +e
+          bash "$TESTS/smoke.sh" "$RUNNER_TEMP/wasmtime/wasmtime" "$MODULE" > "$RUNNER_TEMP/smoke.txt" 2>&1
+          code=$?
+          cat "$RUNNER_TEMP/smoke.txt"
+          { echo "### smoke"; echo; echo '```'; cat "$RUNNER_TEMP/smoke.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
