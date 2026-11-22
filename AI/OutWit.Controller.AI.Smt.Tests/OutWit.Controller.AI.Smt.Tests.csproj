@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Smt.Model\OutWit.Controller.AI.Smt.Model.csproj" />
+  </ItemGroup>
+
+</Project>
