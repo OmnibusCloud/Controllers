@@ -7,8 +7,12 @@ against specifications — on anonymous volunteer nodes. One primitive
 problem generation with CAS checking — generation and verification are the
 same activity with different programs.
 
-**Status: 1.0.0 (Verify.Model 1.0.0, Verify.Scripts 1.0.0) — the first release; not on
-nuget.org or the live network yet.** Its code is the code of 0.17.0, which ran on the test
+**Status: 1.0.1 (Verify.Model 1.0.0, Verify.Scripts 1.0.0) — not on nuget.org or the live
+network yet.** Its code is the code of 1.0.0, the first release: the sandbox host it compiles
+from shared source has two additions this controller does not use (an engine option, and a
+conversation over stdin), both off by default, and 1.0.1 changes nothing of the controller's
+behaviour, of its documents or of its wire types; the documents name the controller version
+1.0.1. The code of 1.0.0 is the code of 0.17.0, which ran on the test
 fleet on Windows x64, Linux x64 and macOS arm64 nodes, with a node that lied and one that
 answered nothing among them, and one change more: what compiling a task's own module may take
 in memory is estimated anew, and a module estimated over 1,536 MiB is refused before it

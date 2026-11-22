@@ -8,12 +8,14 @@ namespace OutWit.Controller.AI.Corpus.Tests.Docs;
 /// The scripts package's compatibility marker: the range of controller versions the bundled
 /// scripts work with, declared as a package reference so that a restore refuses a pair that
 /// cannot work. The range used to end at 1.0.0, exclusive: it would have refused the release the
-/// scripts wait for. The marker cannot be on while no controller of the range is on the feed the
-/// repository restores from, so until then it sits in the project file commented out, and this
-/// test reads it there: the range must admit this build and 1.0.0, must start at the first
-/// controller that feed has and no earlier than the scripts' activities, and a build after 1.0.0
-/// must have it on. A build of 1.0.0 itself may have it either way: the controller is version
-/// 1.0.0 before it is on nuget.org, and the marker is switched on once it is.
+/// scripts then waited for. The marker cannot be on while no controller of the range is on the
+/// feed the repository restores from, so until then it sits in the project file commented out,
+/// and this test reads it there: the range must admit this build and 1.0.1, must start at the
+/// first controller that feed has and no earlier than the scripts' activities, and a build after
+/// 1.0.1 must have it on. A build of 1.0.1 itself may have it either way: the controller is
+/// version 1.0.1 before it is on nuget.org, and the marker is switched on once it is. 1.0.0 is
+/// not published there: the first controller version nuget.org has is 1.0.1 at the earliest, and
+/// when a later one is, the release constant below and the marker's lower bound move to it.
 /// </summary>
 [TestFixture]
 public sealed class CorpusScriptsCompatibilityTests
@@ -30,8 +32,8 @@ public sealed class CorpusScriptsCompatibilityTests
     /// </summary>
     private const string FIRST_WITH_THE_SCRIPTS_ACTIVITIES = "0.9.0";
 
-    /// <summary>The release the candidates become, and the first controller version on nuget.org.</summary>
-    private const string RELEASE = "1.0.0";
+    /// <summary>The first controller version on nuget.org, at the earliest. (The release the candidates became is 1.0.0, which is not published there; 1.0.1 is its code.)</summary>
+    private const string RELEASE = "1.0.1";
 
     #endregion
 
@@ -72,7 +74,7 @@ public sealed class CorpusScriptsCompatibilityTests
 
         if (build == release)
         {
-            // The release is made in steps: the version moves to 1.0.0, the controller package
+            // The release is made in steps: the version moves to 1.0.1, the controller package
             // goes to nuget.org, the marker is switched on, the scripts package is packed. Before
             // the second step the marker on breaks the restore; after the third it is on.
             TestContext.Out.WriteLine($"The controller is {build}, the release itself: the marker is {(enabled ? "on" : "off until the controller package is on nuget.org")}.");

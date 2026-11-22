@@ -11,11 +11,16 @@ Every number on this page was measured, in the controller's tests or on a test f
 [README](../README.md) explains how things work inside; [safety.md](safety.md) is the same
 sandbox told for the people who lend their computers.
 
-Version described: **Verify 1.0.0** (with Verify.Model 1.0.0 and Verify.Scripts 1.0.0), the
-first release. Its code is the code of 0.17.0, which ran on the test fleet on Windows x64, Linux
+Version described: **Verify 1.0.1** (with Verify.Model 1.0.0 and Verify.Scripts 1.0.0). Its
+code is the code of 1.0.0, the first release: the sandbox host it compiles from shared source
+has two additions this controller does not use (an engine option, and a conversation over
+stdin), both off by default, and 1.0.1 changes nothing of the controller's behaviour, of its
+documents or of its wire types. The documents name the controller version 1.0.1, and a job runs
+on one controller version, so the server and the nodes move to 1.0.1 together. The code of
+1.0.0 is the code of 0.17.0, which ran on the test fleet on Windows x64, Linux
 x64 and macOS arm64 nodes, with one change more: the estimate of a compile's memory (below and
 section 9). The fleet figures on this page (scale, medians, pool rate) were
-measured before 0.13.0 and say so where they stand. 1.0.0 is not on nuget.org or on the live
+measured before 0.13.0 and say so where they stand. 1.0.1 is not on nuget.org or on the live
 network yet.
 
 What 1.0.0 changed for an application:
@@ -911,7 +916,7 @@ task of the kit is ended by a node's wall clock.
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 1.0.0 | `OutWit.Controller.AI.Verify` (nuget.org once released; the 0.x versions are on GitHub Packages only) |
+| The controller | 1.0.1 | `OutWit.Controller.AI.Verify` (nuget.org once released; 1.0.0 and the 0.x versions are on GitHub Packages only) |
 | The model and the scripts | 1.0.0 and 1.0.0 | `OutWit.Controller.AI.Verify.Model`, `OutWit.Controller.AI.Verify.Scripts` |
 | The engine | wasmtime long-term line 48: the .NET binding 48.0.2 over the native library 48.0.8, pinned by SHA-256 | natives per platform, release `wasmtime-v48.0.8-2` (8 to 10 MB each; the libraries of `wasmtime-v48.0.8`, byte for byte, with their third-party notices) |
 | The language runtimes | as in section 8 | `verify-wasm.zip`, release `verify-v0.15.0` (67.5 MB) |
@@ -945,4 +950,4 @@ How a deployment uses them:
   - in C/C++ and in a raw module by the engine's 8 MiB stack: some 90,000 to 170,000 levels for a small function. How many depends on the node (the trap mode, the processor architecture: section 9), so a recursion deeper than a few tens of thousands of levels can pass on one honest node and overflow on another.
 - The peak memory of a CPython task can differ by a page between hosts (section 10). Verdicts and outputs do not.
 - A run waits for its slowest share (section 11).
-- The code of 0.17.0 is proven on the test fleet; 1.0.0 is that code and the estimate of a compile's memory (section 9), held by the controller's tests on the three systems and to run on the fleet with the 1.0.0 builds. Its release to nuget.org and to the live network is the owner's decision.
+- The code of 0.17.0 is proven on the test fleet; 1.0.0 is that code and the estimate of a compile's memory (section 9), held by the controller's tests on the three systems and to run on the fleet with the 1.0.0 builds. 1.0.1 is the code of 1.0.0 (the top of this page), held by the same tests; it has not run on a fleet. A release to nuget.org and to the live network, of 1.0.1 or of a later version, is the owner's decision.

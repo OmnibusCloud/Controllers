@@ -10,7 +10,9 @@
   </PropertyGroup>
 
   <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md).
-       ENABLE WHEN THE CONTROLLER IS FIRST PUBLISHED TO NUGET.ORG, which is its 1.0.0. The range
+       ENABLE WHEN THE CONTROLLER IS FIRST PUBLISHED TO NUGET.ORG, which is its 1.0.1 at the
+       earliest (when a later version is the first one there, the lower bound moves to it
+       before the marker is enabled, and the test's constant with it). With that, the range
        is the one to enable as it stands. Lower bound: the first controller version that feed
        will have (the decision record: a lower bound no feed has is noise at every restore). The
        scripts themselves need what a controller has done since 0.9.0: they ask Corpus.Disputes
@@ -19,15 +21,15 @@
        Corpus.Integrity are from 0.7.0, packages and Corpus.ProcessPackage from 0.5.0. Upper
        bound: the next major, exclusive.
        NOT ENABLED YET, and it cannot be: the reference is restored from the feeds this
-       repository restores from, and no controller version of the range is on nuget.org (the 0.x
-       controller packages went to the organization's GitHub Packages feed only). Enabled now it
-       breaks the restore of this project, the publish job included. Enable it (remove the
-       comment marks around the ItemGroup, nothing else) as the first step after the controller
-       package of the release is on nuget.org, before this package is packed for it. A test
-       holds the range to the versions of the build, and fails a build of a controller after
-       1.0.0 in which the marker is still off (CorpusScriptsCompatibilityTests).
+       repository restores from, and no controller version of the range is on nuget.org (the
+       0.x and 1.0.0 controller packages went to the organization's GitHub Packages feed only).
+       Enabled now it breaks the restore of this project, the publish job included. Enable it
+       (remove the comment marks around the ItemGroup, nothing else) as the first step after the
+       controller package of the release is on nuget.org, before this package is packed for it.
+       A test holds the range to the versions of the build, and fails a build of a controller
+       after 1.0.1 in which the marker is still off (CorpusScriptsCompatibilityTests).
   <ItemGroup>
-    <PackageReference Include="OutWit.Controller.AI.Corpus" Version="[1.0.0, 2.0.0)" />
+    <PackageReference Include="OutWit.Controller.AI.Corpus" Version="[1.0.1, 2.0.0)" />
   </ItemGroup>
   -->
 
