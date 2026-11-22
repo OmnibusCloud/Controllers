@@ -32,7 +32,7 @@ internal sealed class SmtModelMutants
 
     #region Fields
 
-    private readonly SmtProblem m_problem;
+    private readonly SmtEvaluationProblem m_problem;
     private readonly IReadOnlyList<SmtExpression> m_model;
     private readonly IReadOnlyList<SmtExpression> m_values;
     private readonly List<(string Sort, string Name)> m_elements = [];
@@ -47,7 +47,7 @@ internal sealed class SmtModelMutants
     /// <param name="fixture">The fixture.</param>
     public SmtModelMutants(SmtFixture fixture)
     {
-        m_problem = SmtProblemReader.Read(SmtCheck.Commands(fixture.Problem));
+        m_problem = SmtEvaluationProblemReader.Read(SmtCheck.Commands(fixture.Problem));
         m_model = fixture.Model == null ? [] : SmtReader.Read(fixture.Model, SmtReaderLimits.Unbounded).Single().Items;
         m_values = fixture.Values == null ? [] : SmtReader.Read(fixture.Values, SmtReaderLimits.Unbounded).Single().Items;
 

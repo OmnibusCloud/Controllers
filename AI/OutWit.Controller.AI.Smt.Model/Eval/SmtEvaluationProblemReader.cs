@@ -3,7 +3,7 @@ using OutWit.Controller.AI.Smt.Model.Lang;
 namespace OutWit.Controller.AI.Smt.Model.Eval;
 
 /// <summary>
-/// Reads the commands of a problem into what the evaluator needs (<see cref="SmtProblem"/>). It
+/// Reads the commands of a problem into what the evaluator needs (<see cref="SmtEvaluationProblem"/>). It
 /// takes the commands a sanitized problem keeps: <c>set-logic</c>, <c>set-info</c>,
 /// declarations and definitions of sorts, datatypes and functions, and <c>assert</c>. It never
 /// throws: a command it cannot make sense of, any other command, or a name with two meanings
@@ -13,7 +13,7 @@ namespace OutWit.Controller.AI.Smt.Model.Eval;
 /// stack, and a sort is read to a fixed depth.
 /// </para>
 /// </summary>
-internal sealed class SmtProblemReader
+internal sealed class SmtEvaluationProblemReader
 {
     #region Constants
 
@@ -51,13 +51,13 @@ internal sealed class SmtProblemReader
     /// </summary>
     /// <param name="commands">The problem's commands, in order.</param>
     /// <returns>What the problem says; with a fault when no model of it can be checked.</returns>
-    public static SmtProblem Read(IReadOnlyList<SmtExpression> commands)
+    public static SmtEvaluationProblem Read(IReadOnlyList<SmtExpression> commands)
     {
-        var reader = new SmtProblemReader();
+        var reader = new SmtEvaluationProblemReader();
         foreach (var command in commands)
             reader.ReadCommand(command);
 
-        return new SmtProblem(reader.Sorts, reader.Resolver, reader.m_symbols, reader.m_declared, reader.m_assertions, reader.m_fault);
+        return new SmtEvaluationProblem(reader.Sorts, reader.Resolver, reader.m_symbols, reader.m_declared, reader.m_assertions, reader.m_fault);
     }
 
     /// <summary>

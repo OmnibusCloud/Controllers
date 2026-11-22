@@ -188,7 +188,8 @@ public class SmtModelTests
     {
         var validator = new SmtModelValidator([]);
 
-        Assert.Throws<ArgumentNullException>(() => _ = new SmtModelValidator(null!));
+        Assert.Throws<ArgumentNullException>(() => _ = new SmtModelValidator((IReadOnlyList<SmtExpression>)null!));
+        Assert.Throws<ArgumentNullException>(() => _ = new SmtModelValidator((SmtProblem)null!));
         Assert.Throws<ArgumentNullException>(() => validator.Validate(null!, SmtEvaluationBudget.Default));
         Assert.Throws<ArgumentNullException>(() => validator.Validate(SmtCheck.Model(null), null!));
         Assert.That(validator.Validate(SmtCheck.Model(null), SmtEvaluationBudget.Default).Class, Is.EqualTo(SmtValidationClass.Validated));

@@ -30,14 +30,25 @@ public sealed class SmtModelValidator
 {
     #region Fields
 
-    private readonly SmtProblem m_problem;
+    private readonly SmtEvaluationProblem m_problem;
 
     #endregion
 
     #region Constructors
 
     /// <summary>
-    /// Reads a problem once, for any number of models.
+    /// Reads a problem the sanitizer took, once, for any number of models.
+    /// </summary>
+    /// <param name="problem">The problem as the sanitizer took it: its kept commands are what is evaluated.</param>
+    /// <exception cref="ArgumentNullException">The problem is null.</exception>
+    public SmtModelValidator(SmtProblem problem)
+    {
+        ArgumentNullException.ThrowIfNull(problem);
+        m_problem = SmtEvaluationProblemReader.Read(problem.Commands);
+    }
+
+    /// <summary>
+    /// Reads a problem from its commands once, for any number of models.
     /// </summary>
     /// <param name="commands">
     /// The commands a sanitized problem keeps, in order: <c>set-logic</c>, <c>set-info</c>,
@@ -48,7 +59,7 @@ public sealed class SmtModelValidator
     public SmtModelValidator(IReadOnlyList<SmtExpression> commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
-        m_problem = SmtProblemReader.Read(commands);
+        m_problem = SmtEvaluationProblemReader.Read(commands);
     }
 
     #endregion

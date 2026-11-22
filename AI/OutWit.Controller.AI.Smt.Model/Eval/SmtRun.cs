@@ -18,7 +18,7 @@ internal sealed class SmtRun
     /// <param name="problem">The problem.</param>
     /// <param name="model">The model, readable.</param>
     /// <param name="budget">What the validation may spend.</param>
-    public SmtRun(SmtProblem problem, SmtModel model, SmtEvaluationBudget budget)
+    public SmtRun(SmtEvaluationProblem problem, SmtModel model, SmtEvaluationBudget budget)
     {
         Problem = problem;
         Model = model;
@@ -53,7 +53,7 @@ internal sealed class SmtRun
     #region Properties
 
     /// <summary>The problem.</summary>
-    public SmtProblem Problem { get; }
+    public SmtEvaluationProblem Problem { get; }
 
     /// <summary>The model.</summary>
     public SmtModel Model { get; }

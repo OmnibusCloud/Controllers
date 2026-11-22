@@ -29,7 +29,7 @@ internal static class SmtDatatypeReader
     /// <param name="reader">The problem being read.</param>
     /// <param name="name">The datatype's name as written.</param>
     /// <param name="body">Its constructors, or <c>par</c> around them.</param>
-    public static void DeclareOne(SmtProblemReader reader, SmtExpression name, SmtExpression body)
+    public static void DeclareOne(SmtEvaluationProblemReader reader, SmtExpression name, SmtExpression body)
     {
         if (!TryBody(body, -1, out var parameters, out var constructors))
         {
@@ -46,7 +46,7 @@ internal static class SmtDatatypeReader
     /// <param name="reader">The problem being read.</param>
     /// <param name="first">The items of the command's first list: sort declarations (2.6) or sort parameters (2.5).</param>
     /// <param name="second">The items of its second list: bodies (2.6) or datatypes with their constructors (2.5).</param>
-    public static void DeclareTogether(SmtProblemReader reader, IReadOnlyList<SmtExpression> first, IReadOnlyList<SmtExpression> second)
+    public static void DeclareTogether(SmtEvaluationProblemReader reader, IReadOnlyList<SmtExpression> first, IReadOnlyList<SmtExpression> second)
     {
         var group = new List<(SmtExpression Name, string[] Parameters, IReadOnlyList<SmtExpression> Constructors)>();
         var read = first.Count > 0 && first[0].IsList ? TryCurrentForm(first, second, group) : TryOlderForm(first, second, group);
@@ -83,7 +83,7 @@ internal static class SmtDatatypeReader
     private static bool TryOlderForm(IReadOnlyList<SmtExpression> parameters, IReadOnlyList<SmtExpression> datatypes,
         List<(SmtExpression Name, string[] Parameters, IReadOnlyList<SmtExpression> Constructors)> group)
     {
-        if (!SmtProblemReader.TryNames(SmtExpression.List(parameters), out var names))
+        if (!SmtEvaluationProblemReader.TryNames(SmtExpression.List(parameters), out var names))
             return false;
 
         foreach (var datatype in datatypes)
@@ -117,7 +117,7 @@ internal static class SmtDatatypeReader
 
         if (SmtTerms.StartsWithReserved(body, SmtVocabulary.PAR))
         {
-            if (body.Items.Count != 3 || !body.Items[2].IsList || !SmtProblemReader.TryNames(body.Items[1], out parameters) || parameters.Length == 0)
+            if (body.Items.Count != 3 || !body.Items[2].IsList || !SmtEvaluationProblemReader.TryNames(body.Items[1], out parameters) || parameters.Length == 0)
                 return false;
 
             constructors = body.Items[2].Items;
@@ -130,7 +130,7 @@ internal static class SmtDatatypeReader
         return constructors.Count > 0 && (arity < 0 || arity == parameters.Length);
     }
 
-    private static void Declare(SmtProblemReader reader, IReadOnlyList<(SmtExpression Name, string[] Parameters, IReadOnlyList<SmtExpression> Constructors)> group)
+    private static void Declare(SmtEvaluationProblemReader reader, IReadOnlyList<(SmtExpression Name, string[] Parameters, IReadOnlyList<SmtExpression> Constructors)> group)
     {
         // The names first: the datatypes of one command may use each other.
         var datatypes = new List<SmtDatatype>(group.Count);
@@ -169,7 +169,7 @@ internal static class SmtDatatypeReader
             ResolveFields(reader, datatype);
     }
 
-    private static bool TryConstructor(SmtProblemReader reader, SmtDatatype datatype, SmtExpression constructor)
+    private static bool TryConstructor(SmtEvaluationProblemReader reader, SmtDatatype datatype, SmtExpression constructor)
     {
         var name = constructor.IsList && constructor.Items.Count > 0 ? constructor.Items[0] : constructor;
         if (!SmtTerms.IsSymbol(name))
@@ -204,7 +204,7 @@ internal static class SmtDatatypeReader
     /// One with parameters is a sort for each list of arguments: its fields are read when a
     /// value of such a sort is met.
     /// </summary>
-    private static void ResolveFields(SmtProblemReader reader, SmtDatatype datatype)
+    private static void ResolveFields(SmtEvaluationProblemReader reader, SmtDatatype datatype)
     {
         if (datatype.Parameters.Count > 0)
             return;

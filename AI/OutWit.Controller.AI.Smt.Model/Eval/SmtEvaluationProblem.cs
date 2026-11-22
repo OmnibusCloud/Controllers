@@ -7,12 +7,12 @@ namespace OutWit.Controller.AI.Smt.Model.Eval;
 /// for, and the assertions. Read once from the problem's commands and then only read, by any
 /// number of validations at once.
 /// </summary>
-internal sealed class SmtProblem
+internal sealed class SmtEvaluationProblem
 {
     #region Constructors
 
     /// <summary>
-    /// Creates the account of a problem; <see cref="SmtProblemReader"/> does.
+    /// Creates the account of a problem; <see cref="SmtEvaluationProblemReader"/> does.
     /// </summary>
     /// <param name="sorts">The problem's sorts.</param>
     /// <param name="resolver">How a sort as written is read.</param>
@@ -20,7 +20,7 @@ internal sealed class SmtProblem
     /// <param name="declared">The names the problem declares, in order: what a model interprets.</param>
     /// <param name="assertions">The asserted terms, in order.</param>
     /// <param name="fault">Why no model of the problem can be checked, or null.</param>
-    public SmtProblem(SmtSortTable sorts, SmtSortResolver resolver, IReadOnlyDictionary<string, SmtSymbol> symbols,
+    public SmtEvaluationProblem(SmtSortTable sorts, SmtSortResolver resolver, IReadOnlyDictionary<string, SmtSymbol> symbols,
         IReadOnlyList<string> declared, IReadOnlyList<SmtExpression> assertions, string? fault)
     {
         Sorts = sorts;

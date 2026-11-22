@@ -77,7 +77,7 @@ internal static class SmtCheck
     /// <exception cref="SmtPartialException">The term is not evaluated to a value.</exception>
     public static SmtValue Evaluate(string term, string declarations = "")
     {
-        var problem = SmtProblemReader.Read(Commands(declarations));
+        var problem = SmtEvaluationProblemReader.Read(Commands(declarations));
         var run = new SmtRun(problem, Model(null), SmtEvaluationBudget.Default);
         return run.Evaluator.Eval(Commands(term).Single(), null, 1);
     }
