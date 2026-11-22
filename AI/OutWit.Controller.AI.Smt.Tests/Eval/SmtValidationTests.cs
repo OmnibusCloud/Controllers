@@ -106,7 +106,7 @@ public class SmtValidationTests
         Assert.That(budget.MaxStringCharacters, Is.EqualTo(SmtEvaluationBudget.DEFAULT_STRING_CHARACTERS));
         Assert.That(budget.MaxArrayEntries, Is.EqualTo(SmtEvaluationBudget.DEFAULT_ARRAY_ENTRIES));
         Assert.That(budget.MaxDepth, Is.LessThanOrEqualTo(SmtEvaluationBudget.DEPTH_CEILING));
-        Assert.That(budget.MaxDepth, Is.GreaterThan(SmtReaderLimits.PROBLEM_DEPTH));
+        Assert.That(SmtEvaluationBudget.DEPTH_CEILING, Is.GreaterThan(SmtReaderLimits.PROBLEM_DEPTH));
     }
 
     [Test]

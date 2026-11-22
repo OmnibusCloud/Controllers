@@ -87,12 +87,27 @@ public class SmtModelValidatorDepthTests
         Assert.That(past.Reason, Is.EqualTo(SmtValidationReasons.BUDGET_DEPTH));
     }
 
-    [Test]
-    public void DefaultCeilingIsAboveTheDeepestProblemThatCanBeReadTest()
+    [TestCase("let")]
+    [TestCase("and")]
+    public void TermNestedToTheHighestCeilingIsEvaluatedTest(string shape)
     {
-        // Whatever shape a problem nests in, its own nesting does not end a validation.
-        Assert.That(SmtEvaluationBudget.Default.MaxDepth, Is.GreaterThan(SmtReaderLimits.Problem.MaxDepth));
-        Assert.That(SmtEvaluationBudget.Default.MaxDepth, Is.GreaterThan(100_000));
+        // The evaluation's thread is sized for the ceiling it counts against, up to the
+        // highest a budget can ask for.
+        var budget = new SmtEvaluationBudget { MaxDepth = SmtEvaluationBudget.DEPTH_CEILING };
+
+        var at = Validate(Nested(shape, SmtEvaluationBudget.DEPTH_CEILING - 1), budget);
+
+        Assert.That(at.Class, Is.Not.EqualTo(SmtValidationClass.Partial), at.ToString());
+    }
+
+    [Test]
+    public void HighestCeilingIsAboveTheDeepestProblemThatCanBeReadTest()
+    {
+        // A budget can be given room for whatever shape a problem that was read nests in. The
+        // default is lower: the shapes real problems nest deep in are chains, which need none.
+        Assert.That(SmtEvaluationBudget.DEPTH_CEILING, Is.GreaterThan(SmtReaderLimits.Problem.MaxDepth));
+        Assert.That(SmtEvaluationBudget.Default.MaxDepth, Is.EqualTo(32_768));
+        Assert.That(SmtEvaluationBudget.Default.MaxDepth, Is.LessThan(SmtEvaluationBudget.DEPTH_CEILING));
     }
 
     #endregion
@@ -125,7 +140,7 @@ public class SmtModelValidatorDepthTests
     public void ProblemWrittenAsAChainOfLetIsEvaluatedWhateverItsLengthTest()
     {
         // Each let names a term that uses the one before, as a tool writes them; the body of
-        // the last one compares the result. The chain is deeper than the nesting ceiling.
+        // the last one compares the result. The chain is deeper than the highest ceiling.
         const int length = 150_000;
         var symbol = SmtExpression.Symbol;
         var body = SmtCheck.Commands($"(and (= v{length} (+ x {length})) (> v{length / 2} x))").Single();
@@ -140,7 +155,7 @@ public class SmtModelValidatorDepthTests
 
         var validation = new SmtModelValidator(commands).Validate(SmtCheck.Model(null, "((x 7))"), SmtEvaluationBudget.Default);
 
-        Assert.That(length, Is.GreaterThan(SmtEvaluationBudget.Default.MaxDepth));
+        Assert.That(length, Is.GreaterThan(SmtEvaluationBudget.DEPTH_CEILING));
         Assert.That(validation.Class, Is.EqualTo(SmtValidationClass.Validated), validation.ToString());
     }
 

@@ -25,18 +25,21 @@ public sealed class SmtEvaluationBudget : ModelBase
     public const long DEFAULT_STEPS = 20_000_000;
 
     /// <summary>
-    /// The highest nesting ceiling a budget can ask for, and the default one: the evaluation's
-    /// thread is sized for it, half a gigabyte of stack of which only what a term really nests
-    /// is ever used. It is above the deepest nesting a problem can be read with, so the nesting
-    /// of a problem's own terms does not end a validation by itself; the body of a definition
-    /// adds its nesting at every call, and a call itself counts two levels. The chains real
-    /// terms are written as (nested let, ite, and, or) are evaluated without nesting, and are
-    /// not bounded by the ceiling at all.
+    /// The default nesting ceiling. The shapes that nest deep in real problems are chains
+    /// (nested let, ite, and, or), which are evaluated without nesting and are not bounded by
+    /// the ceiling at all; what it bounds is a term in a term in a place that is walked by a
+    /// call, and the calls of definitions, each of which counts two levels. The evaluation's
+    /// thread reserves its stack for the ceiling, an eighth of a gigabyte here, and uses of it
+    /// only what a term really nests: a server that runs many validations at once reserves
+    /// that much for each.
+    /// </summary>
+    public const int DEFAULT_DEPTH = 32_768;
+
+    /// <summary>
+    /// The highest nesting ceiling a budget can ask for: half a gigabyte of reserved stack. It
+    /// is above the deepest nesting a problem can be read with.
     /// </summary>
     public const int DEPTH_CEILING = 131_072;
-
-    /// <summary>The default nesting ceiling: the highest one.</summary>
-    public const int DEFAULT_DEPTH = DEPTH_CEILING;
 
     /// <summary>
     /// The default ceiling of an integer, or of the numerator and the denominator of a
