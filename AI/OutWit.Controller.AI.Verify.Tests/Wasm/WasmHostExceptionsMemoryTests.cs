@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using OutWit.Controller.AI.Wasm;
 
@@ -11,7 +12,8 @@ namespace OutWit.Controller.AI.Verify.Tests.Wasm;
 /// nothing else, the numbers are an observation of one machine, not a bound. The bound is the
 /// second test: the store's cap of a memory holds the heap of the exceptions as it holds the
 /// linear memory, each on its own, so a guest that keeps its exceptions is refused more at the
-/// cap.
+/// cap. That one is held by what the run did (its verdict, and how far its fuel says it came),
+/// not by the process's memory, which every platform counts in its own way.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -24,9 +26,6 @@ public sealed class WasmHostExceptionsMemoryTests
     private const long ONE_PAGE = 65536;
     private const int WALL_MS = 120_000;
     private const int SAMPLE_MS = 1;
-
-    /// <summary>What the process may grow by while a guest is refused at a cap of one page: far above the noise of a test process, far below what the guest asked for.</summary>
-    private const long HELD_BOUND_BYTES = 4L << 20;
 
     #endregion
 
@@ -101,7 +100,7 @@ public sealed class WasmHostExceptionsMemoryTests
             Assert.That(many.Outcome.Fault, Is.EqualTo(WasmHost.ENGINE_ERROR_FAULT));
             Assert.That(many.Outcome.EngineError?.Message, Does.Contain("GC heap out of memory"));
             Assert.That(many.Outcome.PeakMemoryBytes, Is.EqualTo(ONE_PAGE));
-            Assert.That(many.Highest.Private - many.Before.Private, Is.LessThan(HELD_BOUND_BYTES), "a hundred thousand kept exceptions would be 6 MiB and more");
+            Assert.That(many.Outcome.FuelConsumed, Is.LessThan(50 * few.Outcome.FuelConsumed), "it was stopped within a few times what a page holds: far from its hundred thousand, which are a thousand times the fuel of a hundred");
         });
     }
 
@@ -180,12 +179,20 @@ public sealed class WasmHostExceptionsMemoryTests
     /// <param name="Working">The bytes it has in physical memory.</param>
     private readonly record struct Sample(long Private, long Working)
     {
-        /// <summary>Reads the process's memory now.</summary>
+        /// <summary>Reads the process's memory now; zeros where the platform does not say.</summary>
         /// <returns>The sample.</returns>
         public static Sample Now()
         {
-            using var process = Process.GetCurrentProcess();
-            return new Sample(process.PrivateMemorySize64, process.WorkingSet64);
+            try
+            {
+                using var process = Process.GetCurrentProcess();
+                return new Sample(process.PrivateMemorySize64, process.WorkingSet64);
+            }
+            catch (Exception exception) when (exception is PlatformNotSupportedException or NotSupportedException or InvalidOperationException or Win32Exception)
+            {
+                // An observation: a platform that cannot be asked fails no test.
+                return default;
+            }
         }
 
         /// <summary>The higher of each number of two samples.</summary>

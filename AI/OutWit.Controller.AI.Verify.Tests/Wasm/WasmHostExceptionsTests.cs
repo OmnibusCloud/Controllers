@@ -172,7 +172,7 @@ public sealed class WasmHostExceptionsTests
         // 48.0.2): what a callee had used was given back when its exception was caught, so a
         // program that did its work in callees that throw ran on almost no fuel. Measured with
         // the 48.0.2 library of the binding's package, on these two loops without their exit:
-        // ten thousand rounds (30 million units of work) ran to their end on 100,002 units, and
+        // ten thousand rounds (80 million units of work) ran to their end on 100,002 units, and
         // a hundred rounds were counted as 1,002 units, where the pinned library counts 801,202.
         // A native library with the defect fails both halves of this test. (A loop in the handler
         // itself, the test above, was charged by that library as well.)
@@ -185,7 +185,7 @@ public sealed class WasmHostExceptionsTests
         TestContext.Out.WriteLine($"a hundred rounds of {TURNS} turns and a throw: {finished.FuelConsumed} units of fuel");
         Assert.Multiple(() =>
         {
-            Assert.That(stopped.Verdict, Is.EqualTo(WasmHostVerdict.OutOfFuel), "ten thousand rounds are thirty times the budget");
+            Assert.That(stopped.Verdict, Is.EqualTo(WasmHostVerdict.OutOfFuel), "ten thousand rounds are eighty times the budget");
             Assert.That(stopped.FuelConsumed, Is.EqualTo(SMALL_FUEL));
             Assert.That(finished.Verdict, Is.EqualTo(WasmHostVerdict.Exited), finished.Stderr);
             Assert.That(finished.ExitCode, Is.EqualTo(WasmHostExceptionModules.FINISHED_EXIT));
