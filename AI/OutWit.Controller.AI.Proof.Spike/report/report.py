@@ -251,6 +251,34 @@ def main() -> int:
         hard += compare(V1, "The three platforms the client ships")
         compare(ORDER, "All six")
 
+        # Platform by platform against the one that checked the most items: a platform that ran
+        # under a time budget has checked a prefix of the same mixed order.
+        reference = max(data, key=lambda rid: (len(data[rid]), -ORDER.index(rid)))
+        rows = []
+        for rid, items in data.items():
+            if rid == reference:
+                continue
+            common = [item for item in items if item in data[reference]]
+            seen = [(outcome(items[item]), outcome(data[reference][item])) for item in common]
+            same = sum(1 for a, b in seen if a == b)
+            against = sum(1 for a, b in seen if a != b and "accepted" in (a, b) and {a, b} & DECIDED_AGAINST)
+            pairs = [(items[item].get("heartbeats"), data[reference][item].get("heartbeats")) for item in common
+                     if not {outcome(items[item]), outcome(data[reference][item])} & MACHINE]
+            pairs = [(a, b) for a, b in pairs if a is not None and b is not None]
+            equal = sum(1 for a, b in pairs if a == b)
+            widest = max([abs(a - b) for a, b in pairs] or [0])
+            accepted = [item for item in common if outcome(items[item]) == outcome(data[reference][item]) == "accepted"]
+            terms = sum(1 for item in accepted if items[item].get("value_hash") == data[reference][item].get("value_hash"))
+            errors = sum(1 for item in common if items[item].get("error_digest") == data[reference][item].get("error_digest"))
+            hard += against
+            rows.append([rid, len(common), same, against, len(common) - same - against, f"{equal} of {len(pairs)}",
+                         widest, f"{terms} of {len(accepted)}", f"{errors} of {len(common)}"])
+        if rows:
+            out += [f"Each platform against {reference} (the items both checked):", ""] + table(
+                ["platform", "items in common", "same verdict", "accepted against decided", "other differences",
+                 "same heartbeat count", "widest difference, heartbeats", "same proof term (hash)",
+                 "same error messages (digest)"], rows)
+
         # the list's own expectation (what the selecting runner said, by the fresh-process path)
         rows = []
         for rid, items in data.items():

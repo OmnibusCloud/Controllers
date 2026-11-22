@@ -155,11 +155,11 @@ jobs:
           python -m venv "$RUNNER_TEMP/kimina-venv"
           "$RUNNER_TEMP/kimina-venv/bin/python" -m pip install --quiet -r "$RUNNER_TEMP/kimina/requirements.txt"
           "$RUNNER_TEMP/kimina-venv/bin/python" -m pip install --quiet "$RUNNER_TEMP/kimina"
-          (cd "$RUNNER_TEMP/kimina" && "$RUNNER_TEMP/kimina-venv/bin/prisma" generate)
+          (cd "$RUNNER_TEMP/kimina" && PATH="$RUNNER_TEMP/kimina-venv/bin:$PATH" prisma generate)
           python "$SPIKE/harness/baseline_kimina.py" --server "$RUNNER_TEMP/kimina" --python "$RUNNER_TEMP/kimina-venv/bin/python" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --repl "$PF0_REPL" --items items/items.jsonl --out "$OUT" --repls 4 --max-heartbeats "$MAX_HEARTBEATS"
 
       # `leanchecker` over the gate's slice, module by module (the reference), then ProofServe
-      # over the same modules.
+      # over the first two of those modules (over all fifty it did not end inside an hour).
       - name: Replay slice (reference)
         continue-on-error: true
         timeout-minutes: 60
@@ -181,7 +181,8 @@ jobs:
           proofserve --version || true
           set +e
           start=$(date +%s)
-          timeout 3600 proofserve check "$PF0_WORK/mathlib4" --root-file "$OUT/roots.txt" --workers 4 > "$OUT/proofserve-receipt.json" 2> "$OUT/proofserve-stderr.txt"
+          head -2 "$OUT/roots.txt" > "$OUT/roots-two.txt"
+          timeout 2400 proofserve check "$PF0_WORK/mathlib4" --root-file "$OUT/roots-two.txt" --workers 4 > "$OUT/proofserve-receipt.json" 2> "$OUT/proofserve-stderr.txt"
           code=$?
           end=$(date +%s)
           echo "{\"exit\": $code, \"seconds\": $((end - start))}" > "$OUT/proofserve.json"

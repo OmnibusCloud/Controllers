@@ -101,8 +101,17 @@ def main() -> int:
             if stripped and len(stripped) < 140 and any(word in stripped.lower() for word in words):
                 if stripped not in named:
                     named.append(stripped)
+        phrases = ("is under the", "is distributed under", "are distributed under", "is licensed under",
+                   "are licensed under", "is released under")
+        components = []
+        for line in text.splitlines():
+            stripped = " ".join(line.split())
+            if stripped and len(stripped) < 160 and any(phrase in stripped for phrase in phrases):
+                if stripped not in components:
+                    components.append(stripped)
         record["licenses_file"] = {"bytes": len(text.encode("utf-8")), "sha256": sha256_file(notices),
-                                   "lines": text.count("\n"), "named": named[:200]}
+                                   "lines": text.count("\n"), "components": components[:120],
+                                   "named": named[:60]}
 
     versions = {}
     for program, args in (("lean", ["--version"]), ("lake", ["--version"]), ("leanc", ["--version"]),
