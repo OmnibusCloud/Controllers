@@ -187,9 +187,12 @@ internal sealed class WasmHost : IDisposable
     /// <returns>How the run ended and what it cost.</returns>
     /// <exception cref="IOException">The capture folder or the file stdout goes to cannot be used, or one of the host's own calls failed (a host fault, not the guest's).</exception>
     /// <exception cref="InvalidOperationException">A preopened folder cannot be opened (a host fault, not the guest's).</exception>
-    /// <exception cref="ArgumentException">Some of the run's folders have a table of names and some have none.</exception>
+    /// <exception cref="ArgumentException">Some of the run's folders have a table of names and some have none, or the run has a conversation together with a stdin text or a file for its stdout.</exception>
     public WasmHostRunOutcome Run(WasmModule module, WasmHostRunRequest request)
     {
+        // Before anything of the run is made: a request that cannot hold its conversation.
+        WasmHostConversationInput.ThrowIfRefused(request);
+
         // The host may live as long as the process, its capture folder in the host's temp
         // storage. A cloud client sweeps that storage whenever it reloads its controllers on an
         // idle node (every controller check, every reconnect), so the folder may be gone between

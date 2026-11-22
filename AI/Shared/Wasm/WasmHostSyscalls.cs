@@ -9,6 +9,8 @@ namespace OutWit.Controller.AI.Wasm;
 /// <list type="bullet">
 /// <item>stdout and stderr are the host's own streams, capped at the write
 /// (<see cref="WasmHostOutput"/>): nothing a guest prints past its cap is stored anywhere;</item>
+/// <item>in a run that holds a conversation, and in no other, the reads of stdin are answered
+/// from what the caller gives (<see cref="WasmHostConversationInput"/>);</item>
 /// <item>a path is resolved by the host first (<see cref="WasmHostFiles"/>): in a folder with a
 /// table of names only the names of the table exist, and nothing can be made or changed there;</item>
 /// <item>a file's record says nothing of the host: no times, no device, a file number that
@@ -63,6 +65,7 @@ internal sealed class WasmHostSyscalls : IDisposable
     private readonly WasmHostOutput m_stdout;
     private readonly WasmHostOutput m_stderr;
     private readonly WasmHostRandom m_random;
+    private readonly WasmHostConversationInput? m_input;
 
     private long m_written;
 
@@ -90,6 +93,7 @@ internal sealed class WasmHostSyscalls : IDisposable
         m_stdout = request.StdoutFile == null
             ? new WasmHostOutput(request.StdoutLimitBytes)
             : new WasmHostOutput(request.StdoutFile, request.StdoutLimitBytes);
+        m_input = request.Conversation == null ? null : new WasmHostConversationInput(request.Conversation, m_stdout, meter, m_wasi);
     }
 
     #endregion
@@ -159,6 +163,10 @@ internal sealed class WasmHostSyscalls : IDisposable
                 catch (Exception exception) when (Note(exception)) { throw; }
             });
         }
+
+        // A run with a conversation, and no other, has its reads of descriptor 0 answered from
+        // it: defined after the reads above, so that it stands over them.
+        m_input?.Define(linker, Read, Note);
 
         if (m_request.WritableLimitBytes > 0)
         {
@@ -338,6 +346,9 @@ internal sealed class WasmHostSyscalls : IDisposable
         var result = m_wasi.Forward(caller, () => m_wasi.FdClose!(descriptor));
         if (result == WasmHostErrno.SUCCESS)
             m_files.Closed(descriptor);
+
+        if (result == WasmHostErrno.SUCCESS)
+            m_input?.Closed(descriptor);
 
         return result;
     }

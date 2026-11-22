@@ -95,6 +95,22 @@ internal sealed class WasmHostOutput : IDisposable
         return m_file != null ? "" : Encoding.UTF8.GetString(m_buffer, 0, (int)m_kept);
     }
 
+    /// <summary>
+    /// The kept bytes from a position on, for a reader that follows the stream while the run goes
+    /// on (a run's conversation): what was kept since it last looked, and nothing of what the cap
+    /// dropped. The span is the stream's own memory: it holds until the guest writes again.
+    /// </summary>
+    /// <param name="position">How many of the kept bytes the reader has seen; less than 0 reads from the start.</param>
+    /// <returns>The bytes kept after them; none when there are none, and none for a stream written to a file.</returns>
+    public ReadOnlySpan<byte> KeptFrom(long position)
+    {
+        var start = Math.Max(0, position);
+        if (m_file != null || start >= m_kept)
+            return [];
+
+        return m_buffer.AsSpan((int)start, (int)(m_kept - start));
+    }
+
     #endregion
 
     #region IDisposable
