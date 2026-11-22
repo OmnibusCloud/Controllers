@@ -3,7 +3,8 @@ using System.Globalization;
 namespace OutWit.Controller.AI.Smt.Model.Lang;
 
 /// <summary>
-/// The rules every atom of a kept command, and of a term, is held to: the places where a text
+/// The rules every atom of a command the solver is given, and of a term, is held to (a
+/// <c>set-info</c> never reaches the solver and is not held to them): the places where a text
 /// that is good SMT-LIB means something else to the solver, or asks it for something of a size
 /// no problem needs.
 /// <list type="bullet">
@@ -37,7 +38,7 @@ internal static class SmtTokenRules
     /// <summary>
     /// Holds every atom of an s-expression to the rules.
     /// </summary>
-    /// <param name="root">A kept command, or a term.</param>
+    /// <param name="root">A command the solver is given, or a term.</param>
     /// <param name="command">The command's name for the refusal, or empty for a term.</param>
     /// <returns>The refusal of the first atom that breaks a rule, or null.</returns>
     public static SmtRefusalData? Check(SmtExpression root, string command)

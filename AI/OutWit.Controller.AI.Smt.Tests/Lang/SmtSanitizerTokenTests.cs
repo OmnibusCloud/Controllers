@@ -24,7 +24,6 @@ public class SmtSanitizerTokenTests
                 ($"(define-fun f ((|{word}| Int)) Int 1)", "define-fun", 1),
                 ($"(assert\n (and a\n  (or b (|{word}| c))))", "assert", 3),
                 ($"(assert |{word}|)", "assert", 1),
-                ($"(set-info :source |{word}|)", "set-info", 1),
                 ($"(set-logic |{word}|)", "set-logic", 1),
                 ($"(declare-datatype D ((mk (|{word}| Int))))", "declare-datatype", 1)
             };
@@ -71,7 +70,6 @@ public class SmtSanitizerTokenTests
     [TestCase("(declare-const -5 Int)", "-5")]
     [TestCase("(declare-const |-7| Int)", "-7")]
     [TestCase("(declare-const x -1)", "-1")]
-    [TestCase("(set-info :version -1)", "-1")]
     [TestCase("(assert -5)", "-5")]
     public void SymbolThatStartsWithAMinusAndADigitRefusesTheProblemTest(string text, string token)
     {
@@ -125,7 +123,7 @@ public class SmtSanitizerTokenTests
 
         foreach (var (content, reason) in cases)
         {
-            foreach (var (text, command) in new[] { ($"(assert\n (= s \"{content}\"))", "assert"), ($"(set-info\n :source \"{content}\")", "set-info") })
+            foreach (var (text, command) in new[] { ($"(assert\n (= s \"{content}\"))", "assert"), ($"(define-fun f () String\n \"{content}\")", "define-fun") })
             {
                 var refusal = SmtSanitizerChecks.Refuse(text, SmtRefusalCodes.NON_ASCII_STRING);
 
@@ -176,7 +174,6 @@ public class SmtSanitizerTokenTests
     [TestCase("(assert (= x (_ bv0 70000)))", "70000")]
     [TestCase("(assert ((_ divisible 65537) x))", "65537")]
     [TestCase("(define-fun f ((x (_ BitVec 99999))) Bool true)", "99999")]
-    [TestCase("(set-info :note (_ a 99999))", "99999")]
     public void IndexAboveTheWidestBitVectorRefusesTheProblemTest(string text, string index)
     {
         var refusal = SmtSanitizerChecks.Refuse("(set-logic QF_BV)\n" + text, SmtRefusalCodes.INDEX_TOO_LARGE);
@@ -209,6 +206,53 @@ public class SmtSanitizerTokenTests
         var refusal = SmtSanitizerChecks.Refuse($"(declare-const x (_ BitVec 1{new string('0', 4_000)}))", SmtRefusalCodes.INDEX_TOO_LARGE);
 
         Assert.That(refusal.Reason, Is.EqualTo("the index 1" + new string('0', 60) + "... is above the 65536 allowed"));
+    }
+
+    #endregion
+
+    #region Information Tests
+
+    [Test]
+    public void InformationIsNotHeldToTheTokenRulesTest()
+    {
+        // The rules are about what the solver reads, and no set-info reaches it: an author's
+        // name outside ASCII, or anything else of a piece of information, is kept as read.
+        const string text =
+            "(set-info :source \"S\u00f8ren Kierkeg\u00e5rd, \u00a9 2025 \ud83d\ude00\")\n" +
+            "(set-info :license |let|)\n" +
+            "(set-info :version -1)\n" +
+            "(set-info :note (_ a 99999))\n" +
+            "(set-info :authors (|forall| \"\u00e9\" -5 (_ b 1048576) |_| |-7|))\n" +
+            "(assert true)\n";
+
+        var problem = SmtSanitizerChecks.Accept(text);
+
+        Assert.That(problem.Canonical, Is.EqualTo(text.Replace("|-7|", "-7")));
+        Assert.That(problem.SolverText, Is.EqualTo("(assert true)\n"));
+        Assert.That(problem.Source, Is.EqualTo("S\u00f8ren Kierkeg\u00e5rd, \u00a9 2025 \ud83d\ude00"));
+        Assert.That(problem.License, Is.EqualTo("let"));
+        Assert.That(problem.Hash, Is.EqualTo(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(problem.Canonical)))));
+        SmtSanitizerChecks.HoldProperties(problem);
+    }
+
+    [Test]
+    public void InformationIsStillHeldToItsShapeTest()
+    {
+        Assert.That(SmtSanitizerChecks.Refuse("(set-info \"\u00e9\")", SmtRefusalCodes.COMMAND_MALFORMED).Command, Is.EqualTo("set-info"));
+        Assert.That(SmtSanitizerChecks.Refuse("(set-info |let| 1)", SmtRefusalCodes.COMMAND_MALFORMED).Command, Is.EqualTo("set-info"));
+        Assert.That(SmtSanitizerChecks.Refuse("(set-info :a -5 -6)", SmtRefusalCodes.COMMAND_MALFORMED).Command, Is.EqualTo("set-info"));
+    }
+
+    [Test]
+    public void EveryOtherKeptCommandIsHeldToTheTokenRulesTest()
+    {
+        // set-logic is the solver's too: only set-info is left out.
+        SmtSanitizerChecks.Refuse("(set-logic |let|)", SmtRefusalCodes.RESERVED_SYMBOL);
+        SmtSanitizerChecks.Refuse("(set-logic -5)", SmtRefusalCodes.AMBIGUOUS_TOKEN);
+        SmtSanitizerChecks.Refuse("(declare-sort |-5| 0)", SmtRefusalCodes.AMBIGUOUS_TOKEN);
+        SmtSanitizerChecks.Refuse("(define-sort T () (_ BitVec 99999))", SmtRefusalCodes.INDEX_TOO_LARGE);
+        SmtSanitizerChecks.Refuse("(declare-datatype D ((mk (get (_ BitVec 99999)))))", SmtRefusalCodes.INDEX_TOO_LARGE);
+        SmtSanitizerChecks.Refuse("(define-funs-rec ((f () String)) (\"\u00e9\"))", SmtRefusalCodes.NON_ASCII_STRING);
     }
 
     #endregion

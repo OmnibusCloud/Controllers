@@ -12,7 +12,9 @@ namespace OutWit.Controller.AI.Smt.Model.Lang;
 /// when it is known and for being unknown when it is not; no command is passed on unexamined.
 /// </para>
 /// <para>
-/// A kept command is held to the standard's shape and to the rules of <see cref="SmtRefusalCodes"/>:
+/// A kept command is held to the standard's shape, and a command the solver is given to the
+/// rules of single tokens as well (<see cref="SmtRefusalCodes"/>; a <c>set-info</c> never
+/// reaches the solver and is kept as it was read):
 /// where good SMT-LIB would mean something else to the solver, the problem is refused, not
 /// reinterpreted. A refusal names the line, the command, a fixed code and a reason; it never
 /// carries the text. Nothing here throws for a bad text, and nothing recurses on nesting.

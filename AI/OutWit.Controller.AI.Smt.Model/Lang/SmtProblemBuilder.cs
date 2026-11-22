@@ -4,8 +4,9 @@ namespace OutWit.Controller.AI.Smt.Model.Lang;
 /// Takes the top-level forms of a text one by one and makes a problem of them, or refuses the
 /// first one that breaks a rule. For each form, in this order: it is a command; its name is
 /// written without bars; it is kept, stripped or refused by its name; a kept command does not
-/// stand after the problem's end; its atoms pass the token rules, in the order of the text; its
-/// shape is the standard's; the names it declares are the problem's own and not too many.
+/// stand after the problem's end; the atoms of a command the solver is given pass the token
+/// rules, in the order of the text; a kept command's shape is the standard's; the names it
+/// declares are not too many.
 /// <para>
 /// A problem ends at its first <c>check-sat</c> and at its <c>exit</c>. After <c>exit</c> a
 /// solver runs nothing, so a command there is part of the text and not of what a solver given
@@ -80,7 +81,10 @@ internal sealed class SmtProblemBuilder
         if (m_exited || m_checked)
             return SmtRefusals.Of(SmtRefusalCodes.COMMAND_AFTER_END, form.Line, head, m_exited ? REASON_AFTER_EXIT : REASON_AFTER_CHECK);
 
-        var refusal = SmtTokenRules.Check(form, head) ?? CheckShape(form, head) ?? CheckNames(form, head);
+        // The rules of single tokens are about what the solver reads. A piece of information never
+        // reaches it: it is held to its shape, and kept as it was read.
+        var tokens = SmtCommandPolicy.IsForSolver(head) ? SmtTokenRules.Check(form, head) : null;
+        var refusal = tokens ?? CheckShape(form, head) ?? CheckNames(form, head);
         if (refusal == null)
             Keep(form, head);
 

@@ -120,10 +120,10 @@ symbol of a term, and it is written back as it was read.
 | `command_not_allowed` | a command that is neither kept nor stripped; a command name between bars (`(\|assert\| ...)`) |
 | `command_after_end` | a kept command after `check-sat` (a script that goes on after a check is incremental: its first answer is for less than the whole text) or after `exit` (a solver runs nothing after it). Stripped commands may follow either |
 | `command_malformed` | a kept command in another shape than the standard's |
-| `reserved_symbol` | a general reserved word between bars (`\|let\|`, `\|_\|`), anywhere in a kept command: an ordinary symbol by the standard, the reserved word to the solver |
-| `ambiguous_token` | a symbol that starts with a minus sign and a digit (`-5`), anywhere in a kept command: a symbol by the standard, a negative number to the solver |
-| `non_ascii_string` | a string literal with a character outside printable ASCII, the tab and the line breaks: the theory of strings takes such a character as the escape `\u{...}` |
-| `index_too_large` | an index above 65,536 in a list that starts with `_`: a bit-vector's width, an extension, a repetition, a rotation, and every other index |
+| `reserved_symbol` | a general reserved word between bars (`\|let\|`, `\|_\|`), anywhere in a command the solver is given or in a term: an ordinary symbol by the standard, the reserved word to the solver |
+| `ambiguous_token` | a symbol that starts with a minus sign and a digit (`-5`), anywhere in a command the solver is given or in a term: a symbol by the standard, a negative number to the solver |
+| `non_ascii_string` | in a command the solver is given or in a term, a string literal with a character outside printable ASCII, the tab and the line breaks: the theory of strings takes such a character as the escape `\u{...}` |
+| `index_too_large` | in a command the solver is given or in a term, an index above 65,536 in a list that starts with `_`: a bit-vector's width, an extension, a repetition, a rotation, and every other index |
 | `too_many_symbols` | more than 100,000 declared names: constants, functions and sorts (declared or defined), datatypes, their constructors and their selectors |
 | `reserved_prefix` | a declared name that starts with `oc!`, the prefix of the controller's own names |
 | `not_a_term` | a text given as one term holds no s-expression, or more than one |
@@ -132,6 +132,10 @@ Where good SMT-LIB would mean something else to the solver than to the standard,
 refused, not reinterpreted. The first thing in the text that breaks a rule is the one named; a
 text that is not SMT-LIB is refused as such whatever commands it starts with. A stripped or
 refused command is not looked into.
+
+The rules of single tokens are about what the solver reads. A `set-info` never reaches it, so
+it is held to its shape only and kept as it was read: a `:source` with an author's name
+outside ASCII is taken, and the canonical text and the hash carry it as UTF-8.
 
 ### The canonical form and its hash
 
