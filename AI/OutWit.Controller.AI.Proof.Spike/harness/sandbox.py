@@ -78,7 +78,7 @@ def main() -> int:
     checks["write_inside"] = brief(run_measured(policy + ["/usr/bin/sh", "-c", f"echo ok > {scratch}/inside.txt && cat {scratch}/inside.txt"], timeout=60))
     checks["write_outside"] = brief(run_measured(policy + ["/usr/bin/sh", "-c", f"echo no > {outside}"], timeout=60))
     checks["write_outside"]["file_exists"] = os.path.exists(outside)
-    checks["read_outside"] = brief(run_measured(policy + ["/usr/bin/sh", "-c", "ls /home > /dev/null"], timeout=60))
+    checks["read_outside"] = brief(run_measured(policy + ["/usr/bin/ls", os.path.expanduser("~")], timeout=60))
     for name, code in (("tcp", TCP), ("udp", UDP)):
         checks[name + "_plain"] = brief(run_measured([python, "-c", code], timeout=60))
         checks[name + "_sandboxed"] = brief(run_measured(policy + [python, "-c", code], timeout=60))

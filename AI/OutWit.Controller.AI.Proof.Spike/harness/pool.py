@@ -129,7 +129,7 @@ def worker(index: int, options: argparse.Namespace, env: dict, items: "queue.Que
             if not start():
                 break
         heartbeats = item.get("max_heartbeats") or options.max_heartbeats
-        body, spans = assemble_body(item, heartbeats)
+        body, spans = assemble_body(item, options.max_heartbeats)
         cap = item.get("hard_cap_s") or options.hard_cap
         began = time.monotonic()
         answer = repl.ask({"cmd": body, "env": record["env"]}, cap)
@@ -150,6 +150,9 @@ def worker(index: int, options: argparse.Namespace, env: dict, items: "queue.Que
             row = classify(item, to_lean_messages(answer), spans, allow_native=options.allow_native)
         row.update({"id": item["id"], "path": "pool", "worker": index, "max_heartbeats": heartbeats,
                     "wall_s": round(took, 4)})
+        for key in ("expect", "class", "made"):
+            if key in item:
+                row[key] = item[key]
         writer.write(row)
         if served % options.sample_every == 0:
             sample = repl.memory()

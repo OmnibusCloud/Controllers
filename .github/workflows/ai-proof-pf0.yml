@@ -1,5 +1,5 @@
 name: AI Proof PF-0
-run-name: "AI Proof PF-0: ${{ github.ref_name }}"
+run-name: "AI Proof PF-0: ${{ github.ref_name }}${{ inputs.select && ' (select)' || '' }}"
 
 # The PF-0 gate of the Proof controller (a spike): the official Lean release and Mathlib's
 # compiled environment of AI/OutWit.Controller.AI.Proof.Spike/pins.env on six platforms, measured.
@@ -7,6 +7,11 @@ run-name: "AI Proof PF-0: ${{ github.ref_name }}"
 
 on:
   workflow_dispatch:
+    inputs:
+      select:
+        description: "Choose the golden set anew from the pinned dataset file (writes the list as an artifact)"
+        type: boolean
+        default: false
   push:
     branches:
       - spike/proof-pf0
@@ -19,45 +24,147 @@ permissions:
 
 # A newer push supersedes the run before it.
 concurrency:
-  group: ai-proof-pf0-${{ github.ref }}
+  group: ai-proof-pf0-${{ github.ref }}-${{ inputs.select && 'select' || 'gate' }}
   cancel-in-progress: true
 
 env:
   SPIKE: AI/OutWit.Controller.AI.Proof.Spike
   PYTHONUTF8: 1
   PYTHONDONTWRITEBYTECODE: 1
-  # The items the stages below work on, and the ones that go through the two-stage split.
-  ITEMS: AI/OutWit.Controller.AI.Proof.Spike/golden/smoke-mathlib.jsonl
-  SPLIT_IDS: m-linarith,m-nlinarith,m-nlinarith3,m-norm-num,m-positivity,m-omega,m-simp,m-ring,m-aesop,m-incomplete,m-mismatch,m-axiom,m-native
+  # The budget of the golden set, in thousands of heartbeats (the dataset's own proofs were
+  # made under this figure; Lean's default is 200000).
+  MAX_HEARTBEATS: 400000
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  platform:
-    name: ${{ matrix.rid }} (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: ubuntu-24.04, rid: linux-x64, processes: 6 }
-          - { os: windows-2022, rid: win-x64, processes: 6 }
-          - { os: macos-15, rid: osx-arm64, processes: 3 }
-          - { os: ubuntu-24.04-arm, rid: linux-arm64, processes: 6 }
-          - { os: macos-15-intel, rid: osx-x64, processes: 4 }
-          - { os: windows-11-arm, rid: win-arm64, processes: 3 }
-    runs-on: ${{ matrix.os }}
+  # Run once (workflow_dispatch, select = true): a seeded sample of the dataset's proved items is
+  # checked on one runner and the golden set is chosen from the outcome. The list it writes is
+  # committed; the texts never are.
+  select:
+    if: ${{ inputs.select }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 340
     env:
-      RID: ${{ matrix.rid }}
-      OUT: results-${{ matrix.rid }}
+      RID: linux-x64
+      OUT: selection
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.14'
+
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+
+      - name: Lean toolchain
+        run: python "$SPIKE/harness/toolchain.py" "$RID" "$PF0_WORK/toolchain" "$OUT/toolchain.json"
+
+      - name: Measuring prelude
+        run: python "$SPIKE/harness/smoke.py" prelude --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
+
+      - name: Mathlib environment
+        run: python "$SPIKE/harness/mathlib.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --skip-hash
+
+      - name: Dataset file
+        run: |
+          . "$SPIKE/pins.env"
+          curl -fsSL --retry 3 --max-time 900 -o "$RUNNER_TEMP/numina.parquet" "$NUMINA_URL"
+          echo "$NUMINA_SHA256  $RUNNER_TEMP/numina.parquet" | sha256sum -c -
+          python -m pip install --quiet pyarrow
+          python -m pip freeze | grep -i pyarrow
+
+      - name: Choose the set
+        run: |
+          python "$SPIKE/golden/select.py" --parquet "$RUNNER_TEMP/numina.parquet" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --max-heartbeats "$MAX_HEARTBEATS"
+          cat "$OUT/select-report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: golden-selection
+          path: selection
+          retention-days: 14
+          if-no-files-found: warn
+
+  # The golden set's texts, rebuilt from the pinned dataset file by the committed list and handed
+  # to the platform jobs as an artifact. Nothing of them is committed.
+  data:
+    if: ${{ !inputs.select }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      ready: ${{ steps.list.outputs.ready }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+
+      - name: Is there a list
+        id: list
+        run: |
+          if [ -f "$SPIKE/golden/list.tsv" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "$(($(wc -l < "$SPIKE/golden/list.tsv") - 1)) items listed"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "no list yet: run the workflow with select = true and commit its list.tsv"
+          fi
+
+      - name: Rebuild the texts
+        if: steps.list.outputs.ready == 'true'
+        run: |
+          . "$SPIKE/pins.env"
+          curl -fsSL --retry 3 --max-time 900 -o "$RUNNER_TEMP/numina.parquet" "$NUMINA_URL"
+          echo "$NUMINA_SHA256  $RUNNER_TEMP/numina.parquet" | sha256sum -c -
+          python -m pip install --quiet pyarrow
+          python -m pip freeze | grep -i pyarrow
+          python "$SPIKE/golden/fetch.py" --parquet "$RUNNER_TEMP/numina.parquet" --list "$SPIKE/golden/list.tsv" --out items/items.jsonl --attribution items/ATTRIBUTION.tsv
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.list.outputs.ready == 'true'
+        with:
+          name: golden-items
+          path: items
+          retention-days: 7
+          if-no-files-found: error
+
+  platform:
+    needs: data
+    name: ${{ matrix.rid }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, rid: linux-x64, jobs: 4, processes: 6, every: 1 }
+          - { os: windows-2022, rid: win-x64, jobs: 3, processes: 6, every: 1 }
+          - { os: macos-15, rid: osx-arm64, jobs: 1, processes: 2, every: 1 }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64, jobs: 4, processes: 6, every: 1 }
+          - { os: macos-15-intel, rid: osx-x64, jobs: 3, processes: 4, every: 1 }
+          - { os: windows-11-arm, rid: win-arm64, jobs: 3, processes: 3, every: 1 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 350
+    env:
+      RID: ${{ matrix.rid }}
+      OUT: results-${{ matrix.rid }}
+      GOLDEN: ${{ needs.data.outputs.ready }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.data.outputs.ready == 'true'
+        with:
+          name: golden-items
+          path: items
 
       - name: Machine
         run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
@@ -94,14 +201,44 @@ jobs:
 
       - name: Start-up of one process
         if: always() && steps.mathlib.outcome == 'success'
-        timeout-minutes: 60
+        timeout-minutes: 75
         run: python "$SPIKE/harness/startup.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
 
       - name: Mathlib smoke, both paths
         id: smoke
         if: always() && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success'
         timeout-minutes: 60
-        run: python "$SPIKE/harness/smoke.py" run --set mathlib --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --repl "$PF0_REPL"
+        run: python "$SPIKE/harness/smoke.py" run --set mathlib --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --repl "$PF0_REPL" --jobs ${{ matrix.jobs }}
+
+      # What is known so far, before the long steps.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: early-${{ matrix.rid }}
+          path: results-${{ matrix.rid }}
+          retention-days: 3
+          if-no-files-found: warn
+
+      # The golden set through the fresh-process path: the verdicts and heartbeats that are
+      # compared across the platforms.
+      - name: Golden set, one process per item
+        id: golden
+        if: always() && env.GOLDEN == 'true' && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success'
+        timeout-minutes: 240
+        run: python "$SPIKE/harness/check.py" --lean-root "$LEAN_ROOT" --lean-path "$PF0_WORK/prelude" --lean-path-file "$PF0_WORK/leanpath.json" --import Mathlib --items items/items.jsonl --out "$OUT/golden-fresh.jsonl" --work "$PF0_WORK/golden" --jobs ${{ matrix.jobs }} --max-heartbeats "$MAX_HEARTBEATS" --every ${{ matrix.every }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() && steps.golden.outcome == 'success'
+        with:
+          name: golden-${{ matrix.rid }}
+          path: results-${{ matrix.rid }}/golden-fresh.jsonl
+          retention-days: 14
+
+      # The same items through the pool path: the same number of processes, each importing once.
+      - name: Golden set, pooled processes
+        if: always() && env.GOLDEN == 'true' && steps.mathlib.outcome == 'success' && steps.repl.outcome == 'success' && steps.prelude.outcome == 'success'
+        timeout-minutes: 120
+        run: python "$SPIKE/harness/pool.py" --repl "$PF0_REPL" --bin "$LEAN_ROOT/bin" --lean-path "$PF0_WORK/prelude" --lean-path-file "$PF0_WORK/leanpath.json" --import Mathlib --items items/items.jsonl --out "$OUT/golden-pool.jsonl" --work "$PF0_WORK/golden-pool" --workers ${{ matrix.jobs }} --max-heartbeats "$MAX_HEARTBEATS" --every ${{ matrix.every }}
 
       # One environment, built elsewhere, replayed by this platform's kernel.
       - name: Replay a slice of the environment
@@ -113,28 +250,14 @@ jobs:
       - name: Check and export
         id: export
         if: always() && steps.mathlib.outcome == 'success'
-        timeout-minutes: 120
-        run: python "$SPIKE/harness/split.py" export --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items "$ITEMS" --ids "$SPLIT_IDS" --out "$OUT" --exports "exports-$RID" --paranoid ${{ matrix.rid == 'linux-x64' && '3' || '0' }}
-
-      - name: Memory of several processes
-        if: always() && steps.mathlib.outcome == 'success' && steps.repl.outcome == 'success' && steps.prelude.outcome == 'success'
-        timeout-minutes: 60
-        run: python "$SPIKE/harness/degree.py" --repl "$PF0_REPL" --bin "$LEAN_ROOT/bin" --lean-path-file "$PF0_WORK/leanpath.json" --lean-path "$PF0_WORK/prelude" --import Mathlib --work "$PF0_WORK/degree" --out "$OUT/degree.json" --max ${{ matrix.processes }} --items "$ITEMS"
-
-      - name: Sandbox (Linux)
-        if: always() && runner.os == 'Linux' && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success'
-        timeout-minutes: 60
+        timeout-minutes: 150
         run: |
-          python "$SPIKE/harness/tools.py" landrun --rid "$RID" --work "$PF0_WORK" --out "$OUT"
-          python "$SPIKE/harness/sandbox.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --landrun "$PF0_WORK/landrun/landrun"
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: results-${{ matrix.rid }}
-          path: results-${{ matrix.rid }}
-          retention-days: 14
-          if-no-files-found: warn
+          if [ "$GOLDEN" = "true" ]; then
+            python "$SPIKE/harness/split.py" choose --items items/items.jsonl --ids "$OUT/split-ids.txt"
+            python "$SPIKE/harness/split.py" export --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items items/items.jsonl --ids "$OUT/split-ids.txt" --out "$OUT" --exports "exports-$RID" --max-heartbeats "$MAX_HEARTBEATS" --paranoid ${{ matrix.rid == 'linux-x64' && '5' || '0' }}
+          else
+            python "$SPIKE/harness/split.py" export --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items "$SPIKE/golden/smoke-mathlib.jsonl" --ids m-linarith,m-nlinarith,m-nlinarith3,m-norm-num,m-positivity,m-omega,m-simp,m-ring,m-aesop,m-incomplete,m-mismatch,m-axiom,m-native --out "$OUT" --exports "exports-$RID" --paranoid ${{ matrix.rid == 'linux-x64' && '3' || '0' }}
+          fi
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always() && steps.export.outcome == 'success'
@@ -144,25 +267,51 @@ jobs:
           retention-days: 3
           if-no-files-found: warn
 
+      - name: Memory of several processes
+        if: always() && steps.mathlib.outcome == 'success' && steps.repl.outcome == 'success' && steps.prelude.outcome == 'success'
+        timeout-minutes: 60
+        run: python "$SPIKE/harness/degree.py" --repl "$PF0_REPL" --bin "$LEAN_ROOT/bin" --lean-path-file "$PF0_WORK/leanpath.json" --lean-path "$PF0_WORK/prelude" --import Mathlib --work "$PF0_WORK/degree" --out "$OUT/degree.json" --max ${{ matrix.processes }} --items "$SPIKE/golden/smoke-mathlib.jsonl"
+
+      - name: Sandbox (Linux)
+        if: always() && runner.os == 'Linux' && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success'
+        timeout-minutes: 90
+        run: |
+          python "$SPIKE/harness/tools.py" landrun --rid "$RID" --work "$PF0_WORK" --out "$OUT"
+          if [ "$GOLDEN" = "true" ]; then
+            python "$SPIKE/harness/sandbox.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --landrun "$PF0_WORK/landrun/landrun" --items items/items.jsonl --limit 200 --jobs ${{ matrix.jobs }}
+          else
+            python "$SPIKE/harness/sandbox.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --landrun "$PF0_WORK/landrun/landrun"
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: results-${{ matrix.rid }}
+          path: results-${{ matrix.rid }}
+          retention-days: 14
+          if-no-files-found: warn
+
   # Stage two of the split, on another operating system and CPU: the export of one machine is
   # judged against the challenge on a machine that never saw the solution's text.
   confirm:
-    needs: platform
-    if: always()
+    needs: [data, platform]
+    if: always() && needs.data.result == 'success'
     name: confirm ${{ matrix.from }} on ${{ matrix.rid }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { from: linux-x64, os: macos-15, rid: osx-arm64 }
+          - { from: linux-x64, os: macos-15-intel, rid: osx-x64 }
           - { from: linux-x64, os: windows-2022, rid: win-x64 }
           - { from: win-x64, os: ubuntu-24.04-arm, rid: linux-arm64 }
           - { from: osx-arm64, os: ubuntu-24.04, rid: linux-x64 }
+          - { from: linux-arm64, os: macos-15, rid: osx-arm64 }
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 180
+    timeout-minutes: 240
     env:
       RID: ${{ matrix.rid }}
       OUT: confirm-${{ matrix.from }}-on-${{ matrix.rid }}
+      GOLDEN: ${{ needs.data.outputs.ready }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -174,6 +323,12 @@ jobs:
         with:
           name: exports-${{ matrix.from }}
           path: exports
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.data.outputs.ready == 'true'
+        with:
+          name: golden-items
+          path: items
 
       - name: Machine
         run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
@@ -198,8 +353,11 @@ jobs:
           bwrap --ro-bind / / --unshare-all /usr/bin/true && echo "bwrap starts with user namespaces let through" || echo "bwrap still does not start"
 
       - name: Confirm
-        timeout-minutes: 120
-        run: python "$SPIKE/harness/split.py" confirm --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items "$ITEMS" --exports exports --out "$OUT" --label "${{ matrix.from }}-on-$RID" --sandbox
+        timeout-minutes: 180
+        run: |
+          ITEMS="$SPIKE/golden/smoke-mathlib.jsonl"
+          if [ "$GOLDEN" = "true" ]; then ITEMS=items/items.jsonl; fi
+          python "$SPIKE/harness/split.py" confirm --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items "$ITEMS" --exports exports --out "$OUT" --label "${{ matrix.from }}-on-$RID" --max-heartbeats "$MAX_HEARTBEATS" --sandbox
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
@@ -208,3 +366,37 @@ jobs:
           path: confirm-${{ matrix.from }}-on-${{ matrix.rid }}
           retention-days: 14
           if-no-files-found: warn
+
+  # Every platform's records side by side: the same verdicts, the same heartbeats, the same
+  # environment bytes.
+  report:
+    needs: [platform, confirm]
+    if: always() && needs.platform.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: results-*
+          path: results
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: confirm-*
+          path: results
+
+      - name: Report
+        run: |
+          set +e
+          python3 -I "$SPIKE/report/report.py" results > report.md
+          code=$?
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: proof-pf0-report
+          path: report.md

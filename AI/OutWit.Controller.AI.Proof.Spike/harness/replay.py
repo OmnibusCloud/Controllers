@@ -23,6 +23,7 @@ import sys
 
 from pf0lib import EXE, lean_environment, run_measured, write_json
 
+# A literal of 20 digits or more does not fit a machine word (2^64 has 20 digits).
 DIGITS = re.compile(r"(?<![\w.])\d{20,}(?![\w.])")
 
 
@@ -58,6 +59,8 @@ def choose(source: str, count_random: int, count_bignum: int, seed: int) -> list
     bignum = [(name, "bignum", -longest) for longest, _count, name in ranked[:count_bignum]]
     taken = {name for name, _kind, _digits in bignum}
     rest = [name for name in leaves if name not in taken]
+    # The modules with long literals are few: the seeded choice fills the slice up.
+    count_random += count_bignum - len(bignum)
     chosen = random.Random(seed).sample(rest, min(count_random, len(rest)))
     return bignum + [(name, "random", 0) for name in sorted(chosen)]
 
@@ -101,12 +104,18 @@ def main() -> int:
               "cpu_s": round(sum(row["user_s"] + row["sys_s"] for row in rows), 2),
               "peak_rss_max": max(row["peak_rss"] for row in rows) if rows else 0}
     if options.together and rows:
-        out = run_measured([checker] + [name for name, _kind, _digits in chosen], env=env, cwd=source, timeout=7200)
-        record["together"] = {"exit": out["exit"], "wall_s": out["wall_s"], "user_s": out["user_s"],
-                              "sys_s": out["sys_s"], "peak_rss": out["peak_rss"],
-                              "peak_private": out.get("peak_private"),
-                              "output": (out["stdout"] + out["stderr"])[-400:] if out["exit"] != 0 else ""}
-        print(f"together: {record['together']}")
+        # `leanchecker` replays several modules in one process, each as a task: tried with a
+        # few modules and with the whole slice.
+        record["together"] = []
+        for count in (2, 5, len(chosen)):
+            names = [name for name, _kind, _digits in chosen[:count]]
+            out = run_measured([checker] + names, env=env, cwd=source, timeout=3600)
+            entry = {"modules": len(names), "exit": out["exit"], "killed": out["killed"], "wall_s": out["wall_s"],
+                     "user_s": out["user_s"], "sys_s": out["sys_s"], "peak_rss": out["peak_rss"],
+                     "peak_private": out.get("peak_private"),
+                     "output": (out["stdout"] + out["stderr"])[-400:] if out["exit"] != 0 else ""}
+            record["together"].append(entry)
+            print(f"together: {entry}", flush=True)
     write_json(os.path.join(options.out, "replay.json"), record)
     print(f"replayed {record['replayed']} of {len(rows)} modules, {record['wall_s']} s in all, "
           f"largest peak {record['peak_rss_max'] >> 20} MiB")

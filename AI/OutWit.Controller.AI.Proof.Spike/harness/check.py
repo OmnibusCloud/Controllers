@@ -20,12 +20,13 @@ import shlex
 import sys
 import time
 
-from pf0lib import JsonlWriter, assemble, classify, lean_environment, parse_messages, read_jsonl, run_measured
+from pf0lib import (EXE, JsonlWriter, assemble, classify, lean_environment, parse_messages, read_jsonl,
+                    run_measured, write_json)
 
 
 def check_one(item: dict, options: argparse.Namespace, env: dict) -> dict:
     heartbeats = item.get("max_heartbeats") or options.max_heartbeats
-    text, spans = assemble(item, options.imports + ["PF0"], heartbeats)
+    text, spans = assemble(item, options.imports + ["PF0"], options.max_heartbeats)
     name = f"{item['id']}.lean"
     path = os.path.join(options.work, name)
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
@@ -55,6 +56,9 @@ def check_one(item: dict, options: argparse.Namespace, env: dict) -> dict:
     })
     if "peak_private" in out:
         row["peak_private"] = out["peak_private"]
+    for key in ("expect", "class", "made"):
+        if key in item:
+            row[key] = item[key]
     if not options.keep:
         try:
             os.remove(path)
@@ -65,7 +69,8 @@ def check_one(item: dict, options: argparse.Namespace, env: dict) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lean", required=True)
+    parser.add_argument("--lean", default="")
+    parser.add_argument("--lean-root", default="", help="the toolchain root (instead of --lean)")
     parser.add_argument("--lean-path", action="append", default=[])
     parser.add_argument("--lean-path-file", default="", help="a JSON list of search folders")
     parser.add_argument("--items", required=True)
@@ -88,6 +93,8 @@ def main() -> int:
     parser.add_argument("--bin", default="", help="the toolchain's bin folder, put first on PATH")
     options = parser.parse_args()
     options.wrap = shlex.split(options.wrap)
+    if not options.lean:
+        options.lean = os.path.join(os.path.abspath(options.lean_root), "bin", "lean" + EXE)
     options.work = os.path.abspath(options.work)
     os.makedirs(options.work, exist_ok=True)
 
@@ -109,17 +116,30 @@ def main() -> int:
     started = time.monotonic()
     counts = {}
     done = 0
+    peaks = []
+    privates = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=options.jobs) as pool:
         for row in pool.map(lambda item: check_one(item, options, env), items):
             writer.write(row)
             key = row["verdict"] or row["status"]
             counts[key] = counts.get(key, 0) + 1
+            peaks.append(row.get("peak_rss") or 0)
+            privates.append(row.get("peak_private") or 0)
             done += 1
             if done % 25 == 0 or done == len(items):
                 print(f"{done}/{len(items)} in {time.monotonic() - started:.0f} s: {counts}", flush=True)
     writer.close()
     elapsed = time.monotonic() - started
     rate = 60.0 * len(items) / elapsed if elapsed > 0 else 0.0
+    peaks.sort()
+    privates.sort()
+    write_json(os.path.splitext(options.out)[0] + "-summary.json", {
+        "items": len(items), "jobs": options.jobs, "elapsed_s": round(elapsed, 2),
+        "items_per_minute": round(rate, 2), "verdicts": counts, "wrapped": bool(options.wrap),
+        "elab_async": options.elab_async, "threads": options.threads,
+        "peak_rss_median": peaks[len(peaks) // 2] if peaks else 0, "peak_rss_max": peaks[-1] if peaks else 0,
+        "peak_private_median": privates[len(privates) // 2] if privates else 0,
+        "peak_private_max": privates[-1] if privates else 0})
     print(f"fresh path: {len(items)} items, {options.jobs} at a time, {elapsed:.1f} s, "
           f"{rate:.1f} items per minute: {counts}")
     return 0

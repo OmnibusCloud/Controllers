@@ -205,8 +205,10 @@ def live_memory(proc: subprocess.Popen) -> dict:
                     if len(parts) >= 2 and parts[0].rstrip(":") in (
                             "Rss", "Pss", "Private_Clean", "Private_Dirty", "Shared_Clean", "Anonymous"):
                         out[parts[0].rstrip(":").lower()] = int(parts[1]) * 1024
-            if "private_clean" in out and "private_dirty" in out:
-                out["private"] = out["private_clean"] + out["private_dirty"]
+            # Pages of a compiled file that only this process maps count as private and clean:
+            # they are the file, not the process. What the process alone answers for is dirty.
+            if "private_dirty" in out:
+                out["private"] = out["private_dirty"]
             return out
         return {}
     except (OSError, ValueError):
@@ -401,7 +403,8 @@ def parse_messages(stdout: str) -> list:
 def assemble_body(item: dict, max_heartbeats: int) -> tuple[str, dict]:
     """The text of one item after the imports, and the line spans of its parts.
 
-    The budget is set first (a trusted line: a candidate may not set it). The challenge is
+    The budget is set by trusted lines (a candidate may not set it): the profile's budget for
+    the challenge, the item's own for the solution when it has one. The challenge is
     elaborated in a namespace of its own, so that its statement and the solution's can be
     compared in one environment; each command is wrapped in the measuring command of the
     prelude, which reports the heartbeats that command used on its thread. The same text goes
@@ -421,6 +424,8 @@ def assemble_body(item: dict, max_heartbeats: int) -> tuple[str, dict]:
     lines.append("namespace PF0C")
     add("c", item["challenge"])
     lines.append("end PF0C")
+    if item.get("max_heartbeats"):
+        lines.append(f"set_option maxHeartbeats {item['max_heartbeats']}")
     for index, text in enumerate(item.get("solution_pre", [])):
         add(f"p{index}", text)
     add("s", item["solution"])

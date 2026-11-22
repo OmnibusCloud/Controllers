@@ -200,21 +200,42 @@ def confirm(options: argparse.Namespace) -> int:
     return 0 if rows else 1
 
 
+def choose(options: argparse.Namespace) -> int:
+    """The items of the golden set that go through the split: accepted ones spread evenly over
+    the set (the heaviest among them), and made ones that elaborate without an error but must
+    not be confirmed (a `sorry`, another statement, an added axiom, a native decision)."""
+    items = read_jsonl(options.items)
+    accepted = sorted(item["id"] for item in items if item.get("class") == "accepted")
+    step = max(1, len(accepted) // options.accepted)
+    chosen = accepted[::step][:options.accepted]
+    for rule, count in (("budget_edge", 4), ("sorry", 3), ("mismatch", 4), ("axiom", 3), ("fact:native_decide", 2),
+                        ("fact:decide", 2)):
+        chosen += sorted(item["id"] for item in items if item.get("made") == rule)[:count]
+    os.makedirs(os.path.dirname(os.path.abspath(options.ids)), exist_ok=True)
+    with open(options.ids, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write("\n".join(chosen) + "\n")
+    print(f"{len(chosen)} items chosen for the split")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("stage", choices=["export", "confirm"])
-    parser.add_argument("--lean-root", required=True)
-    parser.add_argument("--work", required=True)
+    parser.add_argument("stage", choices=["choose", "export", "confirm"])
+    parser.add_argument("--lean-root", default="")
+    parser.add_argument("--work", default="")
     parser.add_argument("--items", required=True)
     parser.add_argument("--ids", default="")
-    parser.add_argument("--exports", required=True)
-    parser.add_argument("--out", required=True)
+    parser.add_argument("--exports", default="")
+    parser.add_argument("--out", default="")
     parser.add_argument("--max-heartbeats", type=int, default=400000)
     parser.add_argument("--transfer-mb", type=int, default=400)
     parser.add_argument("--paranoid", type=int, default=0)
+    parser.add_argument("--accepted", type=int, default=40)
     parser.add_argument("--sandbox", action="store_true")
     parser.add_argument("--label", default="local")
     options = parser.parse_args()
+    if options.stage == "choose":
+        return choose(options)
     os.makedirs(options.out, exist_ok=True)
     return export(options) if options.stage == "export" else confirm(options)
 
