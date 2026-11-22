@@ -11,36 +11,12 @@ Every number on this page is a constant of the code or was measured, in the cont
 or on a test fleet; the [README](../README.md) explains how things work inside, and the JSON
 schemas in this folder are the documents' contracts.
 
-Version described: **Corpus 0.9.1** (Model 0.2.0, Scripts 0.1.7). Corpus 0.2.1 is proven on a
-six-node test fleet (Windows, Linux, macOS); 0.3.0 added what an application's studio needs
-(sections 4, 6 and 8); 0.4.0 was the first hardening release — what the server accepts from a
-node, what a run does when nodes disagree or fail, what hostile input costs, and what a lab can
-and cannot read off a document (sections 7, 9, 11 and 12) — and is proven on the test fleet;
-0.5.0 is the second: what a run promises before it starts holds whoever wrote the manifest
-(section 8), and the tasks and the results travel as blobs (section 10), and is proven on the
-test fleet too; 0.6.0 is the third and moves no product: the module carries the licence notices
-of what it redistributes (section 14), a line a node's log cannot take no longer decides a
-shard's fate (section 12), and a shard that stops inside a header line is truncated, not
-malformed (sections 5 and 7), and gave the same products on the test fleet; 0.7.0 is the fourth
-and moves no product either: a result frame is walked before it is decoded and a result's
-counters are held to the bytes of its shard (sections 9 and 11), a shard that goes out again goes
-out on two machines when the run asked for sampling, and both documents state the sampling that
-was asked for and how each round came back (sections 6 and 9); 0.8.0 is the fifth and moves no
-product either: the near-duplicate merge costs the same whatever a node wrote into its signatures,
-is left at the next document when its job is stopped, and holds 4,000,000 documents at the most
-whatever the length of their signatures (sections 6 and 11); 0.9.0 is the sixth: a dispute one
-machine left without enough copies goes out once more and a value under no ticket no longer
-unsettles the others (section 9), a node's own network is a fault of the node and a fetch has a
-limit before the answer's head (sections 7 and 10), a shard's product has a ceiling that a node
-reserves on its disk and the preflight states (sections 8 and 11), a shard's PDFs have a number
-of runs, a blob transfer has a time to finish in, and one record or one manifest costs a bounded
-amount of memory (section 11); 0.9.1 fixes 0.9.0: a node gives back a shard's disk room when
-its task ends, also when an upload call still reads its products (section 10), reads a record's
-`Content-Length` and a response's status code alike on every node, and refuses a source URL the
-server could not take (sections 8 and 14). What changed for
-an application is listed in section 14. 0.7.0, 0.8.0, 0.9.0 and 0.9.1 have not run on the fleet
-yet. Nothing is on
-nuget.org or on the live network yet.
+Version described: **Corpus 1.0.0** (Model 1.0.0, Scripts 1.0.0). It is the first release, and
+its code is the code of 0.9.1, which ran on the test fleet on Windows x64, Linux x64 and macOS
+arm64 nodes: the hardening of the 0.x line (what the server accepts from a node, what a run does
+when nodes disagree or fail, what hostile input costs, what a run promises before it starts,
+what a lab can and cannot read off a document) is in sections 7 to 12, and what changed for an
+application is listed in section 14. 1.0.0 is not on nuget.org or on the live network yet.
 
 ## Contents
 
@@ -1027,7 +1003,7 @@ files of CC-MAIN-2026-43 (1.58 GB on the wire) with the reference language pack 
 `"output": "stats_and_hashes"`: the report and the integrity document, no text. Its `SCRIPT.md`
 says what to run and what to look at, `check.py` turns the report into the funnel and the
 language table and checks every shard's content hash against the kit's own list, and
-`EXPECTED.md` has the numbers measured locally and the ones the fleet will add. The kit holds
+`EXPECTED.md` has the numbers measured locally, which a fleet gives as well, and marks what differs from one fleet to another. The kit holds
 hashes and counts only, no third-party text.
 
 | | Measured locally (the fleet gives the same products) |
@@ -1049,9 +1025,9 @@ and a merge over the first 12 of the 24 shards finds 7,292: why no figure "so fa
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 0.9.1 | `OutWit.Controller.AI.Corpus` (GitHub Packages; nuget.org at 1.0.0) |
-| The wire types | 0.2.0 | `OutWit.Controller.AI.Corpus.Model`: the server restores it from the feed, so it is published before a controller that needs it |
-| The scripts | 0.1.7 | `OutWit.Controller.AI.Corpus.Scripts` |
+| The controller | 1.0.0 | `OutWit.Controller.AI.Corpus` (nuget.org once released; the 0.x versions are on GitHub Packages only) |
+| The wire types | 1.0.0 | `OutWit.Controller.AI.Corpus.Model` (the layout of 0.2.0): the server restores it from the feed, so it is published before a controller that needs it |
+| The scripts | 1.0.0 | `OutWit.Controller.AI.Corpus.Scripts` |
 | The PDF extractor | pdftext 1.0.0 (pdf_oxide 0.3.78) | `corpus-pdftext-wasm.zip`, release `pdftext-v1.0.0` (5.9 MB, extracted to `wasm/` beside the controller) |
 | The sandbox engine | wasmtime binding 48.0.2 over the native library 48.0.8 | natives per platform, release `wasmtime-v48.0.8-2` (8 to 10 MB each; the libraries of 48.0.8 with the engine's third-party notices), the bytes Verify ships |
 | The reference language pack | `cc-2026-43-16` | a job input; built by `corpus-assets` from Common Crawl WET files and the rule data in `OutWit.Controller.AI.Corpus.Assets/languages/`. That rule data holds FineWeb-2's stop-word lists and repetition thresholds (Apache-2.0): `LICENSE-fineweb-2.txt` is beside the pack wherever the repository hands it out as a file, and the module's notices name the pack |
@@ -1067,258 +1043,72 @@ LLVM-exception), FineWeb-2's stop-word lists (Apache-2.0) and the Unicode Charac
 a test. The two data assets carry their own notices (`LICENSE-wasmtime.txt` and `NOTICE.txt`
 beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
 
-**What changed for an application in 0.9.1** (from 0.9.0):
+**What changed for an application in 1.0.0** (from 0.9.1): nothing. The products, verdicts,
+codes and hashes, the documents and their versions, the scripts and the wire types are those of
+0.9.1; the documents name the controller version 1.0.0. A job runs on one controller version,
+so the server and the nodes move to 1.0.0 together.
 
-- **On a node.** A task gives its disk room back when it ends, also when an upload call it gave
-  up still reads its products: the products stay until the call ends, and the volume's free
-  room counts their bytes. In 0.9.0 the room stayed held until the call ended, so after a call
-  that never ended a later shard that did not fit beside it waited until its job was cancelled,
-  neither refused nor run; it is now the node fault `disk_space`, run elsewhere.
-- **One preflight message changed its words** for a run that samples: `... a shard whose two
-  copies disagree is fetched again by up to 3 machines, and by up to 3 more when they leave it
-  unsettled (a dispute and its second round; N shard(s) are sampled here), ...`.
-- **Two numbers a shard states for itself are read alike on every node.** A WARC record's
-  `Content-Length` and an HTTP response's status code are decimal digits with no sign: a signed
-  form (`Content-Length: +5`, `HTTP/1.1 +200 OK`) was read with the node's own number format,
-  so on most nodes and not on one whose culture writes its plus sign with a direction mark
-  (Arabic, Persian, Hebrew, Pashto). It is now refused on every node: the record makes its shard
-  `Malformed`, the response's page is dropped as `http_status`. Common Crawl writes neither form,
-  and no product, verdict or hash of the demo kit or of the tests' pinned shards moves.
-- **A source URL longer than 4,096 characters is a problem of the manifest** (`sources[N]: the
-  URL is L characters long; a source URL has 4096 at the most.`), in the preflight and in the
-  split. Such a shard passed before, was packaged, fetched and processed, and ended `NoResult`:
-  the server takes no result whose URL is that long.
-- **The documents correct two sentences** that said more than the code does: what the preflight
-  does not measure, the job's frame (section 8), and what the benchmark's self-check covers
-  (section 10).
+**What the 0.x line changed**, for an application written for 0.3.0 or before, in short:
 
-**What changed for an application in 0.9.0** (from 0.8.0):
-
-- **Documents.** `corpus-report/6` and `corpus-integrity/8`: `rounds` gains `dispute_again`
-  (the second dispute round; no package under a script written for an earlier controller); the
-  integrity document's summary gains `disputes_again` and `disputes_again_resolved`, and a
-  dispute's record gains `again` (present when it went out once more: `after`, `copies`,
-  `agreeing`, `results`), its `outcome` and `accepted` being how the second round ended (its
-  `copies`, `agreeing` and `results` stay the dispute round's). Nothing was removed or
-  renamed: a reader of `/5` and `/7` that ignores unknown fields only has to accept the new
-  numbers. `Corpus.Dedup` reads `/1` to `/6`.
-- **The scripts.** Scripts 0.1.7 run the second dispute round: `Corpus.Disputes` with six
-  arguments, `Corpus.Collect` and `Corpus.Integrity` with nine (the second round's tasks and
-  answers before the options). They need controller 0.9.0. A script written for 0.7.0 or 0.8.0
-  runs on 0.9.0 as it did, without the second round.
-- **Verdicts and faults.** A 5xx or 429 that outlasts the retries, a 407, and a public origin's
-  name that the node's resolver turns into an address that is not public are the node fault
-  `network` (run once more elsewhere), no longer `FetchFailed`/`http_5NN` or
-  `OriginRefused`/`origin_address`; `origin_address` is no code of a result any more. New:
-  `Oversized`/`oversized_product`, and the drop `pdf_shard_runs`. A fetch whose origin never
-  sends an answer head is given up at the stall limit (60 s) and is the fault `network`.
-- **What can move a product, and does not for Common Crawl's files.** A document of more than
-  100,000 words (1,000,000 letters of a script without spaces) fails `max_words` whatever a
-  manifest's `max_words` or a pack's rule data says: a run that opened `max_words` past that keeps
-  fewer such documents. A shard whose product passes its ceiling is `Oversized`; a shard's PDFs
-  past 4,096 drop as `pdf_shard_runs`. The stage set's fingerprint moves with these limits. No
-  content hash, signatures hash or verdict of the demo kit or of the tests' pinned shards moved.
-- **The preflight.** `NodeDiskBytesPerShard` is the shard, the most its products may be and
-  64 MiB (it was the shard and half of it again), the shard counted at the most a node fetches
-  it as (its declared size and an eighth more, the cap without a size), which is what a node
-  reserves: the kit's figure is 457,609,025 bytes (it was 171,242,293). The ceiling line states
-  the most the first round's uploads may be, and the storage line the most the first round's
-  products may be (a repair or a dispute uploads again, under the same bound per shard); the
-  storage refusal is still held to the estimate. A manifest whose root holds more than 64 keys
-  is not valid JSON for the preflight.
-- **On a node.** A shard reserves its room on the disk before it is fetched and waits while the
-  node's other shards hold it; a shard without a size reserves the cap's. A node refuses a batch
-  for room once it has read the tasks, before a byte is fetched, when its disk cannot take what
-  the largest of them reserves under its own pipeline. A blob transfer attempt that does not
-  finish in two minutes and the time of its bytes at 32 KiB/s frees the node's transfer gate;
-  the call goes on and is waited for, each further time of an attempt counting as an attempt of
-  the schedule, and no second attempt of the same transfer starts beside it; once the schedule
-  is spent the transfer fails as before. A product an upload still reads keeps its file and its
-  room until the call ends.
-
-**What changed for an application in 0.8.0** (from 0.7.0):
-
-- **No product moved, and no document.** No stage changed; the wire types, the scripts and every
-  schema are those of 0.7.0. `Corpus.Dedup` keeps the documents it kept: for the same report and
-  the same signature blobs the dedup document is the same, byte for byte.
-- **A merge holds 4,000,000 documents whatever the length of their signatures.** Up to 0.7.0 the
-  capacity was counted in signature values alone, so a run signed with fewer than 128 hashes was
-  admitted with more documents (8,000,000 at 64 hashes). Such a run is now refused from the
-  report, before a blob is read, like any other run past the capacity: merge it in parts (a
-  report of some of its shards). At 128 hashes and above nothing changed.
-- **The refusal's last words.** `The run has N documents and one merge holds M with H-hash
-  signatures: merge the run in parts (a report of some of its shards)` ends there when the
-  documents are the bound (128 hashes and fewer), and goes on `, or sign with fewer hashes.` only
-  where fewer hashes would make room (more than 128).
-- **A stopped `CorpusDedup` job ends sooner:** at the next document, not at the next band.
-
-**What changed for an application in 0.7.0** (from 0.6.0):
-
-- **No product moved.** No stage changed and the stage set's fingerprint is the same: what
-  0.4.0 to 0.6.0 made a product of, 0.7.0 makes the same product of, byte for byte, with the
-  same content hashes, signatures hashes and verdicts. The wire types are those of 0.6.0
-  (Model 0.2.0). A job still runs on one controller version, so server and nodes move to 0.7.0
-  together.
-- **New schema versions: `corpus-report/5`, `corpus-integrity/7` and `corpus-capabilities/4`.**
-  The capabilities document gains `trust.repair_copies` and `trust.sampling_states`. The report
-  and the integrity document gain two
-  root objects, `sampling` and `rounds` (section 6). The integrity document also gains
-  `round` (`first` or `repair`) in every entry of `pairs`, `repair_copies` in every entry of
-  `disputes`, and three counters in its summary: `repair_pairs`, `repair_compared`,
-  `repair_mismatches`. Nothing was removed or renamed, and a shard's entry in the report is as
-  it was. `Corpus.Dedup` reads a report of `/5` and of every earlier schema.
-- **The words of `sampling.state`:** `not_asked`, `as_asked`, `short`, `none`, `unknown`. An
-  application that shows a run's integrity should show this word (or `statement`, the same in
-  a sentence): `short` and `none` mean that checking the run asked for did not happen, whatever
-  the other counters say. A pool of one machine ends as `none` for any rate above 0.
-- **A repaired shard may rest on two executions.** With `SamplingRate` above 0 every shard of
-  the repair round runs on two machines. Such a shard has `executions: 2` when its copies
-  agree, is in `pairs` with `round: repair`, and goes to the dispute round when they disagree
-  (0.6.0 repaired on one machine, and two values under a repair ticket left the shard
-  `NoResult`). So `disputes` may now hold a shard whose `first_copies` is 0 or 1, with its
-  `repair_copies` beside it, and `single_execution` no longer counts the repaired shards of a
-  sampled run that came back twice. With `SamplingRate` 0 nothing changes.
-- **The scripts are 0.1.6 and need a controller of 0.7.0:** `CorpusProcess` has two more
-  variables (`again`, `rechecked`), calls the new activity `Corpus.RepairRate` and hands the
-  options to `Corpus.Integrity` as a seventh argument. Its inputs and its outputs (`report`,
-  `integrity`) are unchanged. A script written for 0.6.0 still runs on a 0.7.0 controller
-  (`Corpus.Integrity` takes six arguments or seven): its repair round stays on one machine and
-  its integrity document says `sampling.state: unknown`. The scripts' compatibility range, not
-  yet switched on, reads `[0.7.0, 2.0.0)`.
-- **A result can be dropped for more reasons, under the same words.** `unreadable` now also
-  covers a result frame whose lengths or counts point outside it (it is not decoded), an answer
-  whose file will not open, and a result whose counters the bytes of its shard cannot hold;
-  `content` also covers PDF counts for a task that runs no PDF stage. No reason is new, and
-  nothing an honest node returns is affected.
-- **A manifest with text that is no Unicode is reported, not thrown.** A string or a key with
-  the escape of half a surrogate pair, or with bytes that are not UTF-8, is a problem of the
-  manifest (`manifest: a string or a key is not Unicode text ...`) in the preflight's messages
-  and in the split's failure; before, it left both activities as an error of the JSON library.
-  `Corpus.Dedup` refuses such a report as it refuses any document that is no report.
-- **One preflight message changed its words** for a run that samples: `... The allowance is
-  not a bound: a shard whose two copies disagree is fetched again by up to 3 machines (a
-  dispute; N shard(s) are sampled here), and a shard a node returns as a fault of its own is
-  fetched again by 2 machines (a repair); ...`. For a run that does not sample it is as it was.
-- **The report's sums are 64-bit** (`pdf_*` in the summary were 32-bit) and stop at the largest
-  number instead of wrapping.
-
-**What changed for an application in 0.6.0** (from 0.5.0):
-
-- **Nothing in a call or a document, and no product moved.** The scripts, the activities, the
-  wire types (Model 0.2.0), the four schemas and every fixed word are those of 0.5.0, and no
-  stage changed: what 0.4.0 and 0.5.0 made a product of, 0.6.0 makes the same product of, byte
-  for byte, and the stage set's fingerprint is the same. A job still runs on one controller
-  version, so server and nodes move to 0.6.0 together.
-- **One verdict changed: a shard that stops inside a header line is truncated, not
-  malformed.** A file whose last line has no line feed, where the cut went through the version
-  line or a header of a record, ended as `Malformed` (`not_warc`) and gave no product. It now
-  ends as every other cut file does: `Completed` with `error` `truncated` and the product of
-  its whole records when the origin said where its body ends (a length, chunks),
-  `FetchFailed` (`body_truncated`) when it did not. On a real WET file that is one cut in
-  eighty. A report
-  that counted such a shard under `Malformed` counts it under `Completed` or `FetchFailed`;
-  no code is new. By the same reading a file that stops between the carriage return and the
-  line feed of a blank line after a record is truncated; it was `Completed` without the code,
-  also when its body had no stated end. A line that has its line feed and is malformed, and a
-  body that is no WARC at all, are `Malformed` as before (section 5).
-- **The module is twelve files, not eight:** the four texts above travel in it. A deployment
-  that lists or counts the files of a module, or pins the module's content digest, sees them.
-- **A node's log cannot fail a package.** On a client that hands controllers a logger that is
-  not thread safe (clients up to 2.2.5), a share of several packages could lose a batch to an
-  exception of the logger's own, and the job's message could then be that exception's text
-  instead of fixed words. Neither can happen now; the platform's reassignment of such a batch,
-  which hid it, is no longer needed for it.
-- **The scripts package** is unchanged (0.1.5). Its compatibility range for the controller, not
-  yet switched on, now reads `[0.5.0, 2.0.0)`: it will admit the 1.0.0 the candidates become.
-- **A PDF the clock stopped is the clock's, wherever it fired.** The engine reports the PDF
-  stage's wall-clock backstop as a trap when it stops the extractor's own code, and as an error
-  of another kind (whose cause is the deadline) when it stops it inside a call that passes
-  through the host. The second was read as an error of the document (`pdf_error`, the document
-  dropped): a product the machine's timing chose. Both are now the node fault `pdf_backstop`, and
-  the shard runs again elsewhere. The backstop is minutes past the stage's fuel, so an honest
-  run does not reach it; the build server found it with a backstop of one millisecond.
-
-**What changed for an application in 0.5.0** (from 0.4.0):
-
-- **`degree` left the report.** A shard's entry no longer has `degree` (`corpus-report/4`): the
-  degree a node ran at is the count of a machine's cores, and the report names platforms, never
-  machines. `runtime_target` stays. A reader that used `degree` has nothing to put in its place;
-  one that ignored it changes nothing. A result that fills the field is dropped as `unreadable`.
-- **The script's variables.** `CorpusProcess` still takes the manifest, the model and the options
-  and still returns `report` and `integrity`. Its inner collections changed type and meaning:
-  `tasks`, `repairs` and `disputes` are `CorpusTaskPackageCollection` (references to blobs of
-  tasks), `executions`, `repaired` and `resolved` are `CorpusResultPackageCollection`, and the
-  node activity is `Corpus.ProcessPackage` (`Corpus.ProcessShard` is gone). An application that
-  only submits the bundled scripts changes nothing; one that wrote a script of its own over the
-  old collections, or read `tasks` or `executions` from a finished job, must follow.
-- **The traffic estimate means more.** `EstimatedTrafficBytes` was the fetches alone; it is now
-  the fetches, the uploads, an allowance of a tenth of the fetches and, when the server knows its
-  pool, the language model once per planned node. The fetches alone are in the new
-  `EstimatedFetchBytes`; beside it `EstimatedUploadBytes`, `RetryAllowanceBytes`,
-  `FetchCeilingBytes` and `UnsizedSources` (section 8). The preflight's traffic line reads
-  otherwise and two more lines follow it.
-- **A declared size is enforced.** A shard far above the `size` its manifest declares (an eighth
-  more, 1 MiB at least) ends as `Oversized` with the new code `oversized_declared`, on every
-  node; and a manifest whose sampled sizes the origin contradicts is not well-formed at the
-  preflight and does not start at the split. Manifests with honest sizes see no change.
-- **The storage estimate may be larger.** Shards nobody could size are counted at the cap (they
-  were left out), a manifest that sets a quality threshold or a pack with rule data of its own is
-  estimated as unfiltered, and the task and result packages are counted. A job that fitted a
-  deployment's headroom by one of these may now be refused at the preflight.
-- **Sampling in a large job.** Up to 1,024 shards nothing changes. Beyond, `SamplingRate` is the
-  share of the job's packages, and every shard of a sampled package runs twice (section 10).
-- **Bounds a lab may meet:** a manifest over 256 MiB or 1,048,576 sources, or with a value over
-  4 MiB, is refused by name; a preflight lists the first hundred problems and counts the rest;
-  a host that is not written in ASCII is refused by name (write its `xn--…` form); a report given
-  to `CorpusDedup` may now be 4 GiB (it was 256 MiB) and is read a shard at a time.
-- **New words:** the verdict code `oversized_declared`; the node fault `tasks` (a node that could
-  not read its task package); `surplus` also counts an answer beyond the ones a round opens and a
-  second result for one shard in one answer.
-- **New schema versions:** `corpus-report/4` (no `degree`), `corpus-integrity/6` (the fault code
-  `tasks`; the same shape), `corpus-capabilities/3` (new ceilings, `traffic`, the package
-  constants in `storage`). `corpus-dedup/2` is unchanged, and `CorpusDedup` reads a report of
-  `/3` as it reads one of `/4`.
-- **The wire types** (Model 0.2.0): `CorpusTaskPackageData` and `CorpusResultPackageData` are
-  new; `CorpusTaskData` gains `DeclaredBytes`, `CorpusPreflightData` the five fields above.
-  `CorpusResultData.Degree` stays in the layout and is not filled.
-- **Products** of an honest run on ordinary input are byte for byte those of 0.4.0: no stage
-  changed, and the stage set's fingerprint is the same.
-
-**What changed for an application in 0.4.0** (from 0.3.0):
-
-- **The script's variables.** `CorpusProcess` still takes the manifest, the model and the options
-  and still returns `report` and `integrity`. Inside it are two more fan-outs (`repaired`,
-  `resolved`), empty in a run that goes well.
-- **New outcomes in the report.** `verdict` may be `Disputed` or `NoResult` (with `reason`:
-  `node_fault` or `no_answer`); such a shard has `stats: null` and no product. Every shard of the
-  manifest is in the report, whatever came back.
-- **New fields.** Per shard `executions` and, when there were any, `faults`; in the summary
-  `single_execution`, `rejected_results`, `repairs`, `disputes`, `disputes_resolved`. In the
-  preflight `NodeDiskBytesPerShard` and two more messages. In the diagnostics
-  `MachineOriginCount` (the list `MachineOrigins` is no longer filled).
-- **`error` is a code.** Free text is gone from every document; the codes per verdict are in the
-  capabilities (`trust.verdict_codes`). `FetchFailed` now means the origin answered and did not
-  give the shard; a node that could not reach the origin, write its disk or upload its product is
-  a node fault and the shard is tried again, so `FetchFailed`, `PipelineUnavailable` and `Failed`
-  are rarer and each says something about the input.
-- **New drops:** `record_oversized`, `unsupported_charset`, `html_too_complex`, `html_error`,
-  `pdf_shard_fuel` (all in the `extract` stage of the funnel).
-- **New schema versions:** `corpus-report/3`, `corpus-integrity/5`, `corpus-dedup/2`,
-  `corpus-capabilities/2`. The integrity document's pairs keep their shape and gain `kind` and
-  `code` per side; `disputes` (each with its `outcome`), `no_result` and `rejected` are new. The
-  dedup document gains `excluded`. The words of `rejected`, of a `NoResult` reason and of a
-  dispute's `outcome` are the ones the Verify controller uses.
-- **The platform it needs.** Grid 1.3.0 or later: the ruling counts values as machines, and that
-  Grid keeps one value at most for each return variable a node's tasks asked for (section 9).
-- **Refusals a lab may meet:** a language pack over 16 MiB or past the pack limits (at the
-  preflight, by name); a WET record over 8 MiB is skipped (it was 64 MiB); `Corpus.Dedup` refuses a
-  report that names one blob twice and leaves out a shard whose blob is not the one the report
-  states.
-- **Products** of an honest run on ordinary input are byte for byte those of 0.3.0, with one
-  exception: a document that holds a capital letter added in Unicode 16 (27 code points: U+1C89,
-  U+A7CB, U+A7CC, U+A7DA, U+A7DC and the Garay capitals U+10D50 to U+10D65) is signed and
-  language-profiled with its lower case on every node, where 0.3.0 depended on the node's library.
-  The stage set's fingerprint is new.
+- **Documents.** `corpus-report/6`, `corpus-integrity/8`, `corpus-dedup/2` and
+  `corpus-capabilities/4` (section 6). A shard's `degree` left the report (the degree a node ran
+  at is the count of a machine's cores; `runtime_target` stays); otherwise fields were added,
+  not removed or renamed, so a reader that ignores unknown fields only has to accept the new
+  numbers. `error` is a code of a fixed list, never a text
+  (`trust.verdict_codes` in the capabilities). `Corpus.Dedup` reads a report of `/1` to `/6`.
+- **Outcomes.** A shard's verdict may be `Disputed` or `NoResult` (with `reason`: `node_fault` or
+  `no_answer`), with no product and `stats: null`; every shard of the manifest is in the report,
+  whatever came back. `FetchFailed` means the origin answered and did not give the shard. What a
+  node meets on its own disk, memory, sandbox, uploads or link (an origin that does not answer
+  it, a server error or a request to slow down past the retries, a 407, a resolver that turns a
+  public origin's name into an address that is not public) is a fault of the node, and the shard
+  runs once more elsewhere; so is a PDF the clock stopped (`pdf_backstop`). A shard that stops
+  anywhere is its whole records: `Completed` with `truncated` when the origin said where its body
+  ends, `FetchFailed` (`body_truncated`) when it did not (sections 5 and 7).
+- **The script.** `CorpusProcess` takes the manifest, the model and the options and returns
+  `report` and `integrity`, as it always did. Inside, its collections are references to blobs
+  (`CorpusTaskPackageCollection`, `CorpusResultPackageCollection`), the node activity is
+  `Corpus.ProcessPackage` (`Corpus.ProcessShard` is gone), and it runs a repair round, a dispute
+  round and a second dispute round, empty in a run that goes well. An application that only
+  submits the bundled scripts changes nothing; one that wrote a script of its own over the
+  collections of 0.4.0 or before must follow (section 3).
+- **Sampling.** With `SamplingRate` above 0 the shards of the repair round run on two machines.
+  Both documents carry `sampling`, whose `state` (`not_asked`, `as_asked`, `short`, `none`,
+  `unknown`) or `statement` an application that shows a run's integrity should show: `short` and
+  `none` mean that checking the run asked for did not happen. In a job of more than 1,024 shards
+  `SamplingRate` is the share of the job's packages (section 10).
+- **The preflight** states the traffic part by part (`EstimatedFetchBytes`,
+  `EstimatedUploadBytes`, `RetryAllowanceBytes`, the language model once a planned node), the most
+  the nodes accept (`FetchCeilingBytes`), the shards nobody could size (`UnsizedSources`) and the
+  disk a node needs for each shard it holds (`NodeDiskBytesPerShard`: the shard at the most a node
+  fetches it as, the most its products may be, and 64 MiB). The storage estimate counts shards
+  without a size at the cap and the task and result packages, and estimates as unfiltered a
+  manifest that sets a quality threshold or a pack with rule data of its own (section 8).
+- **What a lab may meet.** A shard far above the size its manifest declares (an eighth more,
+  1 MiB at least) is `Oversized` (`oversized_declared`), and a manifest whose sampled sizes the
+  origin contradicts does not start. A shard whose product passes its ceiling is `Oversized`
+  (`oversized_product`), and a shard's PDFs past 4,096 runs drop as `pdf_shard_runs`. A manifest
+  is refused by name past its bounds, with a host not written in ASCII, or with text that is no
+  Unicode; a source URL over 4,096 characters is a problem of its line. A WARC record whose
+  `Content-Length` is written with a sign makes its shard `Malformed` on every node, and a
+  response whose status is written so drops its page as `http_status`. A language pack, and a
+  report given to `CorpusDedup`, are refused past their bounds; a merge holds 4,000,000 documents
+  whatever the length of their signatures, and a run past that is merged in parts (section 11).
+- **What can move a product, and does not for Common Crawl's files.** A document that holds a
+  capital letter added in Unicode 16 is lower-cased the same way on every node; a document past
+  100,000 words (1,000,000 letters of a script without spaces) is not judged in full; and the two
+  limits above. The stage set's fingerprint moved with each; no content hash, signatures hash or
+  verdict of the demo kit or of the tests' pinned shards moved.
+- **The platform it needs:** Grid 1.3.0 or later; the ruling counts values as machines (section 9).
+- **The wire types** (Model 1.0.0, the layout of 0.2.0): `CorpusTaskPackageData` and
+  `CorpusResultPackageData`; `CorpusTaskData` has `DeclaredBytes`; `CorpusResultData.Degree`
+  stays in the layout and is not filled (a result that fills it is dropped).
+- **The module is twelve files:** the notices and the licence texts travel in it. A deployment
+  that lists the files of a module, or pins its content digest, sees them.
+- **arm64 gives what x64 gives.** On a macOS arm64 node, with every shard on two machines and
+  the other copy on a Linux x64 node, every shard's product came from the arm64 node and was the
+  x64 copy's on its content hash, its signatures hash and its verdict; the PDF stage gives the
+  same bytes there.
 
 ## 15. Known limits
 
@@ -1350,7 +1140,10 @@ beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
 - The busiest share takes the largest shards as the sampled ones and every node as a machine of
   its own; the platform picks at random and knows machines.
 - Shard-frequent lines (CCNet) and a URL blocklist are not in this release.
-- The stages run inside the controller module only: an application cannot yet run them on its
-  own machine to preview a sample (a package for that is designed, not built).
-- The controller is proven on the test fleet. Its release to nuget.org and to the live network is
-  the owner's decision.
+- The stages run inside the controller module only: an application does not run them on its own
+  machine to preview a sample. To see the output on a small scale, run the manifest on one or two
+  shards: the same code, deterministic.
+- A run at the scale of a crawl segment, and the near-duplicate merge at that size, have not been
+  measured yet; they are to run on the 1.0.0 builds.
+- The code of 1.0.0 is proven on the test fleet, as 0.9.1. Its release to nuget.org and to the
+  live network is the owner's decision.

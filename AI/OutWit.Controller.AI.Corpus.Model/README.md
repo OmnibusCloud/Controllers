@@ -4,7 +4,8 @@ Data types for the OutWit Corpus controller: what a lab submits and what the
 fleet returns when public web data (Common Crawl first) is turned into
 training-grade text on anonymous nodes.
 
-This page describes **0.2.0**, the wire types of Corpus 0.5.0.
+This page describes **1.0.0**, the wire types of Corpus 1.0.0: the layout of 0.2.0, which Corpus
+0.5.0 to 0.9.1 ran on, unchanged.
 
 | Type | Role |
 |---|---|
