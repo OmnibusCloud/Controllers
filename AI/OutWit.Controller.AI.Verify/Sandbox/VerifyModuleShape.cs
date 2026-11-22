@@ -129,6 +129,22 @@ internal static class VerifyModuleShape
     public const int MAX_FUNCTIONS = 32_768;
 
     /// <summary>
+    /// The most function types a module may have. The engine compiles code for every one, whatever
+    /// uses it (600,000 of them, in 7 MB, took 3.8 GiB); the compiler the controller ships has 542,
+    /// CPython 176, QuickJS 113.
+    /// </summary>
+    public const int MAX_TYPES = 4096;
+
+    /// <summary>The most imports a module may have: CPython has 42, the compiler 29, a C program of the tests 9.</summary>
+    public const int MAX_IMPORTS = 1024;
+
+    /// <summary>
+    /// The most exports a module may have: a program built to export all its functions has one a
+    /// function and a few besides; the runtimes have 2 to 9.
+    /// </summary>
+    public const int MAX_EXPORTS = MAX_FUNCTIONS + 1024;
+
+    /// <summary>
     /// The largest body one function may have, bytes. The largest of QuickJS is 78 KB and of Lua
     /// 31 KB; CPython's and Ruby's own (163 KB, 138 KB) belong to modules several times the size a
     /// task's module may have.
@@ -138,7 +154,10 @@ internal static class VerifyModuleShape
     private const int SECTION_TYPE = 1;
     private const int SECTION_IMPORT = 2;
     private const int SECTION_FUNCTION = 3;
+    private const int SECTION_GLOBAL = 6;
+    private const int SECTION_EXPORT = 7;
     private const int SECTION_START = 8;
+    private const int SECTION_ELEMENT = 9;
     private const int SECTION_CODE = 10;
     private const int HEADER_LENGTH = 8;
 
@@ -155,6 +174,7 @@ internal static class VerifyModuleShape
     private const byte OP_CALL_INDIRECT = 0x11;
     private const byte OP_RETURN_CALL = 0x12;
     private const byte OP_RETURN_CALL_INDIRECT = 0x13;
+    private const byte OP_REF_FUNC = 0xD2;
 
     private const long BLOCK_TYPE_EMPTY = -64;
 
@@ -174,8 +194,10 @@ internal static class VerifyModuleShape
 
     #region Fields
 
-    private static readonly Bounds TASK = new(MAX_NESTING, MAX_PARAMETERS, MAX_RESULTS, MAX_BLOCK_VALUES, MAX_LOCALS, MAX_MODULE_LOCALS, MAX_FUNCTIONS, MAX_BODY_BYTES, false, VerifyCompileMemory.MAX_BYTES);
-    private static readonly Bounds NONE = new(1 << 20, int.MaxValue, int.MaxValue, int.MaxValue, int.MaxValue, long.MaxValue, int.MaxValue, int.MaxValue, true, long.MaxValue);
+    private static readonly VerifyModuleShapeBounds TASK = new(MAX_NESTING, MAX_PARAMETERS, MAX_RESULTS, MAX_BLOCK_VALUES, MAX_LOCALS, MAX_MODULE_LOCALS, MAX_FUNCTIONS, MAX_BODY_BYTES, false,
+        VerifyCompileMemory.MAX_BYTES, MAX_TYPES, MAX_IMPORTS, MAX_EXPORTS);
+    private static readonly VerifyModuleShapeBounds NONE = new(1 << 20, int.MaxValue, int.MaxValue, int.MaxValue, int.MaxValue, long.MaxValue, int.MaxValue, int.MaxValue, true,
+        long.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue);
 
     #endregion
 
@@ -202,10 +224,10 @@ internal static class VerifyModuleShape
         return Scan(module, NONE);
     }
 
-    private static VerifyModuleShapeReport Scan(ReadOnlySpan<byte> module, Bounds bounds)
+    private static VerifyModuleShapeReport Scan(ReadOnlySpan<byte> module, VerifyModuleShapeBounds bounds)
     {
         var bytes = Saturate(module.Length, COMPILE_FUEL_PER_BYTE);
-        var tally = new Tally { Cost = bytes };
+        var tally = new VerifyModuleShapeTally { Cost = bytes };
         if (module.Length < HEADER_LENGTH)
             return new VerifyModuleShapeReport(tally.Cost, UNREADABLE);
 
@@ -227,7 +249,10 @@ internal static class VerifyModuleShape
                 problem = id switch
                 {
                     SECTION_TYPE => ReadTypes(section, tally, bounds),
-                    SECTION_IMPORT => VerifyModuleCode.ReadFunctionImports(section, tally.ImportTypes) ? null : UNKNOWN_INSTRUCTION,
+                    SECTION_IMPORT => Imports(section, tally, bounds),
+                    SECTION_GLOBAL => Globals(section, tally),
+                    SECTION_EXPORT => Exports(section, tally, bounds),
+                    SECTION_ELEMENT => VerifyModuleSections.ReadElements(section, tally.Escaping) ? null : UNKNOWN_INSTRUCTION,
                     SECTION_FUNCTION => ReadFunctionTypes(section, tally, bounds),
                     SECTION_START => Start(tally, bounds),
                     SECTION_CODE => ScanCode(section, tally, bounds),
@@ -246,7 +271,8 @@ internal static class VerifyModuleShape
 
         // The memory the compile may take: a module that may take more than a node sets aside for
         // one compile is refused, so whatever is compiled fits the gate.
-        var memory = VerifyCompileMemory.Estimate(module.Length, tally.FunctionTypes.Count, tally.LargestWork, tally.MostBlockUnits, tally.KeptUnits);
+        var surface = VerifyCompileMemory.Surface(tally.Types.Count, tally.TypeValues, tally.Imports, tally.Exports, tally.EscapingFunctions(out var escapingValues), escapingValues);
+        var memory = VerifyCompileMemory.Estimate(module.Length, tally.FunctionTypes.Count, tally.LargestWork, tally.MostBlockUnits, tally.KeptUnits, surface);
         if (problem == null && memory > bounds.CompileMemory)
             problem = TOO_MUCH_MEMORY;
 
@@ -265,30 +291,34 @@ internal static class VerifyModuleShape
             HasStartFunction = tally.HasStartFunction,
             KeptUnits = tally.KeptUnits,
             LargestWork = tally.LargestWork,
+            SurfaceBytes = surface,
             CompileMemoryBytes = memory
         };
     }
 
-    private static string? Start(Tally tally, Bounds bounds)
+    private static string? Start(VerifyModuleShapeTally tally, VerifyModuleShapeBounds bounds)
     {
         tally.HasStartFunction = true;
         return bounds.StartAllowed ? null : START_FUNCTION;
     }
 
-    private static string? ReadTypes(ReadOnlySpan<byte> section, Tally tally, Bounds bounds)
+    private static string? ReadTypes(ReadOnlySpan<byte> section, VerifyModuleShapeTally tally, VerifyModuleShapeBounds bounds)
     {
         var position = 0;
-        var count = VerifyModuleCode.ReadU32(section, ref position);
-        for (var index = 0u; index < count; index++)
+        var count = VerifyModuleSections.Count(section, ref position);
+        if (count > bounds.Types)
+            return $"the module has more than {bounds.Types} function types";
+
+        for (var index = 0L; index < count; index++)
         {
             // Function types only: the engine is configured without the proposals that add others.
             if (section[position++] != FORM_FUNCTION)
                 return UNKNOWN_INSTRUCTION;
 
-            var parameters = (int)Math.Min(int.MaxValue, VerifyModuleCode.ReadU32(section, ref position));
+            var parameters = VerifyModuleSections.Length(section, ref position);
             position += parameters;
 
-            var results = (int)Math.Min(int.MaxValue, VerifyModuleCode.ReadU32(section, ref position));
+            var results = VerifyModuleSections.Length(section, ref position);
             position += results;
 
             if (parameters > bounds.Parameters)
@@ -297,6 +327,7 @@ internal static class VerifyModuleShape
             if (results > bounds.Results)
                 return $"a function type of the module has more than {bounds.Results} results";
 
+            tally.TypeValues += parameters + (long)results;
             tally.WidestParameters = Math.Max(tally.WidestParameters, parameters);
             tally.WidestResults = Math.Max(tally.WidestResults, results);
             tally.Types.Add((parameters, results));
@@ -305,7 +336,28 @@ internal static class VerifyModuleShape
         return null;
     }
 
-    private static string? ReadFunctionTypes(ReadOnlySpan<byte> section, Tally tally, Bounds bounds)
+    private static string? Imports(ReadOnlySpan<byte> section, VerifyModuleShapeTally tally, VerifyModuleShapeBounds bounds)
+    {
+        if (!VerifyModuleSections.ReadImports(section, tally.ImportTypes, out var imports))
+            return UNKNOWN_INSTRUCTION;
+
+        tally.Imports = imports;
+        return imports > bounds.Imports ? $"the module has more than {bounds.Imports} imports" : null;
+    }
+
+    private static string? Exports(ReadOnlySpan<byte> section, VerifyModuleShapeTally tally, VerifyModuleShapeBounds bounds)
+    {
+        tally.Exports = VerifyModuleSections.ReadExports(section, tally.Escaping);
+        return tally.Exports > bounds.Exports ? $"the module has more than {bounds.Exports} exports" : null;
+    }
+
+    private static string? Globals(ReadOnlySpan<byte> section, VerifyModuleShapeTally tally)
+    {
+        VerifyModuleSections.ReadGlobals(section, tally.Escaping);
+        return null;
+    }
+
+    private static string? ReadFunctionTypes(ReadOnlySpan<byte> section, VerifyModuleShapeTally tally, VerifyModuleShapeBounds bounds)
     {
         var position = 0;
         var count = VerifyModuleCode.ReadU32(section, ref position);
@@ -318,7 +370,7 @@ internal static class VerifyModuleShape
         return null;
     }
 
-    private static string? ScanCode(ReadOnlySpan<byte> section, Tally tally, Bounds bounds)
+    private static string? ScanCode(ReadOnlySpan<byte> section, VerifyModuleShapeTally tally, VerifyModuleShapeBounds bounds)
     {
         var position = 0;
         var count = VerifyModuleCode.ReadU32(section, ref position);
@@ -329,7 +381,7 @@ internal static class VerifyModuleShape
 
         for (var index = 0; index < count; index++)
         {
-            var size = (int)VerifyModuleCode.ReadU32(section, ref position);
+            var size = VerifyModuleSections.Length(section, ref position);
             if (size > bounds.BodyBytes)
                 return $"a function of the module is larger than {bounds.BodyBytes >> 10} KiB";
 
@@ -352,7 +404,7 @@ internal static class VerifyModuleShape
         return null;
     }
 
-    private static string? ScanFunction(ReadOnlySpan<byte> body, int parameters, byte[] kinds, Tally tally, Bounds bounds)
+    private static string? ScanFunction(ReadOnlySpan<byte> body, int parameters, byte[] kinds, VerifyModuleShapeTally tally, VerifyModuleShapeBounds bounds)
     {
         var position = 0;
 
@@ -387,8 +439,13 @@ internal static class VerifyModuleShape
         long branches = 0;
         kinds[0] = KIND_BLOCK;
 
+        // Every instruction is a byte at least: a scan that reads more instructions than bytes has gone wrong.
+        var steps = 0;
         while (depth > 0)
         {
+            if (++steps > body.Length)
+                return UNREADABLE;
+
             var op = body[position++];
             if (op is not (OP_BR_TABLE or OP_CALL or OP_CALL_INDIRECT or OP_RETURN_CALL or OP_RETURN_CALL_INDIRECT))
             {
@@ -458,14 +515,17 @@ internal static class VerifyModuleShape
                     break;
                 case OP_CALL:
                 case OP_RETURN_CALL:
-                    var called = TypeOfFunction(VerifyModuleCode.ReadU32(body, ref position), tally);
-                    tally.KeptUnits = AddSaturating(tally.KeptUnits, CallUnits(false, called, tally));
+                    var called = tally.TypeOfFunction(VerifyModuleCode.ReadU32(body, ref position));
+                    tally.KeptUnits = AddSaturating(tally.KeptUnits, tally.CallUnits(false, called));
+                    break;
+                case OP_REF_FUNC:
+                    tally.Escaping.Add(VerifyModuleCode.ReadU32(body, ref position));
                     break;
                 case OP_CALL_INDIRECT:
                 case OP_RETURN_CALL_INDIRECT:
                     var typeIndex = (int)Math.Min(int.MaxValue, VerifyModuleCode.ReadU32(body, ref position));
                     VerifyModuleCode.ReadU32(body, ref position);
-                    tally.KeptUnits = AddSaturating(tally.KeptUnits, CallUnits(true, typeIndex, tally));
+                    tally.KeptUnits = AddSaturating(tally.KeptUnits, tally.CallUnits(true, typeIndex));
                     tally.FunctionWork = AddSaturating(tally.FunctionWork, VerifyCompileMemory.WORK_INDIRECT_CALL);
                     break;
                 case 0x20:
@@ -501,22 +561,6 @@ internal static class VerifyModuleShape
         return null;
     }
 
-    /// <summary>The type of a function a call names: imported functions first, then the module's own.</summary>
-    private static int TypeOfFunction(uint function, Tally tally)
-    {
-        if (function < (uint)tally.ImportTypes.Count)
-            return tally.ImportTypes[(int)function];
-
-        var own = function - (uint)tally.ImportTypes.Count;
-        return own < (uint)tally.FunctionTypes.Count ? tally.FunctionTypes[(int)own] : -1;
-    }
-
-    private static long CallUnits(bool indirect, int type, Tally tally)
-    {
-        var (parameters, results) = type >= 0 && type < tally.Types.Count ? tally.Types[type] : (0, 0);
-        return VerifyCompileMemory.CallUnits(indirect, parameters, results);
-    }
-
     private static long Saturate(long left, long right)
     {
         if (left <= 0 || right <= 0)
@@ -528,51 +572,6 @@ internal static class VerifyModuleShape
     private static long AddSaturating(long left, long right)
     {
         return left > long.MaxValue - right ? long.MaxValue : left + right;
-    }
-
-    #endregion
-
-    #region Nested Types
-
-    /// <summary>The bounds one scan holds a module to.</summary>
-    private readonly record struct Bounds(int Nesting, int Parameters, int Results, int BlockValues, int Locals, long ModuleLocals, int Functions, int BodyBytes, bool StartAllowed, long CompileMemory);
-
-    /// <summary>What one scan has counted so far.</summary>
-    private sealed class Tally
-    {
-        public List<(int Parameters, int Results)> Types { get; } = [];
-
-        public List<int> FunctionTypes { get; } = [];
-
-        public List<int> ImportTypes { get; } = [];
-
-        public long KeptUnits { get; set; }
-
-        public long LargestWork { get; set; }
-
-        public long FunctionWork { get; set; }
-
-        public long Cost { get; set; }
-
-        public int DeepestNesting { get; set; }
-
-        public int WidestParameters { get; set; }
-
-        public int WidestResults { get; set; }
-
-        public int WidestBlock { get; set; }
-
-        public int MostLocals { get; set; }
-
-        public long Locals { get; set; }
-
-        public int LargestBody { get; set; }
-
-        public long MostBranches { get; set; }
-
-        public long MostBlockUnits { get; set; }
-
-        public bool HasStartFunction { get; set; }
     }
 
     #endregion

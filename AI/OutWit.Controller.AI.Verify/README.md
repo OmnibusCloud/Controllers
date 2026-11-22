@@ -17,7 +17,8 @@ prices were missing (see "Determinism"). What it changed:
 - A module a task brings, and a program built from its sources, is held to bounds before the
   engine compiles it: a function type has at most 128 parameters and 8 results, a block passes
   at most 8 values, a function has at most 16,384 locals and a body of 128 KiB, a module at
-  most 32,768 functions and 4,194,304 declared locals. A module past a bound is a
+  most 32,768 functions and 4,194,304 declared locals, 4,096 function types, 1,024 imports and
+  33,792 exports. A module past a bound is a
   `CompileError` with fixed words. What is within the bounds is priced by what the engine was
   measured to take for it: the square of a function's branches, its locals times its branches,
   a block that passes values, declared locals, and 24 bytes at the least for any function. A
@@ -755,9 +756,11 @@ locals times the depth of its loops: 6.9 KB took 1.5 s, 28 KB took 81 s and
   engine runs while it makes a module ready is in no budget.
 - A raw module may be at most 8 MiB.
 - While it compiles, the engine takes memory that is in no task's memory cap:
-  6 KiB a byte of the function it works on, and what it keeps of every function
+  6 KiB a byte of the function it works on, what it keeps of every function
   until the module is done, which grows with that function's calls, loads and
-  stores, branches and instructions that may trap. It is estimated from the
+  stores, loops, branches, float and vector instructions and instructions that
+  may trap, and the code it makes for every function type and every function
+  that leaves the module. It is estimated from the
   shape, and a module estimated over 1,536 MiB is refused (`compiling the
   module may take more than 1536 MiB of memory`); compiles that may take 64 MiB
   or more share 1,536 MiB between them in a node's process, each waiting while
@@ -769,9 +772,10 @@ What remains: the bounds, the prices and the estimate of a compile's memory hold
 for the shapes that were measured, and are not a proof about every module the
 engine accepts; the compile itself is not capped; a compile, once
 started, cannot be interrupted; one expensive compile runs at a time in a
-node's process. Two kinds of code compile far more slowly than their price
-says: calls through a table, and loads and stores on a host with hardware
-stack protection (where every trap is an explicit check). Within every bound
+node's process. Some code compiles far more slowly than its price says: calls
+through a table, loops, reads of a table, traps, functions of many parameters
+that leave the module, and loads and stores on a host with hardware stack
+protection (where every trap is an explicit check). Within every bound
 and the default budget, a module of many such functions can hold one core of a
 node for minutes while it compiles, and that compile cannot be stopped. No
 verdict is wrong because of it, and its memory is bounded. A non-optimising compiler

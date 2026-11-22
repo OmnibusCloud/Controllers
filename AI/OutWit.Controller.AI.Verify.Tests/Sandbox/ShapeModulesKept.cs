@@ -175,6 +175,80 @@ internal static class ShapeModulesKept
         return Repeated([0x00], [0x41, 0x00, 0x40, 0x00, 0x1A], grows, functions);
     }
 
+    /// <summary>Functions of nothing but empty loops: the engine checks the fuel and the clock at the head of every loop.</summary>
+    /// <param name="loops">The loops in one function.</param>
+    /// <param name="functions">The functions of that shape.</param>
+    /// <returns>The module's bytes.</returns>
+    public static byte[] Loops(int loops, int functions = 1)
+    {
+        return Repeated([0x00], [0x03, 0x40, 0x0B], loops, functions);
+    }
+
+    /// <summary>Functions of nothing but references to <c>_start</c>, each dropped: a call into the engine each.</summary>
+    /// <param name="references">The references in one function.</param>
+    /// <param name="functions">The functions of that shape.</param>
+    /// <returns>The module's bytes.</returns>
+    public static byte[] FunctionReferences(int references, int functions = 1)
+    {
+        return Repeated([0x00], [0xD2, 0x00, 0x1A], references, functions);
+    }
+
+    /// <summary>Functions of nothing but reads of a table's first element, each dropped.</summary>
+    /// <param name="reads">The reads in one function.</param>
+    /// <param name="functions">The functions of that shape.</param>
+    /// <returns>The module's bytes.</returns>
+    public static byte[] TableReads(int reads, int functions = 1)
+    {
+        return Repeated([0x00], [0x41, 0x00, 0x25, 0x00, 0x1A], reads, functions, 1);
+    }
+
+    /// <summary>Functions of nothing but writes of a null reference into a table's first element.</summary>
+    /// <param name="writes">The writes in one function.</param>
+    /// <param name="functions">The functions of that shape.</param>
+    /// <returns>The module's bytes.</returns>
+    public static byte[] TableWrites(int writes, int functions = 1)
+    {
+        return Repeated([0x00], [0x41, 0x00, 0xD0, 0x70, 0x26, 0x00], writes, functions, 1);
+    }
+
+    /// <summary>Functions of a number of traps, each behind a test of a value read from the memory.</summary>
+    /// <param name="traps">The traps in one function.</param>
+    /// <param name="functions">The functions of that shape.</param>
+    /// <returns>The module's bytes.</returns>
+    public static byte[] GuardedTraps(int traps, int functions = 1)
+    {
+        return Repeated([0x01, 0x01, 0x7F, 0x41, 0x00, 0x28, 0x02, 0x00, 0x21, 0x00], [0x20, 0x00, 0x04, 0x40, 0x00, 0x0B], traps, functions);
+    }
+
+    /// <summary>
+    /// Functions that turn a 64-bit value read from the memory into a float and back a number of
+    /// times with the conversion that saturates (no trap), adding one each time, and store it.
+    /// </summary>
+    /// <param name="conversions">The conversions in one function.</param>
+    /// <param name="functions">The functions of that shape.</param>
+    /// <returns>The module's bytes.</returns>
+    public static byte[] SaturatingTruncations(int conversions, int functions = 1)
+    {
+        return Chained(I64, [0x29, 0x03, 0x00], [0x37, 0x03, 0x00], [0x20, 0x00, 0xB9, 0xFC, 0x06, 0x42, 0x01, 0x7C, 0x21, 0x00], conversions, functions);
+    }
+
+    /// <summary>
+    /// Functions of a number of steps on two locals of a type, both read from the memory first, each
+    /// step the instructions given (which end by setting local 0), local 0 stored at the end: a
+    /// chain nothing can fold. For a float or a vector instruction of the engine's longer sequences.
+    /// </summary>
+    /// <param name="type">The locals' value type: 0x7C (f64) or 0x7B (v128).</param>
+    /// <param name="step">One step's instructions.</param>
+    /// <param name="steps">The steps in one function.</param>
+    /// <param name="functions">The functions of that shape.</param>
+    /// <returns>The module's bytes.</returns>
+    public static byte[] Steps(byte type, byte[] step, int steps, int functions = 1)
+    {
+        return type == 0x7B
+            ? Chained(type, [0xFD, 0x00, 0x04, 0x00], [0xFD, 0x0B, 0x04, 0x00], step, steps, functions)
+            : Chained(type, [0x2B, 0x03, 0x00], [0x39, 0x03, 0x00], step, steps, functions);
+    }
+
     #endregion
 
     #region Tools
@@ -206,12 +280,39 @@ internal static class ShapeModulesKept
     }
 
     /// <summary>A module of functions whose body is the same instructions a number of times over, after the locals given.</summary>
-    private static byte[] Repeated(byte[] locals, byte[] instructions, int count, int functions)
+    private static byte[] Repeated(byte[] locals, byte[] instructions, int count, int functions, int tableElements = 0)
     {
         var body = new List<byte>(locals);
         for (var i = 0; i < count; i++)
             body.AddRange(instructions);
 
+        body.Add(0x0B);
+
+        var bodies = new List<(int Type, byte[] Body)> { (0, NOTHING) };
+        var heavy = body.ToArray();
+        for (var i = 0; i < functions; i++)
+            bodies.Add((0, heavy));
+
+        return ShapeModules.Build([([], [])], [], bodies, 1, tableElements);
+    }
+
+    /// <summary>
+    /// Functions with two locals of a type, both loaded from the memory, then the step a number of
+    /// times, then local 0 stored: the load and the store given for the type.
+    /// </summary>
+    private static byte[] Chained(byte type, byte[] load, byte[] store, byte[] step, int steps, int functions)
+    {
+        var body = new List<byte> { 0x01, 0x02, type };
+        body.AddRange([0x41, 0x00]);
+        body.AddRange(load);
+        body.AddRange([0x21, 0x00, 0x41, 0x10]);
+        body.AddRange(load);
+        body.AddRange([0x21, 0x01]);
+        for (var i = 0; i < steps; i++)
+            body.AddRange(step);
+
+        body.AddRange([0x41, 0x00, 0x20, 0x00]);
+        body.AddRange(store);
         body.Add(0x0B);
 
         var bodies = new List<(int Type, byte[] Body)> { (0, NOTHING) };

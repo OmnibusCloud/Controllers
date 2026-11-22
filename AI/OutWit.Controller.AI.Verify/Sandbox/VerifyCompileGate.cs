@@ -6,7 +6,8 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// not all be in a large one at once: a compile enters with the memory it may take
 /// (<see cref="VerifyModuleShapeReport.CompileMemoryBytes"/>) and waits while the compiles
 /// already inside leave no room for it. Several compiles of ordinary programs run side by side;
-/// one at the bounds of a task's module runs alone. The gate's size is what a node sets aside
+/// one that may take more than half of it runs alone, and a module estimated over the gate is
+/// refused before it is compiled (<see cref="VerifyCompileMemory.MAX_BYTES"/>). The gate's size is what a node sets aside
 /// for it when it decides how many tasks run at once (<see cref="VerifyBatchExecutor.MemoryAside"/>).
 /// </summary>
 internal sealed class VerifyCompileGate

@@ -44,6 +44,9 @@ internal sealed record VerifyModuleShapeReport(long CompileFuel, string? Problem
     /// <summary>What the compiler takes for the function that takes the most while it is worked on, bytes (VerifyCompileMemory.Work).</summary>
     public long LargestWork { get; init; }
 
+    /// <summary>What the engine compiles and holds for the module's types, imports, exports and escaping functions, bytes (VerifyCompileMemory.Surface).</summary>
+    public long SurfaceBytes { get; init; }
+
     /// <summary>What the engine's compiler may take while it compiles the module, bytes: an estimate from the shape.</summary>
     public long CompileMemoryBytes { get; init; }
 }
