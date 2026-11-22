@@ -23,3 +23,6 @@ AI/OutWit.Controller.AI.Verify.Assets/toolchain/notices/** text eol=lf
 # The Corpus toolchain (the PDF extractor's crate, its lock file, the build and test scripts): LF on
 # every checkout, so a build from a Windows checkout reads the same sources
 AI/OutWit.Controller.AI.Corpus.Assets/toolchain/** text eol=lf
+# The Smt toolchain (the pins bash reads, the build, pack and test scripts, the two changes to Z3's
+# sources): LF on every checkout, so a Windows checkout reads the same pins and builds the same module
+AI/OutWit.Controller.AI.Smt.Assets/toolchain/** text eol=lf
