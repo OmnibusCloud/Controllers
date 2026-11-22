@@ -43,7 +43,7 @@ What a program has inside the box:
   is three quarters of the memory that is free when a batch starts, divided by the memory
   one program may take (for C and C++ tasks the compiler's 1 GB counts when it is the
   larger). For tasks whose program is turned into machine code on your computer (below),
-  what that work may take is counted too: 64 MB a program, and about 1.3 GB set aside
+  what that work may take is counted too: 64 MB a program, and about 2.8 GB set aside
   once. The work runs below normal priority: on Windows your own programs go first.
   Linux does not honour that setting for threads; there the cap on the number of programs
   is the protection.
@@ -66,9 +66,13 @@ What a program has inside the box:
   default budget, about two minutes at the largest. That holds for the shapes that were
   measured; it is not a proof about every module, and a compile cannot be stopped once it
   has started. While it compiles, the engine also takes memory that is in no program's
-  256 MB: little for an ordinary program, up to about 1 GB for a module at every bound.
-  Compiles that may take 64 MB or more share about 1 GB between them, so the largest runs
-  alone, and the number of programs run at once is lowered for that gigabyte (above). The machine code of the programs of a batch is
+  256 MB: little for an ordinary program. It is estimated from the module before anything is
+  compiled (the code of every function, its calls, loads and stores, branches and the
+  instructions that may trap), and a module whose compile may take more than 2.5 GB is
+  refused. Compiles that may take 64 MB or more share 2.5 GB between them, so the largest
+  runs alone, and the number of programs run at once is lowered for those 2.5 GB (above).
+  The estimate holds for the kinds of code that were measured; like the price, it is not a
+  proof about every module. The machine code of the programs of a batch is
   kept in memory while the batch may need it again, 256 MB of it at most. A module past
   a bound (blocks nested deeper than 2,048 among them),
   or one a lab brings that is larger than 8 MB, is refused. The first use of a language

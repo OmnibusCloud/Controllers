@@ -7,6 +7,15 @@ namespace OutWit.Controller.AI.Verify.Sandbox;
 /// </summary>
 internal static class VerifyModuleCode
 {
+    #region Constants
+
+    private const byte IMPORT_FUNCTION = 0x00;
+    private const byte IMPORT_TABLE = 0x01;
+    private const byte IMPORT_MEMORY = 0x02;
+    private const byte IMPORT_GLOBAL = 0x03;
+
+    #endregion
+
     #region Functions
 
     /// <summary>Steps over the immediates of an instruction that neither opens nor closes a block.</summary>
@@ -44,8 +53,9 @@ internal static class VerifyModuleCode
                 ReadU32(body, ref position);
                 ReadU32(body, ref position);
                 return true;
-            case 0x1C: // select with types
-                position += (int)ReadU32(body, ref position);
+            case 0x1C: // select with types: their number, then one byte each
+                var types = (int)ReadU32(body, ref position);
+                position += types;
                 return true;
             case 0x41: // i32.const
             case 0x42: // i64.const
@@ -142,6 +152,56 @@ internal static class VerifyModuleCode
     /// <param name="bytes">The bytes.</param>
     /// <param name="position">Where the number starts; moved past it.</param>
     /// <returns>The number.</returns>
+    /// <summary>
+    /// Reads the import section: the type of every function the module imports, in order (they
+    /// come first among the functions a call names); tables, memories and globals are passed over.
+    /// </summary>
+    /// <param name="section">The section's content.</param>
+    /// <param name="functionTypes">Where the types of the imported functions are added.</param>
+    /// <returns>False for an import of a kind the engine is configured without.</returns>
+    public static bool ReadFunctionImports(ReadOnlySpan<byte> section, List<int> functionTypes)
+    {
+        var position = 0;
+        var count = ReadU32(section, ref position);
+        for (var index = 0u; index < count; index++)
+        {
+            // The module's name and the import's: their lengths, then their bytes.
+            var moduleName = (int)ReadU32(section, ref position);
+            position += moduleName;
+            var importName = (int)ReadU32(section, ref position);
+            position += importName;
+
+            switch (section[position++])
+            {
+                case IMPORT_FUNCTION:
+                    functionTypes.Add((int)Math.Min(int.MaxValue, ReadU32(section, ref position)));
+                    break;
+                case IMPORT_TABLE:
+                    position++; // the element type: one byte without the proposals that widen it
+                    SkipLimits(section, ref position);
+                    break;
+                case IMPORT_MEMORY:
+                    SkipLimits(section, ref position);
+                    break;
+                case IMPORT_GLOBAL:
+                    position += 2; // the value type and whether it may change
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void SkipLimits(ReadOnlySpan<byte> section, ref int position)
+    {
+        var flags = section[position++];
+        ReadU32(section, ref position);
+        if ((flags & 1) != 0)
+            ReadU32(section, ref position);
+    }
+
     public static uint ReadU32(ReadOnlySpan<byte> bytes, ref int position)
     {
         return (uint)ReadU64(bytes, ref position);

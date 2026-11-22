@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
 using OutWit.Controller.AI.Verify.Sandbox;
@@ -50,7 +51,7 @@ public sealed class VerifyCompileMemoryTests
     [Test]
     public void N2WhatACompileMayTakeIsReadOffTheShapeTest()
     {
-        // Measured: 6 KB a function while the module is compiled, up to 4 KB a byte of the
+        // Measured: 6 KB a function while the module is compiled, up to 5 KB a byte of the
         // function the compiler works on, 4 bytes a unit of a block that passes values.
         var hello = VerifyModuleShape.Scan(Convert.FromBase64String(VerifySelfCheck.HELLO_WASM_BASE64));
         var calls = VerifyModuleShape.Scan(ShapeModules.Calls(8, 20_000));
@@ -68,13 +69,41 @@ public sealed class VerifyCompileMemoryTests
     }
 
     [Test]
-    public void N2NoModuleWithinTheBoundsMayTakeMoreThanWhatIsSetAsideTest()
+    public void D7AModuleThatMayTakeMoreThanTheGateIsRefusedBeforeItIsCompiledTest()
     {
-        var atTheBounds = VerifyModuleShape.CompileMemoryAtTheBounds(VerifyWasmSandbox.MAX_TASK_MODULE_BYTES);
-        var gate = VerifyWasmSandbox.CompileGateBytes;
+        // 64 functions of 26,000 calls through a table: within every bound, 8.3 MB, and on x64
+        // 1.6 GiB and five minutes to compile. Estimated over what a node sets aside for one
+        // compile, it is refused without being compiled, at any budget.
+        var module = ShapeModulesKept.IndirectCalls(0, 26_000, 64);
+        var report = VerifyModuleShape.Scan(module);
+        var unbounded = VerifyModuleShape.Measure(module);
+        var wasi = VerifyRuntimeCatalog.Resolve(null, VerifyRuntimeCatalog.WASI, out var reason) ?? throw new InvalidOperationException(reason);
+        var limits = VerifyLimitCeilings.Effective(new VerifyLimitsData { FuelBudget = long.MaxValue }, null);
+
+        using var sandbox = new VerifyWasmSandbox();
+        var clock = Stopwatch.StartNew();
+        var result = sandbox.Execute(wasi, ModuleTask(module), limits);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(module, Has.Length.LessThanOrEqualTo(VerifyWasmSandbox.MAX_TASK_MODULE_BYTES));
+            Assert.That(unbounded.Problem, Is.Null, "no other bound holds it");
+            Assert.That(unbounded.CompileMemoryBytes, Is.GreaterThan(VerifyCompileMemory.MAX_BYTES));
+            Assert.That(report.Problem, Is.EqualTo(VerifyModuleShape.TOO_MUCH_MEMORY));
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.CompileError));
+            Assert.That(result.Stderr, Is.EqualTo(VerifyModuleShape.TOO_MUCH_MEMORY));
+            Assert.That(sandbox.TaskModuleCacheCount, Is.Zero, "nothing reached the engine's compiler");
+            Assert.That(clock.Elapsed, Is.LessThan(TimeSpan.FromSeconds(5)));
+        });
+    }
+
+    [Test]
+    public void D7NoModuleThatIsCompiledMayTakeMoreThanWhatIsSetAsideTest()
+    {
+        // The gate is the most a compile may take: whatever is not refused fits it alone.
         var shapes = new[]
         {
-            ShapeModules.Calls(8, 60_000),
+            ShapeModules.Calls(8, 65_000, 64),
             ShapeModules.Locals(VerifyModuleShape.MAX_FUNCTIONS - 1, 0),
             ShapeModules.Blocks(VerifyModuleShape.MAX_BLOCK_VALUES, VerifyModuleShape.MAX_NESTING),
             ShapeModules.Chain(18_000),
@@ -87,12 +116,126 @@ public sealed class VerifyCompileMemoryTests
             {
                 var report = VerifyModuleShape.Scan(module);
                 Assert.That(report.Problem, Is.Null);
-                Assert.That(report.CompileMemoryBytes, Is.LessThanOrEqualTo(atTheBounds));
+                Assert.That(report.CompileMemoryBytes, Is.LessThanOrEqualTo(VerifyWasmSandbox.CompileGateBytes));
             }
 
-            Assert.That(atTheBounds, Is.LessThan(1024 * MEBIBYTE), "under a gibibyte for a module a task brings");
-            Assert.That(gate, Is.GreaterThanOrEqualTo(atTheBounds), "the gate holds a compile at the bounds, of a module a task brings and of a program a build wrote");
-            Assert.That(gate, Is.EqualTo(VerifyModuleShape.CompileMemoryAtTheBounds(VerifyClangBuild.PRODUCT_LIMIT_BYTES)));
+            Assert.That(VerifyWasmSandbox.CompileGateBytes, Is.EqualTo(VerifyCompileMemory.MAX_BYTES));
+            Assert.That(VerifyModuleShape.TOO_MUCH_MEMORY, Is.EqualTo($"compiling the module may take more than {VerifyCompileMemory.MAX_BYTES >> 20} MiB of memory"));
+        });
+    }
+
+    [Test]
+    public void D7TheDenseCallsAreEstimatedOverWhatTheyTookAndRunAloneTest()
+    {
+        // 64 functions of 65,000 calls that pass eight values (8.3 MB, every bound held): measured
+        // 1,893 MiB resident on an arm64 node and 1,382 MiB committed on x64, where the estimate
+        // was 540 MiB. Now it is over the arm64 peak with the margin, within the gate, and more
+        // than half of it: two such compiles never run side by side.
+        var report = VerifyModuleShape.Scan(ShapeModules.Calls(8, 65_000, 64));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.Problem, Is.Null);
+            Assert.That(report.CompileMemoryBytes, Is.GreaterThanOrEqualTo((long)(1.15 * 1893 * MEBIBYTE)));
+            Assert.That(report.CompileMemoryBytes, Is.LessThanOrEqualTo(VerifyWasmSandbox.CompileGateBytes));
+            Assert.That(report.CompileMemoryBytes, Is.GreaterThan(VerifyWasmSandbox.CompileGateBytes / 2));
+        });
+    }
+
+    [Test]
+    public void D7WhatACompileKeepsOfEveryFunctionIsCountedTest()
+    {
+        // The compiler keeps what it made of every function until the module is done: the
+        // estimate grows with every function's instructions, not only with the largest one.
+        const int CALLS = 65_000;
+        var one = VerifyModuleShape.Scan(ShapeModules.Calls(8, CALLS));
+        var sixteen = VerifyModuleShape.Scan(ShapeModules.Calls(8, CALLS, 16));
+        var bytes = ShapeModules.Calls(8, CALLS, 16).Length - ShapeModules.Calls(8, CALLS).Length;
+
+        // Each function of the shape: eight constants and the calls, each passing eight values each way.
+        var perFunction = CALLS * VerifyCompileMemory.CallUnits(false, 8, 8) + 8L * VerifyCompileMemory.UNITS_PLAIN;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sixteen.KeptUnits - one.KeptUnits, Is.EqualTo(15 * perFunction));
+            Assert.That(sixteen.LargestWork, Is.EqualTo(one.LargestWork), "what the compiler takes for the function at hand does not add up");
+            Assert.That(sixteen.CompileMemoryBytes - one.CompileMemoryBytes,
+                Is.EqualTo(15 * (perFunction * VerifyCompileMemory.PER_KEPT_UNIT + VerifyCompileMemory.PER_FUNCTION) + bytes * VerifyCompileMemory.PER_MODULE_BYTE));
+        });
+    }
+
+    [Test]
+    public void D7ACallCountsTheValuesOfTheTypeItCallsTest()
+    {
+        // A call of a function of the module, of an import and through a table: the units of
+        // its kind and a unit a value of the type called, a parameter or a result.
+        const int CALLS = 1000;
+        var none = VerifyModuleShape.Scan(ShapeModules.Calls(0, CALLS));
+        var direct = VerifyModuleShape.Scan(ShapeModules.Calls(8, CALLS));
+        var imported = VerifyModuleShape.Scan(ShapeModulesKept.ImportedCalls(8, CALLS));
+        var indirect = VerifyModuleShape.Scan(ShapeModulesKept.IndirectCalls(8, CALLS));
+        var constants = 8L * VerifyCompileMemory.UNITS_PLAIN;
+        var callee = VerifyCompileMemory.UNITS_PLAIN; // its one instruction, unreachable
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(none.KeptUnits, Is.EqualTo(CALLS * (long)VerifyCompileMemory.UNITS_CALL + callee));
+            Assert.That(direct.KeptUnits, Is.EqualTo(CALLS * VerifyCompileMemory.CallUnits(false, 8, 8) + constants + callee));
+            Assert.That(imported.KeptUnits, Is.EqualTo(CALLS * VerifyCompileMemory.CallUnits(false, 8, 8) + constants), "an import has the type it is imported with");
+            Assert.That(indirect.KeptUnits, Is.EqualTo(CALLS * (VerifyCompileMemory.CallUnits(true, 8, 8) + VerifyCompileMemory.UNITS_PLAIN) + constants + callee));
+            Assert.That(VerifyCompileMemory.CallUnits(false, 8, 8), Is.EqualTo(VerifyCompileMemory.UNITS_CALL + 16 * VerifyCompileMemory.UNITS_PER_VALUE));
+            Assert.That(indirect.LargestWork - direct.LargestWork,
+                Is.EqualTo((indirect.LargestBody - direct.LargestBody) * VerifyCompileMemory.PER_BODY_BYTE + CALLS * VerifyCompileMemory.WORK_INDIRECT_CALL),
+                "a call through a table takes the compiler more while it works on the function");
+        });
+    }
+
+    [Test]
+    public void D7EveryKindOfInstructionCountsWhatItKeepsAndTakesTest()
+    {
+        const int COUNT = 1000;
+        var memory = (long)VerifyCompileMemory.UNITS_MEMORY;
+        var plain = (long)VerifyCompileMemory.UNITS_PLAIN;
+
+        var loads = VerifyModuleShape.Scan(ShapeModulesKept.SummedLoads(COUNT));
+        var divisions = VerifyModuleShape.Scan(ShapeModulesKept.Divisions(COUNT));
+        var truncations = VerifyModuleShape.Scan(ShapeModulesKept.Truncations(COUNT));
+        var grows = VerifyModuleShape.Scan(ShapeModulesKept.Grows(COUNT));
+        var branches = VerifyModuleShape.Scan(ShapeModules.Branches(0, COUNT));
+        var arithmetic = VerifyModuleShape.Scan(ShapeModulesKept.Arithmetic(COUNT));
+
+        Assert.Multiple(() =>
+        {
+            // A load from a base read first, a load and an addition each, the store of the sum.
+            Assert.That(loads.KeptUnits, Is.EqualTo(2 * memory + 2 * plain + COUNT * (memory + plain)));
+            Assert.That(loads.LargestWork, Is.EqualTo(VerifyCompileMemory.Work(loads.LargestBody, (COUNT + 2) * VerifyCompileMemory.WORK_MEMORY)));
+            // Two values read first, a division each.
+            Assert.That(divisions.KeptUnits, Is.EqualTo(2 * memory + 2 * plain + COUNT * (long)VerifyCompileMemory.UNITS_DIVISION));
+            // A value read first; a conversion to a float, one back that may trap, a constant and an addition each; the store.
+            Assert.That(truncations.KeptUnits, Is.EqualTo(2 * memory + 2 * plain + COUNT * (VerifyCompileMemory.UNITS_TRUNCATION + 3 * plain)));
+            Assert.That(grows.KeptUnits, Is.EqualTo(COUNT * (VerifyCompileMemory.UNITS_ENGINE_CALL + plain)));
+            Assert.That(branches.KeptUnits, Is.EqualTo(COUNT * (long)VerifyCompileMemory.UNITS_BRANCH));
+            Assert.That(arithmetic.KeptUnits, Is.EqualTo(2 * memory + 2 * plain + COUNT * 4 * plain));
+            Assert.That(grows.LargestWork, Is.EqualTo(VerifyCompileMemory.Work(grows.LargestBody, 0)), "a call into the engine takes the compiler no more than its bytes");
+        });
+    }
+
+    [Test]
+    public void D7AnInstructionIsReadWithAllItsImmediatesTest()
+    {
+        // A select with its type, and an import: what follows them is the next instruction, not
+        // their bytes read as instructions (the type of a select is i64, which read as an
+        // instruction would be a multiplication).
+        byte[] select = [0x00, 0x42, 0x00, 0x42, 0x00, 0x41, 0x00, 0x1C, 0x01, 0x7E, 0x1A, 0x0B];
+        var report = VerifyModuleShape.Scan(ShapeModules.Build([([], [])], [(0, [0x00, 0x0B]), (0, select)], 1));
+        var imported = VerifyModuleShape.Scan(ShapeModulesKept.ImportedCalls(2, 10));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.Problem, Is.Null);
+            Assert.That(report.KeptUnits, Is.EqualTo(4L * VerifyCompileMemory.UNITS_PLAIN), "three constants and the select");
+            Assert.That(imported.Problem, Is.Null, "the import's names are passed over whole");
+            Assert.That(imported.KeptUnits, Is.EqualTo(10 * VerifyCompileMemory.CallUnits(false, 2, 2) + 2L * VerifyCompileMemory.UNITS_PLAIN));
         });
     }
 
@@ -220,6 +363,7 @@ public sealed class VerifyCompileMemoryTests
         Assert.Multiple(() =>
         {
             Assert.That(aside, Is.EqualTo(VerifyWasmSandbox.CompileGateBytes + VerifyTaskModuleCache.DEFAULT_BYTE_CAPACITY), "the gate of the larger compiles and the kept modules");
+            Assert.That(VerifyWasmSandbox.CompileGateBytes, Is.EqualTo(VerifyCompileMemory.MAX_BYTES), "the gate holds the largest compile there may be");
             Assert.That(perTask, Is.EqualTo(VerifySandboxDefaults.DEFAULT_MEMORY_BYTES + VerifyWasmSandbox.HEAVY_COMPILE_BYTES), "a task's cap and a compile of the lighter kind");
         });
     }
@@ -248,6 +392,33 @@ public sealed class VerifyCompileMemoryTests
             Assert.That(VerifySandboxDegree.Compute(64, none, perTask, 64), Is.EqualTo(1));
             Assert.That(VerifySandboxDegree.UsableRamBytes(0, VerifySandboxDegree.DEFAULT_RAM_HEADROOM, aside), Is.Zero, "unknown stays unknown");
             Assert.That(VerifySandboxDegree.UsableRamBytes(16 * GIBIBYTE, VerifySandboxDegree.DEFAULT_RAM_HEADROOM, 0), Is.EqualTo(12 * GIBIBYTE), "nothing aside for a runtime the controller ships");
+        });
+    }
+
+    [Test]
+    public void D7HowManyTasksOfACompiledRuntimeANodeRunsAtOnceTest()
+    {
+        // A node of 16 cores at the default cap of the degree, with 5, 16 and 64 GiB free: three
+        // quarters of that, less the gate and the kept modules, in tasks of their memory cap and a
+        // compile of the lighter kind (wasi), or of the compiler's step and that compile (C/C++).
+        const long GIBIBYTE = 1L << 30;
+        var wasi = VerifyRuntimeCatalog.Resolve(null, VerifyRuntimeCatalog.WASI, out var reason) ?? throw new InvalidOperationException(reason);
+        var aside = VerifyBatchExecutor.MemoryAside(wasi);
+        var perWasiTask = VerifySandboxDefaults.DEFAULT_MEMORY_BYTES + VerifyWasmSandbox.HEAVY_COMPILE_BYTES;
+        var perCTask = VerifyClangBuild.STEP_MEMORY_BYTES + VerifyWasmSandbox.HEAVY_COMPILE_BYTES;
+
+        int Degree(long free, long perTask) =>
+            VerifySandboxDegree.Compute(16, VerifySandboxDegree.UsableRamBytes(free, VerifySandboxDegree.DEFAULT_RAM_HEADROOM, aside), perTask);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(aside, Is.EqualTo(2816 * MEBIBYTE), "2.5 GiB of the gate and 256 MiB of kept modules");
+            Assert.That(Degree(5 * GIBIBYTE, perWasiTask), Is.EqualTo(3));
+            Assert.That(Degree(5 * GIBIBYTE, perCTask), Is.EqualTo(1));
+            Assert.That(Degree(16 * GIBIBYTE, perWasiTask), Is.EqualTo(16));
+            Assert.That(Degree(16 * GIBIBYTE, perCTask), Is.EqualTo(8));
+            Assert.That(Degree(64 * GIBIBYTE, perWasiTask), Is.EqualTo(16));
+            Assert.That(Degree(64 * GIBIBYTE, perCTask), Is.EqualTo(16));
         });
     }
 

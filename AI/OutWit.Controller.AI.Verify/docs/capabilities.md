@@ -668,14 +668,22 @@ loops: a module of 6.9 KB took 1.5 s, one of 28 KB took 81 s and 1.5 GiB. So:
   module has more than 16384 locals`, `the functions of the module declare more than 4194304
   locals together`, `the module has more than 32768 functions`, `a function of the module is
   larger than 128 KiB`, and `the module has a start function, which a task's module may not
-  have: a program starts at _start`.
+  have: a program starts at _start`. A module whose compile may take more memory than a node
+  sets aside for one is refused as well: `compiling the module may take more than
+  2560 MiB of memory`.
 - The compile uses the calling worker's thread only, so it stays within the cores a batch
   counts.
 - The memory the engine takes while it compiles is in no task's memory cap. It is estimated
-  from the shape (about 6 KB a function, up to 4 KB a byte of the largest function; about a
-  gibibyte for a module at every bound). Compiles that may take 64 MiB or more share 1,040 MiB
-  between them in a node's process: one at the bounds runs alone, several of ordinary programs
-  side by side. A node counts those 1,040 MiB where it decides how many tasks run at once
+  from the shape: 9 KiB a function and 6 KiB a byte of the function the compiler works on (more
+  for its loads, stores, divisions, conversions that may trap and calls through a table), and
+  what the compiler keeps of every function until the module is done, by its instructions: 16
+  bytes a unit, an instruction of arithmetic 3 units, a branch 9, a call 11 and one a value it
+  passes, a load or a store 40, a division 68, a call through a table 90 and one a value, a
+  conversion that may trap 112. The figures are the larger of an x64 node in both trap modes
+  and an arm64 node, with a margin of at least 15 %. A module estimated over 2,560 MiB is
+  refused before it is compiled. Compiles that may take 64 MiB or more share 2,560 MiB between
+  them in a node's process: the largest runs alone, several of ordinary programs side by
+  side. A node counts those 2,560 MiB where it decides how many tasks run at once
   (section 11).
 
 The fuel a task reports includes the price: a C hello costs 8,628,668 (8,314,372 before 0.17.0;
@@ -923,7 +931,7 @@ How a deployment uses them:
 - A task that was not sampled rests on one machine (`single_execution` in the integrity document). So does a task that was sent out once more after a node's fault, unless its repair package was one of the share that runs twice.
 - The server does not know which packages the platform ran twice. It counts how many came back with two accepted results against how many the rate asks for, and says `short` when fewer did; it cannot say which package lost its second execution.
 - The server cannot see which machine returned an answer. A liar can keep a dispute from being resolved (the task stays `Disputed`); it cannot make its answer the accepted one, except when the honest copies of a disputed task were all lost (section 10).
-- The bounds and the price of compiling a task's own module are fitted to measurements of particular shapes, not a proof about every module the engine accepts. A compile, once started, cannot be interrupted, and one expensive compile runs at a time in a node's process (section 9). What the engine takes in memory while it compiles is estimated and counted by the node, not capped.
+- The bounds and the price of compiling a task's own module are fitted to measurements of particular shapes, not a proof about every module the engine accepts. A compile, once started, cannot be interrupted, and one expensive compile runs at a time in a node's process (section 9). What the engine takes in memory while it compiles is estimated from the module, refused over 2,560 MiB and counted by the node; the estimate holds for the kinds of code that were measured, and the compile itself is not capped.
 - Fuel bounds work, not time: a run of slow instructions can take four times as long as its budget lasts at the reference rate, and ten seconds more, before a node's backstop ends it (section 9).
 - Python runs the standard library, sympy or numpy, but no other package and no C extension. Ruby has four bundled gems and no others.
 - TypeScript is not type-checked. C++ has no exceptions. numpy and C/C++ are 32-bit targets.

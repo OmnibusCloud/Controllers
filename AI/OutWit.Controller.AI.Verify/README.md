@@ -24,9 +24,10 @@ prices were missing (see "Determinism"). What it changed:
   module of a few kilobytes could take the engine half a minute, or eight gigabytes, for the
   price of a hello.
 - The memory the engine takes while it compiles such a module is counted where a node decides
-  how many tasks run at once: the compiles that may take 64 MiB or more share about a gibibyte
-  between them (one at the bounds of a task's module runs alone), and the degree sets that
-  gibibyte and the compiled modules the node keeps aside. Those kept modules are bounded by
+  how many tasks run at once: what a compile may take is estimated from the module (the code
+  of every function, by its kind) and a module estimated over 2,560 MiB is refused; the
+  compiles that may take 64 MiB or more share those 2,560 MiB between them (the largest runs
+  alone), and the degree sets them and the compiled modules the node keeps aside. Those kept modules are bounded by
   their bytes (256 MiB of compiled code), not by their number.
 - A module with a start function is refused: a program starts at `_start`, and nothing of a
   task's module runs outside its budget.
@@ -754,15 +755,19 @@ locals times the depth of its loops: 6.9 KB took 1.5 s, 28 KB took 81 s and
   engine runs while it makes a module ready is in no budget.
 - A raw module may be at most 8 MiB.
 - While it compiles, the engine takes memory that is in no task's memory cap:
-  about 6 KB a function, and up to 4 KB a byte of the function it works on. It
-  is estimated from the shape (about a gibibyte for a module at every bound);
-  compiles that may take 64 MiB or more share 1,040 MiB between them in a
-  node's process, each waiting while the others leave it no room, so that one
-  at the bounds runs alone and several of ordinary programs run side by side;
-  the degree counts those 1,040 MiB (see "Node behaviour").
+  6 KiB a byte of the function it works on, and what it keeps of every function
+  until the module is done, which grows with that function's calls, loads and
+  stores, branches and instructions that may trap. It is estimated from the
+  shape, and a module estimated over 2,560 MiB is refused (`compiling the
+  module may take more than 2560 MiB of memory`); compiles that may take 64 MiB
+  or more share 2,560 MiB between them in a node's process, each waiting while
+  the others leave it no room, so that the largest runs alone and several of
+  ordinary programs run side by side; the degree counts those 2,560 MiB (see
+  "Node behaviour").
 
-What remains: the bounds and the prices hold for the shapes that were measured,
-and are not a proof about every module the engine accepts; a compile, once
+What remains: the bounds, the prices and the estimate of a compile's memory hold
+for the shapes that were measured, and are not a proof about every module the
+engine accepts; the compile itself is not capped; a compile, once
 started, cannot be interrupted; one expensive compile runs at a time in a
 node's process. A non-optimising compiler
 tier was evaluated and is not used: the engine's baseline compiler (Winch)
@@ -779,7 +784,7 @@ that is free when the batch starts, and for C/C++ tasks the compiler's 1 GiB a
 step counts as the per-task cap when it is the larger. For a batch whose
 modules the engine compiles on the node (`wasi` and C/C++) what that work may
 take is counted as well: 64 MiB a task, and, taken off the usable RAM once,
-the 1,040 MiB the larger compiles share and the 256 MiB of
+the 2,560 MiB the larger compiles share and the 256 MiB of
 compiled code the node keeps for the tasks to come. Compiling a task's own
 module or a program built from C/C++ takes the worker's thread only; the first
 use of a runtime in a process compiles that runtime's own module (the
