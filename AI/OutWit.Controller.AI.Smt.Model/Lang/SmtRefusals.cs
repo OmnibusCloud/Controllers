@@ -32,6 +32,18 @@ internal static class SmtRefusals
     }
 
     /// <summary>
+    /// Makes the refusal of a row of a problem set: about the row itself, so without a line of a
+    /// text and without a command.
+    /// </summary>
+    /// <param name="code">The code (<see cref="SmtRefusalCodes"/>).</param>
+    /// <param name="reason">What is wrong, in words.</param>
+    /// <returns>The refusal; whoever reads the set gives it its row and its id.</returns>
+    public static SmtRefusalData OfRow(string code, string reason)
+    {
+        return new SmtRefusalData { Code = code, Reason = reason };
+    }
+
+    /// <summary>
     /// Makes the refusal of a text the reader did not take.
     /// </summary>
     /// <param name="fault">The reader's refusal.</param>

@@ -2,7 +2,8 @@ namespace OutWit.Controller.AI.Smt.Model.Lang;
 
 /// <summary>
 /// The codes of a refusal (<see cref="SmtRefusalData.Code"/>): fixed strings, a public contract.
-/// A code names the rule a problem or a term broke; the refusal's reason says it in words.
+/// A code names the rule a problem, a term or a row of a problem set broke; the refusal's reason
+/// says it in words.
 /// </summary>
 public static class SmtRefusalCodes
 {
@@ -62,11 +63,39 @@ public static class SmtRefusalCodes
     /// <summary>A text given as one term is not one s-expression: it holds none, or more than one.</summary>
     public const string NOT_A_TERM = "not_a_term";
 
+    /// <summary>A line of a problem set is no row: it is not UTF-8, not one JSON object, or names a field twice.</summary>
+    public const string ROW_MALFORMED = "row_malformed";
+
+    /// <summary>A line of a problem set is longer than a line may be; nothing of it was read.</summary>
+    public const string ROW_TOO_LONG = "row_too_long";
+
+    /// <summary>A row's id is not 1 to 64 of the characters an id is made of.</summary>
+    public const string ID_INVALID = "id_invalid";
+
+    /// <summary>A row's id is the id of an earlier row of the set.</summary>
+    public const string ID_DUPLICATE = "id_duplicate";
+
+    /// <summary>A row lacks a field it must have: its id, its problem, the constants of an enumeration, the goal of a proof.</summary>
+    public const string FIELD_MISSING = "field_missing";
+
+    /// <summary>A field's value is of another type (null included), outside its range, or none of the values the field takes.</summary>
+    public const string FIELD_INVALID = "field_invalid";
+
+    /// <summary>A row holds a field that is none of a row's, or one that belongs to another query than the row's.</summary>
+    public const string FIELD_NOT_ALLOWED = "field_not_allowed";
+
+    /// <summary>An enumeration is projected on a name the problem does not declare as a constant.</summary>
+    public const string UNKNOWN_CONSTANT = "unknown_constant";
+
+    /// <summary>A problem set has more rows than a set may have; reading ended at this row.</summary>
+    public const string TOO_MANY_PROBLEMS = "too_many_problems";
+
     private static readonly HashSet<string> CODES = new(StringComparer.Ordinal)
     {
         SYNTAX_ERROR, TEXT_TOO_LONG, TOO_MANY_TOKENS, NESTING_TOO_DEEP, NUMERAL_TOO_LONG, LITERAL_TOO_WIDE, STRING_TOO_LONG,
         NOT_A_COMMAND, COMMAND_NOT_ALLOWED, COMMAND_AFTER_END, COMMAND_MALFORMED, RESERVED_SYMBOL, AMBIGUOUS_TOKEN, NON_ASCII_STRING,
-        INDEX_TOO_LARGE, TOO_MANY_SYMBOLS, RESERVED_PREFIX, NOT_A_TERM
+        INDEX_TOO_LARGE, TOO_MANY_SYMBOLS, RESERVED_PREFIX, NOT_A_TERM,
+        ROW_MALFORMED, ROW_TOO_LONG, ID_INVALID, ID_DUPLICATE, FIELD_MISSING, FIELD_INVALID, FIELD_NOT_ALLOWED, UNKNOWN_CONSTANT, TOO_MANY_PROBLEMS
     };
 
     #endregion
