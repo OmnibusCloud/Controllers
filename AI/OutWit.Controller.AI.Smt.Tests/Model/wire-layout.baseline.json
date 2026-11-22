@@ -2,12 +2,36 @@
   "comment": "The wire layout of OutWit.Controller.AI.Smt.Model: the Model package version and, for every MemoryPack type, its members in wire order with name, type and the value a new instance holds. Once a version of the package is published, a member is only ever appended, with the next order; a member that changes its name, its type, its place or its default is a wire change for a deployed fleet and for every application built against the package. Update this file in the same commit as the type (SmtModelWireLayoutTests prints the current layout when it differs).",
   "modelVersion": "0.1.0",
   "types": {
+    "SmtOptionsData": [
+      "0: Profile: String = \"\"",
+      "1: Query: SmtQuery = Check",
+      "2: MaxModels: Int32 = 0",
+      "3: Seed: Int32 = 0",
+      "4: ResourceLimit: Int64 = 0",
+      "5: HardCapSeconds: Int32 = 0",
+      "6: MemoryMegabytes: Int32 = 0",
+      "7: SamplingRate: Double = 0.05"
+    ],
+    "SmtProblemData": [
+      "0: Index: Int32 = 0",
+      "1: Id: String = \"\"",
+      "2: Query: SmtQuery = Check",
+      "3: Text: String = \"\"",
+      "4: Hash: String = \"\"",
+      "5: Values: List<String> = []",
+      "6: Project: List<String> = []",
+      "7: MaxModels: Int32 = 0",
+      "8: Goal: String = \"\"",
+      "9: Expected: SmtProblemStatus = None",
+      "10: Tags: String = \"\""
+    ],
     "SmtRefusalData": [
       "0: File: String = \"\"",
       "1: Line: Int32 = 0",
       "2: Command: String = \"\"",
       "3: Code: String = \"\"",
-      "4: Reason: String = \"\""
+      "4: Reason: String = \"\"",
+      "5: Row: Int32 = 0"
     ]
   }
 }

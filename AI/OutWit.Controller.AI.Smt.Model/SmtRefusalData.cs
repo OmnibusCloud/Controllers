@@ -6,9 +6,15 @@ using OutWit.Common.Values;
 namespace OutWit.Controller.AI.Smt.Model;
 
 /// <summary>
-/// Why a problem, or a term beside it, was not taken: where, which command, a fixed code and a
-/// sentence a person can act on. It never carries the problem's text: of the text it holds a
-/// command name and, in the reason, at most one token cut to 64 characters.
+/// Why a problem, a term beside it, or a row of a problem set was not taken: where, which
+/// command, a fixed code and a sentence a person can act on. It never carries the problem's
+/// text or the row: of them it holds a command name and, in the reason, the name of a field or
+/// at most one token cut to 64 characters.
+/// <para>
+/// In a problem set <see cref="Row"/> is the line of the set, <see cref="File"/> the row's id
+/// and <see cref="Line"/> the line inside the problem's text (0 when the refusal is about the
+/// row itself).
+/// </para>
 /// </summary>
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order: append new members at the END only.
@@ -29,26 +35,34 @@ public sealed partial class SmtRefusalData : ModelBase
                && Line.Is(other.Line)
                && Command.Is(other.Command)
                && Code.Is(other.Code)
-               && Reason.Is(other.Reason);
+               && Reason.Is(other.Reason)
+               && Row.Is(other.Row);
     }
 
     /// <summary>Deep copy.</summary>
     /// <returns>The copy.</returns>
     public override SmtRefusalData Clone()
     {
-        return new SmtRefusalData { File = File, Line = Line, Command = Command, Code = Code, Reason = Reason };
+        return new SmtRefusalData { File = File, Line = Line, Command = Command, Code = Code, Reason = Reason, Row = Row };
     }
 
     #endregion
 
     #region Properties
 
-    /// <summary>The file the problem came from, as whoever read the file names it; empty when the text had no file.</summary>
+    /// <summary>
+    /// What the problem is called: in a problem set the row's id (empty when the row has no
+    /// readable id), elsewhere the file the problem came from as whoever read it names it, or empty.
+    /// </summary>
     [ToString]
     [MemoryPackOrder(0)]
     public string File { get; set; } = "";
 
-    /// <summary>The line the refusal is about (1-based): where the token or the command it names starts; 1 when it is about the text as a whole.</summary>
+    /// <summary>
+    /// The line of the problem's text, or of a term's, the refusal is about (1-based): where the
+    /// token or the command it names starts; 1 when it is about the text as a whole. 0 when the
+    /// refusal is about a row of a problem set and not about a text in it.
+    /// </summary>
     [ToString]
     [MemoryPackOrder(1)]
     public int Line { get; set; }
@@ -66,6 +80,11 @@ public sealed partial class SmtRefusalData : ModelBase
     /// <summary>What is wrong, in a sentence a person can act on.</summary>
     [MemoryPackOrder(4)]
     public string Reason { get; set; } = "";
+
+    /// <summary>The line of the problem set the refusal belongs to (1-based); 0 outside a problem set.</summary>
+    [ToString]
+    [MemoryPackOrder(5)]
+    public int Row { get; set; }
 
     #endregion
 }
