@@ -178,7 +178,7 @@ answer it validates needs no trust in whoever gave it.
 
 | Type | Role |
 |---|---|
-| `SmtModelValidator` | built once from a problem's commands; checks any number of models, from any number of threads |
+| `SmtModelValidator` | built once from a problem (the `SmtProblem` the sanitizer took, or a list of its commands); checks any number of models, from any number of threads |
 | `SmtModel` | what the solver printed after `sat`: the answer of `(get-model)`, of `(get-value (...))`, or both |
 | `SmtValidation` | the outcome: class, reason, detail, and the counts behind them |
 | `SmtValidationClass` | `Validated`, `Partial`, `Failed` |
@@ -190,7 +190,8 @@ answer it validates needs no trust in whoever gave it.
 using OutWit.Controller.AI.Smt.Model.Eval;
 using OutWit.Controller.AI.Smt.Model.Lang;
 
-var validator = new SmtModelValidator(commands);            // the commands of one problem
+var problem = SmtSanitizer.Sanitize(problemText).Problem!;  // the problem as the sanitizer took it
+var validator = new SmtModelValidator(problem);
 var model = SmtModel.Read(modelText, valuesText, limits);   // never throws: a text that is no model is an unreadable model
 var validation = validator.Validate(model, SmtEvaluationBudget.Default);
 
@@ -280,14 +281,16 @@ Nothing is timed.
 | Budget | Default | Counts |
 |---|---|---|
 | Steps | 20,000,000 | one for each term evaluated; an operation on a large value pays for the machine words it touches, a value for the memory it takes |
-| Nesting | 131,072 | a term in a term, a call (two levels), a value in a value |
+| Nesting | 32,768 | a term in a term, a call (two levels), a value in a value; a budget may ask for up to 131,072 |
 | Bits of an integer | 1,048,576 | also the numerator and the denominator of a rational together |
 | Bits of a bit-vector | 1,048,576 | |
 | Characters of a string | 1,048,576 | |
 | Stored indices of an array | 1,048,576 | |
 
 Terms are walked by calls, on a thread the validation makes for itself with a stack sized for
-the nesting ceiling. The chains real terms are written as cost no nesting at all: a chain of
+the nesting ceiling: an eighth of a gigabyte is reserved for the default ceiling, and only what
+a term really nests is ever taken of it. The chains real terms are written as cost no nesting
+at all, and are not bounded by the ceiling: a chain of
 `let`, each in the body of the one before; of `ite`, each in a branch of the one before; of
 `and`, `or` or `=>`, each the last argument of the one before; annotated terms; the cases of a
 `match`. A problem written as a quarter of a million nested `let` is evaluated like any other.
