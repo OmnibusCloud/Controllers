@@ -13,16 +13,29 @@ sandbox told for the people who lend their computers.
 
 Version described: **Verify 1.0.0** (with Verify.Model 1.0.0 and Verify.Scripts 1.0.0), the
 first release. Its code is the code of 0.17.0, which ran on the test fleet on Windows x64, Linux
-x64 and macOS arm64 nodes; the fleet figures on this page (scale, medians, pool rate) were
+x64 and macOS arm64 nodes, with one change more: the estimate of a compile's memory (below and
+section 9). The fleet figures on this page (scale, medians, pool rate) were
 measured before 0.13.0 and say so where they stand. 1.0.0 is not on nuget.org or on the live
 network yet.
 
 What 1.0.0 changed for an application:
 
-- **Nothing, from 0.17.0.** The verdicts, the fuel figures, the outputs, the documents and their
-  versions, the scripts and the wire types are those of 0.17.0; the documents name the
-  controller version 1.0.0. A job runs on one controller version, so the server and the nodes
-  move to 1.0.0 together.
+- **A compile's memory is estimated by what the module holds.** Before a node compiles a
+  task's own `wasi` module, or a program built from C or C++, it estimates the memory the
+  compile may take: by what the compiler keeps of every function until the module is done (its
+  calls, loads and stores, loops, branches, float and vector instructions and the instructions
+  that may trap) and by the code it makes for the module's function types, imports and exports.
+  A module estimated over 1,536 MiB is refused before anything is compiled: a `CompileError`
+  with `compiling the module may take more than 1536 MiB of memory`. A module may have at most
+  4,096 function types, 1,024 imports and 33,792 exports; past them it is a `CompileError`
+  with fixed words as well. The cap leaves ordinary compiled code about 10 to 17 MB of a
+  program; C++ with many virtual functions reaches it sooner (section 9). The compiles that may
+  take 64 MiB or more share those 1,536 MiB, which a node sets aside where it decides how many
+  tasks run at once, so it may run fewer of these tasks at once than 0.17.0 did.
+- **Nothing else moved from 0.17.0.** Every other verdict, the fuel figures, the outputs, the
+  documents and their versions, the scripts and the wire types are those of 0.17.0; the
+  documents name the controller version 1.0.0. A job runs on one controller version, so the
+  server and the nodes move to 1.0.0 together.
 
 What the 0.x line changed, for an application written for an early 0.x version (0.12.0 and
 before), in short:
@@ -56,8 +69,9 @@ before), in short:
   a task share its stdout cap (sections 4 and 9).
 - **A task's own module is bounded and priced.** A `wasi` module, or a program built from C or
   C++, is held to bounds of its shape and refused past them with fixed words, a module with a
-  start function included; within them, compiling it is paid from the task's fuel. A C/C++
-  build may write 128 MiB in all (section 9).
+  start function included; within them, compiling it is paid from the task's fuel, and since
+  1.0.0 its memory is estimated and refused over 1,536 MiB (above). A C/C++ build may write
+  128 MiB in all (section 9).
 - **The scripts run three fan-outs:** the first, the repair round under the same sampling, and
   the dispute round of three copies. `Verify.Disputes` takes the repair round as well and
   `Verify.Settle` the sampling rate; the job variables an application reads are the ones they
@@ -667,8 +681,9 @@ loops: a module of 6.9 KB took 1.5 s, one of 28 KB took 81 s and 1.5 GiB. So:
   arm64 node did not run the measurement, and 1.84 times the x64 figure (the most it took over
   x64 for any shape it ran) stands in for it. For ordinary compiled code that leaves about 10
   to 17 MB of a program within the cap (less when its largest function is large: the largest
-  counts at 6 KiB a byte and more). A module estimated over 1,536 MiB is
-  refused before it is compiled. Compiles that may take 64 MiB or more share 1,536 MiB between
+  counts at 6 KiB a byte and more). C++ with many virtual functions reaches the cap sooner than
+  that: every function that leaves the module counts, a virtual table's entry among them. A
+  module estimated over 1,536 MiB is refused before it is compiled. Compiles that may take 64 MiB or more share 1,536 MiB between
   them in a node's process: the largest runs alone, several of ordinary programs side by
   side. A node counts those 1,536 MiB where it decides how many tasks run at once
   (section 11).
@@ -919,7 +934,7 @@ How a deployment uses them:
 - A task that was not sampled rests on one machine (`single_execution` in the integrity document). So does a task that was sent out once more after a node's fault, unless its repair package was one of the share that runs twice.
 - The server does not know which packages the platform ran twice. It counts how many came back with two accepted results against how many the rate asks for, and says `short` when fewer did; it cannot say which package lost its second execution.
 - The server cannot see which machine returned an answer. A liar can keep a dispute from being resolved (the task stays `Disputed`); it cannot make its answer the accepted one where the platform holds a node to one answer for each package it was given (Grid 1.3.0 and later). With an older Grid a second answer of its own can take the place of an honest copy that did not come back (section 10).
-- The bounds and the price of compiling a task's own module are fitted to measurements of particular shapes, not a proof about every module the engine accepts. A compile, once started, cannot be interrupted, and one expensive compile runs at a time in a node's process (section 9). What the engine takes in memory while it compiles is estimated from the module, refused over 1,536 MiB and counted by the node; the estimate holds for the kinds of code that were measured, and the compile itself is not capped. Calls through a table, loops, reads of a table, traps, and loads and stores on a host with hardware stack protection, compile far more slowly than their price says: within every bound and the default budget a module of many such functions can hold one core of a node for minutes while it compiles, and that compile cannot be stopped. No verdict is wrong because of it, and its memory is bounded.
+- The bounds and the price of compiling a task's own module are fitted to measurements of particular shapes, not a proof about every module the engine accepts. A compile, once started, cannot be interrupted, and one expensive compile runs at a time in a node's process (section 9). What the engine takes in memory while it compiles is estimated from the module, refused over 1,536 MiB and counted by the node; the estimate holds for the kinds of code that were measured, and the compile itself is not capped. Calls through a table, loops, reads of a table, traps, functions of many parameters that leave the module, and loads and stores on a host with hardware stack protection compile far more slowly than their price says: within every bound and the default budget a module of many such functions can hold one core of a node for minutes while it compiles, and that compile cannot be stopped. No verdict is wrong because of it, and its memory is bounded.
 - Fuel bounds work, not time: a run of slow instructions can take four times as long as its budget lasts at the reference rate, and ten seconds more, before a node's backstop ends it (section 9).
 - Three file calls take far longer on Windows than their price: a program that loops on `path_filestat_get`, `path_open` or `fd_filestat_get` burns some 7 million units a second there and is ended by the node's backstop before its fuel: no verdict (`NoResult` with reason `wall_clock` if no node does better), never a wrong one (section 9).
 - Python runs the standard library, sympy or numpy, but no other package and no C extension. Ruby has four bundled gems and no others.
@@ -930,4 +945,4 @@ How a deployment uses them:
   - in C/C++ and in a raw module by the engine's 8 MiB stack: some 90,000 to 170,000 levels for a small function. How many depends on the node (the trap mode, the processor architecture: section 9), so a recursion deeper than a few tens of thousands of levels can pass on one honest node and overflow on another.
 - The peak memory of a CPython task can differ by a page between hosts (section 10). Verdicts and outputs do not.
 - A run waits for its slowest share (section 11).
-- The code of 1.0.0 is proven on the test fleet, as 0.17.0. Its release to nuget.org and to the live network is the owner's decision.
+- The code of 0.17.0 is proven on the test fleet; 1.0.0 is that code and the estimate of a compile's memory (section 9), held by the controller's tests on the three systems and to run on the fleet with the 1.0.0 builds. Its release to nuget.org and to the live network is the owner's decision.

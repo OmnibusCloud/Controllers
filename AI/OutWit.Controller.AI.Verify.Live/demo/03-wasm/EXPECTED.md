@@ -14,8 +14,9 @@ engine compiles on a node pays for its smallest functions. The sizes, the hashes
 are measured again when the kit is next walked on a fleet.
 
 On a macOS arm64 node, with every task of the kit on two machines and the other copy on a Linux
-x64 node (Verify 0.17.0, the code of 1.0.0), no pair of copies differed and every verdict was the
-one below.
+x64 node (Verify 0.17.0), no pair of copies differed and every verdict was the one below. 1.0.0
+adds to that code only the estimate of a compile's memory, which refuses no task of this kit: the
+test above runs every row under 1.0.0.
 
 ## The table
 

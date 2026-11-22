@@ -10,8 +10,10 @@ same activity with different programs.
 **Status: 1.0.0 (Verify.Model 1.0.0, Verify.Scripts 1.0.0) — the first release; not on
 nuget.org or the live network yet.** Its code is the code of 0.17.0, which ran on the test
 fleet on Windows x64, Linux x64 and macOS arm64 nodes, with a node that lied and one that
-answered nothing among them; 1.0.0 changes the version and nothing a node or the server runs.
-What 1.0.0 is, after the 0.x line on the test server, is under "What changed in 1.0.0" below.
+answered nothing among them, and one change more: what compiling a task's own module may take
+in memory is estimated anew, and a module estimated over 1,536 MiB is refused before it
+compiles. What 1.0.0 is, after the 0.x line on the test server, is under "What changed in
+1.0.0" below.
 
 What the controller can do, for an application built on it:
 [docs/capabilities.md](docs/capabilities.md).
@@ -30,11 +32,27 @@ verifiable by construction: code passes its test suite or it does not.
 
 ## What changed in 1.0.0
 
-1.0.0 is the 0.x line of the test server made one release. A lab that ran 0.17.0 sees the same
-verdicts, fuel figures, outputs and documents (`verify-report/3`, `verify-provenance/2`,
-`verify-integrity/3`, `verify-capabilities/3`), the same scripts and the same wire types;
-the documents name the controller version 1.0.0. What the 0.x releases made of the controller,
-in the words of what a lab can count on:
+1.0.0 is the 0.x line of the test server made one release, with one change of its own. A lab
+that ran 0.17.0 sees the same documents (`verify-report/3`, `verify-provenance/2`,
+`verify-integrity/3`, `verify-capabilities/3`), the same scripts and the same wire types, and
+the same verdicts, fuel figures and outputs for every task but a module the new estimate or
+bounds refuse; the documents name the controller version 1.0.0.
+
+- **New in 1.0.0: what a compile may take in memory is estimated by what the module holds.**
+  Before the engine compiles a task's own module, or a program built from its C/C++ sources,
+  the node estimates the memory that compile may take: by what the compiler keeps of every
+  function until the module is done (its calls, loads and stores, loops, branches, float and
+  vector instructions and the instructions that may trap) and by the code it makes for the
+  module's function types, imports and exports. A module estimated over 1,536 MiB is refused
+  before anything is compiled, a `CompileError` in the words `compiling the module may take more
+  than 1536 MiB of memory`, and a module may have at most 4,096 function types, 1,024
+  imports and 33,792 exports. The compiles that may take 64 MiB or more share those 1,536 MiB
+  in a node's process, so a node sets more memory aside for them than 0.17.0 did and may run
+  fewer such tasks at once. The cap leaves ordinary compiled code about 10 to 17 MB of a
+  program; C++ with many virtual functions reaches it sooner, because every function that
+  leaves the module, a virtual table's entry among them, counts.
+
+What the 0.x releases made of the controller, in the words of what a lab can count on:
 
 - **Fuel is the one budget of a run's work.** `Timeout` means out of fuel and nothing else, and
   it is the same on every node. The wall clock is a node's own backstop and gives no verdict: a
@@ -48,10 +66,12 @@ in the words of what a lab can count on:
   brings, and a program built from its sources, is held to bounds: a function type has at most
   128 parameters and 8 results, a block passes at most 8 values, a function has at most 16,384
   locals and a body of 128 KiB, a module at most 32,768 functions and 4,194,304 declared locals,
-  blocks nest at most 2,048 deep, and a module with a start function is refused. A module past
+  4,096 function types, 1,024 imports and 33,792 exports, blocks nest at most 2,048 deep, and a
+  module with a start function is refused. A module past
   a bound is a `CompileError` with fixed words. What is within the bounds is priced from the
   task's fuel by what the engine was measured to take for its shape, and the memory the engine
-  takes while it compiles is counted where a node decides how many tasks run at once. A C/C++
+  takes while it compiles is estimated, refused over 1,536 MiB and counted where a node decides
+  how many tasks run at once. A C/C++
   build has one budget for everything it writes, its objects and its program together: 128 MiB.
 - **What the server reads from a lab is held to its schema and bounded where it is read.** A
   field a taskset's schema does not have (a misspelt `expected_stdout`), a field given twice, a
@@ -108,9 +128,14 @@ The limits that stay, each stated where it belongs below:
 - one lying machine can leave a dispute unsettled and cannot take a result; with a Grid older
   than 1.3.0 a second answer can take the place of an honest copy that did not come back (see
   "Integrity");
-- the compile of a task's own module is priced and its memory counted, not capped, and the
-  bounds and the prices are fitted to measured shapes, not a proof about every module (see
-  "Modules a task brings");
+- the compile of a task's own module is priced, and its memory estimated, refused over 1,536
+  MiB and counted; the compile itself is not capped, and the bounds, the prices and the estimate
+  are fitted to measured shapes, not a proof about every module (see "Modules a task brings");
+- some code compiles far more slowly than its price says (calls through a table, loops, reads
+  of a table, traps, functions of many parameters that leave the module, and loads and stores
+  on a host with hardware stack protection): a module of many such functions can hold one core
+  of a node for minutes while it compiles, and no verdict is wrong because of it (see "Modules
+  a task brings");
 - three file calls take far longer on Windows than their price (`path_filestat_get`,
   `path_open`, `fd_filestat_get`), so a program that loops on them reaches the node's backstop
   there before its fuel: no verdict, `NoResult` (`wall_clock`), never a wrong one (see
@@ -715,7 +740,8 @@ locals times the depth of its loops: 6.9 KB took 1.5 s, 28 KB took 81 s and
   results, a block takes and gives more than 8 values, a function has more than
   16,384 locals or a body larger than 128 KiB, or the module has more than
   32,768 functions or its functions declare more than 4,194,304 locals
-  together. The interpreters the controller ships have at most 28 parameters,
+  together, or it has more than 4,096 function types, 1,024 imports or 33,792
+  exports. The interpreters the controller ships have at most 28 parameters,
   one result and 188 locals in a function; QuickJS has 1,522 functions and a
   largest body of 78 KB.
 - A module with a start function is refused (`the module has a start function,
