@@ -70,7 +70,8 @@ before), in short:
   archives are built again from their pins and compared (section 13).
 - **arm64 gives what x64 gives.** On a macOS arm64 node, with every task of the kits on two
   machines and the other copy on a Linux x64 node, no pair of copies differed, every verdict was
-  the one x64 gives, and the fuel of every batch was the same number on both (section 10).
+  the one x64 gives, and the fuel of every batch was the same number on both (section 10). The
+  compile prices hold there as on x64 (section 9).
 
 ## Contents
 
@@ -615,10 +616,11 @@ loops: a module of 6.9 KB took 1.5 s, one of 28 KB took 81 s and 1.5 GiB. So:
   (the blocks around it), for a block of two values or more; 64 units a local past 256 in a
   function; and a function is priced as 24 bytes at the least. Each is what the engine was
   measured to take for that shape, in the proportion a byte's price has to a byte's time.
-
-  > **TODO (arm64 compile prices):** the sentence on what the compile prices and the compile
-  > memory estimate are on arm64 goes here once they are measured.
-
+  The prices were measured on an x64 Windows desktop and on an arm64 macOS laptop, and hold on
+  both, to within a few times either way, for the shapes that were measured: the arm64 machine
+  compiled them in 0.28 to 1.27 times the x64 time (0.71 at the median), and a unit of the price
+  bought no more compile time there than on x64. They are not a proof about every module
+  (section 14).
 - A task whose budget does not hold the price is `Timeout`, and nothing is compiled.
 - Blocks nested deeper than 2,048 in one function are refused with a `CompileError`. Its stderr
   is `a function of the module nests blocks deeper than 2048`. The shipped interpreters nest

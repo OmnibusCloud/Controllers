@@ -96,10 +96,11 @@ in the words of what a lab can count on:
 - **On arm64 as on x64.** On a macOS arm64 node, with every task of the kits on two machines and
   the other copy on a Linux x64 node, no pair of copies differed, every verdict was the one x64
   gives, and the fuel of every batch was the same number on both: a budgeted task does not
-  change its verdict between the two architectures.
-
-  > **TODO (arm64 compile prices):** the sentence on what the compile prices and the compile
-  > memory estimate are on arm64 goes here once they are measured.
+  change its verdict between the two architectures. The compile prices hold there too: they
+  were measured on an x64 Windows desktop and on an arm64 macOS laptop, and for the shapes that
+  were measured a budget buys about as much compiling on both, to within a few times either way
+  (the arm64 machine compiled them in 0.28 to 1.27 times the x64 time, 0.71 at the median), so
+  no price depends on the architecture. They are not a proof about every module.
 
 The limits that stay, each stated where it belongs below:
 
