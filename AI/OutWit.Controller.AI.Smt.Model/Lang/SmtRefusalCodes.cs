@@ -56,7 +56,7 @@ public static class SmtRefusalCodes
     /// <summary>More declared names than a problem may have.</summary>
     public const string TOO_MANY_SYMBOLS = "too_many_symbols";
 
-    /// <summary>A declared name that starts with the prefix kept for the controller's own names.</summary>
+    /// <summary>A symbol that starts with the prefix kept for the controller's own names: declared, bound, given by <c>:named</c>, or merely used.</summary>
     public const string RESERVED_PREFIX = "reserved_prefix";
 
     /// <summary>A text given as one term is not one s-expression: it holds none, or more than one.</summary>

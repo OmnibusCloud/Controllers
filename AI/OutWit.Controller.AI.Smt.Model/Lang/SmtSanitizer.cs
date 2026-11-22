@@ -36,7 +36,7 @@ public static class SmtSanitizer
     /// <summary>The most characters kept of a problem's <c>:source</c> and of its <c>:license</c>.</summary>
     public const int ATTRIBUTION_CHARACTERS = 1_024;
 
-    /// <summary>The prefix of the controller's own names: no name a problem declares starts with it.</summary>
+    /// <summary>The prefix of the controller's own names: no symbol of a command the solver is given, or of a term, starts with it.</summary>
     public const string RESERVED_PREFIX = "oc!";
 
     private static readonly SmtReaderLimits TERM_LIMITS = new()

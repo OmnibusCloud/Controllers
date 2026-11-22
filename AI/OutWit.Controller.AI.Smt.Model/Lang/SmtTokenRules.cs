@@ -11,7 +11,8 @@ namespace OutWit.Controller.AI.Smt.Model.Lang;
 /// <item>a general reserved word between bars is an ordinary symbol by the standard and the reserved word to the solver;</item>
 /// <item>a symbol that starts with a minus sign and a digit is a symbol by the standard and a negative number to the solver;</item>
 /// <item>a string literal holds printable ASCII, tabs and line breaks: the theory of strings takes any other character as an escape;</item>
-/// <item>an index of an indexed identifier (a bit-vector's width, an extension, a repetition, a rotation) is at most the widest bit-vector.</item>
+/// <item>an index of an indexed identifier (a bit-vector's width, an extension, a repetition, a rotation) is at most the widest bit-vector;</item>
+/// <item>no symbol starts with the prefix of the controller's own names: declared, bound by a binder, given by <c>:named</c> or merely used, it could be taken for one of the names the controller puts around the problem.</item>
 /// </list>
 /// The walk keeps its place on a stack of its own, in the order of the text: the first atom that
 /// breaks a rule is the one refused.
@@ -82,6 +83,10 @@ internal static class SmtTokenRules
             case SmtExpressionKind.Symbol when ReadsAsNegativeNumber(atom.Text):
                 return SmtRefusals.Of(SmtRefusalCodes.AMBIGUOUS_TOKEN, atom.Line, command,
                     $"'{SmtRefusals.Token(atom.Text)}' is a symbol by the standard and a negative number to the solver; a negative number is written (- 5)");
+
+            case SmtExpressionKind.Symbol when atom.Text.StartsWith(SmtSanitizer.RESERVED_PREFIX, StringComparison.Ordinal):
+                return SmtRefusals.Of(SmtRefusalCodes.RESERVED_PREFIX, atom.Line, command,
+                    $"the name '{SmtRefusals.Token(atom.Text)}' starts with '{SmtSanitizer.RESERVED_PREFIX}', the prefix of the controller's own names");
 
             case SmtExpressionKind.String when FirstOutsideAscii(atom.Text) is { } index:
                 return SmtRefusals.Of(SmtRefusalCodes.NON_ASCII_STRING, atom.Line, command, WhyNotAscii(atom.Text, index));

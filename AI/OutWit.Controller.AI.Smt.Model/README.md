@@ -125,7 +125,7 @@ symbol of a term, and it is written back as it was read.
 | `non_ascii_string` | in a command the solver is given or in a term, a string literal with a character outside printable ASCII, the tab and the line breaks: the theory of strings takes such a character as the escape `\u{...}` |
 | `index_too_large` | in a command the solver is given or in a term, an index above 65,536 in a list that starts with `_`: a bit-vector's width, an extension, a repetition, a rotation, and every other index |
 | `too_many_symbols` | more than 100,000 declared names: constants, functions and sorts (declared or defined), datatypes, their constructors and their selectors |
-| `reserved_prefix` | a declared name that starts with `oc!`, the prefix of the controller's own names |
+| `reserved_prefix` | a symbol that starts with `oc!`, the prefix of the controller's own names, anywhere in a command the solver is given or in a term: declared, bound by a binder, given by `:named`, or merely used |
 | `not_a_term` | a text given as one term holds no s-expression, or more than one |
 
 Where good SMT-LIB would mean something else to the solver than to the standard, the problem is

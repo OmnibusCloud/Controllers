@@ -323,23 +323,6 @@ public class SmtSanitizerShapeTests
         Assert.That(refusal.Reason, Does.Contain("'oc!'"));
     }
 
-    [TestCase("(declare-const x!oc! Int)")]
-    [TestCase("(declare-const OC!x Int)")]
-    [TestCase("(declare-const oc Int)")]
-    [TestCase("(declare-const |oc !x| Int)")]
-    [TestCase("(declare-const x oc!Sort)")]
-    [TestCase("(define-fun f ((oc!x Int)) Int oc!x)")]
-    [TestCase("(define-sort T (oc!A) oc!A)")]
-    [TestCase("(declare-datatype D (par (oc!T) ((a (sel oc!T)))))")]
-    [TestCase("(assert (> oc!x 0))")]
-    [TestCase("(assert (let ((oc!y 1)) oc!y))")]
-    [TestCase("(set-info :source oc!x)")]
-    [TestCase("(set-logic oc!LOGIC)")]
-    public void ThePrefixIsRefusedInDeclaredNamesOnlyTest(string text)
-    {
-        SmtSanitizerChecks.Accept(text);
-    }
-
     [Test]
     public void ThePrefixOfALongNameIsShownCutTest()
     {

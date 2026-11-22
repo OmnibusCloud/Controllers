@@ -210,6 +210,58 @@ public class SmtSanitizerTokenTests
 
     #endregion
 
+    #region Prefix Tests
+
+    [TestCase("(declare-const x oc!Sort)")]
+    [TestCase("(declare-fun f (oc!S) Int)")]
+    [TestCase("(define-fun f ((oc!x Int)) Int 1)")]
+    [TestCase("(define-fun f ((x Int)) Int oc!x)")]
+    [TestCase("(define-sort T (oc!A) Int)")]
+    [TestCase("(declare-datatype D (par (oc!T) ((a))))")]
+    [TestCase("(assert (> oc!x 0))")]
+    [TestCase("(assert oc!x)")]
+    [TestCase("(assert (oc!f 1))")]
+    [TestCase("(assert (let ((oc!y 1)) true))")]
+    [TestCase("(assert (forall ((oc!z Int)) true))")]
+    [TestCase("(assert (exists ((z oc!S)) true))")]
+    [TestCase("(assert (! p :named oc!n))")]
+    [TestCase("(assert (! p :pattern ((oc!g p))))")]
+    [TestCase("(assert (match l ((oc!c true))))")]
+    [TestCase("(assert ((_ oc!f 1) x))")]
+    [TestCase("(assert ((as oc!nil L) x))")]
+    [TestCase("(assert (|oc!quoted name| x))")]
+    [TestCase("(assert oc!)")]
+    [TestCase("(set-logic oc!LOGIC)")]
+    public void SymbolWithTheControllersPrefixRefusesTheProblemWhereverItStandsTest(string text)
+    {
+        // Declared, bound by a binder, given by :named or merely used: the name could be taken
+        // for one of those the controller puts around the problem.
+        var refusal = SmtSanitizerChecks.Refuse("(declare-const p Bool)\n" + text, SmtRefusalCodes.RESERVED_PREFIX);
+
+        Assert.That(refusal.Line, Is.EqualTo(2));
+        Assert.That(refusal.Command, Is.EqualTo(SmtReader.Read(text, SmtReaderLimits.Problem).Single().Head));
+        Assert.That(refusal.Reason, Does.StartWith("the name 'oc!").And.EndWith("' starts with 'oc!', the prefix of the controller's own names"));
+    }
+
+    [TestCase("(declare-const x!oc! Int)")]
+    [TestCase("(declare-const OC!x Int)")]
+    [TestCase("(declare-const oc Int)")]
+    [TestCase("(declare-const o!c!x Int)")]
+    [TestCase("(declare-const |oc !x| Int)")]
+    [TestCase("(declare-const | oc!x| Int)")]
+    [TestCase("(assert (= s \"oc!x\"))")]
+    [TestCase("(assert (! p :oc!key 1))")]
+    [TestCase("(set-info :source oc!x)")]
+    [TestCase("(set-info :note (oc!a |oc!b c| (oc!d)))")]
+    public void WhatIsNoSymbolOfTheSolversWithThePrefixIsKeptTest(string text)
+    {
+        // The prefix is the start of a symbol's name. A string, a keyword and a piece of
+        // information are none of the solver's names.
+        SmtSanitizerChecks.HoldProperties(SmtSanitizerChecks.Accept(text));
+    }
+
+    #endregion
+
     #region Information Tests
 
     [Test]
@@ -267,6 +319,8 @@ public class SmtSanitizerTokenTests
         Assert.That(SmtSanitizerChecks.Refuse("(assert (f (g \"\u00e9\") -5 |let| (_ b 99999)))", SmtRefusalCodes.NON_ASCII_STRING).Line, Is.EqualTo(1));
         Assert.That(SmtSanitizerChecks.Refuse("(assert (f ((_ b 99999)) \"\u00e9\" -5 |let|))", SmtRefusalCodes.INDEX_TOO_LARGE).Line, Is.EqualTo(1));
         Assert.That(SmtSanitizerChecks.Refuse("(assert (f (|_| b 99999)))", SmtRefusalCodes.RESERVED_SYMBOL).Line, Is.EqualTo(1));
+        Assert.That(SmtSanitizerChecks.Refuse("(assert (f (g oc!x) -5 |let|))", SmtRefusalCodes.RESERVED_PREFIX).Line, Is.EqualTo(1));
+        Assert.That(SmtSanitizerChecks.Refuse("(assert (f (g -5) oc!x |let|))", SmtRefusalCodes.AMBIGUOUS_TOKEN).Line, Is.EqualTo(1));
     }
 
     [Test]

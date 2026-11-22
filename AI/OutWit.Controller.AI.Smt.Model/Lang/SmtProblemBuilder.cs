@@ -84,7 +84,7 @@ internal sealed class SmtProblemBuilder
         // The rules of single tokens are about what the solver reads. A piece of information never
         // reaches it: it is held to its shape, and kept as it was read.
         var tokens = SmtCommandPolicy.IsForSolver(head) ? SmtTokenRules.Check(form, head) : null;
-        var refusal = tokens ?? CheckShape(form, head) ?? CheckNames(form, head);
+        var refusal = tokens ?? CheckShape(form, head) ?? CountNames(form, head);
         if (refusal == null)
             Keep(form, head);
 
@@ -106,17 +106,8 @@ internal sealed class SmtProblemBuilder
         return fault == null ? null : SmtRefusals.Of(SmtRefusalCodes.COMMAND_MALFORMED, form.Line, head, fault);
     }
 
-    private SmtRefusalData? CheckNames(SmtExpression form, string head)
+    private SmtRefusalData? CountNames(SmtExpression form, string head)
     {
-        foreach (var name in m_shapes.Names)
-        {
-            if (name.Text.StartsWith(SmtSanitizer.RESERVED_PREFIX, StringComparison.Ordinal))
-            {
-                return SmtRefusals.Of(SmtRefusalCodes.RESERVED_PREFIX, name.Line, head,
-                    $"the name '{SmtRefusals.Token(name.Text)}' starts with '{SmtSanitizer.RESERVED_PREFIX}', the prefix of the controller's own names");
-            }
-        }
-
         // Counted as a long: a problem's commands cannot overflow it, whatever the limits become.
         if ((long)m_declared + m_shapes.Names.Count > SmtSanitizer.MAX_DECLARED_SYMBOLS)
             return SmtRefusals.Of(SmtRefusalCodes.TOO_MANY_SYMBOLS, form.Line, head, $"the problem declares more than the {SmtSanitizer.MAX_DECLARED_SYMBOLS} names allowed");
