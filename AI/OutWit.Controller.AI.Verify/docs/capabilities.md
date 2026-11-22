@@ -614,8 +614,7 @@ loops: a module of 6.9 KB took 1.5 s, one of 28 KB took 81 s and 1.5 GiB. So:
   uses) × (its branches) past 16,384; 4 units for every unit of (the values a block passes) ×
   (the blocks around it), for a block of two values or more; 64 units a local past 256 in a
   function; and a function is priced as 24 bytes at the least. Each is what the engine was
-  measured to take for that shape, in the proportion a byte's price has to a byte's time, on
-  x64.
+  measured to take for that shape, in the proportion a byte's price has to a byte's time.
 
   > **TODO (arm64 compile prices):** the sentence on what the compile prices and the compile
   > memory estimate are on arm64 goes here once they are measured.

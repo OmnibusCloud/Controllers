@@ -83,7 +83,7 @@ in the words of what a lab can count on:
   that ran it, and the documents count those (`single_execution`): a run that asks for no
   second execution rests on one machine for every task. Where the platform holds a node to one
   answer for each package it was given (Grid 1.3.0 and later), one lying machine can keep a
-  dispute from being settled (`surplus_copies`, the task `Disputed`), and it cannot make its
+  dispute from being settled (`too_few_copies` or `surplus_copies`, the task `Disputed`), and it cannot make its
   answer the accepted one. Two lying machines that hold two of a task's three copies are the
   majority, and win.
 - **A program sees the same world on every node:** the same file names, file records that say
