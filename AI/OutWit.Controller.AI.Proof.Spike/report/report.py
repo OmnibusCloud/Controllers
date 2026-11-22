@@ -334,8 +334,8 @@ def main() -> int:
             base_wall = sum(main_rows[item]["wall_s"] for item in both)
             base_cpu = sum(main_rows[item].get("user_s", 0) + main_rows[item].get("sys_s", 0) for item in both)
             rows.append([rid, label, len(both), same, f"{equal} of {len(pairs)}", ratio,
-                         round(wall, 1), round(cpu / wall, 2) if wall else None,
-                         round(base_wall, 1), round(base_cpu / base_wall, 2) if base_wall else None])
+                         round(wall, 1), round(cpu / wall, 2) if wall and cpu else None,
+                         round(base_wall, 1), round(base_cpu / base_wall, 2) if base_wall and base_cpu else None])
     if rows:
         out += ["### What the heartbeat count depends on (the same items, one runner)", ""] + table(
             ["platform", "variant", "items", "same verdict", "same heartbeats", "heartbeats / main run (median)",
@@ -458,8 +458,10 @@ def main() -> int:
         first = base - left[0] if base and left[0] else None
         marginal = [left[index - 1] - left[index] for index in range(1, len(left)) if left[index] and left[index - 1]]
         each = steps[-1]["each"]
-        commit = [step["system"].get("commit_available") for step in steps]
-        commit_step = [commit[index - 1] - commit[index] for index in range(1, len(commit)) if commit[index] and commit[index - 1]]
+        # Windows: the commit charge in use (the limit moves when the system grows its page file).
+        used = [(entry.get("commit_limit") or 0) - (entry.get("commit_available") or 0)
+                for entry in [degree.get("baseline") or {}] + [step["system"] for step in steps]]
+        commit_step = [used[index] - used[index - 1] for index in range(1, len(used)) if used[index] and used[index - 1]]
         rows.append([rid, len(steps), mib(base), mib(first), mib(median(marginal)), mib(left[-1]),
                      mib(median([one.get("rss") for one in each])), mib(median([one.get("private") for one in each])),
                      mib(median(commit_step)), median([step["import_s"] for step in steps]), degree.get("stopped") or ""])
@@ -467,7 +469,7 @@ def main() -> int:
         out += ["### Memory of several pooled processes with the environment imported", ""] + table(
             ["platform", "processes started", "machine had left MiB", "the first took MiB",
              "each further one took MiB (median)", "left at the end MiB", "resident of one MiB",
-             "private of one MiB", "commit charge of each further one MiB", "import s", "stopped because"], rows)
+             "private of one MiB", "commit charge of each one MiB (Windows)", "import s", "stopped because"], rows)
 
     # ------------------------------------------------------------------ sandbox
     rows = []
