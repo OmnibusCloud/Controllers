@@ -188,10 +188,14 @@
 
   <Target Name="StageBenchmarkPrereqsIntoModule"
           AfterTargets="ControllerPostBuild"
+          BeforeTargets="ControllerRecordStaged"
           Condition="'$(Configuration)' != 'Release' And Exists('$(RenderPrereqsRoot)\benchmark\render')">
     <!-- Debug-only: skipped on Release so 'dotnet pack' never inlines benchmark
          scenes into the nupkg's content/module/ (published consumers fetch them
-         via the asset resolver from the gh-release URL declared above). -->
+         via the asset resolver from the gh-release URL declared above).
+         The scenes go onto the build's record of what it staged
+         (ControllerStagedFile, before ControllerRecordStaged), so the Debug zip
+         keeps them as it did. -->
     <ItemGroup>
       <RenderBenchmarkPrereqFile Include="$(RenderPrereqsRoot)\benchmark\render\*.blend" />
     </ItemGroup>
@@ -199,6 +203,9 @@
           DestinationFolder="$(ControllerModuleOutputDir)"
           SkipUnchangedFiles="true"
           OverwriteReadOnlyFiles="true" />
+    <ItemGroup>
+      <ControllerStagedFile Include="@(RenderBenchmarkPrereqFile->'$(ControllerModuleOutputDir)%(Filename)%(Extension)')" />
+    </ItemGroup>
   </Target>
 
   <!-- Stage bundled .wit scripts to $(SolutionDir)@Scripts/$(Configuration)/ so test

@@ -1,0 +1,27 @@
+# Danish. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Forside
+Nyheder
+Begivenheder
+Kontakt
+Om os
+Åbningstider
+Torvedage
+Vejr
+[sentence]
+Byens bibliotek åbner mandag klokken ni og lukker klokken syv om aftenen.
+Bageren på hjørnet bager friskt brød hver morgen til hele kvarteret.
+Om foråret blomstrer æbletræerne langs den gamle landevej.
+Færgen sejler over floden hvert tyvende minut, når vejret er godt.
+Efter den lange vinter er stierne i parken blevet repareret.
+Byrådet har besluttet, at broen skal fornyes næste år.
+På torvet sælger landmændene grøntsager, ost og honning fra egnen.
+Skolens elever besøger i dag det lille museum ved havnen.
+På grund af den kraftige regn er tunnelen ved stationen spærret.
+Urmageren har repareret kirkens tårnur i fyrre år.
+Om efteråret samler naboerne sammen bladene fra fortovene.
+Den nye buslinje forbinder landsbyen med byen og sygehuset.
+De ældste huse i byen ligger ved en lille plads bag kirken.
+Om lørdagen kommer de fleste til torvet for at købe en avis og et brød.
+Børnene leger i en have, og de voksne sidder på en bænk i solen.

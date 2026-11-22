@@ -1,0 +1,278 @@
+name: AI Verify toolchain
+run-name: "AI Verify toolchain: ${{ github.ref_name }}"
+
+# The modules of the Verify runtime set that are built here instead of taken ready-made:
+# the Lua interpreter from lua.org's sources and the C and Rust fixtures of the raw-WASI
+# runtime tests, with a pinned wasi-sdk and a pinned Rust. The job builds everything twice
+# in two folders and compares the bytes, checks that the fixtures committed with the tests
+# are those bytes, runs each module under the pinned wasmtime, and publishes the modules as
+# a workflow artifact with their hashes in the log.
+#
+# It runs on a pull request as well as after a merge: a change that replaces a committed
+# module, or moves one of its pins, is held to what the sources build to before it is merged.
+# The paths are the modules, the toolchain that builds them, and the two files that pin them
+# (the asset tool's pins and the controller's runtime catalog).
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/**'
+      # The numpy runtime has a workflow of its own (ai-verify-python-numpy.yml), and the
+      # notices and the archives have theirs (ai-verify-archives.yml).
+      - '!AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/**'
+      - '!AI/OutWit.Controller.AI.Verify.Assets/toolchain/notices/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/modules/**'
+      - '!AI/OutWit.Controller.AI.Verify.Assets/modules/**/THIRD-PARTY-NOTICES.txt'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/AssetPins.cs'
+      - 'AI/OutWit.Controller.AI.Verify/Runtimes/VerifyRuntimeCatalog.cs'
+      - 'AI/OutWit.Controller.AI.Verify.Tests/Sandbox/Fixtures/**'
+      - 'AI/OutWit.Controller.AI.Verify.Live/demo/03-wasm/**'
+      - '.github/workflows/ai-verify-toolchain.yml'
+  # The same paths as above: a list is written twice because a workflow has no way to share one.
+  pull_request:
+    paths:
+      - 'AI/OutWit.Controller.AI.Verify.Assets/toolchain/**'
+      - '!AI/OutWit.Controller.AI.Verify.Assets/toolchain/python-numpy/**'
+      - '!AI/OutWit.Controller.AI.Verify.Assets/toolchain/notices/**'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/modules/**'
+      - '!AI/OutWit.Controller.AI.Verify.Assets/modules/**/THIRD-PARTY-NOTICES.txt'
+      - 'AI/OutWit.Controller.AI.Verify.Assets/AssetPins.cs'
+      - 'AI/OutWit.Controller.AI.Verify/Runtimes/VerifyRuntimeCatalog.cs'
+      - 'AI/OutWit.Controller.AI.Verify.Tests/Sandbox/Fixtures/**'
+      - 'AI/OutWit.Controller.AI.Verify.Live/demo/03-wasm/**'
+      - '.github/workflows/ai-verify-toolchain.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      TOOLCHAIN: AI/OutWit.Controller.AI.Verify.Assets/toolchain
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # A download without a pin stops the build before anything is unpacked or run (exit 3,
+      # with the hash that was seen in the log): nothing is built from it, here or below.
+      - name: Build
+        shell: bash
+        run: bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/work"
+
+      - name: Build again in another folder and compare
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/work2"
+          cp "$RUNNER_TEMP/work/wasi-sdk.tar.gz" "$RUNNER_TEMP/work/lua.tar.gz" "$RUNNER_TEMP/work/binaryen.tar.gz" "$RUNNER_TEMP/work/quickjs.tar.gz" "$RUNNER_TEMP/work/rustc.tar.xz" "$RUNNER_TEMP/work/rust-std-wasi.tar.xz" "$RUNNER_TEMP/work2/"
+          bash "$TOOLCHAIN/build.sh" "$RUNNER_TEMP/out2" "$RUNNER_TEMP/work2" > "$RUNNER_TEMP/build2.log" 2>&1 || { cat "$RUNNER_TEMP/build2.log"; exit 1; }
+          for module in "$RUNNER_TEMP"/out/*.wasm "$RUNNER_TEMP"/out/*.js "$RUNNER_TEMP"/out/LICENSE-*.txt; do
+            name="$(basename "$module")"
+            if cmp -s "$module" "$RUNNER_TEMP/out2/$name"; then
+              echo "same bytes: $name"
+            else
+              echo "::error::$name differs between two builds"
+              exit 1
+            fi
+          done
+
+      - name: What the modules import
+        shell: bash
+        run: |
+          python3 - "$RUNNER_TEMP"/out/*.wasm <<'EOF'
+          import sys
+
+          def leb(data, position):
+              result = shift = 0
+              while True:
+                  byte = data[position]
+                  position += 1
+                  result |= (byte & 0x7F) << shift
+                  shift += 7
+                  if not byte & 0x80:
+                      return result, position
+
+          for path in sys.argv[1:]:
+              data = open(path, "rb").read()
+              position = 8
+              imports = []
+              sections = []
+              while position < len(data):
+                  section = data[position]
+                  size, position = leb(data, position + 1)
+                  sections.append(section)
+                  if section == 2:
+                      cursor = position
+                      count, cursor = leb(data, cursor)
+                      for _ in range(count):
+                          length, cursor = leb(data, cursor)
+                          module = data[cursor:cursor + length].decode()
+                          cursor += length
+                          length, cursor = leb(data, cursor)
+                          name = data[cursor:cursor + length].decode()
+                          cursor += length
+                          kind = data[cursor]
+                          cursor += 1
+                          if kind == 0:
+                              _, cursor = leb(data, cursor)
+                          elif kind == 1:
+                              cursor += 1
+                              flags, cursor = leb(data, cursor)
+                              _, cursor = leb(data, cursor)
+                              if flags & 1:
+                                  _, cursor = leb(data, cursor)
+                          elif kind == 2:
+                              flags, cursor = leb(data, cursor)
+                              _, cursor = leb(data, cursor)
+                              if flags & 1:
+                                  _, cursor = leb(data, cursor)
+                          elif kind == 3:
+                              cursor += 2
+                          elif kind == 4:
+                              cursor += 1
+                              _, cursor = leb(data, cursor)
+                          imports.append(module + "." + name)
+                  position += size
+              print(path.split("/")[-1], len(data), "bytes; sections", sections)
+              print("  imports:", ", ".join(imports))
+              print("  exception tag section (13):", 13 in sections)
+              # The interpreters the runtime set ships run in the sandbox as they are: WASI
+              # imports only (lua.wasm's asyncify ones are connected inside by Binaryen), and
+              # nothing of exception handling.
+              if path.endswith("/lua.wasm") or path.endswith("/qjs.wasm"):
+                  foreign = [name for name in imports if not name.startswith("wasi_snapshot_preview1.")]
+                  if foreign or 13 in sections:
+                      print("::error::" + path.split("/")[-1], "imports", foreign, "or has an exception tag section")
+                      sys.exit(1)
+          EOF
+
+      - name: Run the modules under the pinned wasmtime
+        shell: bash
+        run: |
+          . "$TOOLCHAIN/pins.env"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/wasmtime.tar.xz" "$WASMTIME_URL"
+          echo "$WASMTIME_SHA256  $RUNNER_TEMP/wasmtime.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/wasmtime"
+          tar -xJf "$RUNNER_TEMP/wasmtime.tar.xz" -C "$RUNNER_TEMP/wasmtime" --strip-components=1
+          W="$RUNNER_TEMP/wasmtime/wasmtime"
+          "$W" --version
+          O="$RUNNER_TEMP/out"
+          set +e
+
+          echo "-- lua: version"
+          "$W" run "$O/lua.wasm" -v
+          echo "[exit $?]"
+          echo "-- lua: inline code"
+          "$W" run "$O/lua.wasm" -e 'print(6*7, _VERSION, math.maxinteger)'
+          echo "[exit $?]"
+          echo "-- lua: errors caught by pcall, with the exception-handling feature off as in the sandbox"
+          "$W" run -W exceptions=n "$O/lua.wasm" -e 'print(pcall(error, "caught")); print(pcall(function() local t = nil; return t.x end)); print(select(2, pcall(string.rep)))'
+          echo "[exit $?]"
+          echo "-- lua: an uncaught error"
+          "$W" run "$O/lua.wasm" -e 'error("boom")'
+          echo "[exit $?]"
+          echo "-- lua: stdin, a script file with arguments, require of a neighbour"
+          mkdir -p "$RUNNER_TEMP/task"
+          printf 'local helper = require("helper")\nlocal total = 0\nfor line in io.lines() do total = total + tonumber(line) end\nprint(helper.twice(total), #arg, arg[0], arg[1], arg[2], ...)\n' > "$RUNNER_TEMP/task/main.lua"
+          printf 'return { twice = function(x) return 2 * x end }\n' > "$RUNNER_TEMP/task/helper.lua"
+          printf '2\n3\n' | "$W" run --dir "$RUNNER_TEMP/task::/" "$O/lua.wasm" main.lua -x "two words"
+          echo "[exit $?]"
+          echo "-- lua: what is not there"
+          "$W" run "$O/lua.wasm" -e 'print(os.execute()); print(os.execute("ls")); print(pcall(os.tmpname)); print(io.tmpfile()); print(io.popen and pcall(io.popen, "ls")); print(os.getenv("HOME")); print(io.open("/etc/passwd"))'
+          echo "[exit $?]"
+          echo "-- lua: coroutines, string library, integer and float arithmetic, deep recursion"
+          "$W" run "$O/lua.wasm" -e 'local co = coroutine.wrap(function() for i = 1, 3 do coroutine.yield(i) end end); print(co(), co(), co()); print(string.format("%5.2f %d %s", 3.14159, 2^53, ("x"):rep(3))); print(7 // 2, 7 % 3, 2^0.5, 1 << 62); local function depth(n) return n == 0 and 0 or 1 + depth(n - 1) end; print(depth(10000)); print(pcall(function() local function f() return 1 + f() end return f() end))'
+          echo "[exit $?]"
+
+          echo "-- sum.wasm: stdin and arguments"
+          printf '1 2 3\n4\n' | "$W" run "$O/sum.wasm" 10 20
+          echo "[exit $?]"
+          echo "-- sum.wasm: exit code"
+          "$W" run "$O/sum.wasm" --exit 7
+          echo "[exit $?]"
+
+          if [ -f "$O/words.wasm" ]; then
+            echo "-- words.wasm: stdin"
+            printf 'b a b\nc B a b\n' | "$W" run "$O/words.wasm"
+            echo "[exit $?]"
+            echo "-- words.wasm: a panic"
+            "$W" run "$O/words.wasm" --panic
+            echo "[exit $?]"
+          fi
+          exit 0
+
+      - name: The test suites of Lua and QuickJS, the depth of an unwind, recursion
+        shell: bash
+        run: bash "$TOOLCHAIN/gates.sh" "$RUNNER_TEMP/out" "$RUNNER_TEMP/work" "$RUNNER_TEMP/wasmtime/wasmtime"
+
+      - name: Publish the modules
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: verify-toolchain-modules
+          path: |
+            ${{ runner.temp }}/out/*.wasm
+            ${{ runner.temp }}/out/*.js
+            ${{ runner.temp }}/out/LICENSE-*.txt
+          if-no-files-found: error
+
+      # The C and Rust fixtures live in the repository as files (the sandbox tests read them
+      # on every platform). They must be exactly what these sources build to.
+      # After the modules are published, so a changed source can be taken from the artifact.
+      - name: The committed fixtures are what the toolchain builds
+        shell: bash
+        run: |
+          FIXTURES=AI/OutWit.Controller.AI.Verify.Tests/Sandbox/Fixtures
+          for name in sum.wasm words.wasm; do
+            if cmp -s "$RUNNER_TEMP/out/$name" "$FIXTURES/$name"; then
+              echo "same bytes: $name  $(sha256sum "$FIXTURES/$name" | cut -d' ' -f1)"
+            else
+              echo "::error::$FIXTURES/$name is not what the toolchain builds ($(sha256sum "$RUNNER_TEMP/out/$name" | cut -d' ' -f1))"
+              exit 1
+            fi
+          done
+
+      # The raw-wasm demo kit (demo/03-wasm) carries its modules inside its taskset: the taskset
+      # must be exactly what this build's modules make it.
+      - name: The raw-wasm demo kit is what the toolchain builds
+        shell: bash
+        run: |
+          KIT=AI/OutWit.Controller.AI.Verify.Live/demo/03-wasm
+          mkdir -p "$RUNNER_TEMP/kit-committed"
+          cp "$KIT/taskset.jsonl" "$KIT/candidates.csv" "$RUNNER_TEMP/kit-committed/" 2>/dev/null || true
+          python3 "$KIT/make_taskset.py" "$RUNNER_TEMP/out"
+          mkdir -p "$RUNNER_TEMP/kit-built"
+          cp "$KIT/taskset.jsonl" "$KIT/candidates.csv" "$RUNNER_TEMP/kit-built/"
+          for name in taskset.jsonl candidates.csv; do
+            if cmp -s "$RUNNER_TEMP/kit-built/$name" "$RUNNER_TEMP/kit-committed/$name"; then
+              echo "same bytes: $KIT/$name  $(sha256sum "$RUNNER_TEMP/kit-built/$name" | cut -d' ' -f1)"
+            else
+              echo "::error::$KIT/$name is not what the toolchain's modules make ($(sha256sum "$RUNNER_TEMP/kit-built/$name" | cut -d' ' -f1)); the artifact verify-raw-wasm-kit has the built one"
+              FAILED=1
+            fi
+          done
+          [ -z "${FAILED:-}" ]
+
+      - name: Publish the raw-wasm demo kit as built
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: verify-raw-wasm-kit
+          path: ${{ runner.temp }}/kit-built/
+          if-no-files-found: ignore
+
+      # lua.wasm, qjs.wasm and sucrase.js ship in the runtime set as built here; the asset tool takes them
+      # from the repository, so the committed copies must be exactly what these sources build to.
+      - name: The committed interpreters are what the toolchain builds
+        shell: bash
+        run: |
+          MODULES=AI/OutWit.Controller.AI.Verify.Assets/modules
+          for item in lua-5.4.8/lua.wasm lua-5.4.8/LICENSE-lua.txt quickjs-0.15.1/qjs.wasm quickjs-0.15.1/LICENSE-quickjs-ng.txt typescript-sucrase-3.35.1/sucrase.js typescript-sucrase-3.35.1/LICENSE-sucrase.txt; do
+            name="$(basename "$item")"
+            if cmp -s "$RUNNER_TEMP/out/$name" "$MODULES/$item"; then
+              echo "same bytes: $item  $(sha256sum "$MODULES/$item" | cut -d' ' -f1)"
+            else
+              echo "::error::$MODULES/$item is not what the toolchain builds ($(sha256sum "$RUNNER_TEMP/out/$name" | cut -d' ' -f1))"
+              exit 1
+            fi
+          done

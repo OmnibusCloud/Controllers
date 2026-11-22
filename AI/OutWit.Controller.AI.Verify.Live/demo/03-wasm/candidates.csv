@@ -1,0 +1,14 @@
+index,problem,candidate,language,verdict,why
+0,sum,c,C,Pass,64-bit total
+1,sum,rust,Rust,Pass,64-bit total
+2,sum,c-int-total,C,Fail,an int total wraps past 2^31
+3,sum,rust-unwrap,Rust,RuntimeError,parses as i32 and unwraps: a panic
+4,primes,c,C,Pass,a sieve
+5,primes,rust,Rust,Pass,a sieve
+6,primes,c-naive,C,Timeout,trial division by every smaller number
+7,primes,rust-below,Rust,Fail,leaves the limit itself out
+8,words,rust,Rust,Pass,case-insensitive
+9,words,c,C,Pass,case-insensitive
+10,words,c-case,C,Fail,keeps the case as written
+11,edges,c-network,C,CompileError,imports a host function the sandbox does not provide
+12,edges,c-threads,C,CompileError,a shared memory: threads are not offered

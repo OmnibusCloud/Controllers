@@ -1,0 +1,5 @@
+Job:CorpusRuntimeDiagnostics()
+{
+    CorpusRuntimeDiagnostics:result = Corpus.RuntimeDiagnostics();
+    Blob:capabilities = Corpus.Capabilities();
+}

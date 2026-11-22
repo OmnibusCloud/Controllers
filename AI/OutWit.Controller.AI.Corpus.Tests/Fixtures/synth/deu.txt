@@ -1,0 +1,42 @@
+# German. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Startseite
+Aktuelles
+Veranstaltungen
+Kontakt
+Über uns
+Öffnungszeiten
+Markttage
+Wetter
+[sentence]
+Die Stadtbibliothek öffnet am Montag um neun Uhr und schließt am Abend um sieben.
+Der Bäcker an der Ecke backt jeden Morgen frisches Brot für das ganze Viertel.
+Im Frühling blühen die Apfelbäume entlang der alten Landstraße.
+Die Fähre über den Fluss fährt bei gutem Wetter alle zwanzig Minuten.
+Nach dem langen Winter wurden die Wege im Park neu angelegt.
+Der Gemeinderat hat beschlossen, die Brücke im nächsten Jahr zu erneuern.
+Auf dem Wochenmarkt verkaufen die Bauern Gemüse, Käse und Honig aus der Umgebung.
+Die Kinder der Grundschule besuchen heute das kleine Museum am Hafen.
+Wegen des starken Regens ist die Unterführung am Bahnhof gesperrt.
+Der Uhrmacher repariert seit vierzig Jahren die Turmuhr der Kirche.
+Im Herbst sammeln die Nachbarn gemeinsam das Laub von den Gehwegen.
+Die neue Buslinie verbindet das Dorf mit der Kreisstadt und dem Krankenhaus.
+Am Samstag findet im Gemeindehaus ein Konzert des Jugendchors statt.
+Der Förster zeigt den Besuchern die ältesten Eichen des Waldes.
+Viele Einwohner fahren mit dem Fahrrad zur Arbeit, weil die Straßen eng sind.
+Die Feuerwehr übt jeden Monat am Ufer des Sees.
+In der Werkstatt hinter dem Rathaus werden alte Möbel sorgfältig restauriert.
+Der Arzt hat seine Praxis in das Haus neben der Apotheke verlegt.
+Während der Ferien bleibt das Schwimmbad bis zum späten Abend geöffnet.
+Die Gärtnerin pflanzt Rosen und Lavendel vor dem Eingang des Bahnhofs.
+Ein neuer Radweg führt jetzt vom Marktplatz bis zur Mühle.
+Der Briefträger kennt jede Familie in den Straßen seines Bezirks.
+Am Abend treffen sich die Schachspieler im Lesesaal der Bibliothek.
+Das Wasser des Brunnens wird regelmäßig vom Gesundheitsamt geprüft.
+Die Lehrerin erklärt den Schülern, wie man eine Landkarte liest.
+Im Winter räumt die Gemeinde den Schnee zuerst von den Hauptstraßen.
+Der Fischer bringt seinen Fang früh am Morgen zum Hafen.
+Die Bewohner der Altstadt wünschen sich mehr Bänke und Bäume.
+Auf dem Hügel über der Stadt steht ein alter Wasserturm aus Backstein.
+Der Verein sucht Freiwillige, die beim Sommerfest helfen möchten.

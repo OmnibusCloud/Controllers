@@ -1,0 +1,35 @@
+Job:CorpusProcess(Blob:manifest, Blob:languageModel, CorpusOptions:opts)
+{
+    ~ The tasks and the results travel as blobs: every collection below holds references only. ~
+    CorpusTaskPackageCollection:tasks = Corpus.Split(manifest, languageModel, opts);
+
+    Double:rate = Corpus.SamplingRate(opts);
+    ProcessingOptions:checked = Grid.Replicas(2, rate);
+
+    CorpusResultPackageCollection:executions = Grid.ForEach(package in tasks, checked)
+        => Corpus.ProcessPackage(package);
+
+    ~ A shard without a result (no answer the server accepts, or a fault of the node that ran it) goes out once more: on two machines when the run asked for sampling, so that a round that came back short keeps its checking. ~
+    CorpusTaskPackageCollection:repairs = Corpus.Repairs(tasks, executions);
+    Double:again = Corpus.RepairRate(opts);
+    ProcessingOptions:rechecked = Grid.Replicas(2, again);
+
+    CorpusResultPackageCollection:repaired = Grid.ForEach(package in repairs, rechecked)
+        => Corpus.ProcessPackage(package);
+
+    ~ A shard whose copies disagree runs three more times, on different machines. ~
+    CorpusTaskPackageCollection:disputes = Corpus.Disputes(tasks, executions, repairs, repaired);
+    ProcessingOptions:majority = Grid.Replicas(3);
+
+    CorpusResultPackageCollection:resolved = Grid.ForEach(package in disputes, majority)
+        => Corpus.ProcessPackage(package);
+
+    ~ A dispute that came back with too few copies, or with a lead that may be one machine's second answers, runs once more on three machines. ~
+    CorpusTaskPackageCollection:undecided = Corpus.Disputes(tasks, executions, repairs, repaired, disputes, resolved);
+
+    CorpusResultPackageCollection:settled = Grid.ForEach(package in undecided, majority)
+        => Corpus.ProcessPackage(package);
+
+    Blob:report = Corpus.Collect(tasks, executions, repairs, repaired, disputes, resolved, undecided, settled, opts);
+    Blob:integrity = Corpus.Integrity(tasks, executions, repairs, repaired, disputes, resolved, undecided, settled, opts);
+}

@@ -1,0 +1,66 @@
+using MemoryPack;
+using OutWit.Common.Abstract;
+using OutWit.Common.Values;
+
+namespace OutWit.Controller.AI.Verify.Model;
+
+/// <summary>
+/// Chunk result: one verdict per task of the batch, in task order.
+/// </summary>
+[MemoryPackable]
+// Explicit MemoryPackOrder pins the wire layout to the declaration order — append new members at the END only.
+public sealed partial class VerifyResultBatchData : ModelBase
+{
+    #region Model Base
+
+    public override bool Is(ModelBase modelBase, double tolerance = DEFAULT_TOLERANCE)
+    {
+        if (modelBase is not VerifyResultBatchData other)
+            return false;
+
+        if (Results.Count != other.Results.Count)
+            return false;
+
+        for (var i = 0; i < Results.Count; i++)
+        {
+            if (!Results[i].Is(other.Results[i], tolerance))
+                return false;
+        }
+
+        return Diagnostics.Check(other.Diagnostics)
+               && Ticket.Is(other.Ticket);
+    }
+
+    public override VerifyResultBatchData Clone()
+    {
+        return new VerifyResultBatchData
+        {
+            Results = Results.Select(r => r.Clone()).ToList(),
+            Diagnostics = Diagnostics?.Clone(),
+            Ticket = Ticket
+        };
+    }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>Per-task results, ordered by <see cref="VerifyResultData.TaskIndex"/>.</summary>
+    [MemoryPackAllowSerialize]
+    [MemoryPackOrder(0)]
+    public List<VerifyResultData> Results { get; set; } = [];
+
+    /// <summary>Where and how the batch ran; null only for batches produced before 0.2.0.</summary>
+    [MemoryPackAllowSerialize]
+    [MemoryPackOrder(1)]
+    public VerifyBatchDiagnosticsData? Diagnostics { get; set; }
+
+    /// <summary>
+    /// The ticket of the task package this batch answers (<see cref="VerifyTaskPackageData.Ticket"/>):
+    /// the content of a result names the package it is for. Never written to a document.
+    /// </summary>
+    [MemoryPackOrder(2)]
+    public string Ticket { get; set; } = "";
+
+    #endregion
+}

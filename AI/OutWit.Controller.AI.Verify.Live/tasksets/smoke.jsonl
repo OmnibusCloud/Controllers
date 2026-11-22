@@ -1,0 +1,10 @@
+{"index":0,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"a=int(input());b=int(input());print(a+b)"},"suite":[{"stdin":"2\n3\n","expected_stdout":"5\n","expected_exit":0},{"stdin":"40\n2\n","expected_stdout":"42\n","expected_exit":0}]}
+{"index":1,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"print('wrong')"},"suite":[{"expected_stdout":"right\n","expected_exit":0}]}
+{"index":2,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"raise SystemExit(4)"}}
+{"index":3,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"import math;print(sum(math.isqrt(i) for i in range(10000)))"},"suite":[{"expected_stdout":"661650\n","expected_exit":0}]}
+{"index":4,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"import hashlib;print(hashlib.sha256(b'omnibus').hexdigest())"},"suite":[{"expected_stdout":"0de91c90064b72f29cca4fc772ed1d29adf00a8ade0c2edb04c59a5d722a16ff\n","expected_exit":0}]}
+{"index":5,"runtime":"python-3.14.6","entry":"m.py","sources":{"m.py":"while True: pass"}}
+{"index":6,"runtime":"quickjs-0.15.1","entry":"m.js","sources":{"m.js":"console.log(6*7)"},"suite":[{"expected_stdout":"42\n","expected_exit":0}]}
+{"index":7,"runtime":"quickjs-0.15.1","entry":"m.js","sources":{"m.js":"let s=0;for(let i=0;i<100000;i++)s+=Math.sqrt(i);console.log(Math.floor(s*1000))"},"suite":[{"expected_stdout":"21081692746\n","expected_exit":0}]}
+{"index":8,"runtime":"quickjs-0.15.1","entry":"m.js","sources":{"m.js":"throw new Error('boom')"}}
+{"index":9,"runtime":"quickjs-0.15.1","entry":"m.js","sources":{"m.js":"const a=[];while(true)a.push(new Array(1e6).fill(1))"}}

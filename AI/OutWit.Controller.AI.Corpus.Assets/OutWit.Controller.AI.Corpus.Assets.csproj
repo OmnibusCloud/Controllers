@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The asset builder of the Corpus controller: trains the language-identification model
+       from Common Crawl's own labelled WET files (a deterministic function of the input files in
+       order) and prints the hash the pipeline contract pins. A developer tool, not a package. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>corpus-assets</AssemblyName>
+    <RootNamespace>OutWit.Controller.AI.Corpus.Assets</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Corpus\OutWit.Controller.AI.Corpus.csproj" />
+  </ItemGroup>
+
+</Project>

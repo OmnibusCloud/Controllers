@@ -1,0 +1,17 @@
+# Vietnamese stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/vie_Latn.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 21efd8043635dc4a865c028b409493be0b7e6486ce0bb7ce930adca992fcdd04.
+# In the order of the source; Corpus 0.1.14 shipped this list.
+là
+và
+của
+một
+được
+trong
+năm
+các
+có
+loài
+này
+đã
+người

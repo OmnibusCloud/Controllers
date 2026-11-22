@@ -1,0 +1,12 @@
+# Czech stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/ces_Latn.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 f8ddc6abde747f2692ea39ab10a62d030d51efa68c6ad746d06ab3b4b922407e.
+# In the order of the source; Corpus 0.1.14 shipped this list.
+v
+a
+se
+na
+je
+z
+s
+do

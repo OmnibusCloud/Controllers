@@ -1,0 +1,14 @@
+# Ukrainian stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/ukr_Cyrl.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 d48f642eeb1eee5dc770eaad2307566b200e7b417d5cd09c583a660fb808ff2a.
+# In the order of the source; Corpus 0.1.14 shipped this list.
+у
+в
+на
+і
+з
+та
+до
+року
+за
+що

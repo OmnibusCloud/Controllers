@@ -1,0 +1,31 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.AI.Corpus.Scripts NuGet
+      package. Auto-imported into any csproj that PackageReferences this scripts
+      pack. Copies content/scripts/*.wit into the consumer's $(OutputPath)@Scripts/
+      flat layout.
+  -->
+
+  <PropertyGroup>
+    <_OutWitCorpusScriptsContent>$(MSBuildThisFileDirectory)..\content\scripts\</_OutWitCorpusScriptsContent>
+    <_OutWitCorpusScriptsOutputDir>$(OutputPath)@Scripts\</_OutWitCorpusScriptsOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopyCorpusScripts"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitCorpusScriptsContent)')">
+    <ItemGroup>
+      <_OutWitCorpusScriptFiles Include="$(_OutWitCorpusScriptsContent)*.wit" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitCorpusScriptFiles)"
+        DestinationFiles="@(_OutWitCorpusScriptFiles->'$(_OutWitCorpusScriptsOutputDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.AI.Corpus.Scripts: staged @(_OutWitCorpusScriptFiles->Count()) script(s) to '$(_OutWitCorpusScriptsOutputDir)'." />
+  </Target>
+
+</Project>

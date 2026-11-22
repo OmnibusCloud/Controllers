@@ -1,0 +1,101 @@
+using Wasmtime;
+
+namespace OutWit.Controller.AI.Wasm;
+
+/// <summary>
+/// The envelope every store of a host gets: fuel, the cap of its one linear memory, caps on the
+/// host memory a guest can claim outside that cap (tables, instances), and a wall-clock deadline
+/// in epoch ticks. A memory grow past the cap is refused (memory.grow answers -1 to the guest):
+/// the wasmtime 48 C API has no way to make a refused grow a trap, so a guest that cannot live
+/// without the memory ends by its own hand (an allocator's abort, an interpreter's message), and
+/// the host recognises that by the guest's words (<see cref="WasmHostRunRequest.OutOfMemory"/>).
+/// </summary>
+internal static class WasmHostLimits
+{
+    #region Constants
+
+    /// <summary>
+    /// The most elements one table of a guest may hold. A table is host memory the linear
+    /// memory cap does not count (eight bytes an element or more), so it has a cap of its
+    /// own: over a hundred times the largest table of Verify's bundled runtimes.
+    /// </summary>
+    public const uint MAX_TABLE_ELEMENTS = 1_048_576;
+
+    /// <summary>Tables one guest may declare (a runtime module declares one).</summary>
+    public const long MAX_TABLES = 8;
+
+    /// <summary>One linear memory per guest: the memory cap is per memory, a second one would double it.</summary>
+    public const long MAX_MEMORIES = 1;
+
+    /// <summary>Instances one store may hold: the guest's own, with room for none of its making.</summary>
+    public const long MAX_INSTANCES = 4;
+
+    /// <summary>Epoch tick granularity of a host: the wall-clock interrupt resolution.</summary>
+    public const int EPOCH_TICK_MS = 10;
+
+    #endregion
+
+    #region Functions
+
+    /// <summary>
+    /// Puts a store in its envelope: the fuel it may burn, the cap of its linear memory and of
+    /// its tables and instances, and the epoch deadline of its wall time.
+    /// </summary>
+    /// <param name="store">A store not yet used.</param>
+    /// <param name="fuel">The fuel the run may use (at least one unit is given).</param>
+    /// <param name="memoryBytes">The cap of the guest's linear memory (at least one byte).</param>
+    /// <param name="wallMs">The wall time the run may take: a backstop of the host's own, not a budget of the guest's work. Fuel bounds the work; how long a unit of it takes depends on the machine and on what the guest does, so the clock can end a run before its fuel does.</param>
+    public static void Apply(Store store, long fuel, long memoryBytes, int wallMs)
+    {
+        store.Fuel = (ulong)Math.Max(1, fuel);
+        // The memory cap is per linear memory, so the guest gets one; tables are host
+        // memory outside that cap, so their size and number are capped as well.
+        store.SetLimits(
+            memorySize: Math.Max(1, memoryBytes),
+            tableElements: MAX_TABLE_ELEMENTS,
+            instances: MAX_INSTANCES,
+            tables: MAX_TABLES,
+            memories: MAX_MEMORIES);
+        store.SetEpochDeadline(WallToTicks(wallMs));
+    }
+
+    /// <summary>
+    /// The fuel instantiation runs under when a run's budget is given after it
+    /// (<see cref="WasmHostRunRequest.FuelAfterInstantiation"/>): the most that copying data and
+    /// element segments can cost, a unit per byte of the memory cap and per element of the table
+    /// cap, so that instantiation never runs out of fuel on a platform that copies (Windows) where
+    /// it would not on one that maps a copy-on-write image. Nothing of the run's budget is in it:
+    /// a start function of the module's own has this allowance and no more, and what it burns is
+    /// in no budget and in no fuel reported. The controllers ship no module with a start
+    /// function, and a controller that runs a module it did not ship refuses one that has it.
+    /// </summary>
+    /// <param name="memoryBytes">The cap of the guest's linear memory.</param>
+    /// <returns>The fuel to give the store before instantiation.</returns>
+    public static long InstantiationFuel(long memoryBytes)
+    {
+        return Math.Max(1, memoryBytes) + MAX_TABLES * MAX_TABLE_ELEMENTS;
+    }
+
+    /// <summary>
+    /// Whether a run's wall time is over, by the ticks of its deadline: the engine's clock moves
+    /// in ticks, so a deadline may fire up to two ticks before the time is out.
+    /// </summary>
+    /// <param name="elapsedMs">The time since the run's envelope was set, milliseconds.</param>
+    /// <param name="wallMs">The wall time the run may take, milliseconds.</param>
+    /// <returns>True when the deadline may have fired.</returns>
+    public static bool DeadlineReached(long elapsedMs, int wallMs)
+    {
+        return elapsedMs >= ((long)WallToTicks(wallMs) - 2) * EPOCH_TICK_MS;
+    }
+
+    /// <summary>The epoch deadline of a wall-time budget: whole ticks, rounded up, at least one.</summary>
+    /// <param name="wallMs">The wall time, milliseconds.</param>
+    /// <returns>The deadline in ticks of <see cref="EPOCH_TICK_MS"/>.</returns>
+    public static ulong WallToTicks(int wallMs)
+    {
+        var ticks = (wallMs + EPOCH_TICK_MS - 1) / EPOCH_TICK_MS;
+        return (ulong)Math.Max(1, ticks);
+    }
+
+    #endregion
+}

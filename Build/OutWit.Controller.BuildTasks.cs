@@ -6,14 +6,34 @@
 //   StampControllerManifest  - computes the content digest of the staged module and writes it,
 //                              with the build stamp, into the module's controller.json.
 //   DeterministicZipDirectory - zips the module with sorted entries and a fixed timestamp, so
-//                              the same content gives the same bytes on every machine.
+//                              that the same content packed by the same build tools gives the
+//                              same bytes. Not on every machine: the entries are compressed by
+//                              the runtime the build runs on, whose deflate output differs
+//                              between SDKs and MSBuild hosts, and on Linux and macOS each entry
+//                              records another system and Unix permissions; the manifest in the
+//                              zip also carries the build stamp. Compare builds by the content
+//                              digest, not by the zip's bytes.
 //
-// The content digest is the identity of a controller build that WitCloud compares (its
-// ControllerContentDigest class implements the same definition; the two must not drift):
+// The content digest, not the zip, is what can be reproduced, and only for a build made as the
+// publish workflow makes it: one commit, built on Linux with the SDK that global.json pins and
+// with ContinuousIntegrationBuild=true, states one digest wherever its checkout lies. Without
+// that flag the assemblies carry the checkout's path, so the digest follows the folder. A build
+// on Windows states another digest again: the build writes deps.json and controller.json with
+// the system's line ends, and the assemblies differ too.
+//
+// Both take the module as a list of files (ListedFilesOnly): what the build's own records say
+// it staged (OutWit.Controller.StagedFiles.cs), not whatever lies in the folder. Without a list
+// they take the folder, as a caller outside the controller build gets it.
+//
+// The content digest is the identity of a controller build that WitCloud compares:
 //   every file of the module except controller.json (and, at pack time, Resources/**, which the
 //   nupkg leaves out), ordered by relative path (forward slashes, ordinal, case-sensitive);
 //   SHA-256 over, per file, UTF-8 path + LF + the 32 raw bytes of the file's SHA-256 + LF;
 //   written as "sha256:" + lower-case hex.
+// WitCloud's ControllerContentDigest computes a digest of the same form over the archive it
+// holds, taking every file of the archive but the manifest. The two agree only for an archive
+// without Resources/ and without the files of an extracted data asset: the build leaves
+// Resources/ out and takes the files its records list. The forms must not drift.
 
 using System;
 using System.Collections.Generic;
@@ -37,6 +57,16 @@ namespace OutWit.Controller.Build
         /// </summary>
         public static string OfDirectory(string rootDirectory, IEnumerable<string> excludedFolders)
         {
+            return OfFiles(rootDirectory, Directory.GetFiles(Path.GetFullPath(rootDirectory), "*", SearchOption.AllDirectories), excludedFolders);
+        }
+
+        /// <summary>
+        /// The content digest of the named files of a module folder (full paths inside it), the
+        /// same definition as <see cref="OfDirectory"/> over a list instead of over whatever the
+        /// folder holds: a file that lies in the folder and is not named takes no part.
+        /// </summary>
+        public static string OfFiles(string rootDirectory, IEnumerable<string> paths, IEnumerable<string> excludedFolders)
+        {
             var root = Path.GetFullPath(rootDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var excluded = new List<string>();
             foreach (var folder in excludedFolders ?? new string[0])
@@ -47,9 +77,9 @@ namespace OutWit.Controller.Build
             }
 
             var files = new List<KeyValuePair<string, string>>();
-            foreach (var path in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+            foreach (var path in paths)
             {
-                var relative = path.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Replace('\\', '/');
+                var relative = RelativePath(root, path);
                 if (string.Equals(relative, MANIFEST_FILENAME, StringComparison.Ordinal))
                     continue;
 
@@ -93,6 +123,31 @@ namespace OutWit.Controller.Build
                 return builder.ToString();
             }
         }
+
+        /// <summary>
+        /// A file's path inside a module folder, with forward slashes. A file that is not inside
+        /// the folder is an error of the caller: nothing outside a module is part of it.
+        /// </summary>
+        public static string RelativePath(string root, string path)
+        {
+            var folder = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var full = Path.GetFullPath(path);
+            var comparison = Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (!full.StartsWith(folder, comparison) || full.Length == folder.Length)
+                throw new ArgumentException("'" + path + "' is not a file inside the module folder '" + root + "'.");
+
+            return full.Substring(folder.Length).Replace('\\', '/');
+        }
+
+        /// <summary>The full paths of a task's items.</summary>
+        public static List<string> Paths(ITaskItem[] items)
+        {
+            var paths = new List<string>();
+            foreach (var item in items ?? new ITaskItem[0])
+                paths.Add(item.ItemSpec);
+
+            return paths;
+        }
     }
 
     /// <summary>
@@ -115,6 +170,16 @@ namespace OutWit.Controller.Build
         /// <summary>Top-level module folders the digest leaves out (semicolon list), e.g. Resources.</summary>
         public string ExcludedFolders { get; set; }
 
+        /// <summary>The files the digest is taken over, when <see cref="ListedFilesOnly"/> is set: the files the package ships.</summary>
+        public ITaskItem[] Files { get; set; }
+
+        /// <summary>
+        /// True: the digest covers <see cref="Files"/> and nothing else, whatever the folder
+        /// holds (a file somebody put there does not ship and is not digested). False: every
+        /// file of the folder, as a caller without a list gets it.
+        /// </summary>
+        public bool ListedFilesOnly { get; set; }
+
         [Output]
         public string ContentDigest { get; set; }
 
@@ -123,7 +188,9 @@ namespace OutWit.Controller.Build
             try
             {
                 var excluded = (ExcludedFolders ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-                ContentDigest = ControllerBuildDigest.OfDirectory(ModuleDirectory, excluded);
+                ContentDigest = ListedFilesOnly
+                    ? ControllerBuildDigest.OfFiles(ModuleDirectory, ControllerBuildDigest.Paths(Files), excluded)
+                    : ControllerBuildDigest.OfDirectory(ModuleDirectory, excluded);
 
                 if (!File.Exists(ManifestFile))
                 {
@@ -171,6 +238,15 @@ namespace OutWit.Controller.Build
 
         public bool Overwrite { get; set; }
 
+        /// <summary>The files to pack, when <see cref="ListedFilesOnly"/> is set: full paths inside the source directory.</summary>
+        public ITaskItem[] Files { get; set; }
+
+        /// <summary>
+        /// True: the archive holds <see cref="Files"/> and nothing else, whatever the folder
+        /// holds. False: every file of the folder, as a caller without a list gets it.
+        /// </summary>
+        public bool ListedFilesOnly { get; set; }
+
         public override bool Execute()
         {
             try
@@ -190,10 +266,12 @@ namespace OutWit.Controller.Build
                 }
 
                 var files = new List<KeyValuePair<string, string>>();
-                foreach (var path in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var path in ListedFilesOnly ? ControllerBuildDigest.Paths(Files) : new List<string>(Directory.GetFiles(root, "*", SearchOption.AllDirectories)))
                 {
-                    var relative = path.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Replace('\\', '/');
-                    files.Add(new KeyValuePair<string, string>(relative, path));
+                    var relative = ControllerBuildDigest.RelativePath(root, path);
+                    if (seen.Add(relative))
+                        files.Add(new KeyValuePair<string, string>(relative, path));
                 }
 
                 files.Sort((left, right) => string.CompareOrdinal(left.Key, right.Key));

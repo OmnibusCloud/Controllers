@@ -1,0 +1,42 @@
+namespace OutWit.Controller.AI.Wasm;
+
+/// <summary>
+/// How one run of a WASI command module ended, as the host can tell it apart. Every guest-side
+/// failure is one of these, never an exception; a controller maps them to its own verdicts.
+/// </summary>
+internal enum WasmHostVerdict
+{
+    /// <summary>The guest ended by itself (returned from <c>_start</c> or called <c>proc_exit</c>, with any status: <see cref="WasmHostExit"/>); the exit code says how, 0 for success.</summary>
+    Exited,
+
+    /// <summary>A trap other than a budget stop ended the run (a crash): the trap code names it, the fault holds the fixed words.</summary>
+    Trap,
+
+    /// <summary>The fuel ran out: the deterministic budget stop.</summary>
+    OutOfFuel,
+
+    /// <summary>The epoch deadline passed: the wall-clock backstop, which depends on the machine and is no statement about the program.</summary>
+    Interrupted,
+
+    /// <summary>The guest failed for want of memory: a failed end (not a success, not a budget stop) whose stderr the caller's test recognises as a refused allocation.</summary>
+    OutOfMemory,
+
+    /// <summary>The module could not be instantiated (an import the host does not have, a memory the store cannot grant); it never ran.</summary>
+    NotInstantiated,
+
+    /// <summary>The module exports no <c>_start</c>: it is not a command module.</summary>
+    NoStart,
+
+    /// <summary>
+    /// The engine failed one of the guest's calls without a trap or an exit code. None is known:
+    /// wasmtime 48's own <c>proc_exit</c> failed a status of 126 or more this way, and the host's
+    /// (<see cref="WasmHostExit"/>) takes its place. The engine's own exception travels with the outcome.
+    /// </summary>
+    EngineError,
+
+    /// <summary>
+    /// The guest wrote more to stdout than its cap and the run was asked to end there
+    /// (<see cref="WasmHostRunRequest.StopAtStdoutLimit"/>): the run ended at the write that passed the cap.
+    /// </summary>
+    OutputLimit
+}

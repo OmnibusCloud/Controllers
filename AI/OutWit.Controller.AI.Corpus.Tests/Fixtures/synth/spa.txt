@@ -1,0 +1,42 @@
+# Spanish. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Inicio
+Noticias
+Agenda
+Contacto
+Quiénes somos
+Horarios
+Días de mercado
+El tiempo
+[sentence]
+La biblioteca municipal abre los lunes a las nueve y cierra a las siete de la tarde.
+El panadero de la esquina prepara cada mañana pan fresco para todo el barrio.
+En primavera florecen los manzanos a lo largo de la vieja carretera.
+La barca cruza el río cada veinte minutos cuando hace buen tiempo.
+Después del largo invierno se arreglaron los caminos del parque.
+El ayuntamiento ha decidido renovar el puente el próximo año.
+En el mercado los agricultores venden verduras, queso y miel de la comarca.
+Los alumnos de la escuela visitan hoy el pequeño museo del puerto.
+A causa de la fuerte lluvia, el paso bajo la estación está cerrado.
+El relojero repara desde hace cuarenta años el reloj de la iglesia.
+En otoño los vecinos recogen juntos las hojas de las aceras.
+La nueva línea de autobús une el pueblo con la ciudad y con el hospital.
+El sábado habrá un concierto del coro juvenil en el salón del pueblo.
+El guarda forestal enseña a los visitantes los robles más viejos del bosque.
+Muchos habitantes van al trabajo en bicicleta porque las calles son estrechas.
+Los bomberos hacen prácticas cada mes a la orilla del lago.
+En el taller que está detrás del ayuntamiento se restauran muebles antiguos con cuidado.
+El médico ha trasladado su consulta a la casa que está junto a la farmacia.
+Durante las vacaciones la piscina permanece abierta hasta la noche.
+La jardinera planta rosas y lavanda delante de la entrada de la estación.
+Un nuevo carril para bicicletas va ahora desde la plaza del mercado hasta el molino.
+El cartero conoce a todas las familias de las calles de su zona.
+Por la tarde los jugadores de ajedrez se reúnen en la sala de lectura.
+El agua de la fuente es analizada con regularidad por el servicio de salud.
+La maestra explica a los niños cómo se lee un mapa.
+En invierno el municipio retira primero la nieve de las calles principales.
+El pescador lleva su pesca al puerto muy temprano por la mañana.
+Los vecinos del casco antiguo desean más bancos y más árboles.
+En la colina que domina la ciudad hay un viejo depósito de agua de ladrillo.
+La asociación busca voluntarios para ayudar en la fiesta de verano.

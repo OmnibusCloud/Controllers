@@ -1,0 +1,42 @@
+# Italian. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Home
+Notizie
+Eventi
+Contatti
+Chi siamo
+Orari
+Giorni di mercato
+Meteo
+[sentence]
+La biblioteca comunale apre il lunedì alle nove e chiude alle sette di sera.
+Il fornaio all'angolo prepara ogni mattina il pane fresco per tutto il quartiere.
+In primavera i meli fioriscono lungo la vecchia strada.
+Il traghetto attraversa il fiume ogni venti minuti quando il tempo è buono.
+Dopo il lungo inverno i sentieri del parco sono stati sistemati.
+Il consiglio comunale ha deciso di rinnovare il ponte il prossimo anno.
+Al mercato i contadini vendono verdura, formaggio e miele della zona.
+Gli alunni della scuola visitano oggi il piccolo museo del porto.
+A causa della forte pioggia il sottopassaggio della stazione è chiuso.
+L'orologiaio ripara da quarant'anni l'orologio della chiesa.
+In autunno i vicini raccolgono insieme le foglie dai marciapiedi.
+La nuova linea di autobus collega il paese con la città e con l'ospedale.
+Sabato ci sarà un concerto del coro giovanile nella sala del paese.
+La guardia forestale mostra ai visitatori le querce più vecchie del bosco.
+Molti abitanti vanno al lavoro in bicicletta perché le strade sono strette.
+I vigili del fuoco si esercitano ogni mese sulla riva del lago.
+Nel laboratorio dietro il municipio si restaurano con cura i vecchi mobili.
+Il medico ha trasferito il suo studio nella casa accanto alla farmacia.
+Durante le vacanze la piscina rimane aperta fino a sera.
+La giardiniera pianta rose e lavanda davanti all'ingresso della stazione.
+Una nuova pista ciclabile porta ora dalla piazza del mercato al mulino.
+Il postino conosce tutte le famiglie delle strade della sua zona.
+La sera i giocatori di scacchi si incontrano nella sala di lettura.
+L'acqua della fontana viene controllata regolarmente dal servizio sanitario.
+La maestra spiega ai bambini come si legge una carta geografica.
+In inverno il comune toglie la neve prima dalle strade principali.
+Il pescatore porta il suo pesce al porto la mattina presto.
+Gli abitanti del centro storico desiderano più panchine e più alberi.
+Sulla collina sopra la città sorge una vecchia torre dell'acqua in mattoni.
+L'associazione cerca volontari per aiutare durante la festa d'estate.

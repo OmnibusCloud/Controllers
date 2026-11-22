@@ -1,0 +1,4 @@
+Job:VerifyPreflight(Blob:taskset, VerifyOptions:opts)
+{
+    VerifyPreflight:result = Verify.Preflight(taskset, opts);
+}

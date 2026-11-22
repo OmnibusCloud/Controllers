@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify\OutWit.Controller.AI.Verify.csproj" />
+  </ItemGroup>
+
+  <!-- Build-only references: these projects must be built (so their PostBuild
+       populates @Controllers/<Cfg>/<name>.module/) but their DLLs are not pulled
+       into the test compile output. Variables is the Verify module dependency;
+       Grid/Special are the script-level dependencies of VerifyRun.wit
+       (Grid.ForEach and the typed-variable/flow constructs the engine resolves). -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Special\OutWit.Controller.Special\OutWit.Controller.Special.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <!-- A host executable built as host applications are (VerifyHostProtectionTests). -->
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify.Tests.TrapHost\OutWit.Controller.AI.Verify.Tests.TrapHost.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <!-- A host that loads controllers as the cloud client does (VerifyModuleLoadTests). -->
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify.Tests.ClientHost\OutWit.Controller.AI.Verify.Tests.ClientHost.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <!-- A second carrier of the wasm host, loaded first by that host (WasmHostNativeResolutionTests). -->
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify.Tests.Carrier\OutWit.Controller.AI.Verify.Tests.Carrier.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <!-- The asset tool: the tests hold what it refuses of an archive it unpacks (VerifyAssetArchiveTests). -->
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify.Assets\OutWit.Controller.AI.Verify.Assets.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ExcludedControllerModule Include="render.module" />
+    <ExcludedControllerModule Include="renderdcc.module" />
+  </ItemGroup>
+
+  <!-- Wasmtime sandbox. The sandbox tests are opt-in: they Assert.Ignore unless
+       @Data/runtimes/ holds the pinned runtime set (CPython-WASI with its bytecode
+       layers, QuickJS). Build it with the asset tool (OutWit.Controller.AI.Verify.Assets,
+       "verify-assets build @Data/runtimes"); @Data/ is gitignored. -->
+  <ItemGroup>
+    <PackageReference Include="Wasmtime" Version="48.0.2" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <!-- Where the build restored the binding's package: the tests hold what the module's notices
+       say of Wasmtime.Dotnet.dll to the package's own description and files (VerifyBindingNoticeTests). -->
+  <ItemGroup>
+    <AssemblyMetadata Include="WasmtimePackageFolder" Value="$(PkgWasmtime)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Sandbox\Golden\*.golden.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Sandbox\Fixtures\*.wasm" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The pinned native wasmtime library in place of the package's copy (the wasm host refuses any other). -->
+  <Import Project="..\Shared\WasmHostPinnedNatives.targets" />
+
+</Project>

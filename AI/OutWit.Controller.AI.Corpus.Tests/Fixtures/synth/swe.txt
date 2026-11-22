@@ -1,0 +1,27 @@
+# Swedish. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Hem
+Nyheter
+Evenemang
+Kontakt
+Om oss
+Öppettider
+Torgdagar
+Väder
+[sentence]
+Stadsbiblioteket öppnar på måndag klockan nio och stänger klockan sju på kvällen.
+Bagaren på hörnet bakar färskt bröd varje morgon för hela kvarteret.
+På våren blommar äppelträden längs den gamla landsvägen.
+Färjan går över floden var tjugonde minut när vädret är bra.
+Efter den långa vintern har gångarna i parken lagats.
+Kommunfullmäktige har beslutat att bron ska förnyas nästa år.
+På torget säljer bönderna grönsaker, ost och honung från trakten.
+Eleverna i skolan besöker i dag det lilla museet vid hamnen.
+På grund av det kraftiga regnet är gångtunneln vid stationen avstängd.
+Urmakaren har lagat kyrkans tornur i fyrtio år.
+På hösten samlar grannarna tillsammans ihop löven från trottoarerna.
+Den nya busslinjen förbinder byn med staden och sjukhuset.
+Barnen går in i klassrummet när klockan ringer på morgonen.
+Läraren ger dem nya böcker i början av varje termin.
+Bussen kör in på torget strax före klockan åtta.

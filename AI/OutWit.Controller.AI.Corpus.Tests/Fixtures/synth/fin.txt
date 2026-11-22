@@ -1,0 +1,24 @@
+# Finnish. Text written for this repository's tests: the generated shards are made of it.
+# Nothing here is taken from a crawl or from anybody else's page.
+[label]
+Etusivu
+Uutiset
+Tapahtumat
+Yhteystiedot
+Meistä
+Aukioloajat
+Toripäivät
+Sää
+[sentence]
+Kaupunginkirjasto avataan maanantaina kello yhdeksän ja suljetaan kello seitsemän illalla.
+Kulman leipuri leipoo joka aamu tuoretta leipää koko korttelille.
+Keväällä omenapuut kukkivat vanhan maantien varrella.
+Lautta kulkee joen yli kahdenkymmenen minuutin välein, kun sää on hyvä.
+Pitkän talven jälkeen puiston polut on korjattu.
+Kaupunginvaltuusto on päättänyt uusia sillan ensi vuonna.
+Torilla maanviljelijät myyvät vihanneksia, juustoa ja hunajaa lähiseudulta.
+Koulun oppilaat vierailevat tänään sataman pienessä museossa.
+Rankkasateen vuoksi aseman alikulku on suljettu.
+Kelloseppä on korjannut kirkon tornikelloa neljäkymmentä vuotta.
+Syksyllä naapurit keräävät yhdessä lehdet jalkakäytäviltä.
+Uusi bussilinja yhdistää kylän kaupunkiin ja sairaalaan.

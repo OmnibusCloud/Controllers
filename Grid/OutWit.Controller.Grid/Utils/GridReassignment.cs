@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using OutWit.Controller.Grid.Builders;
 using OutWit.Controller.Grid.Model;
 using OutWit.Engine.Interfaces;
 
@@ -24,6 +25,24 @@ namespace OutWit.Controller.Grid.Utils;
 /// Copies of one item stay on different machines through every round, using only this call's record of
 /// who returned which item. A copy with no machine left is dropped; an item fails the job only when it
 /// has no result at all.
+///
+/// A node answers only what it was asked. A task asks for one value, under the return slot Grid gave
+/// its activity, and a node returns the variable of that name: that is what every node has done since
+/// the first Grid.ForEach. Here a batch's values are held to it: a value is kept when it comes under a
+/// slot some task of the batch asked for, as many times as tasks of the batch asked for that name; any
+/// other value is left out of the results (with a warning) and the rest of the batch stands. Nothing
+/// is reordered and no batch fails for it, so a call whose nodes answer as asked returns exactly what
+/// it returned before. What it gives: no machine has more values in a call's results than its tasks
+/// asked for, so a controller that compares the copies of an item can count each value as one
+/// machine's.
+///
+/// A value the return collection would refuse is an answer not given. A typed collection takes a list
+/// whole or not at all, so one null or one value of another type would cost the call every value of
+/// every node. Such a value is left out like an unasked one (with a warning that says how many and
+/// why), the batch stands, and its task has no answer. A task without an answer is not sent again,
+/// here or for a node that returned fewer values than tasks: the results come back short and the
+/// caller decides. For a copy the machine still counts as holding the item (it has run it), so no
+/// other copy of that item is placed on it.
 /// </summary>
 public static class GridReassignment
 {
@@ -51,11 +70,44 @@ public static class GridReassignment
         public string? FailureMessage { get; set; }
     }
 
+    /// <summary>
+    /// Distributes the tasks of a call whose return collection takes every value.
+    /// </summary>
+    /// <param name="nodes">The nodes that can take the work.</param>
+    /// <param name="tasks">The tasks of the call.</param>
+    /// <param name="processGroup">Runs one node's batch.</param>
+    /// <param name="logWarning">Where warnings go; null when nobody listens.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The values that were kept, the statuses of the batches that completed, and whether the work failed.</returns>
+    /// <exception cref="OperationCanceledException">The call was cancelled.</exception>
+    public static Task<DistributionOutcome> DistributeAsync(
+        IReadOnlyList<IWitEngineActivityNode> nodes,
+        IReadOnlyList<WitGridTask> tasks,
+        Func<WitGridTaskGroup, CancellationToken, Task<GroupProcessResult>> processGroup,
+        Action<string>? logWarning,
+        CancellationToken cancellationToken)
+    {
+        return DistributeAsync(nodes, tasks, processGroup, logWarning, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Distributes the tasks of a call and holds every answer to what its tasks asked for and to what
+    /// the return collection takes.
+    /// </summary>
+    /// <param name="nodes">The nodes that can take the work.</param>
+    /// <param name="tasks">The tasks of the call.</param>
+    /// <param name="processGroup">Runs one node's batch.</param>
+    /// <param name="logWarning">Where warnings go; null when nobody listens.</param>
+    /// <param name="values">What the return collection takes; null when it takes every value.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The values that were kept, the statuses of the batches that completed, and whether the work failed.</returns>
+    /// <exception cref="OperationCanceledException">The call was cancelled.</exception>
     public static async Task<DistributionOutcome> DistributeAsync(
         IReadOnlyList<IWitEngineActivityNode> nodes,
         IReadOnlyList<WitGridTask> tasks,
         Func<WitGridTaskGroup, CancellationToken, Task<GroupProcessResult>> processGroup,
         Action<string>? logWarning,
+        GridValueRule? values,
         CancellationToken cancellationToken)
     {
         var outcome = new DistributionOutcome();
@@ -111,9 +163,15 @@ public static class GridReassignment
                     if (result.Status != null)
                         outcome.CompletedStatuses.Add(result.Status);
 
-                    foreach (var variable in result.Variables)
+                    IReadOnlyList<IWitVariable> answers = GridAnswers.Keep(group, result.Variables, values, out int unasked, out var refused);
+
+                    GridAnswers.Warn(logWarning, GridAnswers.Who(group.Node.NodeId, result.Status, "batch"), group.Count, unasked, refused, values);
+
+                    foreach (var variable in answers)
                         outcome.Results.Add(variable.Value);
 
+                    // A copy whose value was left out is recorded all the same: the machine has run the
+                    // item, and another copy of it must not land there.
                     RecordHolder(holders, group);
                 }
                 else

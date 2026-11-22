@@ -32,6 +32,8 @@ the table.
 | [`OutWit.Controller.CalculiX`](https://www.nuget.org/packages/OutWit.Controller.CalculiX) ([`CalculiX/`](CalculiX/)) | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.CalculiX.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.CalculiX) | 2    | Whole-deck CalculiX (ccx 2.22) solves on compute nodes, responses extracted on the node. Pinned ccx builds for Windows / Linux / macOS ship as release assets of [OmnibusCloud/CalculiX](https://github.com/OmnibusCloud/CalculiX). |
 | [`OutWit.Controller.Sweep`](https://www.nuget.org/packages/OutWit.Controller.Sweep) ([`Sweep/`](Sweep/)) | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.Sweep.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.Sweep) | 1    | Host-side parameter studies for every solver family - CalculiX decks and OpenFOAM cases - with one activity vocabulary: the study validated up front, chunks fanned out with `Grid.ForEach`, a manifest of every harvested variant after each chunk (partial results survive cancellation), the `sweep.state@2` document for non-.NET clients; OpenFOAM case sets (every variant its own ready case) from 2.1. |
 | [`OutWit.Controller.OpenFOAM`](https://www.nuget.org/packages/OutWit.Controller.OpenFOAM) ([`OpenFOAM/`](OpenFOAM/)) | [![NuGet](https://img.shields.io/nuget/v/OutWit.Controller.OpenFOAM.svg?label=)](https://www.nuget.org/packages/OutWit.Controller.OpenFOAM) | 2    | Whole-case OpenFOAM® runs on compute nodes: one case per node through an allow-listed recipe (meshing, decomposition, solver, post step), run-time code refused before anything runs, convergence facts and requested responses read on the node (forces measured during the solve). What it runs and refuses: [SUPPORTED-INPUTS.md](OpenFOAM/SUPPORTED-INPUTS.md). Pinned OpenFOAM v2606 kits for Windows / Linux / macOS ship as release assets of [OmnibusCloud/OpenFOAM](https://github.com/OmnibusCloud/OpenFOAM). |
+| `OutWit.Controller.AI.Verify` ([`AI/`](AI/OutWit.Controller.AI.Verify/))                         | 1.0.0 — not yet published                                                                                                                                                | 2    | Sandboxed, deterministic, fuel-metered execution of untrusted programs against specifications on anonymous nodes (WebAssembly, wasmtime): code against tests (RLVR rewards), generate and check, math with a computer algebra system; Python (also with sympy or numpy), JavaScript, TypeScript, Ruby, Lua, C and C++ compiled on the node, and compiled WASI modules. A share of the work runs twice on different machines and copies that disagree are settled by three. The engine's native library and the language runtimes ship as release assets of this repository. |
+| `OutWit.Controller.AI.Corpus` ([`AI/`](AI/OutWit.Controller.AI.Corpus/))                         | 1.0.0 — not yet published                                                                                                                                                | 2    | Public web data into training-grade text on anonymous nodes: Common Crawl WET and WARC shards fetched by the nodes from the public origin, HTML and PDF (in a wasm sandbox) extracted, language-tagged with a pinned language pack, cleaned, quality-filtered and signed for near-duplicate removal, every stage deterministic; sampled copies compared across machines; what the preflight states of traffic and storage holds whoever wrote the manifest. The engine's native library and the PDF extractor ship as release assets of this repository. |
 
 OpenFOAM® is a registered trademark of OpenCFD Limited. This offering is not
 approved or endorsed by OpenCFD Limited, producer and distributor of the OpenFOAM
@@ -280,6 +282,7 @@ canonical minimal Model shape.
 │   └── sweep.yml                            # Sweep, CalculiX and OpenFOAM tests on Linux, macOS and Windows
 │
 ├── OutWit.slnx                              # Solution file (SLNX format, .NET 10)
+├── global.json                              # The exact .NET SDK every build uses (no roll-forward)
 ├── LICENSE                                  # MIT
 └── README.md                                # this file
 ```
@@ -299,12 +302,14 @@ time is roughly:
    dependencies (`OutWit.Engine.Data`, `OutWit.Engine.Assets.MSBuild`),
    icon / readme / license packaging.
 3. `Build/OutWit.Controller.Manifest.targets` validates the declarations
-   (Sha256/Uri required on every asset, etc.), then **emits the
-   `controller.json`** for the build.
+   (every asset needs a Uri, a Sha256 of 64 lower-case hex digits that is
+   not all zeros, and a Size, etc.), then **emits the `controller.json`**
+   for the build.
 4. `Build/OutWit.Controller.targets` stages the controller's outputs
    into `$(SolutionDir)@Controllers/<Cfg>/<name>.module/`, produces an
    `@Zips/<Cfg>/<name>.zip` (used by the BlobCacheService path on
-   the OmnibusCloud server side), and packs the staged module dir into the
+   the OmnibusCloud server side), and packs the files the build's records
+   list for the module (not whatever else lies in the folder) into the
    nupkg's `content/module/` plus a `lib/<tfm>/_._` marker (so NuGet
    considers the package framework-compatible).
 5. The consumer-side `build/OutWit.Controller.<Name>.targets` ships
@@ -355,7 +360,7 @@ See [Tools/OutWit.Controller.Pack/README.md](Tools/OutWit.Controller.Pack/README
 
 | Workflow                            | Trigger                       | Purpose                                                                                           |
 | ----------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------- |
-| [`publish.yml`](.github/workflows/publish.yml)                       | `workflow_dispatch`             | Publish any project. Tier-2 controllers (Render, ParaView, OpenFOAM) have a release-assets-exist guard before the nuget.org push. |
+| [`publish.yml`](.github/workflows/publish.yml)                       | `workflow_dispatch`             | Publish any project: GitHub Packages from any branch; nuget.org (trusted publishing, off by default) and GitHub Releases from `main` only, through the `release` environment. Tier-2 controllers (Render, ParaView, OpenFOAM) have a release-assets-exist guard before the nuget.org push; the AI controllers' data assets are fetched and held to their pins before any push. |
 | [`verify-render-consumer.yml`](.github/workflows/verify-render-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference the published Render package, assert every external asset materialised. |
 | [`verify-scripts-consumer.yml`](.github/workflows/verify-scripts-consumer.yml) | `workflow_dispatch`             | Cold-build smoke test: PackageReference a published Scripts package, assert the staged `@Scripts/*.wit` layout matches what WitCloud's ScriptSeeder expects. |
 | [`openfoam-oracle.yml`](.github/workflows/openfoam-oracle.yml) | PR touching `OpenFOAM/**`, `workflow_dispatch` | The OpenFOAM controller against the real v2606 kits downloaded from OmnibusCloud/OpenFOAM: pitzDaily through `Foam.Run` serially and on two ranks (Linux, macOS), serially on Windows, plus the whole ordinary test run per platform. |

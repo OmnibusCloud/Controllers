@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.props" />
+
+  <PropertyGroup>
+    <ControllerName>Corpus</ControllerName>
+    <Version>1.0.0</Version>
+    <Description>Bundled .wit scripts for the OutWit Corpus controller — CorpusProcess (public-corpus shards fetched by the nodes, cleaned, language-tagged, quality-filtered and signed, with the tasks and the results travelling as blobs, sampled re-execution, a repair round for shards a node could not answer, on two machines when the run samples, a dispute round by three machines for copies that disagree, and that round once more for disputes that came back with too few copies), CorpusPreflight, CorpusDedup (the near-duplicate merge over a run) and CorpusRuntimeDiagnostics (the module's diagnostics and the capabilities document).</Description>
+    <PackageTags>corpus;common-crawl;scripts;witengine;witcloud;controller</PackageTags>
+  </PropertyGroup>
+
+  <!-- Compatibility marker (see docs/adr-001-script-controller-version-compatibility.md).
+       ENABLE WHEN THE CONTROLLER IS FIRST PUBLISHED TO NUGET.ORG, which is its 1.0.0. The range
+       is the one to enable as it stands. Lower bound: the first controller version that feed
+       will have (the decision record: a lower bound no feed has is noise at every restore). The
+       scripts themselves need what a controller has done since 0.9.0: they ask Corpus.Disputes
+       for a second dispute round (six arguments) and hand it to Corpus.Collect and
+       Corpus.Integrity (nine arguments); Corpus.RepairRate and the run's options in
+       Corpus.Integrity are from 0.7.0, packages and Corpus.ProcessPackage from 0.5.0. Upper
+       bound: the next major, exclusive.
+       NOT ENABLED YET, and it cannot be: the reference is restored from the feeds this
+       repository restores from, and no controller version of the range is on nuget.org (the 0.x
+       controller packages went to the organization's GitHub Packages feed only). Enabled now it
+       breaks the restore of this project, the publish job included. Enable it (remove the
+       comment marks around the ItemGroup, nothing else) as the first step after the controller
+       package of the release is on nuget.org, before this package is packed for it. A test
+       holds the range to the versions of the build, and fails a build of a controller after
+       1.0.0 in which the marker is still off (CorpusScriptsCompatibilityTests).
+  <ItemGroup>
+    <PackageReference Include="OutWit.Controller.AI.Corpus" Version="[1.0.0, 2.0.0)" />
+  </ItemGroup>
+  -->
+
+  <ItemGroup>
+    <None Include="..\OutWit.Controller.AI.Corpus\Scripts\*.wit"
+          Pack="true"
+          PackagePath="content/scripts/" />
+
+    <None Include="build\OutWit.Controller.AI.Corpus.Scripts.targets"
+          Pack="true"
+          PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.Scripts.targets" />
+
+</Project>

@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Corpus\OutWit.Controller.AI.Corpus.csproj" />
+  </ItemGroup>
+
+  <!-- The Grid controller's allocator, compiled against by the tests only: the preflight's share
+       plan follows its rule (CorpusSharePlanner) and CorpusSharePlannerTests holds the two together.
+       The controller itself does not depend on Grid. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid.Model\OutWit.Controller.Grid.Model.csproj" />
+  </ItemGroup>
+
+  <!-- Build-only references: these projects must be built (so their PostBuild
+       populates @Controllers/<Cfg>/<name>.module/) but their DLLs are not pulled
+       into the test compile output. Variables is the Corpus module dependency;
+       Grid/Special are the script-level dependencies of CorpusProcess.wit
+       (Grid.ForEach and the typed-variable/flow constructs the engine resolves). -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Special\OutWit.Controller.Special\OutWit.Controller.Special.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ExcludedControllerModule Include="render.module" />
+    <ExcludedControllerModule Include="renderdcc.module" />
+  </ItemGroup>
+
+  <!-- The PDF stage's sandbox: the wasmtime binding with the natives of its package in the test
+       bin (the build server puts the controller's pinned natives in their place). The PDF tests
+       need the extractor module in @Data/wasm/ (gitignored; the asset corpus-pdftext-wasm.zip
+       extracted there) and Assert.Ignore without it, except on the build server. -->
+  <ItemGroup>
+    <PackageReference Include="Wasmtime" Version="48.0.2" />
+  </ItemGroup>
+
+  <!-- The fixtures. The two shards (*.gz) are generated: Mock/CrawlSynth writes them from the
+       text of Fixtures/synth (written for these tests), and a test holds the committed files to
+       the generator. No record of a real crawl is in the repository: the tests that need real
+       crawl data fetch it by range when they run and check it against the hashes of
+       crawl-heads.json (Mock/CorpusCrawlHeads; kept in @Data/crawl, gitignored). The two
+       language models (*.bin) are the ones corpus-assets built from WET files of
+       CC-MAIN-2026-43: n-gram profiles and rule data, no text of a page. The rule data of the
+       pack (language-pack-*.bin) holds FineWeb-2's stop-word lists and repetition thresholds
+       (Apache-2.0): that project's licence text is beside the pack here and goes with it into
+       the output (LICENSE-fineweb-2.txt, the text of the Assets project's languages folder). -->
+  <ItemGroup>
+    <None Update="Fixtures\*.gz" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\*.bin" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\LICENSE-fineweb-2.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\synth\*.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The pinned native wasmtime library in place of the package's copy (the wasm host refuses any other). -->
+  <Import Project="..\Shared\WasmHostPinnedNatives.targets" />
+
+</Project>

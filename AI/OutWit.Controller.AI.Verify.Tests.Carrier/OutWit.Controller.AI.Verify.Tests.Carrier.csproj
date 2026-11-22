@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A second carrier of the shared wasm host, as small as one can be: the host's source compiled
+       in (its own internal copy, as Verify and Corpus have) and the binding, and nothing else. Not a
+       controller module, so it never reaches @Controllers. WasmHostNativeResolutionTests copies it
+       next to its binding, with or without natives, and has the client-like host load it into the
+       shared context before Verify (OutWit.Controller.AI.Verify.Tests.ClientHost, first carrier):
+       the shape of a cloud client in which another controller loaded the binding first. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- The binding next to the carrier, as a controller module has it. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Wasmtime" Version="48.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\Wasm\**\*.cs" Link="Wasm\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,295 @@
+using OutWit.Controller.AI.Corpus.Language;
+using OutWit.Controller.AI.Corpus.Manifests;
+using OutWit.Controller.AI.Corpus.Model;
+using OutWit.Controller.AI.Corpus.Shards;
+using OutWit.Controller.AI.Corpus.Tests.Mock;
+using OutWit.Engine.Interfaces;
+
+namespace OutWit.Controller.AI.Corpus.Tests.Scripts;
+
+/// <summary>
+/// What the studio reads, through the engine: the preflight's busiest share on the rig's pool (a
+/// share and counts, never a node) and the traffic promise with the sampled copies; a run that keeps
+/// statistics and hashes only — its report names no blob and carries the direct run's content
+/// hashes, its sampled pairs still compare the text and the signatures, and CorpusDedup refuses it
+/// by name; a run with its own MinHash parameters, which the report states and the merge uses; a
+/// node that returns the right text with other signatures, which integrity names.
+/// </summary>
+[TestFixture]
+[NonParallelizable]
+public sealed class CorpusStudioSkeletonTests : CorpusScriptTestBase
+{
+    #region Constants
+
+    private const string WET_FIXTURE = CorpusFixtures.WET;
+    private const string WARC_FIXTURE = CorpusFixtures.WARC;
+    private const string MODEL_FIXTURE = CorpusFixtures.PACK;
+
+    #endregion
+
+    #region Fields
+
+    private string m_processScript = null!;
+    private string m_preflightScript = null!;
+    private string m_dedupScript = null!;
+    private Guid m_modelBlob;
+
+    #endregion
+
+    #region Setup
+
+    [OneTimeSetUp]
+    public async Task Setup()
+    {
+        m_processScript = LoadScript("CorpusProcess.wit");
+        m_preflightScript = LoadScript("CorpusPreflight.wit");
+        m_dedupScript = LoadScript("CorpusDedup.wit");
+        m_modelBlob = await UploadFixtureAsync(MODEL_FIXTURE);
+    }
+
+    #endregion
+
+    #region Preflight Tests
+
+    [Test]
+    public async Task PreflightStatesTheBusiestShareOfTheRigsPoolTest()
+    {
+        var manifest = await UploadAsync(Manifest(WET_FIXTURE, WARC_FIXTURE), "share.json");
+
+        var job = Engine.Compile(m_preflightScript);
+        var status = await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData());
+        var report = (CorpusPreflightData)job.Variables["result"].Value!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
+            Assert.That(report.PlannedNodes, Is.EqualTo(2), "two shards on the rig's three unmeasured nodes");
+            Assert.That(report.BusiestNodeShare, Is.EqualTo(0.5).Within(0.001), "each shard is under a megabyte, the least a shard weighs: the two weigh the same");
+            Assert.That(report.Messages, Has.Some.StartsWith("Work split as the platform would plan it now: 2 of 3 node(s) take shards; the busiest node's share of the work is"));
+        });
+    }
+
+    [Test]
+    public async Task PreflightOfAStatsAndHashesRunSaysWhatStaysTest()
+    {
+        var manifest = await UploadAsync(StudioManifest(", \"output\": \"stats_and_hashes\"", WET_FIXTURE), "stats-preflight.json");
+
+        var job = Engine.Compile(m_preflightScript);
+        await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData { SamplingRate = 1 });
+        var report = (CorpusPreflightData)job.Variables["result"].Value!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.WellFormed, Is.True, string.Join(" | ", report.Messages));
+            Assert.That(report.Messages, Has.Some.StartsWith("output stats_and_hashes:").And.Contains("Corpus.Dedup cannot run over this run"));
+            Assert.That(report.Messages, Has.Some.Contains("no text and no signatures (output stats_and_hashes: they stay on the nodes)"));
+            Assert.That(report.EstimatedStorageBytes, Is.LessThan(Size(MODEL_FIXTURE) + 64 * 1024), "the report, the integrity document and the inputs");
+        });
+    }
+
+    [Test]
+    public async Task PreflightCountsTheSampledCopiesInTheTrafficTest()
+    {
+        var manifest = await UploadAsync(Manifest(WET_FIXTURE, WARC_FIXTURE), "traffic.json");
+
+        var job = Engine.Compile(m_preflightScript);
+        await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData { SamplingRate = 0.5 });
+        var report = (CorpusPreflightData)job.Variables["result"].Value!;
+        var largest = Math.Max(Size(WET_FIXTURE), Size(WARC_FIXTURE));
+
+        var once = Size(WET_FIXTURE) + Size(WARC_FIXTURE);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.EstimatedFetchBytes, Is.EqualTo(once + largest), "the larger shard a second time");
+            Assert.That(report.EstimatedUploadBytes, Is.GreaterThan(0), "M-8: the products every execution uploads are traffic too");
+            Assert.That(report.RetryAllowanceBytes, Is.EqualTo((once + largest + CorpusTrafficEstimate.RETRY_ALLOWANCE_DIVISOR - 1) / CorpusTrafficEstimate.RETRY_ALLOWANCE_DIVISOR), "M-8: an allowance for what is fetched more than once");
+            Assert.That(report.EstimatedTrafficBytes, Is.EqualTo(report.EstimatedFetchBytes + report.EstimatedUploadBytes + report.RetryAllowanceBytes + report.PlannedNodes * Size(MODEL_FIXTURE)), "and the language model, once for each node the plan uses");
+            Assert.That(report.PlannedNodes, Is.GreaterThan(0));
+            Assert.That(report.FetchCeilingBytes, Is.EqualTo(ShardLimits.DeclaredCap(Size(WET_FIXTURE)) + ShardLimits.DeclaredCap(Size(WARC_FIXTURE)) + ShardLimits.DeclaredCap(largest)), "H-8: what the nodes accept at the most");
+            Assert.That(report.Messages, Has.Some.StartsWith($"Contributor traffic estimate {report.EstimatedTrafficBytes} bytes: fetches {once + largest} (every shard once {once} and the second fetch of the 1 largest shard(s), sampled for integrity, {largest}), uploads {report.EstimatedUploadBytes} (the products and the result packages of every execution), the language model {report.PlannedNodes * Size(MODEL_FIXTURE)} ({report.PlannedNodes} node(s), once each) and an allowance of {report.RetryAllowanceBytes}"));
+            Assert.That(report.Messages, Has.Some.StartsWith($"The nodes accept at most {report.FetchCeilingBytes} bytes for those fetches, whoever wrote the manifest"));
+        });
+    }
+
+    [Test]
+    public async Task H7PreflightStatesTheDiskANodeNeedsAndTheRoundsTheEstimateLeavesOutTest()
+    {
+        var manifest = await UploadAsync(Manifest(WET_FIXTURE, WARC_FIXTURE), "disk.json");
+
+        var job = Engine.Compile(m_preflightScript);
+        await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData { SamplingRate = 0.5 });
+        var report = (CorpusPreflightData)job.Variables["result"].Value!;
+        var largest = Math.Max(Size(WET_FIXTURE), Size(WARC_FIXTURE));
+        // The origin answered the sizes: a node holds a shard to its answer and an eighth more, a mebibyte at least.
+        var room = ShardLimits.DeclaredCap(largest);
+        var perShard = room + ShardProductLimits.MaxProductBytes(room, null) + (64L << 20);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(perShard), "the largest shard at the most a node fetches it as, the most its products may be (the manifest's pipeline signs with 128 hashes), 64 MiB");
+            Assert.That(report.NodeDiskBytesPerShard, Is.EqualTo(ShardDisk.Needed(room)), "what a node reserves on its own disk before it fetches");
+            Assert.That(report.Messages, Has.Some.StartsWith("Node disk: a node holds at most its degree and 2 more shards at a time").And.Contains($"Each held shard reserves {perShard} bytes before it is fetched"));
+            Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a node that fails or falls silent has its whole share fetched again by other nodes. The allowance is not a bound: a shard whose two copies disagree is fetched again by up to 3 machines, and by up to 3 more when they leave it unsettled (a dispute and its second round; 1 shard(s) are sampled here), and a shard a node returns as a fault of its own is fetched again by 2 machines (a repair); the report's counters (repairs, disputes) say what a run added."));
+        });
+    }
+
+    [Test]
+    public async Task H7PreflightWithoutSamplingPromisesNoDisputeTest()
+    {
+        var manifest = await UploadAsync(Manifest(WET_FIXTURE), "disk-plain.json");
+
+        var job = Engine.Compile(m_preflightScript);
+        await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData());
+        var report = (CorpusPreflightData)job.Variables["result"].Value!;
+
+        Assert.That(report.Messages, Has.Some.EqualTo("Not in the traffic estimate: a node that fails or falls silent has its whole share fetched again by other nodes. The allowance is not a bound: a shard a node returns as a fault of its own is fetched once more (a repair); the report's counters (repairs, disputes) say what a run added."));
+    }
+
+    #endregion
+
+    #region Run Tests
+
+    [Test]
+    public async Task AStatsAndHashesRunKeepsNoTextAndDedupRefusesItTest()
+    {
+        var manifest = await UploadAsync(StudioManifest(", \"output\": \"stats_and_hashes\"", WET_FIXTURE, WARC_FIXTURE), "stats.json");
+
+        var job = Engine.Compile(m_processScript);
+        var status = await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData { SamplingRate = 1.0 });
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+
+        var reportBlob = (Guid)job.Variables["report"].Value!;
+        using var report = await ReadJsonAsync(reportBlob);
+        using var integrity = await ReadJsonAsync((Guid)job.Variables["integrity"].Value!);
+        var shards = report.RootElement.GetProperty("shards").EnumerateArray().ToList();
+        var model = LanguageModel.Load(CorpusFixtures.PathOf(MODEL_FIXTURE));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.RootElement.GetProperty("summary").GetProperty("output").GetString(), Is.EqualTo("stats_and_hashes"));
+            Assert.That(shards.Select(shard => shard.GetProperty("verdict").GetString()), Is.All.EqualTo("Completed"));
+            Assert.That(shards.Select(shard => shard.GetProperty("text_blob").GetString()), Is.All.Empty);
+            Assert.That(shards.Select(shard => shard.GetProperty("signatures_blob").GetString()), Is.All.Empty);
+            Assert.That(integrity.RootElement.GetProperty("summary").GetProperty("compared").GetInt32(), Is.EqualTo(2), "the hashes are still compared across machines");
+            Assert.That(integrity.RootElement.GetProperty("summary").GetProperty("signatures_compared").GetInt32(), Is.EqualTo(2), "the signatures too: made and hashed, not kept");
+            Assert.That(integrity.RootElement.GetProperty("summary").GetProperty("mismatches").GetInt32(), Is.Zero);
+            Assert.That(shards.Select(shard => shard.GetProperty("signatures_sha256").GetString()), Has.All.Length.EqualTo(64));
+        });
+
+        foreach (var (fixture, format, index) in new[] { (WET_FIXTURE, CorpusSourceFormat.Wet, 0), (WARC_FIXTURE, CorpusSourceFormat.Warc, 1) })
+        {
+            using var shard = File.OpenRead(CorpusFixtures.PathOf(fixture));
+            var direct = new ShardProcessor(new CorpusPipelineData { Version = "e2e-v1" }, model).Process(shard, format, new MemoryStream(), new MemoryStream());
+            Assert.That(shards.Single(s => s.GetProperty("index").GetInt32() == index).GetProperty("content_sha256").GetString(), Is.EqualTo(direct.ContentSha256), $"shard {index}: the full run's hash");
+        }
+
+        var dedup = Engine.Compile(m_dedupScript);
+        var dedupStatus = await Engine.ScheduleAndWaitAsync(dedup, reportBlob, new CorpusOptionsData());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dedupStatus.Result, Is.EqualTo(WitProcessingResult.Failed));
+            Assert.That(Messages(dedupStatus), Has.Some.Contains("The run kept statistics and hashes only"));
+        });
+    }
+
+    [Test]
+    public async Task ARunWithItsOwnParametersIsMergedWithThemTest()
+    {
+        var manifest = await UploadAsync(StudioManifest(", \"minhash\": { \"hashes\": 64, \"bands\": 8 }", WET_FIXTURE), "minhash.json");
+
+        var job = Engine.Compile(m_processScript);
+        var status = await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData());
+        Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+
+        var reportBlob = (Guid)job.Variables["report"].Value!;
+        using var report = await ReadJsonAsync(reportBlob);
+        var shard = report.RootElement.GetProperty("shards")[0];
+        var signatures = await ReadBytesAsync(Guid.Parse(shard.GetProperty("signatures_blob").GetString()!));
+
+        var dedup = Engine.Compile(m_dedupScript);
+        var dedupStatus = await Engine.ScheduleAndWaitAsync(dedup, reportBlob, new CorpusOptionsData());
+        Assert.That(dedupStatus.Result, Is.EqualTo(WitProcessingResult.Completed), dedupStatus.ToString());
+        using var merged = await ReadJsonAsync((Guid)dedup.Variables["dedup"].Value!);
+        var summary = merged.RootElement.GetProperty("summary");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.RootElement.GetProperty("summary").GetProperty("minhash").GetProperty("hashes").GetInt32(), Is.EqualTo(64));
+            Assert.That(shard.GetProperty("minhash").GetProperty("bands").GetInt32(), Is.EqualTo(8));
+            Assert.That(ShardSignatureWriter.ReadHeader(signatures), Is.EqualTo((64, 5, ShardSignatureWriter.HEADER_SIZE_PARAMETERS)), "a WITSIG2 blob states how it was made");
+            Assert.That(summary.GetProperty("hashes").GetInt32(), Is.EqualTo(64));
+            Assert.That(summary.GetProperty("bands").GetInt32(), Is.EqualTo(8));
+            Assert.That(summary.GetProperty("documents").GetInt64(), Is.EqualTo(shard.GetProperty("stats").GetProperty("documents_out").GetInt64()));
+        });
+    }
+
+    [Test]
+    public async Task ANodeWhoseSignaturesDifferIsNamedByIntegrityTest()
+    {
+        // One node returns the right text with other signatures: integrity must see it, by name.
+        var dishonest = NodesManager.CompatibleNodes[0].NodeId;
+        NodesManager.Tamper = (nodeId, result) =>
+        {
+            if (nodeId == dishonest && result.SignaturesSha256.Length > 0)
+                result.SignaturesSha256 = new string(result.SignaturesSha256.Reverse().ToArray());
+        };
+
+        try
+        {
+            var manifest = await UploadAsync(Manifest(WET_FIXTURE, WARC_FIXTURE), "dishonest.json");
+
+            var job = Engine.Compile(m_processScript);
+            var status = await Engine.ScheduleAndWaitAsync(job, manifest, m_modelBlob, new CorpusOptionsData { SamplingRate = 1.0 });
+            Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.ToString());
+
+            using var integrity = await ReadJsonAsync((Guid)job.Variables["integrity"].Value!);
+            var summary = integrity.RootElement.GetProperty("summary");
+            var mismatched = integrity.RootElement.GetProperty("pairs").EnumerateArray().Where(pair => !pair.GetProperty("match").GetBoolean()).ToList();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(integrity.RootElement.GetProperty("schema").GetString(), Is.EqualTo("corpus-integrity/8"));
+                Assert.That(summary.GetProperty("compared").GetInt32(), Is.EqualTo(2));
+                Assert.That(summary.GetProperty("disputes_resolved").GetInt32(), Is.EqualTo(summary.GetProperty("signature_mismatches").GetInt32()), "three machines ran each such shard again, and two of them are honest");
+                Assert.That(summary.GetProperty("signature_mismatches").GetInt32(), Is.GreaterThanOrEqualTo(1), "the dishonest node held a side of at least one pair");
+                Assert.That(summary.GetProperty("mismatches").GetInt32(), Is.EqualTo(summary.GetProperty("signature_mismatches").GetInt32()), "nothing else differs");
+                Assert.That(mismatched.Select(pair => pair.GetProperty("signatures").GetString()), Is.All.EqualTo("differ"));
+                Assert.That(mismatched.SelectMany(pair => pair.GetProperty("differs").EnumerateArray().Select(field => field.GetString())), Is.All.EqualTo("signatures"), "the text agrees: only the signatures tell");
+                Assert.That(mismatched.Select(pair => pair.GetProperty("primary").GetProperty("content_sha256").GetString()),
+                    Is.EqualTo(mismatched.Select(pair => pair.GetProperty("replica").GetProperty("content_sha256").GetString())));
+            });
+        }
+        finally
+        {
+            NodesManager.Tamper = null;
+        }
+    }
+
+    #endregion
+
+    #region Tools
+
+    private string StudioManifest(string pipelineTail, params string[] fixtures)
+    {
+        var sources = string.Join(", ", fixtures.Select(fixture => $"\"{Origin.ShardUrl(fixture)}\""));
+        return $$"""{"pipeline":{"version":"e2e-v1"{{pipelineTail}}},"allowed_origins":["{{Origin.Host}}"],"sources":[{{sources}}]}""";
+    }
+
+    private static long Size(string fixture)
+    {
+        return new FileInfo(CorpusFixtures.PathOf(fixture)).Length;
+    }
+
+    private static IEnumerable<string> Messages(IWitProcessingStatus status)
+    {
+        if (!string.IsNullOrEmpty(status.Message))
+            yield return status.Message;
+
+        foreach (var message in status.Children.SelectMany(Messages))
+            yield return message;
+    }
+
+    #endregion
+}

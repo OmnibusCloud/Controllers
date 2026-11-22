@@ -1,0 +1,131 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\Build\OutWit.Controller.props" />
+
+  <PropertyGroup>
+    <ControllerName>Verify</ControllerName>
+    <Version>1.0.0</Version>
+    <Description>Sandboxed, deterministic, resource-metered execution of untrusted programs against specifications (WASM/wasmtime): code-vs-tests verification, code and math corpus generation with checking — verification by construction on anonymous nodes.</Description>
+    <PackageTags>verify;sandbox;wasm;wasmtime;rlvr;code-execution;witengine;witcloud;controller</PackageTags>
+    <ControllerFeatures>verify-execute</ControllerFeatures>
+    <ControllerUseCases>RLVR code verification and generated-corpus checking on volunteer pools</ControllerUseCases>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Verify.Model\OutWit.Controller.AI.Verify.Model.csproj" />
+  </ItemGroup>
+
+  <!-- WASM sandbox host: the Wasmtime.Dotnet managed binding over the native wasmtime
+       library. A package stages nothing into the module by itself (the Simulation
+       precedent), so the binding is declared below and copied next to the controller.
+       The natives (one per RID, under runtimes/<rid>/native/) and the language runtime
+       modules (under wasm/) are Tier-2 data assets fetched by consumers at build time;
+       the module's deps.json names the natives, and the engine's plugin load context
+       (AssemblyDependencyResolver + LoadUnmanagedDll) resolves them from the module
+       folder. In-solution tests resolve wasmtime from the test bin; the module-load test
+       proves the deployed layout through the real isolated loader. -->
+  <ItemGroup>
+    <PackageReference Include="Wasmtime" Version="48.0.2" />
+  </ItemGroup>
+
+  <!-- The wasm sandbox host, shared with the other AI controllers as source, not as an assembly:
+       the cloud client loads every controller into one shared load context, where an assembly
+       name loads once and the first controller to load it wins. Compiled in here, the host's
+       types (internal, namespace OutWit.Controller.AI.Wasm) are this controller's own copy, and
+       the controller works with or without any other. The one assembly the controllers share is
+       the binding above, pinned to the same version in each (WasmHostBinding.BUILT_AGAINST). -->
+  <ItemGroup>
+    <Compile Include="..\Shared\Wasm\**\*.cs" Link="Wasm\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ControllerModuleAssembly Include="Wasmtime.Dotnet" />
+  </ItemGroup>
+
+  <!-- What the module carries of others, and its terms: beside Wasmtime.Dotnet.dll, the one
+       assembly in the module that is not the controller's own. A committed file, written by
+       the asset tool's toolchain/notices from a pinned source and held to what that tool writes
+       by the toolchain job; kept byte for byte on every checkout (.gitattributes), since the
+       module's content digest covers it. -->
+  <ItemGroup>
+    <ControllerModuleFile Include="$(MSBuildProjectDirectory)\THIRD-PARTY-NOTICES.txt" />
+  </ItemGroup>
+
+  <!-- Tier-2 data assets, fetched by consumers at build time from GitHub releases of this
+       repository, each pinned here by its SHA-256 and its size. The publish workflow holds every
+       released archive to both before a push. A consumer's resolver (OutWit.Engine.Assets.MSBuild,
+       pinned in Build/OutWit.Controller.props) holds a download to both, and the pinned 1.0.2
+       uses a file already in its cache only when its SHA-256 and its length match.
+
+       Three native wasmtime libraries, one per RID, from the neutral asset release
+       wasmtime-v48.0.8-2: the libraries of wasmtime-v48.0.8, byte for byte, packed again with
+       their third-party notices (the Rust standard library and the crates the engine is built
+       from). They are extracted to the folder the module's deps.json names; the wasm host's
+       natives guard (WasmHostNatives.PINNED) holds the library inside each to its SHA-256.
+       One platform-independent set of language runtime modules (tag verify-v<version>; the URI
+       stays on an older tag while the bytes do not change) extracted to wasm/.
+
+       These four archives are built from their pins and packed, the same bytes every time, by
+       the asset tool's toolchain/archives.sh; the toolchain job runs it with its check on, so
+       an archive that is not what the pins build to fails there. Sha256 and Size are the
+       values that script prints.
+       RuntimeIdentifier uses RIDs; the node-side layout uses the same names here because
+       the .NET resolver, not our own probe, reads them. -->
+  <ItemGroup>
+    <ControllerDataAsset Include="wasmtime-win-x64">
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8-2/wasmtime-win-x64.zip</Uri>
+      <Sha256>da8365a7494f757d39d64810dea2b3eed1cb236f27bc794c9b831771b6a81e31</Sha256>
+      <Size>8065827</Size>
+      <ExtractTo>runtimes/win-x64/native/</ExtractTo>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="wasmtime-linux-x64">
+      <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8-2/wasmtime-linux-x64.zip</Uri>
+      <Sha256>ede145fb96677509901f31183bc558bceac92c76026071c2a969db0c6d475911</Sha256>
+      <Size>9692410</Size>
+      <ExtractTo>runtimes/linux-x64/native/</ExtractTo>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="wasmtime-osx-arm64">
+      <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/wasmtime-v48.0.8-2/wasmtime-osx-arm64.zip</Uri>
+      <Sha256>1f13fca2b811f16d3407cc50c3ff08a73c6781484bc32d5dfb28b433ec801012</Sha256>
+      <Size>8286398</Size>
+      <ExtractTo>runtimes/osx-arm64/native/</ExtractTo>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="verify-wasm">
+      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.15.0/verify-wasm.zip</Uri>
+      <Sha256>8cf98ea1a36a99ac96b2b95d3c2f2e056864bc3c25a19acf6a602c2bf6bb67b2</Sha256>
+      <Size>67495474</Size>
+      <ExtractTo>wasm/</ExtractTo>
+    </ControllerDataAsset>
+    <!-- The numpy runtime's folder (python-3.14.6-numpy-2.5.4): its start-up snapshot is bound to
+         the bytes of the two layers it was made with, so the folder travels as one asset of its
+         own. Built from pinned sources by the AI Verify python-numpy workflow: two builds in
+         folders of different names are compared byte for byte, and the workflow fails unless
+         the archive they made is the one pinned here. The bytes are the same on every
+         platform. -->
+    <ControllerDataAsset Include="verify-python-numpy">
+      <RuntimeIdentifier>any</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/verify-v0.15.0/verify-python-numpy.zip</Uri>
+      <Sha256>14eb2bea911159743f3f5c04eeeee405b746f213eab48e88a32d7c61fc587c84</Sha256>
+      <Size>17241530</Size>
+      <ExtractTo>wasm/python-3.14.6-numpy-2.5.4/</ExtractTo>
+    </ControllerDataAsset>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\OutWit.Controller.AI.Verify.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+  <Import Project="..\..\Build\OutWit.Controller.targets" />
+
+</Project>

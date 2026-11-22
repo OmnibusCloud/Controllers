@@ -1,0 +1,40 @@
+Job:VerifyGenerateAndCheck(Blob:generators, Blob:checker, VerifyOptions:opts)
+{
+    VerifyTaskPackageCollection:generatorPackages = Verify.Split(generators, opts);
+
+    VerifyResultPackageCollection:candidates = Grid.ForEach(package in generatorPackages)
+        => Verify.ExecutePackage(package);
+
+    ~ A generator without a verdict goes out once more. The generators run once each: nothing of theirs is compared. ~
+    VerifyTaskPackageCollection:generatorRepairs = Verify.Repairs(generatorPackages, candidates);
+    VerifyResultPackageCollection:generatorRepaired = Grid.ForEach(package in generatorRepairs)
+        => Verify.ExecutePackage(package);
+
+    Blob:generated = Verify.Settle(generatorPackages, candidates, generatorRepairs, generatorRepaired);
+
+    VerifyTaskPackageCollection:checkPackages = Verify.MakeCheckTasks(generated, checker, opts);
+
+    Double:rate = Verify.SamplingRate(opts);
+    ProcessingOptions:checked = Grid.Replicas(2, rate);
+
+    VerifyResultPackageCollection:verdicts = Grid.ForEach(package in checkPackages, checked)
+        => Verify.ExecutePackage(package);
+
+    ~ A check without a verdict goes out once more, under the same sampling. ~
+    VerifyTaskPackageCollection:repairs = Verify.Repairs(checkPackages, verdicts);
+    VerifyResultPackageCollection:repaired = Grid.ForEach(package in repairs, checked)
+        => Verify.ExecutePackage(package);
+
+    ~ A check whose executions disagree runs three more times, on different machines. ~
+    VerifyTaskPackageCollection:disputes = Verify.Disputes(checkPackages, verdicts, repairs, repaired);
+    ProcessingOptions:thrice = Grid.Replicas(3);
+    VerifyResultPackageCollection:settled = Grid.ForEach(package in disputes, thrice)
+        => Verify.ExecutePackage(package);
+
+    Blob:ledger = Verify.Settle(checkPackages, verdicts, repairs, repaired, disputes, settled, rate);
+
+    Blob:report = Verify.Collect(ledger, opts);
+    Blob:corpus = Verify.CollectOutputs(generated, opts);
+    Blob:provenance = Verify.Provenance(ledger);
+    Blob:integrity = Verify.Integrity(ledger);
+}

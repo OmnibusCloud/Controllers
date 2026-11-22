@@ -1,0 +1,15 @@
+# Persian stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/fas_Arab.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 b90ff75ed8db16425c3dbcdac325cf6a0e7fa6ab8809bcc390b5e58e89afc0ba.
+# In the order of the source; Corpus 0.1.14 shipped this list.
+در
+و
+،
+به
+از
+که
+است
+این
+را
+با
+یک

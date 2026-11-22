@@ -1,0 +1,334 @@
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using OutWit.Common.Plugins;
+using OutWit.Controller.AI.Verify.Tests.Mock;
+using OutWit.Engine.Interfaces;
+
+namespace OutWit.Controller.AI.Verify.Tests;
+
+/// <summary>
+/// The self-containment proof of the deployed module (requirement X-13): the staged
+/// verify.module, laid out as a node receives it (the controller, its Model, the
+/// Wasmtime.Dotnet binding, runtimes/&lt;rid&gt;/native/ and wasm/), is loaded through the
+/// engine's real plugin loader in an isolated load context, and the sandbox runs one task
+/// per language runtime from inside that context. The in-process e2e cannot prove this: it
+/// loads the controllers into the default context, where wasmtime resolves from the test bin.
+///
+/// The loader shares every assembly the default context already holds, exactly as a node
+/// host shares the engine with its modules. A node never has the controller in its default
+/// context; this test process must not either, so the fixture names no controller or
+/// wasmtime type (strings only) and is ignored when an earlier fixture has already loaded
+/// them. Run it on its own for the real verdict:
+///   dotnet test --filter FullyQualifiedName~VerifyModuleLoadTests
+/// The module is a copy of this build's own files in a folder of the test's own. Its native
+/// library is the packaged one: the data asset the module's manifest declares, fetched from its
+/// release and checked against the manifest (the test used to copy the library from its own
+/// output, so it could not notice a package that ships without one). The language runtimes are
+/// still laid out from @Data/runtimes (verify-assets), not taken from their release archives.
+/// </summary>
+[TestFixture]
+[Order(0)]
+public class VerifyModuleLoadTests
+{
+    #region Constants
+
+    private const string VERIFY_ASSEMBLY = "OutWit.Controller.AI.Verify";
+    private const string WASMTIME_ASSEMBLY = "Wasmtime.Dotnet";
+    private const string SELF_CHECK_TYPE = "OutWit.Controller.AI.Verify.Sandbox.VerifySelfCheck";
+    private const string SELF_CHECK_METHOD = "Run";
+    private const string RUNTIMES_OVERRIDE_ENV = "WITAI_VERIFY_RUNTIMES";
+    private const string CI_ENV = "GITHUB_ACTIONS";
+    private const string NATIVES_FOLDER = "runtimes/";
+
+    private const string NATIVE_LOADED = "wasmtime-native: loaded";
+    private const string MANAGED_PREFIX = "wasmtime-managed: ";
+    private const string WASM_ROOT_PREFIX = "wasm-root: ";
+    private const string NATIVE_PATH_PREFIX = "wasmtime-native-path: ";
+    private const string PYTHON_PASS = "python-3.14.6: Pass exit=0 stdout=42";
+    private const string SYMPY_PASS = "python-3.14.6-sympy-1.14.0: Pass exit=0 stdout=1.14.0";
+    private const string NUMPY_PASS = "python-3.14.6-numpy-2.5.4: Pass exit=0 stdout=2.5.4 42";
+    private const string QUICKJS_PASS = "quickjs-0.15.1: Pass exit=0 stdout=42";
+    private const string RUBY_PASS = "ruby-3.4.1: Pass exit=0 stdout=42";
+    private const string LUA_PASS = "lua-5.4.8: Pass exit=0 stdout=42";
+    private const string TYPESCRIPT_PASS = "typescript-sucrase-3.35.1: Pass exit=0 stdout=42";
+    private const string CLANG_PASS = "clang-22.1.0: Pass exit=0 stdout=42";
+    private const string WASI_PASS = "wasi: Pass exit=0 stdout=hello";
+
+    #endregion
+
+    #region Fields
+
+    private string m_controllersPath = null!;
+    private string m_moduleDir = null!;
+    private string m_nativeDir = null!;
+    private string m_wasmDir = null!;
+    private string? m_savedOverride;
+
+    #endregion
+
+    #region Setup
+
+    [OneTimeSetUp]
+    public void Setup()
+    {
+        // The Model is not on this list: NUnit's discovery pulls it into the default context
+        // through the signatures of other fixtures, so the loader shares it from the test bin.
+        // That does not weaken the proof - the Model carries no native code and the module's
+        // copy is byte-identical; what must come from the module are the controller, the
+        // managed wasmtime binding and the native library.
+        var alreadyLoaded = AppDomain.CurrentDomain.GetAssemblies()
+            .Select(a => a.GetName().Name)
+            .Where(n => n == VERIFY_ASSEMBLY || n == WASMTIME_ASSEMBLY)
+            .ToList();
+        if (alreadyLoaded.Count > 0)
+        {
+            var reason = $"{string.Join(", ", alreadyLoaded)} already in the default load context (an earlier fixture, or a test whose " +
+                         "signature or async state machine names a controller type); run this fixture alone for the isolation proof.";
+
+            // On the build server the whole assembly runs in one process and this fixture is the
+            // first: a controller already loaded there means the proof silently stopped running.
+            if (string.Equals(Environment.GetEnvironmentVariable(CI_ENV), "true", StringComparison.OrdinalIgnoreCase))
+                Assert.Fail(reason);
+
+            Assert.Ignore(reason);
+        }
+
+        var solutionRoot = FindSolutionRoot();
+        if (solutionRoot == null)
+            VerifyRigModules.Missing("Solution root not found");
+
+        var fixtureRuntimes = Path.Combine(solutionRoot, "AI", "OutWit.Controller.AI.Verify.Tests", "@Data", "runtimes");
+        if (!Directory.Exists(Path.Combine(fixtureRuntimes, "python-3.14.6")) ||
+            !File.Exists(Path.Combine(fixtureRuntimes, "qjs-wasi.wasm")) ||
+            !Directory.Exists(Path.Combine(fixtureRuntimes, "ruby-3.4.1")) ||
+            !Directory.Exists(Path.Combine(fixtureRuntimes, "lua-5.4.8")) ||
+            !Directory.Exists(Path.Combine(fixtureRuntimes, "python-3.14.6-numpy-2.5.4")))
+            VerifyRigModules.Missing($"Pinned runtimes not found under '{fixtureRuntimes}' — run verify-assets build @Data/runtimes to opt in.");
+
+        // The module under test is this build's own, laid out in a folder of the test's own: the
+        // shared staging folder is never changed, nothing else that lies in it is loaded, and a
+        // module another build left there is a failure that names it (VerifyRigModules).
+        m_controllersPath = VerifyRigModules.Stage("module-load", VerifyRigModules.CONTROLLER);
+        m_moduleDir = Path.Combine(m_controllersPath, VerifyRigModules.VERIFY);
+
+        // The binding is staged by the build (ControllerModuleAssembly); its absence is a
+        // staging regression, not a missing prerequisite.
+        Assert.That(File.Exists(Path.Combine(m_moduleDir, $"{WASMTIME_ASSEMBLY}.dll")), Is.True,
+            $"{WASMTIME_ASSEMBLY}.dll must be staged into verify.module by the controller build");
+
+        // The native library is the packaged one: the data asset the module's own manifest
+        // declares for this platform, fetched from the release it names, held to the manifest's
+        // size and SHA-256 and unpacked where the manifest says. A manifest that declares none is
+        // a package that ships without it, and fails here.
+        var rid = RuntimeInformation.RuntimeIdentifier;
+        var natives = VerifyPackagedAssets.Declared(m_moduleDir, rid, NATIVES_FOLDER);
+        Assert.That(natives, Is.Not.Empty,
+            $"verify.module's manifest declares no native engine library for '{rid}': a package made from it ships without one");
+
+        foreach (var asset in natives)
+        {
+            try
+            {
+                m_nativeDir = VerifyPackagedAssets.Resolve(asset, m_moduleDir, VerifyPackagedAssets.CacheFolder(solutionRoot));
+            }
+            catch (HttpRequestException exception)
+            {
+                var reason = $"the packaged native library '{asset.Id}' could not be fetched from {VerifyPackagedAssets.Url(asset)}: {exception.Message}";
+                VerifyRigModules.Missing(reason);
+            }
+        }
+
+        Assert.That(Directory.GetFiles(Path.Combine(m_moduleDir, "runtimes", rid, "native")), Is.Not.Empty,
+            "the packaged asset holds the library where the module's dependency file looks for it");
+
+        m_wasmDir = Path.Combine(m_moduleDir, "wasm");
+        CopyTree(fixtureRuntimes, m_wasmDir);
+
+        // The module must find its runtimes next to the controller, not through the override.
+        m_savedOverride = Environment.GetEnvironmentVariable(RUNTIMES_OVERRIDE_ENV);
+        Environment.SetEnvironmentVariable(RUNTIMES_OVERRIDE_ENV, null);
+    }
+
+    [OneTimeTearDown]
+    public void TearDown()
+    {
+        if (m_controllersPath == null)
+            return;
+
+        Environment.SetEnvironmentVariable(RUNTIMES_OVERRIDE_ENV, m_savedOverride);
+
+        // The folder is the test's own; the native library may stay mapped into this process
+        // after the context unloads, so its removal is best-effort.
+        VerifyRigModules.TryDelete(m_controllersPath);
+    }
+
+    #endregion
+
+    #region Module Load Tests
+
+    [Test]
+    public void StagedModuleRunsSandboxFromIsolatedContextTest()
+    {
+        using var loader = new WitPluginLoader<IWitControllerNode>(m_controllersPath, useIsolatedContexts: true);
+        loader.Load();
+
+        var plugin = loader.Plugins.FirstOrDefault(p => p.GetType().Assembly.GetName().Name == VERIFY_ASSEMBLY);
+        Assert.That(plugin, Is.Not.Null, "verify.module did not load through the plugin loader");
+
+        var pluginAssembly = plugin!.GetType().Assembly;
+        Assert.That(pluginAssembly.Location, Does.StartWith(m_moduleDir).IgnoreCase,
+            "the controller must come from the staged module, not from the test bin");
+
+        var selfCheck = pluginAssembly.GetType(SELF_CHECK_TYPE);
+        Assert.That(selfCheck, Is.Not.Null, $"{SELF_CHECK_TYPE} not found in the loaded module");
+
+        var run = selfCheck!.GetMethod(SELF_CHECK_METHOD, BindingFlags.Public | BindingFlags.Static);
+        Assert.That(run, Is.Not.Null, $"{SELF_CHECK_TYPE}.{SELF_CHECK_METHOD} not found");
+
+        var report = (string)run!.Invoke(null, null)!;
+        TestContext.Out.WriteLine(report);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report, Does.Contain(NATIVE_LOADED), report);
+            Assert.That(report, Does.Contain(PYTHON_PASS), report);
+            Assert.That(report, Does.Contain(SYMPY_PASS), report);
+            Assert.That(report, Does.Contain(NUMPY_PASS), report);
+            Assert.That(report, Does.Contain(QUICKJS_PASS), report);
+            Assert.That(report, Does.Contain(RUBY_PASS), report);
+            Assert.That(report, Does.Contain(LUA_PASS), report);
+            Assert.That(report, Does.Contain(TYPESCRIPT_PASS), report);
+            Assert.That(report, Does.Contain(CLANG_PASS), report);
+            Assert.That(report, Does.Contain(WASI_PASS), report);
+            Assert.That(ReportValue(report, MANAGED_PREFIX), Does.StartWith(m_moduleDir).IgnoreCase,
+                "Wasmtime.Dotnet must resolve from the module, not from the test bin");
+            Assert.That(ReportValue(report, WASM_ROOT_PREFIX), Is.EqualTo(m_wasmDir).IgnoreCase,
+                "the language runtimes must be found in the module's wasm/ folder");
+            Assert.That(ReportValue(report, NATIVE_PATH_PREFIX), Does.StartWith(m_moduleDir).IgnoreCase,
+                "the module-aware resolver must point at the module's runtimes/<rid>/native copy");
+            // The process module list names the loaded library's path on Windows and Linux; macOS
+            // reports dyld images by their canonical path, which need not share the module folder's
+            // prefix (the runner's temp and symlinked folders), so the resolver's own report is the
+            // evidence there.
+            if (!OperatingSystem.IsMacOS())
+            {
+                Assert.That(LoadedNativeModulesUnder(m_moduleDir), Is.Not.Empty,
+                    "the native wasmtime library must be the module's copy, not the test bin's");
+            }
+        });
+    }
+
+    [Test]
+    public void StagedModuleRunsSandboxInAClientLikeHostTest()
+    {
+        // The cloud client loads controllers into one shared load context, and its dependency
+        // file names no wasmtime: every native call must find the module's library through the
+        // module itself. A host built that way (OutWit.Controller.AI.Verify.Tests.ClientHost)
+        // runs the self-check. A load by library name found nothing there on Linux (0.11.2).
+        var (exitCode, report) = RunClientHost(m_controllersPath);
+        TestContext.Out.WriteLine(report);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exitCode, Is.EqualTo(0), report);
+            Assert.That(report, Does.Contain(NATIVE_LOADED), report);
+            Assert.That(report, Does.Contain(PYTHON_PASS), report);
+            Assert.That(report, Does.Contain(QUICKJS_PASS), report);
+            Assert.That(report, Does.Contain(LUA_PASS), report);
+            Assert.That(report, Does.Contain(CLANG_PASS), report);
+            Assert.That(report, Does.Contain(WASI_PASS), report);
+            Assert.That(ReportValue(report, NATIVE_PATH_PREFIX), Does.StartWith(m_moduleDir).IgnoreCase,
+                "the native library must be the module's copy");
+        });
+    }
+
+    #endregion
+
+    #region Tools
+
+    private static (int ExitCode, string Output) RunClientHost(string controllersPath)
+    {
+        const string host = "OutWit.Controller.AI.Verify.Tests.ClientHost";
+        var testDirectory = TestContext.CurrentContext.TestDirectory;
+        var framework = Path.GetFileName(testDirectory);
+        var configuration = Path.GetFileName(Path.GetDirectoryName(testDirectory)!);
+        var aiRoot = Path.GetFullPath(Path.Combine(testDirectory, "..", "..", "..", ".."));
+        var bin = Path.Combine(aiRoot, host, "bin", configuration, framework);
+        var start = new ProcessStartInfo(OperatingSystem.IsWindows() ? Path.Combine(bin, $"{host}.exe") : "dotnet");
+        if (!OperatingSystem.IsWindows())
+            start.ArgumentList.Add(Path.Combine(bin, $"{host}.dll"));
+        start.ArgumentList.Add(controllersPath);
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = true;
+        start.UseShellExecute = false;
+
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("the client-like host did not start");
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(600_000))
+        {
+            process.Kill(entireProcessTree: true);
+            Assert.Fail("the client-like host did not finish");
+        }
+
+        return (process.ExitCode, output.Result + error.Result);
+    }
+
+    private static string ReportValue(string report, string prefix)
+    {
+        var line = report.Split('\n').Select(l => l.TrimEnd('\r')).FirstOrDefault(l => l.StartsWith(prefix, StringComparison.Ordinal));
+        return line == null ? "" : line.Substring(prefix.Length);
+    }
+
+    private static IReadOnlyList<string> LoadedNativeModulesUnder(string folder)
+    {
+        return Process.GetCurrentProcess().Modules
+            .Cast<ProcessModule>()
+            .Select(m => m.FileName)
+            .Where(f => f.StartsWith(folder, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private static void CopyTree(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, dir)));
+        foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
+            File.Copy(file, Path.Combine(destination, Path.GetRelativePath(source, file)), overwrite: true);
+    }
+
+    private static void TryDelete(string? dir)
+    {
+        if (dir == null || !Directory.Exists(dir))
+            return;
+
+        try
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Mapped native library: left in place, overwritten on the next run.
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private static string? FindSolutionRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "OutWit.slnx")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+
+        return null;
+    }
+
+    #endregion
+}

@@ -1,0 +1,19 @@
+# German stop words of the quality filter's stop-word rule: a document must hold two distinct ones.
+# Source: FineWeb-2 (huggingface/fineweb-2), https://github.com/huggingface/fineweb-2/blob/main/configs/deu_Latn.yml, key "stopwords";
+# licence Apache-2.0 (https://github.com/huggingface/fineweb-2/blob/main/LICENSE); file SHA-256 17da6e3a755940ceac4e75db9a94b0faf244449e2c775754948be2b67a25fc9b.
+# In the order of the source; Corpus 0.1.14 shipped this list.
+der
+und
+die
+in
+von
+im
+den
+des
+mit
+das
+er
+dem
+als
+wurde
+für
