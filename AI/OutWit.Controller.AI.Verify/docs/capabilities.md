@@ -11,109 +11,66 @@ Every number on this page was measured, in the controller's tests or on a test f
 [README](../README.md) explains how things work inside; [safety.md](safety.md) is the same
 sandbox told for the people who lend their computers.
 
-Version described: **Verify 0.17.0** (with Verify.Model 0.4.0 and Verify.Scripts 0.7.0), for the
-test server. 0.15.0 is proven on a five-node test fleet (Windows and Linux; 0.11.3 on six nodes
-with macOS), and the fleet figures on this page (scale, medians, pool rate) were measured before
-0.13.0. None of these versions is on nuget.org or on the live network.
+Version described: **Verify 1.0.0** (with Verify.Model 1.0.0 and Verify.Scripts 1.0.0), the
+first release. Its code is the code of 0.17.0, which ran on the test fleet on Windows x64, Linux
+x64 and macOS arm64 nodes; the fleet figures on this page (scale, medians, pool rate) were
+measured before 0.13.0 and say so where they stand. 1.0.0 is not on nuget.org or on the live
+network yet.
 
-What 0.17.0 changed for an application:
+What 1.0.0 changed for an application:
 
-- **Every fuel figure moved; no verdict and no output did.** A call into the host costs 1,000
-  units besides the bytes it moves, and the modules the engine compiles on a node (`wasi` and
-  C/C++) pay for their smallest functions (sections 9 and 10, with the figures before and
-  after). A task budgeted within a few percent of its need should be given the difference.
-- **More of a task's module is refused before it is compiled** (section 9): a function type of
-  more than 128 parameters or 8 results, a block of more than 8 values, a function of more than
-  16,384 locals or 128 KiB, a module of more than 32,768 functions, and a module with a start
-  function. Each is a `CompileError` with fixed words. No program a C, C++ or Rust compiler
-  writes for this target is near these, a start function aside.
-- **A C/C++ build may write 128 MiB in all**, its objects and its program together (it was 64
-  MiB an object and no bound on their sum).
-- **A deep recursion is a stated limit** (sections 9 and 14): how deep one goes before the
-  engine's stack ends depends on the node.
-- **The fuel of a CPython task is no longer said to drift between hosts** (section 10): it has
-  been one number on Windows, Linux and macOS since 0.13.0, and the tests now hold it to that.
-- **No document, no schema and no script changed.** The model and the scripts are the packages
-  they were.
+- **Nothing, from 0.17.0.** The verdicts, the fuel figures, the outputs, the documents and their
+  versions, the scripts and the wire types are those of 0.17.0; the documents name the
+  controller version 1.0.0. A job runs on one controller version, so the server and the nodes
+  move to 1.0.0 together.
 
-What 0.16.0 changed for an application:
-
-- **New document versions.** `verify-report/3` and `verify-integrity/3` (section 6). Every
-  field of the earlier versions is there with the name and the meaning it had. New in both
-  summaries: `sampling_rate` (the rate that was asked for; `null` when the script did not say),
-  `sampling` (`as_asked`, `short`, `none`, `not_stated`) and `unanswered_packages`. New in the
-  integrity document: `fan_outs`, a record for every fan-out, and `round` in every pair. An
-  application that holds a document to its `schema` tag takes the new tags.
-- **The report of a taskset is the same bytes for the same options.** It now states the
-  sampling rate, so the report of one taskset at two rates differs in that field. In a pool of
-  one machine nothing runs twice, and a run that asked for sampling says `short`.
-- **The scripts changed.** The repair round runs under the sampling of the first fan-out,
-  `Verify.Disputes` is handed the repair round too, and `Verify.Settle` the sampling rate
-  (section 3). The job variables an application reads are the same. A script of Verify.Scripts
-  0.6.0 still runs and settles as it did; its documents say `not_stated`.
-- **More is refused of a node.** A result outside what its task allows (fuel beyond the budget
-  of its runs, memory beyond the cap, a time below zero, stdout beyond the cap, case records
-  that are not those of the suite, a verdict its case records do not give) is refused as
-  `content`, and a package with a length or a count that does not fit its own bytes, or with
-  text that is not valid Unicode, as `unreadable` (section 10). The task then goes out once
-  more. No result of an honest node is outside these.
-- **Nothing else moved.** No verdict, no fuel figure and no output of a run without lying or
-  failing nodes changed, and its provenance differs only in the controller version it names;
-  the model is the package it was.
-
-What 0.15.0 changed for an application:
-
-- **Nothing in a run.** A taskset gives the verdicts, the fuel figures and the report it gave
-  under 0.14.0, byte for byte, and the other documents with the controller's version as their
-  only difference; no schema and no document version moved; the model and the scripts are the
-  packages they were.
-- **A node's log cannot fail a package.** On a node whose log throws or cannot take two lines
-  at once (cloud clients up to 2.2.5), a share used to fail now and then with the log's own
-  error in the job's status, and the platform gave the work to another node. The work now
-  completes, and a package that fails for a reason of the node's own says so in the same fixed
-  words as before (section 6).
-- **What a deployment carries changed** (section 13): the archives of the language runtimes
-  and of the native engine library are new ones, with a `THIRD-PARTY-NOTICES.txt` in every
-  folder; the files inside that a program runs on are the same bytes.
-
-What 0.14.0 changed for an application:
-
-- **A taskset is held to its schema, exactly.** A line with a field the schema does not have (a
-  misspelt `expected_stdout` is one), a field or a source name given twice, a value of another
-  type (a suite that is not an array, a `null`), a number outside its range (a limit of 0), a
-  NUL character in a program or an argument, or text that is not valid Unicode is refused, by
-  the field's name. Before, such a line ran with the field ignored. The same holds for a
-  checker spec (section 4).
-- **A runtime id is matched to the letter.** `PYTHON-3.14.6` is an unknown runtime.
-- **New bounds on a taskset.** A line of 64 MiB, 1,024 sources, 1,024 arguments and 1,024
-  cases a task, 4,194,304 tasks a taskset (sections 4 and 9).
-- **The preflight's answer is bounded.** At most 32 messages of a kind, of 240 characters each,
-  with one line that says how many more there are (section 3).
-- **A new document version.** `verify-capabilities/3`: the capabilities document carries these
-  bounds as numbers, in a section of their own, `taskset` (section 3). Every field of
-  `verify-capabilities/2` is there with the name and the meaning it had; an application that
-  holds the document to its `schema` tag takes the new tag.
-- **Nothing else moved.** A taskset the schema allowed is cut into the same packages and gives
-  the same documents as under 0.13.0; no fuel figure and no verdict changed.
-
-What 0.13.0 changed for an application:
+What the 0.x line changed, for an application written for an early 0.x version (0.12.0 and
+before), in short:
 
 - **Fuel is the one budget.** `Timeout` means out of fuel. The wall clock gives no verdict, and
-  `limits.wall_ms` is accepted and is not a limit any more. The default budget is 20e9 (it was
-  50e9) and the ceiling 240e9 (it was 2e12). A call into the host costs fuel by the bytes it
-  moves, so every fuel figure moved (sections 9 and 10).
-- **Two new verdicts.** `NoResult` (no node gave a verdict) and `Disputed` (the executions
-  disagreed and three more did not settle it). `RuntimeUnavailable` is no longer produced
-  (section 7).
-- **New document versions.** `verify-report/2`, `verify-provenance/2`, `verify-integrity/2`,
-  `verify-capabilities/2` (sections 3 and 6).
-- **Tasksets are checked harder.** Source names must be portable for every runtime, and an
-  unknown runtime id refuses the taskset (section 4).
-- **Stricter cases.** A suite case passes only when the program ended by itself, and the cases
-  of a task share its stdout cap (sections 4 and 9).
-- **A task's own module is priced.** Compiling a `wasi` module, or a program built from C or
-  C++, is paid from the task's fuel (section 9).
-- **Random streams.** Every seed but 0 has a new stream (section 9).
+  `limits.wall_ms` is accepted and is not a limit. The default budget is 20e9 and the ceiling
+  240e9. A call into the host costs 1,000 units besides a unit a byte it moves, so every fuel
+  figure of those versions moved (sections 9 and 10).
+- **Two verdicts.** `NoResult` (no node gave a verdict, with a `reason`) and `Disputed` (the
+  executions disagreed and three more did not settle it). `RuntimeUnavailable` is no longer
+  produced (section 7).
+- **The documents** are `verify-report/3`, `verify-provenance/2` and `verify-integrity/3`
+  (section 6). Both summaries state the sampling rate that was asked for (`sampling_rate`),
+  whether the sampling took place (`sampling`: `as_asked`, `short`, `none`, `not_stated`) and
+  the packages nothing answered (`unanswered_packages`); the integrity document has a record
+  for every fan-out (`fan_outs`) and the `round` of every pair. An application that holds a
+  document to its `schema` tag takes these tags.
+- **A new document version.** `verify-capabilities/3`: the capabilities document carries the
+  bounds of a taskset and of a preflight's answer as numbers, in a section of their own,
+  `taskset` (section 3).
+- **A taskset is held to its schema, exactly.** A field the schema does not have (a misspelt
+  `expected_stdout`), a field or a source name given twice, a value of another type, a number
+  outside its range, a NUL in a program or an argument, and text that is not valid Unicode are
+  refused by the field's name, and so is a checker spec. A runtime id is matched to the letter,
+  an unknown one refuses the taskset, and source names must be portable for every runtime.
+- **Bounds on a taskset.** A line of 64 MiB, 1,024 sources, 1,024 arguments and 1,024 cases a
+  task, 4,194,304 tasks a taskset (sections 4 and 9).
+- **The preflight's answer is bounded.** At most 32 messages of a kind, of 240 characters each,
+  with one line that says how many more there are (section 3).
+- **Stricter cases.** A suite case passes only when the program ended by itself, and the cases of
+  a task share its stdout cap (sections 4 and 9).
+- **A task's own module is bounded and priced.** A `wasi` module, or a program built from C or
+  C++, is held to bounds of its shape and refused past them with fixed words, a module with a
+  start function included; within them, compiling it is paid from the task's fuel. A C/C++
+  build may write 128 MiB in all (section 9).
+- **The scripts run three fan-outs:** the first, the repair round under the same sampling, and
+  the dispute round of three copies. `Verify.Disputes` takes the repair round as well and
+  `Verify.Settle` the sampling rate; the job variables an application reads are the ones they
+  always were (section 3).
+- **More is refused of a node.** A result outside what its task allows is refused as `content`,
+  a package that does not fit its own bytes as `unreadable`, and the task goes out once more
+  (section 10). No result of an honest node is outside these.
+- **Random streams.** Every seed but 0 has a stream of its own (section 9).
+- **What a deployment carries** has a `THIRD-PARTY-NOTICES.txt` in every folder, and its
+  archives are built again from their pins and compared (section 13).
+- **arm64 gives what x64 gives.** On a macOS arm64 node, with every task of the kits on two
+  machines and the other copy on a Linux x64 node, no pair of copies differed, every verdict was
+  the one x64 gives, and the fuel of every batch was the same number on both (section 10).
 
 ## Contents
 
@@ -205,8 +162,7 @@ They are bundled in `OutWit.Controller.AI.Verify.Scripts` and run on the server;
 | `VerifyPreflight` | taskset blob, options | `result` | validating a taskset before a run |
 | `VerifyRuntimeDiagnostics` | none | `result`, `capabilities` | what the deployment offers: runtimes, limits, the pool |
 
-The job variables an application reads are the same as before 0.13.0. Inside, a run now has up
-to three fan-outs (section 10):
+Inside, a run has up to three fan-outs (section 10):
 
 1. the first one, with a share of the packages in two copies;
 2. the repair round: tasks without a verdict go out once more, the same share of their
@@ -215,7 +171,7 @@ to three fan-outs (section 10):
    times on different machines.
 
 `Verify.Disputes` is given the first fan-out and the repair round (four arguments; with two it
-looks at the first fan-out alone, as before 0.16.0). `Verify.Settle` is given the three rounds
+looks at the first fan-out alone). `Verify.Settle` is given the three rounds
 and, as its seventh argument, the sampling rate they ran under; without it the repair round is
 taken as one execution a package and the documents say that the sampling was `not_stated`.
 `Verify.Settle` then rules on every task and writes the four documents once, into one ledger
@@ -446,7 +402,7 @@ with the memory cap and the degree the lab's to choose, a node's cores and memor
 off them. What a node says of its own trouble reaches a document only as one of the reason
 codes above; a path, an account name or the text of an error stays in the node's own log. A
 node's log that fails (it throws, or cannot take two lines at once, as the log of cloud clients
-up to 2.2.5) changes nothing of this since 0.15.0: the line is lost, the package completes or
+up to 2.2.5) changes nothing of this: the line is lost, the package completes or
 fails in the same fixed words, and the log's own error goes nowhere. The
 program's own stdout and stderr are the program's and stay as they are.
 
@@ -493,10 +449,11 @@ bytes run on every platform. A batch shares one compiled module.
 
 The costs below are medians over the demo tasks on the test fleet (`provenance`). They give
 the order of magnitude a planner should expect. The medians were measured before 0.13.0. Since
-then a task's fuel also counts the bytes its calls into the host move (section 10), so today's
-figures are higher by the bytes a runtime reads at start: about 1.1 M for a Python hello, about
-147 M for `import sympy`, 2,518 units for the numpy runtime. The hellos in brackets are those
-of 0.13.0, pinned by the controller's tests.
+then a task's fuel also counts the bytes its calls into the host move and a thousand units for
+every call (section 10), so today's figures are higher: by the bytes a runtime reads at start,
+about 1.1 M for a Python hello, about 147 M for `import sympy`, 2,518 units for the numpy
+runtime, and by a thousand units a call (a CPython hello makes 118 calls, the import of sympy
+7,814). The hellos in brackets are those of 1.0.0, pinned by the controller's tests.
 
 | Runtime id | What runs | Typical task: fuel / wall / peak memory |
 |---|---|---|
@@ -506,9 +463,9 @@ of 0.13.0, pinned by the controller's tests.
 | `quickjs-0.15.1` | QuickJS-NG 0.15.1, JavaScript | 12 M / 1 ms / 1.2 MiB (a hello: 2.4 M) |
 | `typescript-sucrase-3.35.1` | TypeScript on the same QuickJS; sucrase strips the types | 0.7 G / 114 ms / 3.4 MiB: loading the transpiler is most of it (a hello: 333 M) |
 | `ruby-3.4.1` | Ruby 3.4.1 with the standard library and the gems base64, csv, matrix, prime | 0.63 G / 304 ms / 53 MiB (a hello: 154 M) |
-| `lua-5.4.8` | Lua 5.4.8 with its standard library | 2.6 M / under 1 ms / 1.3 MiB (a hello: 0.57 M) |
-| `clang-22.1.0` | C17 and C++20 compiled and linked on the node, run as a raw module | the build, under its own budget: 0.2 G for a C hello, 10–20 G and about 5 s for a C++ program of a couple of hundred lines (both measured before 0.13.0); the task: the program's own run and the price of compiling the program (a C hello: 8.3 M) |
-| `wasi` | the task's own compiled module | the module's own run and the price of compiling it, 2,048 units a byte at the least (the 224-byte hello: 458,764) |
+| `lua-5.4.8` | Lua 5.4.8 with its standard library | 2.6 M / under 1 ms / 1.3 MiB (a hello: 0.59 M) |
+| `clang-22.1.0` | C17 and C++20 compiled and linked on the node, run as a raw module | the build, under its own budget: 0.2 G for a C hello, 10–20 G and about 5 s for a C++ program of a couple of hundred lines (both measured before 0.13.0); the task: the program's own run and the price of compiling the program (a C hello: 8.6 M) |
+| `wasi` | the task's own compiled module | the module's own run and the price of compiling it, 2,048 units a byte at the least (the 224-byte hello: 482,292) |
 
 What an author must know, runtime by runtime. The same facts are in the capabilities
 document's `notes`.
@@ -652,17 +609,22 @@ loops: a module of 6.9 KB took 1.5 s, one of 28 KB took 81 s and 1.5 GiB. So:
 - The price is 2,048 units a byte of the module; plus 4 units for every unit of (the locals of
   a function)² × (the depth of its nested loops); plus 100 units for every unit of (the targets
   of a branch table) × (the blocks around it).
-- Since 0.17.0 the price also has: 4 units for every unit of (the branches of a function)², for
+- The price also has: 4 units for every unit of (the branches of a function)², for
   a function of more than 1,024 branches; 128 units for every unit of (the locals a function
   uses) × (its branches) past 16,384; 4 units for every unit of (the values a block passes) ×
   (the blocks around it), for a block of two values or more; 64 units a local past 256 in a
   function; and a function is priced as 24 bytes at the least. Each is what the engine was
-  measured to take for that shape, in the proportion a byte's price has to a byte's time.
+  measured to take for that shape, in the proportion a byte's price has to a byte's time, on
+  x64.
+
+  > **TODO (arm64 compile prices):** the sentence on what the compile prices and the compile
+  > memory estimate are on arm64 goes here once they are measured.
+
 - A task whose budget does not hold the price is `Timeout`, and nothing is compiled.
 - Blocks nested deeper than 2,048 in one function are refused with a `CompileError`. Its stderr
   is `a function of the module nests blocks deeper than 2048`. The shipped interpreters nest
   115 to 781 deep.
-- Since 0.17.0 the other bounds of the table above are refused the same way, each with its own
+- The other bounds of the table above are refused the same way, each with its own
   words on stderr: `a function type of the module has more than 128 parameters`, `... more than
   8 results`, `a block of the module takes and gives more than 8 values`, `a function of the
   module has more than 16384 locals`, `the functions of the module declare more than 4194304
@@ -731,6 +693,7 @@ What is a metric, not identity (it lives in the provenance):
   - Since 0.17.0 a call into the host costs 1,000 units besides its bytes (section 9), so every task's fuel grew by a thousand for every call its runtime makes (a CPython hello makes 118, the import of sympy 7,814). The hellos now, on Windows x64, with the figure of 0.13.0 to 0.16.0 in brackets: `python-3.14.6` 122,481,638 (122,363,490); `python-3.14.6-sympy-1.14.0` 3,213,154,830 (3,205,340,541); `python-3.14.6-numpy-2.5.4` 24,941,299 (24,920,091); `quickjs-0.15.1` 2,367,084 (2,359,037); `ruby-3.4.1` 153,965,549 (153,868,237); `lua-5.4.8` 588,454 (571,435); `typescript-sucrase-3.35.1` 333,420,186 (333,353,693).
   - A task of the `wasi` or the `clang-22.1.0` runtime also reports the price of compiling its module (section 9).
   - The hello of every runtime costs one pinned number on Windows, Linux and macOS (the controller's tests), CPython reading its library from files (`python-3.14.6` and the sympy runtime) included. Up to 0.12.0 the fuel of those two drifted between hosts by a few hundredths of a percent, because the interpreter's imports read the host's file records; since 0.13.0 a file's record says nothing of the host (section 9), and the figures have been the same on the three systems since. The tests also list a CPython hello's calls into the host in order, and the three systems' listings are equal call by call.
+  - Fuel is the same on the two processor architectures: on the test fleet, with every task of the kits on two machines, a macOS arm64 node and a Linux x64 node gave the same fuel for every batch.
 - **Peak memory** of a CPython task can differ by one 64 KiB page.
 - **Wall time** depends on the hardware.
 
@@ -853,7 +816,7 @@ task's three copies are the majority, and win.
 - **Measured (before 0.13.0):**
   - a million small tasks left the server as 1,116 package blobs, 3 MB in all (at the default output caps the same run is now about 2,200 packages);
   - a node behind an 8 kbit/s link finished its share of a 100,000-task run before the run's last node did.
-  - The scale runs on the fleet have not been repeated since 0.13.0 changed the fuel rules and the package caps.
+  - The scale runs on the fleet have not been repeated since 0.13.0 changed the fuel rules and the package caps; they are to be repeated on the 1.0.0 builds.
 - **One plan, one send.**
   - Each node gets a share by its benchmark rate (the reference batch `verify-task@mixed-v2`: one Python program and one QuickJS program per worker thread).
   - A run therefore ends when its slowest share ends.
@@ -900,8 +863,8 @@ task of the kit is ended by a node's wall clock.
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 0.17.0 | `OutWit.Controller.AI.Verify` (GitHub Packages; nuget.org at 1.0.0) |
-| The model and the scripts | 0.4.0 and 0.7.0 | `OutWit.Controller.AI.Verify.Model`, `OutWit.Controller.AI.Verify.Scripts` |
+| The controller | 1.0.0 | `OutWit.Controller.AI.Verify` (nuget.org once released; the 0.x versions are on GitHub Packages only) |
+| The model and the scripts | 1.0.0 and 1.0.0 | `OutWit.Controller.AI.Verify.Model`, `OutWit.Controller.AI.Verify.Scripts` |
 | The engine | wasmtime long-term line 48: the .NET binding 48.0.2 over the native library 48.0.8, pinned by SHA-256 | natives per platform, release `wasmtime-v48.0.8-2` (8 to 10 MB each; the libraries of `wasmtime-v48.0.8`, byte for byte, with their third-party notices) |
 | The language runtimes | as in section 8 | `verify-wasm.zip`, release `verify-v0.15.0` (67.5 MB) |
 | The numpy runtime | CPython 3.14.6 + numpy 2.5.4 | `verify-python-numpy.zip`, release `verify-v0.15.0` (17.2 MB) |
@@ -915,16 +878,17 @@ How a deployment uses them:
 
 ## 14. Known limits
 
-- Not in this wave: PHP (deferred) and Lean (it needs WebAssembly exceptions and gigabytes of library).
+- Not offered: PHP, and Lean (it needs WebAssembly exceptions and gigabytes of library).
 - Not offered to a program: network, threads, processes, writable files, a second memory, more than 2 GiB of memory, more than 240e9 units of fuel a run (two minutes of a busy loop at the reference rate).
 - The limits are a run's, and a task with a suite runs once a case: one task can ask a node for 1,024 runs at the fuel ceiling (section 9).
 - The list of package references a job carries grows with the run, one reference of about 230 bytes a package. At the default output caps the largest taskset is about 2 MB of them. The controller bounds the tasks of a taskset, not its packages: 4,194,304 tasks that each ask for the stdout ceiling would be cut into about 280,000 packages, a list of 64 MB, and are not refused.
-- The scale runs on the fleet (a million tasks) were measured before 0.13.0 and have not been repeated since.
+- The scale runs on the fleet (a million tasks) were measured before 0.13.0 and have not been repeated since; they are to be repeated on the 1.0.0 builds.
 - A task that was not sampled rests on one machine (`single_execution` in the integrity document). So does a task that was sent out once more after a node's fault, unless its repair package was one of the share that runs twice.
 - The server does not know which packages the platform ran twice. It counts how many came back with two accepted results against how many the rate asks for, and says `short` when fewer did; it cannot say which package lost its second execution.
-- The server cannot see which machine returned an answer. A liar can keep a dispute from being resolved (the task stays `Disputed`); it cannot make its answer the accepted one, except when the honest copies of a disputed task were all lost (section 10).
+- The server cannot see which machine returned an answer. A liar can keep a dispute from being resolved (the task stays `Disputed`); it cannot make its answer the accepted one where the platform holds a node to one answer for each package it was given (Grid 1.3.0 and later). With an older Grid a second answer of its own can take the place of an honest copy that did not come back (section 10).
 - The bounds and the price of compiling a task's own module are fitted to measurements of particular shapes, not a proof about every module the engine accepts. A compile, once started, cannot be interrupted, and one expensive compile runs at a time in a node's process (section 9). What the engine takes in memory while it compiles is estimated and counted by the node, not capped.
 - Fuel bounds work, not time: a run of slow instructions can take four times as long as its budget lasts at the reference rate, and ten seconds more, before a node's backstop ends it (section 9).
+- Three file calls take far longer on Windows than their price: a program that loops on `path_filestat_get`, `path_open` or `fd_filestat_get` burns some 7 million units a second there and is ended by the node's backstop before its fuel: no verdict (`NoResult` with reason `wall_clock` if no node does better), never a wrong one (section 9).
 - Python runs the standard library, sympy or numpy, but no other package and no C extension. Ruby has four bundled gems and no others.
 - TypeScript is not type-checked. C++ has no exceptions. numpy and C/C++ are 32-bit targets.
 - A recursion is bounded:
@@ -933,4 +897,4 @@ How a deployment uses them:
   - in C/C++ and in a raw module by the engine's 8 MiB stack: some 90,000 to 170,000 levels for a small function. How many depends on the node (the trap mode, the processor architecture: section 9), so a recursion deeper than a few tens of thousands of levels can pass on one honest node and overflow on another.
 - The peak memory of a CPython task can differ by a page between hosts (section 10). Verdicts and outputs do not.
 - A run waits for its slowest share (section 11).
-- The controller is proven on the test fleet. Its release to nuget.org and to the live network is the owner's decision.
+- The code of 1.0.0 is proven on the test fleet, as 0.17.0. Its release to nuget.org and to the live network is the owner's decision.

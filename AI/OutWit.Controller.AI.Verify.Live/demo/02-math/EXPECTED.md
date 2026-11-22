@@ -3,20 +3,19 @@
 Measured on a six-node test fleet (Windows x64 and Linux x64) with Verify 0.11.3, using the
 commands of `SCRIPT.md`.
 
-**With Verify 0.13.0** the verdicts below are unchanged: a test of the controller runs every
-row of this kit in the sandbox (`VerifyDemoKitTests`). The report gained a `schema` tag and
-three counters, and fuel now counts the bytes a program reads and prints, so the sizes and
-SHA-256 values in the table of the run are those of the version named above. They are measured
-again when the kit is next walked on a fleet.
+**With Verify 1.0.0** the verdicts below are unchanged: a test of the controller runs every
+row of this kit in the sandbox (`VerifyDemoKitTests`). The report is `verify-report/3`: since the
+version named above it gained a `schema` tag and three counters, and states the sampling rate,
+whether the sampling took place (`as_asked` on a fleet of two machines or more) and the packages
+nothing answered (0), so the sizes and SHA-256 values in the table of the run are those of the
+version named above. The fuel figures of the provenance are higher: fuel counts the bytes a
+program reads and prints and a thousand units for every call into the host, and a module the
+engine compiles on a node pays for its smallest functions. The sizes, the hashes and the fuel
+are measured again when the kit is next walked on a fleet.
 
-**With Verify 0.16.0** the verdicts are unchanged again. The report is `verify-report/3`: its
-summary also states the sampling rate, whether the sampling took place (`as_asked` on a fleet
-of two machines or more) and the packages nothing answered (0), so its size and SHA-256 moved
-once more; the outputs did not change.
-
-**With Verify 0.17.0** the verdicts, the report and the outputs are unchanged. The fuel figures
-of the provenance are higher: every call into the host costs a thousand units, and a module the
-engine compiles on a node pays for its smallest functions.
+On a macOS arm64 node, with every task of the kit on two machines and the other copy on a Linux
+x64 node (Verify 0.17.0, the code of 1.0.0), no pair of copies differed and every verdict was the
+one below.
 
 ## The corpus
 

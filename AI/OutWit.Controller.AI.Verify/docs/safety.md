@@ -185,7 +185,9 @@ Where that ends:
   gives no verdict, and a task it ended is sent out once more. On the test fleet no task
   of the hostile kit has reached it: a sleep takes no time, and what a program asks of the
   sandbox is paid from its budget by the byte. A run of slow instructions on a slow
-  computer could reach it. That it works is shown by a test that shortens it.
+  computer could reach it, and so can a program that does nothing but ask about files on a
+  Windows computer: three of those requests are slow there, far slower than the thousand
+  units they cost. That it works is shown by a test that shortens it.
 
 ## Where the protection ends
 
