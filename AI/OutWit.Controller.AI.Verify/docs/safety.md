@@ -43,7 +43,7 @@ What a program has inside the box:
   is three quarters of the memory that is free when a batch starts, divided by the memory
   one program may take (for C and C++ tasks the compiler's 1 GB counts when it is the
   larger). For tasks whose program is turned into machine code on your computer (below),
-  what that work may take is counted too: 64 MB a program, and about 2.8 GB set aside
+  what that work may take is counted too: 64 MB a program, and about 1.8 GB set aside
   once. The work runs below normal priority: on Windows your own programs go first.
   Linux does not honour that setting for threads; there the cap on the number of programs
   is the protection.
@@ -65,12 +65,18 @@ What a program has inside the box:
   running, to within a few times either way: some ten seconds on a slow machine at the
   default budget, about two minutes at the largest. That holds for the shapes that were
   measured; it is not a proof about every module, and a compile cannot be stopped once it
-  has started. While it compiles, the engine also takes memory that is in no program's
+  has started.
+  Some code compiles far more slowly than its price says: calls through a table, and on a
+  computer whose processor enforces hardware stack protection (where every trap is an
+  explicit check) loads and stores. Within every bound and the default budget, a module of
+  many such functions can hold one core of your computer for minutes while it compiles. A
+  compile cannot be stopped once it has started. No verdict is wrong because of it, and the
+  memory it takes is bounded as below. While it compiles, the engine also takes memory that is in no program's
   256 MB: little for an ordinary program. It is estimated from the module before anything is
   compiled (the code of every function, its calls, loads and stores, branches and the
-  instructions that may trap), and a module whose compile may take more than 2.5 GB is
-  refused. Compiles that may take 64 MB or more share 2.5 GB between them, so the largest
-  runs alone, and the number of programs run at once is lowered for those 2.5 GB (above).
+  instructions that may trap), and a module whose compile may take more than 1.5 GB is
+  refused. Compiles that may take 64 MB or more share 1.5 GB between them, so the largest
+  runs alone, and the number of programs run at once is lowered for those 1.5 GB (above).
   The estimate holds for the kinds of code that were measured; like the price, it is not a
   proof about every module. The machine code of the programs of a batch is
   kept in memory while the batch may need it again, 256 MB of it at most. A module past

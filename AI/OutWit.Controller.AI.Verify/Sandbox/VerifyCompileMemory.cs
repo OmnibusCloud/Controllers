@@ -44,7 +44,7 @@ internal static class VerifyCompileMemory
     /// The most a module's compile may take, bytes. A module estimated over it is refused before it
     /// is compiled; a node sets this much aside, once, for the compiles of the larger kind.
     /// </summary>
-    public const long MAX_BYTES = 2560L << 20;
+    public const long MAX_BYTES = 1536L << 20;
 
     /// <summary>The units of an instruction the compiler turns into code of its own: arithmetic, a comparison, a constant.</summary>
     public const int UNITS_PLAIN = 3;

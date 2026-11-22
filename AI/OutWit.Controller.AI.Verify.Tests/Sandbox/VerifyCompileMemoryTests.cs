@@ -105,7 +105,7 @@ public sealed class VerifyCompileMemoryTests
         // The gate is the most a compile may take: whatever is not refused fits it alone.
         var shapes = new[]
         {
-            ShapeModules.Calls(8, 65_000, 64),
+            ShapeModules.Calls(8, 65_000, 16),
             ShapeModules.Locals(VerifyModuleShape.MAX_FUNCTIONS - 1, 0),
             ShapeModules.Blocks(VerifyModuleShape.MAX_BLOCK_VALUES, VerifyModuleShape.MAX_NESTING),
             ShapeModules.Chain(18_000),
@@ -127,20 +127,25 @@ public sealed class VerifyCompileMemoryTests
     }
 
     [Test]
-    public void D7TheDenseCallsAreEstimatedOverWhatTheyTookAndRunAloneTest()
+    public void D7TheDenseCallsAreEstimatedOverWhatTheyTookAndRefusedTest()
     {
         // 64 functions of 65,000 calls that pass eight values (8.3 MB, every bound held): measured
         // 1,893 MiB resident on an arm64 node and 1,382 MiB committed on x64, where the estimate
-        // was 540 MiB. Now it is over the arm64 peak with the margin, within the gate, and more
-        // than half of it: two such compiles never run side by side.
+        // was 540 MiB. Now it is estimated over the arm64 peak with the margin, and over what a
+        // node sets aside for one compile: it is refused, and never compiled. Sixteen of those
+        // functions (1,020 MiB on arm64) are within the gate and over half of it: such a compile
+        // runs alone.
         var report = VerifyModuleShape.Scan(ShapeModules.Calls(8, 65_000, 64));
+        var sixteen = VerifyModuleShape.Scan(ShapeModules.Calls(8, 65_000, 16));
 
         Assert.Multiple(() =>
         {
-            Assert.That(report.Problem, Is.Null);
             Assert.That(report.CompileMemoryBytes, Is.GreaterThanOrEqualTo((long)(1.15 * 1893 * MEBIBYTE)));
-            Assert.That(report.CompileMemoryBytes, Is.LessThanOrEqualTo(VerifyWasmSandbox.CompileGateBytes));
-            Assert.That(report.CompileMemoryBytes, Is.GreaterThan(VerifyWasmSandbox.CompileGateBytes / 2));
+            Assert.That(report.Problem, Is.EqualTo(VerifyModuleShape.TOO_MUCH_MEMORY));
+            Assert.That(sixteen.Problem, Is.Null);
+            Assert.That(sixteen.CompileMemoryBytes, Is.GreaterThanOrEqualTo((long)(1.15 * 1020 * MEBIBYTE)));
+            Assert.That(sixteen.CompileMemoryBytes, Is.LessThanOrEqualTo(VerifyWasmSandbox.CompileGateBytes));
+            Assert.That(sixteen.CompileMemoryBytes, Is.GreaterThan(VerifyWasmSandbox.CompileGateBytes / 2));
         });
     }
 
@@ -414,11 +419,11 @@ public sealed class VerifyCompileMemoryTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(aside, Is.EqualTo(2816 * MEBIBYTE), "2.5 GiB of the gate and 256 MiB of kept modules");
-            Assert.That(Degree(5 * GIBIBYTE, perWasiTask), Is.EqualTo(3));
+            Assert.That(aside, Is.EqualTo(1792 * MEBIBYTE), "1.5 GiB of the gate and 256 MiB of kept modules");
+            Assert.That(Degree(5 * GIBIBYTE, perWasiTask), Is.EqualTo(6));
             Assert.That(Degree(5 * GIBIBYTE, perCTask), Is.EqualTo(1));
             Assert.That(Degree(16 * GIBIBYTE, perWasiTask), Is.EqualTo(16));
-            Assert.That(Degree(16 * GIBIBYTE, perCTask), Is.EqualTo(8));
+            Assert.That(Degree(16 * GIBIBYTE, perCTask), Is.EqualTo(9));
             Assert.That(Degree(64 * GIBIBYTE, perWasiTask), Is.EqualTo(16));
             Assert.That(Degree(64 * GIBIBYTE, perCTask), Is.EqualTo(16));
         });

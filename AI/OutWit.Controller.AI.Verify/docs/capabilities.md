@@ -659,6 +659,14 @@ loops: a module of 6.9 KB took 1.5 s, one of 28 KB took 81 s and 1.5 GiB. So:
   function; and a function is priced as 24 bytes at the least. Each is what the engine was
   measured to take for that shape, in the proportion a byte's price has to a byte's time.
 - A task whose budget does not hold the price is `Timeout`, and nothing is compiled.
+- Two kinds of code compile far more slowly than their price says: calls through a table
+  (measured 36 to 68 times the time the price buys at the reference rate), and loads and stores
+  on a host with hardware stack protection, where every trap is an explicit check (loads
+  measured at up to 52 times). Within every bound and the default budget, a module of many such functions can hold
+  one core of a node for minutes while it compiles (8 MB of them took five to seven minutes on
+  a fast x64 node). A compile cannot be stopped once it has started. No verdict is wrong because
+  of it, and the memory it takes is bounded by the estimate below. This is a stated limit; the
+  prices of these kinds are not changed.
 - Blocks nested deeper than 2,048 in one function are refused with a `CompileError`. Its stderr
   is `a function of the module nests blocks deeper than 2048`. The shipped interpreters nest
   115 to 781 deep.
@@ -670,7 +678,7 @@ loops: a module of 6.9 KB took 1.5 s, one of 28 KB took 81 s and 1.5 GiB. So:
   larger than 128 KiB`, and `the module has a start function, which a task's module may not
   have: a program starts at _start`. A module whose compile may take more memory than a node
   sets aside for one is refused as well: `compiling the module may take more than
-  2560 MiB of memory`.
+  1536 MiB of memory`.
 - The compile uses the calling worker's thread only, so it stays within the cores a batch
   counts.
 - The memory the engine takes while it compiles is in no task's memory cap. It is estimated
@@ -680,10 +688,10 @@ loops: a module of 6.9 KB took 1.5 s, one of 28 KB took 81 s and 1.5 GiB. So:
   bytes a unit, an instruction of arithmetic 3 units, a branch 9, a call 11 and one a value it
   passes, a load or a store 40, a division 68, a call through a table 100 and one a value, a
   conversion that may trap 112. The figures are the larger of an x64 node in both trap modes
-  and an arm64 node, with a margin of at least 15 %. A module estimated over 2,560 MiB is
-  refused before it is compiled. Compiles that may take 64 MiB or more share 2,560 MiB between
+  and an arm64 node, with a margin of at least 15 %. A module estimated over 1,536 MiB is
+  refused before it is compiled. Compiles that may take 64 MiB or more share 1,536 MiB between
   them in a node's process: the largest runs alone, several of ordinary programs side by
-  side. A node counts those 2,560 MiB where it decides how many tasks run at once
+  side. A node counts those 1,536 MiB where it decides how many tasks run at once
   (section 11).
 
 The fuel a task reports includes the price: a C hello costs 8,628,668 (8,314,372 before 0.17.0;
@@ -931,7 +939,7 @@ How a deployment uses them:
 - A task that was not sampled rests on one machine (`single_execution` in the integrity document). So does a task that was sent out once more after a node's fault, unless its repair package was one of the share that runs twice.
 - The server does not know which packages the platform ran twice. It counts how many came back with two accepted results against how many the rate asks for, and says `short` when fewer did; it cannot say which package lost its second execution.
 - The server cannot see which machine returned an answer. A liar can keep a dispute from being resolved (the task stays `Disputed`); it cannot make its answer the accepted one, except when the honest copies of a disputed task were all lost (section 10).
-- The bounds and the price of compiling a task's own module are fitted to measurements of particular shapes, not a proof about every module the engine accepts. A compile, once started, cannot be interrupted, and one expensive compile runs at a time in a node's process (section 9). What the engine takes in memory while it compiles is estimated from the module, refused over 2,560 MiB and counted by the node; the estimate holds for the kinds of code that were measured, and the compile itself is not capped.
+- The bounds and the price of compiling a task's own module are fitted to measurements of particular shapes, not a proof about every module the engine accepts. A compile, once started, cannot be interrupted, and one expensive compile runs at a time in a node's process (section 9). What the engine takes in memory while it compiles is estimated from the module, refused over 1,536 MiB and counted by the node; the estimate holds for the kinds of code that were measured, and the compile itself is not capped. Calls through a table, and loads and stores on a host with hardware stack protection, compile far more slowly than their price says: within every bound and the default budget a module of many such functions can hold one core of a node for minutes while it compiles, and that compile cannot be stopped. No verdict is wrong because of it, and its memory is bounded.
 - Fuel bounds work, not time: a run of slow instructions can take four times as long as its budget lasts at the reference rate, and ten seconds more, before a node's backstop ends it (section 9).
 - Python runs the standard library, sympy or numpy, but no other package and no C extension. Ruby has four bundled gems and no others.
 - TypeScript is not type-checked. C++ has no exceptions. numpy and C/C++ are 32-bit targets.
