@@ -20,6 +20,16 @@ public sealed class SmtModelWireLayoutTests
     /// <summary>Set to a file path to have the current layout written there (to move the baseline on purpose).</summary>
     private const string WRITE_BASELINE_VARIABLE = "WITAI_SMT_WRITE_WIRE_BASELINE";
 
+    /// <summary>
+    /// The members whose initializer is not their type's default, by type: each a member of its
+    /// type's first layout. The sampling rate of a run's options is one: 0 is a rate of its own
+    /// (no re-execution), so "not set" cannot be 0 there, and a new instance holds the default.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string[]> FIRST_LAYOUT_DEFAULTS = new Dictionary<string, string[]>(StringComparer.Ordinal)
+    {
+        [nameof(SmtOptionsData)] = [nameof(SmtOptionsData.SamplingRate)]
+    };
+
     #endregion
 
     #region Layout Tests
@@ -93,16 +103,18 @@ public sealed class SmtModelWireLayoutTests
     {
         // What a reader gets for a member its sender does not have is the type's default. A
         // value member with another initializer would read differently from an older sender
-        // than from a new instance.
+        // than from a new instance: only a member of a type's first layout, which every sender
+        // has, may start at something else.
         Assert.Multiple(() =>
         {
             foreach (var type in SmtModelWireLayout.Types())
             {
+                var allowed = FIRST_LAYOUT_DEFAULTS.GetValueOrDefault(type.Name) ?? [];
                 var other = SmtModelWireLayout.Members(type)
                     .Where(member => member.Type is "Boolean" or "Int32" or "Int64" or "Double" && member.Default is not ("false" or "0"))
                     .Select(member => member.Name);
 
-                Assert.That(other, Is.Empty, $"{type.Name}: a value member starts at something else than its type's default");
+                Assert.That(other, Is.EquivalentTo(allowed), $"{type.Name}: a value member starts at something else than its type's default");
             }
         });
     }
@@ -114,7 +126,7 @@ public sealed class SmtModelWireLayoutTests
     [Test]
     public void RefusalRoundTripsThroughMemoryPackAndComparesByValueTest()
     {
-        var refusal = new SmtRefusalData { File = "qf_lia/0841.smt2", Line = 12, Command = "push", Code = "command_not_allowed", Reason = "incremental scripts, unsat cores and proofs are not supported" };
+        var refusal = new SmtRefusalData { File = "qf_lia/0841.smt2", Line = 12, Command = "push", Code = "command_not_allowed", Reason = "incremental scripts, unsat cores and proofs are not supported", Row = 841 };
 
         var back = MemoryPackSerializer.Deserialize<SmtRefusalData>(MemoryPackSerializer.Serialize(refusal))!;
 
@@ -126,20 +138,23 @@ public sealed class SmtModelWireLayoutTests
             Assert.That(back.Command, Is.EqualTo("push"));
             Assert.That(back.Code, Is.EqualTo("command_not_allowed"));
             Assert.That(back.Reason, Is.EqualTo(refusal.Reason));
+            Assert.That(back.Row, Is.EqualTo(841));
         });
     }
 
     [Test]
     public void RefusalComparesEveryMemberAndClonesDeepTest()
     {
-        var refusal = new SmtRefusalData { File = "a.smt2", Line = 3, Command = "echo", Code = "command_not_allowed", Reason = "r" };
+        var refusal = new SmtRefusalData { File = "a.smt2", Line = 3, Command = "echo", Code = "command_not_allowed", Reason = "r", Row = 7 };
         var clone = refusal.Clone();
 
         Assert.Multiple(() =>
         {
             Assert.That(clone, Is.Not.SameAs(refusal));
             Assert.That(clone.Is(refusal), Is.True);
+            Assert.That(clone.Row, Is.EqualTo(7));
             Assert.That(new SmtRefusalData().Is(new SmtRefusalData()), Is.True);
+            Assert.That(Changed(refusal, other => other.Row = 8).Is(refusal), Is.False);
 
             Assert.That(Changed(refusal, other => other.File = "b.smt2").Is(refusal), Is.False);
             Assert.That(Changed(refusal, other => other.Line = 4).Is(refusal), Is.False);
