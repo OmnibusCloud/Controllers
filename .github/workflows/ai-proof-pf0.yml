@@ -26,6 +26,9 @@ env:
   SPIKE: AI/OutWit.Controller.AI.Proof.Spike
   PYTHONUTF8: 1
   PYTHONDONTWRITEBYTECODE: 1
+  # The items the stages below work on, and the ones that go through the two-stage split.
+  ITEMS: AI/OutWit.Controller.AI.Proof.Spike/golden/smoke-mathlib.jsonl
+  SPLIT_IDS: m-linarith,m-nlinarith,m-nlinarith3,m-norm-num,m-positivity,m-omega,m-simp,m-ring,m-aesop,m-incomplete,m-mismatch,m-axiom,m-native
 
 defaults:
   run:
@@ -38,12 +41,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-24.04, rid: linux-x64 }
-          - { os: windows-2022, rid: win-x64 }
-          - { os: macos-15, rid: osx-arm64 }
-          - { os: ubuntu-24.04-arm, rid: linux-arm64 }
-          - { os: macos-15-intel, rid: osx-x64 }
-          - { os: windows-11-arm, rid: win-arm64 }
+          - { os: ubuntu-24.04, rid: linux-x64, processes: 6 }
+          - { os: windows-2022, rid: win-x64, processes: 6 }
+          - { os: macos-15, rid: osx-arm64, processes: 3 }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64, processes: 6 }
+          - { os: macos-15-intel, rid: osx-x64, processes: 4 }
+          - { os: windows-11-arm, rid: win-arm64, processes: 3 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 340
     env:
@@ -62,13 +65,24 @@ jobs:
       # The official release of this platform, checked against the pinned SHA-256.
       - name: Lean toolchain
         id: toolchain
-        run: |
-          python "$SPIKE/harness/toolchain.py" "$RID" "$PF0_WORK/toolchain" "$OUT/toolchain.json"
-          cat "$OUT/toolchain.json"
+        timeout-minutes: 30
+        run: python "$SPIKE/harness/toolchain.py" "$RID" "$PF0_WORK/toolchain" "$OUT/toolchain.json"
 
-      - name: Prelude and the core smoke
-        id: smoke
-        run: python "$SPIKE/harness/smoke.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
+      - name: Measuring prelude
+        id: prelude
+        timeout-minutes: 10
+        run: python "$SPIKE/harness/smoke.py" prelude --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
+
+      - name: REPL
+        id: repl
+        if: always() && steps.toolchain.outcome == 'success'
+        timeout-minutes: 30
+        run: python "$SPIKE/harness/tools.py" repl --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
+
+      - name: Core smoke (no Mathlib), both paths
+        if: always() && steps.prelude.outcome == 'success'
+        timeout-minutes: 20
+        run: python "$SPIKE/harness/smoke.py" run --set core --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --repl "$PF0_REPL"
 
       # Mathlib's compiled environment by Mathlib's own cache tool: nothing of it enters the
       # Actions cache.
@@ -83,10 +97,114 @@ jobs:
         timeout-minutes: 60
         run: python "$SPIKE/harness/startup.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
 
+      - name: Mathlib smoke, both paths
+        id: smoke
+        if: always() && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success'
+        timeout-minutes: 60
+        run: python "$SPIKE/harness/smoke.py" run --set mathlib --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --repl "$PF0_REPL"
+
+      # One environment, built elsewhere, replayed by this platform's kernel.
+      - name: Replay a slice of the environment
+        if: always() && steps.mathlib.outcome == 'success'
+        timeout-minutes: 120
+        run: python "$SPIKE/harness/replay.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" ${{ matrix.processes >= 6 && '--together' || '' }}
+
+      # Stage one of the split: check, export, and judge the export on this machine.
+      - name: Check and export
+        id: export
+        if: always() && steps.mathlib.outcome == 'success'
+        timeout-minutes: 120
+        run: python "$SPIKE/harness/split.py" export --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items "$ITEMS" --ids "$SPLIT_IDS" --out "$OUT" --exports "exports-$RID" --paranoid ${{ matrix.rid == 'linux-x64' && '3' || '0' }}
+
+      - name: Memory of several processes
+        if: always() && steps.mathlib.outcome == 'success' && steps.repl.outcome == 'success' && steps.prelude.outcome == 'success'
+        timeout-minutes: 60
+        run: python "$SPIKE/harness/degree.py" --repl "$PF0_REPL" --bin "$LEAN_ROOT/bin" --lean-path-file "$PF0_WORK/leanpath.json" --lean-path "$PF0_WORK/prelude" --import Mathlib --work "$PF0_WORK/degree" --out "$OUT/degree.json" --max ${{ matrix.processes }} --items "$ITEMS"
+
+      - name: Sandbox (Linux)
+        if: always() && runner.os == 'Linux' && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success'
+        timeout-minutes: 60
+        run: |
+          python "$SPIKE/harness/tools.py" landrun --rid "$RID" --work "$PF0_WORK" --out "$OUT"
+          python "$SPIKE/harness/sandbox.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --landrun "$PF0_WORK/landrun/landrun"
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: results-${{ matrix.rid }}
           path: results-${{ matrix.rid }}
+          retention-days: 14
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() && steps.export.outcome == 'success'
+        with:
+          name: exports-${{ matrix.rid }}
+          path: exports-${{ matrix.rid }}
+          retention-days: 3
+          if-no-files-found: warn
+
+  # Stage two of the split, on another operating system and CPU: the export of one machine is
+  # judged against the challenge on a machine that never saw the solution's text.
+  confirm:
+    needs: platform
+    if: always()
+    name: confirm ${{ matrix.from }} on ${{ matrix.rid }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { from: linux-x64, os: macos-15, rid: osx-arm64 }
+          - { from: linux-x64, os: windows-2022, rid: win-x64 }
+          - { from: win-x64, os: ubuntu-24.04-arm, rid: linux-arm64 }
+          - { from: osx-arm64, os: ubuntu-24.04, rid: linux-x64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    env:
+      RID: ${{ matrix.rid }}
+      OUT: confirm-${{ matrix.from }}-on-${{ matrix.rid }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: exports-${{ matrix.from }}
+          path: exports
+
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+
+      - name: Lean toolchain
+        timeout-minutes: 30
+        run: python "$SPIKE/harness/toolchain.py" "$RID" "$PF0_WORK/toolchain" "$OUT/toolchain.json"
+
+      - name: Mathlib environment
+        timeout-minutes: 120
+        run: python "$SPIKE/harness/mathlib.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --skip-hash
+
+      # On Linux the stock sandbox of `lake comparator` is tried too: bubblewrap, with
+      # unprivileged user namespaces let through (the image restricts them).
+      - name: bubblewrap (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y -q bubblewrap
+          bwrap --version
+          bwrap --ro-bind / / --unshare-all /usr/bin/true && echo "bwrap starts as the image is" || echo "bwrap does not start as the image is"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          bwrap --ro-bind / / --unshare-all /usr/bin/true && echo "bwrap starts with user namespaces let through" || echo "bwrap still does not start"
+
+      - name: Confirm
+        timeout-minutes: 120
+        run: python "$SPIKE/harness/split.py" confirm --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items "$ITEMS" --exports exports --out "$OUT" --label "${{ matrix.from }}-on-$RID" --sandbox
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: confirm-${{ matrix.from }}-on-${{ matrix.rid }}
+          path: confirm-${{ matrix.from }}-on-${{ matrix.rid }}
           retention-days: 14
           if-no-files-found: warn

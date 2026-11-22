@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import json
 import os
 import shlex
 import sys
@@ -23,20 +24,21 @@ from pf0lib import JsonlWriter, assemble, classify, lean_environment, parse_mess
 
 
 def check_one(item: dict, options: argparse.Namespace, env: dict) -> dict:
-    text, spans = assemble(item, options.imports + ["PF0"])
-    path = os.path.join(options.work, f"{item['id']}.lean")
+    heartbeats = item.get("max_heartbeats") or options.max_heartbeats
+    text, spans = assemble(item, options.imports + ["PF0"], heartbeats)
+    name = f"{item['id']}.lean"
+    path = os.path.join(options.work, name)
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(text)
-    heartbeats = item.get("max_heartbeats") or options.max_heartbeats
-    cmd = list(options.wrap) + [options.lean, "--json", f"-DmaxHeartbeats={heartbeats}",
-                                f"-DElab.async={options.elab_async}"]
+    cmd = list(options.wrap) + [options.lean, "--json", f"-DElab.async={options.elab_async}"]
     if options.threads is not None:
         cmd.append(f"--threads={options.threads}")
-    cmd.append(path)
+    cmd.append(name)
     cap = item.get("hard_cap_s") or options.hard_cap
     memory_cap = item.get("memory_mb")
     out = run_measured(cmd, env=env, cwd=options.work, timeout=cap,
-                       memory_cap=memory_cap * (1 << 20) if memory_cap else None)
+                       memory_cap=memory_cap * (1 << 20) if memory_cap else None,
+                       sample=options.sample)
     messages = parse_messages(out["stdout"])
     row = classify(item, messages, spans, allow_native=options.allow_native)
     if out["killed"] == "timeout":
@@ -65,6 +67,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--lean", required=True)
     parser.add_argument("--lean-path", action="append", default=[])
+    parser.add_argument("--lean-path-file", default="", help="a JSON list of search folders")
     parser.add_argument("--items", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--work", required=True)
@@ -80,6 +83,9 @@ def main() -> int:
     parser.add_argument("--every", type=int, default=1)
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--keep", action="store_true")
+    parser.add_argument("--sample", type=float, default=0.25,
+                        help="seconds between samples of the private memory (0: none)")
+    parser.add_argument("--bin", default="", help="the toolchain's bin folder, put first on PATH")
     options = parser.parse_args()
     options.wrap = shlex.split(options.wrap)
     options.work = os.path.abspath(options.work)
@@ -94,7 +100,11 @@ def main() -> int:
     if options.limit:
         items = items[:options.limit]
 
-    env = lean_environment([os.path.abspath(p) for p in options.lean_path])
+    if options.lean_path_file:
+        with open(options.lean_path_file, encoding="utf-8") as handle:
+            options.lean_path = json.load(handle) + options.lean_path
+    env = lean_environment([os.path.abspath(p) for p in options.lean_path],
+                           bin_dir=options.bin or os.path.dirname(os.path.abspath(options.lean)))
     writer = JsonlWriter(options.out)
     started = time.monotonic()
     counts = {}

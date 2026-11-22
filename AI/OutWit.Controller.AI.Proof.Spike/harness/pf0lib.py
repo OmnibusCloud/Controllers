@@ -162,11 +162,41 @@ if IS_WINDOWS:
         return seconds(user), seconds(kernel)
 
 
+if IS_MACOS:
+    import ctypes
+
+    class _RusageInfoV2(ctypes.Structure):
+        _fields_ = [("ri_uuid", ctypes.c_uint8 * 16)] + [(name, ctypes.c_uint64) for name in (
+            "ri_user_time", "ri_system_time", "ri_pkg_idle_wkups", "ri_interrupt_wkups", "ri_pageins",
+            "ri_wired_size", "ri_resident_size", "ri_phys_footprint", "ri_proc_start_abstime",
+            "ri_proc_exit_abstime", "ri_child_user_time", "ri_child_system_time",
+            "ri_child_pkg_idle_wkups", "ri_child_interrupt_wkups", "ri_child_pageins",
+            "ri_child_elapsed_abstime", "ri_diskio_bytesread", "ri_diskio_byteswritten")]
+
+    try:
+        _libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+    except OSError:
+        _libproc = None
+
+    def _macos_memory(pid: int) -> dict:
+        """Resident size and the physical footprint (what the process alone answers for)."""
+        if _libproc is None:
+            return {}
+        info = _RusageInfoV2()
+        if _libproc.proc_pid_rusage(ctypes.c_int(pid), ctypes.c_int(2), ctypes.byref(info)) != 0:
+            return {}
+        return {"rss": int(info.ri_resident_size), "private": int(info.ri_phys_footprint)}
+
+
 def live_memory(proc: subprocess.Popen) -> dict:
-    """Resident (and, where the system tells, private) bytes of a running process."""
+    """Resident and private bytes of a running process: the private part is what the process
+    alone answers for (Linux: private pages; macOS: physical footprint; Windows: private
+    commit), the rest of the resident set being pages of files other processes map too."""
     try:
         if IS_WINDOWS:
             return _windows_memory(proc._handle)
+        if IS_MACOS:
+            return _macos_memory(proc.pid)
         if IS_LINUX:
             out = {}
             with open(f"/proc/{proc.pid}/smaps_rollup", encoding="ascii") as handle:
@@ -178,9 +208,53 @@ def live_memory(proc: subprocess.Popen) -> dict:
             if "private_clean" in out and "private_dirty" in out:
                 out["private"] = out["private_clean"] + out["private_dirty"]
             return out
-        text = subprocess.run(["ps", "-o", "rss=", "-p", str(proc.pid)], capture_output=True,
-                              text=True, timeout=10).stdout.strip()
-        return {"rss": int(text) * 1024} if text else {}
+        return {}
+    except (OSError, ValueError):
+        return {}
+
+
+def system_memory() -> dict:
+    """What the whole machine has left: the number that says how many processes fit."""
+    try:
+        if IS_LINUX:
+            out = {}
+            with open("/proc/meminfo", encoding="ascii") as handle:
+                for line in handle:
+                    parts = line.split()
+                    if parts[0].rstrip(":") in ("MemTotal", "MemFree", "MemAvailable", "Cached", "AnonPages", "Mapped"):
+                        out[parts[0].rstrip(":").lower()] = int(parts[1]) * 1024
+            out["available"] = out.get("memavailable", 0)
+            return out
+        if IS_WINDOWS:
+            class Status(ctypes.Structure):
+                _fields_ = [("dwLength", wintypes.DWORD), ("dwMemoryLoad", wintypes.DWORD),
+                            ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                            ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                            ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                            ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+            status = Status()
+            status.dwLength = ctypes.sizeof(status)
+            _kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+            return {"available": int(status.ullAvailPhys), "total": int(status.ullTotalPhys),
+                    "commit_available": int(status.ullAvailPageFile), "commit_limit": int(status.ullTotalPageFile)}
+        text = subprocess.run(["vm_stat"], capture_output=True, text=True, timeout=10).stdout
+        page = 4096
+        pages = {}
+        for line in text.splitlines():
+            if "page size of" in line:
+                page = int(line.split("page size of")[1].split()[0])
+            elif ":" in line:
+                key, value = line.split(":", 1)
+                try:
+                    pages[key.strip()] = int(value.strip().rstrip("."))
+                except ValueError:
+                    pass
+        free = sum(pages.get(key, 0) for key in ("Pages free", "Pages inactive", "Pages speculative", "Pages purgeable"))
+        return {"available": free * page, "free": pages.get("Pages free", 0) * page,
+                "file_backed": pages.get("File-backed pages", 0) * page,
+                "anonymous": pages.get("Anonymous pages", 0) * page,
+                "compressed": pages.get("Pages occupied by compressor", 0) * page}
     except (OSError, ValueError, subprocess.SubprocessError):
         return {}
 
@@ -196,17 +270,21 @@ def _live_rss(proc: subprocess.Popen) -> int:
 
 
 def finish(proc: subprocess.Popen, started: float, timeout: float | None = None,
-           memory_cap: int | None = None, poll: float = 0.02) -> dict:
+           memory_cap: int | None = None, poll: float = 0.02, sample: float = 0.25) -> dict:
     """Waits for a started process and reports what it cost.
 
     The exit is collected with wait4 on Linux and macOS (the kernel's own account of the child:
     peak resident set, user and system time) and from the process handle on Windows. A process
     still alive after `timeout` seconds, or seen above `memory_cap` resident bytes, is killed.
+    On Linux and macOS the private part of the memory is sampled while the process runs (its
+    peak is the largest sample); Windows keeps the peak itself.
     """
     killed = None
     usage = None
     status = None
     next_memory_check = 0.0
+    next_sample = started + 0.05
+    peak_private = 0
     while True:
         now = time.monotonic()
         if IS_WINDOWS:
@@ -216,6 +294,9 @@ def finish(proc: subprocess.Popen, started: float, timeout: float | None = None,
             pid, status, usage = os.wait4(proc.pid, os.WNOHANG)
             if pid != 0:
                 break
+            if sample and now >= next_sample:
+                next_sample = now + sample
+                peak_private = max(peak_private, int(live_memory(proc).get("private", 0)))
         if killed is None:
             if timeout is not None and now - started > timeout:
                 killed = "timeout"
@@ -249,15 +330,19 @@ def finish(proc: subprocess.Popen, started: float, timeout: float | None = None,
             "user_s": round(usage.ru_utime, 4),
             "sys_s": round(usage.ru_stime, 4),
             "peak_rss": int(peak),
+            "peak_private": peak_private,
         })
     return row
 
 
 def run_measured(cmd: list, env: dict | None = None, cwd: str | None = None,
                  timeout: float | None = None, memory_cap: int | None = None,
-                 stdin_text: str | None = None, keep: int = 4 << 20) -> dict:
-    """Runs a command to its end; output goes to temporary files and comes back as text."""
-    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+                 stdin_text: str | None = None, keep: int = 4 << 20, sample: float = 0.25,
+                 stdout_path: str | None = None) -> dict:
+    """Runs a command to its end; output goes to temporary files and comes back as text
+    (standard output goes to `stdout_path` instead when one is given, and comes back empty)."""
+    with (open(stdout_path, "wb") if stdout_path else tempfile.TemporaryFile()) as out, \
+            tempfile.TemporaryFile() as err:
         stdin = subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL
         started = time.monotonic()
         try:
@@ -271,10 +356,12 @@ def run_measured(cmd: list, env: dict | None = None, cwd: str | None = None,
                 proc.stdin.close()
             except OSError:
                 pass
-        row = finish(proc, started, timeout, memory_cap)
-        for name, handle in (("stdout", out), ("stderr", err)):
-            handle.seek(0)
-            row[name] = handle.read(keep).decode("utf-8", errors="replace")
+        row = finish(proc, started, timeout, memory_cap, sample=sample)
+        row["stdout"] = ""
+        for name, handle in (("stdout", None if stdout_path else out), ("stderr", err)):
+            if handle is not None:
+                handle.seek(0)
+                row[name] = handle.read(keep).decode("utf-8", errors="replace")
     return row
 
 
@@ -282,9 +369,12 @@ def run_measured(cmd: list, env: dict | None = None, cwd: str | None = None,
 # Lean
 # --------------------------------------------------------------------------------------------
 
-def lean_environment(lean_path: list, extra: dict | None = None) -> dict:
+def lean_environment(lean_path: list, extra: dict | None = None, bin_dir: str | None = None) -> dict:
     env = dict(os.environ)
     env["LEAN_PATH"] = os.pathsep.join(lean_path)
+    if bin_dir:
+        # The toolchain's own tools find its root by asking the `lean` on PATH.
+        env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
     # A panic ends the process instead of going on with a broken state.
     env["LEAN_ABORT_ON_PANIC"] = "1"
     if extra:
@@ -308,25 +398,24 @@ def parse_messages(stdout: str) -> list:
     return messages
 
 
-def assemble(item: dict, imports: list, opens: list | None = None) -> tuple[str, dict]:
-    """The text of one item and the line spans of its parts.
+def assemble_body(item: dict, max_heartbeats: int) -> tuple[str, dict]:
+    """The text of one item after the imports, and the line spans of its parts.
 
-    The challenge is elaborated first, in a namespace of its own, so that its statement and the
-    solution's can be compared in one environment; each command is wrapped in the measuring
-    command of the prelude, which reports the heartbeats that command used on its thread.
+    The budget is set first (a trusted line: a candidate may not set it). The challenge is
+    elaborated in a namespace of its own, so that its statement and the solution's can be
+    compared in one environment; each command is wrapped in the measuring command of the
+    prelude, which reports the heartbeats that command used on its thread. The same text goes
+    to a fresh process (after the import lines) and to a pooled process (as one command).
     """
-    lines = [f"import {name}" for name in imports]
-    for line in (opens or []):
-        lines.append(line)
+    lines = [f"set_option maxHeartbeats {max_heartbeats}"]
     for line in item.get("opens", []):
         lines.append(line)
     spans = {}
 
-    def add(label: str, text: str, measured: bool = True) -> None:
-        if measured:
-            lines.append(f'#pf0_measure "{label}" in')
+    def add(label: str, text: str) -> None:
+        lines.append(f'#pf0_measure "{label}" in')
         first = len(lines) + 1
-        lines.extend(text.rstrip("\n").split("\n"))
+        lines.extend(text.rstrip().splitlines())
         spans[label] = (first, len(lines))
 
     lines.append("namespace PF0C")
@@ -337,6 +426,14 @@ def assemble(item: dict, imports: list, opens: list | None = None) -> tuple[str,
     add("s", item["solution"])
     lines.append(f"#pf0_report {item['name']} PF0C.{item['name']}")
     return "\n".join(lines) + "\n", spans
+
+
+def assemble(item: dict, imports: list, max_heartbeats: int) -> tuple[str, dict]:
+    """The whole file of one item: the import lines, then the body."""
+    body, spans = assemble_body(item, max_heartbeats)
+    header = "".join(f"import {name}\n" for name in imports)
+    shift = len(imports)
+    return header + body, {label: (first + shift, last + shift) for label, (first, last) in spans.items()}
 
 
 def classify(item: dict, messages: list, spans: dict, allow_native: bool = False) -> dict:

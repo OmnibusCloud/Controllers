@@ -90,13 +90,12 @@ def main() -> int:
 
     versions = {}
     for program, args in (("lean", ["--version"]), ("lake", ["--version"]), ("leanc", ["--version"]),
-                          ("leanchecker", ["--help"]), ("leanexport", ["--help"]),
-                          ("nanoda_bin", ["--help"]), ("lean4lean", ["--help"])):
+                          ("nanoda_bin", ["--version"]), ("leantar", ["--version"])):
         path = os.path.join(bin_dir, program + EXE)
         if not os.path.isfile(path):
             versions[program] = None
             continue
-        out = run_measured([path] + args, timeout=120)
+        out = run_measured([path] + args, timeout=30)
         text = (out["stdout"] + out["stderr"]).strip()
         versions[program] = {"exit": out["exit"], "wall_s": out["wall_s"], "text": text[:600]}
     record["programs"] = versions

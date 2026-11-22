@@ -126,6 +126,11 @@ def main() -> int:
         roots[os.path.relpath(root, source).replace(os.sep, "/")] = root_total
     record["disk_by_kind"] = kinds
     record["disk_by_root"] = roots
+    for relative, size, path in listing:
+        if relative.endswith(".sig"):
+            with open(path, "rb") as handle:
+                record["sig_example"] = {"file": relative, "bytes": size, "head_hex": handle.read(96).hex()}
+            break
     record["disk_bytes"] = sum(entry["bytes"] for entry in kinds.values())
     record["disk_files"] = sum(entry["files"] for entry in kinds.values())
     record["source_tree_bytes"] = tree_bytes(source)[0]
