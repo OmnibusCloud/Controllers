@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import sys
 
-from pf0lib import EXE, read_jsonl, run_measured, write_json
+from pf0lib import EXE, read_jsonl, run_measured, sha256_file, write_json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SPIKE = os.path.dirname(HERE)
@@ -35,8 +35,10 @@ def prelude(options: argparse.Namespace) -> int:
     if out["exit"] != 0 or not os.path.isfile(os.path.join(folder, "PF0.olean")):
         print(f"the prelude did not compile (exit {out['exit']})")
         return 1
+    # A compiled Lean file is meant to be the same bytes on every platform: the digest says.
     record = {"folder": folder, "wall_s": out["wall_s"], "peak_rss": out["peak_rss"],
-              "olean_bytes": os.path.getsize(os.path.join(folder, "PF0.olean"))}
+              "olean_bytes": os.path.getsize(os.path.join(folder, "PF0.olean")),
+              "olean_sha256": sha256_file(os.path.join(folder, "PF0.olean"))}
     write_json(os.path.join(options.out, "prelude.json"), record)
     print(f"prelude compiled in {record['wall_s']} s, peak {record['peak_rss'] >> 20} MiB")
     return 0

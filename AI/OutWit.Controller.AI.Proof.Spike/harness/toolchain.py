@@ -87,6 +87,22 @@ def main() -> int:
             if entry.upper().startswith(("LICENSE", "LICENCE", "COPYING", "NOTICE")):
                 licences.append(os.path.relpath(os.path.join(folder, entry), root).replace(os.sep, "/"))
     record["licence_files"] = sorted(licences)
+    # What the release says about the third-party code it carries: the size, the digest and the
+    # lines of its LICENSES file that name a component or a licence.
+    notices = os.path.join(root, "LICENSES")
+    if os.path.isfile(notices):
+        with open(notices, encoding="utf-8", errors="replace") as handle:
+            text = handle.read()
+        words = ("license", "licence", "copyright (c)", "gnu ", "apache", "mit ", "bsd", "llvm", "gmp", "mimalloc",
+                 "libuv", "cadical", "zlib", "nanoda", "lean4lean", "leantar", "leangz")
+        named = []
+        for line in text.splitlines():
+            stripped = " ".join(line.split())
+            if stripped and len(stripped) < 140 and any(word in stripped.lower() for word in words):
+                if stripped not in named:
+                    named.append(stripped)
+        record["licenses_file"] = {"bytes": len(text.encode("utf-8")), "sha256": sha256_file(notices),
+                                   "lines": text.count("\n"), "named": named[:200]}
 
     versions = {}
     for program, args in (("lean", ["--version"]), ("lake", ["--version"]), ("leanc", ["--version"]),

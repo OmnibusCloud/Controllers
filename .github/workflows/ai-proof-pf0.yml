@@ -1,5 +1,5 @@
 name: AI Proof PF-0
-run-name: "AI Proof PF-0: ${{ github.ref_name }}${{ inputs.select && ' (select)' || '' }}"
+run-name: "AI Proof PF-0: ${{ github.ref_name }}${{ inputs.select && ' (select)' || '' }}${{ inputs.baselines && ' (baselines)' || '' }}"
 
 # The PF-0 gate of the Proof controller (a spike): the official Lean release and Mathlib's
 # compiled environment of AI/OutWit.Controller.AI.Proof.Spike/pins.env on six platforms, measured.
@@ -10,6 +10,10 @@ on:
     inputs:
       select:
         description: "Choose the golden set anew from the pinned dataset file (writes the list as an artifact)"
+        type: boolean
+        default: false
+      baselines:
+        description: "Run the baselines on one runner (Kimina Lean Server, ProofServe) instead of the gate"
         type: boolean
         default: false
   push:
@@ -24,7 +28,7 @@ permissions:
 
 # A newer push supersedes the run before it.
 concurrency:
-  group: ai-proof-pf0-${{ github.ref }}-${{ inputs.select && 'select' || 'gate' }}
+  group: ai-proof-pf0-${{ github.ref }}-${{ inputs.select && 'select' || inputs.baselines && 'baselines' || 'gate' }}
   cancel-in-progress: true
 
 env:
@@ -92,8 +96,109 @@ jobs:
 
   # The golden set's texts, rebuilt from the pinned dataset file by the committed list and handed
   # to the platform jobs as an artifact. Nothing of them is committed.
+  # Run on request (workflow_dispatch, baselines = true), on one runner, with the gate's own
+  # items: the Kimina Lean Server against the pool path, ProofServe against `leanchecker`.
+  baselines:
+    if: ${{ inputs.baselines }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      RID: linux-x64
+      OUT: baselines
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The server's pinned requirements are made for Python 3.12.
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+
+      - name: Lean toolchain
+        run: python "$SPIKE/harness/toolchain.py" "$RID" "$PF0_WORK/toolchain" "$OUT/toolchain.json"
+
+      - name: Measuring prelude
+        run: python "$SPIKE/harness/smoke.py" prelude --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
+
+      - name: REPL
+        run: python "$SPIKE/harness/tools.py" repl --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
+
+      - name: Mathlib environment
+        run: python "$SPIKE/harness/mathlib.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --skip-hash
+
+      - name: Items
+        run: |
+          if [ -f "$SPIKE/golden/list.tsv" ]; then
+            . "$SPIKE/pins.env"
+            curl -fsSL --retry 3 --max-time 900 -o "$RUNNER_TEMP/numina.parquet" "$NUMINA_URL"
+            echo "$NUMINA_SHA256  $RUNNER_TEMP/numina.parquet" | sha256sum -c -
+            python -m pip install --quiet pyarrow
+            python "$SPIKE/golden/fetch.py" --parquet "$RUNNER_TEMP/numina.parquet" --list "$SPIKE/golden/list.tsv" --out items/items.jsonl
+          else
+            mkdir -p items
+            cp "$SPIKE/golden/smoke-mathlib.jsonl" items/items.jsonl
+          fi
+
+      # The reference on this very runner: the pool path with the same number of processes.
+      - name: Pool path (reference)
+        run: python "$SPIKE/harness/pool.py" --repl "$PF0_REPL" --bin "$LEAN_ROOT/bin" --lean-path "$PF0_WORK/prelude" --lean-path-file "$PF0_WORK/leanpath.json" --import Mathlib --items items/items.jsonl --out "$OUT/pool.jsonl" --work "$PF0_WORK/pool" --workers 4 --max-heartbeats "$MAX_HEARTBEATS"
+
+      - name: Kimina Lean Server
+        continue-on-error: true
+        timeout-minutes: 90
+        run: |
+          . "$SPIKE/pins.env"
+          git clone --quiet "$KIMINA_REPO" "$RUNNER_TEMP/kimina"
+          git -C "$RUNNER_TEMP/kimina" checkout --quiet "$KIMINA_COMMIT"
+          python -m venv "$RUNNER_TEMP/kimina-venv"
+          "$RUNNER_TEMP/kimina-venv/bin/python" -m pip install --quiet -r "$RUNNER_TEMP/kimina/requirements.txt"
+          "$RUNNER_TEMP/kimina-venv/bin/python" -m pip install --quiet "$RUNNER_TEMP/kimina"
+          (cd "$RUNNER_TEMP/kimina" && "$RUNNER_TEMP/kimina-venv/bin/prisma" generate)
+          python "$SPIKE/harness/baseline_kimina.py" --server "$RUNNER_TEMP/kimina" --python "$RUNNER_TEMP/kimina-venv/bin/python" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --repl "$PF0_REPL" --items items/items.jsonl --out "$OUT" --repls 4 --max-heartbeats "$MAX_HEARTBEATS"
+
+      # `leanchecker` over the gate's slice, module by module (the reference), then ProofServe
+      # over the same modules.
+      - name: Replay slice (reference)
+        continue-on-error: true
+        timeout-minutes: 60
+        run: |
+          python "$SPIKE/harness/replay.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
+          python -c "import json; print('\n'.join(m['module'] for m in json.load(open('$OUT/replay.json'))['modules']))" > "$OUT/roots.txt"
+
+      - name: ProofServe
+        continue-on-error: true
+        timeout-minutes: 90
+        run: |
+          . "$SPIKE/pins.env"
+          curl -fsSL --retry 3 --max-time 1800 -o "$RUNNER_TEMP/proofserve.tar.gz" "$PROOFSERVE_URL"
+          echo "$PROOFSERVE_SHA256  $RUNNER_TEMP/proofserve.tar.gz" | sha256sum -c -
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/install.py" "$PROOFSERVE_INSTALL_URL"
+          echo "$PROOFSERVE_INSTALL_SHA256  $RUNNER_TEMP/install.py" | sha256sum -c -
+          python "$RUNNER_TEMP/install.py" --archive "$RUNNER_TEMP/proofserve.tar.gz"
+          export PATH="$LEAN_ROOT/bin:$HOME/.local/bin:$PATH"
+          proofserve --version || true
+          set +e
+          start=$(date +%s)
+          timeout 3600 proofserve check "$PF0_WORK/mathlib4" --root-file "$OUT/roots.txt" --workers 4 > "$OUT/proofserve-receipt.json" 2> "$OUT/proofserve-stderr.txt"
+          code=$?
+          end=$(date +%s)
+          echo "{\"exit\": $code, \"seconds\": $((end - start))}" > "$OUT/proofserve.json"
+          cat "$OUT/proofserve.json"
+          tail -c 3000 "$OUT/proofserve-stderr.txt"
+          head -c 3000 "$OUT/proofserve-receipt.json"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: baselines
+          path: baselines
+          retention-days: 14
+          if-no-files-found: warn
+
   data:
-    if: ${{ !inputs.select }}
+    if: ${{ !inputs.select && !inputs.baselines }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
@@ -141,12 +246,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-24.04, rid: linux-x64, jobs: 4, processes: 6, every: 1 }
-          - { os: windows-2022, rid: win-x64, jobs: 3, processes: 6, every: 1 }
-          - { os: macos-15, rid: osx-arm64, jobs: 1, processes: 2, every: 1 }
-          - { os: ubuntu-24.04-arm, rid: linux-arm64, jobs: 4, processes: 6, every: 1 }
-          - { os: macos-15-intel, rid: osx-x64, jobs: 3, processes: 4, every: 1 }
-          - { os: windows-11-arm, rid: win-arm64, jobs: 3, processes: 3, every: 1 }
+          - { os: ubuntu-24.04, rid: linux-x64, jobs: 4, processes: 6, fresh: 12000, pool: 6000, small: 3000, one: 1500, modules: 50, split: 40, controls: 4, export: 6000, cap: 300 }
+          - { os: windows-2022, rid: win-x64, jobs: 3, processes: 6, fresh: 12000, pool: 6000, small: 3000, one: 1500, modules: 50, split: 40, controls: 4, export: 6000, cap: 300 }
+          - { os: macos-15, rid: osx-arm64, jobs: 1, processes: 2, fresh: 2700, pool: 1500, small: 1200, one: 900, modules: 12, split: 6, controls: 1, export: 1500, cap: 1200 }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64, jobs: 4, processes: 6, fresh: 12000, pool: 6000, small: 3000, one: 1500, modules: 50, split: 40, controls: 4, export: 6000, cap: 300 }
+          - { os: macos-15-intel, rid: osx-x64, jobs: 2, processes: 4, fresh: 1800, pool: 1200, small: 900, one: 600, modules: 12, split: 8, controls: 2, export: 1200, cap: 300 }
+          - { os: windows-11-arm, rid: win-arm64, jobs: 3, processes: 3, fresh: 1800, pool: 1200, small: 900, one: 600, modules: 12, split: 8, controls: 2, export: 1200, cap: 300 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 350
     env:
@@ -206,7 +311,7 @@ jobs:
 
       - name: Mathlib smoke, both paths
         id: smoke
-        if: ${{ !cancelled() && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success' }}
+        if: ${{ !cancelled() && env.GOLDEN != 'true' && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success' }}
         timeout-minutes: 60
         run: python "$SPIKE/harness/smoke.py" run --set mathlib --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --repl "$PF0_REPL" --jobs ${{ matrix.jobs }}
 
@@ -225,7 +330,7 @@ jobs:
         id: golden
         if: ${{ !cancelled() && env.GOLDEN == 'true' && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success' }}
         timeout-minutes: 240
-        run: python "$SPIKE/harness/check.py" --lean-root "$LEAN_ROOT" --lean-path "$PF0_WORK/prelude" --lean-path-file "$PF0_WORK/leanpath.json" --import Mathlib --items items/items.jsonl --out "$OUT/golden-fresh.jsonl" --work "$PF0_WORK/golden" --jobs ${{ matrix.jobs }} --max-heartbeats "$MAX_HEARTBEATS" --every ${{ matrix.every }}
+        run: python "$SPIKE/harness/check.py" --lean-root "$LEAN_ROOT" --lean-path "$PF0_WORK/prelude" --lean-path-file "$PF0_WORK/leanpath.json" --import Mathlib --items items/items.jsonl --out "$OUT/golden-fresh.jsonl" --work "$PF0_WORK/golden" --jobs ${{ matrix.jobs }} --max-heartbeats "$MAX_HEARTBEATS" --mixed --time-budget ${{ matrix.fresh }} --hard-cap ${{ matrix.cap }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ !cancelled() && steps.golden.outcome == 'success' }}
@@ -234,18 +339,6 @@ jobs:
           path: results-${{ matrix.rid }}/golden-fresh.jsonl
           retention-days: 14
 
-      # The same items through the pool path: the same number of processes, each importing once.
-      - name: Golden set, pooled processes
-        if: ${{ !cancelled() && env.GOLDEN == 'true' && steps.mathlib.outcome == 'success' && steps.repl.outcome == 'success' && steps.prelude.outcome == 'success' }}
-        timeout-minutes: 120
-        run: python "$SPIKE/harness/pool.py" --repl "$PF0_REPL" --bin "$LEAN_ROOT/bin" --lean-path "$PF0_WORK/prelude" --lean-path-file "$PF0_WORK/leanpath.json" --import Mathlib --items items/items.jsonl --out "$OUT/golden-pool.jsonl" --work "$PF0_WORK/golden-pool" --workers ${{ matrix.jobs }} --max-heartbeats "$MAX_HEARTBEATS" --every ${{ matrix.every }}
-
-      # One environment, built elsewhere, replayed by this platform's kernel.
-      - name: Replay a slice of the environment
-        if: ${{ !cancelled() && steps.mathlib.outcome == 'success' }}
-        timeout-minutes: 120
-        run: python "$SPIKE/harness/replay.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" ${{ matrix.processes >= 6 && '--together' || '' }}
-
       # Stage one of the split: check, export, and judge the export on this machine.
       - name: Check and export
         id: export
@@ -253,8 +346,8 @@ jobs:
         timeout-minutes: 150
         run: |
           if [ "$GOLDEN" = "true" ]; then
-            python "$SPIKE/harness/split.py" choose --items items/items.jsonl --ids "$OUT/split-ids.txt"
-            python "$SPIKE/harness/split.py" export --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items items/items.jsonl --ids "$OUT/split-ids.txt" --out "$OUT" --exports "exports-$RID" --max-heartbeats "$MAX_HEARTBEATS" --paranoid ${{ matrix.rid == 'linux-x64' && '5' || '0' }}
+            python "$SPIKE/harness/split.py" choose --items items/items.jsonl --ids "$OUT/split-ids.txt" --accepted ${{ matrix.split }} --controls ${{ matrix.controls }}
+            python "$SPIKE/harness/split.py" export --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items items/items.jsonl --ids "$OUT/split-ids.txt" --out "$OUT" --exports "exports-$RID" --max-heartbeats "$MAX_HEARTBEATS" --time-budget ${{ matrix.export }} --paranoid ${{ matrix.rid == 'linux-x64' && '5' || '0' }}
           else
             python "$SPIKE/harness/split.py" export --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items "$SPIKE/golden/smoke-mathlib.jsonl" --ids m-linarith,m-nlinarith,m-nlinarith3,m-norm-num,m-positivity,m-omega,m-simp,m-ring,m-aesop,m-incomplete,m-mismatch,m-axiom,m-native --out "$OUT" --exports "exports-$RID" --paranoid ${{ matrix.rid == 'linux-x64' && '3' || '0' }}
           fi
@@ -266,6 +359,43 @@ jobs:
           path: exports-${{ matrix.rid }}
           retention-days: 3
           if-no-files-found: warn
+
+      # The same items through the pool path: the same number of processes, each importing once.
+      - name: Golden set, pooled processes
+        if: ${{ !cancelled() && env.GOLDEN == 'true' && steps.mathlib.outcome == 'success' && steps.repl.outcome == 'success' && steps.prelude.outcome == 'success' }}
+        timeout-minutes: 120
+        run: python "$SPIKE/harness/pool.py" --repl "$PF0_REPL" --bin "$LEAN_ROOT/bin" --lean-path "$PF0_WORK/prelude" --lean-path-file "$PF0_WORK/leanpath.json" --import Mathlib --items items/items.jsonl --out "$OUT/golden-pool.jsonl" --work "$PF0_WORK/golden-pool" --workers ${{ matrix.jobs }} --max-heartbeats "$MAX_HEARTBEATS" --mixed --time-budget ${{ matrix.pool }}
+
+      # One pooled process taking the items in one fixed order: every platform's process has then
+      # the same history, which the pool's heartbeat counts depend on.
+      - name: Golden set, one pooled process in a fixed order
+        if: ${{ !cancelled() && env.GOLDEN == 'true' && steps.mathlib.outcome == 'success' && steps.repl.outcome == 'success' && steps.prelude.outcome == 'success' }}
+        timeout-minutes: 60
+        run: python "$SPIKE/harness/pool.py" --repl "$PF0_REPL" --bin "$LEAN_ROOT/bin" --lean-path "$PF0_WORK/prelude" --lean-path-file "$PF0_WORK/leanpath.json" --import Mathlib --items items/items.jsonl --out "$OUT/golden-pool-one.jsonl" --work "$PF0_WORK/golden-pool-one" --workers 1 --max-heartbeats "$MAX_HEARTBEATS" --mixed --limit 150 --time-budget ${{ matrix.one }}
+
+      # The same items against a smaller environment (the tactic framework and the elementary
+      # number systems): what a profile that imports a part of Mathlib still accepts.
+      - name: Golden set, a smaller environment
+        if: ${{ !cancelled() && env.GOLDEN == 'true' && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success' }}
+        timeout-minutes: 100
+        run: python "$SPIKE/harness/check.py" --lean-root "$LEAN_ROOT" --lean-path "$PF0_WORK/prelude" --lean-path-file "$PF0_WORK/leanpath.json" --small-profile --items items/items.jsonl --out "$OUT/golden-small.jsonl" --work "$PF0_WORK/golden-small" --jobs ${{ matrix.jobs }} --max-heartbeats "$MAX_HEARTBEATS" --mixed --time-budget ${{ matrix.small }} --hard-cap ${{ matrix.cap }}
+
+      # What the heartbeat count depends on, on one runner: the same items with parallel
+      # elaboration left on (Lean's default for the command line), and with one worker thread.
+      - name: Options that touch the count (one runner)
+        if: ${{ !cancelled() && env.GOLDEN == 'true' && matrix.rid == 'linux-x64' && steps.golden.outcome == 'success' }}
+        timeout-minutes: 90
+        run: |
+          COMMON=(--lean-root "$LEAN_ROOT" --lean-path "$PF0_WORK/prelude" --lean-path-file "$PF0_WORK/leanpath.json" --import Mathlib --items items/items.jsonl --jobs ${{ matrix.jobs }} --max-heartbeats "$MAX_HEARTBEATS" --mixed --limit 200 --sample 0)
+          python "$SPIKE/harness/check.py" "${COMMON[@]}" --out "$OUT/golden-async.jsonl" --work "$PF0_WORK/golden-async" --async true
+          python "$SPIKE/harness/check.py" "${COMMON[@]}" --out "$OUT/golden-threads1.jsonl" --work "$PF0_WORK/golden-threads1" --threads 1
+          python "$SPIKE/harness/check.py" "${COMMON[@]}" --out "$OUT/golden-again.jsonl" --work "$PF0_WORK/golden-again"
+
+      # One environment, built elsewhere, replayed by this platform's kernel.
+      - name: Replay a slice of the environment
+        if: ${{ !cancelled() && steps.mathlib.outcome == 'success' }}
+        timeout-minutes: 120
+        run: python "$SPIKE/harness/replay.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --limit ${{ matrix.modules }} ${{ matrix.processes >= 6 && '--together' || '' }}
 
       - name: Memory of several processes
         if: ${{ !cancelled() && steps.mathlib.outcome == 'success' && steps.repl.outcome == 'success' && steps.prelude.outcome == 'success' }}
@@ -301,20 +431,23 @@ jobs:
   # Stage two of the split, on another operating system and CPU: the export of one machine is
   # judged against the challenge on a machine that never saw the solution's text.
   confirm:
-    needs: [data, platform]
+    needs: data
     if: ${{ !cancelled() && needs.data.result == 'success' }}
+    permissions:
+      contents: read
+      actions: read
     name: confirm ${{ matrix.from }} on ${{ matrix.rid }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { from: linux-x64, os: macos-15-intel, rid: osx-x64 }
-          - { from: linux-x64, os: windows-2022, rid: win-x64 }
-          - { from: win-x64, os: ubuntu-24.04-arm, rid: linux-arm64 }
-          - { from: osx-arm64, os: ubuntu-24.04, rid: linux-x64 }
-          - { from: linux-arm64, os: macos-15, rid: osx-arm64 }
+          - { from: linux-x64, os: macos-15-intel, rid: osx-x64, limit: 12, budget: 1800 }
+          - { from: linux-x64, os: windows-2022, rid: win-x64, limit: 0, budget: 6000 }
+          - { from: win-x64, os: ubuntu-24.04-arm, rid: linux-arm64, limit: 0, budget: 6000 }
+          - { from: osx-arm64, os: ubuntu-24.04, rid: linux-x64, limit: 0, budget: 6000 }
+          - { from: linux-arm64, os: macos-15, rid: osx-arm64, limit: 6, budget: 1500 }
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 240
+    timeout-minutes: 350
     env:
       RID: ${{ matrix.rid }}
       OUT: confirm-${{ matrix.from }}-on-${{ matrix.rid }}
@@ -325,11 +458,6 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.14'
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: exports-${{ matrix.from }}
-          path: exports
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: needs.data.outputs.ready == 'true'
@@ -359,12 +487,29 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --ro-bind / / --unshare-all /usr/bin/true && echo "bwrap starts with user namespaces let through" || echo "bwrap still does not start"
 
+      # This job starts with the platform jobs and waits here for the export of the other
+      # machine (an artifact of this very run).
+      - name: Wait for the export
+        timeout-minutes: 215
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WANTED: exports-${{ matrix.from }}
+        run: |
+          for attempt in $(seq 1 400); do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" --jq '.artifacts[].name' | grep -qx "$WANTED"; then
+              break
+            fi
+            sleep 30
+          done
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$WANTED" --dir exports
+          ls exports | wc -l
+
       - name: Confirm
         timeout-minutes: 180
         run: |
           ITEMS="$SPIKE/golden/smoke-mathlib.jsonl"
           if [ "$GOLDEN" = "true" ]; then ITEMS=items/items.jsonl; fi
-          python "$SPIKE/harness/split.py" confirm --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items "$ITEMS" --exports exports --out "$OUT" --label "${{ matrix.from }}-on-$RID" --max-heartbeats "$MAX_HEARTBEATS" --sandbox
+          python "$SPIKE/harness/split.py" confirm --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items "$ITEMS" --exports exports --out "$OUT" --label "${{ matrix.from }}-on-$RID" --max-heartbeats "$MAX_HEARTBEATS" --limit ${{ matrix.limit }} --time-budget ${{ matrix.budget }} --sandbox
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ !cancelled() }}

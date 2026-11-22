@@ -26,7 +26,8 @@ import shutil
 import sys
 import time
 
-from pf0lib import EXE, IS_LINUX, STANDARD_AXIOMS, lean_environment, read_jsonl, run_measured, sha256_file, write_json
+from pf0lib import (EXE, IS_LINUX, STANDARD_AXIOMS, lean_environment, read_jsonl, run_measured, sha256_file,
+                    sha256_text, write_json)
 
 # What `lake comparator` exports beside the theorem (Lake.Check: builtinTargets, primitiveTargets).
 QUOT = ["Quot", "Quot.mk", "Quot.lift", "Quot.ind"]
@@ -51,7 +52,10 @@ class Stage:
 
     def module(self, folder: str, module: str, item: dict, text_key: str) -> dict:
         """Elaborates one text as the module `module` in `folder` and exports its theorem."""
-        lines = ["import Mathlib", f"set_option maxHeartbeats {item.get('max_heartbeats') or self.max_heartbeats}"]
+        budget = self.max_heartbeats
+        if text_key == "solution" and item.get("max_heartbeats"):
+            budget = item["max_heartbeats"]
+        lines = ["import Mathlib", f"set_option maxHeartbeats {budget}"]
         lines += item.get("opens", [])
         if text_key == "solution":
             lines += item.get("solution_pre", [])
@@ -136,7 +140,11 @@ def export(options: argparse.Namespace) -> int:
     os.makedirs(options.exports, exist_ok=True)
     budget = options.transfer_mb << 20
     rows = []
+    began = time.monotonic()
     for index, name in enumerate(ids):
+        if options.time_budget and time.monotonic() - began > options.time_budget:
+            print(f"time budget reached after {index} of {len(ids)} items")
+            break
         item = items[name]
         folder = os.path.join(stage.work, "split", name)
         os.makedirs(folder, exist_ok=True)
@@ -173,9 +181,18 @@ def confirm(options: argparse.Namespace) -> int:
     items = {item["id"]: item for item in read_jsonl(options.items)}
     rows = []
     names = sorted(entry[:-len(".json")] for entry in os.listdir(options.exports) if entry.endswith(".json"))
+    if options.limit and len(names) > options.limit:
+        # Evenly over the sorted names, so that accepted and made items both stay in.
+        step = len(names) / options.limit
+        names = [names[int(index * step)] for index in range(options.limit)]
+    names.sort(key=sha256_text)
+    began = time.monotonic()
     for name in names:
         if name not in items:
             continue
+        if options.time_budget and time.monotonic() - began > options.time_budget:
+            print(f"time budget reached after {len(rows)} of {len(names)} exports")
+            break
         item = items[name]
         with open(os.path.join(options.exports, name + ".json"), encoding="utf-8") as handle:
             sent = json.load(handle)
@@ -210,7 +227,9 @@ def choose(options: argparse.Namespace) -> int:
     chosen = accepted[::step][:options.accepted]
     for rule, count in (("budget_edge", 4), ("sorry", 3), ("mismatch", 4), ("axiom", 3), ("fact:native_decide", 2),
                         ("fact:decide", 2)):
-        chosen += sorted(item["id"] for item in items if item.get("made") == rule)[:count]
+        chosen += sorted(item["id"] for item in items if item.get("made") == rule)[:min(count, options.controls)]
+    # A mixed order, the same everywhere: a run that stops at its time budget has done some of each kind.
+    chosen.sort(key=sha256_text)
     os.makedirs(os.path.dirname(os.path.abspath(options.ids)), exist_ok=True)
     with open(options.ids, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("\n".join(chosen) + "\n")
@@ -231,6 +250,10 @@ def main() -> int:
     parser.add_argument("--transfer-mb", type=int, default=400)
     parser.add_argument("--paranoid", type=int, default=0)
     parser.add_argument("--accepted", type=int, default=40)
+    parser.add_argument("--controls", type=int, default=4, help="made items per rule, at most")
+    parser.add_argument("--limit", type=int, default=0, help="confirm: exports taken, at most")
+    parser.add_argument("--time-budget", type=float, default=0.0,
+                        help="seconds after which no further item is started (0: no limit)")
     parser.add_argument("--sandbox", action="store_true")
     parser.add_argument("--label", default="local")
     options = parser.parse_args()

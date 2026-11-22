@@ -22,7 +22,8 @@ import sys
 import threading
 import time
 
-from pf0lib import JsonlWriter, assemble_body, classify, lean_environment, live_memory, read_jsonl, write_json
+from pf0lib import (SMALL_PROFILE, JsonlWriter, assemble_body, classify, lean_environment, live_memory, read_jsonl,
+                    stable_order, write_json)
 
 
 class Repl:
@@ -118,6 +119,8 @@ def worker(index: int, options: argparse.Namespace, env: dict, items: "queue.Que
         repl.close()
         return
     while True:
+        if options.time_budget and time.monotonic() - options.started > options.time_budget:
+            break
         try:
             item = items.get_nowait()
         except queue.Empty:
@@ -182,7 +185,16 @@ def main() -> int:
     parser.add_argument("--allow-native", action="store_true")
     parser.add_argument("--every", type=int, default=1)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--small-profile", action="store_true",
+                        help="import the smaller environment of pf0lib.SMALL_PROFILE instead of --import")
+    parser.add_argument("--time-budget", type=float, default=0.0,
+                        help="seconds after which no further item is started (0: no limit)")
+    parser.add_argument("--mixed", action="store_true",
+                        help="take the items in the platform-independent mixed order of pf0lib.stable_order")
     options = parser.parse_args()
+    if options.small_profile:
+        options.imports = list(SMALL_PROFILE)
+    options.started = time.monotonic()
     options.work = os.path.abspath(options.work)
     os.makedirs(options.work, exist_ok=True)
     if options.lean_path_file:
@@ -190,6 +202,8 @@ def main() -> int:
             options.lean_path = json.load(handle) + options.lean_path
 
     items = [item for item in read_jsonl(options.items) if not item.get("memory_mb")]
+    if options.mixed:
+        items = stable_order(items)
     if options.every > 1:
         items = items[::options.every]
     if options.limit:

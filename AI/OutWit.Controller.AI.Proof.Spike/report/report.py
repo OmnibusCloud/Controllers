@@ -154,6 +154,7 @@ def main() -> int:
         runs = start.get("mathlib") or []
         good = [run for run in runs if run.get("exit") == 0]
         core = [run for run in (start.get("core") or []) if run.get("exit") == 0]
+        small = [run for run in (start.get("small") or []) if run.get("exit") == 0]
         if not runs:
             continue
         warm = good[1:] or good
@@ -161,27 +162,44 @@ def main() -> int:
                      median([run["wall_s"] for run in warm]), median([run["user_s"] for run in warm]),
                      median([run["sys_s"] for run in warm]), mib(median([run["peak_rss"] for run in good])),
                      mib(median([run.get("peak_private") for run in good])),
+                     median([run["wall_s"] for run in small[1:] or small]),
+                     mib(median([run["peak_rss"] for run in small])),
                      median([run["wall_s"] for run in core[1:] or core])])
     out += ["### Start-up: a process that only imports the environment", ""] + table(
         ["platform", "first run s", "next runs s", "user s", "system s", "peak resident MiB", "peak private MiB",
-         "import of core Lean only s"], rows)
+         "the smaller profile s", "its peak resident MiB", "core Lean only s"], rows)
 
     # ------------------------------------------------------------------ golden set
     golden = {rid: load_rows(path(rid, "golden-fresh.jsonl")) for rid in rids}
     golden = {rid: rows for rid, rows in golden.items() if rows}
-    if golden:
-        verdicts = sorted({outcome(row) for rows in golden.values() for row in rows.values()})
+    pooled_golden = {rid: load_rows(path(rid, "golden-pool.jsonl")) for rid in rids}
+    pooled_golden = {rid: rows for rid, rows in pooled_golden.items() if rows}
+    small_golden = {rid: load_rows(path(rid, "golden-small.jsonl")) for rid in rids}
+    small_golden = {rid: rows for rid, rows in small_golden.items() if rows}
+    one_golden = {rid: load_rows(path(rid, "golden-pool-one.jsonl")) for rid in rids}
+    one_golden = {rid: rows for rid, rows in one_golden.items() if rows}
+    for data, name, heading in ((golden, "golden-fresh", "Golden set, one process per item"),
+                                (pooled_golden, "golden-pool", "Golden set, pooled processes"),
+                                (one_golden, "golden-pool-one",
+                                 "Golden set, one pooled process taking the items in one fixed order"),
+                                (small_golden, "golden-small",
+                                 "Golden set against a smaller environment, one process per item")):
+        if not data:
+            continue
+        verdicts = sorted({outcome(row) for rows in data.values() for row in rows.values()})
         rows = []
-        for rid, items in golden.items():
-            summary = load(path(rid, "golden-fresh-summary.json")) or {}
+        for rid, items in data.items():
+            summary = load(path(rid, name + "-summary.json")) or {}
             counts = {verdict: sum(1 for row in items.values() if outcome(row) == verdict) for verdict in verdicts}
             rows.append([rid, len(items)] + [counts[verdict] or "" for verdict in verdicts]
-                        + [summary.get("jobs"), summary.get("elapsed_s"), summary.get("items_per_minute")])
-        out += ["### Golden set, one process per item", ""] + table(
+                        + [summary.get("jobs") or summary.get("workers"), summary.get("elapsed_s"),
+                           summary.get("items_per_minute")])
+        out += [f"### {heading}", ""] + table(
             ["platform", "items"] + verdicts + ["at a time", "seconds", "items per minute"], rows)
 
-        def compare(platforms: list, title: str) -> int:
+        def compare(platforms: list, title: str, data: dict = data) -> int:
             nonlocal out
+            golden = data
             platforms = [rid for rid in platforms if rid in golden]
             if len(platforms) < 2:
                 return 0
@@ -233,15 +251,67 @@ def main() -> int:
         hard += compare(V1, "The three platforms the client ships")
         compare(ORDER, "All six")
 
-        # the list's own expectation (what the selecting runner said)
+        # the list's own expectation (what the selecting runner said, by the fresh-process path)
         rows = []
-        for rid, items in golden.items():
+        for rid, items in data.items():
             expected = [row for row in items.values() if row.get("expect")]
             if expected:
                 agree = sum(1 for row in expected if row["expect"] == outcome(row))
                 rows.append([rid, len(expected), agree])
         if rows:
             out += table(["platform", "items with a listed verdict", "same as listed"], rows)
+
+    # ------------------------------------------------------------------ the smaller environment against the whole
+    rows = []
+    for rid, small in small_golden.items():
+        full = golden.get(rid) or {}
+        both = [item for item in small if item in full]
+        accepted = [item for item in both if outcome(full[item]) == "accepted"]
+        kept = [item for item in accepted if outcome(small[item]) == "accepted"]
+        same_count = sum(1 for item in kept if small[item].get("heartbeats") == full[item].get("heartbeats"))
+        summary = load(path(rid, "golden-small-summary.json")) or {}
+        wall_small = median([small[item]["wall_s"] for item in both])
+        wall_full = median([full[item]["wall_s"] for item in both])
+        rows.append([rid, " ".join(summary.get("imports") or []), len(both), len(accepted), len(kept),
+                     same_count, wall_small, wall_full,
+                     mib(median([small[item].get("peak_rss") for item in both])),
+                     mib(median([full[item].get("peak_rss") for item in both]))])
+    if rows:
+        out += ["### The smaller environment against the whole of Mathlib (the same items, the same runner)", ""] + table(
+            ["platform", "imports", "items in both runs", "accepted with all of Mathlib", "of them accepted with the smaller one",
+             "of them with the same heartbeats", "process s (median), smaller", "process s, whole",
+             "peak resident MiB, smaller", "peak resident MiB, whole"], rows)
+
+    # ------------------------------------------------------------------ options that touch the count
+    rows = []
+    for rid in rids:
+        for name, label, main_rows in (
+                ("golden-again", "fresh: the same options once more", golden.get(rid) or {}),
+                ("golden-async", "fresh: parallel elaboration on (`-DElab.async=true`)", golden.get(rid) or {}),
+                ("golden-threads1", "fresh: one worker thread (`--threads=1`)", golden.get(rid) or {}),
+                ("golden-pool-one", "pool: one process in the list's order, against the pool run above",
+                 pooled_golden.get(rid) or {})):
+            other = load_rows(path(rid, name + ".jsonl"))
+            if not other or not main_rows:
+                continue
+            both = [item for item in other if item in main_rows and outcome(other[item]) not in MACHINE
+                    and outcome(main_rows[item]) not in MACHINE]
+            same = sum(1 for item in both if outcome(other[item]) == outcome(main_rows[item]))
+            pairs = [(other[item].get("heartbeats"), main_rows[item].get("heartbeats")) for item in both]
+            pairs = [(a, b) for a, b in pairs if a and b]
+            equal = sum(1 for a, b in pairs if a == b)
+            ratio = median([a / b for a, b in pairs])
+            wall = sum(other[item]["wall_s"] for item in both)
+            cpu = sum(other[item].get("user_s", 0) + other[item].get("sys_s", 0) for item in both)
+            base_wall = sum(main_rows[item]["wall_s"] for item in both)
+            base_cpu = sum(main_rows[item].get("user_s", 0) + main_rows[item].get("sys_s", 0) for item in both)
+            rows.append([rid, label, len(both), same, f"{equal} of {len(pairs)}", ratio,
+                         round(wall, 1), round(cpu / wall, 2) if wall else None,
+                         round(base_wall, 1), round(base_cpu / base_wall, 2) if base_wall else None])
+    if rows:
+        out += ["### What the heartbeat count depends on (the same items, one runner)", ""] + table(
+            ["platform", "variant", "items", "same verdict", "same heartbeats", "heartbeats / main run (median)",
+             "wall s", "CPU / wall", "main run wall s", "main run CPU / wall"], rows)
 
     # ------------------------------------------------------------------ pool against fresh
     rows = []

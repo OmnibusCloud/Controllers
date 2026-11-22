@@ -62,7 +62,8 @@ def choose(source: str, count_random: int, count_bignum: int, seed: int) -> list
     # The modules with long literals are few: the seeded choice fills the slice up.
     count_random += count_bignum - len(bignum)
     chosen = random.Random(seed).sample(rest, min(count_random, len(rest)))
-    return bignum + [(name, "random", 0) for name in sorted(chosen)]
+    # In the order of the draw: a platform that replays fewer modules replays the first ones.
+    return bignum + [(name, "random", 0) for name in chosen]
 
 
 def main() -> int:
@@ -74,6 +75,7 @@ def main() -> int:
     parser.add_argument("--bignum", type=int, default=25)
     parser.add_argument("--seed", type=int, default=20261122)
     parser.add_argument("--together", action="store_true")
+    parser.add_argument("--limit", type=int, default=0, help="replay only the first N modules of the slice")
     options = parser.parse_args()
     work = os.path.abspath(options.work)
     bin_dir = os.path.join(os.path.abspath(options.lean_root), "bin")
@@ -83,6 +85,8 @@ def main() -> int:
         lean_path = json.load(handle)
     env = lean_environment(lean_path, bin_dir=bin_dir)
     chosen = choose(source, options.random, options.bignum, options.seed)
+    if options.limit:
+        chosen = chosen[:options.limit]
     print(f"{len(chosen)} modules: {sum(1 for _n, kind, _d in chosen if kind == 'bignum')} by number literals "
           f"(longest {max([d for _n, _k, d in chosen] or [0])} digits), the rest by seed {options.seed}")
 
@@ -107,9 +111,9 @@ def main() -> int:
         # `leanchecker` replays several modules in one process, each as a task: tried with a
         # few modules and with the whole slice.
         record["together"] = []
-        for count in (2, 5, len(chosen)):
+        for count in (2, len(chosen)):
             names = [name for name, _kind, _digits in chosen[:count]]
-            out = run_measured([checker] + names, env=env, cwd=source, timeout=3600)
+            out = run_measured([checker] + names, env=env, cwd=source, timeout=420)
             entry = {"modules": len(names), "exit": out["exit"], "killed": out["killed"], "wall_s": out["wall_s"],
                      "user_s": out["user_s"], "sys_s": out["sys_s"], "peak_rss": out["peak_rss"],
                      "peak_private": out.get("peak_private"),

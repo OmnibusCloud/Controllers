@@ -21,6 +21,10 @@ IS_LINUX = sys.platform.startswith("linux")
 EXE = ".exe" if IS_WINDOWS else ""
 
 STANDARD_AXIOMS = ("propext", "Classical.choice", "Quot.sound")
+# A smaller environment, measured beside the whole of Mathlib: the tactic framework and the
+# elementary number systems (what most competition statements are written in).
+SMALL_PROFILE = ["Mathlib.Tactic", "Mathlib.Basic.Real.Basic", "Mathlib.Basic.Complex.Basic",
+                 "Mathlib.Data.Nat.Prime.Basic", "Mathlib.Algebra.BigOperators.Group.Finset.Basic"]
 SORRY_AXIOM = "sorryAx"
 # The words Lean's own budget error carries (Core.checkMaxHeartbeats).
 BUDGET_MARKERS = ("maximum number of heartbeats", "(deterministic) timeout")
@@ -55,6 +59,13 @@ def sha256_file(path: str, chunk: int = 1 << 20) -> str:
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def stable_order(items: list) -> list:
+    """The items in an order that is the same on every platform and mixes the classes of the
+    set (by the SHA-256 of the id): a run that stops at a time budget has then checked a prefix
+    every other platform has checked too."""
+    return sorted(items, key=lambda item: sha256_text(item["id"]))
 
 
 def tree_bytes(root: str) -> tuple[int, int]:
@@ -490,7 +501,13 @@ def classify(item: dict, messages: list, spans: dict, allow_native: bool = False
         row["value_hash"] = report.get("value_hash")
         row["challenge_kind"] = report.get("challenge_kind")
 
-    if report is None:
+    if report is None and "c" in marks and not errors["c"] and solution_errors:
+        # Lean gave up before the report (its limit of errors in one file): the challenge was
+        # elaborated, the solution was reached and failed.
+        row["status"] = "ok"
+        budget = any(marker in text for text in solution_errors for marker in BUDGET_MARKERS)
+        row["verdict"] = "budget" if budget else "rejected"
+    elif report is None:
         row["verdict"] = None
         row["status"] = "no_report"
     elif errors["c"] or report.get("challenge_kind") == "missing":

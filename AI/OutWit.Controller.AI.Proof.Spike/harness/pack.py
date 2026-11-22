@@ -1,6 +1,6 @@
 """PF-0 spike: the delivery options of the environment, measured on one runner.
 
-    pack.py --lean-root <toolchain root> --work <dir> --out <results dir> [--levels 3,10,19]
+    pack.py --lean-root <toolchain root> --work <dir> --out <results dir> [--levels 3,10]
 
   * Our own asset with Mathlib's compressor: the .ltar files of the cache as they are (bytes),
     unpacked into an empty folder by the `leantar` the toolchain ships, with no Mathlib
@@ -24,13 +24,13 @@ import subprocess
 import sys
 import time
 
-from pf0lib import EXE, lean_environment, run_measured, sha256_file, tree_bytes, write_json
+from pf0lib import EXE, SMALL_PROFILE, lean_environment, run_measured, sha256_file, tree_bytes, write_json
 
 NEEDED = (".olean", ".olean.server", ".olean.private", ".ir")
-ROOTS = ["Mathlib", "Mathlib.Tactic", "Mathlib.Data.Real.Basic", "Mathlib.Data.Nat.Prime.Basic",
+ROOTS = ["Mathlib", "Mathlib.Tactic", "Mathlib.Basic.Real.Basic", "Mathlib.Data.Nat.Prime.Basic",
          "Mathlib.Algebra.BigOperators.Group.Finset.Basic", "Mathlib.Analysis.SpecialFunctions.Pow.Real",
          "Mathlib.Analysis.SpecialFunctions.Trigonometric.Basic", "Mathlib.NumberTheory.ArithmeticFunction.Defs",
-         "Mathlib.Topology.Basic", "Mathlib.Data.Complex.Basic", "Mathlib.LinearAlgebra.Matrix.Determinant.Basic"]
+         "Mathlib.Topology.Basic", "Mathlib.Basic.Complex.Basic", "Mathlib.LinearAlgebra.Matrix.Determinant.Basic"]
 IMPORT = re.compile(r"^(?:public\s+|private\s+)?(?:meta\s+)?import\s+(?:all\s+)?(\S+)")
 TWO_GIB = 1 << 31
 
@@ -43,12 +43,16 @@ def kind_of(name: str) -> str | None:
 
 
 def needed_files(root: str) -> list:
+    """The compiled files Lean reads, under the library folders (a `lake` configuration compiled
+    beside them is not one of them)."""
     found = []
     for folder, _dirs, names in os.walk(root):
         for name in names:
             if kind_of(name):
                 path = os.path.join(folder, name)
-                found.append((os.path.relpath(path, root).replace(os.sep, "/"), path))
+                relative = os.path.relpath(path, root).replace(os.sep, "/")
+                if "/build/lib/lean/" in "/" + relative:
+                    found.append((relative, path))
     found.sort()
     return found
 
@@ -74,7 +78,7 @@ def imports_of(path: str) -> list:
                 if depth:
                     depth += line.count("/-") - line.count("-/")
                     continue
-                if not line or line.startswith("--") or line == "module" or line == "prelude":
+                if not line or line.startswith("--") or line.split()[0] in ("module", "prelude"):
                     continue
                 if line.startswith("/-"):
                     depth = line.count("/-") - line.count("-/")
@@ -114,17 +118,18 @@ def closures(source: str, lean_path: list) -> list:
                         sources[module] = os.path.join(folder, name)
     graph = {module: [name for name in imports_of(path) if name in sizes] for module, path in sources.items()}
     out = []
-    for root in ROOTS:
-        if root not in graph:
+    for roots in [[root] for root in ROOTS] + [list(SMALL_PROFILE)]:
+        if any(root not in graph for root in roots):
             continue
-        seen = {root}
-        stack = [root]
+        seen = set(roots)
+        stack = list(roots)
         while stack:
             for name in graph.get(stack.pop(), []):
                 if name not in seen:
                     seen.add(name)
                     stack.append(name)
-        out.append({"root": root, "modules": len(seen), "bytes": sum(sizes[m] for m in seen),
+        label = roots[0] if len(roots) == 1 else "the smaller profile: " + ", ".join(roots)
+        out.append({"root": label, "roots": roots, "modules": len(seen), "bytes": sum(sizes[m] for m in seen),
                     "needed_bytes": sum(needed.get(m, 0) for m in seen)})
     return out
 
@@ -134,7 +139,7 @@ def main() -> int:
     parser.add_argument("--lean-root", required=True)
     parser.add_argument("--work", required=True)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--levels", default="3,10,19")
+    parser.add_argument("--levels", default="3,10")
     options = parser.parse_args()
     work = os.path.abspath(options.work)
     bin_dir = os.path.join(os.path.abspath(options.lean_root), "bin")
@@ -228,7 +233,7 @@ def main() -> int:
         env = dict(os.environ)
         env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
         env["MATHLIB_CACHE_DIR"] = folder
-        out = run_measured([lake, "exe", "cache", "get-", entry["root"]], env=env, cwd=source, timeout=1800)
+        out = run_measured([lake, "exe", "cache", "get-"] + entry["roots"], env=env, cwd=source, timeout=1800)
         if out["exit"] == 0:
             size = 0
             count = 0

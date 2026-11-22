@@ -97,7 +97,8 @@ def main() -> int:
     lean = os.path.join(root, "bin", "lean" + EXE)
     common = [sys.executable, os.path.join(HERE, "check.py"), "--lean", lean,
               "--lean-path", os.path.join(work, "prelude"), "--lean-path-file", os.path.join(work, "leanpath.json"),
-              "--import", "Mathlib", "--items", options.items, "--jobs", str(options.jobs), "--sample", "0"]
+              "--import", "Mathlib", "--items", options.items, "--jobs", str(options.jobs), "--sample", "0",
+              "--mixed"]
     if options.limit:
         common += ["--limit", str(options.limit)]
     runs = {}

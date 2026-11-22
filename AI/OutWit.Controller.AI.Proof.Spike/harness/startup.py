@@ -13,7 +13,7 @@ import json
 import os
 import sys
 
-from pf0lib import EXE, lean_environment, run_measured, system_memory, write_json
+from pf0lib import EXE, SMALL_PROFILE, lean_environment, run_measured, system_memory, write_json
 
 
 def main() -> int:
@@ -31,7 +31,8 @@ def main() -> int:
     folder = os.path.join(work, "startup")
     os.makedirs(folder, exist_ok=True)
     record = {}
-    for name, text in (("mathlib", "import Mathlib\n"), ("core", "import Lean\n")):
+    small = "".join(f"import {name}\n" for name in SMALL_PROFILE)
+    for name, text in (("core", "import Lean\n"), ("small", small), ("mathlib", "import Mathlib\n")):
         path = os.path.join(folder, f"{name}.lean")
         with open(path, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
@@ -47,8 +48,11 @@ def main() -> int:
             if out["exit"] != 0:
                 print((out["stdout"] + out["stderr"])[-2000:])
                 break
+            if out["wall_s"] > 240 and index >= 1:
+                # A machine this slow at it is not asked a third time.
+                break
         record[name] = runs
-    write_json(os.path.join(options.out, "startup.json"), record)
+        write_json(os.path.join(options.out, "startup.json"), record)
     return 0 if all(run["exit"] == 0 for runs in record.values() for run in runs) else 1
 
 
