@@ -1,0 +1,3 @@
+# The published schema of a problem set's row goes into the package as it is: LF on every
+# checkout, so the package carries the same bytes whatever machine packs it
+docs/*.schema.json text eol=lf

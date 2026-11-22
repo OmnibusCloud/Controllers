@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Smt.Model/docs/smt-problems.schema.json",
+  "title": "Smt problem set line",
+  "description": "One row of an Smt problem set: one problem and what is asked of it. A problem set is JSON lines: one object per line, no enclosing array, UTF-8; a line ends with a line feed, with or without a carriage return before it, a blank line is no row, and a byte order mark at the very start is skipped. The reader takes exactly what this schema allows: a line that is not valid UTF-8 or not one JSON object, a row with a field that is not listed here (a misspelt one is such a field), with a field given twice, or with a value of another type (null included) or outside its range is refused, with a fixed code and by the field's name. Beyond what a schema can say: every string must be valid Unicode (half of a surrogate pair written as an escape is refused); a line is at most 16777216 bytes (16 MiB), its line end not counted; a set has at most 1000000 rows, and the row after that is refused and ends the reading; an id names one row of its set, and the first row with an id keeps it; 'tags' is at most 256 bytes of UTF-8 (this schema counts characters). The fields that belong to one query are held to the row's query by the conditions below when the row names its query; a row that names none takes the query of the run's options, and its fields are held to that query in the same way, which this schema cannot see. 'smt2' is sanitized (what becomes of a command, the shapes, the rules of single tokens and the ceilings are in the README of the package, section 'Sanitizing a problem'), and so is every term of 'values' and 'goal' (exactly one s-expression of at most 65536 characters, held to the rules of single tokens); every name of 'project' is one symbol that names a constant the problem declares by declare-const or by a declare-fun of no arguments, and no constant is named twice, whether or not its name is written between bars. A refused row does not stop the reading: the rows after it are read.",
+  "type": "object",
+  "required": ["id", "smt2"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._/+:@=-]{1,64}$",
+      "description": "The name of the problem in its set and in every result: 1 to 64 characters, each a letter A-Z or a-z, a digit, or one of . _ - / + : @ =. No two rows of a set have one id."
+    },
+    "smt2": {
+      "type": "string",
+      "description": "The problem: an SMT-LIB 2.6 script of declarations, definitions and assertions, at most 4194304 characters. It may end with check-sat, get-model, get-value, get-info and exit, which are stripped: the query decides what runs. Every other command, and a text that is not SMT-LIB as the reader of this package reads it, refuses the row with the sanitizer's own code."
+    },
+    "query": {
+      "type": "string",
+      "enum": ["check", "enumerate", "prove"],
+      "description": "What is asked of the problem. check: is it satisfiable, and by which model or which values. enumerate: its models, told apart by the values of the constants of 'project', up to 'max_models'. prove: does 'goal' follow from it. A row without a query takes the query of the run's options."
+    },
+    "values": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": { "type": "string" },
+      "description": "check only. The terms whose values are asked when the problem is satisfiable, 1 to 256, each one term; without it the whole model is asked."
+    },
+    "project": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": { "type": "string" },
+      "description": "enumerate only, and required there. The constants the models are told apart by, 1 to 256: two models that give them the same values are one model. Each is the name of a constant the problem declares, and none is named twice."
+    },
+    "max_models": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "description": "enumerate only. The most models to look for. Without it the number of the run's options, and without that 2: two models tell 'exactly one' from 'more than one'."
+    },
+    "goal": {
+      "type": "string",
+      "description": "prove only, and required there. What is to be proved from the problem: one Boolean term."
+    },
+    "expected": {
+      "type": "string",
+      "enum": ["sat", "unsat"],
+      "description": "check and enumerate only. The verdict the lab expects; it holds over the problem's own :status. A prove row expects nothing here: the verdict of a proof is about its goal."
+    },
+    "tags": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^\\P{Cc}*$",
+      "description": "Anything the lab wants to find again beside the result, passed through as it is: at most 256 bytes of UTF-8, without control characters."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["query"], "properties": { "query": { "const": "check" } } },
+      "then": { "properties": { "project": false, "max_models": false, "goal": false } }
+    },
+    {
+      "if": { "required": ["query"], "properties": { "query": { "const": "enumerate" } } },
+      "then": { "required": ["project"], "properties": { "values": false, "goal": false } }
+    },
+    {
+      "if": { "required": ["query"], "properties": { "query": { "const": "prove" } } },
+      "then": { "required": ["goal"], "properties": { "values": false, "project": false, "max_models": false, "expected": false } }
+    }
+  ]
+}

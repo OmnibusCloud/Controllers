@@ -10,6 +10,12 @@
     <PackageTags>smt;smt-lib;z3;witengine;witcloud;controller;data-types</PackageTags>
   </PropertyGroup>
 
+  <!-- The schema of a problem set's row, the contract a lab writes to: packed under docs/,
+       beside the README that names it. -->
+  <ItemGroup>
+    <None Update="docs\smt-problems.schema.json" Pack="true" PackagePath="docs\smt-problems.schema.json" />
+  </ItemGroup>
+
   <Import Project="..\..\Build\OutWit.Controller.Model.targets" />
 
 </Project>
