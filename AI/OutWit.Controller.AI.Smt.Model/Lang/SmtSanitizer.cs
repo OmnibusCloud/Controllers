@@ -7,7 +7,8 @@ namespace OutWit.Controller.AI.Smt.Model.Lang;
 /// <para>
 /// A problem states something: it declares, defines and asserts. What asks a solver to act
 /// (<c>check-sat</c>, <c>get-model</c>, <c>get-value</c>, <c>get-info</c>, <c>exit</c>) is
-/// stripped and counted: the query decides what runs. Every other command is refused, by name
+/// stripped and counted: the query decides what runs. Nothing that states the problem may
+/// follow its <c>check-sat</c> or its <c>exit</c>. Every other command is refused, by name
 /// when it is known and for being unknown when it is not; no command is passed on unexamined.
 /// </para>
 /// <para>

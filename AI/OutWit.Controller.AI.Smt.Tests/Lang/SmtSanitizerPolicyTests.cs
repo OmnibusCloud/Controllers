@@ -85,13 +85,13 @@ public class SmtSanitizerPolicyTests
     [TestCaseSource(nameof(StrippedNames))]
     public void StrippedCommandIsCountedAndNotKeptTest(string name)
     {
-        var problem = SmtSanitizerChecks.Accept($"(declare-const x Bool)\n({name})\n(assert x)\n\n({name} (x) :all \"text\")\n");
+        var problem = SmtSanitizerChecks.Accept($"(declare-const x Bool)\n(assert x)\n({name})\n\n({name} (x) :all \"text\")\n");
 
         Assert.That(problem.Commands.Select(command => command.Head), Is.EqualTo(new[] { "declare-const", "assert" }));
         Assert.That(problem.Canonical, Is.EqualTo("(declare-const x Bool)\n(assert x)\n"));
         Assert.That(problem.Stripped, Has.Count.EqualTo(1));
         Assert.That(problem.Stripped[name], Is.EqualTo(2));
-        Assert.That(problem.StrippedLines.Select(stripped => (stripped.Line, stripped.Command)), Is.EqualTo(new[] { (2, name), (5, name) }));
+        Assert.That(problem.StrippedLines.Select(stripped => (stripped.Line, stripped.Command)), Is.EqualTo(new[] { (3, name), (5, name) }));
         SmtSanitizerChecks.HoldProperties(problem);
     }
 

@@ -35,6 +35,9 @@ public static class SmtRefusalCodes
     /// <summary>A command a problem may not hold: anything but a declaration, a definition, an assertion or what is stripped; a command name between bars.</summary>
     public const string COMMAND_NOT_ALLOWED = "command_not_allowed";
 
+    /// <summary>A command that states the problem after its end: after <c>check-sat</c> the script would be an incremental one, after <c>exit</c> a solver runs nothing.</summary>
+    public const string COMMAND_AFTER_END = "command_after_end";
+
     /// <summary>A command a problem may hold, written in another shape than the standard gives it.</summary>
     public const string COMMAND_MALFORMED = "command_malformed";
 
@@ -62,7 +65,7 @@ public static class SmtRefusalCodes
     private static readonly HashSet<string> CODES = new(StringComparer.Ordinal)
     {
         SYNTAX_ERROR, TEXT_TOO_LONG, TOO_MANY_TOKENS, NESTING_TOO_DEEP, NUMERAL_TOO_LONG, LITERAL_TOO_WIDE, STRING_TOO_LONG,
-        NOT_A_COMMAND, COMMAND_NOT_ALLOWED, COMMAND_MALFORMED, RESERVED_SYMBOL, AMBIGUOUS_TOKEN, NON_ASCII_STRING,
+        NOT_A_COMMAND, COMMAND_NOT_ALLOWED, COMMAND_AFTER_END, COMMAND_MALFORMED, RESERVED_SYMBOL, AMBIGUOUS_TOKEN, NON_ASCII_STRING,
         INDEX_TOO_LARGE, TOO_MANY_SYMBOLS, RESERVED_PREFIX, NOT_A_TERM
     };
 

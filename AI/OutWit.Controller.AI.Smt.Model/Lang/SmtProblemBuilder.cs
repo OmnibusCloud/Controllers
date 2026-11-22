@@ -3,9 +3,16 @@ namespace OutWit.Controller.AI.Smt.Model.Lang;
 /// <summary>
 /// Takes the top-level forms of a text one by one and makes a problem of them, or refuses the
 /// first one that breaks a rule. For each form, in this order: it is a command; its name is
-/// written without bars; it is kept, stripped or refused by its name; a kept command's atoms
-/// pass the token rules, in the order of the text; its shape is the standard's; the names it
-/// declares are the problem's own and not too many.
+/// written without bars; it is kept, stripped or refused by its name; a kept command does not
+/// stand after the problem's end; its atoms pass the token rules, in the order of the text; its
+/// shape is the standard's; the names it declares are the problem's own and not too many.
+/// <para>
+/// A problem ends at its first <c>check-sat</c> and at its <c>exit</c>. After <c>exit</c> a
+/// solver runs nothing, so a command there is part of the text and not of what a solver given
+/// the text would solve. A declaration or an assertion after a <c>check-sat</c> makes the script
+/// an incremental one: its first answer is for less than the whole text. Questions to the
+/// solver may follow either: they are stripped wherever they stand.
+/// </para>
 /// </summary>
 internal sealed class SmtProblemBuilder
 {
@@ -16,6 +23,9 @@ internal sealed class SmtProblemBuilder
     private const string LICENSE = ":license";
     private const string SAT = "sat";
     private const string UNSAT = "unsat";
+
+    private const string REASON_AFTER_EXIT = "the command stands after exit: a solver runs nothing after it";
+    private const string REASON_AFTER_CHECK = "the command stands after check-sat: a script that goes on after a check is incremental, and its first answer is for less than the whole text";
 
     #endregion
 
@@ -34,6 +44,8 @@ internal sealed class SmtProblemBuilder
     private string m_license = "";
     private int m_assertions;
     private int m_declared;
+    private bool m_checked;
+    private bool m_exited;
 
     #endregion
 
@@ -57,11 +69,16 @@ internal sealed class SmtProblemBuilder
         {
             m_stripped[head] = m_stripped.GetValueOrDefault(head) + 1;
             m_strippedLines.Add(new SmtStrippedCommand(form.Line, head));
+            m_checked |= string.Equals(head, SmtCommandPolicy.CHECK_SAT, StringComparison.Ordinal);
+            m_exited |= string.Equals(head, SmtCommandPolicy.EXIT, StringComparison.Ordinal);
             return null;
         }
 
         if (!SmtCommandPolicy.IsKept(head))
             return SmtRefusals.Of(SmtRefusalCodes.COMMAND_NOT_ALLOWED, form.Line, head, SmtCommandPolicy.WhyRefused(head));
+
+        if (m_exited || m_checked)
+            return SmtRefusals.Of(SmtRefusalCodes.COMMAND_AFTER_END, form.Line, head, m_exited ? REASON_AFTER_EXIT : REASON_AFTER_CHECK);
 
         var refusal = SmtTokenRules.Check(form, head) ?? CheckShape(form, head) ?? CheckNames(form, head);
         if (refusal == null)

@@ -92,7 +92,7 @@ public class SmtSanitizerAdversarialTests
         Assert.That(expectations, Is.SupersetOf(new[]
         {
             SmtRefusalCodes.SYNTAX_ERROR, SmtRefusalCodes.NUMERAL_TOO_LONG, SmtRefusalCodes.NOT_A_COMMAND,
-            SmtRefusalCodes.COMMAND_NOT_ALLOWED, SmtRefusalCodes.COMMAND_MALFORMED, SmtRefusalCodes.RESERVED_SYMBOL, SmtRefusalCodes.AMBIGUOUS_TOKEN,
+            SmtRefusalCodes.COMMAND_NOT_ALLOWED, SmtRefusalCodes.COMMAND_AFTER_END, SmtRefusalCodes.COMMAND_MALFORMED, SmtRefusalCodes.RESERVED_SYMBOL, SmtRefusalCodes.AMBIGUOUS_TOKEN,
             SmtRefusalCodes.NON_ASCII_STRING, SmtRefusalCodes.INDEX_TOO_LARGE, SmtRefusalCodes.RESERVED_PREFIX
         }));
     }

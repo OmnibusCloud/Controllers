@@ -103,10 +103,11 @@ public class SmtSanitizerPropertyTests
     [Test]
     public void HashDoesNotDependOnStrippedCommandsTest()
     {
-        var withQueries = "(check-sat)\n" + LINEAR.Replace("\n", "\n(check-sat)\n(get-model)\n(get-value (x y))\n(get-info :all-statistics)\n") + "(exit)\n";
+        // Questions to the solver between the commands, and the check and the exit at the end.
+        var withQueries = "(get-info :version)\n" + LINEAR.Replace("\n", "\n(get-model)\n(get-value (x y))\n(get-info :all-statistics)\n") + "(check-sat)\n(get-model)\n(exit)\n(check-sat)\n";
 
         var problem = AssertSameProblem(withQueries, LINEAR_HASH);
-        Assert.That(problem.Stripped.Values.Sum(), Is.EqualTo(26));
+        Assert.That(problem.Stripped.Values.Sum(), Is.EqualTo(23));
     }
 
     [Test]

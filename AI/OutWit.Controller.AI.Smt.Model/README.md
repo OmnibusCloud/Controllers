@@ -95,7 +95,7 @@ else
 | | Commands | |
 |---|---|---|
 | Kept | `set-logic`, `set-info`, `declare-sort`, `define-sort`, `declare-const`, `declare-fun`, `define-fun`, `define-fun-rec`, `define-funs-rec`, `declare-datatype`, `declare-datatypes`, `assert` | in the problem, in the order of the text |
-| Stripped | `check-sat`, `get-model`, `get-value`, `get-info`, `exit` | counted and left out: the query decides what runs. The commands after a stripped one are kept |
+| Stripped | `check-sat`, `get-model`, `get-value`, `get-info`, `exit` | counted and left out: the query decides what runs. A kept command after `check-sat` or after `exit` is refused: the problem ends there |
 | Refused | `push`, `pop`, `reset`, `reset-assertions`, `check-sat-assuming`, `get-unsat-core`, `get-unsat-assumptions`, `get-assertions`, `get-assignment`, `get-proof`, `get-option` | incremental scripts, unsat cores and proofs are not supported |
 | Refused | `set-option` | the controller sets every option itself |
 | Refused | `echo`, and every other name: the solver's extensions (`include`, `eval`, `simplify`, `define-const`, ...) and names nobody has heard of | a command is never passed on because nothing was known against it |
@@ -113,6 +113,7 @@ check.
 | `text_too_long`, `too_many_tokens`, `nesting_too_deep`, `numeral_too_long`, `literal_too_wide`, `string_too_long` | the text is past a ceiling of a submitted problem. `text_too_long` also when the problem's own canonical text would be past the ceiling of characters |
 | `not_a_command` | a top-level form that is an atom, an empty list, or a list that does not start with a symbol |
 | `command_not_allowed` | a command that is neither kept nor stripped; a command name between bars (`(\|assert\| ...)`) |
+| `command_after_end` | a kept command after `check-sat` (a script that goes on after a check is incremental: its first answer is for less than the whole text) or after `exit` (a solver runs nothing after it). Stripped commands may follow either |
 | `command_malformed` | a kept command in another shape than the standard's |
 | `reserved_symbol` | a general reserved word between bars (`\|let\|`, `\|_\|`), anywhere in a kept command: an ordinary symbol by the standard, the reserved word to the solver |
 | `ambiguous_token` | a symbol that starts with a minus sign and a digit (`-5`), anywhere in a kept command: a symbol by the standard, a negative number to the solver |

@@ -259,7 +259,7 @@ public class SmtSanitizerRefusalTests
         Assert.That(SmtSanitizerChecks.Refuse("(assert)\n(push 1)", SmtRefusalCodes.COMMAND_MALFORMED).Line, Is.EqualTo(1));
         Assert.That(SmtSanitizerChecks.Refuse("(push 1)\n(assert)", SmtRefusalCodes.COMMAND_NOT_ALLOWED).Line, Is.EqualTo(1));
         Assert.That(SmtSanitizerChecks.Refuse("(assert true)\nx\n(assert)", SmtRefusalCodes.NOT_A_COMMAND).Line, Is.EqualTo(2));
-        Assert.That(SmtSanitizerChecks.Refuse("(check-sat)\n(declare-const oc!a Int)\n()", SmtRefusalCodes.RESERVED_PREFIX).Line, Is.EqualTo(2));
+        Assert.That(SmtSanitizerChecks.Refuse("(get-model)\n(declare-const oc!a Int)\n()", SmtRefusalCodes.RESERVED_PREFIX).Line, Is.EqualTo(2));
     }
 
     [Test]

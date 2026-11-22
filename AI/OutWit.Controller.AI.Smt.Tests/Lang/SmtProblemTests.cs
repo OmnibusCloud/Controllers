@@ -240,7 +240,7 @@ public class SmtProblemTests
     [Test]
     public void AssertionsAreCountedTest()
     {
-        Assert.That(SmtSanitizerChecks.Accept("(assert true)\n(check-sat)\n(assert false)\n(assert (assert x))").AssertionCount, Is.EqualTo(3));
+        Assert.That(SmtSanitizerChecks.Accept("(assert true)\n(get-model)\n(assert false)\n(assert (assert x))\n(check-sat)").AssertionCount, Is.EqualTo(3));
         Assert.That(SmtSanitizerChecks.Accept("(declare-const x Int)").AssertionCount, Is.Zero);
     }
 

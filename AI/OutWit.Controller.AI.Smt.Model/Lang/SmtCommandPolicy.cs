@@ -4,7 +4,9 @@ namespace OutWit.Controller.AI.Smt.Model.Lang;
 /// What becomes of a top-level command of a problem, by its name: kept (a declaration, a
 /// definition, an assertion, the logic, a piece of information), stripped (what asks the solver
 /// to act: the query decides what runs), or refused. A name that is in neither list is refused,
-/// whatever it is: no command is passed on because nothing was known against it.
+/// whatever it is: no command is passed on because nothing was known against it. Two of the
+/// stripped commands end a problem: after <c>check-sat</c> and after <c>exit</c> nothing that
+/// states the problem may follow.
 /// </summary>
 internal static class SmtCommandPolicy
 {
@@ -22,6 +24,8 @@ internal static class SmtCommandPolicy
     public const string DECLARE_DATATYPE = "declare-datatype";
     public const string DECLARE_DATATYPES = "declare-datatypes";
     public const string ASSERT = "assert";
+    public const string CHECK_SAT = "check-sat";
+    public const string EXIT = "exit";
 
     private const string SET_OPTION = "set-option";
 
@@ -37,7 +41,7 @@ internal static class SmtCommandPolicy
 
     private static readonly HashSet<string> STRIPPED = new(StringComparer.Ordinal)
     {
-        "check-sat", "get-model", "get-value", "get-info", "exit"
+        CHECK_SAT, "get-model", "get-value", "get-info", EXIT
     };
 
     private static readonly HashSet<string> INCREMENTAL = new(StringComparer.Ordinal)
