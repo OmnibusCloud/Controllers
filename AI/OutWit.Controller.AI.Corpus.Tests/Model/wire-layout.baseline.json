@@ -1,6 +1,6 @@
 {
   "comment": "The published wire layout of OutWit.Controller.AI.Corpus.Model: the Model package version and, for every MemoryPack DTO, its members in wire order with name, type and the value a new instance holds. A member is only ever appended, with the next order; a member that changes its name, its type, its place or its default is a wire change for a deployed fleet and for every application built against the package. Bump <Version> in the Model csproj, publish it, and only then let the controller depend on it. Update this file in the same commit as the csproj (CorpusModelWireLayoutTests prints the current layout when it differs).",
-  "modelVersion": "0.2.0",
+  "modelVersion": "1.0.0",
   "types": {
     "CorpusCountData": [
       "0: Name: String = \"\"",
