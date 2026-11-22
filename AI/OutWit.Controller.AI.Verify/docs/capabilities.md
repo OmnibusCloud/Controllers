@@ -678,7 +678,7 @@ loops: a module of 6.9 KB took 1.5 s, one of 28 KB took 81 s and 1.5 GiB. So:
   for its loads, stores, divisions, conversions that may trap and calls through a table), and
   what the compiler keeps of every function until the module is done, by its instructions: 16
   bytes a unit, an instruction of arithmetic 3 units, a branch 9, a call 11 and one a value it
-  passes, a load or a store 40, a division 68, a call through a table 90 and one a value, a
+  passes, a load or a store 40, a division 68, a call through a table 100 and one a value, a
   conversion that may trap 112. The figures are the larger of an x64 node in both trap modes
   and an arm64 node, with a margin of at least 15 %. A module estimated over 2,560 MiB is
   refused before it is compiled. Compiles that may take 64 MiB or more share 2,560 MiB between

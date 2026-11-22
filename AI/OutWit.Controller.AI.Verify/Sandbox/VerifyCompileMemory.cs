@@ -65,7 +65,7 @@ internal static class VerifyCompileMemory
     public const int UNITS_CALL = 11;
 
     /// <summary>The units of a call through a table, besides the values it passes.</summary>
-    public const int UNITS_INDIRECT_CALL = 90;
+    public const int UNITS_INDIRECT_CALL = 100;
 
     /// <summary>The units of a call into the engine: growing the memory, copying or filling it, the instructions of tables.</summary>
     public const int UNITS_ENGINE_CALL = 11;
