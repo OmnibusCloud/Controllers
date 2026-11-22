@@ -267,6 +267,23 @@ internal static class ShapeModules
     /// <returns>The module's bytes.</returns>
     public static byte[] Build(IReadOnlyList<(byte[] Parameters, byte[] Results)> types, IReadOnlyList<(int Type, byte[] Body)> functions, int pages)
     {
+        return Build(types, [], functions, pages, 0);
+    }
+
+    /// <summary>
+    /// Puts a module together: its types, the functions it imports (from <c>env</c>, as <c>f0</c>,
+    /// <c>f1</c>...), its own functions (the first of them is exported as <c>_start</c>), a table of
+    /// function references when asked for, one memory exported as <c>memory</c>.
+    /// </summary>
+    /// <param name="types">The function types: parameters and results.</param>
+    /// <param name="imports">The type of every imported function; they come first in the function index space.</param>
+    /// <param name="functions">The functions: the index of the type and the body, locals included.</param>
+    /// <param name="pages">The pages of the memory.</param>
+    /// <param name="tableElements">The elements of a table of function references, or 0 for no table.</param>
+    /// <returns>The module's bytes.</returns>
+    public static byte[] Build(IReadOnlyList<(byte[] Parameters, byte[] Results)> types, IReadOnlyList<int> imports,
+        IReadOnlyList<(int Type, byte[] Body)> functions, int pages, int tableElements)
+    {
         var module = new List<byte> { 0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00 };
 
         var typeSection = new List<byte>(Leb((ulong)types.Count));
@@ -281,11 +298,32 @@ internal static class ShapeModules
 
         Section(module, 1, typeSection);
 
+        if (imports.Count > 0)
+        {
+            var importSection = new List<byte>(Leb((ulong)imports.Count));
+            for (var i = 0; i < imports.Count; i++)
+            {
+                importSection.AddRange(Name("env"));
+                importSection.AddRange(Name($"f{i}"));
+                importSection.Add(0x00);
+                importSection.AddRange(Leb((ulong)imports[i]));
+            }
+
+            Section(module, 2, importSection);
+        }
+
         var functionSection = new List<byte>(Leb((ulong)functions.Count));
         foreach (var (type, _) in functions)
             functionSection.AddRange(Leb((ulong)type));
 
         Section(module, 3, functionSection);
+
+        if (tableElements > 0)
+        {
+            var tableSection = new List<byte> { 0x01, 0x70, 0x00 };
+            tableSection.AddRange(Leb((ulong)tableElements));
+            Section(module, 4, tableSection);
+        }
 
         var memorySection = new List<byte> { 0x01, 0x00 };
         memorySection.AddRange(Leb((ulong)pages));
@@ -295,7 +333,8 @@ internal static class ShapeModules
         exportSection.AddRange(Name("memory"));
         exportSection.AddRange([0x02, 0x00]);
         exportSection.AddRange(Name("_start"));
-        exportSection.AddRange([0x00, 0x00]);
+        exportSection.Add(0x00);
+        exportSection.AddRange(Leb((ulong)imports.Count));
         Section(module, 7, exportSection);
 
         var codeSection = new List<byte>(Leb((ulong)functions.Count));

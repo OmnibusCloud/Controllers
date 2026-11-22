@@ -17,16 +17,18 @@ prices were missing (see "Determinism"). What it changed:
 - A module a task brings, and a program built from its sources, is held to bounds before the
   engine compiles it: a function type has at most 128 parameters and 8 results, a block passes
   at most 8 values, a function has at most 16,384 locals and a body of 128 KiB, a module at
-  most 32,768 functions and 4,194,304 declared locals. A module past a bound is a
+  most 32,768 functions and 4,194,304 declared locals, 4,096 function types, 1,024 imports and
+  33,792 exports. A module past a bound is a
   `CompileError` with fixed words. What is within the bounds is priced by what the engine was
   measured to take for it: the square of a function's branches, its locals times its branches,
   a block that passes values, declared locals, and 24 bytes at the least for any function. A
   module of a few kilobytes could take the engine half a minute, or eight gigabytes, for the
   price of a hello.
 - The memory the engine takes while it compiles such a module is counted where a node decides
-  how many tasks run at once: the compiles that may take 64 MiB or more share about a gibibyte
-  between them (one at the bounds of a task's module runs alone), and the degree sets that
-  gibibyte and the compiled modules the node keeps aside. Those kept modules are bounded by
+  how many tasks run at once: what a compile may take is estimated from the module (the code
+  of every function, by its kind) and a module estimated over 1,536 MiB is refused; the
+  compiles that may take 64 MiB or more share those 1,536 MiB between them (the largest runs
+  alone), and the degree sets them and the compiled modules the node keeps aside. Those kept modules are bounded by
   their bytes (256 MiB of compiled code), not by their number.
 - A module with a start function is refused: a program starts at `_start`, and nothing of a
   task's module runs outside its budget.
@@ -754,17 +756,29 @@ locals times the depth of its loops: 6.9 KB took 1.5 s, 28 KB took 81 s and
   engine runs while it makes a module ready is in no budget.
 - A raw module may be at most 8 MiB.
 - While it compiles, the engine takes memory that is in no task's memory cap:
-  about 6 KB a function, and up to 4 KB a byte of the function it works on. It
-  is estimated from the shape (about a gibibyte for a module at every bound);
-  compiles that may take 64 MiB or more share 1,040 MiB between them in a
-  node's process, each waiting while the others leave it no room, so that one
-  at the bounds runs alone and several of ordinary programs run side by side;
-  the degree counts those 1,040 MiB (see "Node behaviour").
+  6 KiB a byte of the function it works on, what it keeps of every function
+  until the module is done, which grows with that function's calls, loads and
+  stores, loops, branches, float and vector instructions and instructions that
+  may trap, and the code it makes for every function type and every function
+  that leaves the module. It is estimated from the
+  shape, and a module estimated over 1,536 MiB is refused (`compiling the
+  module may take more than 1536 MiB of memory`); compiles that may take 64 MiB
+  or more share 1,536 MiB between them in a node's process, each waiting while
+  the others leave it no room, so that the largest runs alone and several of
+  ordinary programs run side by side; the degree counts those 1,536 MiB (see
+  "Node behaviour").
 
-What remains: the bounds and the prices hold for the shapes that were measured,
-and are not a proof about every module the engine accepts; a compile, once
+What remains: the bounds, the prices and the estimate of a compile's memory hold
+for the shapes that were measured, and are not a proof about every module the
+engine accepts; the compile itself is not capped; a compile, once
 started, cannot be interrupted; one expensive compile runs at a time in a
-node's process. A non-optimising compiler
+node's process. Some code compiles far more slowly than its price says: calls
+through a table, loops, reads of a table, traps, functions of many parameters
+that leave the module, and loads and stores on a host with hardware stack
+protection (where every trap is an explicit check). Within every bound
+and the default budget, a module of many such functions can hold one core of a
+node for minutes while it compiles, and that compile cannot be stopped. No
+verdict is wrong because of it, and its memory is bounded. A non-optimising compiler
 tier was evaluated and is not used: the engine's baseline compiler (Winch)
 needs signal-based traps, which a Windows host with hardware stack protection
 cannot have.
@@ -779,7 +793,7 @@ that is free when the batch starts, and for C/C++ tasks the compiler's 1 GiB a
 step counts as the per-task cap when it is the larger. For a batch whose
 modules the engine compiles on the node (`wasi` and C/C++) what that work may
 take is counted as well: 64 MiB a task, and, taken off the usable RAM once,
-the 1,040 MiB the larger compiles share and the 256 MiB of
+the 1,536 MiB the larger compiles share and the 256 MiB of
 compiled code the node keeps for the tasks to come. Compiling a task's own
 module or a program built from C/C++ takes the worker's thread only; the first
 use of a runtime in a process compiles that runtime's own module (the

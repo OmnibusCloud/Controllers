@@ -43,7 +43,7 @@ What a program has inside the box:
   is three quarters of the memory that is free when a batch starts, divided by the memory
   one program may take (for C and C++ tasks the compiler's 1 GB counts when it is the
   larger). For tasks whose program is turned into machine code on your computer (below),
-  what that work may take is counted too: 64 MB a program, and about 1.3 GB set aside
+  what that work may take is counted too: 64 MB a program, and about 1.8 GB set aside
   once. The work runs below normal priority: on Windows your own programs go first.
   Linux does not honour that setting for threads; there the cap on the number of programs
   is the protection.
@@ -58,17 +58,30 @@ What a program has inside the box:
   work takes the one thread of the worker that runs the task, so it stays within the
   cores counted above. Before it starts, the module is checked: its shape is held to
   bounds (how many values a call or a block passes, how many locals a function has and
-  how large it is, how many functions there are, how deep blocks nest) and priced, and
+  how large it is, how many functions, function types, imports and exports there are, how
+  deep blocks nest) and priced, and
   the price is taken from the task's budget of instructions: a task that cannot pay is
   stopped and nothing is compiled. The prices were fitted to what the engine was measured
   to take for each shape, so that a budget buys about as much of this work as it buys of
   running, to within a few times either way: some ten seconds on a slow machine at the
   default budget, about two minutes at the largest. That holds for the shapes that were
   measured; it is not a proof about every module, and a compile cannot be stopped once it
-  has started. While it compiles, the engine also takes memory that is in no program's
-  256 MB: little for an ordinary program, up to about 1 GB for a module at every bound.
-  Compiles that may take 64 MB or more share about 1 GB between them, so the largest runs
-  alone, and the number of programs run at once is lowered for that gigabyte (above). The machine code of the programs of a batch is
+  has started.
+  Some code compiles far more slowly than its price says: calls through a table, loops,
+  reads of a table, traps, functions of many parameters that leave the module, and on a
+  computer whose processor enforces hardware stack protection (where every trap is an
+  explicit check) loads and stores. Within every bound and the default budget, a module of
+  many such functions can hold one core of your computer for minutes while it compiles. A
+  compile cannot be stopped once it has started. No verdict is wrong because of it, and the
+  memory it takes is bounded as below. While it compiles, the engine also takes memory that is in no program's
+  256 MB: little for an ordinary program. It is estimated from the module before anything is
+  compiled (the code of every function, its calls, loads and stores, loops, branches and
+  the instructions that may trap, and what the engine makes for the module's types and for
+  the functions that leave it), and a module whose compile may take more than 1.5 GB is
+  refused. Compiles that may take 64 MB or more share 1.5 GB between them, so the largest
+  runs alone, and the number of programs run at once is lowered for those 1.5 GB (above).
+  The estimate holds for the kinds of code that were measured; like the price, it is not a
+  proof about every module. The machine code of the programs of a batch is
   kept in memory while the batch may need it again, 256 MB of it at most. A module past
   a bound (blocks nested deeper than 2,048 among them),
   or one a lab brings that is larger than 8 MB, is refused. The first use of a language

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using OutWit.Controller.AI.Verify.Model;
 using OutWit.Controller.AI.Verify.Runtimes;
 using OutWit.Controller.AI.Verify.Sandbox;
@@ -50,7 +51,7 @@ public sealed class VerifyCompileMemoryTests
     [Test]
     public void N2WhatACompileMayTakeIsReadOffTheShapeTest()
     {
-        // Measured: 6 KB a function while the module is compiled, up to 4 KB a byte of the
+        // Measured: 6 KB a function while the module is compiled, up to 5 KB a byte of the
         // function the compiler works on, 4 bytes a unit of a block that passes values.
         var hello = VerifyModuleShape.Scan(Convert.FromBase64String(VerifySelfCheck.HELLO_WASM_BASE64));
         var calls = VerifyModuleShape.Scan(ShapeModules.Calls(8, 20_000));
@@ -68,13 +69,43 @@ public sealed class VerifyCompileMemoryTests
     }
 
     [Test]
-    public void N2NoModuleWithinTheBoundsMayTakeMoreThanWhatIsSetAsideTest()
+    public void D7AModuleThatMayTakeMoreThanTheGateIsRefusedBeforeItIsCompiledTest()
     {
-        var atTheBounds = VerifyModuleShape.CompileMemoryAtTheBounds(VerifyWasmSandbox.MAX_TASK_MODULE_BYTES);
-        var gate = VerifyWasmSandbox.CompileGateBytes;
+        // 64 functions of 26,000 calls through a table: within every bound, 8.3 MB, and on x64
+        // 1.6 GiB and five minutes to compile. Estimated over what a node sets aside for one
+        // compile, it is refused without being compiled, at any budget.
+        var module = ShapeModulesKept.IndirectCalls(0, 26_000, 64);
+        var report = VerifyModuleShape.Scan(module);
+        var unbounded = VerifyModuleShape.Measure(module);
+        var wasi = VerifyRuntimeCatalog.Resolve(null, VerifyRuntimeCatalog.WASI, out var reason) ?? throw new InvalidOperationException(reason);
+        var limits = VerifyLimitCeilings.Effective(new VerifyLimitsData { FuelBudget = long.MaxValue }, null);
+
+        // Without the refusal the sandbox would compile it: the scan's word is asked first.
+        Assert.That(report.Problem, Is.EqualTo(VerifyModuleShape.TOO_MUCH_MEMORY));
+
+        using var sandbox = new VerifyWasmSandbox();
+        var clock = Stopwatch.StartNew();
+        var result = sandbox.Execute(wasi, ModuleTask(module), limits);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(module, Has.Length.LessThanOrEqualTo(VerifyWasmSandbox.MAX_TASK_MODULE_BYTES));
+            Assert.That(unbounded.Problem, Is.Null, "no other bound holds it");
+            Assert.That(unbounded.CompileMemoryBytes, Is.GreaterThan(VerifyCompileMemory.MAX_BYTES));
+            Assert.That(result.Verdict, Is.EqualTo(VerifyVerdict.CompileError));
+            Assert.That(result.Stderr, Is.EqualTo(VerifyModuleShape.TOO_MUCH_MEMORY));
+            Assert.That(sandbox.TaskModuleCacheCount, Is.Zero, "nothing reached the engine's compiler");
+            Assert.That(clock.Elapsed, Is.LessThan(TimeSpan.FromSeconds(5)));
+        });
+    }
+
+    [Test]
+    public void D7NoModuleThatIsCompiledMayTakeMoreThanWhatIsSetAsideTest()
+    {
+        // The gate is the most a compile may take: whatever is not refused fits it alone.
         var shapes = new[]
         {
-            ShapeModules.Calls(8, 60_000),
+            ShapeModules.Calls(8, 65_000, 16),
             ShapeModules.Locals(VerifyModuleShape.MAX_FUNCTIONS - 1, 0),
             ShapeModules.Blocks(VerifyModuleShape.MAX_BLOCK_VALUES, VerifyModuleShape.MAX_NESTING),
             ShapeModules.Chain(18_000),
@@ -87,12 +118,56 @@ public sealed class VerifyCompileMemoryTests
             {
                 var report = VerifyModuleShape.Scan(module);
                 Assert.That(report.Problem, Is.Null);
-                Assert.That(report.CompileMemoryBytes, Is.LessThanOrEqualTo(atTheBounds));
+                Assert.That(report.CompileMemoryBytes, Is.LessThanOrEqualTo(VerifyWasmSandbox.CompileGateBytes));
             }
 
-            Assert.That(atTheBounds, Is.LessThan(1024 * MEBIBYTE), "under a gibibyte for a module a task brings");
-            Assert.That(gate, Is.GreaterThanOrEqualTo(atTheBounds), "the gate holds a compile at the bounds, of a module a task brings and of a program a build wrote");
-            Assert.That(gate, Is.EqualTo(VerifyModuleShape.CompileMemoryAtTheBounds(VerifyClangBuild.PRODUCT_LIMIT_BYTES)));
+            Assert.That(VerifyWasmSandbox.CompileGateBytes, Is.EqualTo(VerifyCompileMemory.MAX_BYTES));
+            Assert.That(VerifyModuleShape.TOO_MUCH_MEMORY, Is.EqualTo($"compiling the module may take more than {VerifyCompileMemory.MAX_BYTES >> 20} MiB of memory"));
+        });
+    }
+
+    [Test]
+    public void D7TheDenseCallsAreEstimatedOverWhatTheyTookAndRefusedTest()
+    {
+        // 64 functions of 65,000 calls that pass eight values (8.3 MB, every bound held): measured
+        // 1,893 MiB resident on an arm64 node and 1,382 MiB committed on x64, where the estimate
+        // was 540 MiB. Now it is estimated over the arm64 peak with the margin, and over what a
+        // node sets aside for one compile: it is refused, and never compiled. Sixteen of those
+        // functions (1,020 MiB on arm64) are within the gate and over half of it: such a compile
+        // runs alone.
+        var report = VerifyModuleShape.Scan(ShapeModules.Calls(8, 65_000, 64));
+        var sixteen = VerifyModuleShape.Scan(ShapeModules.Calls(8, 65_000, 16));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(report.CompileMemoryBytes, Is.GreaterThanOrEqualTo((long)(1.15 * 1893 * MEBIBYTE)));
+            Assert.That(report.Problem, Is.EqualTo(VerifyModuleShape.TOO_MUCH_MEMORY));
+            Assert.That(sixteen.Problem, Is.Null);
+            Assert.That(sixteen.CompileMemoryBytes, Is.GreaterThanOrEqualTo((long)(1.15 * 1020 * MEBIBYTE)));
+            Assert.That(sixteen.CompileMemoryBytes, Is.LessThanOrEqualTo(VerifyWasmSandbox.CompileGateBytes));
+            Assert.That(sixteen.CompileMemoryBytes, Is.GreaterThan(VerifyWasmSandbox.CompileGateBytes / 2));
+        });
+    }
+
+    [Test]
+    public void D7WhatACompileKeepsOfEveryFunctionIsCountedTest()
+    {
+        // The compiler keeps what it made of every function until the module is done: the
+        // estimate grows with every function's instructions, not only with the largest one.
+        const int CALLS = 65_000;
+        var one = VerifyModuleShape.Scan(ShapeModules.Calls(8, CALLS));
+        var sixteen = VerifyModuleShape.Scan(ShapeModules.Calls(8, CALLS, 16));
+        var bytes = ShapeModules.Calls(8, CALLS, 16).Length - ShapeModules.Calls(8, CALLS).Length;
+
+        // Each function of the shape: eight constants and the calls, each passing eight values each way.
+        var perFunction = CALLS * VerifyCompileMemory.CallUnits(false, 8, 8) + 8L * VerifyCompileMemory.UNITS_PLAIN;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sixteen.KeptUnits - one.KeptUnits, Is.EqualTo(15 * perFunction));
+            Assert.That(sixteen.LargestWork, Is.EqualTo(one.LargestWork), "what the compiler takes for the function at hand does not add up");
+            Assert.That(sixteen.CompileMemoryBytes - one.CompileMemoryBytes,
+                Is.EqualTo(15 * (perFunction * VerifyCompileMemory.PER_KEPT_UNIT + VerifyCompileMemory.PER_FUNCTION) + bytes * VerifyCompileMemory.PER_MODULE_BYTE));
         });
     }
 
@@ -220,6 +295,7 @@ public sealed class VerifyCompileMemoryTests
         Assert.Multiple(() =>
         {
             Assert.That(aside, Is.EqualTo(VerifyWasmSandbox.CompileGateBytes + VerifyTaskModuleCache.DEFAULT_BYTE_CAPACITY), "the gate of the larger compiles and the kept modules");
+            Assert.That(VerifyWasmSandbox.CompileGateBytes, Is.EqualTo(VerifyCompileMemory.MAX_BYTES), "the gate holds the largest compile there may be");
             Assert.That(perTask, Is.EqualTo(VerifySandboxDefaults.DEFAULT_MEMORY_BYTES + VerifyWasmSandbox.HEAVY_COMPILE_BYTES), "a task's cap and a compile of the lighter kind");
         });
     }
@@ -248,6 +324,33 @@ public sealed class VerifyCompileMemoryTests
             Assert.That(VerifySandboxDegree.Compute(64, none, perTask, 64), Is.EqualTo(1));
             Assert.That(VerifySandboxDegree.UsableRamBytes(0, VerifySandboxDegree.DEFAULT_RAM_HEADROOM, aside), Is.Zero, "unknown stays unknown");
             Assert.That(VerifySandboxDegree.UsableRamBytes(16 * GIBIBYTE, VerifySandboxDegree.DEFAULT_RAM_HEADROOM, 0), Is.EqualTo(12 * GIBIBYTE), "nothing aside for a runtime the controller ships");
+        });
+    }
+
+    [Test]
+    public void D7HowManyTasksOfACompiledRuntimeANodeRunsAtOnceTest()
+    {
+        // A node of 16 cores at the default cap of the degree, with 5, 16 and 64 GiB free: three
+        // quarters of that, less the gate and the kept modules, in tasks of their memory cap and a
+        // compile of the lighter kind (wasi), or of the compiler's step and that compile (C/C++).
+        const long GIBIBYTE = 1L << 30;
+        var wasi = VerifyRuntimeCatalog.Resolve(null, VerifyRuntimeCatalog.WASI, out var reason) ?? throw new InvalidOperationException(reason);
+        var aside = VerifyBatchExecutor.MemoryAside(wasi);
+        var perWasiTask = VerifySandboxDefaults.DEFAULT_MEMORY_BYTES + VerifyWasmSandbox.HEAVY_COMPILE_BYTES;
+        var perCTask = VerifyClangBuild.STEP_MEMORY_BYTES + VerifyWasmSandbox.HEAVY_COMPILE_BYTES;
+
+        int Degree(long free, long perTask) =>
+            VerifySandboxDegree.Compute(16, VerifySandboxDegree.UsableRamBytes(free, VerifySandboxDegree.DEFAULT_RAM_HEADROOM, aside), perTask);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(aside, Is.EqualTo(1792 * MEBIBYTE), "1.5 GiB of the gate and 256 MiB of kept modules");
+            Assert.That(Degree(5 * GIBIBYTE, perWasiTask), Is.EqualTo(6));
+            Assert.That(Degree(5 * GIBIBYTE, perCTask), Is.EqualTo(1));
+            Assert.That(Degree(16 * GIBIBYTE, perWasiTask), Is.EqualTo(16));
+            Assert.That(Degree(16 * GIBIBYTE, perCTask), Is.EqualTo(9));
+            Assert.That(Degree(64 * GIBIBYTE, perWasiTask), Is.EqualTo(16));
+            Assert.That(Degree(64 * GIBIBYTE, perCTask), Is.EqualTo(16));
         });
     }
 

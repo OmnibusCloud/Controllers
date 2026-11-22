@@ -44,8 +44,11 @@ internal static class VerifyModuleCode
                 ReadU32(body, ref position);
                 ReadU32(body, ref position);
                 return true;
-            case 0x1C: // select with types
-                position += (int)ReadU32(body, ref position);
+            case 0x1C: // select with types: their number, which is one, then the type
+                if (ReadU32(body, ref position) != 1)
+                    throw new ArgumentOutOfRangeException(nameof(body), "a select of the module names other than one type");
+
+                position++;
                 return true;
             case 0x41: // i32.const
             case 0x42: // i64.const

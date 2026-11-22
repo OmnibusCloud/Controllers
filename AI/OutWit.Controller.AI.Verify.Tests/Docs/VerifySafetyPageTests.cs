@@ -65,10 +65,13 @@ public sealed class VerifySafetyPageTests
             Assert.That(page, Does.Contain($"{VerifyClangBuild.STEP_MEMORY_BYTES / GIBIBYTE} GB of memory a step"));
             Assert.That(page, Does.Contain($"{VerifyClangBuild.PRODUCT_LIMIT_BYTES / MEBIBYTE} MB"));
             Assert.That(page, Does.Contain($"all of one build together at {VerifyClangBuild.BUILD_LIMIT_BYTES / MEBIBYTE} MB"));
-            Assert.That(page, Does.Contain($"Compiles that may take {VerifyWasmSandbox.HEAVY_COMPILE_BYTES / MEBIBYTE} MB or more share about 1 GB between them"));
-            Assert.That(page, Does.Contain($"{VerifyWasmSandbox.HEAVY_COMPILE_BYTES / MEBIBYTE} MB a program, and about 1.3 GB set aside"));
-            Assert.That(VerifyBatchExecutor.MemoryAside(VerifyRuntimeCatalog.Resolve(null, VerifyRuntimeCatalog.WASI, out _)!), Is.InRange(1250 * MEBIBYTE, 1350 * MEBIBYTE), "the page says about 1.3 GB");
-            Assert.That(VerifyWasmSandbox.CompileGateBytes, Is.InRange(950 * MEBIBYTE, 1100 * MEBIBYTE), "the page says about 1 GB, twice");
+            Assert.That(page, Does.Contain($"Compiles that may take {VerifyWasmSandbox.HEAVY_COMPILE_BYTES / MEBIBYTE} MB or more share 1.5 GB between them"));
+            Assert.That(page, Does.Contain("a module whose compile may take more than 1.5 GB is"));
+            Assert.That(page, Does.Contain($"{VerifyWasmSandbox.HEAVY_COMPILE_BYTES / MEBIBYTE} MB a program, and about 1.8 GB set aside"));
+            Assert.That(VerifyBatchExecutor.MemoryAside(VerifyRuntimeCatalog.Resolve(null, VerifyRuntimeCatalog.WASI, out _)!), Is.InRange(1750 * MEBIBYTE, 1850 * MEBIBYTE), "the page says about 1.8 GB");
+            Assert.That(VerifyWasmSandbox.CompileGateBytes, Is.EqualTo(1536 * MEBIBYTE), "the page says 1.5 GB, three times");
+            Assert.That(page, Does.Contain("Some code compiles far more slowly than its price says: calls through a table"), "the slow compiles are a stated limit");
+            Assert.That(page, Does.Contain("many such functions can hold one core of your computer for minutes while it compiles"));
             Assert.That(page, Does.Contain($"{VerifyTaskModuleCache.DEFAULT_BYTE_CAPACITY / MEBIBYTE} MB of it at most"));
             Assert.That(page, Does.Contain("a thousand units a request, and one unit a byte it moves"));
             Assert.That(OutWit.Controller.AI.Wasm.WasmHostMeter.CALL_FUEL, Is.EqualTo(1000), "the page writes this number as a word: a thousand");

@@ -541,11 +541,12 @@ public sealed class VerifyWasmSandbox : IDisposable
     public static long TaskModuleCacheBytes => VerifyTaskModuleCache.DEFAULT_BYTE_CAPACITY;
 
     /// <summary>
-    /// The memory the compiles of the larger kind may take together in one process: what one
-    /// compile may take at every bound of a task's module, for the largest program a build may
-    /// write. One such compile fills it; several of ordinary programs share it.
+    /// The memory the compiles of the larger kind may take together in one process: the most one
+    /// compile may take (a module estimated over it is refused before it is compiled,
+    /// <see cref="VerifyCompileMemory.MAX_BYTES"/>). The largest compile fills it; several of
+    /// ordinary programs share it.
     /// </summary>
-    public static long CompileGateBytes => VerifyModuleShape.CompileMemoryAtTheBounds(VerifyClangBuild.PRODUCT_LIMIT_BYTES);
+    public static long CompileGateBytes => VerifyCompileMemory.MAX_BYTES;
 
     /// <summary>The most task-supplied modules the sandbox keeps compiled at once.</summary>
     public static int TaskModuleCacheCapacity => VerifyTaskModuleCache.DEFAULT_CAPACITY;
