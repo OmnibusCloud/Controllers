@@ -23,8 +23,8 @@ public static class SmtProblemSetLimits
     /// <summary>The most constants one row is projected on.</summary>
     public const int MAX_PROJECT = 256;
 
-    /// <summary>The most bytes of a row's tags, in UTF-8.</summary>
-    public const int MAX_TAGS_BYTES = 256;
+    /// <summary>The most characters of a row's tags, counted as a schema's <c>maxLength</c> counts them: Unicode code points.</summary>
+    public const int MAX_TAGS_CHARACTERS = 256;
 
     /// <summary>The most refusal records a summary keeps; the refusals after them are only counted.</summary>
     public const int MAX_REFUSALS_KEPT = 1_000;

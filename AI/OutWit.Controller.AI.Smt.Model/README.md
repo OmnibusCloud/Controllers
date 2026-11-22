@@ -231,7 +231,7 @@ the rule; a row it would not take is refused, by the field's name.
 | `max_models` | `enumerate` only; optional; an integer from 1 to 1,000; without it the number of the run's options, and without that 2 |
 | `goal` | `prove` only, and required there; one term |
 | `expected` | `check` and `enumerate` only; optional; `sat` or `unsat`; it holds over the problem's `:status`. A `prove` row expects nothing |
-| `tags` | optional; at most 256 bytes of UTF-8 without control characters, passed through |
+| `tags` | optional; at most 256 characters without control characters, passed through. A character is one Unicode code point, as the schema's `maxLength` counts it |
 
 A term (of `values`, of `goal`, a name of `project`) is exactly one s-expression of at most
 65,536 characters, held to the rules of single tokens; it travels as its canonical text, and a

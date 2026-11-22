@@ -25,7 +25,7 @@ internal static class SmtProblemSetRowParser
     /// <summary>A field name longer than this is not read: no field is that long.</summary>
     private const int MAX_FIELD_NAME_BYTES = 256;
 
-    /// <summary>The most bytes of JSON one character can take (an escape of four hexadecimal digits).</summary>
+    /// <summary>The most bytes of JSON one unit of UTF-16 can take (an escape of four hexadecimal digits).</summary>
     private const int MAX_JSON_BYTES_PER_CHARACTER = 6;
 
     private const int MAX_DEPTH = 8;
@@ -212,11 +212,13 @@ internal static class SmtProblemSetRowParser
         if (!IsString(ref reader, draft, "tags"))
             return null;
 
-        var tags = reader.ValueSpan.Length > SmtProblemSetLimits.MAX_TAGS_BYTES * MAX_JSON_BYTES_PER_CHARACTER ? null : StringOf(ref reader);
-        if (tags != null && Encoding.UTF8.GetByteCount(tags) <= SmtProblemSetLimits.MAX_TAGS_BYTES && !tags.Any(char.IsControl))
+        // A character of tags is a Unicode code point, as a schema's maxLength counts: one or two
+        // units of UTF-16, each at most one escape. A longer value is not made a string.
+        var tags = reader.ValueSpan.Length > SmtProblemSetLimits.MAX_TAGS_CHARACTERS * 2 * MAX_JSON_BYTES_PER_CHARACTER ? null : StringOf(ref reader);
+        if (tags != null && tags.EnumerateRunes().Count() <= SmtProblemSetLimits.MAX_TAGS_CHARACTERS && !tags.Any(char.IsControl))
             return tags;
 
-        draft.Refuse(SmtRefusalCodes.FIELD_INVALID, $"'tags' must be at most {SmtProblemSetLimits.MAX_TAGS_BYTES} bytes of UTF-8 without control characters");
+        draft.Refuse(SmtRefusalCodes.FIELD_INVALID, $"'tags' must be at most {SmtProblemSetLimits.MAX_TAGS_CHARACTERS} characters without control characters");
         return null;
     }
 

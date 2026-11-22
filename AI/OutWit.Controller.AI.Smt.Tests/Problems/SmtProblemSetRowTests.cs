@@ -263,23 +263,38 @@ public class SmtProblemSetRowTests
     [Test]
     public void TagsAreAShortTextWithoutControlCharactersTest()
     {
-        const string reason = "'tags' must be at most 256 bytes of UTF-8 without control characters";
+        const string reason = "'tags' must be at most 256 characters without control characters";
         var escape = "\\" + "u";
         var accented = "\u00e9";
 
         Assert.That(SmtProblemSets.Accept(ROW + $",\"tags\":\"{new string('t', 256)}\"}}").Tags, Has.Length.EqualTo(256));
-        Assert.That(SmtProblemSets.Accept(ROW + $",\"tags\":\"{string.Concat(Enumerable.Repeat(accented, 128))}\"}}").Tags, Has.Length.EqualTo(128), "256 bytes");
         Assert.That(SmtProblemSets.Accept(ROW + ",\"tags\":\"\"}").Tags, Is.Empty);
         Assert.That(SmtProblemSets.Accept(ROW + ",\"tags\":\"kit=b; cage 6x6, \\\"quoted\\\" \\\\ /\"}").Tags, Is.EqualTo("kit=b; cage 6x6, \"quoted\" \\ /"));
 
+        // A character is a Unicode code point, as a schema's maxLength counts it: no byte of
+        // UTF-8, no unit of UTF-16, and one however it is written.
+        var astral = char.ConvertFromUtf32(0x1F600);
+        var astralEscaped = escape + "d83d" + escape + "de00";
+
+        Assert.That(SmtProblemSets.Accept(ROW + $",\"tags\":\"{Repeat(accented, 256)}\"}}").Tags, Is.EqualTo(Repeat(accented, 256)), "256 characters in 512 bytes");
+        Assert.That(SmtProblemSets.Accept(ROW + $",\"tags\":\"{Repeat(astral, 256)}\"}}").Tags, Is.EqualTo(Repeat(astral, 256)), "256 characters in 1,024 bytes and 512 units of UTF-16");
+        Assert.That(SmtProblemSets.Accept(ROW + $",\"tags\":\"{Repeat(astralEscaped, 256)}\"}}").Tags, Is.EqualTo(Repeat(astral, 256)), "256 characters, each written as two escapes");
+        Assert.That(SmtProblemSets.Accept(ROW + $",\"tags\":\"{Repeat(astral, 255)}t\"}}").Tags, Has.Length.EqualTo(511));
+
+        Assert.That(SmtProblemSets.Refuse(ROW + $",\"tags\":\"{Repeat(accented, 257)}\"}}", SmtRefusalCodes.FIELD_INVALID).Reason, Is.EqualTo(reason), "257 characters of two bytes");
+        Assert.That(SmtProblemSets.Refuse(ROW + $",\"tags\":\"{Repeat(astral, 257)}\"}}", SmtRefusalCodes.FIELD_INVALID).Reason, Is.EqualTo(reason), "257 characters of four bytes");
+        Assert.That(SmtProblemSets.Refuse(ROW + $",\"tags\":\"{Repeat(astralEscaped, 257)}\"}}", SmtRefusalCodes.FIELD_INVALID).Reason, Is.EqualTo(reason), "257 characters, each written as two escapes");
+        Assert.That(SmtProblemSets.Refuse(ROW + $",\"tags\":\"{Repeat(astral, 256)}t\"}}", SmtRefusalCodes.FIELD_INVALID).Reason, Is.EqualTo(reason), "257 characters");
+
         Assert.That(SmtProblemSets.Refuse(ROW + $",\"tags\":\"{new string('t', 257)}\"}}", SmtRefusalCodes.FIELD_INVALID).Reason, Is.EqualTo(reason));
-        Assert.That(SmtProblemSets.Refuse(ROW + $",\"tags\":\"{string.Concat(Enumerable.Repeat(accented, 128))}t\"}}", SmtRefusalCodes.FIELD_INVALID).Reason, Is.EqualTo(reason), "257 bytes in 129 characters");
         Assert.That(SmtProblemSets.Refuse(ROW + $",\"tags\":\"{new string('t', 5_000)}\"}}", SmtRefusalCodes.FIELD_INVALID).Reason, Is.EqualTo(reason));
 
         foreach (var control in new[] { "\\n", "\\t", "\\r", escape + "0000", escape + "0001", escape + "001f", escape + "007f", escape + "0085", escape + "009f" })
             Assert.That(SmtProblemSets.Refuse(ROW + $",\"tags\":\"a{control}b\"}}", SmtRefusalCodes.FIELD_INVALID).Reason, Is.EqualTo(reason), control);
 
         Assert.That(SmtProblemSets.Refuse(ROW + $",\"tags\":\"{escape}d83d\"}}", SmtRefusalCodes.FIELD_INVALID).Reason, Is.EqualTo(reason), "half of a surrogate pair");
+
+        static string Repeat(string text, int count) => string.Concat(Enumerable.Repeat(text, count));
     }
 
     [Test]

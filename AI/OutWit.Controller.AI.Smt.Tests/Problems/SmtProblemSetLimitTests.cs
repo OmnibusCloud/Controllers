@@ -30,7 +30,7 @@ public class SmtProblemSetLimitTests
         Assert.That(SmtProblemSetLimits.MAX_ID_CHARACTERS, Is.EqualTo(64));
         Assert.That(SmtProblemSetLimits.MAX_VALUES, Is.EqualTo(256));
         Assert.That(SmtProblemSetLimits.MAX_PROJECT, Is.EqualTo(256));
-        Assert.That(SmtProblemSetLimits.MAX_TAGS_BYTES, Is.EqualTo(256));
+        Assert.That(SmtProblemSetLimits.MAX_TAGS_CHARACTERS, Is.EqualTo(256));
         Assert.That(SmtProblemSetLimits.MAX_REFUSALS_KEPT, Is.EqualTo(1_000));
         Assert.That(SmtProblemSetLimits.MAX_LICENSES, Is.EqualTo(64));
         Assert.That(SmtProblemSetLimits.MAX_LOGICS, Is.EqualTo(64));

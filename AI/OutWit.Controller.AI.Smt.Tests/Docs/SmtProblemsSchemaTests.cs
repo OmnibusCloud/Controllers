@@ -106,15 +106,15 @@ public class SmtProblemsSchemaTests
         Assert.That((fields.GetProperty("values").GetProperty("minItems").GetInt32(), fields.GetProperty("values").GetProperty("maxItems").GetInt32()), Is.EqualTo((1, SmtProblemSetLimits.MAX_VALUES)));
         Assert.That((fields.GetProperty("project").GetProperty("minItems").GetInt32(), fields.GetProperty("project").GetProperty("maxItems").GetInt32()), Is.EqualTo((1, SmtProblemSetLimits.MAX_PROJECT)));
         Assert.That((fields.GetProperty("max_models").GetProperty("minimum").GetInt32(), fields.GetProperty("max_models").GetProperty("maximum").GetInt32()), Is.EqualTo((1, SmtOptionsRules.MAX_MODELS)));
-        Assert.That(fields.GetProperty("tags").GetProperty("maxLength").GetInt32(), Is.EqualTo(SmtProblemSetLimits.MAX_TAGS_BYTES));
+        Assert.That(fields.GetProperty("tags").GetProperty("maxLength").GetInt32(), Is.EqualTo(SmtProblemSetLimits.MAX_TAGS_CHARACTERS));
         Assert.That(fields.GetProperty("query").GetProperty("enum").EnumerateArray().Select(word => word.GetString()), Is.EqualTo(Enum.GetNames<SmtQuery>().Select(name => name.ToLowerInvariant())));
         Assert.That(fields.GetProperty("expected").GetProperty("enum").EnumerateArray().Select(word => word.GetString()), Is.EqualTo(new[] { "sat", "unsat" }));
 
         // What a schema cannot state is said in words, with the code's own numbers.
         Assert.That(description, Does.Contain($"at most {SmtProblemSetLimits.MAX_LINE_BYTES} bytes (16 MiB)"));
         Assert.That(description, Does.Contain($"at most {SmtProblemSetLimits.MAX_ROWS} rows"));
-        Assert.That(description, Does.Contain($"at most {SmtProblemSetLimits.MAX_TAGS_BYTES} bytes of UTF-8"));
         Assert.That(description, Does.Contain($"at most {SmtSanitizer.TERM_CHARACTERS} characters"));
+        Assert.That(fields.GetProperty("tags").GetProperty("description").GetString(), Does.Contain($"at most {SmtProblemSetLimits.MAX_TAGS_CHARACTERS} characters,"));
         Assert.That(fields.GetProperty("smt2").GetProperty("description").GetString(), Does.Contain($"at most {SmtReaderLimits.PROBLEM_CHARACTERS} characters"));
         Assert.That(fields.GetProperty("max_models").GetProperty("description").GetString(), Does.Contain($"without that {SmtOptionsRules.DEFAULT_MAX_MODELS}:"));
         Assert.That(fields.GetProperty("values").GetProperty("description").GetString(), Does.Contain($"1 to {SmtProblemSetLimits.MAX_VALUES},"));
@@ -260,9 +260,13 @@ public class SmtProblemsSchemaTests
         foreach (var length in new[] { 0, 1, 63, 64, 65, 200 })
             yield return Line([("id", $"\"{new string('i', length)}\""), ("smt2", $"\"{PROBLEM}\"")]);
 
-        // Tags: the lengths around the bound, and characters a tag may not hold.
-        foreach (var length in new[] { 0, 1, 255, 256, 257, 1000 })
-            yield return Line([("id", "\"a\""), ("smt2", $"\"{PROBLEM}\""), ("tags", $"\"{new string('t', length)}\"")]);
+        // Tags: the lengths around the bound, in characters of one, two and four bytes of UTF-8
+        // (the last are two units of UTF-16 each), and characters a tag may not hold.
+        foreach (var character in new[] { "t", ((char)0xE9).ToString(), char.ConvertFromUtf32(0x1F600) })
+        {
+            foreach (var length in new[] { 0, 1, 255, 256, 257, 1000 })
+                yield return Line([("id", "\"a\""), ("smt2", $"\"{PROBLEM}\""), ("tags", $"\"{string.Concat(Enumerable.Repeat(character, length))}\"")]);
+        }
 
         foreach (var control in new[] { "\\n", "\\t", "\\r", "\\b", "\\f" })
             yield return Line([("id", "\"a\""), ("smt2", $"\"{PROBLEM}\""), ("tags", $"\"a{control}b\"")]);
