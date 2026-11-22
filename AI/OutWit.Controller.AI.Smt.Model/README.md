@@ -3,10 +3,10 @@
 The language layer and the data types of the OutWit Smt controller: SMT problems solved by a
 pinned solver on anonymous nodes, with every answer checked.
 
-This page describes **0.1.0**, the first parts of the package: the reader, and the sanitizer with
-the canonical form of a problem and the script builders. The controller is in development; the
-model evaluator and the other wire types join this package before a controller that needs them
-is published.
+This page describes **0.1.0**: the reader, the sanitizer with the canonical form of a problem and
+the script builders, and the model evaluator that checks a `sat` answer. The controller is in
+development; the wire types of a run join this package before a controller that needs them is
+published.
 
 ## Reading SMT-LIB
 
@@ -169,3 +169,135 @@ rules a found model out) as s-expressions, written by the writer that writes a p
 goes into a command as the s-expression it is, never as text: whatever it holds, the command is
 one command. A resource limit above 4,294,967,295 is refused: the solver's parameter is 32 bits
 wide, and given more it reports an error and then runs with no limit at all.
+
+## Checking a model
+
+A `sat` answer comes with a model, and a model can be checked: every assertion of the problem is
+evaluated under it. The evaluator is plain .NET code that shares nothing with a solver, so an
+answer it validates needs no trust in whoever gave it.
+
+| Type | Role |
+|---|---|
+| `SmtModelValidator` | built once from a problem's commands; checks any number of models, from any number of threads |
+| `SmtModel` | what the solver printed after `sat`: the answer of `(get-model)`, of `(get-value (...))`, or both |
+| `SmtValidation` | the outcome: class, reason, detail, and the counts behind them |
+| `SmtValidationClass` | `Validated`, `Partial`, `Failed` |
+| `SmtValidationReasons` | the reason codes |
+| `SmtEvaluationBudget` | what one validation may spend: steps, nesting, sizes |
+| `SmtClosedScript` | the problem with the model written into it, for a solver to evaluate |
+
+```csharp
+using OutWit.Controller.AI.Smt.Model.Eval;
+using OutWit.Controller.AI.Smt.Model.Lang;
+
+var validator = new SmtModelValidator(commands);            // the commands of one problem
+var model = SmtModel.Read(modelText, valuesText, limits);   // never throws: a text that is no model is an unreadable model
+var validation = validator.Validate(model, SmtEvaluationBudget.Default);
+
+Console.WriteLine($"{validation.Class} {validation.Reason} {validation.Detail}");
+```
+
+### The three classes
+
+| Class | Means |
+|---|---|
+| `Validated` | every assertion evaluated to true. The model, with a default value for each symbol it leaves out, is a witness: the problem is satisfiable |
+| `Failed` | an assertion evaluated to false with nothing guessed. The model does not satisfy the problem: the answer is wrong |
+| `Partial` | neither. The answer rests on other checks |
+
+`Failed` is an accusation, so it is given only when it is certain: no symbol the model left out
+stands behind the false assertion, no construct the evaluator does not compute to the end, no
+budget. `Validated` is given only for a real witness: every value the model gives a symbol is
+checked against the sort the problem declares for it, wherever it is used. A model that sets an
+`Int` to a half satisfies nothing.
+
+A validation never throws for what the problem or the model holds, never runs past its budget,
+and gives the same answer for the same input on every machine.
+
+### What is evaluated
+
+- Core: `not`, `and`, `or`, `=>`, `xor`, `=`, `distinct`, `ite`; `let`, `!` with `:named` terms
+  used by name, `match`.
+- Ints and Reals, exactly: integers of any size and rationals in lowest terms; `div` and `mod`
+  by the standard's definition, where the remainder is never negative (`(div (- 7) 2)` is
+  `(- 4)`, `(mod (- 7) 2)` is `1`, `(div 7 (- 2))` is `(- 3)`).
+- Bit-vectors: every operator of QF_BV, the signed divisions by the standard's own definitions
+  (division by zero included, which the standard defines for bit-vectors), `bv2nat`, `int2bv`,
+  and the three spellings of a value (`#x..`, `#b..`, `(_ bvN w)`).
+- Arrays, as finite maps over a default: `((as const (Array I E)) v)`, `store`, `select`,
+  equality. A function the solver prints behind an array (`(_ as-array f)`, `lambda`) becomes a
+  finite map where its body is the chain of `ite` a solver prints, and can be read at an index
+  otherwise.
+- Datatypes: constructors, selectors, `(_ is C)` and `is-C`, `match`; the declarations of
+  SMT-LIB 2.6 and 2.5, with `par`.
+- Uninterpreted sorts, with the elements the model lists, and uninterpreted functions, with the
+  model's interpretations.
+- `define-fun`, `define-fun-rec`, `define-funs-rec`.
+- The basic operators of strings: `str.++`, `str.len`, `str.at`, `str.substr`, `str.prefixof`,
+  `str.suffixof`, `str.contains`, `str.indexof`, `str.replace`, `str.<`, `str.<=`, the
+  conversions to and from integers and code points.
+
+`and`, `or` and `=>` are evaluated in three values: a false conjunct decides a conjunction
+whatever a conjunct beside it would have come to. `ite` evaluates only the branch its condition
+picks. A recursive definition is taken as the program it reads as.
+
+A general reserved word (`let`, `forall`, `exists`, `match`, `par`, `_`, `!`, `as`) is the word
+only when it is not written between bars. The name of a command (`assert`, `reset`, `push` and
+the others) is an ordinary name in a term, with bars or without, and the model's names are
+matched to the problem's by the name alone.
+
+### What is partial
+
+| Reason | When |
+|---|---|
+| `completed_symbol` | an assertion is false only with a symbol the model left out, which was given the default value of its sort |
+| `quantifier` | `forall`, `exists` |
+| `algebraic_number` | a number the solver printed as `root-obj` |
+| `division_by_zero` | `div`, `mod` or `/` by zero: the standard leaves the value to the model |
+| `regular_expression` | `str.in_re` and everything under `re.` |
+| `floating_point` | the theory of floating-point numbers |
+| `selector_of_other_constructor` | a selector applied to a value of another constructor |
+| `unsupported_operator` | an operator the evaluator knows by name and does not compute; the detail is the name |
+| `unsupported_sort` | a sort it has no values for; an array as the index of an array |
+| `array_comparison` | two arrays whose equality their finite maps do not decide |
+| `string_literal` | a string literal readers read differently: an escape that is none of the standard's, a character outside printable ASCII |
+| `ill_formed_term` | a term that fits no reading: a wrong number of arguments, a value of the wrong sort |
+| `unknown_symbol` | a name that nothing declares |
+| `ill_formed_command` | a command that is no declaration, definition or assertion, or one that cannot be read |
+| `ambiguous_symbol` | a name the problem gives two meanings: declared twice, or the name of an operator |
+| `unreadable_model` | a text that is not what a solver prints as a model |
+| `budget_steps`, `budget_depth`, `budget_size` | the budget ended the evaluation |
+| `evaluator_error` | a defect of the evaluator itself; the tests hold it to zero occurrences |
+
+`Failed` has one reason, `assertion_false`, with the 1-based index of the first false assertion
+as its detail. A reason is a fixed code: nothing of the problem or of the model is ever in it.
+
+### The budget
+
+A validation counts what it spends and stops, as `Partial`, when the count passes the budget.
+Nothing is timed.
+
+| Budget | Default | Counts |
+|---|---|---|
+| Steps | 20,000,000 | one for each term evaluated; an operation on a large value pays for the machine words it touches, a value for the memory it takes |
+| Nesting | 131,072 | a term in a term, a call (two levels), a value in a value |
+| Bits of an integer | 1,048,576 | also the numerator and the denominator of a rational together |
+| Bits of a bit-vector | 1,048,576 | |
+| Characters of a string | 1,048,576 | |
+| Stored indices of an array | 1,048,576 | |
+
+Terms are walked by calls, on a thread the validation makes for itself with a stack sized for
+the nesting ceiling. The chains real terms are written as cost no nesting at all: a chain of
+`let`, each in the body of the one before; of `ite`, each in a branch of the one before; of
+`and`, `or` or `=>`, each the last argument of the one before; annotated terms; the cases of a
+`match`. A problem written as a quarter of a million nested `let` is evaluated like any other.
+
+### The closed script
+
+`SmtClosedScript.Build(commands, model)` writes the model into the problem: every declared
+symbol the model defines becomes a `define-fun` with the sorts the problem declares, after the
+elements of the model's universes and the functions the solver added for itself, each
+definition after the ones it mentions; the problem's own definitions and assertions follow, and
+`(check-sat)` ends it. `set-info` is left out. A solver that is handed the script has nothing
+left to choose: it evaluates, and its `sat` or `unsat` is a second opinion on the evaluator's
+`Validated` or `Failed`. A symbol the model leaves out stays declared, and `Free` counts them.
