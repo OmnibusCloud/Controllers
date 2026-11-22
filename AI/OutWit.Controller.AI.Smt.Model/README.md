@@ -4,9 +4,9 @@ The language layer and the data types of the OutWit Smt controller: SMT problems
 pinned solver on anonymous nodes, with every answer checked.
 
 This page describes **0.1.0**: the reader, the sanitizer with the canonical form of a problem and
-the script builders, and the model evaluator that checks a `sat` answer. The controller is in
-development; the wire types of a run join this package before a controller that needs them is
-published.
+the script builders, the problem set (its rows, its reader, its schema, the options of a run),
+and the model evaluator that checks a `sat` answer. The controller is in development; the other
+wire types of a run join this package before a controller that needs them is published.
 
 ## Reading SMT-LIB
 
@@ -128,6 +128,9 @@ symbol of a term, and it is written back as it was read.
 | `reserved_prefix` | a symbol that starts with `oc!`, the prefix of the controller's own names, anywhere in a command the solver is given or in a term: declared, bound by a binder, given by `:named`, or merely used |
 | `not_a_term` | a text given as one term holds no s-expression, or more than one |
 
+The codes of a row of a problem set (`row_malformed`, `field_invalid` and the rest) are in
+"A problem set" below.
+
 Where good SMT-LIB would mean something else to the solver than to the standard, the problem is
 refused, not reinterpreted. The first thing in the text that breaks a rule is the one named; a
 text that is not SMT-LIB is refused as such whatever commands it starts with. A stripped or
@@ -169,6 +172,123 @@ rules a found model out) as s-expressions, written by the writer that writes a p
 goes into a command as the s-expression it is, never as text: whatever it holds, the command is
 one command. A resource limit above 4,294,967,295 is refused: the solver's parameter is 32 bits
 wide, and given more it reports an error and then runs with no limit at all.
+
+## A problem set
+
+What a lab submits is a problem set: JSON lines, one problem a line, UTF-8, with the options of
+the run beside it. The same code reads a set in the application before anybody signs in, on the
+host when a run is split, and wherever a preflight counts what a set holds.
+
+| Type | Role |
+|---|---|
+| `SmtProblemSetReader` | reads a set from a stream a row at a time: `TryRead(out row)`; holds one line in memory, never the set, and keeps a running `Summary` |
+| `SmtProblemSetRow` | one row: its `Line` and `Index`, and either the problem (`Data`, and the sanitizer's `Problem` beside it) or the `Refusal` |
+| `SmtProblemData` | an accepted problem as it travels to a node: its id, its query, its canonical text and hash, the terms beside it as canonical text, the expected verdict, the tags |
+| `SmtProblemSetSummary` | what was read, counted: rows taken and refused, the taken problems by logic, by query and by expected verdict, the stripped commands, the refusals by code and the first 1,000 of them in full, the licences |
+| `SmtProblemSetLimits` | the numbers below |
+| `SmtOptionsData`, `SmtOptionsRules` | the options of a run; their defaults and ceilings, `Check` and `Resolve` |
+| `SmtQuery` | `Check`, `Enumerate`, `Prove` |
+
+```csharp
+using OutWit.Controller.AI.Smt.Model;
+using OutWit.Controller.AI.Smt.Model.Problems;
+
+var options = new SmtOptionsData { Query = SmtQuery.Check };
+foreach (var problem in SmtOptionsRules.Check(options))
+    Console.WriteLine(problem);
+
+using var stream = File.OpenRead("problems.jsonl");
+var reader = new SmtProblemSetReader(stream, options);
+while (reader.TryRead(out var row))
+{
+    if (row.IsAccepted)
+        Console.WriteLine($"{row.Data.Id}: {row.Data.Query}, {row.Data.Hash}");
+    else
+        Console.WriteLine($"line {row.Line}: {row.Refusal!.Code}: {row.Refusal.Reason}");
+}
+
+Console.WriteLine($"{reader.Summary.Accepted} taken, {reader.Summary.Refused} refused");
+```
+
+### A row
+
+```json
+{"id": "cage-6x6-000412", "query": "enumerate", "smt2": "(declare-const a Int)(declare-const b Int)(assert (< 0 a b 4))", "project": ["a", "b"], "max_models": 2}
+{"id": "vc-17", "query": "prove", "smt2": "(declare-const x Int)(assert (> x 1))", "goal": "(> (* x x) x)"}
+```
+
+The schema of a row is [`docs/smt-problems.schema.json`](docs/smt-problems.schema.json), packed
+with the package. A row is taken exactly when the schema allows it, wherever a schema can state
+the rule; a row it would not take is refused, by the field's name.
+
+| Field | Rule |
+|---|---|
+| `id` | required; 1 to 64 characters, each a letter `A-Z` or `a-z`, a digit, or one of `. _ - / + : @ =`; once in a set (the first row with an id keeps it, whatever becomes of the row) |
+| `smt2` | required; the text of the problem, sanitized as above |
+| `query` | optional: `check`, `enumerate` or `prove`; without it the query of the run's options |
+| `values` | `check` only; optional; 1 to 256 strings, each one term whose value is asked |
+| `project` | `enumerate` only, and required there; 1 to 256 strings, each the name of a constant the problem declares (by `declare-const`, or by a `declare-fun` of no arguments), none named twice |
+| `max_models` | `enumerate` only; optional; an integer from 1 to 1,000; without it the number of the run's options, and without that 2 |
+| `goal` | `prove` only, and required there; one term |
+| `expected` | `check` and `enumerate` only; optional; `sat` or `unsat`; it holds over the problem's `:status`. A `prove` row expects nothing |
+| `tags` | optional; at most 256 bytes of UTF-8 without control characters, passed through |
+
+A term (of `values`, of `goal`, a name of `project`) is exactly one s-expression of at most
+65,536 characters, held to the rules of single tokens; it travels as its canonical text, and a
+name of `project` as the problem declares it.
+
+Around the row: a line is at most 16 MiB (16,777,216 bytes), its line end not counted, and a
+longer one is refused and passed over without being held in memory; a line that is empty or only
+blanks is no row; a line ends with a line feed, with or without a carriage return before it; a
+byte order mark at the very start is skipped. A set has at most 1,000,000 rows: the row after
+that is refused once, and reading ends. A refused row does not stop the reading.
+
+### The codes of a row
+
+A refusal of a row is an `SmtRefusalData` with `Row`, the line of the set; `File`, the row's id
+(empty when the row has no readable id); and `Line`, the line inside the problem's or the term's
+text for a refusal of the sanitizer, 0 for a refusal of the row itself. A refusal of the
+sanitizer keeps its own code from the table above; for a term the reason starts with the field
+(`'goal': ...`, `'values[2]': ...`). A reason names a field or a single token cut to 64
+characters, never more of the row.
+
+| Code | When |
+|---|---|
+| `row_malformed` | the line is not valid UTF-8 or not one JSON object (nothing of such a line is read, its id included), or the row gives a field twice |
+| `row_too_long` | the line is longer than 16 MiB; nothing of it is read |
+| `id_invalid` | the id is not 1 to 64 of the characters an id is made of |
+| `id_duplicate` | an earlier row of the set has the id |
+| `field_missing` | the row lacks `id` or `smt2`, an `enumerate` row lacks `project`, a `prove` row lacks `goal` |
+| `field_invalid` | a field's value is of another type (null included), outside its range, none of the words the field takes, or not valid Unicode text; an array is empty or too long; a name of `project` is no symbol, or names a constant twice |
+| `field_not_allowed` | the row holds a name that is no field of a row (a misspelt field is one), or a field of another query than the row's |
+| `unknown_constant` | a name of `project` is not a constant the problem declares |
+| `too_many_problems` | the set has more than 1,000,000 rows; this row and what follows it were not read |
+
+What is looked at, in this order: the line is a row and every field that was given reads (the
+first fault in the order of the line); the row has its id, and no earlier row has it; it has its
+problem; every field belongs to the row's query and the query has the fields it needs; the
+sanitizer takes the problem; it takes the terms, and the names are declared constants.
+
+### The options of a run
+
+| Option (`SmtOptionsData`) | In a run's specification | Default | Ceiling | |
+|---|---|---|---|---|
+| `Profile` | `profile` | the controller's | | the id of the solver profile; this package only carries it |
+| `Query` | `query` | `check` | | the query of a row that names none |
+| `MaxModels` | `max_models` | 2 | 1,000 | the most models of an enumeration whose row names no number |
+| `Seed` | `seed` | 0 | 2,147,483,647 | the seed of the solver's random choices |
+| `ResourceLimit` | `rlimit` | the profile's | 4,294,967,295 | the solver's own counter of work for one check |
+| `HardCapSeconds` | `hard_cap_s` | 60 | 600 | seconds of a reference machine for one problem; the controller turns them into a budget of the solver's work that is the same on every node |
+| `MemoryMegabytes` | `memory_mb` | 1,024 | 4,096 | the most memory of one problem |
+| `SamplingRate` | `sampling_rate` | 0.05 | 1 | the share of the problems that are run on two machines; 0 turns re-execution off, 1 runs every problem twice |
+
+A number that is 0 and a text that is empty mean "not set: the default". The sampling rate is the
+exception, since 0 is a rate of its own: a new `SmtOptionsData` holds its default.
+`SmtOptionsRules.Check` gives one sentence for each option that is out of its range, naming it as
+a run's specification does; `SmtOptionsRules.Resolve` gives a copy with the defaults of this
+package filled in (the profile and the resource limit stay as they are: their defaults are the
+controller's and the profile's). A reader takes options that are in range, and refuses to be
+made with others.
 
 ## Checking a model
 
