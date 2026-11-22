@@ -1,0 +1,2 @@
+# Every file of the spike is text that bash, Python and Lean read on every runner: always LF.
+* text eol=lf

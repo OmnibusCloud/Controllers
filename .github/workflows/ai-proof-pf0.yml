@@ -1,0 +1,92 @@
+name: AI Proof PF-0
+run-name: "AI Proof PF-0: ${{ github.ref_name }}"
+
+# The PF-0 gate of the Proof controller (a spike): the official Lean release and Mathlib's
+# compiled environment of AI/OutWit.Controller.AI.Proof.Spike/pins.env on six platforms, measured.
+# Everything is downloaded and run here, on hosted runners; nothing is published.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spike/proof-pf0
+    paths:
+      - 'AI/OutWit.Controller.AI.Proof.Spike/**'
+      - '.github/workflows/ai-proof-pf0.yml'
+
+permissions:
+  contents: read
+
+# A newer push supersedes the run before it.
+concurrency:
+  group: ai-proof-pf0-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SPIKE: AI/OutWit.Controller.AI.Proof.Spike
+  PYTHONUTF8: 1
+  PYTHONDONTWRITEBYTECODE: 1
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  platform:
+    name: ${{ matrix.rid }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, rid: linux-x64 }
+          - { os: windows-2022, rid: win-x64 }
+          - { os: macos-15, rid: osx-arm64 }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64 }
+          - { os: macos-15-intel, rid: osx-x64 }
+          - { os: windows-11-arm, rid: win-arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 340
+    env:
+      RID: ${{ matrix.rid }}
+      OUT: results-${{ matrix.rid }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14'
+
+      - name: Machine
+        run: python "$SPIKE/harness/machine.py" "$OUT/machine.json"
+
+      # The official release of this platform, checked against the pinned SHA-256.
+      - name: Lean toolchain
+        id: toolchain
+        run: |
+          python "$SPIKE/harness/toolchain.py" "$RID" "$PF0_WORK/toolchain" "$OUT/toolchain.json"
+          cat "$OUT/toolchain.json"
+
+      - name: Prelude and the core smoke
+        id: smoke
+        run: python "$SPIKE/harness/smoke.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
+
+      # Mathlib's compiled environment by Mathlib's own cache tool: nothing of it enters the
+      # Actions cache.
+      - name: Mathlib environment
+        id: mathlib
+        if: always() && steps.toolchain.outcome == 'success'
+        timeout-minutes: 120
+        run: python "$SPIKE/harness/mathlib.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
+
+      - name: Start-up of one process
+        if: always() && steps.mathlib.outcome == 'success'
+        timeout-minutes: 60
+        run: python "$SPIKE/harness/startup.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: results-${{ matrix.rid }}
+          path: results-${{ matrix.rid }}
+          retention-days: 14
+          if-no-files-found: warn
