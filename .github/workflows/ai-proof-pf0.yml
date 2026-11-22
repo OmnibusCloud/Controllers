@@ -79,7 +79,7 @@ jobs:
 
       - name: Choose the set
         run: |
-          python "$SPIKE/golden/select.py" --parquet "$RUNNER_TEMP/numina.parquet" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --max-heartbeats "$MAX_HEARTBEATS"
+          python "$SPIKE/golden/selection.py" --parquet "$RUNNER_TEMP/numina.parquet" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --max-heartbeats "$MAX_HEARTBEATS"
           cat "$OUT/select-report.md" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -282,6 +282,13 @@ jobs:
           else
             python "$SPIKE/harness/sandbox.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --landrun "$PF0_WORK/landrun/landrun"
           fi
+
+      # The delivery options of the environment, on one runner: the cache's own files as our
+      # asset (unpacked by the toolchain's leantar alone), plain zstd, smaller environments.
+      - name: Delivery options (one runner)
+        if: always() && matrix.rid == 'linux-x64' && steps.mathlib.outcome == 'success'
+        timeout-minutes: 120
+        run: python "$SPIKE/harness/pack.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()

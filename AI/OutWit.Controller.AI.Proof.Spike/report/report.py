@@ -134,11 +134,18 @@ def main() -> int:
                  entry.get("unpack_s")] for entry in pack.get("variants", [])]
         out += ["Packing the environment (one runner):", ""] + table(
             ["packing", "bytes", "seconds to pack", "parts of at most 2 GiB", "seconds to unpack"], rows)
+        first = pack["variants"][0] if pack.get("variants") else {}
+        if first:
+            out += [f"The `.ltar` asset unpacked by the toolchain's `leantar` alone gives "
+                    f"{'the same files as' if first.get('same_files_as_the_cache_tool') else 'files that DIFFER from'} "
+                    f"Mathlib's cache tool; `lean` "
+                    f"{'imports Mathlib from it' if first.get('lean_imports_from_it') else 'does NOT import from it'}.", ""]
         if pack.get("closures"):
-            rows = [[entry["root"], entry["modules"], gib(entry["bytes"]), gib(entry.get("needed_bytes"))]
+            rows = [[entry["root"], entry["modules"], gib(entry["bytes"]), gib(entry.get("needed_bytes")),
+                     mib(entry.get("download_bytes")), entry.get("download_files")]
                     for entry in pack["closures"]]
             out += ["Smaller environments (the import closure of one root):", ""] + table(
-                ["root", "modules", "all files GiB", ".olean* + .ir GiB"], rows)
+                ["root", "modules", "all files GiB", ".olean* + .ir GiB", "cache download MiB", "cache files"], rows)
 
     # ------------------------------------------------------------------ start-up
     rows = []

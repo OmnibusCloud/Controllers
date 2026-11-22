@@ -1,6 +1,6 @@
 """PF-0 spike: choosing the golden set (run once, on one runner; its list is committed).
 
-    select.py --parquet <file> --lean-root <toolchain root> --work <dir> --out <dir>
+    selection.py --parquet <file> --lean-root <toolchain root> --work <dir> --out <dir>
               [--seed N] [--jobs N] [--model N] [--human N] [--with-sorry N]
 
 From the pinned NuminaMath-LEAN file: every row that carries a proof (the model's
@@ -202,7 +202,7 @@ def main() -> int:
 
     lines = ["### Golden set selection", "",
              f"Source: {golden.SOURCE} ({golden.LICENCE}), {len(rows)} rows; seed {options.seed}; "
-             f"budget {options.max_heartbeats} thousand heartbeats.", "",
+             f"budget maxHeartbeats {options.max_heartbeats}.", "",
              "| rows with | usable as a `check` item | not usable, by reason |", "|---|---|---|"]
     names = {"k": "a model proof", "h": "a complete human proof", "w": "a human proof with sorry"}
     for kind in "khw":
