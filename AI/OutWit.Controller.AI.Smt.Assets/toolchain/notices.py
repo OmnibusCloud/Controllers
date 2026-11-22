@@ -55,6 +55,9 @@ PARTS = [
             "src/util/scoped_timer.cpp is replaced (a timer never fires) and src/util/hwf.cpp is edited (a "
             "rounding other than to nearest stops the solver). The changes are wasi/scoped_timer.cpp and patch.py "
             "of the toolchain.",
+            "Individual source files of Z3 name further copyright holders in their headers and are distributed "
+            "under the same licence; the source archive above, at the address and with the SHA-256 given, is the "
+            "place to read them.",
         ],
         "files": ["LICENSE-z3.txt"],
     },
