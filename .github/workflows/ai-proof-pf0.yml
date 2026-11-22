@@ -83,7 +83,7 @@ jobs:
           cat "$OUT/select-report.md" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: golden-selection
           path: selection
@@ -182,12 +182,12 @@ jobs:
 
       - name: REPL
         id: repl
-        if: always() && steps.toolchain.outcome == 'success'
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' }}
         timeout-minutes: 30
         run: python "$SPIKE/harness/tools.py" repl --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
 
       - name: Core smoke (no Mathlib), both paths
-        if: always() && steps.prelude.outcome == 'success'
+        if: ${{ !cancelled() && steps.prelude.outcome == 'success' }}
         timeout-minutes: 20
         run: python "$SPIKE/harness/smoke.py" run --set core --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --repl "$PF0_REPL"
 
@@ -195,24 +195,24 @@ jobs:
       # Actions cache.
       - name: Mathlib environment
         id: mathlib
-        if: always() && steps.toolchain.outcome == 'success'
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' }}
         timeout-minutes: 120
         run: python "$SPIKE/harness/mathlib.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
 
       - name: Start-up of one process
-        if: always() && steps.mathlib.outcome == 'success'
+        if: ${{ !cancelled() && steps.mathlib.outcome == 'success' }}
         timeout-minutes: 75
         run: python "$SPIKE/harness/startup.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
 
       - name: Mathlib smoke, both paths
         id: smoke
-        if: always() && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success'
+        if: ${{ !cancelled() && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success' }}
         timeout-minutes: 60
         run: python "$SPIKE/harness/smoke.py" run --set mathlib --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" --repl "$PF0_REPL" --jobs ${{ matrix.jobs }}
 
       # What is known so far, before the long steps.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: early-${{ matrix.rid }}
           path: results-${{ matrix.rid }}
@@ -223,12 +223,12 @@ jobs:
       # compared across the platforms.
       - name: Golden set, one process per item
         id: golden
-        if: always() && env.GOLDEN == 'true' && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success'
+        if: ${{ !cancelled() && env.GOLDEN == 'true' && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success' }}
         timeout-minutes: 240
         run: python "$SPIKE/harness/check.py" --lean-root "$LEAN_ROOT" --lean-path "$PF0_WORK/prelude" --lean-path-file "$PF0_WORK/leanpath.json" --import Mathlib --items items/items.jsonl --out "$OUT/golden-fresh.jsonl" --work "$PF0_WORK/golden" --jobs ${{ matrix.jobs }} --max-heartbeats "$MAX_HEARTBEATS" --every ${{ matrix.every }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always() && steps.golden.outcome == 'success'
+        if: ${{ !cancelled() && steps.golden.outcome == 'success' }}
         with:
           name: golden-${{ matrix.rid }}
           path: results-${{ matrix.rid }}/golden-fresh.jsonl
@@ -236,20 +236,20 @@ jobs:
 
       # The same items through the pool path: the same number of processes, each importing once.
       - name: Golden set, pooled processes
-        if: always() && env.GOLDEN == 'true' && steps.mathlib.outcome == 'success' && steps.repl.outcome == 'success' && steps.prelude.outcome == 'success'
+        if: ${{ !cancelled() && env.GOLDEN == 'true' && steps.mathlib.outcome == 'success' && steps.repl.outcome == 'success' && steps.prelude.outcome == 'success' }}
         timeout-minutes: 120
         run: python "$SPIKE/harness/pool.py" --repl "$PF0_REPL" --bin "$LEAN_ROOT/bin" --lean-path "$PF0_WORK/prelude" --lean-path-file "$PF0_WORK/leanpath.json" --import Mathlib --items items/items.jsonl --out "$OUT/golden-pool.jsonl" --work "$PF0_WORK/golden-pool" --workers ${{ matrix.jobs }} --max-heartbeats "$MAX_HEARTBEATS" --every ${{ matrix.every }}
 
       # One environment, built elsewhere, replayed by this platform's kernel.
       - name: Replay a slice of the environment
-        if: always() && steps.mathlib.outcome == 'success'
+        if: ${{ !cancelled() && steps.mathlib.outcome == 'success' }}
         timeout-minutes: 120
         run: python "$SPIKE/harness/replay.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT" ${{ matrix.processes >= 6 && '--together' || '' }}
 
       # Stage one of the split: check, export, and judge the export on this machine.
       - name: Check and export
         id: export
-        if: always() && steps.mathlib.outcome == 'success'
+        if: ${{ !cancelled() && steps.mathlib.outcome == 'success' }}
         timeout-minutes: 150
         run: |
           if [ "$GOLDEN" = "true" ]; then
@@ -260,7 +260,7 @@ jobs:
           fi
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always() && steps.export.outcome == 'success'
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
         with:
           name: exports-${{ matrix.rid }}
           path: exports-${{ matrix.rid }}
@@ -268,12 +268,12 @@ jobs:
           if-no-files-found: warn
 
       - name: Memory of several processes
-        if: always() && steps.mathlib.outcome == 'success' && steps.repl.outcome == 'success' && steps.prelude.outcome == 'success'
+        if: ${{ !cancelled() && steps.mathlib.outcome == 'success' && steps.repl.outcome == 'success' && steps.prelude.outcome == 'success' }}
         timeout-minutes: 60
         run: python "$SPIKE/harness/degree.py" --repl "$PF0_REPL" --bin "$LEAN_ROOT/bin" --lean-path-file "$PF0_WORK/leanpath.json" --lean-path "$PF0_WORK/prelude" --import Mathlib --work "$PF0_WORK/degree" --out "$OUT/degree.json" --max ${{ matrix.processes }} --items "$SPIKE/golden/smoke-mathlib.jsonl"
 
       - name: Sandbox (Linux)
-        if: always() && runner.os == 'Linux' && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success'
+        if: ${{ !cancelled() && runner.os == 'Linux' && steps.mathlib.outcome == 'success' && steps.prelude.outcome == 'success' }}
         timeout-minutes: 90
         run: |
           python "$SPIKE/harness/tools.py" landrun --rid "$RID" --work "$PF0_WORK" --out "$OUT"
@@ -286,12 +286,12 @@ jobs:
       # The delivery options of the environment, on one runner: the cache's own files as our
       # asset (unpacked by the toolchain's leantar alone), plain zstd, smaller environments.
       - name: Delivery options (one runner)
-        if: always() && matrix.rid == 'linux-x64' && steps.mathlib.outcome == 'success'
+        if: ${{ !cancelled() && matrix.rid == 'linux-x64' && steps.mathlib.outcome == 'success' }}
         timeout-minutes: 120
         run: python "$SPIKE/harness/pack.py" --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --out "$OUT"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: results-${{ matrix.rid }}
           path: results-${{ matrix.rid }}
@@ -302,7 +302,7 @@ jobs:
   # judged against the challenge on a machine that never saw the solution's text.
   confirm:
     needs: [data, platform]
-    if: always() && needs.data.result == 'success'
+    if: ${{ !cancelled() && needs.data.result == 'success' }}
     name: confirm ${{ matrix.from }} on ${{ matrix.rid }}
     strategy:
       fail-fast: false
@@ -367,7 +367,7 @@ jobs:
           python "$SPIKE/harness/split.py" confirm --lean-root "$LEAN_ROOT" --work "$PF0_WORK" --items "$ITEMS" --exports exports --out "$OUT" --label "${{ matrix.from }}-on-$RID" --max-heartbeats "$MAX_HEARTBEATS" --sandbox
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: confirm-${{ matrix.from }}-on-${{ matrix.rid }}
           path: confirm-${{ matrix.from }}-on-${{ matrix.rid }}
@@ -378,7 +378,7 @@ jobs:
   # environment bytes.
   report:
     needs: [platform, confirm]
-    if: always() && needs.platform.result != 'skipped'
+    if: ${{ !cancelled() && needs.platform.result != 'skipped' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -403,7 +403,7 @@ jobs:
           exit $code
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: proof-pf0-report
           path: report.md
