@@ -365,8 +365,9 @@ script). Wherever the evaluator gives a value, the solver agrees with it.
   otherwise.
 - Datatypes: constructors, selectors, `(_ is C)` and `is-C`, `match`; the declarations of
   SMT-LIB 2.6 and 2.5, with `par`.
-- Uninterpreted sorts, with the elements the model lists, and uninterpreted functions, with the
-  model's interpretations.
+- Uninterpreted sorts, with the elements the model lists and the ones it names without listing
+  them (below), and uninterpreted functions, with the model's interpretations. Two elements of
+  a sort are the same element exactly when they have the same name.
 - `define-fun`, `define-fun-rec`, `define-funs-rec`.
 - The basic operators of strings: `str.++`, `str.len`, `str.at`, `str.substr`, `str.prefixof`,
   `str.suffixof`, `str.contains`, `str.indexof`, `str.replace`, `str.<`, `str.<=`, the
@@ -443,8 +444,9 @@ A solver names an element of an uninterpreted sort after the sort (`A!val!0` of 
 and may give a function such an element as its value without listing that sort's universe.
 Such an element, named in the model's definitions, of a sort the problem declares without
 parameters, and declared by nobody, is declared with the listed ones, and `Unlisted` counts
-them: the script names nothing it does not declare. The evaluator itself reads only the
-elements a model lists.
+them: the script names nothing it does not declare. The evaluator reads such a name by the same
+rule, as an element of its sort like a listed one; a name of that shape for a sort the problem
+does not declare, or declares with parameters, stays an unknown symbol.
 
 ## A node's work
 

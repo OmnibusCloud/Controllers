@@ -73,7 +73,7 @@ public sealed class SmtSolverSliceTests
     /// The closed scripts that declare elements the model names without listing them, by
     /// problem: the model gives a function a value that is an element of a sort
     /// (<c>A$!val!0</c>) whose universe it does not list. Written here by name so that a script
-    /// that starts or stops needing such a declaration shows.
+    /// that starts or stops needing such a declaration shows; the evaluator validates both models.
     /// </summary>
     private static readonly string[] CLOSED_WITH_UNLISTED = ["p481", "p482"];
 
@@ -213,6 +213,10 @@ public sealed class SmtSolverSliceTests
                 return;
 
             Assert.That(classes, Is.EquivalentTo(CLASSES), "validated, partial and failed, by logic");
+
+            // The models that name elements without listing their sorts' universes are validated.
+            foreach (var id in CLOSED_WITH_UNLISTED)
+                Assert.That(m_results.Single(result => result.Id == id).Validation?.Class, Is.EqualTo(SmtValidationClass.Validated), id);
 
             var covered = classes.Where(pair => COVERED.Contains(pair.Key)).ToList();
             Assert.That(covered.Sum(pair => pair.Value.Validated + pair.Value.Partial + pair.Value.Failed), Is.EqualTo(COVERED_SAT), "the satisfiable problems of the nine logics the evaluator's coverage is stated for");

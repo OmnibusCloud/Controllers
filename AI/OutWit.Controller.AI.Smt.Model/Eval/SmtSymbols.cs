@@ -1,10 +1,12 @@
+using OutWit.Controller.AI.Smt.Model.Lang;
+
 namespace OutWit.Controller.AI.Smt.Model.Eval;
 
 /// <summary>
 /// What a name stands for in one validation. A term of the problem sees the local names around
 /// it, then the names the problem introduces. A term of the model sees, after those, the names
-/// the model adds for itself: the elements of its universes and the functions behind its
-/// arrays. A term of the problem never sees the model's own names.
+/// the model adds for itself: the elements of its universes, listed or only named, and the
+/// functions behind its arrays. A term of the problem never sees the model's own names.
 /// <para>
 /// A symbol the problem declares takes its value from the model, checked against the declared
 /// sort; one the model leaves out takes the default value of its sort, and the validation
@@ -206,11 +208,30 @@ internal sealed class SmtSymbols
             return sort.Kind == SmtSortKind.Uninterpreted ? new SmtElementValue(name, sort) : throw m_meter.Doubt();
         }
 
-        if (!m_run.Model.Functions.TryGetValue(name, out var function) || function.Parameters.Count != 0)
+        if (!m_run.Model.Functions.TryGetValue(name, out var function))
+            return Unlisted(name) ?? throw Unknown(name);
+
+        if (function.Parameters.Count != 0)
             throw Unknown(name);
 
         var value = m_run.Evaluator.Eval(function.Body, new SmtScope(true), depth + SmtEvaluator.CALL_LEVELS);
         return m_run.Conformance.Conform(value, m_run.Resolve(function.ResultSort), depth);
+    }
+
+    /// <summary>
+    /// An element of a sort the model names without listing the sort's universe, read as the
+    /// closed script declares it (<see cref="SmtElementNames"/>): the name is a sort's, the mark
+    /// and a number; the problem declares that sort without parameters; and nobody declares the
+    /// name. It is an element of the sort like a listed one, the same element exactly when the
+    /// name is the same.
+    /// </summary>
+    /// <returns>The element, or null when the name is no such element's.</returns>
+    private SmtElementValue? Unlisted(string name)
+    {
+        if (!SmtElementNames.TrySortOf(name, out var sort) || !m_run.Problem.Resolver.IsDeclaredWithoutParameters(sort))
+            return null;
+
+        return new SmtElementValue(name, m_run.Resolve(SmtExpression.Symbol(sort)));
     }
 
     /// <summary>
