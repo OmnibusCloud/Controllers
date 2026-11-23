@@ -1,0 +1,2 @@
+# The golden file of the solver's outcomes: LF on every checkout
+outcomes.tsv text eol=lf
