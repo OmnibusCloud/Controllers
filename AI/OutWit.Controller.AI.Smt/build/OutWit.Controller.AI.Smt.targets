@@ -1,0 +1,44 @@
+<Project>
+
+  <!--
+      Consumer-side targets for the OutWit.Controller.AI.Smt NuGet package.
+      Auto-imported into any csproj that PackageReferences this controller.
+      Copies the package's content/module/* into the consumer's
+      $(OutputPath)@Controllers\smt.module\ so the controller runtime can
+      find the controller DLL, the Smt.Model DLL and the manifest, then resolves
+      the module's Tier-2 data assets (the native wasmtime library per platform)
+      from the manifest into the same folder, the way Verify's and Corpus's
+      targets do.
+  -->
+
+  <PropertyGroup>
+    <_OutWitSmtModulePackageContent>$(MSBuildThisFileDirectory)..\content\module\</_OutWitSmtModulePackageContent>
+    <_OutWitSmtModuleOutputDir>$(OutputPath)@Controllers\smt.module\</_OutWitSmtModuleOutputDir>
+  </PropertyGroup>
+
+  <Target Name="OutWitCopySmtModule"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="Build"
+          Condition="Exists('$(_OutWitSmtModulePackageContent)')">
+    <ItemGroup>
+      <_OutWitSmtFiles Include="$(_OutWitSmtModulePackageContent)**\*" />
+    </ItemGroup>
+    <Copy
+        SourceFiles="@(_OutWitSmtFiles)"
+        DestinationFiles="@(_OutWitSmtFiles->'$(_OutWitSmtModuleOutputDir)%(RecursiveDir)%(Filename)%(Extension)')"
+        SkipUnchangedFiles="true"
+        OverwriteReadOnlyFiles="true" />
+    <Message Importance="Normal"
+             Text="OutWit.Controller.AI.Smt: staged module to '$(_OutWitSmtModuleOutputDir)'." />
+  </Target>
+
+  <Target Name="OutWitResolveSmtAssets"
+          AfterTargets="OutWitCopySmtModule"
+          Condition="Exists('$(_OutWitSmtModuleOutputDir)controller.json')">
+    <ResolveControllerAssetsTask
+        ManifestPath="$(_OutWitSmtModuleOutputDir)controller.json"
+        OutputPath="$(OutputPath)@Controllers\"
+        ResolveForAllPlatforms="true" />
+  </Target>
+
+</Project>
