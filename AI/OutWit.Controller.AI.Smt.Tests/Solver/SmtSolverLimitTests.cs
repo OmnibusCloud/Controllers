@@ -205,6 +205,22 @@ public sealed class SmtSolverLimitTests
     }
 
     [Test]
+    public void AFailureOfTheHostOutsideTheSolverIsAFaultOfTheNodeNamedByItsKindTest()
+    {
+        // A sandbox that was closed under the session: nothing the solver did, and nothing the
+        // problem is to blame for. The outcome names the kind of failure and no more of it.
+        var solved = SmtSolverRig.SolveInAClosedSandbox(SmtSolverProblems.Check("small", SmtSolverCases.ONE_SOLUTION), new SmtOptionsData());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(solved.Words(), Is.EqualTo("node_fault host_fault"), solved.ToString());
+            Assert.That(solved.Message, Is.EqualTo("the host failed outside the solver: ObjectDisposedException"));
+            Assert.That(solved.Verdict, Is.EqualTo("none"));
+            Assert.That(solved.Fuel, Is.Zero);
+        });
+    }
+
+    [Test]
     public void AProcessWithoutASandboxSaysSoInFixedWordsTest()
     {
         const string WORDS = "the solver module (wasm/z3-5.4.1.wasm) is not in the controller's folder";

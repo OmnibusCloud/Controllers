@@ -150,6 +150,47 @@ public sealed class SmtSolverCheckTests
     }
 
     [Test]
+    public void AResourceLimitThatEndsACheckByAnExceptionIsTheLimitAsWellTest()
+    {
+        // The solver has two words for a check its limit stopped: "canceled" when the limit made
+        // it give up, and this one when the limit ended it by an exception, as here, in the
+        // middle of turning a multiplication into clauses.
+        const long LIMIT = 2_000;
+        var problem = SmtSolverProblems.Check("factors", """
+            (set-logic QF_BV)
+            (declare-const a (_ BitVec 64))
+            (declare-const b (_ BitVec 64))
+            (assert (= (bvmul a b) #x00000000ffffffc5))
+            (assert (bvugt a #x0000000000000001))
+            (assert (bvugt b #x0000000000000001))
+            """);
+
+        var solved = SmtSolverRig.Solve(problem, new SmtOptionsData { ResourceLimit = LIMIT });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(solved.Words(), Is.EqualTo("ok unknown rlimit"), solved.ToString());
+            Assert.That(solved.ReasonText, Is.EqualTo("max. resource limit exceeded"));
+            Assert.That(solved.ResourceCount, Is.EqualTo(LIMIT), "the counter stands at the limit");
+        });
+    }
+
+    [Test]
+    public void AnUnknownTheSolverNamesNoReasonForIsUnknownByAnotherReasonAndKeepsItsWordTest()
+    {
+        var problem = SmtSolverProblems.Check("power", "(declare-const x Real)(declare-const y Real)(assert (= (^ x y) 3.0))(assert (> x 1.0))");
+
+        var solved = SmtSolverRig.Solve(problem, new SmtOptionsData());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(solved.Words(), Is.EqualTo("ok unknown other"), solved.ToString());
+            Assert.That(solved.ReasonText, Is.EqualTo("unknown"), "the solver's own word, kept");
+            Assert.That(solved.ResourceCount, Is.LessThan(1_000_000), "far below the limit");
+        });
+    }
+
+    [Test]
     public void AProblemTheSolversProcedureIsNotCompleteForIsUnknownByItsOwnWordTest()
     {
         var one = SmtSolverCases.Of("check-strings-incomplete");

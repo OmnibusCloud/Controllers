@@ -122,6 +122,22 @@ internal static class SmtSolverRig
         return unavailable;
     }
 
+    /// <summary>
+    /// Solves a problem in a sandbox that was closed under it: the sandbox with explicit trap
+    /// checks is released first (the next test that asks for one makes another), and the session
+    /// is then started in it.
+    /// </summary>
+    /// <param name="problem">The problem as it travels.</param>
+    /// <param name="options">The run's options, each in its range.</param>
+    /// <returns>The outcome.</returns>
+    public static SmtSolved SolveInAClosedSandbox(SmtProblemData problem, SmtOptionsData options)
+    {
+        var closed = (SmtSandbox)Explicit();
+        Release();
+
+        return Take(SmtSolver.Solve(problem, options, closed, null));
+    }
+
     /// <summary>Releases the sandbox with explicit trap checks, when a test made one.</summary>
     public static void Release()
     {
