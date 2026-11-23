@@ -1,6 +1,6 @@
 {
   "comment": "The wire layout of OutWit.Controller.AI.Smt.Model: the Model package version and, for every MemoryPack type, its members in wire order with name, type and the value a new instance holds. Once a version of the package is published, a member is only ever appended, with the next order; a member that changes its name, its type, its place or its default is a wire change for a deployed fleet and for every application built against the package. Update this file in the same commit as the type (SmtModelWireLayoutTests prints the current layout when it differs).",
-  "modelVersion": "0.1.0",
+  "modelVersion": "0.2.0",
   "types": {
     "SmtOptionsData": [
       "0: Profile: String = \"\"",
@@ -32,6 +32,76 @@
       "3: Code: String = \"\"",
       "4: Reason: String = \"\"",
       "5: Row: Int32 = 0"
+    ],
+    "SmtResultData": [
+      "0: Index: Int32 = 0",
+      "1: Id: String = \"\"",
+      "2: Hash: String = \"\"",
+      "3: Ticket: String = \"\"",
+      "4: Query: SmtQuery = Check",
+      "5: Status: String = \"\"",
+      "6: Code: String = \"\"",
+      "7: Message: String = \"\"",
+      "8: Verdict: String = \"\"",
+      "9: Reason: String = \"\"",
+      "10: ReasonText: String = \"\"",
+      "11: Proof: String = \"\"",
+      "12: Count: Int32 = 0",
+      "13: Complete: Boolean = false",
+      "14: LimitReached: Boolean = false",
+      "15: Models: List<String> = []",
+      "16: Values: List<String> = []",
+      "17: Checks: Int32 = 0",
+      "18: ResourceCount: Int64 = 0",
+      "19: Fuel: Int64 = 0",
+      "20: PeakMemoryBytes: Int64 = 0",
+      "21: Transcript: String = \"\"",
+      "22: ControllerVersion: String = \"\"",
+      "23: Platform: String = \"\"",
+      "24: WallMs: Int32 = 0",
+      "25: Digest: String = \"\""
+    ],
+    "SmtResultPackageData": [
+      "0: ResultsBlobId: Guid = Guid.Empty",
+      "1: Sha256: String = \"\"",
+      "2: SizeBytes: Int64 = 0",
+      "3: ResultCount: Int32 = 0",
+      "4: Ticket: String = \"\"",
+      "5: FaultCode: String = \"\"",
+      "6: FaultMessage: String = \"\""
+    ],
+    "SmtRuntimeDiagnosticsData": [
+      "0: ControllerVersion: String = \"\"",
+      "1: ProfileId: String = \"\"",
+      "2: SolverVersion: String = \"\"",
+      "3: ModuleFile: String = \"\"",
+      "4: ModuleSha256: String = \"\"",
+      "5: ModuleSize: Int64 = 0",
+      "6: ModulePresent: Boolean = false",
+      "7: ModuleCompiled: Boolean = false",
+      "8: CompileMs: Int64 = 0",
+      "9: SandboxProblem: String = \"\"",
+      "10: WasmtimeBinding: String = \"\"",
+      "11: NativesVersion: String = \"\"",
+      "12: NativesSha256: String = \"\"",
+      "13: NativesPinned: Boolean = false",
+      "14: TrapMode: String = \"\"",
+      "15: Platform: String = \"\"",
+      "16: LogicalCores: Int32 = 0",
+      "17: AvailableMemoryBytes: Int64 = 0",
+      "18: SessionMemoryBytes: Int64 = 0",
+      "19: Degree: Int32 = 0",
+      "20: DegreeReason: String = \"\""
+    ],
+    "SmtTaskPackageData": [
+      "0: ProblemsBlobId: Guid = Guid.Empty",
+      "1: Sha256: String = \"\"",
+      "2: SizeBytes: Int64 = 0",
+      "3: ProblemCount: Int32 = 0",
+      "4: Ticket: String = \"\"",
+      "5: RequiredControllerVersion: String = \"\"",
+      "6: IndexDigest: String = \"\"",
+      "7: Options: SmtOptionsData? = null"
     ]
   }
 }

@@ -5,8 +5,8 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>Smt</ControllerName>
-    <Version>0.1.0</Version>
-    <Description>The language layer and data types of the OutWit Smt controller: a strict SMT-LIB 2.6 reader with shape limits, shared by everything that reads a problem before a solver does.</Description>
+    <Version>0.2.0</Version>
+    <Description>The language layer and data types of the OutWit Smt controller: a strict SMT-LIB 2.6 reader with shape limits, shared by everything that reads a problem before a solver does, and the wire types of the packages a node solves and returns.</Description>
     <PackageTags>smt;smt-lib;z3;witengine;witcloud;controller;data-types</PackageTags>
   </PropertyGroup>
 

@@ -3,10 +3,12 @@
 The language layer and the data types of the OutWit Smt controller: SMT problems solved by a
 pinned solver on anonymous nodes, with every answer checked.
 
-This page describes **0.1.0**: the reader, the sanitizer with the canonical form of a problem and
+This page describes **0.2.0**: the reader, the sanitizer with the canonical form of a problem and
 the script builders, the problem set (its rows, its reader, its schema, the options of a run),
-and the model evaluator that checks a `sat` answer. The controller is in development; the other
-wire types of a run join this package before a controller that needs them is published.
+the model evaluator that checks a `sat` answer, and the wire types of a node's work (a package of
+problems, a row, a package of rows, the diagnostics). The controller is in development; the
+other wire types of a run (a preflight, a report) join this package before a controller that
+needs them is published.
 
 ## Reading SMT-LIB
 
@@ -443,3 +445,67 @@ Such an element, named in the model's definitions, of a sort the problem declare
 parameters, and declared by nobody, is declared with the listed ones, and `Unlisted` counts
 them: the script names nothing it does not declare. The evaluator itself reads only the
 elements a model lists.
+
+## A node's work
+
+Problems travel to a node and rows travel back as blobs: what the messages carry are references.
+These are the types of both ends; the package format of the blobs is the controller's own.
+
+| Type | Role |
+|---|---|
+| `SmtTaskPackageData` | what a node is handed: the blob of the problems (`ProblemsBlobId`, `Sha256`, `SizeBytes`), how many (`ProblemCount`), the package's `Ticket`, the controller version the job runs on (`RequiredControllerVersion`), the digest of the problems' indices (`IndexDigest`), the run's `Options`, resolved |
+| `SmtResultPackageData` | what a node returns: the blob of the rows (`ResultsBlobId`, `Sha256`, `SizeBytes`), how many (`ResultCount`), the ticket it answers, and a `FaultCode` with its `FaultMessage` when the node could not work on the package at all |
+| `SmtResultData` | one problem's row: the problem (`Index`, `Id`, the `Hash` of the text the node was given), the `Ticket`, how its session ended and what it came to, every model and value as the solver printed it, what it cost, the `ControllerVersion`, the `Platform`, the `WallMs`, and its `Digest` |
+| `SmtResultDigest` | the canonical form of a row and its SHA-256: `Of(row)`, `Holds(row)`, `Canonical(row)` |
+| `SmtResultWords` | the words of a row: statuses, verdicts, reasons, proofs |
+| `SmtNodeFaults` | the codes of a package a node could not work on |
+| `SmtRuntimeDiagnosticsData` | what the controller of a process carries and can do |
+
+The ticket is 16 random bytes as 32 lower-case hex characters, made with the package; it comes
+back in the result package and in every row, and is never written to a document. The index
+digest is the SHA-256 over the indices of the package's problems in ascending order, each as four
+bytes, low byte first.
+
+### The row of a problem
+
+| Field | |
+|---|---|
+| `Status` | `ok`, `refused`, `input_error`, `output_exceeded`, `engine_crash`, `node_fault` |
+| `Code`, `Message` | the fixed word of the outcome's kind and its sentence (at most 1,024 characters): a refusal's code and reason, the solver's message of an input error, the kind of a crash or of a fault |
+| `Verdict` | `sat`, `unsat`, `unknown`, `none` |
+| `Reason`, `ReasonText` | for an `unknown`: `rlimit`, `fuel`, `memout`, `incomplete`, `other` (else `none`), and the solver's own word |
+| `Proof` | `proved`, `counterexample`, `none` |
+| `Count`, `Complete`, `LimitReached` | what an enumeration found |
+| `Models`, `Values` | as the solver printed them, all of them: what a lab is shown of them is the report's to cut |
+| `Checks`, `ResourceCount`, `Fuel`, `PeakMemoryBytes` | what the session cost, in counts |
+| `Transcript` | the last 8 KB of the session's transcript |
+
+A row names no machine: it says the platform (`win-x64`, `linux-x64`, `osx-arm64`) and the
+controller version, and nothing else of the node. A row whose status is `node_fault` says
+something about the machine and nothing about the problem: the problem has no answer from it.
+
+### The digest of a row
+
+Everything in a row but the wall time, the platform, the controller version and the ticket is a
+function of the problem, the run's options and the solver module, so two honest machines give the
+same values to the last byte. `SmtResultDigest.Canonical` writes exactly those values, one after
+the other, each with its name and, for a text, its length (`smt-result/1`, then `index=12`,
+`id[6]=cage-1`, and so on, every model and every value in order), and `SmtResultDigest.Of` is the
+SHA-256 of its UTF-8 bytes in lower-case hexadecimal. A problem sent again in another package keeps
+its digest. Copies of a problem solved on two machines are compared by it; a host recomputes it
+from the row it received rather than trusting the one the row carries (`Holds`).
+
+### The codes of a node's refusal
+
+| Code | When |
+|---|---|
+| `version_mismatch` | the package was made for another controller version |
+| `package_invalid` | the reference names no blob, no options, no size, or a number of problems outside 1 to 256 |
+| `ticket_invalid` | the ticket is not 32 lower-case hex characters |
+| `package_too_large` | the blob is larger than a node takes, by its reference or by what it unpacks to |
+| `package_hash_mismatch` | the blob has another size or another SHA-256 than its reference names |
+| `package_unreadable` | the blob is not a package of problems of this format, or a frame of it cannot be read |
+| `package_mismatch` | the blob holds another number of problems, or other problems, than its reference names |
+| `sandbox_unavailable` | the process has no sandbox for the solver |
+| `memory_insufficient` | the machine's available memory does not hold one session under the package's options |
+| `download_failed`, `upload_failed` | a transfer failed at every attempt |
