@@ -126,6 +126,7 @@ symbol of a term, and it is written back as it was read.
 | `index_too_large` | in a command the solver is given or in a term, an index above 65,536 in a list that starts with `_`: a bit-vector's width, an extension, a repetition, a rotation, and every other index |
 | `too_many_symbols` | more than 100,000 declared names: constants, functions and sorts (declared or defined), datatypes, their constructors and their selectors |
 | `reserved_prefix` | a symbol that starts with `oc!`, the prefix of the controller's own names, anywhere in a command the solver is given or in a term: declared, bound by a binder, given by `:named`, or merely used |
+| `builtin_name` | in a problem whose logic is `ALL`, or that has set none before the command, a function declared or defined with parameters, or a constructor with fields, named `acos`, `acosh`, `arctan2`, `asin`, `asinh`, `atan`, `atan2`, `atanh`, `cos`, `cosh`, `exp`, `ln`, `log`, `sin`, `sinh`, `tan` or `tanh`: there the solver takes the declaration and still reads every application of the name as its own operator |
 | `not_a_term` | a text given as one term holds no s-expression, or more than one |
 
 The codes of a row of a problem set (`row_malformed`, `field_invalid` and the rest) are in
@@ -135,6 +136,12 @@ Where good SMT-LIB would mean something else to the solver than to the standard,
 refused, not reinterpreted. The first thing in the text that breaks a rule is the one named; a
 text that is not SMT-LIB is refused as such whatever commands it starts with. A stripped or
 refused command is not looked into.
+
+A problem may give its own meaning to a name the solver has built in. For every such name but
+the ones of `builtin_name`, the solver then either reports an error or reads an application
+that fits the problem's declaration as the problem's, and a constant of any such name (`pi`,
+`exp`) is the problem's: those problems are taken. Under any other logic than `ALL` the names
+of `builtin_name` are no operators of the solver's, and a function of such a name is taken too.
 
 The rules of single tokens are about what the solver reads. A `set-info` never reaches it, so
 it is held to its shape only and kept as it was read: a `:source` with an author's name

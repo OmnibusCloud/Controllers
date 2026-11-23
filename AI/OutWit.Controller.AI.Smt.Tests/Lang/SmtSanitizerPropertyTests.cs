@@ -218,6 +218,8 @@ public class SmtSanitizerPropertyTests
             $"(declare-const {secret} Int Int)",
             $"(declare-fun {secret} {secret} {secret})",
             $"(declare-datatype {secret} ({secret}))",
+            $"(declare-fun sin ({secret}) {secret})",
+            $"(declare-datatype {secret} ((exp ({secret} Real))))",
             $"(set-info {secret})",
             $"(set-info :status {secret} {secret})",
             $"(set-option :{secret} {secret})",
