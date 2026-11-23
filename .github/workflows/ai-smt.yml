@@ -170,7 +170,23 @@ jobs:
       # digest and fuel.
       - name: Test
         shell: bash
-        run: dotnet test AI/OutWit.Controller.AI.Smt.Tests/OutWit.Controller.AI.Smt.Tests.csproj -c Release --no-build --filter "Category!=Slice&Category!=Load" --logger "console;verbosity=normal"
+        run: |
+          set -o pipefail
+          dotnet test AI/OutWit.Controller.AI.Smt.Tests/OutWit.Controller.AI.Smt.Tests.csproj -c Release --no-build --filter "Category!=Slice&Category!=Load" --logger "console;verbosity=normal" | tee smt-tests.log
+
+      # The filter held: above the adapter's limit of selected tests it would run the whole
+      # assembly (smt.runsettings raises the limit), and the slice's and the load test's tests,
+      # which a test of each names here, would show in this job's log.
+      - name: The slice and the load test did not run here
+        if: always()
+        shell: bash
+        run: |
+          log=smt-tests.log
+          [ -s "$log" ] || { echo "::error::the test step left no log"; exit 1; }
+          for test in ListNamesTheWholeSliceTest ThePreflightOfTheSliceSaysWhatTheListSaysTest TenThousandProblemsTravelAsBlobsEndToEndTest; do
+            if grep -q "$test" "$log"; then echo "::error::$test ran in the three-platform job: the filter was not held"; exit 1; fi
+          done
+          grep -E "(Passed|Failed)!  - " "$log" || true
 
   # The 469 problems of the SMT-LIB release 2025 the committed list names. The sanitizer: every
   # one is sanitized, its canonical text held to be a fixed point and its :status to be the
