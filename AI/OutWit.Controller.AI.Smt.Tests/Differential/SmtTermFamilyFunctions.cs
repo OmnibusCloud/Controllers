@@ -3,26 +3,34 @@ using System.Text;
 namespace OutWit.Controller.AI.Smt.Tests.Differential;
 
 /// <summary>
-/// Uninterpreted functions and an uninterpreted sort, with the interpretation a model gives
+/// Uninterpreted functions and two uninterpreted sorts, with the interpretation a model gives
 /// them: constants, functions of one and two arguments over Int, Bool, bit-vectors and the
-/// sort, whose model is a chain of <c>ite</c> as a solver prints it, and three elements of the
-/// sort that the model lists. Each term gets a model of its own.
+/// sorts, whose model is a chain of <c>ite</c> as a solver prints it. The model lists the three
+/// elements of the sort <c>U</c>; it names the three of <c>V</c> without listing them, as a
+/// solver may. Each term gets a model of its own.
 /// </summary>
 internal sealed class SmtTermFamilyFunctions : SmtTermFamily
 {
     #region Constants
 
-    /// <summary>The declarations of the sort, the constants and the functions.</summary>
+    /// <summary>The declarations of the sorts, the constants and the functions.</summary>
     public const string PRELUDE =
         "(declare-sort U 0)(declare-const x Int)(declare-const y Int)(declare-const b Bool)(declare-const u U)"
         + "(declare-fun f (Int) Int)(declare-fun g (Int Int) Bool)(declare-fun h (Bool Int) Int)(declare-fun k (U) U)"
-        + "(declare-fun p (U) Bool)(declare-fun m (Int) U)(declare-fun q (U U) Int)(declare-fun w ((_ BitVec 8)) (_ BitVec 8))";
+        + "(declare-fun p (U) Bool)(declare-fun m (Int) U)(declare-fun q (U U) Int)(declare-fun w ((_ BitVec 8)) (_ BitVec 8))"
+        + "(declare-sort V 0)(declare-const v V)(declare-fun r (Int) V)(declare-fun s (V) Int)(declare-fun t (V U) V)";
 
-    /// <summary>The uninterpreted sort.</summary>
+    /// <summary>The uninterpreted sort whose universe the model lists.</summary>
     public static readonly SmtGenSort UNIVERSE = SmtGenSort.Uninterpreted("U");
 
-    /// <summary>The elements of the sort, as the model lists them.</summary>
+    /// <summary>The elements of <see cref="UNIVERSE"/>, as the model lists them.</summary>
     public static readonly string[] ELEMENTS = ["U!val!0", "U!val!1", "U!val!2"];
+
+    /// <summary>The uninterpreted sort whose elements the model names without listing them.</summary>
+    public static readonly SmtGenSort UNLISTED = SmtGenSort.Uninterpreted("V");
+
+    /// <summary>The elements of <see cref="UNLISTED"/>, as the model names them; every model names all three.</summary>
+    public static readonly string[] UNLISTED_ELEMENTS = ["V!val!0", "V!val!1", "V!val!2"];
 
     private static readonly SmtGenSort BYTE = SmtGenSort.BitVector(8);
 
@@ -44,8 +52,9 @@ internal sealed class SmtTermFamilyFunctions : SmtTermFamily
     #region Functions
 
     /// <summary>
-    /// A model of the prelude, as a solver prints one: the elements, the cardinality
-    /// constraint, a value for each constant and a chain of <c>ite</c> for each function.
+    /// A model of the prelude, as a solver prints one: the elements of <c>U</c>, the cardinality
+    /// constraint, a value for each constant and a chain of <c>ite</c> for each function. The
+    /// elements of <c>V</c> are named, not listed; the interpretation of <c>s</c> names all three.
     /// </summary>
     /// <returns>The answer of <c>get-model</c>.</returns>
     public string NewModel()
@@ -65,6 +74,10 @@ internal sealed class SmtTermFamilyFunctions : SmtTermFamily
         builder.Append($"(define-fun m ((x!0 Int)) U {Chain(1, () => [Small()], Element)})");
         builder.Append($"(define-fun q ((x!0 U) (x!1 U)) Int {Chain(2, () => [Element(), Element()], Small)})");
         builder.Append($"(define-fun w ((x!0 (_ BitVec 8))) (_ BitVec 8) {Chain(1, () => [Byte()], Byte)})");
+        builder.Append($"(define-fun v () V {Hidden()})");
+        builder.Append($"(define-fun r ((x!0 Int)) V {Chain(1, () => [Small()], Hidden)})");
+        builder.Append($"(define-fun s ((x!0 V)) Int (ite (= x!0 V!val!0) {Small()} (ite (= x!0 V!val!1) {Small()} (ite (= x!0 V!val!2) {Small()} {Small()}))))");
+        builder.Append($"(define-fun t ((x!0 V) (x!1 U)) V {Chain(2, () => [Hidden(), Element()], Hidden)})");
         return builder.Append(')').ToString();
     }
 
@@ -76,25 +89,30 @@ internal sealed class SmtTermFamilyFunctions : SmtTermFamily
         if (sort.Is(UNIVERSE))
             return generator.Chance(50) ? $"(k {Of(inner)})" : $"(m {generator.Term(SmtGenSort.INT, inner)})";
 
+        if (sort.Is(UNLISTED))
+            return generator.Chance(50) ? $"(r {generator.Term(SmtGenSort.INT, inner)})" : $"(t {OfUnlisted(inner)} {Of(inner)})";
+
         if (sort.Is(BYTE))
             return $"(w {generator.Term(BYTE, inner)})";
 
         switch (sort.Kind)
         {
             case SmtGenSortKind.Int:
-                return generator.Next(3) switch
+                return generator.Next(4) switch
                 {
                     0 => $"(f {generator.Term(SmtGenSort.INT, inner)})",
                     1 => $"(h {generator.Term(SmtGenSort.BOOL, inner)} {generator.Term(SmtGenSort.INT, inner)})",
+                    2 => $"(s {OfUnlisted(inner)})",
                     _ => $"(q {Of(inner)} {Of(inner)})"
                 };
             case SmtGenSortKind.Bool:
+                var compared = generator.Chance(50) ? UNIVERSE : UNLISTED;
                 return generator.Next(4) switch
                 {
                     0 => $"(g {generator.Term(SmtGenSort.INT, inner)} {generator.Term(SmtGenSort.INT, inner)})",
                     1 => $"(p {Of(inner)})",
-                    2 => $"(= {generator.Terms(UNIVERSE, inner, 2, 3)})",
-                    _ => $"(distinct {generator.Terms(UNIVERSE, inner, 2, 3)})"
+                    2 => $"(= {generator.Terms(compared, inner, 2, 3)})",
+                    _ => $"(distinct {generator.Terms(compared, inner, 2, 3)})"
                 };
             default:
                 return null;
@@ -104,8 +122,11 @@ internal sealed class SmtTermFamilyFunctions : SmtTermFamily
     /// <inheritdoc />
     public override string? Literal(SmtGenSort sort)
     {
-        // The sort has no literals; its constant stands in for one.
-        return sort.Is(UNIVERSE) ? "u" : null;
+        // The sorts have no literals; their constants stand in for one.
+        if (sort.Is(UNIVERSE))
+            return "u";
+
+        return sort.Is(UNLISTED) ? "v" : null;
     }
 
     /// <inheritdoc />
@@ -113,6 +134,9 @@ internal sealed class SmtTermFamilyFunctions : SmtTermFamily
     {
         if (sort.Is(UNIVERSE))
             return "u";
+
+        if (sort.Is(UNLISTED))
+            return "v";
 
         return sort.Kind switch
         {
@@ -125,6 +149,11 @@ internal sealed class SmtTermFamilyFunctions : SmtTermFamily
     private string Of(int depth)
     {
         return Generator.Term(UNIVERSE, depth);
+    }
+
+    private string OfUnlisted(int depth)
+    {
+        return Generator.Term(UNLISTED, depth);
     }
 
     /// <summary>
@@ -158,6 +187,11 @@ internal sealed class SmtTermFamilyFunctions : SmtTermFamily
     private string Element()
     {
         return Generator.Pick(ELEMENTS);
+    }
+
+    private string Hidden()
+    {
+        return Generator.Pick(UNLISTED_ELEMENTS);
     }
 
     private string Byte()

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using OutWit.Controller.AI.Smt.Model.Eval;
+using OutWit.Controller.AI.Smt.Model.Lang;
 using OutWit.Controller.AI.Smt.Tests.Mock;
 using OutWit.Controller.AI.Smt.Tests.Solver;
 
@@ -41,6 +42,12 @@ public sealed class SmtDifferentialTests
     /// a generator that drifts into terms the evaluator leaves open tests nothing, and shows here.
     /// </summary>
     private const int LEAST_DECIDED_PERCENT = 50;
+
+    /// <summary>The least share of the functions' terms, in percent, that the evaluator decides on a value of the sort whose elements the model does not list.</summary>
+    private const int LEAST_UNLISTED_PERCENT = 20;
+
+    /// <summary>The names of the functions' prelude whose values or arguments are of that sort.</summary>
+    private static readonly string[] UNLISTED_NAMES = ["v", "r", "s", "t"];
 
     #endregion
 
@@ -142,9 +149,38 @@ public sealed class SmtDifferentialTests
         });
     }
 
+    [Test]
+    public void TheFunctionsReachTheElementsTheModelDoesNotListTest()
+    {
+        // The sort V of the functions' prelude: its elements are named by the model, never listed.
+        var functions = m_outcomes.Where(outcome => outcome.Term.Theory == SmtDifferentialTheory.Functions).ToList();
+        var unlisted = functions.Count(outcome => outcome.Verdict == SmtDifferentialVerdict.Agreed && Names(outcome.Term.Term).Overlaps(UNLISTED_NAMES));
+
+        TestContext.Out.WriteLine($"{unlisted} of {functions.Count} terms of the functions decided and agreed on with an element the model does not list");
+        Assert.That(unlisted * 100, Is.GreaterThanOrEqualTo(functions.Count * LEAST_UNLISTED_PERCENT));
+    }
+
     #endregion
 
     #region Tools
+
+    /// <summary>The symbols a term holds.</summary>
+    private static HashSet<string> Names(string term)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<SmtExpression>(SmtReader.Read(term, SmtReaderLimits.Problem));
+        while (pending.Count > 0)
+        {
+            var expression = pending.Pop();
+            if (expression.Kind == SmtExpressionKind.Symbol)
+                names.Add(expression.Text);
+
+            foreach (var item in expression.Items)
+                pending.Push(item);
+        }
+
+        return names;
+    }
 
     private string Report(int count, long compileMs, long elapsedMs)
     {

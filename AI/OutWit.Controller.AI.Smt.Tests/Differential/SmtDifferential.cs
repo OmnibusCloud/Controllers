@@ -128,16 +128,17 @@ internal static class SmtDifferential
     }
 
     /// <summary>
-    /// The closed script as text: the model's definitions in place of the declarations, the
-    /// elements of the model's sort stated to differ, and no <c>(check-sat)</c>, which the
-    /// solver's query adds.
+    /// The closed script as text: the model's definitions in place of the declarations (the
+    /// elements the model names without listing them declared beside the listed ones), the
+    /// elements of each of the model's sorts stated to differ, and no <c>(check-sat)</c>, which
+    /// the solver's query adds.
     /// </summary>
     private static string Script(SmtGeneratedTerm term, IReadOnlyList<SmtExpression> commands, SmtModel model)
     {
         var script = SmtClosedScript.Build(commands, model);
         var lines = script.Commands.Take(script.Commands.Count - 1).Select(command => command.ToString()).ToList();
-        if (term.Elements.Count > 1)
-            lines.Add($"(assert (distinct {string.Join(" ", term.Elements)}))");
+        foreach (var elements in term.Elements.Where(elements => elements.Count > 1))
+            lines.Add($"(assert (distinct {string.Join(" ", elements)}))");
 
         return string.Join("\n", lines);
     }
