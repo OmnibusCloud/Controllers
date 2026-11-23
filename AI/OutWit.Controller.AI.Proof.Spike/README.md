@@ -6,8 +6,9 @@ one compiled environment replay everywhere, can a proof accepted on one machine 
 another without running its code, what does a checking process cost, and how does the
 environment get to a machine. Nothing here ships; the folder is scripts, pins and one list.
 
-Everything runs on GitHub-hosted runners (`.github/workflows/ai-proof-pf0.yml`). No Lean file,
-no Mathlib file, no dataset text and no binary is committed.
+Everything runs on GitHub-hosted runners (`.github/workflows/ai-proof-pf0.yml`); `harness/local.sh`
+runs the same steps on a machine that is not one. No Lean file, no Mathlib file, no dataset text
+and no binary is committed.
 
 | Path | What |
 |---|---|
@@ -23,6 +24,7 @@ no Mathlib file, no dataset text and no binary is committed.
 | `harness/sandbox.py` | landrun on Linux: a refused write, a refused connection, the same verdicts inside |
 | `harness/pack.py` | delivery options of the environment: the cache's files unpacked by the toolchain's `leantar`, plain zstd, smaller environments |
 | `harness/baseline_kimina.py` | a baseline on request: the Kimina Lean Server on one runner with the same items |
+| `harness/local.sh` | the workflow's platform job on a machine that is not a hosted runner: the same steps with no time budget; the work folder, the results, the logs and every tool's cache stay under one folder, and nothing is installed |
 | `golden/items.py`, `selection.py`, `fetch.py`, `list.tsv` | the golden set: chosen once from NuminaMath-LEAN (Apache-2.0), committed as a list of ids and hashes, rebuilt from the pinned file in every run |
 | `golden/smoke-*.jsonl` | a few items written for the gate, one or more per verdict class |
 | `report/report.py` | the platforms side by side |

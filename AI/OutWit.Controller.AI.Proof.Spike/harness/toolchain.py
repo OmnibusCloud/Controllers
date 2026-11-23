@@ -4,11 +4,14 @@
 
 Writes a record (bytes downloaded, the digest and the time to check it, the time to unpack,
 bytes and files on disk, the programs in bin/, the licence files) and, under GitHub Actions,
-exports the toolchain's root folder as LEAN_ROOT.
+exports the toolchain's root folder as LEAN_ROOT. A machine that can read no zstd (neither
+Python 3.14 nor a zstd program) takes the release's zip of the same platform, where one is
+pinned.
 """
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -19,8 +22,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def unpack(archive: str, dest: str) -> str:
-    """Unpacks a .tar.zst and says how: Python's own reader when it has one, else zstd and tar."""
+    """Unpacks the release and says how: a .tar.zst by Python's own reader when it has one, else
+    by zstd and tar; a .zip by unzip (which keeps the modes and the links)."""
     os.makedirs(dest, exist_ok=True)
+    if archive.endswith(".zip"):
+        if subprocess.run(["unzip", "-q", archive, "-d", dest]).returncode != 0:
+            raise RuntimeError("unzip failed")
+        return "unzip"
     if sys.version_info >= (3, 14):
         import tarfile
         with tarfile.open(archive, "r:zst") as tar:
@@ -38,12 +46,13 @@ def main() -> int:
     rid, dest, record_path = sys.argv[1], os.path.abspath(sys.argv[2]), sys.argv[3]
     pins = load_pins(os.path.join(HERE, "..", "pins.env"))
     key = rid_key(rid)
-    name = pins[f"LEAN_{key}_FILE"]
+    name, pinned = pins[f"LEAN_{key}_FILE"], pins[f"LEAN_{key}_SHA256"]
+    if sys.version_info < (3, 14) and shutil.which("zstd") is None and pins.get(f"LEAN_{key}_ZIP_FILE"):
+        name, pinned = pins[f"LEAN_{key}_ZIP_FILE"], pins[f"LEAN_{key}_ZIP_SHA256"]
     url = pins["LEAN_URL_PREFIX"] + "/" + name
     os.makedirs(dest, exist_ok=True)
     archive = os.path.join(dest, name)
-    record = {"rid": rid, "lean_version": pins["LEAN_VERSION"], "url": url,
-              "pinned_sha256": pins[f"LEAN_{key}_SHA256"]}
+    record = {"rid": rid, "lean_version": pins["LEAN_VERSION"], "url": url, "pinned_sha256": pinned}
 
     started = time.monotonic()
     subprocess.run(["curl", "-fsSL", "--retry", "3", "--max-time", "1800", "-o", archive, url], check=True)

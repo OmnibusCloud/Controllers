@@ -20,6 +20,7 @@ Nothing of the solution's text is elaborated here: the programs that run are `le
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import os
 import shutil
@@ -110,19 +111,44 @@ class Stage:
                 "says": (out["stdout"] + out["stderr"]).strip()[-200:]}
 
 
-def compress(source: str, target: str) -> dict:
-    from compression import zstd
-    started = time.monotonic()
-    with open(source, "rb") as reader, zstd.open(target, "wb", level=3) as writer:
-        shutil.copyfileobj(reader, writer, 1 << 20)
-    return {"zst_bytes": os.path.getsize(target), "zst_s": round(time.monotonic() - started, 2)}
+def zstd_module():
+    """Python's own zstd (3.14), or nothing: an older Python packs and unpacks with gzip."""
+    try:
+        from compression import zstd
+        return zstd
+    except ImportError:
+        return None
 
 
-def decompress(source: str, target: str) -> float:
-    from compression import zstd
+def compress(source: str, stem: str) -> dict:
+    """Packs an export for the way as `<stem>.zst`, or as `<stem>.gz` where there is no zstd."""
+    zstd = zstd_module()
     started = time.monotonic()
-    with zstd.open(source, "rb") as reader, open(target, "wb") as writer:
-        shutil.copyfileobj(reader, writer, 1 << 20)
+    if zstd is not None:
+        target, kind = stem + ".zst", "zst"
+        with open(source, "rb") as reader, zstd.open(target, "wb", level=3) as writer:
+            shutil.copyfileobj(reader, writer, 1 << 20)
+    else:
+        target, kind = stem + ".gz", "gz"
+        with open(source, "rb") as reader, gzip.open(target, "wb", compresslevel=6) as writer:
+            shutil.copyfileobj(reader, writer, 1 << 20)
+    return {"file": target, kind + "_bytes": os.path.getsize(target),
+            kind + "_s": round(time.monotonic() - started, 2)}
+
+
+def decompress(stem: str, target: str) -> float:
+    """Unpacks a travelled export: `<stem>.zst`, or `<stem>.gz` (the form for a machine without
+    zstd; the bytes inside are the same and are checked against the sender's digest)."""
+    zstd = zstd_module()
+    started = time.monotonic()
+    if os.path.isfile(stem + ".zst") and zstd is not None:
+        with zstd.open(stem + ".zst", "rb") as reader, open(target, "wb") as writer:
+            shutil.copyfileobj(reader, writer, 1 << 20)
+    elif os.path.isfile(stem + ".gz"):
+        with gzip.open(stem + ".gz", "rb") as reader, open(target, "wb") as writer:
+            shutil.copyfileobj(reader, writer, 1 << 20)
+    else:
+        raise SystemExit(f"{stem}: a .zst export needs Python 3.14; bring it as .gz")
     return round(time.monotonic() - started, 2)
 
 
@@ -158,13 +184,14 @@ def export(options: argparse.Namespace) -> int:
             row["kernel"] = stage.kernel(folder, solution)
             if index < options.paranoid:
                 row["paranoid"] = stage.judge(folder, item, challenge, solution, sandbox=False, paranoid=True)
-            target = os.path.join(options.exports, name + ".solution.ndjson.zst")
-            row["transfer"] = compress(solution, target)
-            if row["transfer"]["zst_bytes"] > budget:
+            row["transfer"] = compress(solution, os.path.join(options.exports, name + ".solution.ndjson"))
+            target = row["transfer"].pop("file")
+            packed = os.path.getsize(target)
+            if packed > budget:
                 os.remove(target)
                 row["transfer"]["left_out"] = True
             else:
-                budget -= row["transfer"]["zst_bytes"]
+                budget -= packed
                 write_json(os.path.join(options.exports, name + ".json"),
                            {"id": name, "solution_sha256": row["solution"]["export_sha256"],
                             "challenge_sha256": row["challenge"]["export_sha256"],
@@ -200,7 +227,7 @@ def confirm(options: argparse.Namespace) -> int:
         os.makedirs(folder, exist_ok=True)
         row = {"id": name, "expect": item.get("expect"), "sender_comparator_exit": sent["comparator_exit"]}
         solution = os.path.join(folder, "solution.ndjson")
-        row["unpack_s"] = decompress(os.path.join(options.exports, name + ".solution.ndjson.zst"), solution)
+        row["unpack_s"] = decompress(os.path.join(options.exports, name + ".solution.ndjson"), solution)
         row["solution_bytes"] = os.path.getsize(solution)
         row["solution_sha256_matches"] = sha256_file(solution) == sent["solution_sha256"]
         row["challenge"] = stage.module(folder, "Challenge", item, "challenge")

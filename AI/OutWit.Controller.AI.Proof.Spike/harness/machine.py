@@ -4,7 +4,8 @@
 
 Records the operating system, kernel, CPU, memory and free disk; on Linux also the Landlock
 state of the kernel. Chooses the work folder on the volume with the most free space and, under
-GitHub Actions, exports it as PF0_WORK.
+GitHub Actions, exports it as PF0_WORK. Where PF0_WORK is set already (a machine that is not a
+hosted runner), that folder is the work folder and nothing is created anywhere else.
 """
 from __future__ import annotations
 
@@ -87,7 +88,7 @@ def main() -> int:
         if free > best_free:
             best, best_free = folder, free
     record["disk_free"] = disks
-    work = os.path.join(best, "pf0").replace("\\", "/")
+    work = (os.environ.get("PF0_WORK") or os.path.join(best, "pf0")).replace("\\", "/")
     os.makedirs(work, exist_ok=True)
     record["work"] = work
     write_json(sys.argv[1], record)

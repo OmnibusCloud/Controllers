@@ -404,10 +404,12 @@ def main() -> int:
         accepted = [row for row in done if row["comparator"]["exit"] == 0]
         refused = [row for row in done if row["comparator"]["exit"] == 1]
         pick = lambda key, sub: median([row[key].get(sub) for row in accepted if row.get(key)])  # noqa: E731
+        # A machine without zstd (a Python before 3.14) packs with gzip: said beside the figure.
+        packed = mib(pick("transfer", "zst_bytes")) or (mib(pick("transfer", "gz_bytes")) + " (gzip)").strip()
         rows.append([rid, len(split), len(accepted), len(refused), len(split) - len(done),
                      pick("solution", "elab_s"), pick("solution", "export_s"),
                      mib(pick("solution", "export_bytes")), mib(max([row["solution"].get("export_bytes", 0) for row in done] or [0])),
-                     mib(pick("transfer", "zst_bytes")), pick("comparator", "wall_s"), pick("kernel", "wall_s"),
+                     packed if packed != "(gzip)" else "", pick("comparator", "wall_s"), pick("kernel", "wall_s"),
                      mib(pick("comparator", "peak_rss")), pick("paranoid", "wall_s")])
     if rows:
         out += ["### Two-stage split, both stages on one machine", ""] + table(
