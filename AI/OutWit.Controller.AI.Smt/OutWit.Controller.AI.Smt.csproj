@@ -4,15 +4,27 @@
 
   <PropertyGroup>
     <ControllerName>Smt</ControllerName>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Description>SMT problems solved on anonymous nodes by a pinned Z3 that runs as a WebAssembly module in a wasm sandbox: check, enumerate and prove under a deterministic budget, so the same problem gives the same answer, the same model and the same cost on every machine.</Description>
     <PackageTags>smt;smt-lib;z3;solver;wasm;wasmtime;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>smt-solve</ControllerFeatures>
     <ControllerUseCases>Checking, enumerating and proving SMT problems at CPU scale with every answer reproducible</ControllerUseCases>
   </PropertyGroup>
 
+  <!-- The scripts that run the controller's activities take blobs and collections of the
+       Variables controller. -->
+  <ItemGroup>
+    <ControllerDependency Include="Variables" MinimumVersion="1.0.0" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\OutWit.Controller.AI.Smt.Model\OutWit.Controller.AI.Smt.Model.csproj" />
+  </ItemGroup>
+
+  <!-- The schema of the capabilities document (Smt.Capabilities), the contract a lab reads:
+       packed under docs/, beside the README that names it. -->
+  <ItemGroup>
+    <None Update="docs\smt-capabilities.schema.json" Pack="true" PackagePath="docs\smt-capabilities.schema.json" />
   </ItemGroup>
 
   <!-- The solver's sandbox: the Wasmtime.Dotnet managed binding over the native wasmtime

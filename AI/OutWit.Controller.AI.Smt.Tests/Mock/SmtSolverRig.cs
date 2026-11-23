@@ -67,6 +67,24 @@ internal static class SmtSolverRig
     /// <returns>The outcome.</returns>
     public static SmtSolved Solve(SmtProblemData problem, SmtOptionsData options, SmtSolverSetup setup, CancellationToken cancellationToken = default)
     {
+        return Take(Raw(problem, options, setup, cancellationToken));
+    }
+
+    /// <summary>
+    /// Solves a problem as <see cref="Solve(SmtProblemData, SmtOptionsData, SmtSolverSetup, CancellationToken)"/>
+    /// does and gives the controller's own outcome, as an object: for a rig that makes more of it
+    /// (a row), inside a method body.
+    /// </summary>
+    /// <param name="problem">The problem as it travels.</param>
+    /// <param name="options">The run's options.</param>
+    /// <param name="setup">What is changed, or null for the controller's entry.</param>
+    /// <param name="cancellationToken">The session's cancellation.</param>
+    /// <returns>The controller's outcome.</returns>
+    public static object Raw(SmtProblemData problem, SmtOptionsData options, SmtSolverSetup? setup, CancellationToken cancellationToken = default)
+    {
+        if (setup == null)
+            return SmtSolver.Solve(problem, options, cancellationToken);
+
         SmtSandbox? sandbox = null;
         var unavailable = setup.WithoutSandbox;
         if (unavailable == null)
@@ -75,7 +93,7 @@ internal static class SmtSolverRig
         // The options are looked at first, as the entry looks at them; an envelope is made of options that were taken.
         var changed = setup.OutputLimitBytes != null || setup.BackstopMs != null || setup.Fuel != null || setup.HostMemoryBytes != null;
         if (!changed || SmtSolver.Refusal(options) != null)
-            return Take(SmtSolver.Solve(problem, options, sandbox, unavailable, cancellationToken));
+            return SmtSolver.Solve(problem, options, sandbox, unavailable, cancellationToken);
 
         var envelope = SmtProfile.Envelope(options);
         envelope = envelope with
@@ -86,7 +104,7 @@ internal static class SmtSolverRig
             HostMemoryBytes = setup.HostMemoryBytes ?? envelope.HostMemoryBytes
         };
 
-        return Take(SmtSolver.Solve(problem, envelope, sandbox, unavailable, cancellationToken));
+        return SmtSolver.Solve(problem, envelope, sandbox, unavailable, cancellationToken);
     }
 
     /// <summary>

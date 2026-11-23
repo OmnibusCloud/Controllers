@@ -8,6 +8,22 @@
     <ProjectReference Include="..\OutWit.Controller.AI.Smt.Model\OutWit.Controller.AI.Smt.Model.csproj" />
   </ItemGroup>
 
+  <!-- Build-only references: these projects must be built (so that their builds stage
+       @Controllers/<Cfg>/<name>.module/) but their assemblies are not the tests'. Variables is the
+       Smt module's dependency; Grid runs a package on the in-process nodes of the engine tests
+       (Grid.ForEach, Grid.Replicas). -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Variables\OutWit.Controller.Variables\OutWit.Controller.Variables.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Grid\OutWit.Controller.Grid\OutWit.Controller.Grid.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ExcludedControllerModule Include="render.module" />
+    <ExcludedControllerModule Include="renderdcc.module" />
+  </ItemGroup>
+
   <!-- The solver's sandbox: the wasmtime binding with the natives of its package in the test bin
        (the build server puts the controller's pinned natives in their place). The tests of the
        category Solver need the solver module in @Data/wasm/ (gitignored: the archive

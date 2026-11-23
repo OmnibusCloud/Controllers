@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Smt/docs/smt-capabilities.schema.json",
+  "title": "Smt capabilities",
+  "description": "The capabilities blob of Smt.Capabilities: what a lab can know before a run. It takes no problem set. Nodes run the same module as the host (a node on another version refuses the work), so what is said here is the pool's. An application reads its limits here instead of carrying copies of them. Nothing in it names a machine.",
+  "type": "object",
+  "required": ["schema", "controller", "profile", "queries", "defaults", "ceilings", "time", "session", "problem", "problem_set", "results", "packages", "node", "benchmark_unit", "platforms"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "string", "const": "smt-capabilities/1" },
+    "controller": { "type": "string", "description": "The controller's version." },
+    "profile": {
+      "type": "object",
+      "description": "The one pinned solver of this version: every problem of a run is solved by it, under the same numbers on every node.",
+      "required": ["id", "solver", "solver_version", "module", "module_sha256", "module_size", "module_present", "engine"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "The profile's id, as a run's options name it." },
+        "solver": { "type": "string", "const": "z3" },
+        "solver_version": { "type": "string" },
+        "module": { "type": "string", "description": "Where the solver module is, relative to the controller's folder." },
+        "module_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The module's pinned SHA-256: a module with other bytes is not compiled." },
+        "module_size": { "type": "integer", "minimum": 1 },
+        "module_present": { "type": "boolean", "description": "The host's copy of the controller has the module with the pinned bytes." },
+        "engine": { "type": "string", "description": "The WebAssembly engine the module runs on, with the version of its native library." }
+      }
+    },
+    "queries": {
+      "type": "array",
+      "description": "What can be asked of a problem.",
+      "items": { "type": "string", "enum": ["check", "enumerate", "prove"] },
+      "uniqueItems": true
+    },
+    "defaults": {
+      "type": "object",
+      "description": "What applies when a run's options leave a value unset (0 means unset, the sampling rate aside).",
+      "required": ["max_models", "seed", "rlimit", "hard_cap_s", "memory_mb", "sampling_rate"],
+      "additionalProperties": false,
+      "properties": {
+        "max_models": { "type": "integer", "minimum": 1 },
+        "seed": { "type": "integer", "minimum": 0 },
+        "rlimit": { "type": "integer", "minimum": 1, "description": "The solver's resource limit of one check: the profile's number." },
+        "hard_cap_s": { "type": "integer", "minimum": 1, "description": "Seconds of a reference machine for one problem, turned into fuel at time.fuel_per_second." },
+        "memory_mb": { "type": "integer", "minimum": 1, "description": "The solver's own memory ceiling of one problem." },
+        "sampling_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "The share of the problems run on two machines." }
+      }
+    },
+    "ceilings": {
+      "type": "object",
+      "description": "The most a run's options may ask for; a run whose options pass one is refused.",
+      "required": ["max_models", "seed", "rlimit", "hard_cap_s", "memory_mb", "sampling_rate"],
+      "additionalProperties": false,
+      "properties": {
+        "max_models": { "type": "integer", "minimum": 1 },
+        "seed": { "type": "integer", "minimum": 0 },
+        "rlimit": { "type": "integer", "minimum": 1 },
+        "hard_cap_s": { "type": "integer", "minimum": 1 },
+        "memory_mb": { "type": "integer", "minimum": 1 },
+        "sampling_rate": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "time": {
+      "type": "object",
+      "description": "How the budgets relate to time. Both budgets of a session are counts: the solver's resource limit of a check, and fuel, which the hard cap is turned into at fuel_per_second. The wall clock gives no verdict: a node keeps a backstop of its own, backstop_base_ms and backstop_slowdown times the time the fuel takes at the reference rate, and a session the backstop ends is a fault of the node.",
+      "required": ["fuel_per_second", "backstop_base_ms", "backstop_slowdown"],
+      "additionalProperties": false,
+      "properties": {
+        "fuel_per_second": { "type": "integer", "minimum": 1 },
+        "backstop_base_ms": { "type": "integer", "minimum": 1 },
+        "backstop_slowdown": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "session": {
+      "type": "object",
+      "description": "What one session of the solver may write and keep.",
+      "required": ["output_bytes", "transcript_bytes", "message_characters", "memory_headroom_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "output_bytes": { "type": "integer", "minimum": 1, "description": "Everything a session may write, its models included; the write that passes it ends the session as output_exceeded." },
+        "transcript_bytes": { "type": "integer", "minimum": 1, "description": "The end of a session's transcript a row keeps." },
+        "message_characters": { "type": "integer", "minimum": 1, "description": "The most characters of a row's message." },
+        "memory_headroom_bytes": { "type": "integer", "minimum": 0, "description": "The least the host's cap of the solver's linear memory stands above the solver's own ceiling." }
+      }
+    },
+    "problem": {
+      "type": "object",
+      "description": "The ceilings of one submitted problem; a problem past one is refused with its code.",
+      "required": ["max_characters", "max_tokens", "max_depth", "max_numeral_digits", "max_literal_bits", "max_string_characters", "max_declared_symbols", "max_index", "max_term_characters"],
+      "additionalProperties": false,
+      "properties": {
+        "max_characters": { "type": "integer", "minimum": 1 },
+        "max_tokens": { "type": "integer", "minimum": 1 },
+        "max_depth": { "type": "integer", "minimum": 1 },
+        "max_numeral_digits": { "type": "integer", "minimum": 1 },
+        "max_literal_bits": { "type": "integer", "minimum": 1 },
+        "max_string_characters": { "type": "integer", "minimum": 1 },
+        "max_declared_symbols": { "type": "integer", "minimum": 1 },
+        "max_index": { "type": "integer", "minimum": 1 },
+        "max_term_characters": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "problem_set": {
+      "type": "object",
+      "description": "The ceilings of a problem set (JSON lines, one problem a row).",
+      "required": ["max_line_bytes", "max_rows", "max_id_characters", "max_values", "max_project", "max_tags_characters"],
+      "additionalProperties": false,
+      "properties": {
+        "max_line_bytes": { "type": "integer", "minimum": 1 },
+        "max_rows": { "type": "integer", "minimum": 1 },
+        "max_id_characters": { "type": "integer", "minimum": 1 },
+        "max_values": { "type": "integer", "minimum": 1 },
+        "max_project": { "type": "integer", "minimum": 1 },
+        "max_tags_characters": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "results": {
+      "type": "object",
+      "description": "The words a row may say, and the codes of a package a node could not work on at all.",
+      "required": ["statuses", "verdicts", "reasons", "proofs", "node_faults"],
+      "additionalProperties": false,
+      "properties": {
+        "statuses": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+        "verdicts": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+        "reasons": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+        "proofs": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+        "node_faults": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true }
+      }
+    },
+    "packages": {
+      "type": "object",
+      "description": "What one package a node is sent may hold.",
+      "required": ["max_problems", "max_bytes", "max_problem_frame_bytes", "max_result_frame_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "max_problems": { "type": "integer", "minimum": 1 },
+        "max_bytes": { "type": "integer", "minimum": 1 },
+        "max_problem_frame_bytes": { "type": "integer", "minimum": 1 },
+        "max_result_frame_bytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "node": {
+      "type": "object",
+      "description": "What a node runs a package with: one session a core, at most max_degree, as many as ram_headroom of its available memory holds at session_bytes a session (twice the host's cap of the solver's linear memory under the default options, and session_margin_bytes), at the priority below normal.",
+      "required": ["max_degree", "ram_headroom", "session_margin_bytes", "session_bytes", "priority"],
+      "additionalProperties": false,
+      "properties": {
+        "max_degree": { "type": "integer", "minimum": 1 },
+        "ram_headroom": { "type": "number", "minimum": 0, "maximum": 1 },
+        "session_margin_bytes": { "type": "integer", "minimum": 0 },
+        "session_bytes": { "type": "integer", "minimum": 1 },
+        "priority": { "type": "string", "const": "below_normal" }
+      }
+    },
+    "benchmark_unit": { "type": "string", "description": "The unit of the pool's rate: problems of the reference set a second." },
+    "platforms": {
+      "type": "array",
+      "description": "The platforms a node runs the controller on.",
+      "items": { "type": "string", "enum": ["win-x64", "linux-x64", "osx-arm64"] },
+      "uniqueItems": true
+    },
+    "pool": {
+      "type": "object",
+      "description": "The pool a run submitted now would be planned on, as totals; absent when the host cannot say. No node is named.",
+      "required": ["nodes", "measured", "rate"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes": { "type": "integer", "minimum": 0 },
+        "measured": { "type": "integer", "minimum": 0 },
+        "workers": { "type": "integer", "minimum": 0, "description": "Sessions at once of the measured nodes, added up; absent when the host does not carry every measured node's degree." },
+        "rate": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

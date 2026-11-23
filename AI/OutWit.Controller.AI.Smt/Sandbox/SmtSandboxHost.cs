@@ -30,6 +30,8 @@ internal static class SmtSandboxHost
 
     private static IWitTempStorage? m_tempStorage;
 
+    private static string? m_lastProblem;
+
     #endregion
 
     #region Functions
@@ -68,6 +70,7 @@ internal static class SmtSandboxHost
 
             var storage = Volatile.Read(ref m_tempStorage);
             m_instance = Create(SmtModuleLocator.Locate(), storage?.CreateScope(SCOPE_LABEL), out problem);
+            Volatile.Write(ref m_lastProblem, problem);
             return m_instance;
         }
     }
@@ -108,6 +111,16 @@ internal static class SmtSandboxHost
             return null;
         }
     }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>The process-wide sandbox when it has been made, else null; asking never makes it.</summary>
+    public static SmtSandbox? Current => Volatile.Read(ref m_instance);
+
+    /// <summary>Why the last attempt to make the sandbox failed, in fixed words; null when it has not failed or has not been made yet.</summary>
+    public static string? LastProblem => Volatile.Read(ref m_lastProblem);
 
     #endregion
 }
