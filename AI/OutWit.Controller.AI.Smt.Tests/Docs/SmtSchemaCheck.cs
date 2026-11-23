@@ -56,7 +56,9 @@ internal static class SmtSchemaCheck
         switch (keyword.Name)
         {
             case "type":
-                return IsOfType(rule.GetString()!, value);
+                return rule.ValueKind == JsonValueKind.Array
+                    ? rule.EnumerateArray().Any(type => IsOfType(type.GetString()!, value))
+                    : IsOfType(rule.GetString()!, value);
             case "enum":
                 return rule.EnumerateArray().Any(allowed => AreEqual(allowed, value));
             case "const":

@@ -1,7 +1,11 @@
 {
   "comment": "The wire layout of OutWit.Controller.AI.Smt.Model: the Model package version and, for every MemoryPack type, its members in wire order with name, type and the value a new instance holds. Once a version of the package is published, a member is only ever appended, with the next order; a member that changes its name, its type, its place or its default is a wire change for a deployed fleet and for every application built against the package. Update this file in the same commit as the type (SmtModelWireLayoutTests prints the current layout when it differs).",
-  "modelVersion": "0.2.0",
+  "modelVersion": "0.3.0",
   "types": {
+    "SmtCountData": [
+      "0: Name: String = \"\"",
+      "1: Count: Int32 = 0"
+    ],
     "SmtOptionsData": [
       "0: Profile: String = \"\"",
       "1: Query: SmtQuery = Check",
@@ -11,6 +15,37 @@
       "5: HardCapSeconds: Int32 = 0",
       "6: MemoryMegabytes: Int32 = 0",
       "7: SamplingRate: Double = 0.05"
+    ],
+    "SmtPreflightData": [
+      "0: Runnable: Boolean = false",
+      "1: Rows: Int32 = 0",
+      "2: Accepted: Int32 = 0",
+      "3: Refused: Int32 = 0",
+      "4: BytesRead: Int64 = 0",
+      "5: Sha256: String = \"\"",
+      "6: RefusalCodes: List<SmtCountData> = []",
+      "7: Refusals: List<SmtRefusalData> = []",
+      "8: Logics: List<SmtCountData> = []",
+      "9: OtherLogics: Int32 = 0",
+      "10: Queries: List<SmtCountData> = []",
+      "11: Expected: List<SmtCountData> = []",
+      "12: Stripped: List<SmtCountData> = []",
+      "13: Licenses: List<SmtCountData> = []",
+      "14: OtherLicenses: Int32 = 0",
+      "15: OptionProblems: List<String> = []",
+      "16: Profile: String = \"\"",
+      "17: ResourceLimit: Int64 = 0",
+      "18: HardCapSeconds: Int32 = 0",
+      "19: Fuel: Int64 = 0",
+      "20: MemoryMegabytes: Int32 = 0",
+      "21: MaxModels: Int32 = 0",
+      "22: Seed: Int32 = 0",
+      "23: SamplingRate: Double = 0",
+      "24: SessionMemoryBytes: Int64 = 0",
+      "25: UpperBoundSeconds: Int64 = 0",
+      "26: Packages: Int32 = 0",
+      "27: ProblemsPerPackage: Int32 = 0",
+      "28: Messages: List<String> = []"
     ],
     "SmtProblemData": [
       "0: Index: Int32 = 0",

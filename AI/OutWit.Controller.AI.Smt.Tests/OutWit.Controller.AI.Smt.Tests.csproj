@@ -2,6 +2,12 @@
 
   <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
 
+  <!-- The settings of every dotnet test of this project (smt.runsettings): the jobs select tests
+       by category, and above the adapter's limit of selected tests the whole assembly would run. -->
+  <PropertyGroup>
+    <RunSettingsFilePath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'smt.runsettings'))</RunSettingsFilePath>
+  </PropertyGroup>
+
   <!-- The controller, and its model package with it. -->
   <ItemGroup>
     <ProjectReference Include="..\OutWit.Controller.AI.Smt\OutWit.Controller.AI.Smt.csproj" />

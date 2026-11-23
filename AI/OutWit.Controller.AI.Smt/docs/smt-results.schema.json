@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Smt/docs/smt-results.schema.json",
+  "title": "Smt results row",
+  "description": "One line of the results of SmtRun (the blob Smt.CollectResults hands out): a row of the problem set, in the set's order, refused rows included. A row says how its problem was settled and what the answer is; it names no machine: how many copies answered and whether they agreed, never which. Models and values are the solver's own text, cut for what a lab sees at 65,536 bytes of UTF-8 a row (whole texts only, in the order the session gave them; model_truncated says so, and the full models stay in the run's ledger).",
+  "type": "object",
+  "required": ["index", "id", "status", "code", "message", "verdict", "reason", "expected", "expected_agreement", "validation", "validation_reason", "copies", "agreed", "settled_by", "model_truncated"],
+  "additionalProperties": false,
+  "properties": {
+    "index": { "type": "integer", "minimum": 0, "description": "The row's place in the set, from 0: taken and refused rows are counted, blank lines are not." },
+    "id": { "type": "string", "maxLength": 64, "description": "The row's id; empty for a refused row whose id could not be read." },
+    "query": { "type": "string", "enum": ["check", "enumerate", "prove"], "description": "What was asked of the problem. Absent for a row the set refused." },
+    "logic": { "type": "string", "description": "The logic the problem's set-logic names, as the host read it; empty for none. Absent for a row the set refused." },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "refused", "input_error", "output_exceeded", "engine_crash", "no_result", "disputed"],
+      "description": "ok: the query was answered (an unknown included). refused: the set or the sanitizer refused the row, or a node refused the problem; no solver ran. input_error: the solver reported an error in what it was given. output_exceeded: the session wrote more than its output cap; the verdict the solver had given by then stands, its model is not there. engine_crash: the solver trapped, ended with a status that is no answer, or answered something unreadable. no_result: no node answered the problem, after the repair round either; code says what the nodes said last. disputed: the copies disagreed and three more did not settle it; code is the dispute's outcome. A no_result or a disputed row is no answer and is left out of the verdict counts."
+    },
+    "code": { "type": "string", "description": "The fixed word of the status: the refusal's code, the kind of a crash, the reason of a no_result (a node's fault code, a reason a result was refused, no_answer), the outcome of a standing dispute; empty where the status says it all." },
+    "message": { "type": "string", "maxLength": 1024, "description": "The sentence that goes with the code: a refusal's reason (never the problem's text), the solver's message of an input error; empty for an answered query." },
+    "line": { "type": "integer", "minimum": 0, "description": "For a row the set refused: the line inside the problem's text the sanitizer refused, 0 for a refusal of the row itself." },
+    "verdict": { "type": "string", "enum": ["sat", "unsat", "unknown", "none"] },
+    "reason": { "type": "string", "enum": ["rlimit", "fuel", "memout", "incomplete", "other", "none"], "description": "Why a check has no verdict or an enumeration is not complete: the resource limit of a check, the fuel of the hard cap, the memory, the solver's own word; none otherwise." },
+    "expected": { "type": "string", "enum": ["sat", "unsat", "none"], "description": "The verdict the row or the problem's :status expects; none for a proof." },
+    "expected_agreement": { "type": "string", "enum": ["agree", "disagree", "n/a"], "description": "agree or disagree when a verdict sat or unsat meets an expected one; n/a otherwise." },
+    "count": { "type": "integer", "minimum": 0, "maximum": 1000, "description": "enumerate: the models found." },
+    "complete": { "type": "boolean", "description": "enumerate: the last check said unsat, so count is exact." },
+    "limit_reached": { "type": "boolean", "description": "enumerate: as many models were found as were asked for." },
+    "proof": { "type": "string", "enum": ["proved", "counterexample", "none"], "description": "prove: unsat of the problem with the negated goal is proved; sat is a counterexample, with its model." },
+    "model": { "type": ["string", "null"], "description": "check and prove: the answer of (get-model) as the solver printed it; null without one or when it did not fit the row." },
+    "values": { "type": ["string", "null"], "description": "check: the answer of (get-value ...) for the terms the row asked for; null without them or when it did not fit." },
+    "models": {
+      "type": "array",
+      "maxItems": 1000,
+      "description": "enumerate: each model found, with the values of the projected constants that tell it apart.",
+      "items": {
+        "type": "object",
+        "required": ["values", "model"],
+        "additionalProperties": false,
+        "properties": {
+          "values": { "type": ["string", "null"] },
+          "model": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "model_truncated": { "type": "boolean", "description": "Whether a model or a value of the row was left out (null above) because the row's texts passed 65,536 bytes." },
+    "validation": {
+      "type": "string",
+      "enum": ["validated", "partial", "failed", "none"],
+      "description": "What the host's model evaluator said of every model of a sat answer, checked against the problem as the host sanitized it (the counterexample of a proof against the problem and the negated goal): validated, every assertion true; failed, an assertion false with nothing guessed; partial, neither (the reason says why). The worst of an enumeration's models. none: no model to check."
+    },
+    "validation_reason": { "type": "string", "description": "The evaluator's reason code of a partial or failed class (output_exceeded for a model that did not come whole); empty otherwise." },
+    "validation_detail": { "type": "string", "description": "For a failed class: which assertion (and which model of an enumeration)." },
+    "copies": { "type": "integer", "minimum": 0, "description": "How many machines answered the problem in the rounds it was ruled on: the first (or the repair round) and the dispute round. Never which." },
+    "agreed": { "type": "boolean", "description": "Whether all of them gave one digest." },
+    "settled_by": {
+      "type": "string",
+      "enum": ["one_copy", "copies", "dispute", "agreement", ""],
+      "description": "one_copy: one machine's answer, nothing against it. copies: two or more with one digest. dispute: the majority of three more machines after the first copies disagreed or the evaluator called the model failed. agreement: the machines agree and the evaluator still calls the model failed (validation is failed): a disagreement between the evaluator and the solver, counted in the integrity document, with no machine taken for a liar. Empty without an answer."
+    },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The digest of the settled row (smt-result/1): the same for the problem on every honest machine." },
+    "stats": {
+      "type": "object",
+      "required": ["resource_count", "fuel", "checks"],
+      "additionalProperties": false,
+      "properties": {
+        "resource_count": { "type": "integer", "minimum": 0, "description": "The solver's resource counter after its last answered check." },
+        "fuel": { "type": "integer", "minimum": 0, "description": "The fuel of the session, counted from the solver's first instruction." },
+        "checks": { "type": "integer", "minimum": 0, "description": "The checks the session sent." }
+      }
+    },
+    "tags": { "type": "string", "maxLength": 256, "description": "The row's tags, passed through." }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["query"] },
+      "then": { "required": ["logic"] }
+    },
+    {
+      "if": { "required": ["query"], "properties": { "query": { "const": "check" } } },
+      "then": { "required": ["model", "values"] }
+    },
+    {
+      "if": { "required": ["query"], "properties": { "query": { "const": "prove" } } },
+      "then": { "required": ["model", "proof"] }
+    },
+    {
+      "if": { "required": ["query"], "properties": { "query": { "const": "enumerate" } } },
+      "then": { "required": ["models", "count", "complete", "limit_reached"] }
+    },
+    {
+      "if": { "properties": { "settled_by": { "const": "agreement" } } },
+      "then": { "properties": { "validation": { "const": "failed" } } }
+    },
+    {
+      "if": { "properties": { "status": { "enum": ["no_result", "disputed"] } } },
+      "then": { "properties": { "verdict": { "const": "none" }, "settled_by": { "const": "" } } }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The settings of every run of the Smt tests, named by the test project (RunSettingsFilePath), so
+    that a dotnet test of it uses them wherever it runs.
+
+    AssemblySelectLimit: above this many selected tests the NUnit adapter runs the whole assembly
+    and filters the results afterwards (2000 by default). The jobs of "AI Smt" select tests by
+    category (the three-platform job leaves out the slice and the load test, which have jobs of
+    their own and need what only those jobs have); run whole, the assembly would run them in the
+    wrong job and fail it. The limit stands far above any size this project will reach.
+
+    The run parameter says that these settings were the ones used: SmtRunSettingsTests fails when
+    a run does not see it.
+-->
+<RunSettings>
+  <NUnit>
+    <AssemblySelectLimit>100000</AssemblySelectLimit>
+  </NUnit>
+  <TestRunParameters>
+    <Parameter name="smt.runsettings" value="used" />
+  </TestRunParameters>
+</RunSettings>

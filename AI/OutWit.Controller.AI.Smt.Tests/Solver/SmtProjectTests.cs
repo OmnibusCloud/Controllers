@@ -73,12 +73,12 @@ public sealed class SmtProjectTests
     }
 
     [Test]
-    public void TheSolverModuleIsNoDataAssetYetTest()
+    public void TheSolverModuleIsADataAssetBesideTheNativeLibrariesTest()
     {
-        // No release holds the module: an asset that names none would fail at every consumer.
+        // The module's archive is held to its release and its bytes by SmtDataAssetTests.
         var assets = Project(SMT).Descendants("ControllerDataAsset").Select(asset => (string?)asset.Attribute("Include")).ToList();
 
-        Assert.That(assets, Is.EqualTo(new[] { "wasmtime-win-x64", "wasmtime-linux-x64", "wasmtime-osx-arm64" }));
+        Assert.That(assets, Is.EqualTo(new[] { "wasmtime-win-x64", "wasmtime-linux-x64", "wasmtime-osx-arm64", "smt-z3-wasm" }));
     }
 
     #endregion
@@ -108,9 +108,12 @@ public sealed class SmtProjectTests
             Assert.That(Project(SMT).Descendants("ControllerDependency").Select(item => (string?)item.Attribute("Include")), Is.EqualTo(new[] { "Variables" }), "and the manifest says so");
             Assert.That(registered, Is.EqualTo(new[]
             {
-                "WitActivityAdapterSmtCapabilities", "WitActivityAdapterSmtRuntimeDiagnostics", "WitActivityAdapterSmtSolvePackage",
-                "WitVariableSmtResultPackage", "WitVariableSmtResultPackageCollection", "WitVariableSmtRuntimeDiagnostics",
-                "WitVariableSmtTaskPackage", "WitVariableSmtTaskPackageCollection"
+                "WitActivityAdapterSmtCapabilities", "WitActivityAdapterSmtCollect", "WitActivityAdapterSmtCollectResults", "WitActivityAdapterSmtDisputes",
+                "WitActivityAdapterSmtIntegrity", "WitActivityAdapterSmtPreflight", "WitActivityAdapterSmtProvenance", "WitActivityAdapterSmtRepairs",
+                "WitActivityAdapterSmtRuntimeDiagnostics", "WitActivityAdapterSmtSamplingRate", "WitActivityAdapterSmtSettle", "WitActivityAdapterSmtSolvePackage",
+                "WitActivityAdapterSmtSplit",
+                "WitVariableSmtOptions", "WitVariableSmtPreflight", "WitVariableSmtResultPackage", "WitVariableSmtResultPackageCollection",
+                "WitVariableSmtRuntimeDiagnostics", "WitVariableSmtTaskPackage", "WitVariableSmtTaskPackageCollection"
             }));
         });
 
@@ -120,7 +123,11 @@ public sealed class SmtProjectTests
             .OfType<string>()
             .Order(StringComparer.Ordinal)
             .ToList();
-        Assert.That(activities, Is.EqualTo(new[] { "Smt.Capabilities", "Smt.RuntimeDiagnostics", "Smt.SolvePackage" }));
+        Assert.That(activities, Is.EqualTo(new[]
+        {
+            "Smt.Capabilities", "Smt.Collect", "Smt.CollectResults", "Smt.Disputes", "Smt.Integrity", "Smt.Preflight", "Smt.Provenance", "Smt.Repairs",
+            "Smt.RuntimeDiagnostics", "Smt.SamplingRate", "Smt.Settle", "Smt.SolvePackage", "Smt.Split"
+        }));
     }
 
     [Test]

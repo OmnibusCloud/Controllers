@@ -1,0 +1,28 @@
+Job:SmtRun(Blob:problems, SmtOptions:opts)
+{
+    SmtTaskPackageCollection:packages = Smt.Split(problems, opts);
+
+    Double:rate = Smt.SamplingRate(opts);
+    ProcessingOptions:checked = Grid.Replicas(2, rate);
+
+    SmtResultPackageCollection:solved = Grid.ForEach(package in packages, checked)
+        => Smt.SolvePackage(package);
+
+    ~ A problem without an answer (a package that came back with a node's fault code, without a row the server takes, or with rows that are faults of the node) goes out once more, under the same sampling. ~
+    SmtTaskPackageCollection:repairs = Smt.Repairs(packages, solved);
+    SmtResultPackageCollection:repaired = Grid.ForEach(package in repairs, checked)
+        => Smt.SolvePackage(package);
+
+    ~ A problem whose copies disagree, or whose model the server's evaluator calls failed, goes to three more machines. ~
+    SmtTaskPackageCollection:disputes = Smt.Disputes(packages, solved, repairs, repaired);
+    ProcessingOptions:thrice = Grid.Replicas(3);
+    SmtResultPackageCollection:settled = Grid.ForEach(package in disputes, thrice)
+        => Smt.SolvePackage(package);
+
+    Blob:ledger = Smt.Settle(problems, opts, packages, solved, repairs, repaired, disputes, settled, rate);
+
+    Blob:results = Smt.CollectResults(ledger);
+    Blob:report = Smt.Collect(ledger);
+    Blob:provenance = Smt.Provenance(ledger);
+    Blob:integrity = Smt.Integrity(ledger);
+}

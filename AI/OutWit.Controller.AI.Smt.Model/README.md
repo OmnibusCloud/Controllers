@@ -3,12 +3,12 @@
 The language layer and the data types of the OutWit Smt controller: SMT problems solved by a
 pinned solver on anonymous nodes, with every answer checked.
 
-This page describes **0.2.0**: the reader, the sanitizer with the canonical form of a problem and
+This page describes **0.3.0**: the reader, the sanitizer with the canonical form of a problem and
 the script builders, the problem set (its rows, its reader, its schema, the options of a run),
-the model evaluator that checks a `sat` answer, and the wire types of a node's work (a package of
-problems, a row, a package of rows, the diagnostics). The controller is in development; the
-other wire types of a run (a preflight, a report) join this package before a controller that
-needs them is published.
+the model evaluator that checks a `sat` answer, the wire types of a node's work (a package of
+problems, a row, a package of rows, the diagnostics), and the types of a run on the host (its
+preflight and the words of its documents). The controller is in development; nothing is
+published.
 
 ## Reading SMT-LIB
 
@@ -511,3 +511,20 @@ from the row it received rather than trusting the one the row carries (`Holds`).
 | `sandbox_unavailable` | the process has no sandbox for the solver |
 | `memory_insufficient` | the machine's available memory does not hold one session under the package's options |
 | `download_failed`, `upload_failed` | a transfer failed at every attempt |
+
+## A run
+
+What a lab sees of a run is the controller's documents (results, report, provenance,
+integrity: JSON, with their schemas in the controller's `docs/`) and the preflight before it.
+This package carries the types and the words they are made of, so that an application reads them
+with the same vocabulary the controller writes them in.
+
+| Type | Role |
+|---|---|
+| `SmtPreflightData` | what a problem set and a run's options come to before anything is sent (`Smt.Preflight`): the set counted (rows, taken, refused by code with the first 100 refusals in full, by logic, by query, by expected verdict, the stripped commands, the licences), the SHA-256 of the set, the options checked by name, the budget of a problem as numbers (the resource limit, the hard cap and its fuel, the memory, the models of an enumeration, the seed, the sampling rate), the memory a node needs for one session, the upper bound "taken problems times the hard cap" (a bound, never an estimate of a duration), and the packages a run would cut the set into |
+| `SmtCountData` | one count of a table of the preflight: a name and how many times it was met |
+| `SmtRunWords` | the words a run's documents add to a node's row: the host's statuses `no_result` and `disputed`; how an answer was settled (`one_copy`, `copies`, `dispute`, `agreement`); the evaluator's classes as a row writes them (`validated`, `partial`, `failed`, `none`); the agreement with the expected verdict (`agree`, `disagree`, `n/a`); the causes of a dispute (`digests_differ`, `model_failed`, `surplus`) and its outcomes (`resolved`, `no_majority`, `too_few_copies`, `surplus_copies`) |
+
+A preflight is `Runnable` when its options are in range, its profile is the controller's and the
+set has a row. Options out of range are said, one sentence an option, and the set is still read
+with each such option at its default.

@@ -5,25 +5,35 @@ runs as a WebAssembly module inside the controller's own wasm sandbox, under bud
 counts and not clocks, so the same problem gives the same verdict, the same model and the same
 cost on every machine.
 
-**Status: 0.2.0, in development; nothing is published.** This version holds the solver (the
-profile, the sandbox, one session per problem) and the node's side of a run: a node solves
-packages of problems with a pool of sessions and returns packages of rows, reports what it
-carries, and measures itself for the allocator. The host's side of a run (cutting a problem set
-into packages, the run's script, settling the copies, the report) is not here yet, and no script
-is shipped. The solver module is not a data asset yet: it is looked for under `wasm/` in the
-controller's folder, and a node without it says so. The language layer and the wire types (the
-reader, the sanitizer, the model evaluator, the problem set, the options, the packages and their
-rows) are [`OutWit.Controller.AI.Smt.Model`](../OutWit.Controller.AI.Smt.Model/README.md).
+**Status: 0.3.0, in development; nothing is published.** This version holds the solver (the
+profile, the sandbox, one session per problem), the node's side of a run (packages of problems
+solved with a pool of sessions, packages of rows returned, the node measured for the allocator)
+and the host's side: a lab's problem set cut into packages, solved with copies on different
+machines, repaired, disputed, settled by the digests of the rows, every `sat` model checked on the
+server by the model evaluator, and written out as results, a report, provenance and integrity,
+all through blobs (`SmtRun`). The solver module is a data asset of the controller. What a lab can
+rely on, and the limits, are [`docs/capabilities.md`](docs/capabilities.md). The language layer and
+the wire types (the reader, the sanitizer, the model evaluator, the problem set, the options, the
+packages and their rows, the preflight, the words of the documents) are
+[`OutWit.Controller.AI.Smt.Model`](../OutWit.Controller.AI.Smt.Model/README.md); the scripts travel
+in [`OutWit.Controller.AI.Smt.Scripts`](../OutWit.Controller.AI.Smt.Scripts/README.md).
 
 | Activity | Where | In, out |
 |---|---|---|
 | `Smt.SolvePackage` | node | an `SmtTaskPackage` (a reference to a blob of problems), an `SmtResultPackage` (a reference to a blob of rows) |
+| `Smt.Split` | host | the problem set (`Blob`) and the options (`SmtOptions`), an `SmtTaskPackageCollection` |
+| `Smt.SamplingRate` | host | the options, a `Double`: the share of the packages solved on two machines |
+| `Smt.Repairs` | host | the first fan-out's packages and results, the packages of the problems without an answer |
+| `Smt.Disputes` | host | the first fan-out's and the repair round's packages and results, the packages of the problems that go to three more machines |
+| `Smt.Settle` | host | the set, the options, every round's packages and results, and the rate; the ledger (`Blob`) |
+| `Smt.CollectResults`, `Smt.Collect`, `Smt.Provenance`, `Smt.Integrity` | host | the ledger; the results ([`docs/smt-results.schema.json`](docs/smt-results.schema.json)), the report ([`docs/smt-report.schema.json`](docs/smt-report.schema.json)), the provenance ([`docs/smt-provenance.schema.json`](docs/smt-provenance.schema.json)), the integrity document ([`docs/smt-integrity.schema.json`](docs/smt-integrity.schema.json)) |
+| `Smt.Preflight` | host | the set and the options, an `SmtPreflight` |
 | `Smt.RuntimeDiagnostics` | host | nothing, an `SmtRuntimeDiagnostics` |
 | `Smt.Capabilities` | host | nothing, a `Blob` of JSON ([`docs/smt-capabilities.schema.json`](docs/smt-capabilities.schema.json)) |
 
-The variables `SmtTaskPackage`, `SmtResultPackage`, `SmtRuntimeDiagnostics` and the collections
-`SmtTaskPackageCollection`, `SmtResultPackageCollection` are registered with them. The module
-depends on the Variables controller.
+The variables `SmtTaskPackage`, `SmtResultPackage`, `SmtRuntimeDiagnostics`, `SmtOptions`,
+`SmtPreflight` and the collections `SmtTaskPackageCollection`, `SmtResultPackageCollection` are
+registered with them. The module depends on the Variables controller; the scripts use Grid.
 
 ## The profile
 
@@ -33,7 +43,7 @@ One solver, pinned (`SmtProfile`):
 |---|---|
 | Id | `z3-5.4.1` |
 | Solver | Z3 5.4.1 built for `wasm32-wasip1`, single-threaded, with C++ exceptions as WebAssembly exceptions |
-| Module | `wasm/z3-5.4.1.wasm`, 30,204,160 bytes, SHA-256 `9b8a67e85542b5d62d30b40060dd237fcef07f794ea235483afc83eef47a1364`; built from pinned sources by the workflow "AI Smt toolchain" ([`toolchain/`](../OutWit.Controller.AI.Smt.Assets/toolchain)), two builds compared byte for byte |
+| Module | `wasm/z3-5.4.1.wasm`, 30,204,160 bytes, SHA-256 `9b8a67e85542b5d62d30b40060dd237fcef07f794ea235483afc83eef47a1364`; built from pinned sources by the workflow "AI Smt toolchain" ([`toolchain/`](../OutWit.Controller.AI.Smt.Assets/toolchain)), two builds compared byte for byte; a data asset of the controller: the archive `smt-z3-wasm.zip` of the release `smt-z3-v5.4.1` (30,314,801 bytes, SHA-256 `3c3f67877e4e193dc64070023fbf64addb4b01520de4b9fa79b673b77d48cc02`, with Z3's licence and notices), extracted at the module's root |
 | Resource limit of one check | 150,000,000 units of the solver's own counter, when the options name none; at most 4,294,967,295 |
 | Hard cap | seconds of a reference machine, turned into fuel at 5,000,000,000 units a second: 60 s are 3·10¹¹ units, counted from the solver's first instruction |
 | Memory | the option's megabytes are the solver's own ceiling; the sandbox's cap of its linear memory is a quarter above it, and 16 MiB above it at the least (at most what a wasm32 program can address), so the solver meets its own ceiling first and ends cleanly. Under a ceiling too small for it to start in, it still starts, and ends by that ceiling at once |
@@ -199,6 +209,73 @@ warm-up run, then timed runs; the rate is problems a second of the median run, i
 `smt-problem@ref-v1`. Every problem is held to its outcome and its fuel, the same on every
 machine, so a node that computes otherwise cannot score; a node without a sandbox or without
 memory for one session reports the default (unranked) score.
+
+## A run on the host
+
+`SmtRun(Blob:problems, SmtOptions:opts)` follows Verify's run:
+
+```
+Smt.Split -> Smt.SamplingRate -> Grid.Replicas(2, rate) -> Grid.ForEach => Smt.SolvePackage
+          -> Smt.Repairs -> Grid.ForEach (the same sampling) => Smt.SolvePackage
+          -> Smt.Disputes -> Grid.Replicas(3) -> Grid.ForEach => Smt.SolvePackage
+          -> Smt.Settle -> Smt.CollectResults, Smt.Collect, Smt.Provenance, Smt.Integrity
+```
+
+The work is split once and sent once; the repair round and the dispute round are the only second
+sends. Nothing names, avoids or steers to a machine: copies on different machines are
+`Grid.Replicas`' only.
+
+**Split.** The set is read a row at a time by the model package's reader, the taken problems wait
+in a working file of the host's until the run knows how many it has, and are cut into packages
+(`SmtPackagePlanner`): 16 problems a package while the run is small, about 1,024 packages once it
+is large, never more than the 256 a node takes, and a package ends before its problems' text
+passes 32 Mi characters. The cut depends on the problems alone. A set without a row, options out
+of range and a profile the controller does not have are refused; a set whose every row is
+refused gives no package, and its results say why for each row.
+
+**Intake.** A node's result package is a claim. It is taken only under a ticket its round gave
+out. A package with a fault code is the node's word that it could not work on the package (one of
+`SmtNodeFaults`, no blob), and is counted so. Otherwise its blob must be the bytes its reference
+names, a package of rows of this format, holding exactly the rows of its package, each once, each
+one a node may give (`SmtRowChecks`): its ticket, its problem's id, hash and query, this
+controller version, a platform the controller ships for, the words of a row, the counts of models
+and values a session of its query gives, texts within what a session writes, and a digest that
+is its own. Anything else fails that package and is counted by reason (`unknown_ticket`,
+`duplicate`, `unreadable`, `content`, `surplus`). Rows wait in a spool file, never together in
+memory.
+
+**Settling** (`SmtRulings`), problem by problem in the set's order:
+
+- The first round's answers are ruled on (a row of a fault of the node is no answer). A problem
+  with none is sent once more, under the same sampling, and ruled on by the repair round; with
+  none there either it is `no_result`, with the code of what the nodes said last.
+- Copies are compared by their digests and by nothing else. Answers of one digest are one answer
+  (`one_copy` for one machine, `copies` for two or more).
+- Every answer that says `sat` is checked by the model evaluator (`SmtHostEvaluator`) against the
+  problem as the host's own sanitizer takes it: a check's model with the values it asked for,
+  every model of an enumeration with its projected values, the counterexample of a proof against
+  the problem and the negated goal. A model that did not fit the session's output is `partial`
+  (`output_exceeded`); a row's class is the worst of its models.
+- Answers of more than one digest, a package with more answers than were asked for, and an answer
+  whose model is `failed` go to three more machines. The answer is the digest the most of them
+  give, two at least, with no tie, and two machines' worth once the answers that may be one
+  machine's second are left out (`dispute`); otherwise the problem is `disputed`.
+- A failed model accuses nobody by itself: a copy is a lie only when it differs from the settled
+  answer of the others. When the settled answer's model is still `failed`, the machines agree and
+  the evaluator does not: the row says `validation: failed`, `settled_by: agreement`, and the
+  integrity document lists the problem as a disagreement between the evaluator and the solver,
+  with no machine counted as lying.
+
+**Documents.** `Smt.Settle` writes the results, the report, the provenance and the integrity
+document into one ledger blob of the host's own, with the full models of the rows whose models
+the results cut at 64 KB; the other activities hand a document out of it as it is. No document
+names a machine. Their fields are in [`docs/capabilities.md`](docs/capabilities.md) and their
+schemas beside it.
+
+**Preflight.** `Smt.Preflight` reads the set the same way, sends nothing, and gives an
+`SmtPreflight`: the set counted, the options checked by name, the budget as numbers, the upper
+bound "taken problems times the hard cap" (no duration is estimated anywhere), the memory of one
+session on a node, and the packages a run would make.
 
 ## Licence
 

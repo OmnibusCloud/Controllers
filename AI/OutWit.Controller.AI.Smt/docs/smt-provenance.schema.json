@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Smt/docs/smt-provenance.schema.json",
+  "title": "Smt provenance",
+  "description": "The provenance of SmtRun (the blob Smt.Provenance hands out): what the run ran with. The solver profile and the SHA-256 of its module; the engine's version and the SHA-256 of its native library for each platform the controller ships for; the controller's version and its model package's; the options as resolved (numbers, never the word default); and the problem set by its SHA-256. Nothing is said of the machines that ran it.",
+  "type": "object",
+  "required": ["schema", "profile", "engine", "controller", "model", "options", "sampling_rate", "problem_set"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "string", "const": "smt-provenance/1" },
+    "profile": {
+      "type": "object",
+      "required": ["id", "solver", "solver_version", "module", "module_sha256", "module_size"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "solver": { "type": "string", "const": "z3" },
+        "solver_version": { "type": "string" },
+        "module": { "type": "string", "description": "Where the module lies in the controller's folder." },
+        "module_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "module_size": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "required": ["name", "version", "natives_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "const": "wasmtime" },
+        "version": { "type": "string" },
+        "natives_sha256": { "type": "object", "description": "The SHA-256 of the native engine library the controller ships, by platform." }
+      }
+    },
+    "controller": { "type": "string", "description": "The controller version the run ran on: every taken row was made by it." },
+    "model": { "type": "string", "description": "The version of the model package the controller was built with: the reader, the sanitizer and the evaluator the server used." },
+    "options": {
+      "type": "object",
+      "required": ["profile", "query", "max_models", "seed", "rlimit", "hard_cap_s", "fuel", "memory_mb", "sampling_rate"],
+      "additionalProperties": false,
+      "properties": {
+        "profile": { "type": "string" },
+        "query": { "type": "string", "enum": ["check", "enumerate", "prove"] },
+        "max_models": { "type": "integer", "minimum": 1 },
+        "seed": { "type": "integer", "minimum": 0 },
+        "rlimit": { "type": "integer", "minimum": 1 },
+        "hard_cap_s": { "type": "integer", "minimum": 1 },
+        "fuel": { "type": "integer", "minimum": 1 },
+        "memory_mb": { "type": "integer", "minimum": 1 },
+        "sampling_rate": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "sampling_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "The sampling rate the script stated to Smt.Settle; null when it did not." },
+    "problem_set": {
+      "type": "object",
+      "required": ["sha256", "bytes", "rows"],
+      "additionalProperties": false,
+      "properties": {
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The SHA-256 of the problem set's bytes." },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "rows": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
