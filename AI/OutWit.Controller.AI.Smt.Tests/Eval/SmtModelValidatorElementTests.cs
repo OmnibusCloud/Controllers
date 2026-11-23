@@ -7,9 +7,10 @@ namespace OutWit.Controller.AI.Smt.Tests.Eval;
 /// <summary>
 /// The elements of an uninterpreted sort, listed by the model or only named by it
 /// (<c>A!val!1</c> as the value of a function, with no universe of <c>A</c> printed). Each case
-/// runs twice, the universe listed and not listed, and must come out the same: an element is an
-/// element of its sort, the same element exactly when its name is the same. Each case has a
-/// mutant, the model with one element changed for another, that the evaluator must call failed.
+/// is run twice in one test, the universe listed and not listed, and must come out the same: an
+/// element is an element of its sort, the same element exactly when its name is the same. Each
+/// case has a mutant, the model with one element changed for another, that the evaluator must
+/// call failed.
 /// </summary>
 [TestFixture]
 public class SmtModelValidatorElementTests
@@ -23,16 +24,23 @@ public class SmtModelValidatorElementTests
     #region Listed And Unlisted Tests
 
     [TestCaseSource(nameof(Cases))]
-    public void AnElementListedOrNotIsReadTheSameWayTest(string name, string problem, string model, string mutant, bool listed)
+    public void AnElementListedOrNotIsReadTheSameWayTest(string name, string problem, string model, string mutant)
     {
-        var universe = listed ? UNIVERSE + " " : "";
+        Assert.Multiple(() =>
+        {
+            foreach (var listed in new[] { true, false })
+            {
+                var universe = listed ? UNIVERSE + " " : "";
+                var where = $"{name}, {(listed ? "listed" : "not listed")}";
 
-        var validation = SmtCheck.Validate(problem, $"({universe}{model})");
-        var mutated = SmtCheck.Validate(problem, $"({universe}{mutant})");
+                var validation = SmtCheck.Validate(problem, $"({universe}{model})");
+                var mutated = SmtCheck.Validate(problem, $"({universe}{mutant})");
 
-        Assert.That(validation.Class, Is.EqualTo(SmtValidationClass.Validated), $"{name}: {validation.Reason} {validation.Detail}");
-        Assert.That(mutated.Class, Is.EqualTo(SmtValidationClass.Failed), $"{name}, the mutant: {mutated.Reason} {mutated.Detail}");
-        Assert.That(mutated.Reason, Is.EqualTo(SmtValidationReasons.ASSERTION_FALSE), name);
+                Assert.That(validation.Class, Is.EqualTo(SmtValidationClass.Validated), $"{where}: {validation.Reason} {validation.Detail}");
+                Assert.That(mutated.Class, Is.EqualTo(SmtValidationClass.Failed), $"{where}, the mutant: {mutated.Reason} {mutated.Detail}");
+                Assert.That(mutated.Reason, Is.EqualTo(SmtValidationReasons.ASSERTION_FALSE), where);
+            }
+        });
     }
 
     [Test]
@@ -119,10 +127,7 @@ public class SmtModelValidatorElementTests
         };
 
         foreach (var (name, problem, model, mutant) in cases)
-        {
-            yield return new TestCaseData(name, problem, model, mutant, true).SetName($"{{m}}({name}, listed)");
-            yield return new TestCaseData(name, problem, model, mutant, false).SetName($"{{m}}({name}, not listed)");
-        }
+            yield return new TestCaseData(name, problem, model, mutant).SetName($"{{m}}({name})");
     }
 
     #endregion
