@@ -5,7 +5,9 @@ same 24 content hashes, signatures hashes and counters (the stages' diagnostics 
 `DemoKitPinsDiagnosticsTests` runs the files against `shards.tsv`); 0.7.0 and 0.8.0 change no stage, and their
 stage set's fingerprint is the one of those; 0.9.0 adds limits to the stages (a document judged in full up to
 100,000 words, a ceiling on a shard's product, 4,096 PDF runs a shard) that no file of the kit comes near, so
-its numbers are these too, under another fingerprint; 0.9.1 and 1.0.0 leave the stage set as it is. The 24 files of `manifest.json` (their SHA-256 checked
+its numbers are these too, under another fingerprint; 0.9.1 and 1.0.0 leave the stage set as it is, and so does
+1.0.1, which is the code of 1.0.0 (the source of the sandbox host it compiles has two additions the controller
+does not use): nothing here was measured again with it. The 24 files of `manifest.json` (their SHA-256 checked
 against the manifest) through the stage pipeline of the controller, the manifest's pipeline and
 the reference language pack `cc-2026-43-16`. A shard's product is a function of its bytes and the
 pipeline, so these numbers are the fleet's: the same content hashes and counters on any node and
@@ -19,7 +21,7 @@ holds for it.
 ## The report
 
 ```
-report     : corpus-report/6, controller 1.0.0, output stats_and_hashes
+report     : corpus-report/6, controller 1.0.1, output stats_and_hashes
 shards     : 24 (Completed 24)
 fetched    : 1,584,054,229 bytes; the product would be 448,706,065 bytes compressed
 funnel     : records 515,379 > extracted 515,355 > language 453,528 > lines 427,293 > quality 273,891 = out 273,891

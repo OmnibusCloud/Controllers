@@ -191,8 +191,9 @@ public sealed class VerifySupplyChainTests
     [Test]
     public void L9TheScriptsPackageAcceptsTheReleaseItWaitsForTest()
     {
-        // The marker is enabled when the controller is first published to nuget.org, as 1.0.0.
-        // Its range must hold that version; the one it had, [0.1.0, 1.0.0), refused it.
+        // The marker is enabled when the controller is first published to nuget.org: as 1.0.1 at
+        // the earliest, 1.0.0 not being published there. Its range must hold that version; the
+        // one it had at first, [0.1.0, 1.0.0), refused the 1.0.0 it then waited for.
         var marker = Regex.Match(ReadRepository(SCRIPTS_PROJECT),
             $"<PackageReference\\s+Include=\"{Regex.Escape(CONTROLLER_PACKAGE)}\"\\s+Version=\"\\[(?<lower>[0-9.]+),\\s*(?<upper>[0-9.]+)\\)\"");
 
@@ -200,7 +201,7 @@ public sealed class VerifySupplyChainTests
 
         var lower = Version.Parse(marker.Groups["lower"].Value);
         var upper = Version.Parse(marker.Groups["upper"].Value);
-        var first = new Version(1, 0, 0);
+        var first = new Version(1, 0, 1);
 
         Assert.Multiple(() =>
         {

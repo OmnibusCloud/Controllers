@@ -15,7 +15,11 @@ obligations — a shard cap and a traffic estimate the contributor sees before
 opting in, a rule about where a machine fetches from that a job cannot widen
 (see *Where a machine fetches from*), retries with jitter towards the origin.
 
-**Status: 1.0.0 — the first release; not on nuget.org or the live network yet.** Its code is
+**Status: 1.0.1 — not on nuget.org or the live network yet.** Its code is the code of 1.0.0,
+the first release: the sandbox host it compiles from shared source has two additions this
+controller does not use (an engine option, and a conversation over stdin), both off by default,
+and 1.0.1 changes nothing of the controller's behaviour, of its documents or of its wire types;
+the documents name the controller version 1.0.1. The code of 1.0.0 is
 the code of 0.9.1, which ran on the test fleet on Windows x64, Linux x64 and macOS arm64 nodes,
 with a node that lied and one that answered nothing among them; 1.0.0 changes the version and
 nothing a node or the server runs. What 1.0.0 is, after the 0.x line on the test server, is
@@ -1478,7 +1482,7 @@ line structure and adds the line stage; 0.4.0 lower-cases the capitals Unicode
 products are those of 0.4.0 byte for byte; 0.9.0 adds three limits — a document is judged in
 full up to 100,000 words, a shard's product is held to its ceiling, a shard's PDFs to 4,096
 runs — that change the product of no Common Crawl file and of no file the tests pin, and moves
-the stage set's fingerprint with them; 0.9.1 and 1.0.0 leave the stage set as it is), which is why a job runs on one controller
+the stage set's fingerprint with them; 0.9.1, 1.0.0 and 1.0.1 leave the stage set as it is), which is why a job runs on one controller
 version: a node on another refuses its batch. The tests pin a zstd frame digest and a MinHash signature digest,
 pin the records and the extracted text of a shard (a generated one, and the head
 of a real crawl file) and a pack's language answers to values

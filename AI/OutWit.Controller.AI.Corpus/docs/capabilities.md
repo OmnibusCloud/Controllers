@@ -11,12 +11,15 @@ Every number on this page is a constant of the code or was measured, in the cont
 or on a test fleet; the [README](../README.md) explains how things work inside, and the JSON
 schemas in this folder are the documents' contracts.
 
-Version described: **Corpus 1.0.0** (Model 1.0.0, Scripts 1.0.0). It is the first release, and
-its code is the code of 0.9.1, which ran on the test fleet on Windows x64, Linux x64 and macOS
+Version described: **Corpus 1.0.1** (Model 1.0.0, Scripts 1.0.0). Its code is the code of
+1.0.0, the first release: the sandbox host it compiles from shared source has two additions this
+controller does not use (an engine option, and a conversation over stdin), both off by default,
+and 1.0.1 changes nothing of the controller's behaviour, of its documents or of its wire types.
+The code of 1.0.0 is the code of 0.9.1, which ran on the test fleet on Windows x64, Linux x64 and macOS
 arm64 nodes: the hardening of the 0.x line (what the server accepts from a node, what a run does
 when nodes disagree or fail, what hostile input costs, what a run promises before it starts,
 what a lab can and cannot read off a document) is in sections 7 to 12, and what changed for an
-application is listed in section 14. 1.0.0 is not on nuget.org or on the live network yet.
+application is listed in section 14. 1.0.1 is not on nuget.org or on the live network yet.
 
 ## Contents
 
@@ -1025,7 +1028,7 @@ and a merge over the first 12 of the 24 shards finds 7,292: why no figure "so fa
 
 | Part | Version | Where it comes from |
 |---|---|---|
-| The controller | 1.0.0 | `OutWit.Controller.AI.Corpus` (nuget.org once released; the 0.x versions are on GitHub Packages only) |
+| The controller | 1.0.1 | `OutWit.Controller.AI.Corpus` (nuget.org once released; 1.0.0 and the 0.x versions are on GitHub Packages only) |
 | The wire types | 1.0.0 | `OutWit.Controller.AI.Corpus.Model` (the layout of 0.2.0): the server restores it from the feed, so it is published before a controller that needs it |
 | The scripts | 1.0.0 | `OutWit.Controller.AI.Corpus.Scripts` |
 | The PDF extractor | pdftext 1.0.0 (pdf_oxide 0.3.78) | `corpus-pdftext-wasm.zip`, release `pdftext-v1.0.0` (5.9 MB, extracted to `wasm/` beside the controller) |
@@ -1042,6 +1045,13 @@ LLVM-exception), FineWeb-2's stop-word lists (Apache-2.0) and the Unicode Charac
 `LICENSE-unicode.txt` and the controller's own `LICENSE.txt`: twelve files, held to that list by
 a test. The two data assets carry their own notices (`LICENSE-wasmtime.txt` and `NOTICE.txt`
 beside each native library, `wasm/LICENSE-pdftext.txt` beside the extractor).
+
+**What changed for an application in 1.0.1** (from 1.0.0): nothing. The sandbox host the
+controller compiles from shared source has two additions it does not use (an engine option, and
+a conversation over stdin), both off by default. The products, verdicts, codes and hashes, the
+documents and their versions, the scripts and the wire types are those of 1.0.0; the documents
+name the controller version 1.0.1. A job runs on one controller version, so the server and the
+nodes move to 1.0.1 together.
 
 **What changed for an application in 1.0.0** (from 0.9.1): nothing. The products, verdicts,
 codes and hashes, the documents and their versions, the scripts and the wire types are those of
@@ -1145,5 +1155,6 @@ so the server and the nodes move to 1.0.0 together.
   shards: the same code, deterministic.
 - A run at the scale of a crawl segment, and the near-duplicate merge at that size, have not been
   measured yet; they are to run on the 1.0.0 builds.
-- The code of 1.0.0 is proven on the test fleet, as 0.9.1. Its release to nuget.org and to the
-  live network is the owner's decision.
+- The code of 1.0.0 is proven on the test fleet, as 0.9.1. 1.0.1 is the code of 1.0.0 (section
+  14), held by the controller's tests; it has not run on a fleet. A release to nuget.org and to
+  the live network, of 1.0.1 or of a later version, is the owner's decision.
