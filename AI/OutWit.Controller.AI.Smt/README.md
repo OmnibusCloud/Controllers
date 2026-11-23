@@ -152,11 +152,11 @@ The sessions of a package run on threads of their own below normal priority, eac
 that holds a guest's. The degree is `min(logical cores, 16, sessions the memory holds)`. One
 session may take twice the host's cap of the solver's linear memory (the heap of the solver's
 exception objects is capped apart from the linear memory and may take as much again) and a
-margin of 160 MiB for the host's part of a session (its output, its answers as text, the problem
+margin of 192 MiB for the host's part of a session (its output, its answers as text, the problem
 as the sanitizer took it, the row being written, the guest's stack); the sessions may claim three
 quarters of the memory the machine has available as the runtime sees it. Under the default
-options a session counts 2,720 MiB: a machine with 4 GiB available runs one, with 16 GiB four,
-with 64 GiB sixteen (eighteen fit). A machine where not one session fits refuses the package
+options a session counts 2,752 MiB: a machine with 4 GiB available runs one, with 16 GiB four,
+with 64 GiB sixteen (seventeen fit). A machine where not one session fits refuses the package
 (`memory_insufficient`).
 
 ### Cancel

@@ -34,13 +34,14 @@ internal static class SmtSandboxDegree
     /// The host memory one session takes beside its two caps: its thread's stack, the store and
     /// the instance, the output the host keeps (up to the session's output cap), the answers
     /// decoded as text, the problem as the sanitizer took it, and the row being written. Measured
-    /// by <c>SmtSessionMemoryTests</c> (the live managed heap a session, four sessions at once):
-    /// under a megabyte for small problems, 57 MB for a problem of 3.2 MB with a model of 2 MB, and
-    /// 99 MB for that problem enumerated up to the output cap (15.6 MB of models). The problem's
-    /// part grows with its text (4 MiB at most) and the guest's stack takes up to 8 MiB more, so
-    /// the worst session is near 125 MB; the margin rounds that up.
+    /// by <c>SmtSessionMemoryTests</c> (the live managed heap a session, four sessions at once, on
+    /// Windows, Linux and macOS): under 2 MB for small problems, 58 to 83 MB for a problem of
+    /// 3.2 MB with a model of 2 MB, and 99 to 125 MB for that problem enumerated up to the output
+    /// cap (15.6 MB of models). The problem's part grows with its text (4 MiB at most) and the
+    /// guest's stack takes up to 8 MiB more, so the worst session comes near 160 MB; the margin
+    /// rounds that up.
     /// </summary>
-    public const long SESSION_MARGIN_BYTES = 160L << 20;
+    public const long SESSION_MARGIN_BYTES = 192L << 20;
 
     /// <summary>The degree was decided by the cores.</summary>
     public const string BY_CORES = "cores";

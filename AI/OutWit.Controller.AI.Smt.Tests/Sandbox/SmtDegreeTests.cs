@@ -53,7 +53,7 @@ public sealed class SmtDegreeTests
     public void TheDegreeOfAMachineUnderTheDefaultOptionsTest(int cores, int gigabytes, int degree, string reason)
     {
         // A session under the default options takes 2.5 GiB and the margin: three quarters of
-        // 4 GiB hold one, of 16 GiB four, of 64 GiB eighteen.
+        // 4 GiB hold one, of 16 GiB four, of 64 GiB seventeen.
         var session = SmtNodeRig.SessionBytes(new SmtOptionsData());
 
         Assert.That(SmtNodeRig.Degree(cores, gigabytes * GIGABYTE, session), Is.EqualTo((degree, reason)));
