@@ -180,5 +180,6 @@ They need no server and no solver: the command line, the ids and the packing of 
 back by the model package's reader), the schema check against the controller's own schemas, the
 summary, the comparison of two runs, the three server verbs driven through a server in memory,
 and the eight-queens kit against the model evaluator (every placement of eight queens, one a row,
-and the one completion of the Latin square). The test project lives in the tool's folder and is
-not part of the solution or of a workflow: run it after a change to the tool.
+and the one completion of the Latin square). The test project lives in the tool's folder; it is
+in the solution, and the workflow "AI Smt" runs it on Windows, Linux and macOS after the
+controller's tests.
