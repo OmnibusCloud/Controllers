@@ -1,0 +1,36 @@
+{
+  "schema": "smt-capabilities/1",
+  "controller": "0.3.0",
+  "profile": {
+    "id": "z3-5.4.1",
+    "solver": "z3",
+    "solver_version": "5.4.1",
+    "module": "wasm/z3-5.4.1.wasm",
+    "module_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "module_size": 30204160,
+    "module_present": true,
+    "engine": "wasmtime 1.0.0"
+  },
+  "queries": ["check", "enumerate", "prove"],
+  "defaults": { "max_models": 2, "seed": 0, "rlimit": 150000000, "hard_cap_s": 60, "memory_mb": 1024, "sampling_rate": 0.05 },
+  "ceilings": { "max_models": 1000, "seed": 2147483647, "rlimit": 4294967295, "hard_cap_s": 600, "memory_mb": 4096, "sampling_rate": 1 },
+  "time": { "fuel_per_second": 5000000000, "backstop_base_ms": 60000, "backstop_slowdown": 10 },
+  "session": { "output_bytes": 16777216, "transcript_bytes": 8192, "message_characters": 1024, "memory_headroom_bytes": 16777216 },
+  "problem": {
+    "max_characters": 4194304, "max_tokens": 2000000, "max_depth": 100000, "max_numeral_digits": 4096, "max_literal_bits": 65536,
+    "max_string_characters": 65536, "max_declared_symbols": 100000, "max_index": 65536, "max_term_characters": 65536
+  },
+  "problem_set": { "max_line_bytes": 16777216, "max_rows": 1000000, "max_id_characters": 64, "max_values": 256, "max_project": 256, "max_tags_characters": 256 },
+  "results": {
+    "statuses": ["ok", "refused", "input_error", "output_exceeded", "engine_crash", "node_fault"],
+    "verdicts": ["sat", "unsat", "unknown", "none"],
+    "reasons": ["rlimit", "fuel", "memout", "incomplete", "other", "none"],
+    "proofs": ["proved", "counterexample", "none"],
+    "node_faults": ["version_mismatch", "package_invalid", "ticket_invalid"]
+  },
+  "packages": { "max_problems": 256, "max_bytes": 269484032, "max_problem_frame_bytes": 134217728, "max_result_frame_bytes": 67108864 },
+  "node": { "max_degree": 16, "ram_headroom": 0.75, "session_margin_bytes": 201326592, "session_bytes": 2885681152, "priority": "below_normal" },
+  "benchmark_unit": "smt-problem@ref-v1",
+  "platforms": ["win-x64", "linux-x64", "osx-arm64"],
+  "pool": { "nodes": 3, "measured": 3, "workers": 12, "rate": 41.5 }
+}

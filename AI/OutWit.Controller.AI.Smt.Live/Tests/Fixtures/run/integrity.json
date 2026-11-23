@@ -1,0 +1,42 @@
+{
+  "schema": "smt-integrity/1",
+  "summary": {
+    "problems": 3,
+    "copies_made": 6,
+    "compared": 3,
+    "agreements": 3,
+    "disagreements": 0,
+    "one_copy": 0,
+    "unsat_one_copy": 0,
+    "disputes": 0,
+    "disputes_resolved": 0,
+    "disputed": 0,
+    "dispute_causes": { "digests_differ": 0, "model_failed": 0, "surplus": 0 },
+    "dispute_outcomes": { "resolved": 0, "no_majority": 0, "too_few_copies": 0, "surplus_copies": 0 },
+    "lies": 0,
+    "problems_with_lies": 0,
+    "failed_models": 0,
+    "evaluator_solver_disagreements": 0,
+    "repairs": 0,
+    "repairs_by_reason": {},
+    "no_result": 0,
+    "no_result_by_reason": {},
+    "rejected_results": 0,
+    "rejected": { "unknown_ticket": 0, "duplicate": 0, "unreadable": 0, "content": 0, "surplus": 0 },
+    "node_faults": 0,
+    "node_faults_by_code": {
+      "version_mismatch": 0, "package_invalid": 0, "ticket_invalid": 0, "package_too_large": 0, "package_hash_mismatch": 0, "package_unreadable": 0,
+      "package_mismatch": 0, "sandbox_unavailable": 0, "memory_insufficient": 0, "download_failed": 0, "upload_failed": 0
+    },
+    "sampling_rate": 1,
+    "sampling": "as_asked",
+    "unanswered_packages": 0
+  },
+  "evaluator_solver_disagreements": [],
+  "fan_outs": [
+    { "round": "main", "packages": 1, "problems": 3, "copies": 2, "selected": 1, "complete": 1, "unanswered": 0 },
+    { "round": "repair", "packages": 0, "problems": 0, "copies": 2, "selected": 0, "complete": 0, "unanswered": 0 },
+    { "round": "dispute", "packages": 0, "problems": 0, "copies": 3, "selected": 0, "complete": 0, "unanswered": 0 }
+  ],
+  "disputes": []
+}

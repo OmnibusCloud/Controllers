@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The live client of the Smt controller: drives SmtRuntimeDiagnostics, SmtPreflight and
+       SmtRun on a real server through the public SDK, the way a lab's application does, checks
+       the documents a run gives against their schemas, compares two runs of one problem set,
+       and packs a folder of SMT-LIB files into a problem set. A developer tool, not a package:
+       never packed or published. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>smt-live</AssemblyName>
+    <RootNamespace>OutWit.Controller.AI.Smt.Live</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- The tool's unit tests and the demo kits live in this folder; they are not its sources. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);Tests/**;demo/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OutWit.Cloud.SDK" Version="2.2.0" />
+  </ItemGroup>
+
+  <!-- The model package: the options, the preflight and the diagnostics travel as its types, and
+       the problem set is read and sanitized here by the code the server reads it with. -->
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Smt.Model\OutWit.Controller.AI.Smt.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OutWit.Controller.AI.Smt.Live.Tests" />
+  </ItemGroup>
+
+  <!-- The schemas of the controller's documents, beside the tool under docs/: every document a
+       run or a diagnostics job gives is held to its schema as the controller publishes it. -->
+  <ItemGroup>
+    <None Include="..\OutWit.Controller.AI.Smt\docs\smt-*.schema.json" Link="docs\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,3 @@
+# The problem sets of the demo kits: LF on every checkout, so a set has the same bytes, and the
+# same SHA-256 in a run's provenance, whatever machine checked it out
+demo/**/*.jsonl text eol=lf
