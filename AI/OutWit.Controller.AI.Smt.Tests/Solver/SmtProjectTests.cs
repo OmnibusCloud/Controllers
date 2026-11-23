@@ -86,19 +86,41 @@ public sealed class SmtProjectTests
     #region Module Tests
 
     [Test]
-    public void TheModuleIsNamedSmtAndRegistersNothingYetTest()
+    public void TheModuleIsNamedSmtAndRegistersItsActivitiesAndVariablesTest()
     {
         var manifest = typeof(WitControllerSmtModule).GetCustomAttribute<WitPluginManifestAttribute>();
+        var dependency = typeof(WitControllerSmtModule).GetCustomAttribute<WitPluginDependencyAttribute>();
         var services = new ServiceCollection();
 
         new WitControllerSmtModule().Initialize(services);
+
+        // An adapter is registered as its own type, a variable as the adapter of its type.
+        var registered = services
+            .Select(service => service.ServiceType.IsGenericType ? service.ServiceType.GetGenericArguments()[0].Name : service.ServiceType.Name)
+            .Order(StringComparer.Ordinal)
+            .ToList();
 
         Assert.Multiple(() =>
         {
             Assert.That(manifest?.Name, Is.EqualTo("Smt"));
             Assert.That(manifest?.Version, Is.EqualTo((string?)Project(SMT).Descendants("Version").Single()));
-            Assert.That(services, Is.Empty, "this version holds the solver: no variable, no activity");
+            Assert.That(dependency?.PluginName, Is.EqualTo("Variables"), "the scripts take the blobs and collections of the Variables controller");
+            Assert.That(Project(SMT).Descendants("ControllerDependency").Select(item => (string?)item.Attribute("Include")), Is.EqualTo(new[] { "Variables" }), "and the manifest says so");
+            Assert.That(registered, Is.EqualTo(new[]
+            {
+                "WitActivityAdapterSmtCapabilities", "WitActivityAdapterSmtRuntimeDiagnostics", "WitActivityAdapterSmtSolvePackage",
+                "WitVariableSmtResultPackage", "WitVariableSmtResultPackageCollection", "WitVariableSmtRuntimeDiagnostics",
+                "WitVariableSmtTaskPackage", "WitVariableSmtTaskPackageCollection"
+            }));
         });
+
+        // The activities as a script names them.
+        var activities = typeof(WitControllerSmtModule).Assembly.GetTypes()
+            .Select(type => type.GetCustomAttributesData().FirstOrDefault(attribute => attribute.AttributeType.Name == "ActivityAttribute")?.ConstructorArguments.FirstOrDefault().Value as string)
+            .OfType<string>()
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        Assert.That(activities, Is.EqualTo(new[] { "Smt.Capabilities", "Smt.RuntimeDiagnostics", "Smt.SolvePackage" }));
     }
 
     [Test]

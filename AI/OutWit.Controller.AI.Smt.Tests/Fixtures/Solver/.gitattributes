@@ -1,2 +1,3 @@
-# The golden file of the solver's outcomes: LF on every checkout
+# The golden files of the solver's outcomes and of the rows: LF on every checkout
 outcomes.tsv text eol=lf
+rows.tsv text eol=lf
