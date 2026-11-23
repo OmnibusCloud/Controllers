@@ -22,6 +22,21 @@ namespace OutWit.Controller.AI.Wasm;
 /// the natives guard (<see cref="WasmHostNatives"/>) asks right after it, before anything else of
 /// the library is used.
 /// </para>
+/// <para>
+/// One setting can be asked for, and is off unless it is: WebAssembly exceptions (the standard
+/// proposal: tags, <c>throw</c>, <c>try_table</c>). It is for a module the controller itself ships
+/// and pins by hash (a C++ program that throws), never for a module a task brought. The four
+/// advisories were about exceptions and the machinery under them: fuel that a callee had used
+/// given back at a catch (GHSA-m63x-6p34-q65x), the heap of the exception objects corrupted
+/// (GHSA-cfhf-m2cr-62wj, GHSA-hw8m-q44c-ggrf), a module's tags misaligning the host's own records
+/// (GHSA-p79w-pv2r-29qp). The pinned native library is past all four; a task's module has no use
+/// for exceptions, and what is off cannot be reached. The GC proposal and the typed function
+/// references stay off in such an engine as in every other. Its exception objects live in a heap
+/// the store manages beside the linear memory: host memory, which the store's cap of a memory
+/// bounds as it bounds the linear memory, each on its own. A guest that keeps its exceptions is
+/// refused more at the cap, and that refusal is an error of the engine
+/// (<see cref="WasmHostVerdict.EngineError"/>), neither a trap nor an exit.
+/// </para>
 /// </summary>
 internal static class WasmHostEngineConfig
 {
@@ -38,6 +53,21 @@ internal static class WasmHostEngineConfig
     /// <exception cref="InvalidOperationException">No native library was found, the one loaded is not the pinned one, or the binding has no native handle or the library lacks the calls.</exception>
     public static Config Create(bool parallelCompilation, bool forceExplicitTraps, out bool explicitTraps)
     {
+        return Create(parallelCompilation, forceExplicitTraps, exceptions: false, out explicitTraps);
+    }
+
+    /// <summary>
+    /// Makes the deterministic configuration and says whether the engine takes WebAssembly
+    /// exceptions: the one setting an engine made here can differ in from every other.
+    /// </summary>
+    /// <param name="parallelCompilation">Whether a compile may use threads of the engine's own besides the caller's.</param>
+    /// <param name="forceExplicitTraps">True to make traps explicit checks whatever the process; false leaves it to the process (a process with shadow stacks always has them).</param>
+    /// <param name="exceptions">True for an engine that takes the exceptions proposal: for a module the controller ships and pins by hash, never for one a task brought.</param>
+    /// <param name="explicitTraps">True when traps are explicit checks in the engine made from the configuration.</param>
+    /// <returns>A configuration not yet used, to make one engine from.</returns>
+    /// <exception cref="InvalidOperationException">No native library was found, the one loaded is not the pinned one, or the binding has no native handle or the library lacks the calls.</exception>
+    public static Config Create(bool parallelCompilation, bool forceExplicitTraps, bool exceptions, out bool explicitTraps)
+    {
         var config = NewConfig();
         try
         {
@@ -53,7 +83,7 @@ internal static class WasmHostEngineConfig
                 .WithWasmThreads(false)
                 .WithGc(false)
                 .WithFunctionReferences(false)
-                .WithExceptions(false)
+                .WithExceptions(exceptions)
                 .WithComponentModel(false)
                 .WithRelaxedSIMD(true, true)
                 .WithParallelCompilation(parallelCompilation);

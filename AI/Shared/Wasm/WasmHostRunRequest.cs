@@ -23,6 +23,18 @@ internal sealed class WasmHostRunRequest
     public string? Stdin { get; init; }
 
     /// <summary>
+    /// A conversation with the guest over its stdin and stdout, or null (the default: a run
+    /// without one is what it always was). With one, the host answers the guest's reads of
+    /// descriptor 0 itself (<see cref="WasmHostConversationInput"/>): each time the guest has
+    /// consumed everything given so far, the conversation sees what the guest wrote to stdout
+    /// since it was last asked and gives the next input; an empty answer is the end of input.
+    /// Not together with <see cref="Stdin"/> (a guest has one stdin) nor with
+    /// <see cref="StdoutFile"/> (the conversation reads the stdout the host keeps in memory):
+    /// <see cref="WasmHost.Run"/> refuses such a request.
+    /// </summary>
+    public WasmHostConversation? Conversation { get; init; }
+
+    /// <summary>
     /// The host folder the run's stdio files live in while it runs (made when missing; the files
     /// are deleted when the run ends). On a node it is a scope of the client's temp storage.
     /// </summary>

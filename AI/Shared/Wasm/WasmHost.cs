@@ -40,6 +40,7 @@ internal sealed class WasmHost : IDisposable
 
     private const string EXPLICIT_TRAPS = "explicit-traps";
     private const string SIGNAL_TRAPS = "signal-traps";
+    private const string EXCEPTIONS = "exceptions";
 
     #endregion
 
@@ -50,6 +51,7 @@ internal sealed class WasmHost : IDisposable
     private readonly Thread m_epochThread;
     private readonly ManualResetEventSlim m_stopped = new(false);
     private readonly bool m_explicitTraps;
+    private readonly bool m_exceptions;
     private readonly string m_compiledCodeKey;
     private bool m_disposed;
 
@@ -95,12 +97,26 @@ internal sealed class WasmHost : IDisposable
     /// </param>
     /// <exception cref="InvalidOperationException">The loaded binding is not the one built against, the native library is not the pinned one or none was found, or the binding lacks what the engine settings need.</exception>
     public WasmHost(bool parallelCompilation, bool explicitTraps)
+        : this(parallelCompilation, explicitTraps, exceptions: false)
+    {
+    }
+
+    /// <summary>
+    /// Creates a host and says whether its engine takes WebAssembly exceptions: for a module the
+    /// controller itself ships and pins by hash, never for one a task brought (<see cref="WasmHostEngineConfig"/>).
+    /// </summary>
+    /// <param name="parallelCompilation">Whether the engine compiles a module's functions on several threads of its own.</param>
+    /// <param name="explicitTraps">True to make every trap an explicit check whatever the process; false leaves the choice to the process.</param>
+    /// <param name="exceptions">True for an engine with the exceptions proposal on; false for the engine every other constructor makes.</param>
+    /// <exception cref="InvalidOperationException">The loaded binding is not the one built against, the native library is not the pinned one or none was found, or the binding lacks what the engine settings need.</exception>
+    public WasmHost(bool parallelCompilation, bool explicitTraps, bool exceptions)
     {
         WasmHostBinding.ThrowIfUnavailable();
         WasmHostNativeLibrary.EnsureRegistered();
 
-        m_engine = CreateEngine(parallelCompilation, explicitTraps, out m_explicitTraps);
-        m_compiledCodeKey = CompiledCodeKeyOf(WasmHostNatives.Sha256Of(WasmHostNativeLibrary.LoadedPath!) ?? "", m_explicitTraps);
+        m_exceptions = exceptions;
+        m_engine = CreateEngine(parallelCompilation, explicitTraps, exceptions, out m_explicitTraps);
+        m_compiledCodeKey = CompiledCodeKeyOf(WasmHostNatives.Sha256Of(WasmHostNativeLibrary.LoadedPath!) ?? "", m_explicitTraps, m_exceptions);
         m_shim = new WasmHostShim(m_engine);
 
         // One thread of the host's own advances the epoch for every store; per-store deadlines
@@ -120,9 +136,9 @@ internal sealed class WasmHost : IDisposable
     /// looked up after the guard has passed, not when the constructor is compiled.
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static WasmEngine CreateEngine(bool parallelCompilation, bool forceExplicitTraps, out bool explicitTraps)
+    private static WasmEngine CreateEngine(bool parallelCompilation, bool forceExplicitTraps, bool exceptions, out bool explicitTraps)
     {
-        return new WasmEngine(WasmHostEngineConfig.Create(parallelCompilation, forceExplicitTraps, out explicitTraps));
+        return new WasmEngine(WasmHostEngineConfig.Create(parallelCompilation, forceExplicitTraps, exceptions, out explicitTraps));
     }
 
     #endregion
@@ -144,6 +160,21 @@ internal sealed class WasmHost : IDisposable
     }
 
     /// <summary>
+    /// The key of an engine that may take WebAssembly exceptions: the key of
+    /// <see cref="CompiledCodeKeyOf(string, bool)"/>, with <c>-exceptions</c> after it when the
+    /// engine has them on, so that a cache never offers one kind of engine the code of the other.
+    /// </summary>
+    /// <param name="nativesSha256">The native library's SHA-256.</param>
+    /// <param name="explicitTraps">Whether traps are explicit checks.</param>
+    /// <param name="exceptions">Whether the engine takes the exceptions proposal.</param>
+    /// <returns>The key without the argument when it is false, e.g. <c>wasmtime-&lt;sha256&gt;-signal-traps-exceptions</c> when it is true.</returns>
+    public static string CompiledCodeKeyOf(string nativesSha256, bool explicitTraps, bool exceptions)
+    {
+        var key = CompiledCodeKeyOf(nativesSha256, explicitTraps);
+        return exceptions ? $"{key}-{EXCEPTIONS}" : key;
+    }
+
+    /// <summary>
     /// Runs one WASI command module once, in its own store: the request's argv, environment,
     /// folders and stdin, the deterministic clock and randomness, the fuel / memory / wall-clock
     /// envelope; stdout and stderr are the host's own streams, capped at the write
@@ -156,9 +187,12 @@ internal sealed class WasmHost : IDisposable
     /// <returns>How the run ended and what it cost.</returns>
     /// <exception cref="IOException">The capture folder or the file stdout goes to cannot be used, or one of the host's own calls failed (a host fault, not the guest's).</exception>
     /// <exception cref="InvalidOperationException">A preopened folder cannot be opened (a host fault, not the guest's).</exception>
-    /// <exception cref="ArgumentException">Some of the run's folders have a table of names and some have none.</exception>
+    /// <exception cref="ArgumentException">Some of the run's folders have a table of names and some have none, or the run has a conversation together with a stdin text or a file for its stdout.</exception>
     public WasmHostRunOutcome Run(WasmModule module, WasmHostRunRequest request)
     {
+        // Before anything of the run is made: a request that cannot hold its conversation.
+        WasmHostConversationInput.ThrowIfRefused(request);
+
         // The host may live as long as the process, its capture folder in the host's temp
         // storage. A cloud client sweeps that storage whenever it reloads its controllers on an
         // idle node (every controller check, every reconnect), so the folder may be gone between
@@ -465,9 +499,13 @@ internal sealed class WasmHost : IDisposable
     /// </summary>
     public bool ExplicitTraps => m_explicitTraps;
 
+    /// <summary>Whether the engine takes WebAssembly exceptions: true only in a host made so, for a module the controller ships and pins.</summary>
+    public bool Exceptions => m_exceptions;
+
     /// <summary>
     /// What a module compiled on <see cref="Engine"/> is valid for: this process's native library
-    /// and trap mode (<see cref="CompiledCodeKeyOf"/>). Nothing of the host keeps compiled code past
+    /// and trap mode (<see cref="CompiledCodeKeyOf(string, bool)"/>), and the exceptions proposal
+    /// when the engine has it on. Nothing of the host keeps compiled code past
     /// its engine; a cache that does keys its entries by this and loads nothing under another key.
     /// </summary>
     public string CompiledCodeKey => m_compiledCodeKey;
