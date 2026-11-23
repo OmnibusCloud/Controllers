@@ -3,7 +3,7 @@ using OutWit.Controller.AI.Wasm;
 namespace OutWit.Controller.AI.Verify.Tests.Wasm;
 
 /// <summary>
-/// What a conversation does not touch (<see cref="IWasmHostConversation"/>): a read of any
+/// What a conversation does not touch (<see cref="WasmHostConversation"/>): a read of any
 /// descriptor but the guest's stdin goes the way it goes in a run without a conversation, a stdin
 /// the guest closed is no longer the conversation's, and a run that has no conversation leaves
 /// its reads to WASI as it always did.
@@ -139,21 +139,30 @@ public sealed class WasmHostConversationOtherReadsTests
 
     #region Tools
 
-    private WasmHostRunOutcome Run(byte[] bytes, IWasmHostConversation? conversation, bool charge = false, string? stdin = null, WasmHostCallCensus? census = null)
+    private WasmHostRunOutcome Run(byte[] bytes, WasmHostConversationScripted? conversation, bool charge = false, string? stdin = null, WasmHostCallCensus? census = null)
     {
         return WasmHostConversationRig.Run(m_host, m_capture, bytes, conversation, charge, stdin: stdin, census: census);
     }
 
     /// <summary>Runs the copy program (it reads a file of its first folder into its second) and reads what it wrote.</summary>
-    private (WasmHostRunOutcome Outcome, string Copied) Copy(string output, string input, IWasmHostConversation? conversation, bool charge)
+    private CopyRun Copy(string output, string input, WasmHostConversationScripted? conversation, bool charge)
     {
         Directory.CreateDirectory(output);
         var outcome = WasmHostConversationRig.Run(m_host, m_capture, WasmHostModules.Copy(), conversation, charge,
             preopens: [new WasmHostPreopen(input, "/in"), new WasmHostPreopen(output, "/out", Writable: true)]);
 
         var copy = Path.Combine(output, WasmHostModules.OUTPUT_NAME);
-        return (outcome, File.Exists(copy) ? File.ReadAllText(copy) : "");
+        return new CopyRun(outcome, File.Exists(copy) ? File.ReadAllText(copy) : "");
     }
+
+    #endregion
+
+    #region Nested Types
+
+    /// <summary>A run of the copy program and what it wrote. A class: see <see cref="WasmHostConversationScripted"/> on what a test's types may hold.</summary>
+    /// <param name="Outcome">The run's outcome.</param>
+    /// <param name="Copied">The text of the file the program wrote; empty when it wrote none.</param>
+    private sealed record CopyRun(WasmHostRunOutcome Outcome, string Copied);
 
     #endregion
 }

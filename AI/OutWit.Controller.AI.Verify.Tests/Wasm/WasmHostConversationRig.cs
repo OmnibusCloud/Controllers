@@ -27,7 +27,7 @@ internal static class WasmHostConversationRig
     /// <param name="host">The host.</param>
     /// <param name="capture">The run's capture folder.</param>
     /// <param name="bytes">The module.</param>
-    /// <param name="conversation">The run's conversation, or null for a run without one.</param>
+    /// <param name="conversation">The run's conversation (its <c>Next</c> is handed to the run), or null for a run without one.</param>
     /// <param name="charge">Whether the run's calls into the host cost fuel.</param>
     /// <param name="fuel">The run's fuel.</param>
     /// <param name="stdoutLimitBytes">The cap of the run's stdout; 0 for none.</param>
@@ -37,7 +37,7 @@ internal static class WasmHostConversationRig
     /// <param name="census">Where the run's calls are counted, or null.</param>
     /// <param name="preopens">The folders the guest sees, or null for none.</param>
     /// <returns>The run's outcome.</returns>
-    public static WasmHostRunOutcome Run(WasmHost host, string capture, byte[] bytes, IWasmHostConversation? conversation, bool charge = false,
+    public static WasmHostRunOutcome Run(WasmHost host, string capture, byte[] bytes, WasmHostConversationScripted? conversation, bool charge = false,
         long fuel = FUEL, int stdoutLimitBytes = 0, bool stopAtStdoutLimit = false, string? stdin = null, string? stdoutFile = null,
         WasmHostCallCensus? census = null, IReadOnlyList<WasmHostPreopen>? preopens = null)
     {
@@ -47,7 +47,7 @@ internal static class WasmHostConversationRig
             Argv = ["main.wasm"],
             Preopens = preopens ?? [],
             Stdin = stdin,
-            Conversation = conversation,
+            Conversation = conversation == null ? null : conversation.Next,
             CaptureDirectory = capture,
             Fuel = fuel,
             FuelAfterInstantiation = true,

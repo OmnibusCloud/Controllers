@@ -32,7 +32,7 @@ internal sealed class WasmHostRunRequest
     /// <see cref="StdoutFile"/> (the conversation reads the stdout the host keeps in memory):
     /// <see cref="WasmHost.Run"/> refuses such a request.
     /// </summary>
-    public IWasmHostConversation? Conversation { get; init; }
+    public WasmHostConversation? Conversation { get; init; }
 
     /// <summary>
     /// The host folder the run's stdio files live in while it runs (made when missing; the files

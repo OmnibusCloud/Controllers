@@ -1,13 +1,21 @@
 using System.Text;
-using OutWit.Controller.AI.Wasm;
 
 namespace OutWit.Controller.AI.Verify.Tests.Wasm;
 
 /// <summary>
 /// A conversation of a test: it keeps what it was shown at every turn, as text, and answers by a
-/// rule of the test's. One conversation serves one run.
+/// rule of the test's. Its <see cref="Next"/> is what a run is given as its conversation; one
+/// conversation serves one run.
+/// <para>
+/// The class implements and derives from nothing of the controller, and no type of these tests
+/// keeps a value type of the controller's in a field (a tuple that holds a run's outcome is one,
+/// and so is the class the compiler makes for a lambda that captures such a tuple). A test
+/// framework loads every type of the test assembly when it looks for tests, and a type that named
+/// the controller in its shape would load the controller's assembly then, before the test that
+/// proves the module loads in a context of its own.
+/// </para>
 /// </summary>
-internal sealed class WasmHostConversationScripted : IWasmHostConversation
+internal sealed class WasmHostConversationScripted
 {
     #region Fields
 
@@ -41,11 +49,9 @@ internal sealed class WasmHostConversationScripted : IWasmHostConversation
         return new WasmHostConversationScripted((turn, _) => turn < pieces.Length ? pieces[turn] : null);
     }
 
-    #endregion
-
-    #region IWasmHostConversation
-
-    /// <summary>Keeps what the guest wrote and answers by the rule.</summary>
+    /// <summary>
+    /// The conversation as a run takes it: keeps what the guest wrote and answers by the rule.
+    /// </summary>
     /// <param name="output">What the guest wrote to stdout since the previous turn.</param>
     /// <returns>The next input as UTF-8; empty for the end of input.</returns>
     public ReadOnlyMemory<byte> Next(ReadOnlySpan<byte> output)

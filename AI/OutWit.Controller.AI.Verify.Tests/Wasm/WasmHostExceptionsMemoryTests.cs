@@ -112,7 +112,7 @@ public sealed class WasmHostExceptionsMemoryTests
     /// Runs a module under the cap of one page and samples the process's memory while it runs.
     /// The module is compiled before the first sample: what compiling takes is not the run's.
     /// </summary>
-    private (WasmHostRunOutcome Outcome, Sample Before, Sample Highest, Sample After) Measure(byte[] bytes)
+    private Measured Measure(byte[] bytes)
     {
         using var module = Wasmtime.Module.FromBytes(m_host.Engine, "main.wasm", bytes);
         var request = new WasmHostRunRequest
@@ -155,10 +155,10 @@ public sealed class WasmHostExceptionsMemoryTests
             sampler.Join();
         }
 
-        return (outcome, before, highest, Sample.Now());
+        return new Measured(outcome, before, highest, Sample.Now());
     }
 
-    private static string Describe((WasmHostRunOutcome Outcome, Sample Before, Sample Highest, Sample After) run)
+    private static string Describe(Measured run)
     {
         return $"{run.Outcome.Verdict} {run.Outcome.ExitCode} in {run.Outcome.WallMs} ms, fuel {run.Outcome.FuelConsumed}; "
                + $"private memory {Mebibytes(run.Before.Private)} MiB before, {Mebibytes(run.Highest.Private)} at the highest, {Mebibytes(run.After.Private)} after; "
@@ -173,6 +173,13 @@ public sealed class WasmHostExceptionsMemoryTests
     #endregion
 
     #region Nested Types
+
+    /// <summary>A run and the process's memory around it. A class: see <see cref="WasmHostConversationScripted"/> on what a test's types may hold.</summary>
+    /// <param name="Outcome">The run's outcome.</param>
+    /// <param name="Before">The memory before the run.</param>
+    /// <param name="Highest">The highest numbers sampled while it ran.</param>
+    /// <param name="After">The memory after the run.</param>
+    private sealed record Measured(WasmHostRunOutcome Outcome, Sample Before, Sample Highest, Sample After);
 
     /// <summary>The memory of this process at one moment, as the operating system counts it.</summary>
     /// <param name="Private">The bytes only this process holds.</param>

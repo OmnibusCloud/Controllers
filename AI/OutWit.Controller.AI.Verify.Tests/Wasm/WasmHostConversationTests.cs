@@ -4,7 +4,7 @@ using Wasmtime;
 namespace OutWit.Controller.AI.Verify.Tests.Wasm;
 
 /// <summary>
-/// A conversation over a guest's stdin and stdout (<see cref="IWasmHostConversation"/>): the
+/// A conversation over a guest's stdin and stdout (<see cref="WasmHostConversation"/>): the
 /// caller answers the guest's reads one by one, having seen what the guest wrote so far. The
 /// turns and the end of input, the read's own rules (one buffer, no more than it holds, a bad
 /// pointer refused before anybody is asked), the bounds that hold with a conversation as without
@@ -342,7 +342,7 @@ public sealed class WasmHostConversationTests
 
     #region Tools
 
-    private WasmHostRunOutcome Run(byte[] bytes, IWasmHostConversation? conversation, bool charge = false, long fuel = WasmHostConversationRig.FUEL,
+    private WasmHostRunOutcome Run(byte[] bytes, WasmHostConversationScripted? conversation, bool charge = false, long fuel = WasmHostConversationRig.FUEL,
         int stdoutLimitBytes = 0, bool stopAtStdoutLimit = false)
     {
         return WasmHostConversationRig.Run(m_host, m_capture, bytes, conversation, charge, fuel, stdoutLimitBytes, stopAtStdoutLimit);

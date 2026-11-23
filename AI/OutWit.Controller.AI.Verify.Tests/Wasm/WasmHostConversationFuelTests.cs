@@ -68,7 +68,7 @@ public sealed class WasmHostConversationFuelTests
     [TestCase(true)]
     public void TheFuelOfAConversationIsTheSameOnEveryRunTest(bool charge)
     {
-        var runs = Enumerable.Range(0, 5).Select(_ => Talk(m_host, charge)).ToList();
+        var runs = Enumerable.Range(0, 5).Select(_ => Hold(m_host, charge)).ToList();
 
         TestContext.Out.WriteLine($"three lines, the price of calls {(charge ? "on" : "off")}: {runs[0].Outcome.FuelConsumed} units of fuel");
         Assert.Multiple(() =>
@@ -85,7 +85,7 @@ public sealed class WasmHostConversationFuelTests
     {
         // The number is the guest's instructions alone, counted from its first one: a platform
         // or a trap mode that changed it would change what two nodes report for one run.
-        var run = Talk(m_host, charge: false);
+        var run = Hold(m_host, charge: false);
 
         Assert.That(run.Outcome.FuelConsumed, Is.EqualTo(GUEST_FUEL));
     }
@@ -98,7 +98,7 @@ public sealed class WasmHostConversationFuelTests
             Assert.Ignore("this test process enforces shadow stacks, so its traps are explicit checks already: the two trap modes were NOT compared here");
 
         Assert.That(m_explicit.ExplicitTraps, Is.True);
-        AssertSameRun(Talk(m_explicit, charge), Talk(m_host, charge), "explicit checks against hardware traps");
+        AssertSameRun(Hold(m_explicit, charge), Hold(m_host, charge), "explicit checks against hardware traps");
     }
 
     [TestCase(false)]
@@ -106,7 +106,7 @@ public sealed class WasmHostConversationFuelTests
     public void AConversationIsTheSameRunOnAnEngineWithExceptionsOnTest(bool charge)
     {
         Assert.That(m_exceptions.Exceptions, Is.True);
-        AssertSameRun(Talk(m_exceptions, charge), Talk(m_host, charge), "exceptions on against exceptions off");
+        AssertSameRun(Hold(m_exceptions, charge), Hold(m_host, charge), "exceptions on against exceptions off");
     }
 
     #endregion
@@ -122,8 +122,8 @@ public sealed class WasmHostConversationFuelTests
         const int BYTES = 14 + 20;
         var census = new WasmHostCallCensus();
 
-        var free = Talk(m_host, charge: false);
-        var charged = Talk(m_host, charge: true, census);
+        var free = Hold(m_host, charge: false);
+        var charged = Hold(m_host, charge: true, census);
 
         TestContext.Out.WriteLine($"{free.Outcome.FuelConsumed} units without the price, {charged.Outcome.FuelConsumed} with it");
         Assert.Multiple(() =>
@@ -160,14 +160,14 @@ public sealed class WasmHostConversationFuelTests
     #region Tools
 
     /// <summary>Holds the three-line conversation with the echo guest on a host.</summary>
-    private (WasmHostRunOutcome Outcome, IReadOnlyList<string> Seen) Talk(WasmHost host, bool charge, WasmHostCallCensus? census = null)
+    private Talk Hold(WasmHost host, bool charge, WasmHostCallCensus? census = null)
     {
         var conversation = WasmHostConversationScripted.Pieces(LINES);
         var outcome = WasmHostConversationRig.Run(host, m_capture, WasmHostConversationModules.Echo(CAPACITY), conversation, charge, census: census);
-        return (outcome, conversation.Seen);
+        return new Talk(outcome, conversation.Seen);
     }
 
-    private static void AssertSameRun((WasmHostRunOutcome Outcome, IReadOnlyList<string> Seen) run, (WasmHostRunOutcome Outcome, IReadOnlyList<string> Seen) other, string what)
+    private static void AssertSameRun(Talk run, Talk other, string what)
     {
         Assert.That(run.Outcome.Verdict, Is.EqualTo(other.Outcome.Verdict), $"{what}: the verdict");
         Assert.That(run.Outcome.ExitCode, Is.EqualTo(other.Outcome.ExitCode), $"{what}: the exit code");
@@ -177,6 +177,15 @@ public sealed class WasmHostConversationFuelTests
         Assert.That(run.Outcome.PeakMemoryBytes, Is.EqualTo(other.Outcome.PeakMemoryBytes), $"{what}: the peak memory");
         Assert.That(run.Seen, Is.EqualTo(other.Seen), $"{what}: what the caller was shown, turn by turn");
     }
+
+    #endregion
+
+    #region Nested Types
+
+    /// <summary>One conversation held: the run and what the caller was shown. A class: see <see cref="WasmHostConversationScripted"/> on what a test's types may hold.</summary>
+    /// <param name="Outcome">The run's outcome.</param>
+    /// <param name="Seen">What the caller was shown, turn by turn.</param>
+    private sealed record Talk(WasmHostRunOutcome Outcome, IReadOnlyList<string> Seen);
 
     #endregion
 }

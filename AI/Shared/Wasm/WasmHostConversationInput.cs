@@ -5,7 +5,7 @@ namespace OutWit.Controller.AI.Wasm;
 /// <summary>
 /// The guest's stdin in a run that holds a conversation
 /// (<see cref="WasmHostRunRequest.Conversation"/>): descriptor 0, read from what the caller gives
-/// turn by turn (<see cref="IWasmHostConversation"/>). The read is the host's own call, as the
+/// turn by turn (<see cref="WasmHostConversation"/>). The read is the host's own call, as the
 /// writes of stdout and stderr are (<see cref="WasmHostSyscalls"/>), and it keeps to their rules:
 /// <list type="bullet">
 /// <item>it fills the first buffer of the guest's list that has room, as WASI's own read does,
@@ -42,7 +42,7 @@ internal sealed class WasmHostConversationInput
 
     #region Fields
 
-    private readonly IWasmHostConversation m_conversation;
+    private readonly WasmHostConversation m_conversation;
     private readonly WasmHostOutput m_stdout;
     private readonly WasmHostMeter m_meter;
     private readonly WasmHostWasi m_wasi;
@@ -63,7 +63,7 @@ internal sealed class WasmHostConversationInput
     /// <param name="stdout">The run's stdout as the host keeps it.</param>
     /// <param name="meter">The run's meter.</param>
     /// <param name="wasi">The run's way to WASI's own calls.</param>
-    public WasmHostConversationInput(IWasmHostConversation conversation, WasmHostOutput stdout, WasmHostMeter meter, WasmHostWasi wasi)
+    public WasmHostConversationInput(WasmHostConversation conversation, WasmHostOutput stdout, WasmHostMeter meter, WasmHostWasi wasi)
     {
         m_conversation = conversation;
         m_stdout = stdout;
@@ -192,7 +192,7 @@ internal sealed class WasmHostConversationInput
 
         try
         {
-            m_pending = m_conversation.Next(output);
+            m_pending = m_conversation(output);
         }
         catch (Exception exception) when (exception is WasmHostRunEnded or WasmtimeException)
         {
