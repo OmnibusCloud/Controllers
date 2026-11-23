@@ -93,10 +93,17 @@ def imports_of(path: str) -> list:
 
 
 def closures(source: str, lean_path: list) -> list:
-    """For each root: the modules of its import closure and their bytes on disk."""
+    """For each root: the modules of its import closure and their bytes on disk.
+
+    Only the environment's own folders count: the search path also ends with the toolchain's
+    library, and the modules of Lean itself that Mathlib imports are not part of the environment.
+    """
     sizes = {}
     needed = {}
+    inside = os.path.normcase(os.path.abspath(source))
     for root in lean_path:
+        if not os.path.normcase(os.path.abspath(root)).startswith(inside):
+            continue
         for folder, _dirs, names in os.walk(root):
             for name in names:
                 stem = name.split(".", 1)[0]
