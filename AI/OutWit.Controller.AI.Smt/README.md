@@ -173,14 +173,18 @@ with 64 GiB sixteen (seventeen fit). A machine where not one session fits refuse
 ### The machines a package goes to
 
 Smt needs machines of 8 GB at least. `Smt.SolvePackage` declares
-`[RequiresResources(MinRamMb = 8192)]` (`SmtSandboxDegree.MIN_RAM_MB`), and the server's planner
+`[RequiresResources(MinRamMb = 7680)]` (`SmtSandboxDegree.MIN_RAM_MB`), and the server's planner
 sends a package only to a node whose reported memory meets it. One session under the default
 options needs 3,670 MiB available (2,752 MiB at three quarters): an 8 GB machine has that with the
 node's client and its system running; a 6 GB machine has about 2 GB available then, and refuses
-every package. The planner admits a node that has reported no capabilities, so the node's own
-check stays: such a machine refuses what it cannot hold. The capabilities document states the
-number (`node.min_ram_mb`), and its pool counts only the nodes the planner would send a package
-to.
+every package. A node reports the memory its system sees, and a machine sold as 8 GB sees
+somewhat less than 8,192 MiB (Windows leaves out what the firmware and the graphics reserve,
+Linux reports its `MemTotal`): 7,680 MiB (7.5 GiB) lets such machines in and keeps the 6 GB ones
+(about 5,900 MiB) out. Where one session does not fit at a given moment, the node's own check
+stays: it refuses the package, and the repair round sends its problems out again, to two
+machines; so does a node that has reported no capabilities, which the planner admits unchecked.
+The capabilities document states the number (`node.min_ram_mb`), and its pool counts only the
+nodes the planner would send a package to.
 
 ### Cancel
 

@@ -38,7 +38,7 @@ Three queries: `check` (is the problem satisfiable, by which model or which valu
 |---|---|
 | Solver | Z3 5.4.1 for `wasm32-wasip1`, single-threaded; profile `z3-5.4.1`; the module's SHA-256 is pinned and checked before it is compiled |
 | Platforms of the nodes | Windows x64, Linux x64, macOS arm64 |
-| Machines of the nodes | 8 GB of memory at least (8,192 MiB as a node reports it): the planner sends no package to a smaller one |
+| Machines of the nodes | 8 GB of memory at least (7,680 MiB as a node reports it: a machine sold as 8 GB reports a little less than 8,192 MiB): the planner sends no package to a smaller one |
 | Budget of a problem | the solver's resource limit of a check (150,000,000 by default) and the hard cap as fuel (60 s of a reference machine by default, at 5,000,000,000 units a second): counts, the same on every node |
 | Copies | a share of the packages (the sampling rate, 0.05 by default) is solved on two machines; a problem whose package lost one of its two copies, or that has no answer, goes out again to two machines; a dispute on three more |
 | Checks | every `sat` model is evaluated against the problem on the server, by code that shares nothing with the solver |
@@ -206,7 +206,7 @@ What it does not claim:
 | A session's output | 16 MiB; past it the row is `output_exceeded` and keeps its verdict |
 | What a lab sees of a row's models | 64 KB |
 | Memory of one session on a node | twice the host's cap of the solver's memory and 192 MiB: 2,752 MiB under the defaults |
-| Memory of a node's machine | 8,192 MiB at least, as the node reports it (`node.min_ram_mb` of the capabilities); the sessions may claim three quarters of what it has available |
+| Memory of a node's machine | 7,680 MiB at least as the node reports it (a machine sold as 8 GB; `node.min_ram_mb` of the capabilities); the sessions may claim three quarters of what it has available |
 | Duration | none is estimated; the upper bound is the taken problems times the hard cap |
 
 ## 8. Scale and delivery
