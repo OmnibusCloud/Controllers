@@ -25,6 +25,10 @@ run-name: "AI Smt toolchain: ${{ github.ref_name }}"
 
 on:
   workflow_dispatch:
+  # Called as a job by the workflow that tests the controller ("AI Smt"): the module its tests
+  # run on is the one built and checked here, taken from the cache when nothing of the
+  # toolchain changed.
+  workflow_call:
   push:
     branches: [main]
     paths:
