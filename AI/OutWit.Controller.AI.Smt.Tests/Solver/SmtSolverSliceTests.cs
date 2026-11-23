@@ -63,27 +63,26 @@ public sealed class SmtSolverSliceTests
         ["QF_S"] = (5, 5, 0)
     };
 
-    /// <summary>The models the evaluator took a side on, each of which the solver is handed again as a closed script.</summary>
+    /// <summary>
+    /// The models the evaluator took a side on, each of which the solver is handed again as a
+    /// closed script, takes, and agrees with the evaluator on: all of them.
+    /// </summary>
     private const int CLOSED = 217;
 
     /// <summary>
-    /// The closed scripts the solver does not take, by problem: its model gives a function a
-    /// value that is an element of a sort (<c>A$!val!0</c>) whose elements the model does not
-    /// list, and the closed script, which declares the elements a model lists, names it without
-    /// declaring it. The solver reports an unknown constant: neither an agreement nor a
-    /// contradiction. Written here by name so that the number is not quietly smaller: a closed
-    /// script that starts to be taken, or another one that stops, shows.
+    /// The closed scripts that declare elements the model names without listing them, by
+    /// problem: the model gives a function a value that is an element of a sort
+    /// (<c>A$!val!0</c>) whose universe it does not list. Written here by name so that a script
+    /// that starts or stops needing such a declaration shows.
     /// </summary>
-    private static readonly string[] CLOSED_NOT_TAKEN = ["p481", "p482"];
-
-    private const string UNDECLARED_ELEMENT = "unknown constant ";
-    private const string ELEMENT_MARK = "!val!";
+    private static readonly string[] CLOSED_WITH_UNLISTED = ["p481", "p482"];
 
     #endregion
 
     #region Fields
 
     private List<SmtSliceResult> m_results = null!;
+    private Dictionary<string, int> m_unlisted = null!;
     private int m_listed;
     private string m_report = "";
 
@@ -104,6 +103,7 @@ public sealed class SmtSolverSliceTests
 
         m_listed = rows.Count;
         m_results = [];
+        m_unlisted = new Dictionary<string, int>(StringComparer.Ordinal);
         var solving = new Stopwatch();
         var validating = new Stopwatch();
         var closing = new Stopwatch();
@@ -142,6 +142,7 @@ public sealed class SmtSolverSliceTests
                     closing.Start();
                     var script = SmtClosedScript.Build(problem.Commands, model);
                     free = script.Free;
+                    m_unlisted[row.Id] = script.Unlisted;
                     var again = SmtSanitizer.Sanitize(script.ToString());
                     if (again.Problem == null)
                         closedRefusal = $"{again.Refusal!.Code}, line {again.Refusal.Line}: {again.Refusal.Reason}";
@@ -233,13 +234,6 @@ public sealed class SmtSolverSliceTests
                 if (result.Closed == null)
                     continue;
 
-                if (CLOSED_NOT_TAKEN.Contains(result.Id))
-                {
-                    Assert.That(result.Closed.Status, Is.EqualTo("input_error"), $"{result.Id} is written here as a closed script the solver does not take, and it takes it: {result.Closed}");
-                    Assert.That(result.Closed.Message, Does.Contain(UNDECLARED_ELEMENT).And.Contain(ELEMENT_MARK), $"{result.Id}: not taken, for another reason than the one written here");
-                    continue;
-                }
-
                 var expected = result.Validation!.Class == SmtValidationClass.Validated ? "ok sat" : "ok unsat";
                 Assert.That(result.Closed.Words(), Is.EqualTo(expected),
                     $"{result.Id} ({result.Logic}): the evaluator says {result.Validation.Class} and the solver, given the model as definitions, says otherwise: {result.Closed}");
@@ -251,7 +245,8 @@ public sealed class SmtSolverSliceTests
                 return;
 
             Assert.That(sided.Count(result => result.Closed != null), Is.EqualTo(CLOSED), "the closed scripts the solver was handed");
-            Assert.That(agreed, Is.EqualTo(CLOSED - CLOSED_NOT_TAKEN.Length), "the closed scripts on which the solver and the evaluator agree");
+            Assert.That(agreed, Is.EqualTo(CLOSED), "the closed scripts on which the solver and the evaluator agree");
+            Assert.That(m_unlisted.Where(pair => pair.Value > 0).Select(pair => pair.Key).Order(StringComparer.Ordinal), Is.EqualTo(CLOSED_WITH_UNLISTED), "the closed scripts that declare elements the model does not list");
         });
     }
 
@@ -295,7 +290,8 @@ public sealed class SmtSolverSliceTests
         lines.Add($"  the closed scripts: {closed.Count} checked by the solver in {closeMs} ms: "
                   + $"{closed.Count(result => result.Closed!.Verdict == "sat")} sat, {closed.Count(result => result.Closed!.Verdict == "unsat")} unsat, "
                   + $"{closed.Count(result => result.Closed!.Verdict is not ("sat" or "unsat"))} other; "
-                  + $"{m_results.Count(result => result.ClosedRefusal != null)} refused by the sanitizer; {closed.Count(result => result.ClosedFree > 0)} with symbols the model left out");
+                  + $"{m_results.Count(result => result.ClosedRefusal != null)} refused by the sanitizer; {closed.Count(result => result.ClosedFree > 0)} with symbols the model left out; "
+                  + $"{m_unlisted.Count(pair => pair.Value > 0)} with elements the model does not list");
         foreach (var result in closed.Where(result => result.Closed!.Status != "ok"))
             lines.Add($"    {result.Id} ({result.Logic}): {result.Closed!.Status}: {result.Closed.Message}");
 

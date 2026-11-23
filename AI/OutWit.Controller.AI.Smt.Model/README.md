@@ -424,3 +424,10 @@ definition after the ones it mentions; the problem's own definitions and asserti
 `(check-sat)` ends it. `set-info` is left out. A solver that is handed the script has nothing
 left to choose: it evaluates, and its `sat` or `unsat` is a second opinion on the evaluator's
 `Validated` or `Failed`. A symbol the model leaves out stays declared, and `Free` counts them.
+
+A solver names an element of an uninterpreted sort after the sort (`A!val!0` of a sort `A`),
+and may give a function such an element as its value without listing that sort's universe.
+Such an element, named in the model's definitions, of a sort the problem declares without
+parameters, and declared by nobody, is declared with the listed ones, and `Unlisted` counts
+them: the script names nothing it does not declare. The evaluator itself reads only the
+elements a model lists.
