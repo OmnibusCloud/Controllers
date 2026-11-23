@@ -13,6 +13,9 @@ internal static class SmtSolverModule
     /// <summary>The module's place under the test project's <c>@Data</c>.</summary>
     public const string RELATIVE_PATH = "wasm/z3-5.4.1.wasm";
 
+    /// <summary>The SHA-256 of the module: the bytes the toolchain's pins build to, and the profile pins.</summary>
+    public const string SHA256 = "9b8a67e85542b5d62d30b40060dd237fcef07f794ea235483afc83eef47a1364";
+
     private const string CI_ENV = "GITHUB_ACTIONS";
     private const string PROJECT_FILE = "OutWit.Controller.AI.Smt.Tests.csproj";
     private const string DATA_FOLDER = "@Data";
