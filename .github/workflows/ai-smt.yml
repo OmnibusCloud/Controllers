@@ -81,11 +81,13 @@ jobs:
       # AspectInjector (a build-time dependency of OutWit.Common) ships a native
       # osx-arm64 helper that Apple Silicon kills on launch ("Killed: 9") when
       # its signature is missing or invalid. An ad-hoc signature after the
-      # restore lets the build through.
+      # restore lets the build through: the restore of both test projects the
+      # job builds, so whatever helper either brings is signed.
       - name: Restore and sign the AspectInjector helper (macOS)
         if: runner.os == 'macOS'
         run: |
           dotnet restore AI/OutWit.Controller.AI.Smt.Tests/OutWit.Controller.AI.Smt.Tests.csproj
+          dotnet restore AI/OutWit.Controller.AI.Smt.Live/Tests/OutWit.Controller.AI.Smt.Live.Tests.csproj
           for helper in "$HOME"/.nuget/packages/aspectinjector/*/build/_bin/osx-arm64/AspectInjector; do
             chmod +x "$helper"
             codesign --force -s - "$helper"
@@ -187,6 +189,17 @@ jobs:
             if grep -q "$test" "$log"; then echo "::error::$test ran in the three-platform job: the filter was not held"; exit 1; fi
           done
           grep -E "(Passed|Failed)!  - " "$log" || true
+
+      # The live client, smt-live (AI/OutWit.Controller.AI.Smt.Live): its own tests, which need
+      # neither a server nor the solver: the command line, the packing of a folder read back by
+      # the model package's reader, the documents held to the controller's schemas, the comparison
+      # of two runs, the commands against a server in memory, and the demo kits against the model
+      # evaluator. Their project lives in the tool's folder.
+      - name: The tests of smt-live
+        shell: bash
+        run: |
+          dotnet build AI/OutWit.Controller.AI.Smt.Live/Tests/OutWit.Controller.AI.Smt.Live.Tests.csproj -c Release
+          dotnet test AI/OutWit.Controller.AI.Smt.Live/Tests/OutWit.Controller.AI.Smt.Live.Tests.csproj -c Release --no-build --logger "console;verbosity=normal"
 
   # The 469 problems of the SMT-LIB release 2025 the committed list names. The sanitizer: every
   # one is sanitized, its canonical text held to be a fixed point and its :status to be the

@@ -150,8 +150,9 @@ public sealed class SmtLiveDemoTests
     [Test]
     public void TheKnownAnswersTableIsTheListsAndTheSliceTestsTest()
     {
+        // A checkout may end its lines with carriage returns: the table is read line by line.
         var root = SmtLiveFixtures.RepositoryRoot();
-        var expected = File.ReadAllText(Path.Combine(root, KNOWN_EXPECTED));
+        var expected = File.ReadAllText(Path.Combine(root, KNOWN_EXPECTED)).ReplaceLineEndings("\n");
         var table = Regex.Matches(expected, @"^\| (QF_\w+) \| (\d+) \| (\d+) \| (\d+) \| (\d+) / (\d+) / (\d+) \|$", RegexOptions.Multiline)
             .ToDictionary(match => match.Groups[1].Value, match => string.Join(" ", Enumerable.Range(2, 6).Select(group => match.Groups[group].Value)));
 
