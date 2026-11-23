@@ -1,0 +1,314 @@
+name	constant	parameters	arguments	result	first	second	function
+&&	declaration	-	-	-	-	-	-
+*	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+**	declaration	Int Int	7 2	Bool	true	false	error
++	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
++oo	declaration	-	-	-	-	-	-
++zero	declaration	-	-	-	-	-	-
+-	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+-oo	declaration	-	-	-	-	-	-
+-zero	declaration	-	-	-	-	-	-
+/	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+/0	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+<	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+<=	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+=	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+=>	declaration	Bool Bool Bool	true false true	Bool	true	false	error
+>	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+>=	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+Char	declaration	-	-	-	-	-	-
+NaN	declaration	-	-	-	-	-	-
+RNA	declaration	-	-	-	-	-	-
+RNE	declaration	-	-	-	-	-	-
+RTN	declaration	-	-	-	-	-	-
+RTP	declaration	-	-	-	-	-	-
+RTZ	declaration	-	-	-	-	-	-
+^	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+abs	declaration	Real	0.5	Real	11.0	12.0	error
+ac-op	declaration	-	-	-	-	-	-
+acos	declaration	Real	0.5	Real	11.0	12.0	builtin
+acosh	declaration	Real	2.0	Real	11.0	12.0	builtin
+and	error	Bool Bool Bool	true false true	Bool	true	false	error
+arctan2	declaration	Real Real	0.5 2.0	Real	11.0	12.0	builtin
+array-ext	declaration	(Array Int Bool) (Array Int Bool)	((as const (Array Int Bool)) true) ((as const (Array Int Bool)) false)	(Array Int Bool)	((as const (Array Int Bool)) true)	((as const (Array Int Bool)) false)	error
+as-array	declaration	-	-	-	-	-	-
+asin	declaration	Real	0.5	Real	11.0	12.0	builtin
+asinh	declaration	Real	0.5	Real	11.0	12.0	builtin
+at-least	declaration	-	-	-	-	-	-
+at-most	declaration	-	-	-	-	-	-
+atan	declaration	Real	0.5	Real	11.0	12.0	builtin
+atan2	declaration	Real Real	0.5 2.0	Real	11.0	12.0	builtin
+atanh	declaration	Real	0.5	Real	11.0	12.0	builtin
+bit0	declaration	-	-	-	-	-	-
+bit1	declaration	-	-	-	-	-	-
+bit2bool	declaration	-	-	-	-	-	-
+bv2int	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bv2nat	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvadd	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvand	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvashr	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvcomp	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvlshr	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvmul	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvnand	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvneg	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvnego	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvnor	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvnot	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvor	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvredand	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvredor	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvsaddo	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsdiv	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsdiv0	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvsdiv_i	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsdivo	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsge	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsgt	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvshl	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsle	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvslt	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsmod	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsmod0	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvsmod_i	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsmul_noovfl	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsmul_noudfl	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsmulo	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsrem	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsrem0	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvsrem_i	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvssubo	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvsub	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvuaddo	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvudiv	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvudiv0	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvudiv_i	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvuge	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvugt	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvule	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvult	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvumul_noovfl	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvumulo	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvurem	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvurem0	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvurem_i	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvusubo	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+bvxnor	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+bvxor	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+case-def	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+char	declaration	-	-	-	-	-	-
+char.<=	declaration	-	-	-	-	-	-
+char.from_bv	declaration	-	-	-	-	-	-
+char.is_digit	declaration	Real	0.5	Real	11.0	12.0	error
+char.to_bv	declaration	-	-	-	-	-	-
+char.to_int	declaration	Real	0.5	Real	11.0	12.0	error
+choice	declaration	-	-	-	-	-	-
+complement	declaration	(Array Int Bool)	((as const (Array Int Bool)) true)	(Array Int Bool)	((as const (Array Int Bool)) true)	((as const (Array Int Bool)) false)	error
+complex.imag	declaration	Real	0.5	Real	11.0	12.0	error
+complex.make	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+complex.real	declaration	Real	0.5	Real	11.0	12.0	error
+concat	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+const	declaration	-	-	-	-	-	-
+cos	declaration	Real	0.5	Real	11.0	12.0	builtin
+cosh	declaration	Real	0.5	Real	11.0	12.0	builtin
+default	declaration	(Array Int Bool)	((as const (Array Int Bool)) true)	(Array Int Bool)	((as const (Array Int Bool)) true)	((as const (Array Int Bool)) false)	error
+distinct	error	Real Real	0.5 2.0	Real	11.0	12.0	error
+div	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+div0	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+euler	declaration	-	-	-	-	-	-
+exp	declaration	Real	0.5	Real	11.0	12.0	builtin
+ext_rotate_left	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+ext_rotate_right	declaration	(_ BitVec 8) (_ BitVec 8)	#x05 #x03	(_ BitVec 1)	#b0	#b1	error
+extract	declaration	-	-	-	-	-	-
+false	error	-	-	-	-	-	-
+ff.add	declaration	-	-	-	-	-	-
+ff.bitsum	declaration	-	-	-	-	-	-
+ff.mul	declaration	-	-	-	-	-	-
+ff.neg	declaration	-	-	-	-	-	-
+fp	declaration	-	-	-	-	-	-
+fp.abs	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.add	declaration	RoundingMode (_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	RNE (fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.div	declaration	RoundingMode (_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	RNE (fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.eq	declaration	(_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.fma	declaration	-	-	-	-	-	-
+fp.geq	declaration	(_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.gt	declaration	(_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.isInfinite	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.isNaN	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.isNegative	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.isNormal	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.isPositive	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.isSubnormal	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.isZero	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.leq	declaration	(_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.lt	declaration	(_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.max	declaration	(_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.max_i	declaration	(_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.min	declaration	(_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.min_i	declaration	(_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.mul	declaration	RoundingMode (_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	RNE (fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.neg	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.rem	declaration	(_ FloatingPoint 8 24) (_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000) (fp #b0 #b10000000 #b00000000000000000000000)	(_ FloatingPoint 8 24)	(_ +zero 8 24)	(_ -zero 8 24)	error
+fp.roundToIntegral	declaration	RoundingMode (_ FloatingPoint 8 24)	RNE (fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 8)	#x0b	#x0c	error
+fp.sqrt	declaration	RoundingMode (_ FloatingPoint 8 24)	RNE (fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 8)	#x0b	#x0c	error
+fp.sub	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.to_ieee_bv	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.to_ieee_bv_I	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.to_real	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.to_real_I	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+fp.to_sbv	declaration	-	-	-	-	-	-
+fp.to_sbv_I	declaration	-	-	-	-	-	-
+fp.to_ubv	declaration	-	-	-	-	-	-
+fp.to_ubv_I	declaration	-	-	-	-	-	-
+if	declaration	Bool Bool Bool	true false true	Bool	true	false	error
+implies	declaration	-	-	-	-	-	-
+int.to.str	declaration	Int	3	(Seq Int)	(seq.unit 11)	(seq.unit 12)	error
+int2bv	declaration	-	-	-	-	-	-
+int_to_bv	declaration	-	-	-	-	-	-
+intersection	declaration	(Array Int Bool) (Array Int Bool)	((as const (Array Int Bool)) true) ((as const (Array Int Bool)) false)	(Array Int Bool)	((as const (Array Int Bool)) true)	((as const (Array Int Bool)) false)	error
+is	declaration	-	-	-	-	-	-
+is_int	declaration	Real	0.5	Real	11.0	12.0	error
+ite	declaration	Bool Bool Bool	true false true	Bool	true	false	error
+lambda	declaration	-	-	-	-	-	-
+linear-order	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+ln	declaration	Real	0.5	Real	11.0	12.0	builtin
+log	declaration	Real	0.5	Real	11.0	12.0	builtin
+map	declaration	-	-	-	-	-	-
+mkbv	declaration	Bool Bool Bool	true false true	Bool	true	false	error
+mod	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+mod0	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+not	declaration	Bool	true	Bool	true	false	error
+or	error	Bool Bool Bool	true false true	Bool	true	false	error
+partial-order	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+pbeq	declaration	-	-	-	-	-	-
+pbge	declaration	-	-	-	-	-	-
+pble	declaration	-	-	-	-	-	-
+pi	declaration	-	-	-	-	-	-
+piecewise-linear-order	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+re.*	declaration	RegLan	re.allchar	RegLan	re.all	re.none	error
+re.+	declaration	RegLan	re.allchar	RegLan	re.all	re.none	error
+re.++	declaration	RegLan RegLan	re.allchar re.none	RegLan	re.all	re.none	error
+re.^	declaration	-	-	-	-	-	-
+re.all	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+re.allchar	declaration	-	-	-	-	-	-
+re.comp	declaration	RegLan	re.allchar	RegLan	re.all	re.none	error
+re.complement	declaration	RegLan	re.allchar	RegLan	re.all	re.none	error
+re.derivative	declaration	-	-	-	-	-	-
+re.diff	declaration	RegLan RegLan	re.allchar re.none	RegLan	re.all	re.none	error
+re.empty	declaration	-	-	-	-	-	-
+re.inter	declaration	RegLan RegLan	re.allchar re.none	RegLan	re.all	re.none	error
+re.loop	declaration	-	-	-	-	-	-
+re.none	declaration	-	-	-	-	-	-
+re.nostr	declaration	-	-	-	-	-	-
+re.of.pred	declaration	(Array Int Bool)	((as const (Array Int Bool)) true)	(Array Int Bool)	((as const (Array Int Bool)) true)	((as const (Array Int Bool)) false)	error
+re.opt	declaration	RegLan	re.allchar	RegLan	re.all	re.none	error
+re.range	declaration	(Seq Int) (Seq Int)	(seq.unit 1) (seq.unit 2)	(Seq Int)	(seq.unit 11)	(seq.unit 12)	error
+re.reverse	declaration	RegLan	re.allchar	RegLan	re.all	re.none	error
+re.union	declaration	RegLan RegLan	re.allchar re.none	RegLan	re.all	re.none	error
+re.xor	declaration	RegLan RegLan	re.allchar re.none	RegLan	re.all	re.none	error
+recfun-num-rounds	declaration	-	-	-	-	-	-
+rem	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+repeat	declaration	-	-	-	-	-	-
+root-obj	declaration	-	-	-	-	-	-
+rotate_left	declaration	-	-	-	-	-	-
+rotate_right	declaration	-	-	-	-	-	-
+roundNearestTiesToAway	declaration	-	-	-	-	-	-
+roundNearestTiesToEven	declaration	-	-	-	-	-	-
+roundTowardNegative	declaration	-	-	-	-	-	-
+roundTowardPositive	declaration	-	-	-	-	-	-
+roundTowardZero	declaration	-	-	-	-	-	-
+sbv_to_int	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+select	declaration	(Array Int Int) Int	((as const (Array Int Int)) 0) 1	Int	11	12	error
+seq.++	declaration	(Seq Int) (Seq Int)	(seq.unit 1) (seq.unit 2)	(Seq Int)	(seq.unit 11)	(seq.unit 12)	error
+seq.at	declaration	(Seq Int) Int	(seq.unit 1) 0	Int	11	12	error
+seq.contains	declaration	(Seq Int) (Seq Int)	(seq.unit 1) (seq.unit 2)	(Seq Int)	(seq.unit 11)	(seq.unit 12)	error
+seq.empty	declaration	-	-	-	-	-	-
+seq.extract	declaration	String Int Int	"abc" 1 1	String	"x"	"y"	error
+seq.fold_left	declaration	-	-	-	-	-	-
+seq.fold_lefti	declaration	-	-	-	-	-	-
+seq.foldl	declaration	-	-	-	-	-	-
+seq.foldli	declaration	-	-	-	-	-	-
+seq.in.re	declaration	String RegLan	"ab" re.allchar	Bool	true	false	error
+seq.indexof	declaration	(Seq Int) (Seq Int)	(seq.unit 1) (seq.unit 2)	(Seq Int)	(seq.unit 11)	(seq.unit 12)	error
+seq.last_indexof	declaration	(Seq Int) (Seq Int)	(seq.unit 1) (seq.unit 2)	(Seq Int)	(seq.unit 11)	(seq.unit 12)	error
+seq.len	declaration	(Seq Int)	(seq.unit 1)	Int	11	12	error
+seq.map	declaration	-	-	-	-	-	-
+seq.mapi	declaration	-	-	-	-	-	-
+seq.nth	declaration	(Seq Int) Int	(seq.unit 1) 0	Int	11	12	error
+seq.nth_i	declaration	(Seq Int) Int	(seq.unit 1) 0	Int	11	12	error
+seq.nth_u	declaration	(Seq Int) Int	(seq.unit 1) 0	Int	11	12	error
+seq.power	declaration	(Seq Int) Int	(seq.unit 1) 0	Int	11	12	error
+seq.prefixof	declaration	(Seq Int) (Seq Int)	(seq.unit 1) (seq.unit 2)	(Seq Int)	(seq.unit 11)	(seq.unit 12)	error
+seq.replace	declaration	String String String	"abc" "b" "z"	String	"x"	"y"	error
+seq.replace_all	declaration	String String String	"abc" "b" "z"	String	"x"	"y"	error
+seq.replace_re	declaration	-	-	-	-	-	-
+seq.replace_re_all	declaration	-	-	-	-	-	-
+seq.suffixof	declaration	(Seq Int) (Seq Int)	(seq.unit 1) (seq.unit 2)	(Seq Int)	(seq.unit 11)	(seq.unit 12)	error
+seq.to.re	declaration	(Seq Int)	(seq.unit 1)	Int	11	12	error
+seq.unit	declaration	Real	0.5	Real	11.0	12.0	error
+set.diff	declaration	-	-	-	-	-	-
+set.difference	declaration	-	-	-	-	-	-
+set.empty	declaration	-	-	-	-	-	-
+set.filter	declaration	-	-	-	-	-	-
+set.in	declaration	-	-	-	-	-	-
+set.intersect	declaration	-	-	-	-	-	-
+set.map	declaration	-	-	-	-	-	-
+set.map.inverse	declaration	-	-	-	-	-	-
+set.range	declaration	Int Int	7 2	Bool	true	false	error
+set.singleton	declaration	Real	0.5	Real	11.0	12.0	error
+set.size	declaration	-	-	-	-	-	-
+set.subset	declaration	-	-	-	-	-	-
+set.union	declaration	-	-	-	-	-	-
+setminus	declaration	(Array Int Bool) (Array Int Bool)	((as const (Array Int Bool)) true) ((as const (Array Int Bool)) false)	(Array Int Bool)	((as const (Array Int Bool)) true)	((as const (Array Int Bool)) false)	error
+sign_extend	declaration	-	-	-	-	-	-
+sin	declaration	Real	0.5	Real	11.0	12.0	builtin
+sinh	declaration	Real	0.5	Real	11.0	12.0	builtin
+store	declaration	(Array Int Int) Int Int	((as const (Array Int Int)) 0) 1 2	(Array Int Int)	((as const (Array Int Int)) 11)	((as const (Array Int Int)) 12)	error
+str.++	declaration	String String String	"abc" "b" "z"	String	"x"	"y"	error
+str.<	declaration	String String	"ab" "c"	Bool	true	false	error
+str.<=	declaration	String String	"ab" "c"	Bool	true	false	error
+str.at	declaration	String Int	"ab" 1	String	"x"	"y"	error
+str.contains	declaration	String String	"ab" "c"	Bool	true	false	error
+str.from-int	declaration	Int	3	(Seq Int)	(seq.unit 11)	(seq.unit 12)	error
+str.from_code	declaration	Int	3	(Seq Int)	(seq.unit 11)	(seq.unit 12)	error
+str.from_int	declaration	Int	3	(Seq Int)	(seq.unit 11)	(seq.unit 12)	error
+str.from_sbv	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+str.from_ubv	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+str.in-re	declaration	String RegLan	"ab" re.allchar	Bool	true	false	error
+str.in.re	declaration	String RegLan	"ab" re.allchar	Bool	true	false	error
+str.in_re	declaration	String RegLan	"ab" re.allchar	Bool	true	false	error
+str.indexof	declaration	String String Int	"abc" "b" 0	Int	11	12	error
+str.is_digit	declaration	String	"ab"	Bool	true	false	error
+str.len	declaration	String	"ab"	Bool	true	false	error
+str.power	declaration	String Int	"ab" 1	String	"x"	"y"	error
+str.prefixof	declaration	String String	"ab" "c"	Bool	true	false	error
+str.replace	declaration	String String String	"abc" "b" "z"	String	"x"	"y"	error
+str.replace_all	declaration	String String String	"abc" "b" "z"	String	"x"	"y"	error
+str.replace_re	declaration	-	-	-	-	-	-
+str.replace_re_all	declaration	-	-	-	-	-	-
+str.substr	declaration	String Int Int	"abc" 1 1	String	"x"	"y"	error
+str.suffixof	declaration	String String	"ab" "c"	Bool	true	false	error
+str.to-int	declaration	String	"ab"	Bool	true	false	error
+str.to-re	declaration	String	"ab"	Bool	true	false	error
+str.to.int	declaration	String	"ab"	Bool	true	false	error
+str.to.re	declaration	String	"ab"	Bool	true	false	error
+str.to_code	declaration	String	"ab"	Bool	true	false	error
+str.to_int	declaration	String	"ab"	Bool	true	false	error
+str.to_re	declaration	String	"ab"	Bool	true	false	error
+subset	declaration	(Array Int Bool) (Array Int Bool)	((as const (Array Int Bool)) true) ((as const (Array Int Bool)) false)	(Array Int Bool)	((as const (Array Int Bool)) true)	((as const (Array Int Bool)) false)	error
+tan	declaration	Real	0.5	Real	11.0	12.0	builtin
+tanh	declaration	Real	0.5	Real	11.0	12.0	builtin
+to_fp	declaration	-	-	-	-	-	-
+to_fp_unsigned	declaration	-	-	-	-	-	-
+to_ieee_bv	declaration	(_ FloatingPoint 8 24)	(fp #b0 #b01111111 #b00000000000000000000000)	(_ BitVec 32)	#x0000000b	#x0000000c	error
+to_int	declaration	Real	0.5	Real	11.0	12.0	error
+to_real	declaration	Real	0.5	Real	11.0	12.0	error
+transitive-closure	declaration	-	-	-	-	-	-
+tree-order	declaration	Real Real	0.5 2.0	Real	11.0	12.0	error
+true	error	-	-	-	-	-	-
+ubv_to_int	declaration	(_ BitVec 1)	#b1	Bool	true	false	error
+union	declaration	(Array Int Bool) (Array Int Bool)	((as const (Array Int Bool)) true) ((as const (Array Int Bool)) false)	(Array Int Bool)	((as const (Array Int Bool)) true)	((as const (Array Int Bool)) false)	error
+update-field	declaration	-	-	-	-	-	-
+xor	error	Bool Bool Bool	true false true	Bool	true	false	error
+zero_extend	declaration	-	-	-	-	-	-
+~	declaration	Real	0.5	Real	11.0	12.0	error
