@@ -5,12 +5,25 @@ runs as a WebAssembly module inside the controller's own wasm sandbox, under bud
 counts and not clocks, so the same problem gives the same verdict, the same model and the same
 cost on every machine.
 
-**Status: 0.1.0, in development; nothing is published.** This version holds the solver itself:
-the profile, the sandbox and one session per problem. It registers no activity and no variable
-yet, ships no script, and its solver module is not a data asset yet: the module is looked for
-under `wasm/` in the controller's folder, and a node without it says so. The language layer (the
-reader, the sanitizer, the model evaluator, the problem set and the options) is
-[`OutWit.Controller.AI.Smt.Model`](../OutWit.Controller.AI.Smt.Model/README.md).
+**Status: 0.2.0, in development; nothing is published.** This version holds the solver (the
+profile, the sandbox, one session per problem) and the node's side of a run: a node solves
+packages of problems with a pool of sessions and returns packages of rows, reports what it
+carries, and measures itself for the allocator. The host's side of a run (cutting a problem set
+into packages, the run's script, settling the copies, the report) is not here yet, and no script
+is shipped. The solver module is not a data asset yet: it is looked for under `wasm/` in the
+controller's folder, and a node without it says so. The language layer and the wire types (the
+reader, the sanitizer, the model evaluator, the problem set, the options, the packages and their
+rows) are [`OutWit.Controller.AI.Smt.Model`](../OutWit.Controller.AI.Smt.Model/README.md).
+
+| Activity | Where | In, out |
+|---|---|---|
+| `Smt.SolvePackage` | node | an `SmtTaskPackage` (a reference to a blob of problems), an `SmtResultPackage` (a reference to a blob of rows) |
+| `Smt.RuntimeDiagnostics` | host | nothing, an `SmtRuntimeDiagnostics` |
+| `Smt.Capabilities` | host | nothing, a `Blob` of JSON ([`docs/smt-capabilities.schema.json`](docs/smt-capabilities.schema.json)) |
+
+The variables `SmtTaskPackage`, `SmtResultPackage`, `SmtRuntimeDiagnostics` and the collections
+`SmtTaskPackageCollection`, `SmtResultPackageCollection` are registered with them. The module
+depends on the Variables controller.
 
 ## The profile
 
@@ -94,6 +107,98 @@ Everything in an outcome but the measured wall time is a function of the problem
 and the module: the tests hold forty-one problems to one file of hashes and fuel on Windows,
 Linux and macOS, hold a host with explicit trap checks to one with hardware traps, and hold
 eight sessions at once to the same sessions one by one.
+
+## A package on a node
+
+Problems travel to a node and rows travel back as blobs; the messages that assign the work and
+report it carry references only. `Smt.SolvePackage` is given an `SmtTaskPackageData` and:
+
+1. holds the reference to what a node takes, before anything is downloaded: the controller
+   version the job runs on is this node's, the ticket is 32 lower-case hex characters, there is
+   a blob, there are options, 1 to 256 problems, a blob of at most 257 MiB;
+2. downloads the blob over the node's blob channel (in chunks, resumed after a break, tried again
+   for about five minutes; a few downloads of a share at once, the first transfer of all alone);
+3. holds the blob to its reference: its size, its SHA-256, and that it holds exactly the problems
+   the reference names (their number and the digest of their indices);
+4. makes the process's sandbox (the module is compiled at the first package of a process) and
+   the degree (below);
+5. solves the problems with the pool and writes each row to the package of results as its
+   session ends, in the order the sessions end;
+6. uploads the rows and returns an `SmtResultPackageData`: the blob, its SHA-256 and size, the
+   number of rows and the package's ticket.
+
+One package is solved at a time in a process; the other packages of a share wait with their
+blobs downloaded. A problem that fails on its own (a refusal, an error of the solver's, a
+crash, a budget) is a row with its status, never a failed package. A package the node cannot work
+on at all comes back without a blob and with the code of why (`SmtNodeFaults`): another version,
+a reference that is not one, a ticket that is none, a blob too large, of another hash, unreadable
+or holding other problems, no sandbox, no memory for one session, a download or an upload that
+failed at every attempt. The words of such a code name versions, sizes and hashes, never a
+path or a name of the machine. A failure of the node's own that has no code fails the activity in
+fixed words, and the node's log says which.
+
+### The package format
+
+An eight-byte header (`WSPK`, the kind, the version, two zero bytes) and a Brotli stream of
+frames, each the length of a MemoryPack image and the image: one frame a problem in a package of
+problems, one frame a row in a package of results. A reader holds every frame to its bound
+before it holds it (128 MiB a problem, 64 MiB a row), a package to the number of frames its
+reference names and to the bytes it may unpack to (256 MiB a package of problems), and grows a
+frame's buffer with the bytes that arrive, never with the length a frame claims.
+
+### The pool and the degree
+
+The sessions of a package run on threads of their own below normal priority, each with a stack
+that holds a guest's. The degree is `min(logical cores, 16, sessions the memory holds)`. One
+session may take twice the host's cap of the solver's linear memory (the heap of the solver's
+exception objects is capped apart from the linear memory and may take as much again) and a
+margin of 160 MiB for the host's part of a session (its output, its answers as text, the problem
+as the sanitizer took it, the row being written, the guest's stack); the sessions may claim three
+quarters of the memory the machine has available as the runtime sees it. Under the default
+options a session counts 2,720 MiB: a machine with 4 GiB available runs one, with 16 GiB four,
+with 64 GiB sixteen (eighteen fit). A machine where not one session fits refuses the package
+(`memory_insufficient`).
+
+### Cancel
+
+Once the job is cancelled no problem is handed out any more, every running session ends at the
+solver's next read of its input, and the package returns nothing: it is sent again elsewhere. A
+session inside a check ends when the check does: by its answer, its resource limit, its fuel or
+the backstop. Fuel ends it within the hard cap on a machine at the reference rate (60 s by
+default, 600 s at most); on any machine the backstop ends it within a minute and ten times the
+hard cap (660 s by default, 6,060 s at most). A check whose resource counter does not move
+(non-linear real arithmetic can burn its fuel so) is the case that waits that long.
+
+### Rows and their digest
+
+Each row (`SmtResultData`) carries the problem's index, id and the hash of the text the node was
+given, the ticket, every value of the session's outcome in the words of a result, all the models,
+the controller version and the platform (`win-x64`, `linux-x64`, `osx-arm64`), the wall time, and
+the digest of its canonical form, which leaves the wall time, the platform, the version and the
+ticket out. Two honest machines give the same digest for a problem: the tests hold the rows of
+the forty-one problems to one committed file of digests on the three platforms, in both trap
+modes, twice in a row, at eight sessions at once, and solved through the engine on two nodes.
+
+## Diagnostics, capabilities and the benchmark
+
+`Smt.RuntimeDiagnostics` says what the controller of the answering process carries and can do:
+its version and profile, the module's pin and whether the process has it and has compiled it
+(with the compile time), the engine library's pin and whether it is the one loaded, the trap mode,
+the platform, and the degree a package would get, with what decided it. Asking compiles nothing.
+`Smt.Capabilities` writes what a lab can know before a run as a JSON document
+([`docs/smt-capabilities.schema.json`](docs/smt-capabilities.schema.json)): the profile, the
+queries, the defaults and ceilings of the options and of a problem, the words of a row and the
+codes of a node's refusal, the size of a package, the degree rule, the benchmark's unit, the
+platforms and the pool as totals. Nothing in either names a machine.
+
+The benchmark of `Smt.SolvePackage` gives the allocator a rate: thirty small problems written for
+it (every query; linear integers and reals, bit-vectors, uninterpreted functions, arrays,
+datatypes, strings), the same on every node, solved by the pool at the node's degree as a
+package is, the set given often enough that each session gets about four problems a run. A
+warm-up run, then timed runs; the rate is problems a second of the median run, in the unit
+`smt-problem@ref-v1`. Every problem is held to its outcome and its fuel, the same on every
+machine, so a node that computes otherwise cannot score; a node without a sandbox or without
+memory for one session reports the default (unranked) score.
 
 ## Licence
 
