@@ -23,9 +23,10 @@ namespace OutWit.Controller.AI.Smt.Tests;
 /// (<see cref="OrderAttribute"/>). On the build server a controller already loaded fails it; on a
 /// developer's machine it is ignored, and run alone it gives the verdict:
 ///   dotnet test --filter FullyQualifiedName~SmtModuleLoadTests
-/// The native library is the packaged one: the data asset the module's manifest declares, fetched
-/// from its release and held to the manifest. The solver module is laid out from the tests'
-/// <c>@Data/wasm</c>: it is no data asset yet.
+/// The native library and the solver module are the packaged ones: the data assets the module's
+/// manifest declares for this platform and for every platform, fetched from their releases and
+/// held to the manifest (kept between runs under the tests' <c>@Data/.assets</c>), as a node is
+/// sent them.
 /// </para>
 /// </summary>
 [TestFixture]
@@ -41,6 +42,8 @@ public sealed class SmtModuleLoadTests
     private const string SELF_CHECK_METHOD = "Run";
     private const string NATIVES_FOLDER = "runtimes/";
     private const string SOLVER_FILE = "z3-5.4.1.wasm";
+    private const string SOLVER_ASSET = "smt-z3-wasm";
+    private const string ANY_PLATFORM = "any";
 
     private const string NATIVE_LOADED = "wasmtime-native: loaded";
     private const string MANAGED_PREFIX = "wasmtime-managed: ";
@@ -80,7 +83,6 @@ public sealed class SmtModuleLoadTests
             Assert.Ignore(reason);
         }
 
-        var solver = SmtSolverModule.Require();
         var root = SmtRigModules.SolutionRoot();
         if (root == null)
             SmtRigModules.Missing("the solution root was not found");
@@ -91,13 +93,17 @@ public sealed class SmtModuleLoadTests
         Assert.That(File.Exists(Path.Combine(m_moduleDir, $"{WASMTIME_ASSEMBLY}.dll")), Is.True,
             $"{WASMTIME_ASSEMBLY}.dll must be staged into smt.module by the controller's build");
 
-        // The native library is the packaged one: the asset the module's own manifest declares for
-        // this platform, fetched from the release it names and held to its size and SHA-256.
+        // The native library and the solver module are the packaged ones: the assets the module's
+        // own manifest declares for this platform and for every platform, fetched from the
+        // releases they name and held to their sizes and SHA-256.
         var rid = RuntimeInformation.RuntimeIdentifier;
-        var natives = SmtPackagedAssets.Declared(m_moduleDir).Where(asset => asset.RuntimeIdentifier == rid && asset.ExtractTo.StartsWith(NATIVES_FOLDER, StringComparison.Ordinal)).ToList();
+        var declared = SmtPackagedAssets.Declared(m_moduleDir);
+        var natives = declared.Where(asset => asset.RuntimeIdentifier == rid && asset.ExtractTo.StartsWith(NATIVES_FOLDER, StringComparison.Ordinal)).ToList();
+        var everywhere = declared.Where(asset => asset.RuntimeIdentifier == ANY_PLATFORM).ToList();
         Assert.That(natives, Is.Not.Empty, $"smt.module's manifest declares no native engine library for '{rid}': a package made from it ships without one");
+        Assert.That(everywhere.Select(asset => asset.Id), Does.Contain(SOLVER_ASSET), "smt.module's manifest declares the solver module: a package made from it ships without one");
 
-        foreach (var asset in natives)
+        foreach (var asset in natives.Concat(everywhere))
         {
             try
             {
@@ -105,14 +111,11 @@ public sealed class SmtModuleLoadTests
             }
             catch (HttpRequestException exception)
             {
-                SmtRigModules.Missing($"the packaged native library '{asset.Id}' could not be fetched from {SmtPackagedAssets.Url(asset)}: {exception.Message}");
+                SmtRigModules.Missing($"the packaged asset '{asset.Id}' could not be fetched from {SmtPackagedAssets.Url(asset)}: {exception.Message}");
             }
         }
 
-        // The solver module where the controller looks for it, beside itself.
-        var wasm = Path.Combine(m_moduleDir, "wasm");
-        Directory.CreateDirectory(wasm);
-        File.Copy(solver, Path.Combine(wasm, SOLVER_FILE), overwrite: true);
+        Assert.That(File.Exists(Path.Combine(m_moduleDir, "wasm", SOLVER_FILE)), Is.True, "the solver module's asset puts it where the controller looks for it");
 
         // The module must be found beside the controller, not through the variable the tests set.
         m_savedModule = Environment.GetEnvironmentVariable(SmtTestEnvironment.MODULE_VARIABLE);
