@@ -1,0 +1,50 @@
+{
+  "schema": "smt-report/1",
+  "run": {
+    "profile": "z3-5.4.1",
+    "module_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "controller": "0.3.0",
+    "sampling_rate": 1,
+    "sampling": "as_asked",
+    "unanswered_packages": 0,
+    "options": { "profile": "z3-5.4.1", "query": "check", "max_models": 2, "seed": 0, "rlimit": 150000000, "hard_cap_s": 60, "fuel": 300000000000, "memory_mb": 1024, "sampling_rate": 1 }
+  },
+  "problem_set": {
+    "rows": 4,
+    "accepted": 3,
+    "refused": 1,
+    "refused_by_code": { "syntax_error": 1 },
+    "logics": { "QF_LIA": 3 },
+    "other_logics": 0,
+    "queries": { "check": 2, "enumerate": 1 },
+    "expected": { "sat": 1, "unsat": 1, "none": 1 }
+  },
+  "statuses": { "ok": 3, "refused": 1, "input_error": 0, "output_exceeded": 0, "engine_crash": 0, "no_result": 0, "disputed": 0 },
+  "verdicts": { "sat": 2, "unsat": 1, "unknown": 0 },
+  "unknown": { "rlimit": 0, "fuel": 0, "memout": 0, "incomplete": 0, "other": 0 },
+  "expected": { "agree": 2, "disagree": 0, "n/a": 2 },
+  "validation": {
+    "classes": { "validated": 2, "partial": 0, "failed": 0 },
+    "by_logic": { "QF_LIA": { "validated": 2, "partial": 0, "failed": 0 } },
+    "partial_by_reason": {}
+  },
+  "copies": {
+    "two_or_more": 3,
+    "agreed": 3,
+    "disputed": 0,
+    "disputes": { "resolved": 0, "no_majority": 0, "too_few_copies": 0, "surplus_copies": 0 },
+    "settled_by": { "one_copy": 0, "copies": 3, "dispute": 0, "agreement": 0 }
+  },
+  "unsat_one_copy": { "count": 0, "indices": [] },
+  "long_tail": {
+    "rlimit": 150000000,
+    "fuel": 300000000000,
+    "problems": [
+      { "index": 2, "resource_count": 300, "fuel": 9000, "stopped_by": "" },
+      { "index": 0, "resource_count": 120, "fuel": 3400, "stopped_by": "" },
+      { "index": 1, "resource_count": 80, "fuel": 2100, "stopped_by": "" }
+    ]
+  },
+  "attribution": { "sources": [], "other_problems": 0 },
+  "enumerate": { "exactly_one": 0, "two_or_more": 1, "no_model": 0, "undecided": 0, "kept": [], "dropped": [2] }
+}
