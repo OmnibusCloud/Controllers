@@ -1,0 +1,3 @@
+# What the demo kits fetch and what runs write: fetched SMT-LIB problems are never committed
+demo-out/
+smt-run-*/
