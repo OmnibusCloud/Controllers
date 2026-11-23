@@ -2,17 +2,32 @@
 
   <Import Project="..\..\Build\OutWit.Controller.Tests.props" />
 
+  <!-- The controller, and its model package with it. -->
   <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Smt\OutWit.Controller.AI.Smt.csproj" />
     <ProjectReference Include="..\OutWit.Controller.AI.Smt.Model\OutWit.Controller.AI.Smt.Model.csproj" />
   </ItemGroup>
 
+  <!-- The solver's sandbox: the wasmtime binding with the natives of its package in the test bin
+       (the build server puts the controller's pinned natives in their place). The tests of the
+       category Solver need the solver module in @Data/wasm/ (gitignored: the archive
+       smt-z3-wasm.zip of the workflow "AI Smt toolchain", unpacked there) and Assert.Ignore
+       without it, except on the build server. -->
+  <ItemGroup>
+    <PackageReference Include="Wasmtime" Version="48.0.2" />
+  </ItemGroup>
+
   <!-- The adversarial corpus of the sanitizer (written for these tests, kept as bytes: see
-       .gitattributes) and the list of the SMT-LIB slice. The problems of the slice are never
-       committed: Slice/fetch.py puts them into @Data/slice (gitignored), where the tests of the
-       category Slice read them. -->
+       .gitattributes), the list of the SMT-LIB slice, and the golden file of the solver's
+       outcomes. The problems of the slice are never committed: Slice/fetch.py puts them into
+       @Data/slice (gitignored), where the tests of the category Slice read them. -->
   <ItemGroup>
     <None Update="Fixtures\Adversarial\*.smt2" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\Solver\*" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Slice\fetch-list.tsv" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- The pinned native wasmtime library in place of the package's copy (the wasm host refuses any other). -->
+  <Import Project="..\Shared\WasmHostPinnedNatives.targets" />
 
 </Project>
