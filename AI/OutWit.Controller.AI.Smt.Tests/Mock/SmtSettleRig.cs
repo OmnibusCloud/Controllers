@@ -185,8 +185,9 @@ internal sealed class SmtSettleRig : IDisposable
     /// <summary>What Smt.Repairs stores of a first fan-out.</summary>
     /// <param name="issued">The packages it gave out.</param>
     /// <param name="returned">What came back.</param>
+    /// <param name="rate">The sampling rate the script hands Smt.Repairs, or null for a call without it.</param>
     /// <returns>The packages of the repair round.</returns>
-    public List<SmtTaskPackageData> Repairs(IReadOnlyList<SmtTaskPackageData> issued, IReadOnlyList<SmtResultPackageData> returned)
+    public List<SmtTaskPackageData> Repairs(IReadOnlyList<SmtTaskPackageData> issued, IReadOnlyList<SmtResultPackageData> returned, double? rate = null)
     {
         var main = SmtSettlement.ReadMainAsync(issued, returned, Blobs).GetAwaiter().GetResult();
         return SmtSettlement.PublishRepairsAsync(main, Blobs, Path.Combine(Work, "repairs")).GetAwaiter().GetResult();

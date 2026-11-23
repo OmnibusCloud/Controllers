@@ -43,6 +43,23 @@ internal static class SmtRunChecks
         });
     }
 
+    /// <summary>Holds every document Smt.Settle wrote of a run made up without nodes to its schema.</summary>
+    /// <param name="run">The documents' texts.</param>
+    public static void AssertSchemas(SmtSettledDocuments run)
+    {
+        var results = Schema("smt-results.schema.json");
+
+        Assert.Multiple(() =>
+        {
+            foreach (var line in run.Results.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                Assert.That(SmtSchemaCheck.IsValid(results, JsonDocument.Parse(line).RootElement), Is.True, $"a row of the results is not what its schema says: {line[..Math.Min(400, line.Length)]}");
+
+            Assert.That(SmtSchemaCheck.IsValid(Schema("smt-report.schema.json"), JsonDocument.Parse(run.Report).RootElement), Is.True, "the report");
+            Assert.That(SmtSchemaCheck.IsValid(Schema("smt-integrity.schema.json"), JsonDocument.Parse(run.Integrity).RootElement), Is.True, "the integrity document");
+            Assert.That(SmtSchemaCheck.IsValid(Schema("smt-provenance.schema.json"), JsonDocument.Parse(run.Provenance).RootElement), Is.True, "the provenance");
+        });
+    }
+
     /// <summary>Holds a run's documents to name no machine: not the test host's name, its user, or a folder of it.</summary>
     /// <param name="run">The run.</param>
     public static void AssertNamesNoMachine(SmtRunDocuments run)
