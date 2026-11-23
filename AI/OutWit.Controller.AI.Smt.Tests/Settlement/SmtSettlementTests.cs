@@ -194,6 +194,39 @@ public sealed class SmtSettlementTests
     }
 
     [Test]
+    public void AMajorityOnAFailedModelMakesNoLiarOfTheMachineThatDiffersTest()
+    {
+        // One copy, a failed model A: three more machines. Two give A again, the third a model B the
+        // evaluator validates. The machines' answer is A, which the server itself finds wrong: the
+        // third machine is no liar for differing from it, and nobody else is either.
+        var (set, options, package) = One(X_ABOVE_ONE, rate: 0);
+        var returned = new[] { m_rig.Answer(package, _ => SmtSettleRig.Sat(X_ZERO)) };
+
+        var disputes = m_rig.Disputes([package], returned, [], []);
+        var settled = new[] { m_rig.Answer(disputes[0], _ => SmtSettleRig.Sat(X_ZERO)), m_rig.Answer(disputes[0], _ => SmtSettleRig.Sat(X_ZERO)), m_rig.Answer(disputes[0], _ => SmtSettleRig.Sat(X_TWO)) };
+        var run = Settle(set, options, [package], returned, disputes: disputes, settled: settled, rate: 0);
+
+        AssertAgreementWithoutLiars(run, copies: 4);
+    }
+
+    [Test]
+    public void AMajorityOnAFailedModelMakesNoLiarOfAnyCopyOfTheFirstRoundTest()
+    {
+        // The same with the first round in it: its copies give B and A, which differ; three more
+        // give A, A and B. A leads, the evaluator rejects it, and no copy is counted as a lie, the
+        // copies of B in either round included.
+        var (set, options, package) = One(X_ABOVE_ONE, rate: 1);
+        var returned = new[] { m_rig.Answer(package, _ => SmtSettleRig.Sat(X_TWO)), m_rig.Answer(package, _ => SmtSettleRig.Sat(X_ZERO)) };
+
+        var disputes = m_rig.Disputes([package], returned, [], []);
+        var settled = new[] { m_rig.Answer(disputes[0], _ => SmtSettleRig.Sat(X_ZERO)), m_rig.Answer(disputes[0], _ => SmtSettleRig.Sat(X_ZERO)), m_rig.Answer(disputes[0], _ => SmtSettleRig.Sat(X_TWO)) };
+        var run = Settle(set, options, [package], returned, disputes: disputes, settled: settled, rate: 1);
+
+        AssertAgreementWithoutLiars(run, copies: 5);
+        Assert.That(Integrity(run).GetProperty("disputes")[0].GetProperty("cause").GetString(), Is.EqualTo(SmtRunWords.DIGESTS_DIFFER));
+    }
+
+    [Test]
     public void AModelPastTheCapIsCutForTheLabAndKeptWholeInTheLedgerTest()
     {
         const int CONSTANTS = 3_000;
@@ -398,6 +431,28 @@ public sealed class SmtSettlementTests
             Assert.That(SmtSchemaCheck.IsValid(SmtRunChecks.Schema("smt-report.schema.json"), JsonDocument.Parse(run.Report).RootElement), Is.True, "the report");
             Assert.That(SmtSchemaCheck.IsValid(SmtRunChecks.Schema("smt-integrity.schema.json"), JsonDocument.Parse(run.Integrity).RootElement), Is.True, "the integrity document");
             Assert.That(SmtSchemaCheck.IsValid(SmtRunChecks.Schema("smt-provenance.schema.json"), JsonDocument.Parse(run.Provenance).RootElement), Is.True, "the provenance");
+        });
+    }
+
+    /// <summary>A problem settled by agreement on the failed model A over copies of B: failed, listed loudly, and no liar.</summary>
+    private static void AssertAgreementWithoutLiars(SmtSettledDocuments run, int copies)
+    {
+        var row = Row(run, 0);
+        var loud = Integrity(run).GetProperty("evaluator_solver_disagreements");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.GetProperty("settled_by").GetString(), Is.EqualTo(SmtRunWords.AGREEMENT));
+            Assert.That(row.GetProperty("validation").GetString(), Is.EqualTo(SmtRunWords.FAILED));
+            Assert.That(row.GetProperty("model").GetString(), Is.EqualTo(X_ZERO), "the machines' answer");
+            Assert.That(row.GetProperty("agreed").GetBoolean(), Is.False, "the copies did not all give one digest");
+            Assert.That(row.GetProperty("copies").GetInt32(), Is.EqualTo(copies));
+            Assert.That(Count(run.Integrity, "lies"), Is.Zero, "no copy is a lie against an answer the evaluator rejects");
+            Assert.That(Count(run.Integrity, "problems_with_lies"), Is.Zero);
+            Assert.That(Count(run.Integrity, "evaluator_solver_disagreements"), Is.EqualTo(1));
+            Assert.That(loud.GetArrayLength(), Is.EqualTo(1));
+            Assert.That(loud[0].GetProperty("index").GetInt32(), Is.Zero, "named by its index, loudly");
+            Assert.That(Integrity(run).GetProperty("disputes")[0].GetProperty("outcome").GetString(), Is.EqualTo(SmtRunWords.RESOLVED), "the dispute record stands");
         });
     }
 

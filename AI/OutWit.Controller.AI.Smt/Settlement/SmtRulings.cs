@@ -166,11 +166,17 @@ internal static class SmtRulings
 
         var leader = groups[0][0];
         var copies = first.Count + votes.Count;
-        var lies = first.Count(copy => copy.Digest != leader.Digest) + votes.Count(copy => copy.Digest != leader.Digest);
+        var differing = first.Count(copy => copy.Digest != leader.Digest) + votes.Count(copy => copy.Digest != leader.Digest);
         var leaderCheck = check(leader);
-        var settledBy = leaderCheck.IsFailed ? SmtRunWords.AGREEMENT : SmtRunWords.DISPUTE;
 
-        return SmtRuling.Accept(index, leader, leaderCheck, copies, lies == 0, settledBy, repaired,
+        // A copy is a lie only when it differs from a settled answer the evaluator does not reject.
+        // When the machines' answer is a model the evaluator calls failed, nobody is counted as
+        // lying, the copies that differ from it least of all: the problem is a disagreement between
+        // the evaluator and the solver (settled by agreement), and the integrity document lists it.
+        var settledBy = leaderCheck.IsFailed ? SmtRunWords.AGREEMENT : SmtRunWords.DISPUTE;
+        var lies = leaderCheck.IsFailed ? 0 : differing;
+
+        return SmtRuling.Accept(index, leader, leaderCheck, copies, differing == 0, settledBy, repaired,
             new SmtDisputeRecord(index, cause, first.Count, votes.Count, most, SmtRunWords.RESOLVED), lies);
     }
 
