@@ -1,0 +1,4 @@
+Job:SmtPreflight(Blob:problems, SmtOptions:opts)
+{
+    SmtPreflight:result = Smt.Preflight(problems, opts);
+}

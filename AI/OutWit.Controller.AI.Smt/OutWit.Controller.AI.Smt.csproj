@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Smt</ControllerName>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Description>SMT problems solved on anonymous nodes by a pinned Z3 that runs as a WebAssembly module in a wasm sandbox: check, enumerate and prove under a deterministic budget, so the same problem gives the same answer, the same model and the same cost on every machine.</Description>
     <PackageTags>smt;smt-lib;z3;solver;wasm;wasmtime;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>smt-solve</ControllerFeatures>
@@ -21,10 +21,16 @@
     <ProjectReference Include="..\OutWit.Controller.AI.Smt.Model\OutWit.Controller.AI.Smt.Model.csproj" />
   </ItemGroup>
 
-  <!-- The schema of the capabilities document (Smt.Capabilities), the contract a lab reads:
-       packed under docs/, beside the README that names it. -->
+  <!-- The schemas of the documents a lab reads (the capabilities, and the results, the report,
+       the provenance and the integrity of a run) and what a lab can rely on: the contract,
+       packed under docs/, beside the README that names them. -->
   <ItemGroup>
     <None Update="docs\smt-capabilities.schema.json" Pack="true" PackagePath="docs\smt-capabilities.schema.json" />
+    <None Update="docs\smt-results.schema.json" Pack="true" PackagePath="docs\smt-results.schema.json" />
+    <None Update="docs\smt-report.schema.json" Pack="true" PackagePath="docs\smt-report.schema.json" />
+    <None Update="docs\smt-provenance.schema.json" Pack="true" PackagePath="docs\smt-provenance.schema.json" />
+    <None Update="docs\smt-integrity.schema.json" Pack="true" PackagePath="docs\smt-integrity.schema.json" />
+    <None Update="docs\capabilities.md" Pack="true" PackagePath="docs\capabilities.md" />
   </ItemGroup>
 
   <!-- The solver's sandbox: the Wasmtime.Dotnet managed binding over the native wasmtime
@@ -66,9 +72,14 @@
        the module's deps.json names; the wasm host's natives guard (WasmHostNatives.PINNED)
        holds the library inside each to its SHA-256.
 
-       The solver module (z3-5.4.1.wasm) is no data asset yet: no release holds it. It is
-       looked for under wasm/ in the controller's folder, held to the SHA-256 the profile pins
-       (SmtProfile.MODULE_SHA256) before it is compiled, and a node without it says so. -->
+       The solver module: the archive smt-z3-wasm.zip of the asset release smt-z3-v5.4.1 of
+       this repository, the very bytes the workflow "AI Smt toolchain" builds from its pins (two
+       builds compared byte for byte). It holds wasm/z3-5.4.1.wasm with Z3's licence and
+       notices beside it, and is extracted at the module's root, so the module lands under wasm/
+       where SmtModuleLocator looks; the controller holds it to the SHA-256 the profile pins
+       (SmtProfile.MODULE_SHA256) before it compiles it. The same bytes on every platform. A
+       later packing of the same solver is a release of its own (smt-z3-v5.4.1-2): a published
+       archive is never replaced. -->
   <ItemGroup>
     <ControllerDataAsset Include="wasmtime-win-x64">
       <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -90,6 +101,13 @@
       <Sha256>1f13fca2b811f16d3407cc50c3ff08a73c6781484bc32d5dfb28b433ec801012</Sha256>
       <Size>8286398</Size>
       <ExtractTo>runtimes/osx-arm64/native/</ExtractTo>
+    </ControllerDataAsset>
+    <ControllerDataAsset Include="smt-z3-wasm">
+      <RuntimeIdentifier>any</RuntimeIdentifier>
+      <Uri>gh-release://OmnibusCloud/Controllers/smt-z3-v5.4.1/smt-z3-wasm.zip</Uri>
+      <Sha256>3c3f67877e4e193dc64070023fbf64addb4b01520de4b9fa79b673b77d48cc02</Sha256>
+      <Size>30314801</Size>
+      <ExtractTo>.</ExtractTo>
     </ControllerDataAsset>
   </ItemGroup>
 

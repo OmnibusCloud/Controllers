@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Smt/docs/smt-integrity.schema.json",
+  "title": "Smt integrity",
+  "description": "The integrity document of SmtRun (the blob Smt.Integrity hands out): what the server did with what the nodes returned, in counts. Copies of a problem are compared by the digest of their rows and by nothing else; a copy is a lie only when it differs from the settled answer of the others; a model the server's evaluator calls failed accuses nobody by itself, and when the machines agree on it the problem is counted as a disagreement between the evaluator and the solver, each such problem by its index. No machine and no package is named.",
+  "type": "object",
+  "required": ["schema", "summary", "evaluator_solver_disagreements", "fan_outs", "disputes"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "string", "const": "smt-integrity/1" },
+    "summary": {
+      "type": "object",
+      "required": [
+        "problems", "copies_made", "compared", "agreements", "disagreements", "one_copy", "unsat_one_copy", "disputes", "disputes_resolved", "disputed",
+        "dispute_causes", "dispute_outcomes", "lies", "problems_with_lies", "failed_models", "evaluator_solver_disagreements", "repairs", "repairs_by_reason",
+        "no_result", "no_result_by_reason", "rejected_results", "rejected", "node_faults", "node_faults_by_code", "sampling_rate", "sampling", "unanswered_packages"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "problems": { "type": "integer", "minimum": 0, "description": "Taken problems of the run." },
+        "copies_made": { "type": "integer", "minimum": 0, "description": "Answers taken, every round together: copies of a problem's row that are statements about it (a row of a fault of its node is not)." },
+        "compared": { "type": "integer", "minimum": 0, "description": "Problems whose first round (or the repair round, for a problem the first left without an answer) brought two answers or more." },
+        "agreements": { "type": "integer", "minimum": 0, "description": "Of those, problems whose answers all gave one digest." },
+        "disagreements": { "type": "integer", "minimum": 0, "description": "Of those, problems whose answers gave more than one digest." },
+        "one_copy": { "type": "integer", "minimum": 0, "description": "Problems settled on one answer: they rest on one machine. A problem whose package was not sampled is one of them." },
+        "unsat_one_copy": { "type": "integer", "minimum": 0, "description": "Of those, problems answered unsat: nothing beyond that machine vouches for them." },
+        "disputes": { "type": "integer", "minimum": 0, "description": "Problems that went to three more machines." },
+        "disputes_resolved": { "type": "integer", "minimum": 0, "description": "Disputes a majority of the three settled." },
+        "disputed": { "type": "integer", "minimum": 0, "description": "Disputes that stand: rows with status disputed." },
+        "dispute_causes": {
+          "type": "object",
+          "required": ["digests_differ", "model_failed", "surplus"],
+          "additionalProperties": false,
+          "description": "Why the disputes went: the copies' digests differed; the evaluator called the model of the copies failed; more answers to the problem's package came back than were asked for.",
+          "properties": { "digests_differ": { "type": "integer" }, "model_failed": { "type": "integer" }, "surplus": { "type": "integer" } }
+        },
+        "dispute_outcomes": {
+          "type": "object",
+          "required": ["resolved", "no_majority", "too_few_copies", "surplus_copies"],
+          "additionalProperties": false,
+          "properties": { "resolved": { "type": "integer" }, "no_majority": { "type": "integer" }, "too_few_copies": { "type": "integer" }, "surplus_copies": { "type": "integer" } }
+        },
+        "lies": { "type": "integer", "minimum": 0, "description": "Answers that differ from the settled answer of the others: a lie was found in each." },
+        "problems_with_lies": { "type": "integer", "minimum": 0, "description": "Problems a lie was found in." },
+        "failed_models": { "type": "integer", "minimum": 0, "description": "Answers, every round together, whose model the evaluator called failed." },
+        "evaluator_solver_disagreements": { "type": "integer", "minimum": 0, "description": "Problems the machines agree on and the evaluator calls failed (settled_by agreement). No machine is counted as lying for them. Each is listed below by its index." },
+        "repairs": { "type": "integer", "minimum": 0, "description": "Problems without an answer from the first fan-out, sent out once more." },
+        "repairs_by_reason": { "type": "object", "description": "The repairs by what the first fan-out said of the problem: a node's fault code of its package, the code of a row of a fault of the node, the reason its package's result was refused, or no_answer." },
+        "no_result": { "type": "integer", "minimum": 0, "description": "Problems left without a result: rows with status no_result." },
+        "no_result_by_reason": { "type": "object", "description": "The same by what the nodes said last." },
+        "rejected_results": { "type": "integer", "minimum": 0, "description": "Result packages the server refused, every round and reason together." },
+        "rejected": {
+          "type": "object",
+          "required": ["unknown_ticket", "duplicate", "unreadable", "content", "surplus"],
+          "additionalProperties": false,
+          "description": "The refused result packages by reason. A refused package fails that package and not the run.",
+          "properties": {
+            "unknown_ticket": { "type": "integer", "description": "A result under a ticket the fan-out did not give out." },
+            "duplicate": { "type": "integer", "description": "The same result blob returned again." },
+            "unreadable": { "type": "integer", "description": "Not a package of results this version reads, not the bytes its reference names, or damaged." },
+            "content": { "type": "integer", "description": "Does not hold exactly the rows of its package (one missing, foreign or twice), or holds a row a node may not give: another ticket, another problem's id, hash or query, another controller version or platform, a word no row has, counts of models or values a session does not give, or a digest that is not its own." },
+            "surplus": { "type": "integer", "description": "More results under one ticket than copies were asked for, in the dispute round or in a repair round that asked for one: which is the answer cannot be told, so none is taken." }
+          }
+        },
+        "node_faults": { "type": "integer", "minimum": 0, "description": "Packages a node said it could not work on (a fault code and no rows), every round together. Their problems have no answer from that node." },
+        "node_faults_by_code": {
+          "type": "object",
+          "required": ["version_mismatch", "package_invalid", "ticket_invalid", "package_too_large", "package_hash_mismatch", "package_unreadable", "package_mismatch", "sandbox_unavailable", "memory_insufficient", "download_failed", "upload_failed"],
+          "additionalProperties": false,
+          "properties": {
+            "version_mismatch": { "type": "integer" }, "package_invalid": { "type": "integer" }, "ticket_invalid": { "type": "integer" }, "package_too_large": { "type": "integer" },
+            "package_hash_mismatch": { "type": "integer" }, "package_unreadable": { "type": "integer" }, "package_mismatch": { "type": "integer" }, "sandbox_unavailable": { "type": "integer" },
+            "memory_insufficient": { "type": "integer" }, "download_failed": { "type": "integer" }, "upload_failed": { "type": "integer" }
+          }
+        },
+        "sampling_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "The share of the packages the run asked to solve on two machines, as the script stated it to Smt.Settle; null when it did not." },
+        "sampling": { "type": "string", "enum": ["not_stated", "none", "as_asked", "short"], "description": "Whether the sampling that was asked for happened; the same word as in the report." },
+        "unanswered_packages": { "type": "integer", "minimum": 0, "description": "The sum of unanswered over the fan-outs." }
+      }
+    },
+    "evaluator_solver_disagreements": {
+      "type": "array",
+      "description": "Every problem the machines agree on and the evaluator calls failed, loudly: its index, the evaluator's reason and its detail.",
+      "items": {
+        "type": "object",
+        "required": ["index", "reason", "detail"],
+        "additionalProperties": false,
+        "properties": {
+          "index": { "type": "integer", "minimum": 0 },
+          "reason": { "type": "string" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "fan_outs": {
+      "type": "array",
+      "description": "One record a fan-out the script ran, in the order they ran: what it was asked for and what came back, counted in packages.",
+      "items": {
+        "type": "object",
+        "required": ["round", "packages", "problems", "copies", "selected", "complete", "unanswered"],
+        "additionalProperties": false,
+        "properties": {
+          "round": { "type": "string", "enum": ["main", "repair", "dispute"] },
+          "packages": { "type": "integer", "minimum": 0 },
+          "problems": { "type": "integer", "minimum": 0 },
+          "copies": { "type": "integer", "minimum": 1, "description": "The answers a selected package was asked for: 2 where a share is sampled, 3 in a dispute, 1 in a repair round without sampling." },
+          "selected": { "type": ["integer", "null"], "minimum": 0, "description": "The packages asked for that many answers; null when the script did not state its rate." },
+          "complete": { "type": "integer", "minimum": 0, "description": "The packages that came back with that many taken answers, or more." },
+          "unanswered": { "type": "integer", "minimum": 0, "description": "The packages no taken answer came back for." }
+        }
+      }
+    },
+    "disputes": {
+      "type": "array",
+      "description": "Every dispute, by problem index.",
+      "items": {
+        "type": "object",
+        "required": ["index", "cause", "first_copies", "copies", "agreeing", "outcome"],
+        "additionalProperties": false,
+        "properties": {
+          "index": { "type": "integer", "minimum": 0 },
+          "cause": { "type": "string", "enum": ["digests_differ", "model_failed", "surplus"] },
+          "first_copies": { "type": "integer", "minimum": 0 },
+          "copies": { "type": "integer", "minimum": 0 },
+          "agreeing": { "type": "integer", "minimum": 0 },
+          "outcome": { "type": "string", "enum": ["resolved", "no_majority", "too_few_copies", "surplus_copies"] }
+        }
+      }
+    }
+  }
+}

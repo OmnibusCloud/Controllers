@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Smt/docs/smt-report.schema.json",
+  "title": "Smt report",
+  "description": "The report of SmtRun (the blob Smt.Collect hands out): what the run ran with in short, the problem set as it was read, the verdicts and the unknowns by reason, the agreement with the expected verdicts, the evaluator's classes by logic, the copies and how the disputes ended, the problems answered unsat by one machine only, the long tail with the budget, the attribution from the problems' :source and :license, and for a run with enumerations the problems with exactly one model (kept) and those with two or more (dropped). Problems are named by their index in the set (the results give the id). No machine is named, and no duration is estimated anywhere.",
+  "type": "object",
+  "required": ["schema", "run", "problem_set", "statuses", "verdicts", "unknown", "expected", "validation", "copies", "unsat_one_copy", "long_tail", "attribution"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "string", "const": "smt-report/1" },
+    "run": {
+      "type": "object",
+      "required": ["profile", "module_sha256", "controller", "sampling_rate", "sampling", "unanswered_packages", "options"],
+      "additionalProperties": false,
+      "properties": {
+        "profile": { "type": "string", "description": "The solver profile." },
+        "module_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The SHA-256 of the solver module the profile pins." },
+        "controller": { "type": "string", "description": "The controller version the run ran on." },
+        "sampling_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "The share of the packages the run asked to solve on two machines, as the script stated it; null when it did not." },
+        "sampling": { "type": "string", "enum": ["not_stated", "none", "as_asked", "short"], "description": "Whether the sampling that was asked for happened: as_asked when as many packages came back with two answers as the rate asks for, in the first fan-out and in the repair round; short when fewer did." },
+        "unanswered_packages": { "type": "integer", "minimum": 0, "description": "Packages no taken answer came back for, every fan-out together." },
+        "options": { "description": "The options as resolved: numbers, never the word default.", "type": "object", "required": ["profile", "query", "max_models", "seed", "rlimit", "hard_cap_s", "fuel", "memory_mb", "sampling_rate"], "additionalProperties": false,
+          "properties": {
+            "profile": { "type": "string" },
+            "query": { "type": "string", "enum": ["check", "enumerate", "prove"] },
+            "max_models": { "type": "integer", "minimum": 1 },
+            "seed": { "type": "integer", "minimum": 0 },
+            "rlimit": { "type": "integer", "minimum": 1, "description": "The resource limit of one check, as a number." },
+            "hard_cap_s": { "type": "integer", "minimum": 1, "description": "The hard cap of one problem, seconds of the reference machine." },
+            "fuel": { "type": "integer", "minimum": 1, "description": "The hard cap as the count the sandbox stops at." },
+            "memory_mb": { "type": "integer", "minimum": 1 },
+            "sampling_rate": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      }
+    },
+    "problem_set": {
+      "type": "object",
+      "required": ["rows", "accepted", "refused", "refused_by_code", "logics", "other_logics", "queries", "expected"],
+      "additionalProperties": false,
+      "properties": {
+        "rows": { "type": "integer", "minimum": 0 },
+        "accepted": { "type": "integer", "minimum": 0 },
+        "refused": { "type": "integer", "minimum": 0 },
+        "refused_by_code": { "type": "object", "description": "Refused rows by refusal code." },
+        "logics": { "type": "object", "description": "Taken problems by the logic their set-logic names (the empty name for none), 64 logics at most." },
+        "other_logics": { "type": "integer", "minimum": 0, "description": "Taken problems of logics past the 64 named." },
+        "queries": { "type": "object", "description": "Taken problems by query." },
+        "expected": { "type": "object", "description": "Taken problems by expected verdict: sat, unsat, none." }
+      }
+    },
+    "statuses": {
+      "type": "object",
+      "required": ["ok", "refused", "input_error", "output_exceeded", "engine_crash", "no_result", "disputed"],
+      "additionalProperties": false,
+      "description": "Rows by status, every row of the set once.",
+      "properties": {
+        "ok": { "type": "integer" }, "refused": { "type": "integer" }, "input_error": { "type": "integer" }, "output_exceeded": { "type": "integer" },
+        "engine_crash": { "type": "integer" }, "no_result": { "type": "integer" }, "disputed": { "type": "integer" }
+      }
+    },
+    "verdicts": {
+      "type": "object",
+      "required": ["sat", "unsat", "unknown"],
+      "additionalProperties": false,
+      "description": "Answered rows (status ok or output_exceeded) by verdict.",
+      "properties": { "sat": { "type": "integer" }, "unsat": { "type": "integer" }, "unknown": { "type": "integer" } }
+    },
+    "unknown": {
+      "type": "object",
+      "required": ["rlimit", "fuel", "memout", "incomplete", "other"],
+      "additionalProperties": false,
+      "description": "Rows with verdict unknown, by reason. unknown is not an answer.",
+      "properties": { "rlimit": { "type": "integer" }, "fuel": { "type": "integer" }, "memout": { "type": "integer" }, "incomplete": { "type": "integer" }, "other": { "type": "integer" } }
+    },
+    "expected": {
+      "type": "object",
+      "required": ["agree", "disagree", "n/a"],
+      "additionalProperties": false,
+      "description": "Rows by agreement of their verdict with the expected one.",
+      "properties": { "agree": { "type": "integer" }, "disagree": { "type": "integer" }, "n/a": { "type": "integer" } }
+    },
+    "validation": {
+      "type": "object",
+      "required": ["classes", "by_logic", "partial_by_reason"],
+      "additionalProperties": false,
+      "properties": {
+        "classes": {
+          "type": "object",
+          "required": ["validated", "partial", "failed"],
+          "additionalProperties": false,
+          "description": "Settled rows with a model to check, by the class the host's evaluator gave.",
+          "properties": { "validated": { "type": "integer" }, "partial": { "type": "integer" }, "failed": { "type": "integer" } }
+        },
+        "by_logic": { "type": "object", "description": "The same by logic: each logic an object of validated, partial and failed; 64 logics at most, the rest under (other)." },
+        "partial_by_reason": { "type": "object", "description": "Partial classes by the evaluator's reason code." }
+      }
+    },
+    "copies": {
+      "type": "object",
+      "required": ["two_or_more", "agreed", "disputed", "disputes", "settled_by"],
+      "additionalProperties": false,
+      "properties": {
+        "two_or_more": { "type": "integer", "description": "Problems answered by two machines or more." },
+        "agreed": { "type": "integer", "description": "Of those, the problems whose answers all gave one digest." },
+        "disputed": { "type": "integer", "description": "Problems that went to three more machines." },
+        "disputes": {
+          "type": "object",
+          "required": ["resolved", "no_majority", "too_few_copies", "surplus_copies"],
+          "additionalProperties": false,
+          "description": "How the disputes ended.",
+          "properties": { "resolved": { "type": "integer" }, "no_majority": { "type": "integer" }, "too_few_copies": { "type": "integer" }, "surplus_copies": { "type": "integer" } }
+        },
+        "settled_by": {
+          "type": "object",
+          "required": ["one_copy", "copies", "dispute", "agreement"],
+          "additionalProperties": false,
+          "description": "Answers by how they were settled.",
+          "properties": { "one_copy": { "type": "integer" }, "copies": { "type": "integer" }, "dispute": { "type": "integer" }, "agreement": { "type": "integer" } }
+        }
+      }
+    },
+    "unsat_one_copy": {
+      "type": "object",
+      "required": ["count", "indices"],
+      "additionalProperties": false,
+      "description": "The problems answered unsat by one machine only: nothing but that machine vouches for them.",
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "indices": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true }
+      }
+    },
+    "long_tail": {
+      "type": "object",
+      "required": ["rlimit", "fuel", "problems"],
+      "additionalProperties": false,
+      "description": "Every problem with a settled row and what it cost, the most fuel first, with the budget of a problem.",
+      "properties": {
+        "rlimit": { "type": "integer", "minimum": 1 },
+        "fuel": { "type": "integer", "minimum": 1 },
+        "problems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["index", "resource_count", "fuel", "stopped_by"],
+            "additionalProperties": false,
+            "properties": {
+              "index": { "type": "integer", "minimum": 0 },
+              "resource_count": { "type": "integer", "minimum": 0 },
+              "fuel": { "type": "integer", "minimum": 0 },
+              "stopped_by": { "type": "string", "enum": ["rlimit", "fuel", "memout", ""], "description": "The budget that stopped the problem as unknown; empty when none did." }
+            }
+          }
+        }
+      }
+    },
+    "attribution": {
+      "type": "object",
+      "required": ["sources", "other_problems"],
+      "additionalProperties": false,
+      "description": "The pairs of the problems' :source and :license, with how many taken problems carry each, the most first; 1,000 pairs at most.",
+      "properties": {
+        "sources": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "required": ["source", "license", "problems"],
+            "additionalProperties": false,
+            "properties": {
+              "source": { "type": "string" },
+              "license": { "type": "string" },
+              "problems": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        "other_problems": { "type": "integer", "minimum": 0, "description": "Problems of the pairs past the 1,000 named." }
+      }
+    },
+    "enumerate": {
+      "type": "object",
+      "required": ["exactly_one", "two_or_more", "no_model", "undecided", "kept", "dropped"],
+      "additionalProperties": false,
+      "description": "For a run with enumerations: kept, the problems with exactly one model (a complete enumeration of one); dropped, those with two or more.",
+      "properties": {
+        "exactly_one": { "type": "integer", "minimum": 0 },
+        "two_or_more": { "type": "integer", "minimum": 0 },
+        "no_model": { "type": "integer", "minimum": 0, "description": "Complete enumerations that found no model." },
+        "undecided": { "type": "integer", "minimum": 0, "description": "Enumerations that did not decide: one model and no word on a second, or none and no word." },
+        "kept": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true },
+        "dropped": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true }
+      }
+    }
+  }
+}
