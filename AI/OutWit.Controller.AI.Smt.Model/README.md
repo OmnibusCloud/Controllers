@@ -342,6 +342,11 @@ checked against the sort the problem declares for it, wherever it is used. A mod
 A validation never throws for what the problem or the model holds, never runs past its budget,
 and gives the same answer for the same input on every machine.
 
+The evaluator is open code, so its agreement with the solver is shown by volume, not by
+reading: its tests hold it to the pinned solver on thousands of closed terms generated for every
+theory below, and on the models of real problems written back into their problems (the closed
+script). Wherever the evaluator gives a value, the solver agrees with it.
+
 ### What is evaluated
 
 - Core: `not`, `and`, `or`, `=>`, `xor`, `=`, `distinct`, `ite`; `let`, `!` with `:named` terms

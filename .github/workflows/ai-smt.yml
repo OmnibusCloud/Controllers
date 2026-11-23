@@ -225,3 +225,57 @@ jobs:
       - name: Test
         shell: bash
         run: dotnet test "$TESTS/OutWit.Controller.AI.Smt.Tests.csproj" -c Release --no-build --filter "Category=Slice" --logger "console;verbosity=normal"
+
+  # The model evaluator against the solver itself, by volume: closed terms generated from a
+  # fixed seed for each theory (integer and real arithmetic, linear and not, bit-vectors, arrays,
+  # datatypes, functions with a model, strings, the core), each evaluated by the evaluator and
+  # checked by the solver, which must agree wherever the evaluator gives a value. The test jobs
+  # above run a few hundred of them on each platform; this one runs thousands. The log states
+  # the totals of each theory: decided and agreed, partial by reason, disagreements.
+  differential:
+    needs: module
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      TESTS: AI/OutWit.Controller.AI.Smt.Tests
+      SMT_DIFFERENTIAL_TERMS: 600
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+
+      - name: Cache the engine downloads
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: AI/OutWit.Controller.AI.Verify.Tests/@Data/natives/.downloads
+          key: verify-engine-natives-${{ hashFiles('AI/OutWit.Controller.AI.Verify.Assets/toolchain/pins.env') }}
+
+      - name: The pinned engine library
+        shell: bash
+        run: bash AI/OutWit.Controller.AI.Verify.Assets/toolchain/natives.sh AI/OutWit.Controller.AI.Verify.Tests/@Data/natives
+
+      - name: The solver module's archive
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: smt-z3-wasm
+          path: AI/OutWit.Controller.AI.Smt.Tests/@Data/.downloads
+
+      - name: The solver module under the tests
+        shell: bash
+        run: |
+          . AI/OutWit.Controller.AI.Smt.Assets/toolchain/pins.env
+          data="$TESTS/@Data"
+          zip="$data/.downloads/smt-z3-wasm.zip"
+          echo "$SMT_Z3_WASM_SHA256  $zip" | sha256sum -c -
+          python3 -I -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$zip" "$data"
+          echo "$Z3_MODULE_SHA256  $data/wasm/z3-$Z3_VERSION.wasm" | sha256sum -c -
+
+      - name: Build
+        shell: bash
+        run: dotnet build "$TESTS/OutWit.Controller.AI.Smt.Tests.csproj" -c Release
+
+      - name: Test
+        shell: bash
+        run: dotnet test "$TESTS/OutWit.Controller.AI.Smt.Tests.csproj" -c Release --no-build --filter "Category=Differential" --logger "console;verbosity=normal"
