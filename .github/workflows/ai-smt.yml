@@ -23,6 +23,8 @@ on:
     paths:
       - 'AI/OutWit.Controller.AI.Smt*/**'
       - 'AI/Shared/**'
+      - 'Grid/**'
+      - 'Variables/**'
       - 'Build/**'
       - 'nuget.config'
       - 'global.json'
@@ -32,6 +34,8 @@ on:
     paths:
       - 'AI/OutWit.Controller.AI.Smt*/**'
       - 'AI/Shared/**'
+      - 'Grid/**'
+      - 'Variables/**'
       - 'Build/**'
       - 'nuget.config'
       - 'global.json'
