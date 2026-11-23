@@ -23,6 +23,12 @@ internal sealed class SmtRound
 
     #endregion
 
+    #region Fields
+
+    private HashSet<string>? m_answered;
+
+    #endregion
+
     #region Functions
 
     /// <summary>The copies of a problem in this round, in an order that follows from their digests.</summary>
@@ -46,7 +52,9 @@ internal sealed class SmtRound
     /// <returns>Empty when an answer to it was taken; else the node's fault code, the reason a result was refused, or <see cref="SmtRunWords.NO_ANSWER"/>.</returns>
     public string FateOf(string ticket)
     {
-        if (Accepted.Any(package => package.Unit.Ticket == ticket))
+        // Asked once the round is taken in: the tickets answered are gathered at the first call.
+        m_answered ??= Accepted.Select(package => package.Unit.Ticket).ToHashSet(StringComparer.Ordinal);
+        if (m_answered.Contains(ticket))
             return "";
 
         return Fates.TryGetValue(ticket, out var fate) ? fate : SmtRunWords.NO_ANSWER;
