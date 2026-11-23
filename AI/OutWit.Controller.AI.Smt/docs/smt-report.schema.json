@@ -17,7 +17,7 @@
         "module_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The SHA-256 of the solver module the profile pins." },
         "controller": { "type": "string", "description": "The controller version the run ran on." },
         "sampling_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "The share of the packages the run asked to solve on two machines, as the script stated it; null when it did not." },
-        "sampling": { "type": "string", "enum": ["not_stated", "none", "as_asked", "short"], "description": "Whether the sampling that was asked for happened: as_asked when as many packages came back with two answers as the rate asks for, in the first fan-out and in the repair round; short when fewer did." },
+        "sampling": { "type": "string", "enum": ["not_stated", "none", "as_asked", "short"], "description": "Whether the sampling that was asked for happened: as_asked when every problem with an answer of a package asked for twice ended with two answers of one fan-out (the first, or the repair round that sent it out again to two machines) and as many such packages came back as the rate asks for; short otherwise (a repair pair that lost a copy again, or a package asked for twice of which at most one result came back). A package is known to have been asked for twice by the two results that came back under it, whatever they say, or by a rate that asks for every package." },
         "unanswered_packages": { "type": "integer", "minimum": 0, "description": "Packages no taken answer came back for, every fan-out together." },
         "options": { "description": "The options as resolved: numbers, never the word default.", "type": "object", "required": ["profile", "query", "max_models", "seed", "rlimit", "hard_cap_s", "fuel", "memory_mb", "sampling_rate"], "additionalProperties": false,
           "properties": {
@@ -101,7 +101,7 @@
       "required": ["two_or_more", "agreed", "disputed", "disputes", "settled_by"],
       "additionalProperties": false,
       "properties": {
-        "two_or_more": { "type": "integer", "description": "Problems answered by two machines or more." },
+        "two_or_more": { "type": "integer", "description": "Problems answered by two machines or more: two answers or more, but not a lone answer of the first fan-out and a lone answer of the repair round, which may be one machine's (those are settled one_copy)." },
         "agreed": { "type": "integer", "description": "Of those, the problems whose answers all gave one digest." },
         "disputed": { "type": "integer", "description": "Problems that went to three more machines." },
         "disputes": {
@@ -124,7 +124,7 @@
       "type": "object",
       "required": ["count", "indices"],
       "additionalProperties": false,
-      "description": "The problems answered unsat by one machine only: nothing but that machine vouches for them.",
+      "description": "The problems answered unsat by one machine only (settled_by one_copy): nothing but that machine vouches for them.",
       "properties": {
         "count": { "type": "integer", "minimum": 0 },
         "indices": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true }

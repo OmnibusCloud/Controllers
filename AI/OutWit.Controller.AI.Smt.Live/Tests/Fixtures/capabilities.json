@@ -1,6 +1,6 @@
 {
   "schema": "smt-capabilities/1",
-  "controller": "0.3.0",
+  "controller": "0.4.0",
   "profile": {
     "id": "z3-5.4.1",
     "solver": "z3",
@@ -29,7 +29,7 @@
     "node_faults": ["version_mismatch", "package_invalid", "ticket_invalid"]
   },
   "packages": { "max_problems": 256, "max_bytes": 269484032, "max_problem_frame_bytes": 134217728, "max_result_frame_bytes": 67108864 },
-  "node": { "max_degree": 16, "ram_headroom": 0.75, "session_margin_bytes": 201326592, "session_bytes": 2885681152, "priority": "below_normal" },
+  "node": { "min_ram_mb": 8192, "max_degree": 16, "ram_headroom": 0.75, "session_margin_bytes": 201326592, "session_bytes": 2885681152, "priority": "below_normal" },
   "benchmark_unit": "smt-problem@ref-v1",
   "platforms": ["win-x64", "linux-x64", "osx-arm64"],
   "pool": { "nodes": 3, "measured": 3, "workers": 12, "rate": 41.5 }

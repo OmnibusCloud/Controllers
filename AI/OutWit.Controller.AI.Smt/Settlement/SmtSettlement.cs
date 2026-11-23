@@ -8,10 +8,11 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 
 /// <summary>
 /// The rounds of a run on the host, between the fan-outs: what came back is taken in under its
-/// tickets (<see cref="SmtRoundIntake"/>), the problems without an answer go out once more, the
-/// problems whose copies disagree or whose model the evaluator calls failed go to three more
-/// machines (<see cref="SmtRulings"/>). Every round's problems are read from the host's own
-/// packages, a package at a time, and stored as packages of their own by the planner's rule.
+/// tickets (<see cref="SmtRoundIntake"/>), the problems without an answer and the problems of a
+/// package asked for twice that came back with fewer than two answers go out once more, to two
+/// machines, the problems whose copies disagree or whose model the evaluator calls failed go to
+/// three more machines (<see cref="SmtRulings"/>). Every round's problems are read from the host's
+/// own packages, a package at a time, and stored as packages of their own by the planner's rule.
 /// Settling the run and writing its documents is <see cref="SmtRunSettlement"/>.
 /// </summary>
 internal static class SmtSettlement
@@ -29,18 +30,15 @@ internal static class SmtSettlement
         return SmtRoundIntake.ReadAsync(SmtRound.MAIN, issued, returned, SmtRulings.SAMPLE_COPIES, surplusIsSuspect: true, blobs, spool);
     }
 
-    /// <summary>Takes in the repair round.</summary>
+    /// <summary>Takes in the repair round, which asks two machines for every one of its packages (<c>Grid.Replicas(2)</c>).</summary>
     /// <param name="issued">The packages it gave out.</param>
     /// <param name="returned">What Grid.ForEach returned.</param>
-    /// <param name="sampled">True when the round ran under the sampling of the first fan-out (a package may have two answers); false when every package was asked for once.</param>
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="spool">Where whole rows are kept, or null.</param>
     /// <returns>The round as taken.</returns>
-    public static Task<SmtRound> ReadRepairAsync(IReadOnlyList<SmtTaskPackageData> issued, IEnumerable<SmtResultPackageData?> returned, bool sampled, IWitBlobService blobs, SmtSpool? spool = null)
+    public static Task<SmtRound> ReadRepairAsync(IReadOnlyList<SmtTaskPackageData> issued, IEnumerable<SmtResultPackageData?> returned, IWitBlobService blobs, SmtSpool? spool = null)
     {
-        return sampled
-            ? SmtRoundIntake.ReadAsync(SmtRound.REPAIR, issued, returned, SmtRulings.SAMPLE_COPIES, surplusIsSuspect: true, blobs, spool)
-            : SmtRoundIntake.ReadAsync(SmtRound.REPAIR, issued, returned, 1, surplusIsSuspect: false, blobs, spool);
+        return SmtRoundIntake.ReadAsync(SmtRound.REPAIR, issued, returned, SmtRulings.SAMPLE_COPIES, surplusIsSuspect: true, blobs, spool);
     }
 
     /// <summary>Takes in the dispute round.</summary>
@@ -55,16 +53,19 @@ internal static class SmtSettlement
     }
 
     /// <summary>
-    /// Stores the problems of the first fan-out that have no answer as packages to send out once
-    /// more: those of the packages no taken result answers (a node's fault code, a refused result,
-    /// nothing at all), and those every taken copy of which is a fault of its node.
+    /// Stores the problems of the first fan-out that go out once more as packages: those of the
+    /// packages no taken result answers (a node's fault code, a refused result, nothing at all),
+    /// those every taken copy of which is a fault of its node, and those of a package the fan-out
+    /// is known to have asked for twice that have fewer than two answers (<see cref="SmtRulings.NeedsRepair"/>).
     /// </summary>
     /// <param name="main">The first fan-out.</param>
+    /// <param name="rate">The sampling rate the fan-out ran under, or null when the script does not say.</param>
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="folder">A folder of the host's own for the package files.</param>
-    /// <returns>The references; empty when every problem has an answer.</returns>
-    public static Task<List<SmtTaskPackageData>> PublishRepairsAsync(SmtRound main, IWitBlobService blobs, string folder)
+    /// <returns>The references; empty when every problem has the answers it was asked for.</returns>
+    public static Task<List<SmtTaskPackageData>> PublishRepairsAsync(SmtRound main, double? rate, IWitBlobService blobs, string folder)
     {
+        var sampled = SmtRulings.Sampled(main, rate);
         var wanted = new Dictionary<string, HashSet<int>?>(StringComparer.Ordinal);
 
         foreach (var unit in main.Unanswered)
@@ -72,7 +73,7 @@ internal static class SmtSettlement
 
         foreach (var (index, unit) in main.UnitOf)
         {
-            if (SmtRulings.NeedsRepair(main, index))
+            if (SmtRulings.NeedsRepair(main, index, sampled.Contains(unit.Ticket)))
                 Want(wanted, unit.Ticket, index);
         }
 
@@ -80,13 +81,13 @@ internal static class SmtSettlement
     }
 
     /// <summary>
-    /// Stores the problems that go to three more machines as packages: those of the first fan-out
-    /// whose answers disagree, whose package had more answers than were asked for, or whose
-    /// answer's model the evaluator calls failed; and the same of the repair round for the
-    /// problems the first fan-out left without an answer.
+    /// Stores the problems that go to three more machines as packages: those whose first answers
+    /// (<see cref="SmtRulings.First"/>: the first fan-out's, with the repair round's for a problem
+    /// it answered) disagree, came under a ticket with more answers than were asked for, or are one
+    /// answer whose model the evaluator calls failed.
     /// </summary>
     /// <param name="main">The first fan-out, taken in with a spool.</param>
-    /// <param name="repair">The repair round, taken in as a sampled one with the same spool, or null.</param>
+    /// <param name="repair">The repair round, taken in with the same spool, or null.</param>
     /// <param name="spool">The spool both rounds' rows were kept in.</param>
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="folder">A folder of the host's own for the package files.</param>
@@ -94,15 +95,21 @@ internal static class SmtSettlement
     public static async Task<(List<SmtTaskPackageData> Packages, SortedDictionary<string, int> Causes)> PublishDisputesAsync(SmtRound main, SmtRound? repair, SmtSpool spool,
         IWitBlobService blobs, string folder)
     {
+        // Every problem with a copy in either round, once; its first answers are made again on each
+        // pass instead of being held, a few small lists at a time.
+        IEnumerable<int> Indices()
+        {
+            return repair == null ? main.Copies.Keys : main.Copies.Keys.Concat(repair.Copies.Keys.Where(index => !main.Copies.ContainsKey(index)));
+        }
+
         // The answers a model check decides: those of one digest whose row says sat.
         var leaders = new List<(SmtRound Round, SmtCopy Copy)>();
-        foreach (var index in main.Copies.Keys)
-            AddLeader(leaders, main, index);
-
-        if (repair != null)
+        foreach (var index in Indices())
         {
-            foreach (var index in repair.Copies.Keys.Where(index => SmtRulings.NeedsRepair(main, index)))
-                AddLeader(leaders, repair, index);
+            var first = SmtRulings.First(index, main, repair);
+            var answers = first.Answers;
+            if (answers.Count > 0 && answers[0].ClaimsSat && answers.All(answer => answer.Digest == answers[0].Digest))
+                leaders.Add((first.Round, answers[0]));
         }
 
         var checks = await CheckAsync(leaders, spool, blobs);
@@ -114,29 +121,18 @@ internal static class SmtSettlement
         var wanted = new Dictionary<string, HashSet<int>?>(StringComparer.Ordinal);
         var causes = new SortedDictionary<string, int>(StringComparer.Ordinal);
 
-        foreach (var (index, unit) in main.UnitOf)
+        foreach (var index in Indices())
         {
-            if (SmtRulings.Cause(main, index, Check) is { } cause)
+            var first = SmtRulings.First(index, main, repair);
+            if (SmtRulings.Cause(first, Check) is { } cause)
             {
-                Want(wanted, unit.Ticket, index);
-                SmtIntegrityFacts.Count(causes, cause);
-            }
-        }
-
-        if (repair == null)
-            return (await PublishAsync(main.Issued, wanted, blobs, folder), causes);
-
-        foreach (var (index, unit) in repair.UnitOf)
-        {
-            if (SmtRulings.NeedsRepair(main, index) && SmtRulings.Cause(repair, index, Check) is { } cause)
-            {
-                Want(wanted, unit.Ticket, index);
+                Want(wanted, first.Round.UnitOf[index].Ticket, index);
                 SmtIntegrityFacts.Count(causes, cause);
             }
         }
 
         // A ticket is of one round, so the packages of the two rounds are told apart by it.
-        return (await PublishAsync([.. main.Issued, .. repair.Issued], wanted, blobs, folder), causes);
+        return (await PublishAsync(repair == null ? main.Issued : [.. main.Issued, .. repair.Issued], wanted, blobs, folder), causes);
     }
 
     /// <summary>
@@ -193,13 +189,6 @@ internal static class SmtSettlement
     #endregion
 
     #region Tools
-
-    private static void AddLeader(List<(SmtRound Round, SmtCopy Copy)> leaders, SmtRound round, int index)
-    {
-        var answers = round.Answers(index);
-        if (answers.Count > 0 && answers[0].ClaimsSat && answers.All(answer => answer.Digest == answers[0].Digest))
-            leaders.Add((round, answers[0]));
-    }
 
     private static void Want(Dictionary<string, HashSet<int>?> wanted, string ticket, int index)
     {

@@ -1,0 +1,16 @@
+namespace OutWit.Controller.AI.Smt.Settlement;
+
+/// <summary>
+/// The answers a problem is first ruled on (<see cref="SmtRulings.First"/>): the first fan-out's,
+/// and for a problem the repair round answered, the first fan-out's with the repair round's.
+/// </summary>
+/// <param name="Answers">The answers: the first fan-out's, then the repair round's; empty when neither gave one.</param>
+/// <param name="Round">The latest round with an answer among them: the round a dispute sends the problem on from.</param>
+/// <param name="TwoMachines">
+/// Whether two of the answers are known to be two machines': two answers of one fan-out, whose
+/// copies Grid keeps on different machines. A lone answer of the first fan-out and a lone answer of
+/// the repair round may be one machine's: Grid guarantees nothing across fan-outs.
+/// </param>
+/// <param name="Surplus">Whether a round that gave answers among them took more results under the problem's ticket than it asked for.</param>
+/// <param name="Repaired">Whether the repair round's answers are among them.</param>
+internal sealed record SmtFirstAnswers(List<SmtCopy> Answers, SmtRound Round, bool TwoMachines, bool Surplus, bool Repaired);

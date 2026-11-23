@@ -16,13 +16,30 @@ namespace OutWit.Controller.AI.Smt.Sandbox;
 /// else that runs on the machine are taken.
 /// <para>
 /// A machine where not one session fits does not run the package: it is refused with
-/// <see cref="SmtNodeFaults.MEMORY_INSUFFICIENT"/> and goes elsewhere. A machine that cannot say
-/// what it has available runs as many sessions as its cores and the cap allow.
+/// <see cref="SmtNodeFaults.MEMORY_INSUFFICIENT"/> and goes elsewhere: the repair round sends its
+/// problems out again, to two machines. The planner sends a package only to a machine of at least
+/// <see cref="MIN_RAM_MB"/>, so a refusal for memory is a machine whose memory was taken by other
+/// work, or one that has not reported what it has. A machine that cannot say what it has available
+/// runs as many sessions as its cores and the cap allow.
 /// </para>
 /// </summary>
 internal static class SmtSandboxDegree
 {
     #region Constants
+
+    /// <summary>
+    /// The least memory a machine must have for the planner to send it a package, in MiB of the
+    /// total the node reports: <c>Smt.SolvePackage</c> declares it as its
+    /// <c>RequiresResources.MinRamMb</c>, and the capabilities document states it. Why 8 GB: one
+    /// session at the default options takes 2,752 MiB (<see cref="SessionBytes(SmtOptionsData)"/>),
+    /// and the sessions may claim <see cref="RAM_HEADROOM"/> of the memory the machine has
+    /// available, so one session needs 3,670 MiB available. An 8 GB machine has that with the
+    /// node's client and its system running; a 6 GB machine has about 2 GB available then, and
+    /// refuses every package with <see cref="SmtNodeFaults.MEMORY_INSUFFICIENT"/>.
+    /// The planner admits a node that has reported no capabilities (it checks nothing then); such
+    /// a node still refuses a package it has no memory for.
+    /// </summary>
+    public const long MIN_RAM_MB = 8192;
 
     /// <summary>The most sessions a package runs at once on a node.</summary>
     public const int MAX_DEGREE = 16;

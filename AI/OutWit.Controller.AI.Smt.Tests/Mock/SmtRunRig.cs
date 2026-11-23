@@ -107,6 +107,9 @@ internal static class SmtRunRig
     /// <summary>The reasons a result package is refused for, in the order the integrity document lists them.</summary>
     public static IReadOnlyList<string> RejectReasons => SmtRoundIntake.REASONS;
 
+    /// <summary>The reason of a repair of a problem whose package was asked for twice and came back with fewer than two answers.</summary>
+    public static string CopiesShort => SmtRulings.COPIES_SHORT;
+
     /// <summary>The schema names of the four documents: results rows have none; the report, the integrity and the provenance.</summary>
     public static (string Report, string Integrity, string Provenance) Schemas => (SmtReportWriter.SCHEMA, SmtIntegrityWriter.SCHEMA, SmtProvenanceWriter.SCHEMA);
 

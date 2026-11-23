@@ -296,7 +296,8 @@ public sealed class SmtRunMixedSetTests : SmtRunTestBase
             Assert.That(m_run.IntegrityCount("no_result"), Is.EqualTo(1));
             Assert.That(m_run.IntegrityCount("no_result_by_reason", "backstop"), Is.EqualTo(1));
             Assert.That(m_run.IntegrityCount("disputes") + m_run.IntegrityCount("lies") + m_run.IntegrityCount("rejected_results"), Is.Zero);
-            Assert.That(m_run.FanOut("repair").Packages, Is.EqualTo(1), "the problem went out once more");
+            Assert.That(m_run.FanOut("repair"), Is.EqualTo((1, 2, 1, 1, 0)),
+                "the problem went out once more, to two machines (a run without sampling too), and both came back");
 
             Assert.That(provenance.GetProperty("schema").GetString(), Is.EqualTo(SmtRunRig.Schemas.Provenance));
             Assert.That(provenance.GetProperty("profile").GetProperty("module_sha256").GetString(), Is.EqualTo(SmtSolverModule.SHA256));

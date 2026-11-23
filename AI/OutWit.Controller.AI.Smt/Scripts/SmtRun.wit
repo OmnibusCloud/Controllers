@@ -8,12 +8,13 @@ Job:SmtRun(Blob:problems, SmtOptions:opts)
     SmtResultPackageCollection:solved = Grid.ForEach(package in packages, checked)
         => Smt.SolvePackage(package);
 
-    ~ A problem without an answer (a package that came back with a node's fault code, without a row the server takes, or with rows that are faults of the node) goes out once more, under the same sampling. ~
-    SmtTaskPackageCollection:repairs = Smt.Repairs(packages, solved);
-    SmtResultPackageCollection:repaired = Grid.ForEach(package in repairs, checked)
+    ~ A problem without an answer (a package that came back with a node's fault code, without a row the server takes, or with rows that are faults of the node), and a problem of a package asked for twice that came back with fewer than two answers, goes out once more, every package to two machines: the copies the sampling asked for are restored. It costs traffic on the fault path only. ~
+    SmtTaskPackageCollection:repairs = Smt.Repairs(packages, solved, rate);
+    ProcessingOptions:twice = Grid.Replicas(2);
+    SmtResultPackageCollection:repaired = Grid.ForEach(package in repairs, twice)
         => Smt.SolvePackage(package);
 
-    ~ A problem whose copies disagree, or whose model the server's evaluator calls failed, goes to three more machines. ~
+    ~ A problem whose copies disagree (the lone answer of the first fan-out against the repair round's among them), or whose model the server's evaluator calls failed, goes to three more machines. ~
     SmtTaskPackageCollection:disputes = Smt.Disputes(packages, solved, repairs, repaired);
     ProcessingOptions:thrice = Grid.Replicas(3);
     SmtResultPackageCollection:settled = Grid.ForEach(package in disputes, thrice)

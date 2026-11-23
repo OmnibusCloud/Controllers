@@ -49,7 +49,9 @@ internal sealed class SmtReportFacts
         if (data.Query == SmtQuery.Enumerate)
             HasEnumerations = true;
 
-        if (ruling.Copies >= SmtRulings.SAMPLE_COPIES)
+        // Two answers settled as one machine's (a lone answer of the first fan-out and one of the
+        // repair round) are not two machines.
+        if (ruling.Copies >= SmtRulings.SAMPLE_COPIES && ruling.SettledBy != SmtRunWords.ONE_COPY)
         {
             TwoOrMoreCopies++;
             if (ruling.Agreed)
@@ -71,7 +73,7 @@ internal sealed class SmtReportFacts
         if (row.Verdict == SmtResultWords.UNKNOWN)
             Count(Unknowns, row.Reason);
 
-        if (row.Verdict == SmtResultWords.UNSAT && ruling.Copies == 1)
+        if (row.Verdict == SmtResultWords.UNSAT && ruling.SettledBy == SmtRunWords.ONE_COPY)
             UnsatOneCopy.Add(data.Index);
 
         if (ruling.Check.Class != SmtRunWords.NOT_CHECKED)
@@ -174,7 +176,7 @@ internal sealed class SmtReportFacts
     /// <summary>The partial classes by reason.</summary>
     public SortedDictionary<string, int> PartialReasons { get; } = new(StringComparer.Ordinal);
 
-    /// <summary>The problems with two or more answers.</summary>
+    /// <summary>The problems with two or more answers that do not rest on one machine's answer.</summary>
     public int TwoOrMoreCopies { get; private set; }
 
     /// <summary>Of those, the problems whose answers all gave one digest.</summary>
@@ -186,7 +188,7 @@ internal sealed class SmtReportFacts
     /// <summary>The answers by how they were settled.</summary>
     public SortedDictionary<string, int> SettledBy { get; } = new(StringComparer.Ordinal);
 
-    /// <summary>The problems answered <c>unsat</c> by one machine only.</summary>
+    /// <summary>The problems answered <c>unsat</c> by one machine only (settled by <see cref="SmtRunWords.ONE_COPY"/>).</summary>
     public List<int> UnsatOneCopy { get; } = [];
 
     /// <summary>Every problem with a settled row, with what it cost.</summary>

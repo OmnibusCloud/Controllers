@@ -58,6 +58,7 @@ public sealed class SmtLiveDiagnosticsTests
             Assert.That(output, Does.Contain("degree      : 4 session(s) at once (memory)"));
             Assert.That(output, Does.Contain("valid (smt-capabilities.schema.json)"));
             Assert.That(output, Does.Contain("queries     : check, enumerate, prove"));
+            Assert.That(output, Does.Contain("node        : min_ram_mb 8192, max_degree 16"), "the least memory of a node's machine");
             Assert.That(output, Does.Contain("pool        : 3 node(s), 3 measured, 12 session(s) at once, rate 41.5"));
         });
     }

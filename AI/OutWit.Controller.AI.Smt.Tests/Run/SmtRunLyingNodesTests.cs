@@ -169,9 +169,14 @@ public sealed class SmtRunLyingNodesTests : SmtRunTestBase
     [Test]
     public async Task ANodeThatReturnsAFaultCodeForEveryPackageCostsNothingButItsShareTest()
     {
+        // Every package was asked for twice; the liar's copy of each it held came back as a fault
+        // code, so the honest copy stood alone. Those problems go out again, to two machines: a
+        // pair that missed the liar restores the copies, a pair that met it again leaves the
+        // honest answers of two fan-outs, which may be one machine's, and the sampling short.
         Liars.Lie = honest => Task.FromResult<SmtResultPackageData?>(SmtRunRig.Fault(honest, SmtNodeFaults.SANDBOX_UNAVAILABLE));
 
         var run = await RunAsync(m_set, new SmtOptionsData { SamplingRate = 1 });
+        var alone = run.Rows.Count(row => row.GetProperty("settled_by").GetString() == SmtRunWords.ONE_COPY);
 
         await AssertHonestAsync(run);
         Assert.Multiple(() =>
@@ -180,7 +185,11 @@ public sealed class SmtRunLyingNodesTests : SmtRunTestBase
             Assert.That(run.IntegrityCount("node_faults"), Is.EqualTo(Liars.Lies), "every package it gave back so is counted");
             Assert.That(run.IntegrityCount("node_faults_by_code", SmtNodeFaults.SANDBOX_UNAVAILABLE), Is.EqualTo(Liars.Lies));
             Assert.That(run.IntegrityCount("rejected_results"), Is.Zero, "a node's own fault code is not a refused result");
-            Assert.That(run.Rows.Count(row => row.GetProperty("settled_by").GetString() == SmtRunWords.ONE_COPY), Is.GreaterThan(0), "the honest copy stands alone");
+            Assert.That(run.IntegrityCount("repairs_by_reason", SmtRunRig.CopiesShort), Is.GreaterThan(0), "the problems the liar left with one answer went out again");
+            Assert.That(run.IntegrityCount("repairs"), Is.EqualTo(run.IntegrityCount("repairs_by_reason", SmtRunRig.CopiesShort)), "and nothing else did");
+            Assert.That(run.Rows.Select(row => row.GetProperty("settled_by").GetString()), Has.All.AnyOf(SmtRunWords.COPIES, SmtRunWords.ONE_COPY));
+            Assert.That(run.Report.GetProperty("run").GetProperty("sampling").GetString(), Is.EqualTo(alone > 0 ? "short" : "as_asked"),
+                "the sampling is short exactly when a problem rests on one machine");
             Assert.That(run.IntegrityCount("no_result"), Is.Zero);
         });
 

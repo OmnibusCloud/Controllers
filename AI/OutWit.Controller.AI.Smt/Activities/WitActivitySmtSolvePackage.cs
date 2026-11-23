@@ -1,6 +1,7 @@
 using MemoryPack;
 using OutWit.Common.Abstract;
 using OutWit.Common.Values;
+using OutWit.Controller.AI.Smt.Sandbox;
 using OutWit.Engine.Data.Activities;
 using OutWit.Engine.Data.Attributes;
 using OutWit.Engine.Interfaces;
@@ -14,10 +15,13 @@ namespace OutWit.Controller.AI.Smt.Activities;
 /// (<c>SmtResultPackage</c>). A function of its input: the same package gives the same rows on
 /// every node, so a retry or a copy elsewhere is safe. A node starts every package of its share
 /// together so that the blobs arrive ahead of the work; one package is solved at a time in a
-/// process, since its sessions take the node's cores.
+/// process, since its sessions take the node's cores. The planner sends it to machines of
+/// <see cref="SmtSandboxDegree.MIN_RAM_MB"/> at least: below that one session at the default
+/// options does not fit in what a machine has available.
 /// </summary>
 [Activity("Smt.SolvePackage")]
 [CanRunInParallelOnClient(true)]
+[RequiresResources(MinRamMb = SmtSandboxDegree.MIN_RAM_MB)]
 [MemoryPackable]
 public sealed partial class WitActivitySmtSolvePackage : WitActivityFunction
 {

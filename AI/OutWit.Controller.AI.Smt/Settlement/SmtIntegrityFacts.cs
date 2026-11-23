@@ -26,7 +26,7 @@ internal sealed class SmtIntegrityFacts
     /// <summary>The answers taken, every round together: a copy of a problem's row that is a statement about it.</summary>
     public long CopiesMade { get; set; }
 
-    /// <summary>The problems whose first round brought two answers or more.</summary>
+    /// <summary>The problems first ruled on two answers or more: the first fan-out's, with the repair round's for a problem it answered.</summary>
     public int Compared { get; set; }
 
     /// <summary>Of those, the problems whose answers all gave one digest.</summary>
@@ -35,7 +35,7 @@ internal sealed class SmtIntegrityFacts
     /// <summary>Of those, the problems whose answers gave more than one digest.</summary>
     public int Disagreements { get; set; }
 
-    /// <summary>The problems settled on one answer: they rest on one machine.</summary>
+    /// <summary>The problems whose answer rests on one machine: one answer, or a lone answer of the first fan-out and one of the repair round with its digest.</summary>
     public int OneCopy { get; set; }
 
     /// <summary>Of those, the problems answered <c>unsat</c>: nothing but that machine vouches for them.</summary>
@@ -56,11 +56,14 @@ internal sealed class SmtIntegrityFacts
     /// <summary>The problems the machines agree on and the evaluator calls failed: disagreements between the evaluator and the solver.</summary>
     public List<(int Index, string Reason, string Detail)> EvaluatorDisagreements { get; } = [];
 
-    /// <summary>The problems without an answer from the first fan-out, sent out once more.</summary>
+    /// <summary>The problems the repair round sent out once more: those without an answer from the first fan-out, and those of a package asked for twice with fewer than two answers.</summary>
     public int Repairs { get; set; }
 
-    /// <summary>The repairs by what the first fan-out said of the problem.</summary>
+    /// <summary>The repairs by what the first fan-out said of the problem, or <see cref="SmtRulings.COPIES_SHORT"/>.</summary>
     public SortedDictionary<string, int> RepairReasons { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The problems with an answer of the packages asked for twice that ended without two answers of one fan-out.</summary>
+    public int SampledShort { get; set; }
 
     /// <summary>The problems left without a result.</summary>
     public int NoResult { get; set; }

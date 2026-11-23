@@ -43,7 +43,7 @@ stripped : check-sat 469, exit 469, get-value 6 (left out by the sanitizer: the 
 | Verdicts | sat 225, unsat 244, unknown 0: every problem's verdict the list's |
 | Expected | agree 469, disagree 0, n/a 0 |
 | The evaluator's classes | validated 217, partial 8, failed 0 |
-| Copies (`--rate 1`, a fleet of two machines or more) | sampling `as_asked`; 469 problems answered by two machines, all of them agreeing; settled by `copies` 469; none rests on one machine |
+| Copies (`--rate 1`, a fleet of two machines of 8 GB or more) | sampling `as_asked`; 469 problems answered by two machines, all of them agreeing; settled by `copies` 469; none rests on one machine |
 | Integrity | lies 0, evaluator/solver disagreements 0, no result 0, disputes 0 |
 | `smt-live run` | exit 0, `result   : OK` |
 | `check.py` | `held: everything` |

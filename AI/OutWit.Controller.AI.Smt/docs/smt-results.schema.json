@@ -51,12 +51,12 @@
     },
     "validation_reason": { "type": "string", "description": "The evaluator's reason code of a partial or failed class (output_exceeded for a model that did not come whole); empty otherwise." },
     "validation_detail": { "type": "string", "description": "For a failed class: which assertion (and which model of an enumeration)." },
-    "copies": { "type": "integer", "minimum": 0, "description": "How many machines answered the problem in the rounds it was ruled on: the first (or the repair round) and the dispute round. Never which." },
+    "copies": { "type": "integer", "minimum": 0, "description": "How many answers the problem was ruled on: the first fan-out's, the repair round's for a problem it sent out again, and the dispute round's. Answers of different fan-outs may be one machine's; settled_by says what the answer rests on. Never which machines." },
     "agreed": { "type": "boolean", "description": "Whether all of them gave one digest." },
     "settled_by": {
       "type": "string",
       "enum": ["one_copy", "copies", "dispute", "agreement", ""],
-      "description": "one_copy: one machine's answer, nothing against it. copies: two or more with one digest. dispute: the majority of three more machines after the first copies disagreed or the evaluator called the model failed. agreement: the machines agree and the evaluator still calls the model failed (validation is failed): a disagreement between the evaluator and the solver, counted in the integrity document, with no machine taken for a liar. Empty without an answer."
+      "description": "one_copy: one machine's answer, nothing against it: one answer, or a lone answer of the first fan-out and a lone answer of the repair round with the same digest (two fan-outs may place them on one machine). copies: two or more with one digest, two of them of one fan-out (the first, or the repair round), whose copies are on different machines. dispute: the majority of three more machines after the first copies disagreed or the evaluator called the model failed. agreement: the machines agree and the evaluator still calls the model failed (validation is failed): a disagreement between the evaluator and the solver, counted in the integrity document, with no machine taken for a liar. Empty without an answer."
     },
     "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The digest of the settled row (smt-result/1): the same for the problem on every honest machine." },
     "stats": {
