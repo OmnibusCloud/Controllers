@@ -61,6 +61,7 @@ on:
           - OutWit.Controller.OpenFOAM
           - OutWit.Controller.AI.Verify
           - OutWit.Controller.AI.Corpus
+          - OutWit.Controller.AI.Smt
           # Models
           - OutWit.Controller.Grid.Model
           - OutWit.Controller.Variables.Model
@@ -73,6 +74,7 @@ on:
           - OutWit.Controller.OpenFOAM.Model
           - OutWit.Controller.AI.Verify.Model
           - OutWit.Controller.AI.Corpus.Model
+          - OutWit.Controller.AI.Smt.Model
           # Scripts (content-only nupkgs that ship bundled .wit scripts)
           - OutWit.Controller.Matrices.Scripts
           - OutWit.Controller.Render.Scripts
@@ -83,6 +85,7 @@ on:
           - OutWit.Controller.Visualization.ParaView.Scripts
           - OutWit.Controller.AI.Verify.Scripts
           - OutWit.Controller.AI.Corpus.Scripts
+          - OutWit.Controller.AI.Smt.Scripts
           # Tools
           - OutWit.Controller.Pack
       pushToNuGet:
@@ -427,14 +430,15 @@ jobs:
           fi
 
       # The AI controllers' packages name their data assets by release address and pin each by
-      # SHA-256 and size (the language runtimes, the native engine libraries, the PDF module).
+      # SHA-256 and size (the language runtimes, the native engine libraries, the PDF module, the
+      # solver module).
       # A package whose asset is not on its release, or is another file than the pinned one, is
       # broken for every consumer and every node. So before a push to any feed every asset is
       # fetched and held to its pin: the package goes out only when what it names is there.
       # The assets are read from the manifest the built package ships, not from the project
       # file's text: what the build evaluated is what a consumer gets.
       - name: Verify the data assets are released and are the pinned files (AI controllers)
-        if: (inputs.pushToNuGet || inputs.pushToGitHubPackages) && (env.PROJECT == 'OutWit.Controller.AI.Verify' || env.PROJECT == 'OutWit.Controller.AI.Corpus')
+        if: (inputs.pushToNuGet || inputs.pushToGitHubPackages) && (env.PROJECT == 'OutWit.Controller.AI.Verify' || env.PROJECT == 'OutWit.Controller.AI.Corpus' || env.PROJECT == 'OutWit.Controller.AI.Smt')
         shell: bash
         run: bash .github/scripts/released-data-assets.sh "NuGet/${{ env.PROJECT }}.${{ steps.paths.outputs.version }}.nupkg"
 
