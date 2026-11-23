@@ -63,6 +63,9 @@ public static class SmtRefusalCodes
     /// <summary>A text given as one term is not one s-expression: it holds none, or more than one.</summary>
     public const string NOT_A_TERM = "not_a_term";
 
+    /// <summary>In a problem whose logic is <c>ALL</c> or that sets none, a function with parameters or a constructor with fields named after an operator the solver reads in its place (<c>sin</c>, <c>exp</c>, ...).</summary>
+    public const string BUILTIN_NAME = "builtin_name";
+
     /// <summary>A line of a problem set is no row: it is not UTF-8, not one JSON object, or names a field twice.</summary>
     public const string ROW_MALFORMED = "row_malformed";
 
@@ -94,7 +97,7 @@ public static class SmtRefusalCodes
     {
         SYNTAX_ERROR, TEXT_TOO_LONG, TOO_MANY_TOKENS, NESTING_TOO_DEEP, NUMERAL_TOO_LONG, LITERAL_TOO_WIDE, STRING_TOO_LONG,
         NOT_A_COMMAND, COMMAND_NOT_ALLOWED, COMMAND_AFTER_END, COMMAND_MALFORMED, RESERVED_SYMBOL, AMBIGUOUS_TOKEN, NON_ASCII_STRING,
-        INDEX_TOO_LARGE, TOO_MANY_SYMBOLS, RESERVED_PREFIX, NOT_A_TERM,
+        INDEX_TOO_LARGE, TOO_MANY_SYMBOLS, RESERVED_PREFIX, NOT_A_TERM, BUILTIN_NAME,
         ROW_MALFORMED, ROW_TOO_LONG, ID_INVALID, ID_DUPLICATE, FIELD_MISSING, FIELD_INVALID, FIELD_NOT_ALLOWED, UNKNOWN_CONSTANT, TOO_MANY_PROBLEMS
     };
 

@@ -25,7 +25,8 @@ public class SmtSanitizerFuzzTests
         "(set-logic QF_BV)\n(declare-const a (_ BitVec 8))\n(define-fun twice ((v (_ BitVec 8))) (_ BitVec 8) (bvadd v v))\n(assert (! (= (twice a) #x10) :named double))\n(assert (not (= ((_ zero_extend 8) a) #b0000000000000001)))\n(check-sat)\n(get-model)\n",
         "(set-logic ALL)\n(set-info :source |a hand-written\nproblem|)\n(declare-datatypes ((Tree 1)) ((par (T) ((leaf) (node (left (Tree T)) (value T) (right (Tree T)))))))\n(declare-const |my tree| (Tree String))\n(assert (= (value |my tree|) \"say \"\"hi\"\"\"))\n",
         "(declare-sort U 0)\n(define-sort Pair (A) (Array A A))\n(declare-fun f (U U) Bool)\n(define-funs-rec ((even ((n Int)) Bool) (odd ((n Int)) Bool)) ((ite (= n 0) true (odd (- n 1))) (ite (= n 0) false (even (- n 1)))))\n(define-fun-rec fact ((n Int)) Int (ite (<= n 0) 1 (* n (fact (- n 1)))))\n(assert (forall ((u U)) (f u u)))\n(assert (even 4))\n(get-value ((fact 3)))\n",
-        "(set-info :license \"https://creativecommons.org/licenses/by/4.0/\")\n(set-info :status unsat)\n(declare-datatype Color ((red) (green) (blue)))\n(declare-const c Color)\n(declare-const r Real)\n(assert (distinct c red green blue))\n(assert (> r 1.50))\n(get-info :reason-unknown)\n"
+        "(set-info :license \"https://creativecommons.org/licenses/by/4.0/\")\n(set-info :status unsat)\n(declare-datatype Color ((red) (green) (blue)))\n(declare-const c Color)\n(declare-const r Real)\n(assert (distinct c red green blue))\n(assert (> r 1.50))\n(get-info :reason-unknown)\n",
+        "(declare-fun sin () Real)\n(declare-fun g (Real) Real)\n(declare-datatype W ((cos) (mk (tan Real))))\n(assert (= (g sin) (tan (mk sin))))\n"
     ];
 
     private static readonly string[] SEPARATORS = [" ", " ", " ", " ", " ", " ", "\n", "\n", "\r\n", "\t", "  ", "", " ; a comment (exit)\n"];
@@ -78,7 +79,7 @@ public class SmtSanitizerFuzzTests
         {
             SmtRefusalCodes.SYNTAX_ERROR, SmtRefusalCodes.NUMERAL_TOO_LONG, SmtRefusalCodes.LITERAL_TOO_WIDE, SmtRefusalCodes.NOT_A_COMMAND,
             SmtRefusalCodes.COMMAND_NOT_ALLOWED, SmtRefusalCodes.COMMAND_AFTER_END, SmtRefusalCodes.COMMAND_MALFORMED, SmtRefusalCodes.RESERVED_SYMBOL, SmtRefusalCodes.AMBIGUOUS_TOKEN,
-            SmtRefusalCodes.NON_ASCII_STRING, SmtRefusalCodes.INDEX_TOO_LARGE, SmtRefusalCodes.RESERVED_PREFIX
+            SmtRefusalCodes.NON_ASCII_STRING, SmtRefusalCodes.INDEX_TOO_LARGE, SmtRefusalCodes.RESERVED_PREFIX, SmtRefusalCodes.BUILTIN_NAME
         }));
     }
 
@@ -190,6 +191,7 @@ public class SmtSanitizerFuzzTests
             ":status", ":source", ":license", ":named", ":", ":smt-lib-version", "::", ":a:b",
             "sat", "unsat", "unknown", "2.0", "true", "false",
             "oc!x", "oc!", "|oc!y|", "x", "y", "Int", "Bool", "BitVec", "zero_extend", "repeat", "red", "Tree",
+            "sin", "exp", "|atan2|", "pi", "Real", "(set-logic ALL)", "(set-logic QF_UFNRA)", "(declare-fun sin (Real) Real)", "(define-fun-rec cos ((r Real)) Real r)",
             ";", "; hidden (exit)\n", ";\r", ";\n",
             "(exit)", "(check-sat)", "(get-model)", "(set-option :a 1)", "(push 1)", "(echo \"sat\")", "(include \"f\")",
             "(_ BitVec 1048576)", "(_ BitVec 8)", "((_ repeat 100000) x)", "(set-info :status unsat)", "(set-info :smt-lib-version 2.0)", "(set-info :source |two\r\nlines|)",

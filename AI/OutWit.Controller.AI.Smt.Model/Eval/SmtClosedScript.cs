@@ -20,7 +20,10 @@ namespace OutWit.Controller.AI.Smt.Model.Eval;
 /// <para>
 /// The elements of a universe are declared, not defined: the script does not say that they
 /// differ. A <c>sat</c> for it is still a witness; an <c>unsat</c> says that no choice of the
-/// elements satisfies the assertions, the model's own choice included.
+/// elements satisfies the assertions, the model's own choice included. An element the model's
+/// definitions name without the model listing its sort's universe (a solver names an element
+/// after its sort, <c>A!val!0</c> of a sort <c>A</c> the problem declares) is declared with
+/// the listed ones (<see cref="Unlisted"/>).
 /// </para>
 /// </summary>
 public sealed class SmtClosedScript
@@ -28,6 +31,8 @@ public sealed class SmtClosedScript
     #region Constants
 
     private const string SET_INFO = "set-info";
+    private const string DECLARE_SORT = "declare-sort";
+    private const string NO_PARAMETERS = "0";
     private const string DECLARE_CONST = "declare-const";
     private const string DECLARE_FUN = "declare-fun";
     private const string DEFINE_FUN = "define-fun";
@@ -45,11 +50,12 @@ public sealed class SmtClosedScript
 
     #region Constructors
 
-    private SmtClosedScript(IReadOnlyList<SmtExpression> commands, int defined, int free)
+    private SmtClosedScript(IReadOnlyList<SmtExpression> commands, int defined, int free, int unlisted)
     {
         Commands = commands;
         Defined = defined;
         Free = free;
+        Unlisted = unlisted;
     }
 
     #endregion
@@ -71,6 +77,7 @@ public sealed class SmtClosedScript
         var script = new List<SmtExpression>(commands.Count + model.UniverseElements + model.Definitions + 1);
         var rest = new List<SmtExpression>(commands.Count);
         var definitions = new SmtClosedDefinitions(model);
+        var sorts = new Dictionary<string, SmtExpression>(StringComparer.Ordinal);
         var free = 0;
 
         // What the problem defines itself, the model does not define again.
@@ -84,7 +91,11 @@ public sealed class SmtClosedScript
                 continue;
 
             if (name != null && HEADER_COMMANDS.Contains(name))
+            {
                 script.Add(command);
+                if (IsSortWithoutParameters(command, name))
+                    sorts.TryAdd(command.Items[1].Text, command.Items[1]);
+            }
             else if (!IsDeclaration(command, name))
                 rest.Add(command);
             else if (!definitions.TryDefine(command))
@@ -94,12 +105,15 @@ public sealed class SmtClosedScript
             }
         }
 
-        script.AddRange(model.ElementsInOrder);
         var defined = definitions.Declared;
-        script.AddRange(definitions.InOrderOfUse());
+        var ordered = definitions.InOrderOfUse();
+        var unlisted = definitions.UnlistedElements(ordered, sorts);
+        script.AddRange(model.ElementsInOrder);
+        script.AddRange(unlisted);
+        script.AddRange(ordered);
         script.AddRange(rest);
         script.Add(SmtExpression.List(SmtExpression.Symbol(CHECK_SAT)));
-        return new SmtClosedScript(script, defined, free);
+        return new SmtClosedScript(script, defined, free, unlisted.Count);
     }
 
     /// <summary>
@@ -158,6 +172,16 @@ public sealed class SmtClosedScript
     }
 
     /// <summary>
+    /// Whether a command declares a sort without parameters, whose elements a model may name.
+    /// </summary>
+    private static bool IsSortWithoutParameters(SmtExpression command, string name)
+    {
+        var items = command.Items;
+        return name == DECLARE_SORT && items.Count is 2 or 3 && SmtTerms.IsSymbol(items[1])
+               && (items.Count == 2 || (items[2].Kind == SmtExpressionKind.Numeral && items[2].Text == NO_PARAMETERS));
+    }
+
+    /// <summary>
     /// Whether a command declares a constant or a function, in a shape that can be read.
     /// </summary>
     private static bool IsDeclaration(SmtExpression command, string? name)
@@ -182,6 +206,9 @@ public sealed class SmtClosedScript
 
     /// <summary>How many of them the model leaves out: they stay declared, and the solver chooses them.</summary>
     public int Free { get; }
+
+    /// <summary>How many elements the script declares that the model's definitions name and its universes do not list.</summary>
+    public int Unlisted { get; }
 
     #endregion
 }

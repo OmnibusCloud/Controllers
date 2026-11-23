@@ -78,6 +78,59 @@ public class SmtClosedScriptTests
     }
 
     [Test]
+    public void BuildDeclaresAnElementTheModelNamesWithoutListingItTest()
+    {
+        // The solver lists the universe of S, and gives head a value of A, whose universe it
+        // does not list: the element is declared with the listed ones, once.
+        const string problem = "(declare-sort A 0)(declare-sort S 0)(declare-fun head (S) A)(declare-fun first (S) A)(declare-const s S)(assert (= s s))";
+        const string model = "((declare-fun S!val!0 () S) (forall ((x S)) (= x S!val!0)) (define-fun s () S S!val!0) (define-fun head ((x!0 S)) A A!val!0) (define-fun first ((x!0 S)) A (ite (= x!0 S!val!0) A!val!0 A!val!1)))";
+
+        var script = Build(problem, model);
+
+        Assert.That(Lines(script), Is.EqualTo(new[]
+        {
+            "(declare-sort A 0)",
+            "(declare-sort S 0)",
+            "(declare-fun S!val!0 () S)",
+            "(declare-fun A!val!0 () A)",
+            "(declare-fun A!val!1 () A)",
+            "(define-fun head ((x!0 S)) A A!val!0)",
+            "(define-fun first ((x!0 S)) A (ite (= x!0 S!val!0) A!val!0 A!val!1))",
+            "(define-fun s () S S!val!0)",
+            "(assert (= s s))",
+            "(check-sat)"
+        }));
+        Assert.That(script.Unlisted, Is.EqualTo(2));
+        Assert.That(script.Defined, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void BuildDeclaresOnlyElementsOfTheProblemsSortsTest()
+    {
+        // B is no sort of the problem, P has a parameter, A!val!x ends in no number, A!val!7 is
+        // the problem's own constant, and A!val! has no number at all: only A!val!2 is an element.
+        const string problem = "(declare-sort A)(declare-sort P 1)(declare-const A!val!7 A)(declare-fun f (Int) A)(assert (= (f 0) A!val!7))";
+        const string model = "((define-fun A!val!7 () A A!val!2) (define-fun f ((x!0 Int)) A (ite (= x!0 0) A!val!2 (ite (= x!0 1) B!val!0 (ite (= x!0 2) P!val!0 (ite (= x!0 3) A!val!x (ite (= x!0 4) A!val! A!val!7)))))))";
+
+        var script = Build(problem, model);
+
+        Assert.That(script.Commands.Where(command => command.Head == "declare-fun").Select(command => command.ToString()), Is.EqualTo(new[] { "(declare-fun A!val!2 () A)" }));
+        Assert.That(script.Unlisted, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void BuildDeclaresNoElementTheModelListsTest()
+    {
+        const string problem = "(declare-sort U 0)(declare-fun f (U) U)(declare-const u U)(assert (= (f u) u))";
+        const string model = "((declare-fun U!val!0 () U) (declare-fun U!val!1 () U) (define-fun u () U U!val!1) (define-fun f ((x!0 U)) U (ite (= x!0 U!val!0) U!val!1 U!val!1)))";
+
+        var script = Build(problem, model);
+
+        Assert.That(script.Commands.Count(command => command.Head == "declare-fun"), Is.EqualTo(2));
+        Assert.That(script.Unlisted, Is.EqualTo(0));
+    }
+
+    [Test]
     public void BuildPutsADefinitionAfterTheOnesItMentionsTest()
     {
         // The solver prints the function behind an array after the array, and a function

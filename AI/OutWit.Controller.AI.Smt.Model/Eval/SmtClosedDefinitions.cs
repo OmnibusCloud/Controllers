@@ -13,7 +13,9 @@ internal sealed class SmtClosedDefinitions
     #region Constants
 
     private const string DECLARE_CONST = "declare-const";
+    private const string DECLARE_FUN = "declare-fun";
     private const string DEFINE_FUN = "define-fun";
+    private const string ELEMENT_MARK = "!val!";
     private const byte OPEN = 1;
     private const byte DONE = 2;
 
@@ -114,6 +116,65 @@ internal sealed class SmtClosedDefinitions
             Emit(name, states, ordered);
 
         return ordered;
+    }
+
+    /// <summary>
+    /// The elements of the problem's own sorts that the definitions name and the model does not
+    /// list. A solver names an element of a sort after the sort (<c>A!val!0</c> is an element of
+    /// <c>A</c>), and it may give a function such an element as its value without listing the
+    /// universe of that sort. Each is declared as a listed element is, a constant of its sort,
+    /// so that the script names nothing it does not declare.
+    /// </summary>
+    /// <param name="definitions">The definitions of the script, in its order (<see cref="InOrderOfUse"/>).</param>
+    /// <param name="sorts">The sorts the problem declares without parameters, by name, as written.</param>
+    /// <returns>One <c>(declare-fun e () S)</c> for each such element, in the order the definitions name them.</returns>
+    public IReadOnlyList<SmtExpression> UnlistedElements(IReadOnlyList<SmtExpression> definitions, IReadOnlyDictionary<string, SmtExpression> sorts)
+    {
+        var declarations = new List<SmtExpression>();
+        if (sorts.Count == 0)
+            return declarations;
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<SmtExpression>();
+        foreach (var definition in definitions)
+        {
+            pending.Push(definition.Items[4]);
+            while (pending.Count > 0)
+            {
+                var term = pending.Pop();
+                if (term.Kind == SmtExpressionKind.Symbol && seen.Add(term.Text) && SortOfElement(term.Text, sorts) is { } sort)
+                    declarations.Add(SmtExpression.List(SmtExpression.Symbol(DECLARE_FUN), term, SmtExpression.List(), sort));
+
+                for (var index = term.Items.Count - 1; index >= 0; index--)
+                    pending.Push(term.Items[index]);
+            }
+        }
+
+        return declarations;
+    }
+
+    /// <summary>
+    /// The sort of a name that is an element no one declares: the name is a sort's name, the
+    /// mark and digits, and it is neither a name the problem gives a meaning nor one the model
+    /// defines or lists.
+    /// </summary>
+    private SmtExpression? SortOfElement(string name, IReadOnlyDictionary<string, SmtExpression> sorts)
+    {
+        if (m_taken.Contains(name) || m_model.Elements.ContainsKey(name))
+            return null;
+
+        var mark = name.LastIndexOf(ELEMENT_MARK, StringComparison.Ordinal);
+        var digits = mark + ELEMENT_MARK.Length;
+        if (mark <= 0 || digits == name.Length)
+            return null;
+
+        for (var index = digits; index < name.Length; index++)
+        {
+            if (!char.IsAsciiDigit(name[index]))
+                return null;
+        }
+
+        return sorts.TryGetValue(name[..mark], out var sort) ? sort : null;
     }
 
     private void Add(string name, SmtExpression definition)

@@ -5,8 +5,9 @@ namespace OutWit.Controller.AI.Smt.Model.Lang;
 /// first one that breaks a rule. For each form, in this order: it is a command; its name is
 /// written without bars; it is kept, stripped or refused by its name; a kept command does not
 /// stand after the problem's end; the atoms of a command the solver is given pass the token
-/// rules, in the order of the text; a kept command's shape is the standard's; the names it
-/// declares are not too many.
+/// rules, in the order of the text; a kept command's shape is the standard's; it declares no
+/// function or constructor the solver would read as its own operator (<see cref="SmtBuiltinNames"/>);
+/// the names it declares are not too many.
 /// <para>
 /// A problem ends at its first <c>check-sat</c> and at its <c>exit</c>. After <c>exit</c> a
 /// solver runs nothing, so a command there is part of the text and not of what a solver given
@@ -84,7 +85,7 @@ internal sealed class SmtProblemBuilder
         // The rules of single tokens are about what the solver reads. A piece of information never
         // reaches it: it is held to its shape, and kept as it was read.
         var tokens = SmtCommandPolicy.IsForSolver(head) ? SmtTokenRules.Check(form, head) : null;
-        var refusal = tokens ?? CheckShape(form, head) ?? CountNames(form, head);
+        var refusal = tokens ?? CheckShape(form, head) ?? CheckBuiltins(form, head) ?? CountNames(form, head);
         if (refusal == null)
             Keep(form, head);
 
@@ -104,6 +105,19 @@ internal sealed class SmtProblemBuilder
     {
         var fault = m_shapes.Check(form, head);
         return fault == null ? null : SmtRefusals.Of(SmtRefusalCodes.COMMAND_MALFORMED, form.Line, head, fault);
+    }
+
+    /// <summary>
+    /// A function or a constructor with parameters named after an operator the solver reads in
+    /// its place, under the logic the problem has set so far (<see cref="SmtBuiltinNames"/>).
+    /// </summary>
+    private SmtRefusalData? CheckBuiltins(SmtExpression form, string head)
+    {
+        if (!SmtBuiltinNames.Overrides(m_logic) || SmtBuiltinNames.FirstOverridden(form, head) is not { } name)
+            return null;
+
+        return SmtRefusals.Of(SmtRefusalCodes.BUILTIN_NAME, name.Line, head,
+            $"'{SmtRefusals.Token(name.Text)}' is an operator the solver has built in: under the logic {SmtBuiltinNames.ALL_LOGIC}, or with no logic set, the solver reads its own operator where the problem applies a function or a constructor of that name");
     }
 
     private SmtRefusalData? CountNames(SmtExpression form, string head)
