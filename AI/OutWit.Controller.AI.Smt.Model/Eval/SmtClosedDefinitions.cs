@@ -15,7 +15,6 @@ internal sealed class SmtClosedDefinitions
     private const string DECLARE_CONST = "declare-const";
     private const string DECLARE_FUN = "declare-fun";
     private const string DEFINE_FUN = "define-fun";
-    private const string ELEMENT_MARK = "!val!";
     private const byte OPEN = 1;
     private const byte DONE = 2;
 
@@ -160,21 +159,10 @@ internal sealed class SmtClosedDefinitions
     /// </summary>
     private SmtExpression? SortOfElement(string name, IReadOnlyDictionary<string, SmtExpression> sorts)
     {
-        if (m_taken.Contains(name) || m_model.Elements.ContainsKey(name))
+        if (m_taken.Contains(name) || m_model.Elements.ContainsKey(name) || !SmtElementNames.TrySortOf(name, out var sortName))
             return null;
 
-        var mark = name.LastIndexOf(ELEMENT_MARK, StringComparison.Ordinal);
-        var digits = mark + ELEMENT_MARK.Length;
-        if (mark <= 0 || digits == name.Length)
-            return null;
-
-        for (var index = digits; index < name.Length; index++)
-        {
-            if (!char.IsAsciiDigit(name[index]))
-                return null;
-        }
-
-        return sorts.TryGetValue(name[..mark], out var sort) ? sort : null;
+        return sorts.TryGetValue(sortName, out var sort) ? sort : null;
     }
 
     private void Add(string name, SmtExpression definition)

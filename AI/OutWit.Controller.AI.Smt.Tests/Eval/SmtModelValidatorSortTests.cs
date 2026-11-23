@@ -99,12 +99,18 @@ public class SmtModelValidatorSortTests
         const string problem = "(declare-sort U 0)(declare-sort V 0)(declare-const u U)(assert (= u u))";
 
         var other = SmtCheck.Validate(problem, "((declare-fun V!val!0 () V) (define-fun u () U V!val!0))");
-        var missing = SmtCheck.Validate(problem, "((define-fun u () U U!val!0))");
+        var otherUnlisted = SmtCheck.Validate(problem, "((define-fun u () U V!val!0))");
+        var missing = SmtCheck.Validate(problem, "((define-fun u () U W!val!0))");
         var own = SmtCheck.Validate(problem, "((declare-fun U!val!0 () U) (define-fun u () U U!val!0))");
+        var ownUnlisted = SmtCheck.Validate(problem, "((define-fun u () U U!val!0))");
 
+        // An element the model names without listing it is an element of the sort its name
+        // says, as a listed one is; a name of a sort the problem does not declare is nobody's.
         AssertNoVerdict(other);
+        AssertNoVerdict(otherUnlisted);
         Assert.That(missing.Reason, Is.EqualTo(SmtValidationReasons.UNKNOWN_SYMBOL));
         Assert.That(own.Class, Is.EqualTo(SmtValidationClass.Validated));
+        Assert.That(ownUnlisted.Class, Is.EqualTo(SmtValidationClass.Validated));
     }
 
     #endregion

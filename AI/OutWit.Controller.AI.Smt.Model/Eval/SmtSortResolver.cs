@@ -68,6 +68,17 @@ internal sealed class SmtSortResolver
     }
 
     /// <summary>
+    /// Whether the problem declares a sort of a name by <c>declare-sort</c>, without parameters:
+    /// a sort whose elements a model may name without listing them.
+    /// </summary>
+    /// <param name="name">A sort's name.</param>
+    /// <returns>True for such a sort.</returns>
+    public bool IsDeclaredWithoutParameters(string name)
+    {
+        return m_declared.TryGetValue(name, out var declared) && declared.Arity == 0;
+    }
+
+    /// <summary>
     /// Adds a sort the problem leaves to the model (<c>declare-sort</c>).
     /// </summary>
     /// <param name="name">The sort's name.</param>

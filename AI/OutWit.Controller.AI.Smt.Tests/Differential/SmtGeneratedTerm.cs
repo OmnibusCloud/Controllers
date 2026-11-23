@@ -20,8 +20,12 @@ internal sealed class SmtGeneratedTerm
     /// <summary>The answer of <c>get-model</c> that interprets what the prelude declares; null when it declares nothing to interpret.</summary>
     public string? Model { get; init; }
 
-    /// <summary>The elements of the model's universes, which the solver is told are distinct; none when there are none.</summary>
-    public IReadOnlyList<string> Elements { get; init; } = [];
+    /// <summary>
+    /// The elements of the model's sorts, a group for each sort, listed by the model or only
+    /// named by it: the solver is told that the elements of a group are distinct, as the
+    /// evaluator takes them. None when the model has none.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<string>> Elements { get; init; } = [];
 
     /// <summary>The term.</summary>
     public required string Term { get; init; }

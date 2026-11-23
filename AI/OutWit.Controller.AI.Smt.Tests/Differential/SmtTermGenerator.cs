@@ -82,7 +82,7 @@ internal sealed class SmtTermGenerator
         SmtGenSort[] tops;
         var prelude = LOGIC;
         string? model = null;
-        IReadOnlyList<string> elements = [];
+        IReadOnlyList<IReadOnlyList<string>> elements = [];
         switch (theory)
         {
             case SmtDifferentialTheory.IntLinear:
@@ -126,8 +126,8 @@ internal sealed class SmtTermGenerator
                 m_families = [m_functions, m_intLinear];
                 prelude += SmtTermFamilyFunctions.PRELUDE;
                 model = m_functions.NewModel();
-                elements = SmtTermFamilyFunctions.ELEMENTS;
-                EqualSorts = [SmtGenSort.INT, SmtGenSort.BOOL, SmtTermFamilyFunctions.UNIVERSE];
+                elements = [SmtTermFamilyFunctions.ELEMENTS, SmtTermFamilyFunctions.UNLISTED_ELEMENTS];
+                EqualSorts = [SmtGenSort.INT, SmtGenSort.BOOL, SmtTermFamilyFunctions.UNIVERSE, SmtTermFamilyFunctions.UNLISTED];
                 tops = [SmtGenSort.INT, SmtGenSort.BOOL, SmtGenSort.BitVector(8)];
                 break;
             case SmtDifferentialTheory.Strings:
