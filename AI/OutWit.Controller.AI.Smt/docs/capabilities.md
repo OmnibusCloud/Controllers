@@ -1,0 +1,214 @@
+# Smt: what the controller can do
+
+A reference for building on the Smt controller: what goes into a run and what comes out, what
+is checked and what is not, and where the edges are. The [README](../README.md) explains how
+things work inside; the schemas beside this page are the contract of the documents.
+
+Version described: **Smt 0.3.0** (with Smt.Model 0.3.0 and Smt.Scripts 0.1.0). In development;
+nothing is published.
+
+## Contents
+
+1. What Smt is for
+2. At a glance
+3. Calling Smt from an application
+4. The problem set
+5. What comes back
+6. What a run checks, and what it does not claim
+7. Limits
+8. Scale and delivery
+9. Known limits
+
+## 1. What Smt is for
+
+Solving many SMT problems (SMT-LIB 2.6, a declarative subset) on anonymous machines with every
+answer reproducible: the solver is a pinned Z3 built for WebAssembly and run in the controller's
+own sandbox, under budgets that are counts and not clocks, so the same problem under the same
+options gives the same verdict, the same model and the same cost on every node. That is what lets
+copies of a problem solved on different machines be compared to the byte, and what lets a lab
+re-run a row and get the row.
+
+Three queries: `check` (is the problem satisfiable, by which model or which values), `enumerate`
+(the models told apart by a projection, up to a number, with a word on whether there are more),
+`prove` (does a goal follow from the problem: proved, or a counterexample).
+
+## 2. At a glance
+
+| | |
+|---|---|
+| Solver | Z3 5.4.1 for `wasm32-wasip1`, single-threaded; profile `z3-5.4.1`; the module's SHA-256 is pinned and checked before it is compiled |
+| Platforms of the nodes | Windows x64, Linux x64, macOS arm64 |
+| Budget of a problem | the solver's resource limit of a check (150,000,000 by default) and the hard cap as fuel (60 s of a reference machine by default, at 5,000,000,000 units a second): counts, the same on every node |
+| Copies | a share of the packages (the sampling rate, 0.05 by default) is solved on two machines; a dispute on three more |
+| Checks | every `sat` model is evaluated against the problem on the server, by code that shares nothing with the solver |
+| Documents | results (JSON lines), report, provenance, integrity (JSON), each with a schema |
+| Machines | no document names one: a row says how many machines answered and whether they agreed |
+
+## 3. Calling Smt from an application
+
+### The scripts
+
+| Script | Arguments | What it gives |
+|---|---|---|
+| `SmtRun` | `Blob:problems`, `SmtOptions:opts` | the blobs `results`, `report`, `provenance`, `integrity` |
+| `SmtPreflight` | `Blob:problems`, `SmtOptions:opts` | `result`: an `SmtPreflight`; nothing is sent to a node |
+| `SmtRuntimeDiagnostics` | none | `result`: an `SmtRuntimeDiagnostics`; `capabilities`: a JSON blob (the profile, the defaults and ceilings, the pool as totals) |
+
+The problem set and every document travel as blobs; the job's variables carry references and a
+few numbers.
+
+### The options (`SmtOptionsData`)
+
+| Option | Default | Ceiling | |
+|---|---|---|---|
+| `query` | `check` | | the query of a row that names none |
+| `max_models` | 2 | 1,000 | the models of an enumeration whose row names no number |
+| `seed` | 0 | 2,147,483,647 | the seed of the solver's random choices |
+| `rlimit` | 150,000,000 | 4,294,967,295 | the solver's own counter of work for one check |
+| `hard_cap_s` | 60 | 600 | seconds of the reference machine for one problem, as fuel |
+| `memory_mb` | 1,024 | 4,096 | the most memory of one problem |
+| `sampling_rate` | 0.05 | 1 | the share of the packages solved on two machines; 0 none, 1 all |
+
+A run whose options are out of range, or name a profile the controller does not have, is
+refused before anything is sent. The documents state every option as the number the run used,
+never the word "default".
+
+### Before a run
+
+`SmtPreflight` reads the set as a run reads it and says: the rows, taken and refused (by code, the
+first 100 refusals in full: the line, the id, the command, the code and a reason that never
+carries the problem's text), the taken problems by logic, by query and by expected verdict, the
+commands the sanitizer left out, the licences, the SHA-256 of the set, what is wrong with the
+options (one sentence an option, by name; the set is still read), the budget of a problem as
+numbers, the memory a node needs for one session, the upper bound of the work (the taken problems
+times the hard cap, in seconds of the reference machine), and the packages a run would make. No
+duration is estimated: how long an SMT problem takes cannot be told from its text.
+
+## 4. The problem set
+
+JSON lines, one problem a line ([`smt-problems.schema.json`](../../OutWit.Controller.AI.Smt.Model/docs/smt-problems.schema.json)
+of the model package): `id`, `smt2`, and the fields of the row's query (`values` for a check,
+`project` and `max_models` for an enumeration, `goal` for a proof), `expected` and `tags`. The
+reader, the sanitizer and their refusal codes are the model package's
+([README](../../OutWit.Controller.AI.Smt.Model/README.md)): the same code reads a set in an
+application, on the server and on the node. A refused row costs nothing and has its row in the
+results.
+
+## 5. What comes back
+
+### The results ([`smt-results.schema.json`](smt-results.schema.json))
+
+One JSON line a row of the set, in the set's order, refused rows included.
+
+| Field | |
+|---|---|
+| `index`, `id`, `query`, `logic` | the row; `query` and `logic` for a taken problem only |
+| `status`, `code`, `message` | `ok`, `refused`, `input_error`, `output_exceeded`, `engine_crash`, or the server's `no_result` (no node answered, after the repair round either; `code` says what the nodes said last) and `disputed` (copies disagreed and three more did not settle it; `code` is the dispute's outcome) |
+| `verdict`, `reason` | `sat`, `unsat`, `unknown` (with `rlimit`, `fuel`, `memout`, `incomplete` or `other`), `none` |
+| `expected`, `expected_agreement` | the verdict the row or the problem's `:status` expects, and `agree`, `disagree` or `n/a` |
+| `count`, `complete`, `limit_reached`, `models` | an enumeration: the models found, whether the count is exact, whether the number asked for was reached, and each model with the values of the projected constants |
+| `proof` | a proof: `proved` or `counterexample` |
+| `model`, `values` | a check's model and the values it asked for; a proof's counterexample |
+| `model_truncated` | the texts above are the solver's own and are shown up to 64 KB a row, whole texts only; past that they are null and this is true. The full models stay in the run's ledger, the server's own blob |
+| `validation`, `validation_reason`, `validation_detail` | what the server's evaluator said of every model: `validated`, `partial` (with the reason), `failed` (with the assertion), or `none` when there is no model |
+| `copies`, `agreed`, `settled_by` | how many machines answered, whether all gave one digest, and how the answer was settled: `one_copy`, `copies`, `dispute`, `agreement` |
+| `digest`, `stats` | the digest of the settled row (the same on every honest machine), its resource count, fuel and checks |
+| `tags` | passed through |
+
+### The report ([`smt-report.schema.json`](smt-report.schema.json))
+
+What the run ran with in short (profile, module SHA-256, controller version, sampling rate and
+whether it was met, the options as numbers); the set as it was read (rows, taken, refused by code,
+by logic, by query); the rows by status; the verdicts; the unknowns by reason; the agreement with
+the expected verdicts; the evaluator's classes, by logic, and the partial ones by reason; the
+copies (problems answered by two machines or more, how many agreed, the disputes and how they
+ended, the answers by how they were settled); the problems answered `unsat` by one machine only,
+by index; the long tail (every problem with a settled row, the most fuel first, with what stopped
+it and the budget); the attribution from the problems' `:source` and `:license`; and for a run
+with enumerations, the problems with exactly one model (kept) and those with two or more
+(dropped).
+
+### The integrity document ([`smt-integrity.schema.json`](smt-integrity.schema.json))
+
+Counts only, and records by problem index: the answers taken, the problems compared and how they
+compared, the problems that rest on one machine (and of them the `unsat` ones), the disputes by
+cause and by outcome, the answers a lie was found in and the problems they are of, the models the
+evaluator called failed, **the problems on which the machines agree and the evaluator does not,
+each by its index**, the repairs and why, the problems left without a result and why, the result
+packages refused by reason, the packages nodes said they could not work on by code, and what every
+fan-out was asked for and what came back.
+
+### The provenance ([`smt-provenance.schema.json`](smt-provenance.schema.json))
+
+The profile and the module's SHA-256 and size, the engine's version and the SHA-256 of its native
+library for each platform, the controller's version and its model package's, the options as
+resolved, the sampling rate, and the problem set's SHA-256, size and rows.
+
+## 6. What a run checks, and what it does not claim
+
+What holds:
+
+- **Every `sat` is checked.** Each model of an answer that says `sat` is evaluated against the
+  problem as the server's own sanitizer takes it: a check's model with the values it asked for,
+  every model of an enumeration, the counterexample of a proof against the problem and the negated
+  goal. `validated` means every assertion is true under the model: the problem is satisfiable
+  whoever said so.
+- **Copies are compared by digest.** A row's digest covers every value but the wall time, the
+  platform, the controller version and the ticket; two honest machines give the same digest.
+  Copies that differ go to three more machines, and the answer is the digest two of them at least
+  give, with no tie.
+- **A failed model accuses nobody by itself.** It sends the problem to three more machines. A copy
+  is a lie only when it differs from the settled answer of the others. When the machines agree and
+  the evaluator still says `failed`, the row says so (`settled_by: agreement`) and the integrity
+  document lists the problem; no machine is taken for a liar.
+- **A node's word is a claim.** A result is taken only under a ticket its round gave out, as an
+  answer to a problem of its package, from this controller version, with the words, counts and
+  digest of a row; anything else fails its package and is counted. A package a node could not
+  work on, and a problem whose session a node could not end, go out once more.
+- **No machine is named.** The documents name no machine, no user, no folder and no ticket.
+
+What it does not claim:
+
+- **`unsat` and `unknown` rest on the copies.** Nothing beyond the copies vouches for them; a
+  problem whose package was not sampled rests on one machine, and the report lists every `unsat`
+  answered by one machine only. Raise the sampling rate to 1 for every problem twice.
+- **`partial` is not checked to the end.** Quantifiers, algebraic numbers, regular expressions,
+  floating point and the other reasons of the model package's evaluator leave a model partial: it
+  rests on the copies too. A model past the session's output cap is partial (`output_exceeded`).
+- **The values asked are checked only as far as they name constants.** The value of a term that
+  is no constant is shown as the solver printed it.
+- **Duplicate models of an enumeration are not looked for.** The count is the solver's.
+- **Copies on different machines are the platform's.** The server sees results, not machines:
+  counting answers as machines rests on Grid keeping one value for each return variable a node's
+  tasks asked for (Grid 1.3.0 and later).
+
+## 7. Limits
+
+| | |
+|---|---|
+| Problems in a set | 1,000,000 rows |
+| A problem | 4,194,304 characters, 2,000,000 tokens, nesting 100,000 (the model package's ceilings) |
+| A package | 16 to 256 problems, about 1,024 packages once a run is large, at most 32 Mi characters of text; a node takes at most 256 problems and 257 MiB |
+| A session's output | 16 MiB; past it the row is `output_exceeded` and keeps its verdict |
+| What a lab sees of a row's models | 64 KB |
+| Memory of one session on a node | twice the host's cap of the solver's memory and 192 MiB: 2,752 MiB under the defaults |
+| Duration | none is estimated; the upper bound is the taken problems times the hard cap |
+
+## 8. Scale and delivery
+
+The set is read a row at a time and its taken problems wait in a working file of the server's
+until they are cut into packages; packages, rows and documents travel as blobs and never sit
+whole in the server's memory, which holds a small record a copy and a few numbers a problem. The
+work is split once and sent once by the nodes' rates; the repair round and the dispute round are
+the only second sends. The load test of the build server runs ten thousand problems through
+`SmtRun` on three in-process nodes with the memory and every message measured: a request carries
+one package reference, an answer one result reference.
+
+## 9. Known limits
+
+- A compile of the solver module costs a node tens of seconds at the first package of a process,
+  outside every budget.
+- A check whose resource counter does not move (non-linear real arithmetic) ends by its fuel or,
+  on a slow machine, by the node's wall-clock backstop, which makes it a fault of the node and
+  sends it once more.
+- The report lists every problem of the long tail: its size grows with the set.
