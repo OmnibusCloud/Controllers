@@ -1,0 +1,65 @@
+<Project>
+
+  <!-- The solver's data assets beside smt-live, for `local`: the solver module (wasm/z3-5.4.1.wasm,
+       with Z3's licence and notices) and the pinned native wasmtime library of one platform
+       (runtimes/<rid>/native/, with its licence and notices). They are resolved from the
+       controller's own manifest (the controller.json its build stages under
+       @Controllers/<configuration>/smt.module/) the way a node's client and a package's consumer
+       resolve them: each archive is fetched from the release the manifest names, held to the
+       SHA-256 and the size the manifest states (OutWit.Engine.Assets.MSBuild, which the controller
+       brings), and unpacked at the path the manifest states, relative to the controller's
+       assembly, which here lies beside the tool. At run time the controller holds the module to
+       its profile's pin and the library to its natives guard's pin once more.
+
+         a publish for one platform (publish-local.sh): the assets of that platform, into the published folder
+         dotnet build -c Release -p:SmtLiveAssets=true: the assets of this machine, into the build output
+
+       The archives are kept in the asset task's cache (~/.outwit/asset-cache) and hashed again
+       at every use. -->
+
+  <PropertyGroup>
+    <SmtLiveRepositoryRoot>$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory), 'OutWit.slnx'))</SmtLiveRepositoryRoot>
+    <SmtLiveManifest>$(SmtLiveRepositoryRoot)\@Controllers\$(Configuration)\smt.module\controller.json</SmtLiveManifest>
+    <SmtLiveAssetsRoot>$(MSBuildProjectDirectory)\obj\smt-assets\$(Configuration)\</SmtLiveAssetsRoot>
+    <SmtLiveBuildRid>$(NETCoreSdkPortableRuntimeIdentifier)</SmtLiveBuildRid>
+    <SmtLiveBuildRid Condition="'$(SmtLiveBuildRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</SmtLiveBuildRid>
+  </PropertyGroup>
+
+  <Target Name="SmtLivePublishAssets" AfterTargets="Publish">
+    <Error Condition="'$(RuntimeIdentifier)' == ''"
+           Text="smt-live is published for one platform, with that platform's native engine library: dotnet publish -r win-x64|linux-x64|osx-arm64 --self-contained" />
+    <Error Condition="!Exists('$(SmtLiveManifest)')"
+           Text="The controller's manifest is not at $(SmtLiveManifest): the controller's build stages it there." />
+
+    <PropertyGroup>
+      <_SmtLivePublishAssets>$(SmtLiveAssetsRoot)$(RuntimeIdentifier)\</_SmtLivePublishAssets>
+    </PropertyGroup>
+    <RemoveDir Directories="$(_SmtLivePublishAssets)" />
+    <ResolveControllerAssetsTask ManifestPath="$(SmtLiveManifest)" OutputPath="$(_SmtLivePublishAssets)" Platforms="$(RuntimeIdentifier)" />
+
+    <ItemGroup>
+      <_SmtLivePublishAsset Include="$(_SmtLivePublishAssets)smt.module\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_SmtLivePublishAsset)"
+          DestinationFiles="@(_SmtLivePublishAsset->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Message Importance="High" Text="smt-live: the solver's data assets of $(RuntimeIdentifier) are beside the tool in $(PublishDir)" />
+  </Target>
+
+  <Target Name="SmtLiveBuildAssets" AfterTargets="Build" Condition="'$(SmtLiveAssets)' == 'true' And '$(_IsPublishing)' != 'true'">
+    <Error Condition="!Exists('$(SmtLiveManifest)')"
+           Text="The controller's manifest is not at $(SmtLiveManifest): the controller's build stages it there." />
+
+    <PropertyGroup>
+      <_SmtLiveBuildAssets>$(SmtLiveAssetsRoot)build-$(SmtLiveBuildRid)\</_SmtLiveBuildAssets>
+    </PropertyGroup>
+    <RemoveDir Directories="$(_SmtLiveBuildAssets)" />
+    <ResolveControllerAssetsTask ManifestPath="$(SmtLiveManifest)" OutputPath="$(_SmtLiveBuildAssets)" Platforms="$(SmtLiveBuildRid)" />
+
+    <ItemGroup>
+      <_SmtLiveBuildAsset Include="$(_SmtLiveBuildAssets)smt.module\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_SmtLiveBuildAsset)"
+          DestinationFiles="@(_SmtLiveBuildAsset->'$(OutDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
+
+</Project>

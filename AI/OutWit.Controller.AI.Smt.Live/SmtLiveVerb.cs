@@ -16,5 +16,11 @@ internal enum SmtLiveVerb
     Compare,
 
     /// <summary>Packs a folder of SMT-LIB files into a problem set.</summary>
-    Pack
+    Pack,
+
+    /// <summary>Runs a problem set on this machine alone, with the controller's own code, and measures it.</summary>
+    Local,
+
+    /// <summary>Compares a local run with a fleet run of the same set: times, rates, digests row by row, the crossover.</summary>
+    Comparative
 }

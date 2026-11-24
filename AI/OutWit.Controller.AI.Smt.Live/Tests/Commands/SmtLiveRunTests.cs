@@ -85,6 +85,34 @@ public sealed class SmtLiveRunTests
     }
 
     [Test]
+    public async Task ARunWritesWhatItMeasuredEndToEndBesideTheDocumentsTest()
+    {
+        Answer();
+
+        var exit = await Run(new SmtOptionsData());
+
+        var facts = JsonNode.Parse(File.ReadAllText(Path.Combine(m_out, SmtLiveFleetFacts.FILE)))!.AsObject();
+        var seconds = facts["seconds"]!.AsObject();
+        Assert.Multiple(() =>
+        {
+            Assert.That(exit, Is.EqualTo(SmtLiveExitCodes.OK));
+            Assert.That((string?)facts["schema"], Is.EqualTo(SmtLiveFleetFacts.SCHEMA));
+            Assert.That((string?)facts["status"], Is.EqualTo("Completed"));
+            Assert.That((string?)facts["problem_set"]!["file"], Is.EqualTo("problems.jsonl"));
+            Assert.That((string?)facts["problem_set"]!["sha256"], Is.EqualTo(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(m_set)))));
+            Assert.That((int?)facts["problem_set"]!["rows"], Is.EqualTo(2));
+            Assert.That((int?)facts["problem_set"]!["taken"], Is.EqualTo(3), "as the report says");
+            Assert.That(seconds.Select(member => member.Key), Is.EqualTo(new[] { "connect", "upload", "job", "fetch", "wall" }));
+            Assert.That(seconds.Select(member => (double)member.Value!), Has.All.GreaterThanOrEqualTo(0));
+            Assert.That((double)seconds["wall"]!, Is.GreaterThanOrEqualTo((double)seconds["connect"]! + (double)seconds["upload"]! + (double)seconds["job"]! + (double)seconds["fetch"]! - 0.01),
+                "the parts lie within the wall time");
+            Assert.That((double?)facts["server"]!["queue_seconds"], Is.EqualTo(2), "by the server's clock");
+            Assert.That((double?)facts["server"]!["run_seconds"], Is.EqualTo(3));
+            Assert.That(m_output.ToString(), Does.Contain("(by the server's clock: queue 00:00:02.0, run 00:00:03.0)").And.Contain("fleet.json written"));
+        });
+    }
+
+    [Test]
     public async Task WhatARunMustNotHaveIsSaidLoudlyAndMakesTheExitCodeThreeTest()
     {
         SmtLiveFixtures.Edit(Path.Combine(m_documents, SmtLiveDocuments.INTEGRITY.File), root =>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using OutWit.Controller.AI.Smt.Live.Documents;
 using OutWit.Controller.AI.Smt.Live.Server;
@@ -9,7 +10,9 @@ namespace OutWit.Controller.AI.Smt.Live.Commands;
 /// <c>run</c>: uploads a problem set, runs <c>SmtRun</c> with the options, waits with the job's
 /// progress, downloads the four documents (results, report, integrity, provenance) into a
 /// folder, holds each to its schema, and prints the report's summary. Options out of their
-/// ranges are refused here, before anything is sent: the controller would refuse the run.
+/// ranges are refused here, before anything is sent: the controller would refuse the run. What
+/// the run took, end to end from the tool's start, is written beside the documents
+/// (<see cref="SmtLiveFleetFacts"/>): the fleet side of the comparative test.
 /// </summary>
 internal sealed class SmtLiveRun
 {
@@ -25,6 +28,7 @@ internal sealed class SmtLiveRun
 
     private readonly ISmtLiveServer m_server;
     private readonly TextWriter m_output;
+    private readonly SmtLiveClock m_clock;
 
     #endregion
 
@@ -35,10 +39,12 @@ internal sealed class SmtLiveRun
     /// </summary>
     /// <param name="server">The server.</param>
     /// <param name="output">Where the lines go.</param>
-    public SmtLiveRun(ISmtLiveServer server, TextWriter output)
+    /// <param name="clock">The clock the times are read from: the tool's start; null for one that starts now.</param>
+    public SmtLiveRun(ISmtLiveServer server, TextWriter output, SmtLiveClock? clock = null)
     {
         m_server = server;
         m_output = output;
+        m_clock = clock ?? SmtLiveClock.StartNow();
     }
 
     #endregion
@@ -71,7 +77,9 @@ internal sealed class SmtLiveRun
         }
 
         var schemas = SmtLiveDocuments.RUN.ToDictionary(document => document, SmtLiveDocuments.SchemaOf);
-        var blob = await SmtLiveInput.UploadAsync(m_server, path, m_output, ct);
+        var connected = m_clock.Elapsed;
+        var (blob, rows, bytes, sha256) = await SmtLiveInput.UploadAsync(m_server, path, m_output, ct);
+        var uploaded = m_clock.Elapsed;
 
         var job = await m_server.SubmitAsync(SCRIPT, [blob, options], ct);
         m_output.WriteLine($"{SCRIPT} submitted: job {job.Id}");
@@ -84,6 +92,7 @@ internal sealed class SmtLiveRun
         }
 
         m_output.WriteLine($"  completed in {end.Duration:hh\\:mm\\:ss}");
+        var ended = m_clock.Elapsed;
 
         var target = folder ?? FOLDER_PREFIX + job.Id.ToString("N")[..FOLDER_ID_CHARACTERS];
         Directory.CreateDirectory(target);
@@ -98,6 +107,34 @@ internal sealed class SmtLiveRun
                 came.Add(document);
 
             held &= verdict?.IsValid == true;
+        }
+
+        var wall = m_clock.Elapsed;
+        if (came.Contains(SmtLiveDocuments.REPORT))
+        {
+            var facts = new SmtLiveFleetFacts
+            {
+                StartedUtc = m_clock.StartedUtc,
+                Job = job.Id,
+                Status = end.Status,
+                SetFile = Path.GetFileName(path),
+                SetSha256 = sha256,
+                SetBytes = bytes,
+                Rows = rows,
+                Taken = Taken(Path.Combine(target, SmtLiveDocuments.REPORT.File)),
+                Connect = connected,
+                Upload = uploaded - connected,
+                JobTime = ended - uploaded,
+                Fetch = wall - ended,
+                Wall = wall,
+                Poll = SmtLiveServerCloud.POLL_INTERVAL,
+                SubmittedUtc = end.SubmittedUtc,
+                ServerStartedUtc = end.StartedUtc,
+                CompletedUtc = end.CompletedUtc
+            };
+            facts.Write(Path.Combine(target, SmtLiveFleetFacts.FILE));
+            m_output.WriteLine($"wall     : {Clock(wall)} from the tool's start to the documents on disk: connect {Clock(connected)}, upload {Clock(uploaded - connected)}, " +
+                               $"job {Clock(ended - uploaded)}{ServerTimes(end)}, fetch {Clock(wall - ended)}; {SmtLiveFleetFacts.FILE} written");
         }
 
         if (!came.Contains(SmtLiveDocuments.REPORT) || !came.Contains(SmtLiveDocuments.INTEGRITY) || !came.Contains(SmtLiveDocuments.RESULTS))
@@ -132,6 +169,37 @@ internal sealed class SmtLiveRun
 
         m_output.WriteLine("result   : OK: the four documents hold to their schemas, nothing is alarming");
         return SmtLiveExitCodes.OK;
+    }
+
+    /// <summary>The problems a run took, as its report says; 0 when the report does not say.</summary>
+    private static long Taken(string reportPath)
+    {
+        try
+        {
+            using var report = JsonDocument.Parse(File.ReadAllBytes(reportPath));
+            return report.RootElement.TryGetProperty("problem_set", out var set) && set.TryGetProperty("accepted", out var accepted) && accepted.TryGetInt64(out var taken)
+                ? taken
+                : 0;
+        }
+        catch (JsonException)
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>The job's queue and run by the server's clock, when it gave them.</summary>
+    private static string ServerTimes(SmtLiveJobEnd end)
+    {
+        if (end.StartedUtc is not { } started || end.CompletedUtc is not { } completed)
+            return "";
+
+        var queue = end.SubmittedUtc is { } submitted ? $"queue {Clock(started - submitted)}, " : "";
+        return $" (by the server's clock: {queue}run {Clock(completed - started)})";
+    }
+
+    private static string Clock(TimeSpan time)
+    {
+        return time.ToString(@"hh\:mm\:ss\.f", CultureInfo.InvariantCulture);
     }
 
     /// <summary>Downloads one document and holds it to its schema; null when the job names no blob for it.</summary>

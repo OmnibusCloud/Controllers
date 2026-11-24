@@ -2,8 +2,9 @@
 
 The live client of the Smt controller: a small console that drives the controller's bundled
 scripts on a real server through the public SDK (`OutWit.Cloud.SDK`), the way a lab's
-application does, and works with what they give. A developer tool: it is never packed or
-published.
+application does, and works with what they give; and that runs a problem set on one machine
+with the controller's own code, the local side of the comparative test. A developer tool: it is
+never packed or published.
 
 | Verb | Needs a server | What it does |
 |---|---|---|
@@ -12,6 +13,8 @@ published.
 | `run` | yes | uploads a problem set, runs `SmtRun`, waits with its progress, downloads the four documents, holds each to its schema, prints the summary |
 | `compare` | no | two folders `run` wrote, for one problem set: the same settled answers and the same provenance, or every difference |
 | `pack` | no | a folder of SMT-LIB files into a problem set, read back as the server reads it |
+| `local` | no | a problem set on this machine alone, by the controller's own code: the four documents of a run and `local.json`, what it measured |
+| `comparative` | no | a folder `local` wrote and a folder `run` wrote, for one set: the comparative table, the digests row by row, the crossover |
 
 ## Build
 
@@ -23,6 +26,46 @@ bin/Release/net10.0/smt-live --help
 The schemas of the controller's documents (`../OutWit.Controller.AI.Smt/docs/smt-*.schema.json`)
 are copied beside the tool, into `docs/`, by the build: a run's documents are held to the schemas
 the controller publishes, not to a copy of the tool's own.
+
+`local` solves with the controller itself, and the controller holds what it solves with to its
+pins: the solver module (`wasm/z3-5.4.1.wasm`) and the native wasmtime library of the platform
+(`runtimes/<rid>/native/`), both beside the controller's assembly, which lies beside the tool. A
+plain build does not carry them (the binding's own library is left out: the controller would
+refuse it). They are the controller's data assets, resolved from its manifest as a node's client
+resolves them: each archive fetched from the release the manifest names, held to the SHA-256
+and the size it states, and unpacked where it says. A publish for one platform does that (below);
+so does a build with `-p:SmtLiveAssets=true`, for this machine's platform:
+
+```
+dotnet build -c Release -p:SmtLiveAssets=true
+bin/Release/net10.0/smt-live local demo/02-eight-queens/problems.jsonl
+```
+
+The controller's types `local` calls are internal to it; the controller names only its tests as a
+friend, and it is not changed for a developer tool (a change of its bytes is a new version and a
+test-server gate). So the tool is compiled against a copy of the controller's assembly whose
+members are public (`Krafs.Publicizer`, a build-time package of which nothing ships) and declares
+that it ignores the access checks to that assembly, which the .NET runtime honours: at run time
+the tool calls the very assembly a node loads. When the controller next changes, one line of it
+(`InternalsVisibleTo("smt-live")`) can take the publicizer's place; the tool's code stays as it is.
+
+### A build for another machine
+
+`publish-local.sh` makes a self-contained folder of the tool for one platform (no .NET needed
+where it runs), with the controller's data assets of that platform beside it, checks that the
+module and the library are the bytes the controller's source pins and that no other wasmtime
+library is in the folder, and zips it (the zip keeps the tool executable for `unzip`). It runs
+on Windows (Git Bash), Linux and macOS, for any of the three platforms:
+
+```
+bash publish-local.sh osx-arm64 demo-out/smt-live-osx-arm64    # or win-x64, linux-x64
+```
+
+The tool of an `osx-arm64` build is signed ad hoc by the .NET SDK, from any system; should macOS
+kill it at its start ("Killed: 9"), sign it again on the Mac with `codesign --force --sign -
+smt-live`, and never sign the native library again: its SHA-256 is pinned. The workflow "AI Smt"
+publishes and runs it on each of the three platforms. How the comparative test takes it to a
+Mac and back is in [`demo/04-comparative/SCRIPT.md`](demo/04-comparative/SCRIPT.md).
 
 ## Environment
 
@@ -107,6 +150,23 @@ ended, the lies found, the disagreements between the evaluator and the solver (e
 id), the problems without a result, the repairs, refused result packages and node faults, each
 fan-out, and the first rows that were not answered `ok`.
 
+`run` also writes `fleet.json` beside the documents: what the run took, measured end to end from
+the tool's start (the moment the files were ready) to the documents on disk, the fleet side of
+the comparative test:
+
+| Field | |
+|---|---|
+| `schema` | `smt-live-fleet/1` |
+| `started_utc`, `job`, `status` | when the tool started, the job, how it ended |
+| `problem_set` | the set's file name, SHA-256, bytes and rows, and the rows taken (from the report) |
+| `seconds.connect` | the tool's start to the server connected and signed in |
+| `seconds.upload` | describing and uploading the set |
+| `seconds.job` | the submit to the poll that saw the job end: the server cut the set into packages, the fleet solved them, the server settled the run (every `sat` model through the evaluator) and wrote the documents. Its error is the poll's interval (`poll_seconds`) |
+| `seconds.fetch` | downloading the four documents and holding each to its schema |
+| `seconds.wall` | the tool's start to the four documents on disk |
+| `server` | the job's times by the server's clock, when it gives them: `queue_seconds` (taken to started) and `run_seconds` (started to ended) |
+| `problems_per_second` | the rows taken over the wall time |
+
 A line that starts with `!!!` is one a lab must not miss. These make the run **alarming** (exit 3):
 a disagreement between the evaluator and the solver, a lie, a standing dispute, a problem without
 a result, a verdict that disagrees with the expected one, a settled model the evaluator calls
@@ -151,14 +211,111 @@ when the query could not be given what it needs. A file that is not UTF-8, or la
 a set may be (16 MiB), is skipped and said. The set is written in any case; the exit code is 1
 when a file was skipped or a row is refused.
 
+### local
+
+```
+smt-live local <problems.jsonl> [options but --rate] [--degree N] [--out <folder>]
+```
+
+The set runs on this machine alone, by the controller's own code, from the tool's start to the
+four documents on disk; nothing is sent anywhere:
+
+1. **The sandbox**: the controller's factory makes it from the module the controller's locator
+   finds (beside the controller, or the file `WITAI_SMT_Z3` names), holds the module to the
+   profile's size and SHA-256 and the native library to the natives guard's SHA-256, and
+   compiles the module (tens of seconds). A module or a library of other bytes gives no sandbox,
+   and the run stops with the controller's reason.
+2. **The set**: read and cut into packages by the code `Smt.Split` runs on the server: the same
+   reader and sanitizer, the same refusals, the same packages with their tickets.
+3. **The degree**: the node's rule, `min(cores, 16, 75 % of the available memory / one session)`,
+   read once after a collection, so the view of the memory is fresh; or the sessions `--degree`
+   gives (1 to 256), with the rule's degree beside it.
+4. **The solve**: each package checked as a node checks it; every problem solved by the node's
+   session code on the node's worker threads (below normal priority), its row made and its digest
+   computed by the node's code, and written to its package's result package. One pool goes over
+   the whole set in its order, as a queue of files would on one machine: a node solves one
+   package at a time and waits for each package's slowest problem; here no session waits.
+5. **The settlement and the documents**: by the code `Smt.Settle` and the documents' activities
+   run on the server: every `sat` model checked by the host's evaluator, the four documents
+   written by the host's writers and held to their schemas, and the summary printed as `run`
+   prints it.
+
+One machine makes no copies, so the fields only a fleet has say what is true here: the sampling
+rate is 0 (`--rate` is not an option of `local`; the report says `sampling none`), every answer
+rests on one copy (`copies` 1, `agreed` true, `settled_by` `one_copy`; every `unsat` is in
+`unsat_one_copy`), and there is no repair or dispute round (a problem without an answer stays
+without one). A row's digest and its stats do not depend on any of that: they are the same as a
+fleet's for the same set, options and module.
+
+The folder (`smt-local-` and the start's time when `--out` is not given) gets the four documents
+and `local.json`; the working files (the packages, the result packages, the sandbox's stdio files)
+live in its `.work` folder while the run lasts and are removed at its end. Ctrl+C stops the run
+between problems.
+
+| `local.json` | |
+|---|---|
+| `schema`, `started_utc` | `smt-live-local/1`; when the tool started |
+| `machine` | `os`, `os_version`, `platform`, `architecture`, `cores` (logical), `memory_bytes`, `available_bytes`, as the runtime sees them; no name of the machine, a user or a folder |
+| `degree` | `sessions` and `decided_by` (`cores`, `cap`, `memory`, or `given`); `rule_sessions` and `rule_decided_by`, what the node's rule gives here; `session_bytes` |
+| `solver` | the profile and the controller's version; `module` (its place beside the tool, or that `WITAI_SMT_Z3` named it), `module_sha256`, `module_pinned`; `engine`, `natives_sha256`, `natives_pinned`, as loaded; `explicit_traps` |
+| `problem_set` | the set's file name, SHA-256, bytes, rows, taken and refused |
+| `packages` | the packages the set was cut into |
+| `seconds.startup` | the tool's start to the sandbox ready: the runtime's start and the module's compile |
+| `seconds.read` | reading the set and cutting it into packages |
+| `seconds.solve` | the pool: the first problem handed out to the last row written |
+| `seconds.settle` | settling (the evaluator on every `sat` model) and writing the documents |
+| `seconds.wall` | the tool's start to the four documents on disk |
+| `problems_per_second` | the rows taken over the wall time |
+
+What `local` does not measure: copying the tool and the set to the machine (the files are ready
+when the tool starts), and anything a fleet adds: transfers, a queue, other machines.
+
+### comparative
+
+```
+smt-live comparative <local folder> <fleet run folder> [--fixed <fleet run folder of a small set>]
+```
+
+The comparative table of one set, from what `local` and `run` wrote; every number is read from
+their documents and measurements, and nothing is estimated:
+
+- **The same thing?** The set (its SHA-256 in both provenances), the module, the options but the
+  sampling rate, and both controller versions.
+- **The table**: each side's wall time end to end and its parts (start-up, read, solve, settle;
+  connect, upload, job with the server's queue and run, fetch), the problems taken and a second,
+  the statuses, the verdicts, the agreement with the expected verdicts, the evaluator's classes
+  and the failed validations, the sampling, the answers taken, the copies that disagreed, the
+  retries (repairs and disputes), the node faults and the refused results, the unanswered
+  packages and the problems without a result, the lies and the evaluator's disagreements.
+- **The rows**, side by side: equal digests (`smt-result/1`: the answer, the models, the values,
+  the validation's inputs and the cost, everything but where and when) are the strongest sign that
+  both sides ran the same problem with the same module under the same options. A row without a
+  digest is compared by its status and code. A flip is a row whose verdict differs. The first 20
+  differences are printed with their index and id.
+- **The crossover**: each side's time is a fixed cost and a cost a problem, the same for every
+  problem of a set like this one. This machine's fixed cost is its start-up (measured), its cost
+  a problem the rest of its wall time over its problems. The fleet's line goes through two fleet
+  runs measured end to end: a small set's (`--fixed`, whose time is almost all fixed cost) and the
+  compared set's. Where the lines cross is the size above which the fleet finishes first; the
+  lines, the inputs and these assumptions are printed. "This machine finishes first at every
+  size a set may have" when the fleet never catches up, or catches up only above the 1,000,000 rows
+  a set may have. Without `--fixed`, or without `fleet.json` (a run of an older tool), there is no
+  crossover, and the line says why; the measured result at the compared size is printed in any
+  case.
+- **Operator effort** is not measured by the tool: `SCRIPT.md` of the comparative test lists each
+  side's steps.
+
+Exit 0 when both ran the same set, module and options and every row is the same; 1 when anything
+differs; 2 when a document is not there.
+
 ## Exit codes
 
 | Code | |
 |---|---|
 | 0 | done, and everything held |
-| 1 | a job did not complete; a document did not come or does not hold to its schema; a preflight would not start or refuses the options; two runs differ; a packed file was skipped or its row is refused |
-| 2 | the command line, an input or the environment is wrong; nothing was sent |
-| 3 | a run completed and its documents hold to their schemas, and it reports something alarming |
+| 1 | a job did not complete; a document did not come or does not hold to its schema; a preflight would not start or refuses the options; two runs differ; a packed file was skipped or its row is refused; a local run had no sandbox; the two runs of a comparative differ |
+| 2 | the command line, an input or the environment is wrong; nothing was sent or run |
+| 3 | a run or a local run completed and its documents hold to their schemas, and it reports something alarming |
 
 ## Demo kits
 
@@ -167,6 +324,8 @@ when a file was skipped or a row is refused.
   must be the list's and every class of the evaluator the slice test's.
 - [`demo/02-eight-queens`](demo/02-eight-queens/SCRIPT.md): two enumerations (eight queens, 92
   models; a Latin square with exactly one), the smoke test of a fleet.
+- [`demo/04-comparative`](demo/04-comparative/SCRIPT.md): the comparative test: one set on one
+  machine (`local`) and on the fleet (`run`), and the table of the two (`comparative`).
 
 What fetches and runs write goes to `demo-out/`, which is never committed.
 
@@ -176,10 +335,18 @@ What fetches and runs write goes to `demo-out/`, which is never committed.
 dotnet test Tests/OutWit.Controller.AI.Smt.Live.Tests.csproj
 ```
 
-They need no server and no solver: the command line, the ids and the packing of a folder (read
-back by the model package's reader), the schema check against the controller's own schemas, the
-summary, the comparison of two runs, the three server verbs driven through a server in memory,
-and the eight-queens kit against the model evaluator (every placement of eight queens, one a row,
-and the one completion of the Latin square). The test project lives in the tool's folder; it is
-in the solution, and the workflow "AI Smt" runs it on Windows, Linux and macOS after the
-controller's tests.
+They need no server: the command line, the ids and the packing of a folder (read back by the
+model package's reader), the schema check against the controller's own schemas, the summary, the
+comparison of two runs, the three server verbs driven through a server in memory (and what `run`
+measures), the eight-queens kit against the model evaluator (every placement of eight queens, one
+a row, and the one completion of the Latin square), the comparative table and its crossover on
+fixtures, and local runs. Those solve in the controller's sandbox, with the solver module the
+controller's tests run (their `@Data/wasm`, found through `WITAI_SMT_Z3`) and the pinned native
+library laid out by the asset tool's `natives.sh`, and are ignored without them (failed on the
+build server): the eight-queens kit gives the rows the test fleet gave (their digests and costs in
+its `EXPECTED.md`), and a handful of problems of every query the same rows at one session and at
+three. A test of the category `Slice` runs `local` on eight problems of the slice the controller's
+tests fetch, each with the list's verdict. The test project lives in the tool's folder; it is in
+the solution, and the workflow "AI Smt" runs it on Windows, Linux and macOS after the
+controller's tests (the slice test in its job "slice"), and runs the self-contained build of
+each platform on the eight-queens kit from where its zip was unpacked.

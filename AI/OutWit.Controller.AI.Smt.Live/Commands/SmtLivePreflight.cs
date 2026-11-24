@@ -57,7 +57,7 @@ internal sealed class SmtLivePreflight
     public async Task<int> RunAsync(string path, SmtOptionsData options, CancellationToken ct)
     {
         m_output.WriteLine($"options  : {SmtLiveInput.Describe(options)}");
-        var blob = await SmtLiveInput.UploadAsync(m_server, path, m_output, ct);
+        var (blob, _, _, _) = await SmtLiveInput.UploadAsync(m_server, path, m_output, ct);
 
         var job = await m_server.SubmitAsync(SCRIPT, [blob, options], ct);
         m_output.WriteLine($"{SCRIPT} submitted: job {job.Id}");

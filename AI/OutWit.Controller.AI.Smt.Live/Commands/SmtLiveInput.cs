@@ -21,15 +21,15 @@ internal static class SmtLiveInput
     /// <param name="path">The problem set.</param>
     /// <param name="output">Where the lines go.</param>
     /// <param name="ct">Cancels the upload.</param>
-    /// <returns>The blob of the set.</returns>
-    public static async Task<Guid> UploadAsync(ISmtLiveServer server, string path, TextWriter output, CancellationToken ct)
+    /// <returns>The blob of the set, and the set's rows, bytes and SHA-256.</returns>
+    public static async Task<(Guid Blob, int Rows, long Bytes, string Sha256)> UploadAsync(ISmtLiveServer server, string path, TextWriter output, CancellationToken ct)
     {
         var (rows, bytes, sha256) = await DescribeAsync(path, ct);
         output.WriteLine($"input    : {Path.GetFileName(path)}, {rows} row(s), {bytes} byte(s), sha256 {sha256}");
 
         var blob = await server.UploadAsync(path, new SmtLiveProgress(output, "upload"), ct);
         output.WriteLine($"uploaded : blob {blob}");
-        return blob;
+        return (blob, rows, bytes, sha256);
     }
 
     /// <summary>

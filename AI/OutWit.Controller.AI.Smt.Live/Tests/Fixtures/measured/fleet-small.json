@@ -1,0 +1,10 @@
+{
+  "schema": "smt-live-fleet/1",
+  "started_utc": "2026-11-24T12:20:00.000Z",
+  "job": "0b6e3f3a-2d8e-4c55-8d0e-5a1d7c9b2f22",
+  "status": "Completed",
+  "problem_set": { "file": "problems.jsonl", "sha256": "8fcb09369a7fc3a9ed2d59eac093769fdd52d0d66359de1cf83244dca707fd08", "bytes": 3342, "rows": 2, "taken": 1 },
+  "seconds": { "connect": 1.5, "upload": 0.3, "job": 37.0, "fetch": 1.0, "wall": 39.8 },
+  "poll_seconds": 3,
+  "problems_per_second": 0.0251
+}

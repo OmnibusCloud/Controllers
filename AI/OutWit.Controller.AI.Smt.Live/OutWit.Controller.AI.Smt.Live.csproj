@@ -3,8 +3,9 @@
   <!-- The live client of the Smt controller: drives SmtRuntimeDiagnostics, SmtPreflight and
        SmtRun on a real server through the public SDK, the way a lab's application does, checks
        the documents a run gives against their schemas, compares two runs of one problem set,
-       and packs a folder of SMT-LIB files into a problem set. A developer tool, not a package:
-       never packed or published. -->
+       packs a folder of SMT-LIB files into a problem set, runs a set on this machine alone with
+       the controller's own code, and compares such a run with a fleet's. A developer tool, not a
+       package: never packed or published. -->
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -29,6 +30,38 @@
     <ProjectReference Include="..\OutWit.Controller.AI.Smt.Model\OutWit.Controller.AI.Smt.Model.csproj" />
   </ItemGroup>
 
+  <!-- The controller itself, for `local`: the set is read and cut into packages by the host's
+       code, every problem is solved by the node's session code in the controller's own sandbox
+       (the module and the native engine library held to their pins by the controller), and the
+       run is settled and its documents written by the host's code. That code is internal to the
+       controller, which names only its tests as a friend, and the controller is not changed for
+       a developer tool (a change of its bytes is a new version and a test-server gate). So the
+       tool is compiled against a copy of the controller's assembly whose members are public
+       (Krafs.Publicizer, a build-time package: nothing of it ships) and declares that it ignores
+       the access checks to that assembly, which the runtime honours: at run time the tool calls
+       the very assembly a node loads. The compiler is given the implementation assembly, not the
+       reference assembly, which has no internal members. -->
+  <PropertyGroup>
+    <CompileUsingReferenceAssemblies>false</CompileUsingReferenceAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OutWit.Controller.AI.Smt\OutWit.Controller.AI.Smt.csproj" />
+    <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <Publicize Include="OutWit.Controller.AI.Smt" />
+  </ItemGroup>
+
+  <!-- The wasmtime binding without its package's native library (48.0.2): the controller's
+       sandbox loads only the pinned library (wasmtime 48.0.8), from runtimes/<rid>/native/ beside
+       the controller's assembly, where a publish (build/SmtLiveAssets.targets) or the tests' build
+       puts it. -->
+  <ItemGroup>
+    <PackageReference Include="Wasmtime" Version="48.0.2" ExcludeAssets="native" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="OutWit.Controller.AI.Smt.Live.Tests" />
   </ItemGroup>
@@ -38,5 +71,9 @@
   <ItemGroup>
     <None Include="..\OutWit.Controller.AI.Smt\docs\smt-*.schema.json" Link="docs\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- The solver's data assets beside the tool: on a publish for one platform, and on a build
+       with -p:SmtLiveAssets=true. -->
+  <Import Project="build\SmtLiveAssets.targets" />
 
 </Project>

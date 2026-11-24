@@ -1,0 +1,15 @@
+{
+  "schema": "smt-live-local/1",
+  "started_utc": "2026-11-24T12:00:00Z",
+  "machine": { "os": "macos", "os_version": "15.1.0", "platform": "osx-arm64", "architecture": "arm64", "cores": 14, "memory_bytes": 51539607552, "available_bytes": 34359738368 },
+  "degree": { "sessions": 9, "decided_by": "memory", "rule_sessions": 9, "rule_decided_by": "memory", "session_bytes": 2885681152 },
+  "solver": {
+    "profile": "z3-5.4.1", "controller": "0.4.0", "module": "wasm/z3-5.4.1.wasm",
+    "module_sha256": "1111111111111111111111111111111111111111111111111111111111111111", "module_pinned": true,
+    "engine": "wasmtime 48.0.8", "natives_sha256": "4444444444444444444444444444444444444444444444444444444444444444", "natives_pinned": true, "explicit_traps": false
+  },
+  "problem_set": { "file": "problems.jsonl", "sha256": "5555555555555555555555555555555555555555555555555555555555555555", "bytes": 512, "rows": 4, "taken": 3, "refused": 1 },
+  "packages": 1,
+  "seconds": { "startup": 20.0, "read": 0.5, "solve": 2.0, "settle": 0.5, "wall": 23.0 },
+  "problems_per_second": 0.1304
+}

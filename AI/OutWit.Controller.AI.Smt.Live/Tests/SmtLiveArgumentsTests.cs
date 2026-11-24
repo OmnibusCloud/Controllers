@@ -14,6 +14,10 @@ public sealed class SmtLiveArgumentsTests
     [TestCase("compare a b", "Compare", 2)]
     [TestCase("pack folder --out p.jsonl", "Pack", 1)]
     [TestCase("pack folder --query prove --out p.jsonl", "Pack", 1)]
+    [TestCase("local p.jsonl", "Local", 1)]
+    [TestCase("local p.jsonl --degree 14 --hard-cap 100 --out d", "Local", 1)]
+    [TestCase("comparative a b", "Comparative", 2)]
+    [TestCase("comparative a b --fixed c", "Comparative", 2)]
     public void ParseReadsEveryVerbTest(string line, string verb, int inputs)
     {
         var arguments = SmtLiveArguments.Parse(Split(line), out var error);
@@ -89,6 +93,25 @@ public sealed class SmtLiveArgumentsTests
         Assert.That(SmtOptionsRules.Check(arguments.Options), Has.Count.EqualTo(2), "the controller's rule says which options are out of range");
     }
 
+    [Test]
+    public void ParseReadsTheDegreeOfALocalRunAndTheSmallRunOfAComparativeTest()
+    {
+        var local = SmtLiveArguments.Parse(Split("local p.jsonl --degree 14 --seed 3"), out var localError);
+        var plain = SmtLiveArguments.Parse(Split("local p.jsonl"), out _);
+        var comparative = SmtLiveArguments.Parse(Split("comparative l f --fixed s"), out var comparativeError);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(localError, Is.Null);
+            Assert.That(local!.Degree, Is.EqualTo(14));
+            Assert.That(local.Options.Seed, Is.EqualTo(3));
+            Assert.That(plain!.Degree, Is.Null, "the node's rule");
+            Assert.That(comparativeError, Is.Null);
+            Assert.That(comparative!.Inputs, Is.EqualTo(new[] { "l", "f" }));
+            Assert.That(comparative.Fixed, Is.EqualTo("s"));
+        });
+    }
+
     #endregion
 
     #region Refusal Tests
@@ -113,6 +136,14 @@ public sealed class SmtLiveArgumentsTests
     [TestCase("compare a b --rate 1", "'--rate' is not an option of compare")]
     [TestCase("pack folder --rate 1 --out p.jsonl", "'--rate' is not an option of pack")]
     [TestCase("diagnostics --query check", "'--query' is not an option of diagnostics")]
+    [TestCase("local p.jsonl --rate 1", "'--rate' is not an option of local")]
+    [TestCase("local p.jsonl --degree 0", "--degree must be a whole number of sessions from 1 to 256")]
+    [TestCase("local p.jsonl --degree 257", "--degree must be a whole number of sessions from 1 to 256")]
+    [TestCase("local p.jsonl --degree -3", "--degree must be a whole number")]
+    [TestCase("local p.jsonl --degree four", "--degree must be a whole number")]
+    [TestCase("run p.jsonl --degree 4", "'--degree' is not an option of run")]
+    [TestCase("comparative a", "takes 2 argument")]
+    [TestCase("comparative a b --out c", "'--out' is not an option of comparative")]
     public void ParseRefusesAWrongCommandLineWithASentenceTest(string line, string sentence)
     {
         var arguments = SmtLiveArguments.Parse(Split(line), out var error);

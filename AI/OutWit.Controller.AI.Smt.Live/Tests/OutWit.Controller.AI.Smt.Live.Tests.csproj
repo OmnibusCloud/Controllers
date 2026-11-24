@@ -1,9 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- The unit tests of smt-live, without a server: the command line, the packing of a folder,
-       the schema check against the controller's own schemas, the comparison of two runs, and the
-       commands driven through a fake server. They live in the tool's folder and are run with
-       dotnet test on this project. -->
+       the schema check against the controller's own schemas, the comparison of two runs, the
+       commands driven through a fake server, the comparative table and its crossover, and local
+       runs, which solve with the controller's own code in its sandbox. They live in the tool's
+       folder and are run with dotnet test on this project. -->
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -36,6 +37,12 @@
   <ItemGroup>
     <Using Include="NUnit.Framework" />
   </ItemGroup>
+
+  <!-- The local runs solve in the controller's sandbox, which loads only the pinned native
+       wasmtime library: it takes the package's copy's place in the output (as in the controller's
+       tests), when the asset tool's natives.sh has laid it out. The solver module is the one the
+       controller's tests run, in their @Data/wasm (SmtLiveTestEnvironment). -->
+  <Import Project="..\..\Shared\WasmHostPinnedNatives.targets" />
 
   <!-- The documents of a small run, held to the controller's schemas; the eight-queens kit. -->
   <ItemGroup>
