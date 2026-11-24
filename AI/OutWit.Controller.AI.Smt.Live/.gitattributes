@@ -1,3 +1,6 @@
 # The problem sets of the demo kits: LF on every checkout, so a set has the same bytes, and the
 # same SHA-256 in a run's provenance, whatever machine checked it out
 demo/**/*.jsonl text eol=lf
+# The lists of the demo kits that name problems by hash: LF on every checkout, so a list is the bytes
+# its script writes, with the SHA-256 its kit states
+demo/**/kit-list.tsv text eol=lf

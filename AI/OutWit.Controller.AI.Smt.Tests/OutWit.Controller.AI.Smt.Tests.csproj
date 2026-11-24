@@ -49,6 +49,13 @@
     <None Update="Slice\fetch-list.tsv" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- The list of the long-tail kit of smt-live, whose sample the tests of the category LongTail
+       solve under the kit's options. Its problems are never committed: the kit's make_set.py
+       fetches them, and WITAI_SMT_LONG_TAIL_DIR names the folder of the sample. -->
+  <ItemGroup>
+    <None Include="..\OutWit.Controller.AI.Smt.Live\demo\03-long-tail\kit-list.tsv" Link="Kit\kit-list.tsv" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- The pinned native wasmtime library in place of the package's copy (the wasm host refuses any other). -->
   <Import Project="..\Shared\WasmHostPinnedNatives.targets" />
 
