@@ -64,7 +64,8 @@ public sealed class SmtLiveComparativeTests
             Assert.That(output, Does.Contain("module    : the same: sha256 1111"));
             Assert.That(output, Does.Contain("wall time, end to end").And.Contain("00:00:23.0").And.Contain("00:00:40.0"));
             Assert.That(output, Does.Contain("start-up 00:00:20.0").And.Contain("connect 00:00:01.5").And.Contain("of the job: queue 00:00:02.0"));
-            Assert.That(output, Does.Contain("1 machine: osx-arm64, 14 cores, 48.0 GiB; 9 session(s) at once (memory)"));
+            Assert.That(output, Does.Contain("local     : 1 machine: osx-arm64, 14 cores, 48.0 GiB; 9 session(s) at once (memory)"));
+            Assert.That(output, Does.Contain("fleet     : the fleet's machines (not named)"));
             Assert.That(output, Does.Contain("problems a second, end to end").And.Contain("0.13").And.Contain("0.075"));
             Assert.That(output, Does.Contain("rows      : 4 compared row by row; digests: 3 of 3 equal; without a digest: 1 the same"));
             Assert.That(output, Does.Contain("flips (sat, unsat and unknown against each other): 0"));

@@ -146,9 +146,10 @@ internal sealed class SmtLiveComparative
 
     private void PrintTable(SmtLiveMeasured local, SmtLiveMeasured? fleet, SmtLiveRunDocuments localDocs, SmtLiveRunDocuments fleetDocs)
     {
+        m_output.WriteLine($"local     : {local.Description}");
+        m_output.WriteLine($"fleet     : {fleet?.Description ?? "the fleet's machines (not named)"}");
         m_output.WriteLine();
         Row("", "local", "fleet");
-        Row("machines", local.Description, fleet?.Description ?? "the fleet's machines (not named)");
         Row("wall time, end to end", Clock(local.Wall), fleet == null ? $"{NOT_MEASURED} (no {SmtLiveFleetFacts.FILE})" : Clock(fleet.Wall));
 
         var parts = Math.Max(local.Parts.Count, fleet?.Parts.Count ?? 0);
