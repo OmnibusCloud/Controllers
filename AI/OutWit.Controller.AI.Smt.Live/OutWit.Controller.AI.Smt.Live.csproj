@@ -72,4 +72,8 @@
     <None Include="..\OutWit.Controller.AI.Smt\docs\smt-*.schema.json" Link="docs\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- The solver's data assets beside the tool: on a publish for one platform, and on a build
+       with -p:SmtLiveAssets=true. -->
+  <Import Project="build\SmtLiveAssets.targets" />
+
 </Project>
