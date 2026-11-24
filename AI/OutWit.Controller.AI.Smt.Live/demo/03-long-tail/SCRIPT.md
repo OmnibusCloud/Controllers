@@ -114,6 +114,17 @@ bin/Release/net10.0/smt-live run demo-out/long-tail/problems.jsonl --rlimit 4294
 bin/Release/net10.0/smt-live compare demo-out/long-tail/run-1 demo-out/long-tail/run-2
 ```
 
+The same set on one machine alone, by the controller's own code and without a server (no copies,
+so no `--rate`), is `smt-live local` with the same options; `check.py` holds its folder too:
+
+```
+bin/Release/net10.0/smt-live local demo-out/long-tail/problems.jsonl --rlimit 4294967295 --hard-cap 300 --memory 1024 --out demo-out/long-tail/local
+python -I demo/03-long-tail/check.py demo-out/long-tail/local
+```
+
+The comparative test ([`../04-comparative`](../04-comparative/SCRIPT.md)) runs this kit both ways
+and puts the two side by side.
+
 ## The options
 
 `--rlimit 4294967295 --hard-cap 300 --memory 1024 --rate 0.05`, each within the controller's
