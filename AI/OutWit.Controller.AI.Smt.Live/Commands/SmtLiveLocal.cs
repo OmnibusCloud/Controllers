@@ -100,9 +100,6 @@ internal sealed class SmtLiveLocal
             return SmtLiveExitCodes.USAGE;
         }
 
-        var (rows, bytes, sha256) = await SmtLiveInput.DescribeAsync(path, ct);
-        m_output.WriteLine($"input    : {Path.GetFileName(path)}, {rows} row(s), {bytes} byte(s), sha256 {sha256}");
-
         var target = Path.GetFullPath(folder ?? FOLDER_PREFIX + m_clock.StartedUtc.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
         var work = Path.Combine(target, WORK_FOLDER);
         Directory.CreateDirectory(target);
@@ -115,6 +112,10 @@ internal sealed class SmtLiveLocal
             sandbox ??= SmtLiveSandbox.Open(Path.Combine(work, "sandbox"), out var unavailable) ?? throw new SmtLiveLocalException($"no sandbox: {unavailable}");
             var startup = m_clock.Elapsed;
             PrintSandbox(sandbox, startup);
+
+            // The set's hash grows with the set: it counts in the reading, not in the start-up.
+            var (rows, bytes, sha256) = await SmtLiveInput.DescribeAsync(path, ct);
+            m_output.WriteLine($"input    : {Path.GetFileName(path)}, {rows} row(s), {bytes} byte(s), sha256 {sha256}");
 
             return await RunAsync(path, options, degree, target, work, sandbox, startup, (rows, bytes, sha256), ct);
         }
