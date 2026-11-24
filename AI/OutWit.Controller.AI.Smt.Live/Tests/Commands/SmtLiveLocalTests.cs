@@ -129,7 +129,7 @@ public sealed class SmtLiveLocalTests
             Assert.That(facts.GetProperty("seconds").GetProperty("solve").GetDouble(), Is.GreaterThan(0));
             Assert.That(facts.GetProperty("problems_per_second").GetDouble(), Is.GreaterThan(0));
             Assert.That(facts.GetProperty("machine").EnumerateObject().Select(member => member.Name),
-                Is.EqualTo(new[] { "os", "os_version", "platform", "cores", "memory_bytes", "available_bytes" }), "the machine without a name");
+                Is.EqualTo(new[] { "os", "os_version", "platform", "architecture", "cores", "memory_bytes", "available_bytes" }), "the machine without a name");
 
             Assert.That(Directory.Exists(Path.Combine(folder, SmtLiveLocal.WORK_FOLDER)), Is.False, "the working files are gone");
             Assert.That(Directory.GetFiles(folder).Select(Path.GetFileName).Order(),

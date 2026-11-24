@@ -1,7 +1,7 @@
 {
   "schema": "smt-live-local/1",
   "started_utc": "2026-11-24T12:00:00Z",
-  "machine": { "os": "macos", "os_version": "15.1.0", "platform": "osx-arm64", "cores": 14, "memory_bytes": 51539607552, "available_bytes": 34359738368 },
+  "machine": { "os": "macos", "os_version": "15.1.0", "platform": "osx-arm64", "architecture": "arm64", "cores": 14, "memory_bytes": 51539607552, "available_bytes": 34359738368 },
   "degree": { "sessions": 9, "decided_by": "memory", "rule_sessions": 9, "rule_decided_by": "memory", "session_bytes": 2885681152 },
   "solver": {
     "profile": "z3-5.4.1", "controller": "0.4.0", "module": "wasm/z3-5.4.1.wasm",

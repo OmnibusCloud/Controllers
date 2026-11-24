@@ -40,6 +40,7 @@ internal sealed class SmtLiveLocalFacts
             json.WriteString("os", Machine.Os);
             json.WriteString("os_version", Machine.OsVersion);
             json.WriteString("platform", Machine.Platform);
+            json.WriteString("architecture", Machine.Architecture);
             json.WriteNumber("cores", Machine.Cores);
             json.WriteNumber("memory_bytes", Machine.MemoryBytes);
             json.WriteNumber("available_bytes", Machine.AvailableBytes);

@@ -255,7 +255,7 @@ between problems.
 | `local.json` | |
 |---|---|
 | `schema`, `started_utc` | `smt-live-local/1`; when the tool started |
-| `machine` | `os`, `os_version`, `platform`, `cores` (logical), `memory_bytes`, `available_bytes`, as the runtime sees them; no name of the machine, a user or a folder |
+| `machine` | `os`, `os_version`, `platform`, `architecture`, `cores` (logical), `memory_bytes`, `available_bytes`, as the runtime sees them; no name of the machine, a user or a folder |
 | `degree` | `sessions` and `decided_by` (`cores`, `cap`, `memory`, or `given`); `rule_sessions` and `rule_decided_by`, what the node's rule gives here; `session_bytes` |
 | `solver` | the profile and the controller's version; `module` (its place beside the tool, or that `WITAI_SMT_Z3` named it), `module_sha256`, `module_pinned`; `engine`, `natives_sha256`, `natives_pinned`, as loaded; `explicit_traps` |
 | `problem_set` | the set's file name, SHA-256, bytes, rows, taken and refused |
