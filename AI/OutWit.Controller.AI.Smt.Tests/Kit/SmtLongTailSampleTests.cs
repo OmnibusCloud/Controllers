@@ -58,6 +58,13 @@ public sealed class SmtLongTailSampleTests
     /// <summary>The problems of the sample the options leave undecided, by id: none.</summary>
     private static readonly string[] UNDECIDED = [];
 
+    /// <summary>
+    /// The fuel of the sample's forty sessions together: a count, the same on every machine for
+    /// the pinned module and engine. The most of one problem is about a hundred seconds of the
+    /// reference machine, a third of the hard cap.
+    /// </summary>
+    private const long SAMPLE_FUEL = 1_488_437_746_353;
+
     private static readonly UTF8Encoding STRICT = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     #endregion
@@ -183,6 +190,12 @@ public sealed class SmtLongTailSampleTests
         Assert.That(undecided, Is.EqualTo(UNDECIDED), "a problem of the sample that a budget ended");
     }
 
+    [Test]
+    public void TheSampleBurnsTheFuelWrittenHereTest()
+    {
+        Assert.That(m_results.Sum(result => result.Outcome?.Fuel ?? 0), Is.EqualTo(SAMPLE_FUEL), "the fuel of the sample's sessions together");
+    }
+
     #endregion
 
     #region Tools
@@ -192,7 +205,7 @@ public sealed class SmtLongTailSampleTests
         var text = new StringBuilder();
         text.AppendLine($"long-tail sample: {m_results.Count} problems, {degree} at once, {elapsed.TotalSeconds:F0} s; module compile {compile} ms");
         text.AppendLine($"options: rlimit {RESOURCE_LIMIT}, hard cap {HARD_CAP_SECONDS} s (fuel {(long)(HARD_CAP_SECONDS * FUEL_PER_SECOND)}), memory {MEMORY_MEGABYTES} MB");
-        text.AppendLine("id       logic   status band   comp s   verdict   reason   ref s    wall s   wall/comp  peak MiB  validation");
+        text.AppendLine("id       logic   status band   comp s   verdict   reason   ref s    wall s   wall/comp  peak MiB  resource count  validation");
         foreach (var result in m_results)
         {
             var row = result.Row;
@@ -204,7 +217,7 @@ public sealed class SmtLongTailSampleTests
 
             var outcome = result.Outcome;
             var wall = outcome.WallMs / 1000.0;
-            text.AppendLine($"{row.Id,-8} {row.Logic,-7} {row.Status,-6} {row.Band,-6} {row.Seconds,7:F1}   {outcome.Verdict,-8}  {outcome.Reason,-7} {outcome.Fuel / FUEL_PER_SECOND,7:F1}  {wall,7:F1}   {wall / row.Seconds,8:F2}  {outcome.PeakMemoryBytes / 1048576.0,8:F0}  {result.Validation?.Class.ToString() ?? "-"}");
+            text.AppendLine($"{row.Id,-8} {row.Logic,-7} {row.Status,-6} {row.Band,-6} {row.Seconds,7:F1}   {outcome.Verdict,-8}  {outcome.Reason,-7} {outcome.Fuel / FUEL_PER_SECOND,7:F1}  {wall,7:F1}   {wall / row.Seconds,8:F2}  {outcome.PeakMemoryBytes / 1048576.0,8:F0}  {outcome.ResourceCount,14}  {result.Validation?.Class.ToString() ?? "-"}");
         }
 
         var decided = m_results.Where(result => result.Outcome is { Verdict: "sat" or "unsat" }).ToList();
@@ -212,6 +225,7 @@ public sealed class SmtLongTailSampleTests
         {
             var ratios = decided.Select(result => result.Outcome!.WallMs / 1000.0 / result.Row.Seconds).Order().ToList();
             var reference = decided.Select(result => result.Outcome!.Fuel / FUEL_PER_SECOND / result.Row.Seconds).Order().ToList();
+            text.AppendLine($"fuel in all {m_results.Sum(result => result.Outcome?.Fuel ?? 0)}, the most of one problem {decided.Max(result => result.Outcome!.Fuel)}");
             text.AppendLine($"decided {decided.Count} of {m_results.Count}; wall / competition median {ratios[ratios.Count / 2]:F2}, the most {ratios[^1]:F2}; reference seconds / competition median {reference[reference.Count / 2]:F2}, the most {reference[^1]:F2}");
         }
 

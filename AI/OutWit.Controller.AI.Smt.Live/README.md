@@ -324,6 +324,11 @@ differs; 2 when a document is not there.
   must be the list's and every class of the evaluator the slice test's.
 - [`demo/02-eight-queens`](demo/02-eight-queens/SCRIPT.md): two enumerations (eight queens, 92
   models; a Latin square with exactly one), the smoke test of a fleet.
+- [`demo/03-long-tail`](demo/03-long-tail/SCRIPT.md): the long tail, 1,960 SMT-LIB problems of
+  QF_LIA and QF_BV that took Z3 from 1 to 60 seconds at past SMT competitions, chosen from the
+  SMT-LIB Catalog by a committed script and fetched by their list; every verdict must be the
+  problem's `:status` or an unknown at a budget's end, and 95 % of the models or more validated.
+  The workflow "AI Smt long tail" reads every row of it and solves its sample.
 - [`demo/04-comparative`](demo/04-comparative/SCRIPT.md): the comparative test: one set on one
   machine (`local`) and on the fleet (`run`), and the table of the two (`comparative`).
 
@@ -335,18 +340,21 @@ What fetches and runs write goes to `demo-out/`, which is never committed.
 dotnet test Tests/OutWit.Controller.AI.Smt.Live.Tests.csproj
 ```
 
-They need no server: the command line, the ids and the packing of a folder (read back by the
-model package's reader), the schema check against the controller's own schemas, the summary, the
+They need no server: the command line, the ids and the packing of a folder (read back by the model
+package's reader), the schema check against the controller's own schemas, the summary, the
 comparison of two runs, the three server verbs driven through a server in memory (and what `run`
-measures), the eight-queens kit against the model evaluator (every placement of eight queens, one
-a row, and the one completion of the Latin square), the comparative table and its crossover on
-fixtures, and local runs. Those solve in the controller's sandbox, with the solver module the
-controller's tests run (their `@Data/wasm`, found through `WITAI_SMT_Z3`) and the pinned native
-library laid out by the asset tool's `natives.sh`, and are ignored without them (failed on the
-build server): the eight-queens kit gives the rows the test fleet gave (their digests and costs in
-its `EXPECTED.md`), and a handful of problems of every query the same rows at one session and at
+measures), the eight-queens kit against the model evaluator (every placement of eight queens, one a
+row, and the one completion of the Latin square), the long-tail kit's list against the rules of its
+selection, its `EXPECTED.md` and the options of its commands, the comparative table and its
+crossover on fixtures, and local runs. Those solve in the controller's sandbox, with the solver
+module the controller's tests run (their `@Data/wasm`, found through `WITAI_SMT_Z3`) and the pinned
+native library laid out by the asset tool's `natives.sh`, and are ignored without them (failed on
+the build server): the eight-queens kit gives the rows the test fleet gave (their digests and costs
+in its `EXPECTED.md`), and a handful of problems of every query the same rows at one session and at
 three. A test of the category `Slice` runs `local` on eight problems of the slice the controller's
 tests fetch, each with the list's verdict. The test project lives in the tool's folder; it is in
-the solution, and the workflow "AI Smt" runs it on Windows, Linux and macOS after the
-controller's tests (the slice test in its job "slice"), and runs the self-contained build of
-each platform on the eight-queens kit from where its zip was unpacked.
+the solution, and the workflow "AI Smt" runs it on Windows, Linux and macOS after the controller's
+tests (the slice test in its job "slice"), and runs the self-contained build of each platform on
+the eight-queens kit from where its zip was unpacked. The long-tail kit's Python scripts have tests
+of their own in `demo/03-long-tail/tests` (`python -I -m unittest discover -s tests -t tests` in
+the kit's folder), which the workflow "AI Smt long tail" runs.

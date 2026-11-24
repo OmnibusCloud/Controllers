@@ -146,10 +146,12 @@ public sealed class SmtLiveLongTailTests
         var (rlimit, hardCap, memory) = (options.Groups[1].Value, options.Groups[2].Value, options.Groups[3].Value);
         var line = $"--rlimit {rlimit} --hard-cap {hardCap} --memory {memory}";
 
+        var commands = Regex.Matches(script, @"smt-live (preflight|run) demo-out/long-tail/problems\.jsonl (.*)$", RegexOptions.Multiline).Select(match => match.Groups[2].Value).ToList();
+
         Assert.Multiple(() =>
         {
-            Assert.That(Regex.Matches(script, @"smt-live (preflight|run) demo-out/long-tail/problems\.jsonl (.*)$", RegexOptions.Multiline).Select(match => match.Groups[2].Value),
-                Has.All.StartWith(line).And.Count.EqualTo(3), "SCRIPT.md: the preflight and the two runs");
+            Assert.That(commands, Has.Count.EqualTo(3), "SCRIPT.md: the preflight and the two runs");
+            Assert.That(commands, Has.All.StartWith(line), "SCRIPT.md: the options of the preflight and the runs");
             Assert.That(expected, Does.Contain($"`{line}"), "EXPECTED.md names the options");
             Assert.That(sample, Does.Contain($"RESOURCE_LIMIT = {long.Parse(rlimit, CultureInfo.InvariantCulture):#,0}".Replace(",", "_")));
             Assert.That(sample, Does.Contain($"HARD_CAP_SECONDS = {hardCap};"));

@@ -6,7 +6,7 @@ The ones only a fleet measures (the wall time, how many machines took part, how 
 placed, which problems a budget stopped there) go into the table at the end, from the first real
 run on the test fleet.
 
-The commands are those of `SCRIPT.md`: `@@OPTIONS@@`.
+The commands are those of `SCRIPT.md`: `--rlimit 4294967295 --hard-cap 300 --memory 1024 --rate 0.05`.
 
 ## The list
 
@@ -52,11 +52,30 @@ the median 67,470.
 
 ## The set
 
-@@SET@@
+`make_set.py` writes 1,960 rows, 257,872,798 bytes, SHA-256
+`601ba8b9c880d8a5b0c3fcc2dad927e62a2344232dd109a6c1b029e3b167b265` (this tool's `pack` on the
+1,960 files the list names, each held to its SHA-256): the name the provenance gives the set.
+`smt-live pack` reads it back as the server reads it:
+
+```
+checked  : 1960 row(s) read as the server reads them: 1960 taken, 0 refused
+logics   : QF_BV 1149, QF_LIA 811
+queries  : check 1960
+expected : unsat 892, sat 1068 (from the problems' :status)
+stripped : check-sat 1960, exit 1960 (left out by the sanitizer: the query decides what runs)
+```
+
+`ATTRIBUTION.tsv`: every file states CC BY 4.0 or no licence (the collection's CC BY 4.0); 1,848
+name their source in `:source`, the 112 that do not are named by their path.
 
 ## The preflight
 
-@@PREFLIGHT@@
+- runnable; 1,960 rows, 1,960 taken, 0 refused; the logics, queries, expected verdicts and stripped
+  commands as above; the options taken;
+- the budget: rlimit 4294967295, hard cap 300 s, fuel 1500000000000, memory 1024 MB;
+- a node needs 2752 MiB available for one session;
+- the upper bound: 588000 s of the reference machine (1,960 problems times the hard cap);
+- 123 packages of at most 16 problems (the planner's rule for a run of fewer than 16,384 problems).
 
 ## The run
 
@@ -79,7 +98,21 @@ runs to that.
 
 ## The sample on the build server
 
-@@SAMPLE@@
+`SmtLongTailSampleTests` (workflow "AI Smt long tail") solves the forty problems the list marks
+as the sample, under the options above, four sessions at once, each file held to the list's
+SHA-256:
+
+| | Must be |
+|---|---|
+| Problems | 40: QF_LIA and QF_BV, 10 `sat` and 10 `unsat` each, at evenly spaced places of their competition times |
+| Verdicts | every one the problem's `:status`; none undecided |
+| The evaluator | every one of the 20 models validated |
+| Fuel | 1,488,437,746,353 the forty together; the most of one 490,332,441,060 (`lia0555`, 98 s of the reference machine, 20.2 s at the competition) |
+
+The fuel is the same wherever the sample runs (a Windows x64 workstation and the build server's
+Linux). Against the competition's seconds a problem took median 0.54 reference seconds, the most
+7.2 (`bv0308`: 4.2 s there, 30 s here), the least almost none (`lia0749`: 46.5 s there, 0.2 s
+here); the solver's memory peaked at 203 MiB.
 
 ## Measured on the test fleet
 
