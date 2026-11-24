@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using OutWit.Controller.AI.Smt.Live.Commands;
 using OutWit.Controller.AI.Smt.Live.Comparative;
 using OutWit.Controller.AI.Smt.Live.Documents;
@@ -12,8 +14,9 @@ namespace OutWit.Controller.AI.Smt.Live.Tests.Commands;
 /// <summary>
 /// <c>local</c> solving for real: the controller's sandbox, made once for the fixture (the module's
 /// compile takes tens of seconds), and runs of a few problems each. The eight-queens kit gives the
-/// very rows the test fleet gave (its <c>EXPECTED.md</c> records their digests and costs); a
-/// handful of small problems of every query gives the same rows at one session and at three.
+/// very rows the test fleet gave (its <c>EXPECTED.md</c> records their digests and costs, which are
+/// read from there); a handful of small problems of every query gives the same rows at one session
+/// and at three.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -21,12 +24,11 @@ public sealed class SmtLiveLocalTests
 {
     #region Constants
 
-    /// <summary>The rows of the eight-queens kit on the test fleet (demo/02-eight-queens/EXPECTED.md, 2026-11-24, Smt 0.4.0): id, digest, fuel, resource count, checks.</summary>
-    private static readonly (string Id, string Digest, long Fuel, long ResourceCount, long Checks)[] FLEET_QUEENS =
-    [
-        ("eight-queens", "b744c8ada6aca2ba554c21658a65346a754afd4f4ee89caeec645992ef2c25a6", 3_367_145_445, 3_512_328, 93),
-        ("latin-5x5", "447e76c2b00fc1fa236a9f5c09ca8d87d4dcf2f92a3f5322c516cfec91817d86", 77_689_501, 22_858, 2)
-    ];
+    /// <summary>The kit's expected result, whose last table records the rows the test fleet gave.</summary>
+    private const string QUEENS_EXPECTED = "AI/OutWit.Controller.AI.Smt.Live/demo/02-eight-queens/EXPECTED.md";
+
+    /// <summary>The kit's rows, in the set's order.</summary>
+    private static readonly string[] QUEENS = ["eight-queens", "latin-5x5"];
 
     private const string QUEENS_SHA256 = "8fcb09369a7fc3a9ed2d59eac093769fdd52d0d66359de1cf83244dca707fd08";
 
@@ -90,15 +92,17 @@ public sealed class SmtLiveLocalTests
         var exit = await Local(set, new SmtOptionsData(), null, folder);
 
         var rows = Rows(folder);
+        var expected = File.ReadAllText(Path.Combine(SmtLiveFixtures.RepositoryRoot(), QUEENS_EXPECTED)).ReplaceLineEndings("\n");
         using var local = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(folder, SmtLiveLocalFacts.FILE)));
         var facts = local.RootElement;
         Assert.Multiple(() =>
         {
             Assert.That(exit, Is.EqualTo(SmtLiveExitCodes.OK), "four documents that hold, nothing alarming");
-            Assert.That(rows, Has.Count.EqualTo(FLEET_QUEENS.Length));
-            for (var index = 0; index < FLEET_QUEENS.Length; index++)
+            Assert.That(rows, Has.Count.EqualTo(QUEENS.Length));
+            for (var index = 0; index < QUEENS.Length; index++)
             {
-                var (id, digest, fuel, resourceCount, checks) = FLEET_QUEENS[index];
+                var id = QUEENS[index];
+                var (digest, fuel, resourceCount, checks) = FleetRow(expected, id);
                 var row = rows[index];
                 Assert.That((string?)row["id"], Is.EqualTo(id));
                 Assert.That((string?)row["digest"], Is.EqualTo(digest), $"{id}: the digest the fleet gave");
@@ -192,6 +196,22 @@ public sealed class SmtLiveLocalTests
     private Task<int> Local(string set, SmtOptionsData options, int? degree, string folder)
     {
         return new SmtLiveLocal(m_output, SmtLiveClock.StartNow(), m_sandbox).RunAsync(set, options, degree, folder, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// A row the test fleet gave, as the kit's <c>EXPECTED.md</c> records it:
+    /// <c>| `id`: digest, fuel, resource count, checks... | `digest`, fuel, resource count, checks... |</c>.
+    /// </summary>
+    private static (string Digest, long Fuel, long ResourceCount, long Checks) FleetRow(string expected, string id)
+    {
+        var line = expected.Split('\n').SingleOrDefault(candidate => candidate.StartsWith($"| `{id}`: digest", StringComparison.Ordinal));
+        Assert.That(line, Is.Not.Null, $"{QUEENS_EXPECTED} records the fleet's row of {id}");
+
+        var match = Regex.Match(line!, @"`([0-9a-f]{64})`, ([0-9,]+), ([0-9,]+), ([0-9,]+)");
+        Assert.That(match.Success, Is.True, $"the fleet's row of {id}: a digest, the fuel, the resource count and the checks");
+
+        static long Number(Group group) => long.Parse(group.Value.Replace(",", ""), CultureInfo.InvariantCulture);
+        return (match.Groups[1].Value, Number(match.Groups[2]), Number(match.Groups[3]), Number(match.Groups[4]));
     }
 
     private static List<JsonObject> Rows(string folder)
