@@ -5,8 +5,8 @@ the evaluator alone: the committed list (`AI/OutWit.Controller.AI.Smt.Tests/Slic
 and the controller's slice tests, which solve every problem of it in the controller's sandbox on
 the build server (`Solver/SmtSolverSliceTests.cs`, `Slice/SmtSlicePreflightTests.cs`). They are the
 same on any fleet, and `check.py` holds a run to them. The ones only a fleet measures (the wall
-time, how the work was placed) are **not measured yet: the table at the end is filled in after the
-first real run on the test fleet.**
+time, how the work was placed) are in the table at the end, from the first real run on the test
+fleet.
 
 The commands are those of `SCRIPT.md`: `--rlimit 2000000000 --hard-cap 100 --rate 1`.
 
@@ -39,7 +39,7 @@ stripped : check-sat 469, exit 469, get-value 6 (left out by the sanitizer: the 
 | | Must be |
 |---|---|
 | Documents | the four, each holding to its schema |
-| Statuses | ok 469; refused, input_error, output_exceeded, engine_crash, no_result, disputed 0 |
+| Statuses | ok 468, output_exceeded 1; refused, input_error, engine_crash, no_result, disputed 0 |
 | Verdicts | sat 225, unsat 244, unknown 0: every problem's verdict the list's |
 | Expected | agree 469, disagree 0, n/a 0 |
 | The evaluator's classes | validated 217, partial 8, failed 0 |
@@ -67,7 +67,11 @@ solver pins them (validated / partial / failed):
 
 A partial model is one the evaluator could not decide to the end (a construct it does not
 compute; the report's `partial by reason` line names each reason); it accuses nobody and rests on
-the copies.
+the copies. The eight are QF_S 5 (`regular_expression`), QF_DT 2 (`selector_of_other_constructor`)
+and QF_BV 1 (`output_exceeded`): `p235`, a floating-point problem whose model is more than the
+16 MiB a session may write. Its verdict `sat` stands and agrees with the list; its status is
+`output_exceeded`, and the report's `rows` line names it as the one row not `ok`. `check.py` and
+the slice test count it as answered.
 
 The stats of a row (the resource count, the fuel, the checks) and its digest are functions of the
 problem, the options and the module: they are the same on every machine and in every run, which
@@ -75,13 +79,16 @@ is what `compare` holds two runs to.
 
 ## Measured on the test fleet
 
-Not measured yet. To be filled in after the first real run of `SCRIPT.md` on the test fleet.
+The first real run of `SCRIPT.md`, twice in a row, on the test fleet. Every number the run must
+show held in both (`check.py`: `held: everything`); the table gives what only a fleet measures.
 
 | | Run 1 | Run 2 |
 |---|---|---|
-| Date, controller version | | |
-| Nodes and their platforms | | |
-| Wall time (`completed in`) | | |
-| Fan-outs (main / repair / dispute): packages, complete, unanswered | | |
-| Fuel in all, the most of one problem (`check.py`) | | |
-| `compare` | | |
+| Date, controller version | 2026-11-24, Smt 0.4.0 (scripts 0.2.0) | the same, right after run 1 |
+| Nodes and their platforms | 3: Windows x64 2, macOS arm64 1 (each 15 GiB or more); three Linux x64 machines of 6 GB were online, below the controller's floor of 7,680 MiB, and took no work | the same |
+| Wall time (`completed in`) | 00:01:28 | 00:01:29 |
+| Fan-outs (main / repair / dispute): packages, complete, unanswered | 30, 30, 0 / 0 / 0 | 30, 30, 0 / 0 / 0 |
+| Copies | 938 answers taken, 469 problems settled by `copies`, disputes 0, node faults 0 | the same |
+| Fuel in all, the most of one problem (`check.py`) | 871,137,970,987; 141,543,580,764 (`p235`) | the same |
+| Resource count in all (`check.py`) | 331,524,625 | the same |
+| `compare` | | `result   : the same settled answers and the same provenance` |

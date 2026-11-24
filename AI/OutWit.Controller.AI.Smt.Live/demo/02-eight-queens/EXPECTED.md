@@ -4,8 +4,8 @@ What a run must show follows from the two problems alone; the tool's tests hold 
 rows to it without a solver: the model package's reader takes both rows, every one of the 92
 placements of eight queens satisfies the first problem by the model evaluator and no other
 placement of a queen a row does, and the six given cells have exactly one completion, which
-satisfies the second. What only a fleet measures is **not measured yet: the table at the end is
-filled in after the first real run on the test fleet.**
+satisfies the second. What only a fleet measures is in the table at the end, from the first real
+run on the test fleet.
 
 ## The set
 
@@ -52,12 +52,12 @@ The one model of `latin-5x5` gives the square (`x11` to `x55`, row by row):
 
 ## Measured on the test fleet
 
-Not measured yet. To be filled in after the first real run of `SCRIPT.md` on the test fleet.
+The first real run of `SCRIPT.md` on the test fleet; everything of "The run" above held.
 
 | | |
 |---|---|
-| Date, controller version | |
-| Nodes and their platforms | |
-| Wall time (`completed in`) | |
-| `eight-queens`: digest, fuel, resource count, checks, `model_truncated` | |
-| `latin-5x5`: digest, fuel, resource count, checks | |
+| Date, controller version | 2026-11-24, Smt 0.4.0 (scripts 0.2.0) |
+| Nodes and their platforms | 3: Windows x64 2, macOS arm64 1 (each 15 GiB or more); three Linux x64 machines of 6 GB were online, below the controller's floor of 7,680 MiB, and took no work |
+| Wall time (`completed in`) | 00:00:03 |
+| `eight-queens`: digest, fuel, resource count, checks, `model_truncated` | `b744c8ada6aca2ba554c21658a65346a754afd4f4ee89caeec645992ef2c25a6`, 3,367,145,445, 3,512,328, 93, false |
+| `latin-5x5`: digest, fuel, resource count, checks | `447e76c2b00fc1fa236a9f5c09ca8d87d4dcf2f92a3f5322c516cfec91817d86`, 77,689,501, 22,858, 2 |
