@@ -33,7 +33,8 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 if command -v python3 > /dev/null && python3 -c "" 2> /dev/null; then py=python3; else py=python; fi
 
-sha() { if command -v sha256sum > /dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+# From stdin: given a name with a backslash (a Windows path), sha256sum marks its line with one.
+sha() { if command -v sha256sum > /dev/null; then sha256sum < "$1" | cut -d' ' -f1; else shasum -a 256 < "$1" | cut -d' ' -f1; fi; }
 
 # The pins, from the controller's source: the profile's module and the natives guard's table.
 module_pin=$(sed -n 's/.*MODULE_SHA256 = "\([0-9a-f]\{64\}\)".*/\1/p' "$root/AI/OutWit.Controller.AI.Smt/Profiles/SmtProfile.cs")
