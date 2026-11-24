@@ -99,6 +99,9 @@ def fetch(rows, folder, make_list):
                     missing.discard(member.name)
                     if not missing:
                         break
+        except (tarfile.TarError, EOFError, OSError) as error:
+            # The files written so far stay: the next try fetches only the rest.
+            print("%s: the stream broke: %s" % (logic, error), flush=True)
         finally:
             close()
         for name in sorted(missing):
