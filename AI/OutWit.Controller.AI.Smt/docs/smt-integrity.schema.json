@@ -19,10 +19,10 @@
       "properties": {
         "problems": { "type": "integer", "minimum": 0, "description": "Taken problems of the run." },
         "copies_made": { "type": "integer", "minimum": 0, "description": "Answers taken, every round together: copies of a problem's row that are statements about it (a row of a fault of its node is not)." },
-        "compared": { "type": "integer", "minimum": 0, "description": "Problems whose first round (or the repair round, for a problem the first left without an answer) brought two answers or more." },
+        "compared": { "type": "integer", "minimum": 0, "description": "Problems first ruled on two answers or more: the first fan-out's, with the repair round's for a problem it sent out again and answered (the lone answer of the first fan-out is compared with them by digest)." },
         "agreements": { "type": "integer", "minimum": 0, "description": "Of those, problems whose answers all gave one digest." },
         "disagreements": { "type": "integer", "minimum": 0, "description": "Of those, problems whose answers gave more than one digest." },
-        "one_copy": { "type": "integer", "minimum": 0, "description": "Problems settled on one answer: they rest on one machine. A problem whose package was not sampled is one of them." },
+        "one_copy": { "type": "integer", "minimum": 0, "description": "Problems whose answer rests on one machine: one answer, or a lone answer of the first fan-out and a lone answer of the repair round with the same digest (two fan-outs may place them on one machine). A problem whose package was not sampled is one of them." },
         "unsat_one_copy": { "type": "integer", "minimum": 0, "description": "Of those, problems answered unsat: nothing beyond that machine vouches for them." },
         "disputes": { "type": "integer", "minimum": 0, "description": "Problems that went to three more machines." },
         "disputes_resolved": { "type": "integer", "minimum": 0, "description": "Disputes a majority of the three settled." },
@@ -44,8 +44,8 @@
         "problems_with_lies": { "type": "integer", "minimum": 0, "description": "Problems a lie was found in." },
         "failed_models": { "type": "integer", "minimum": 0, "description": "Answers, every round together, whose model the evaluator called failed." },
         "evaluator_solver_disagreements": { "type": "integer", "minimum": 0, "description": "Problems the machines agree on and the evaluator calls failed (settled_by agreement). No machine is counted as lying for them. Each is listed below by its index." },
-        "repairs": { "type": "integer", "minimum": 0, "description": "Problems without an answer from the first fan-out, sent out once more." },
-        "repairs_by_reason": { "type": "object", "description": "The repairs by what the first fan-out said of the problem: a node's fault code of its package, the code of a row of a fault of the node, the reason its package's result was refused, or no_answer." },
+        "repairs": { "type": "integer", "minimum": 0, "description": "Problems the repair round sent out once more, every package of it to two machines: those without an answer from the first fan-out (sampled or not), and those of a package the first fan-out asked for twice that came back with fewer than two answers." },
+        "repairs_by_reason": { "type": "object", "description": "The repairs by what the first fan-out said of the problem: for a problem without an answer, a node's fault code of its package, the code of a row of a fault of the node, the reason its package's result was refused, or no_answer; copies_short for a problem of a package asked for twice that came back with one answer." },
         "no_result": { "type": "integer", "minimum": 0, "description": "Problems left without a result: rows with status no_result." },
         "no_result_by_reason": { "type": "object", "description": "The same by what the nodes said last." },
         "rejected_results": { "type": "integer", "minimum": 0, "description": "Result packages the server refused, every round and reason together." },
@@ -59,7 +59,7 @@
             "duplicate": { "type": "integer", "description": "The same result blob returned again." },
             "unreadable": { "type": "integer", "description": "Not a package of results this version reads, not the bytes its reference names, or damaged." },
             "content": { "type": "integer", "description": "Does not hold exactly the rows of its package (one missing, foreign or twice), or holds a row a node may not give: another ticket, another problem's id, hash or query, another controller version or platform, a word no row has, counts of models or values a session does not give, or a digest that is not its own." },
-            "surplus": { "type": "integer", "description": "More results under one ticket than copies were asked for, in the dispute round or in a repair round that asked for one: which is the answer cannot be told, so none is taken." }
+            "surplus": { "type": "integer", "description": "More results under one ticket than copies were asked for, in the dispute round: which is the answer cannot be told, so none is taken. (In the first fan-out and the repair round such a ticket is kept, and its problems go to a dispute.)" }
           }
         },
         "node_faults": { "type": "integer", "minimum": 0, "description": "Packages a node said it could not work on (a fault code and no rows), every round together. Their problems have no answer from that node." },
@@ -74,7 +74,7 @@
           }
         },
         "sampling_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "The share of the packages the run asked to solve on two machines, as the script stated it to Smt.Settle; null when it did not." },
-        "sampling": { "type": "string", "enum": ["not_stated", "none", "as_asked", "short"], "description": "Whether the sampling that was asked for happened; the same word as in the report." },
+        "sampling": { "type": "string", "enum": ["not_stated", "none", "as_asked", "short"], "description": "Whether the sampling that was asked for happened; the same word as in the report: as_asked when every problem with an answer of a package asked for twice ended with two answers of one fan-out (the first, or the repair round that sent it out again) and as many such packages came back as the rate asks for; short otherwise." },
         "unanswered_packages": { "type": "integer", "minimum": 0, "description": "The sum of unanswered over the fan-outs." }
       }
     },
@@ -103,7 +103,7 @@
           "round": { "type": "string", "enum": ["main", "repair", "dispute"] },
           "packages": { "type": "integer", "minimum": 0 },
           "problems": { "type": "integer", "minimum": 0 },
-          "copies": { "type": "integer", "minimum": 1, "description": "The answers a selected package was asked for: 2 where a share is sampled, 3 in a dispute, 1 in a repair round without sampling." },
+          "copies": { "type": "integer", "minimum": 1, "description": "The answers a selected package was asked for: 2 where a share is sampled and in the repair round (every package of it; a repair round of controllers before 0.4.0 without sampling asked for 1), 3 in a dispute." },
           "selected": { "type": ["integer", "null"], "minimum": 0, "description": "The packages asked for that many answers; null when the script did not state its rate." },
           "complete": { "type": "integer", "minimum": 0, "description": "The packages that came back with that many taken answers, or more." },
           "unanswered": { "type": "integer", "minimum": 0, "description": "The packages no taken answer came back for." }

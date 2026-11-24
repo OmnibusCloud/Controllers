@@ -55,12 +55,13 @@ internal static class SmtRunSettlement
         var rate = samplingRate is { } stated ? SmtSampling.Clamp(stated) : (double?)null;
 
         var main = await SmtSettlement.ReadMainAsync(fanOut.Issued, fanOut.Returned, blobs, spool);
-        var repaired = repair is { } again ? await SmtSettlement.ReadRepairAsync(again.Issued, again.Returned, sampled: rate > 0, blobs, spool) : null;
+        var repaired = repair is { } again ? await SmtSettlement.ReadRepairAsync(again.Issued, again.Returned, blobs, spool) : null;
         var settled = dispute is { } thrice ? await SmtSettlement.ReadDisputeAsync(thrice.Issued, thrice.Returned, blobs, spool) : null;
 
         var borrowable = settled == null ? new Dictionary<string, int>(StringComparer.Ordinal) : SmtRulings.Borrowable(settled);
         var mainTickets = await TicketsOfUnansweredAsync(main, blobs);
         var repairTickets = repaired == null ? new Dictionary<int, string>() : await TicketsOfUnansweredAsync(repaired, blobs);
+        var sampled = SmtRulings.Sampled(main, rate);
 
         var facts = new SmtIntegrityFacts { SamplingRate = rate };
         var report = new SmtReportFacts();
@@ -104,7 +105,8 @@ internal static class SmtRunSettlement
                     var ruling = SmtRulings.Rule(index, main, repaired, settled, borrowable, Check,
                         () => ReasonIn(repaired ?? main, index, repaired == null ? mainTickets : repairTickets));
 
-                    Count(facts, index, ruling, rounds, main, mainTickets, Check);
+                    Count(facts, index, ruling, rounds, Check);
+                    CountRepair(facts, index, main, repaired, mainTickets, repairTickets, sampled);
 
                     var accepted = ruling.Accepted == null ? null : spool.Read(ruling.Accepted);
                     SmtResultsWriter.WriteTaken(results, models, row.Data, row.Problem, ruling, accepted);
@@ -114,7 +116,7 @@ internal static class SmtRunSettlement
                 set = reader.Summary;
             }
 
-            CountRounds(facts, main, repaired, settled, rate);
+            CountRounds(facts, main, repaired, settled, rate, sampled.Count);
 
             using (var stream = Create(sections[SmtLedger.REPORT]))
                 SmtReportWriter.Write(stream, provenance, set, report, facts.Sampling, facts.UnansweredPackages);
@@ -182,8 +184,7 @@ internal static class SmtRunSettlement
         return unanswered.TryGetValue(index, out var ticket) ? round.FateOf(ticket) is { Length: > 0 } fateOf ? fateOf : SmtRunWords.NO_ANSWER : SmtRunWords.NO_ANSWER;
     }
 
-    private static void Count(SmtIntegrityFacts facts, int index, SmtRuling ruling, IReadOnlyList<SmtRound> rounds, SmtRound main, IReadOnlyDictionary<int, string> mainTickets,
-        Func<SmtCopy, SmtModelCheck> check)
+    private static void Count(SmtIntegrityFacts facts, int index, SmtRuling ruling, IReadOnlyList<SmtRound> rounds, Func<SmtCopy, SmtModelCheck> check)
     {
         facts.Problems++;
 
@@ -195,23 +196,6 @@ internal static class SmtRunSettlement
                 if (check(answer).IsFailed)
                     facts.FailedModels++;
             }
-        }
-
-        if (SmtRulings.NeedsRepair(main, index))
-        {
-            facts.Repairs++;
-            SmtIntegrityFacts.Count(facts.RepairReasons, ReasonIn(main, index, mainTickets));
-        }
-
-        var first = ruling.Repaired ? rounds.FirstOrDefault(round => round.Name == SmtRound.REPAIR) : main;
-        var answers = first?.Answers(index) ?? [];
-        if (answers.Count >= SmtRulings.SAMPLE_COPIES)
-        {
-            facts.Compared++;
-            if (answers.All(answer => answer.Digest == answers[0].Digest))
-                facts.Agreements++;
-            else
-                facts.Disagreements++;
         }
 
         if (ruling.Dispute != null)
@@ -240,7 +224,41 @@ internal static class SmtRunSettlement
             facts.EvaluatorDisagreements.Add((index, ruling.Check.Reason, ruling.Check.Detail));
     }
 
-    private static void CountRounds(SmtIntegrityFacts facts, SmtRound main, SmtRound? repair, SmtRound? dispute, double? rate)
+    /// <summary>
+    /// What the first and the repair round did for one problem: whether the repair round sent it
+    /// (its packages say so, whatever came back) and why, how its first answers compared, and
+    /// whether a problem of a package asked for twice ended without two answers of one fan-out.
+    /// </summary>
+    private static void CountRepair(SmtIntegrityFacts facts, int index, SmtRound main, SmtRound? repair,
+        IReadOnlyDictionary<int, string> mainTickets, IReadOnlyDictionary<int, string> repairTickets, IReadOnlySet<string> sampled)
+    {
+        var answers = main.Answers(index).Count;
+        var again = repair?.Answers(index).Count ?? 0;
+
+        if (repair != null && (repair.UnitOf.ContainsKey(index) || repairTickets.ContainsKey(index)))
+        {
+            facts.Repairs++;
+            SmtIntegrityFacts.Count(facts.RepairReasons, answers == 0 ? ReasonIn(main, index, mainTickets) : SmtRulings.COPIES_SHORT);
+        }
+
+        var first = SmtRulings.First(index, main, repair).Answers;
+        if (first.Count >= SmtRulings.SAMPLE_COPIES)
+        {
+            facts.Compared++;
+            if (first.All(answer => answer.Digest == first[0].Digest))
+                facts.Agreements++;
+            else
+                facts.Disagreements++;
+        }
+
+        // A problem without any answer is no answer the sampling failed to check: it is counted
+        // as a problem without a result.
+        var ticket = main.UnitOf.TryGetValue(index, out var unit) ? unit.Ticket : mainTickets.GetValueOrDefault(index);
+        if (ticket != null && sampled.Contains(ticket) && answers + again > 0 && answers < SmtRulings.SAMPLE_COPIES && again < SmtRulings.SAMPLE_COPIES)
+            facts.SampledShort++;
+    }
+
+    private static void CountRounds(SmtIntegrityFacts facts, SmtRound main, SmtRound? repair, SmtRound? dispute, double? rate, int sampled)
     {
         foreach (var round in new[] { main, repair, dispute }.OfType<SmtRound>())
         {
@@ -251,21 +269,18 @@ internal static class SmtRunSettlement
                 facts.Faults[code] = facts.Faults.GetValueOrDefault(code) + count;
         }
 
-        // What each fan-out was asked for and what came back, in packages.
+        // What each fan-out was asked for and what came back, in packages. The repair round asks
+        // two machines for every one of its packages.
         int? asked = rate is { } stated ? SmtSampling.Selected(main.Issued.Count, stated) : null;
         facts.FanOuts.Add(FanOut(main, SmtRulings.SAMPLE_COPIES, asked));
 
         if (repair != null)
-        {
-            facts.FanOuts.Add(rate is double share && share > 0
-                ? FanOut(repair, SmtRulings.SAMPLE_COPIES, SmtSampling.Selected(repair.Issued.Count, share))
-                : FanOut(repair, 1, repair.Issued.Count));
-        }
+            facts.FanOuts.Add(FanOut(repair, SmtRulings.SAMPLE_COPIES, repair.Issued.Count));
 
         if (dispute != null)
             facts.FanOuts.Add(FanOut(dispute, SmtRulings.DISPUTE_COPIES, dispute.Issued.Count));
 
-        facts.Sampling = SmtSampling.State(rate, facts.FanOuts);
+        facts.Sampling = SmtSampling.State(rate, asked ?? 0, sampled, facts.SampledShort);
     }
 
     /// <summary>One fan-out in numbers: the packages that came back with the answers asked of them, and those without any.</summary>

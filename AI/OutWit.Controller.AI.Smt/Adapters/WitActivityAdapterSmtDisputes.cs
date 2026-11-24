@@ -56,7 +56,7 @@ internal sealed class WitActivityAdapterSmtDisputes : WitActivityAdapterFunction
         var repair = activity.Repairs == null
             ? null
             : await SmtSettlement.ReadRepairAsync(SmtAdapterTools.TaskPackages(pool, activity.Repairs, "Repairs"), SmtAdapterTools.ResultPackages(pool, activity.Repaired, "Repaired"),
-                sampled: true, BlobService, spool);
+                BlobService, spool);
 
         var (packages, causes) = await SmtSettlement.PublishDisputesAsync(main, repair, spool, BlobService, work.Path);
 

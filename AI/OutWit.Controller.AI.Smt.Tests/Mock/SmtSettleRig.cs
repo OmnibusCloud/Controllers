@@ -185,11 +185,12 @@ internal sealed class SmtSettleRig : IDisposable
     /// <summary>What Smt.Repairs stores of a first fan-out.</summary>
     /// <param name="issued">The packages it gave out.</param>
     /// <param name="returned">What came back.</param>
+    /// <param name="rate">The sampling rate the script hands Smt.Repairs, or null for a call without it.</param>
     /// <returns>The packages of the repair round.</returns>
-    public List<SmtTaskPackageData> Repairs(IReadOnlyList<SmtTaskPackageData> issued, IReadOnlyList<SmtResultPackageData> returned)
+    public List<SmtTaskPackageData> Repairs(IReadOnlyList<SmtTaskPackageData> issued, IReadOnlyList<SmtResultPackageData> returned, double? rate = null)
     {
         var main = SmtSettlement.ReadMainAsync(issued, returned, Blobs).GetAwaiter().GetResult();
-        return SmtSettlement.PublishRepairsAsync(main, Blobs, Path.Combine(Work, "repairs")).GetAwaiter().GetResult();
+        return SmtSettlement.PublishRepairsAsync(main, rate, Blobs, Path.Combine(Work, "repairs")).GetAwaiter().GetResult();
     }
 
     /// <summary>What Smt.Disputes stores of a first fan-out and a repair round.</summary>
@@ -203,7 +204,7 @@ internal sealed class SmtSettleRig : IDisposable
     {
         using var spool = new SmtSpool(Path.Combine(Work, "spool"));
         var main = SmtSettlement.ReadMainAsync(issued, returned, Blobs, spool).GetAwaiter().GetResult();
-        var repair = SmtSettlement.ReadRepairAsync(repairs, repaired, sampled: true, Blobs, spool).GetAwaiter().GetResult();
+        var repair = SmtSettlement.ReadRepairAsync(repairs, repaired, Blobs, spool).GetAwaiter().GetResult();
         return SmtSettlement.PublishDisputesAsync(main, repair, spool, Blobs, Path.Combine(Work, "disputes")).GetAwaiter().GetResult().Packages;
     }
 

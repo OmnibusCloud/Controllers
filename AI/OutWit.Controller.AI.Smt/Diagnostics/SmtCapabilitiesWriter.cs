@@ -14,8 +14,8 @@ namespace OutWit.Controller.AI.Smt.Diagnostics;
 /// The capabilities document: what a lab can know before a run. The controller's version and its
 /// solver profile, the queries, the defaults and ceilings of a run's options, the ceilings of a
 /// problem and of a problem set, the words a row may say and the codes of a package a node could
-/// not work on, the size of a package, what a node runs a package with, the benchmark's unit, the
-/// platforms, and the pool as totals. Nodes run the same module as the host (a node on another
+/// not work on, the size of a package, what a node runs a package with and the least memory it
+/// must have, the benchmark's unit, the platforms, and the pool as totals. Nodes run the same module as the host (a node on another
 /// version refuses the work), so what is said here is the pool's. A JSON document, so an
 /// application reads it without the controller's types and reads its limits here instead of
 /// carrying copies of them; its schema is <c>docs/smt-capabilities.schema.json</c>.
@@ -135,8 +135,9 @@ internal static class SmtCapabilitiesWriter
 
             // What a node runs a package with: one session a core, at most max_degree, as many as
             // ram_headroom of its available memory holds at two caps of the linear memory and the
-            // margin a session.
+            // margin a session; and the least memory a machine has for the planner to send it one.
             writer.WriteStartObject("node");
+            writer.WriteNumber("min_ram_mb", SmtSandboxDegree.MIN_RAM_MB);
             writer.WriteNumber("max_degree", SmtSandboxDegree.MAX_DEGREE);
             writer.WriteNumber("ram_headroom", SmtSandboxDegree.RAM_HEADROOM);
             writer.WriteNumber("session_margin_bytes", SmtSandboxDegree.SESSION_MARGIN_BYTES);

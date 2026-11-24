@@ -53,7 +53,8 @@ internal sealed class WitActivityAdapterSmtSettle : WitActivityAdapterFunction<W
         var repair = (Issued: (IReadOnlyList<SmtTaskPackageData>)SmtAdapterTools.TaskPackages(pool, activity.Repairs, "Repairs"),
             Returned: (IEnumerable<SmtResultPackageData?>)SmtAdapterTools.ResultPackages(pool, activity.Repaired, "Repaired"));
 
-        // A script that never samples and never fails a model has nothing to dispute, and may run no dispute round.
+        // A script that never samples and never fails a model has nothing to dispute, and may run no
+        // dispute round. The repair round asked two machines for every package.
         (IReadOnlyList<SmtTaskPackageData> Issued, IEnumerable<SmtResultPackageData?> Returned)? dispute = activity.Disputes == null
             ? null
             : (SmtAdapterTools.TaskPackages(pool, activity.Disputes, "Disputes"), SmtAdapterTools.ResultPackages(pool, activity.Settled, "Settled"));

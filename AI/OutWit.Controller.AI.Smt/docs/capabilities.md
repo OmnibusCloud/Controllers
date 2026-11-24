@@ -4,7 +4,7 @@ A reference for building on the Smt controller: what goes into a run and what co
 is checked and what is not, and where the edges are. The [README](../README.md) explains how
 things work inside; the schemas beside this page are the contract of the documents.
 
-Version described: **Smt 0.3.0** (with Smt.Model 0.3.0 and Smt.Scripts 0.1.0). In development;
+Version described: **Smt 0.4.0** (with Smt.Model 0.3.0 and Smt.Scripts 0.2.0). In development;
 nothing is published.
 
 ## Contents
@@ -38,8 +38,9 @@ Three queries: `check` (is the problem satisfiable, by which model or which valu
 |---|---|
 | Solver | Z3 5.4.1 for `wasm32-wasip1`, single-threaded; profile `z3-5.4.1`; the module's SHA-256 is pinned and checked before it is compiled |
 | Platforms of the nodes | Windows x64, Linux x64, macOS arm64 |
+| Machines of the nodes | 8 GB of memory at least (7,680 MiB as a node reports it: a machine sold as 8 GB reports a little less than 8,192 MiB): the planner sends no package to a smaller one |
 | Budget of a problem | the solver's resource limit of a check (150,000,000 by default) and the hard cap as fuel (60 s of a reference machine by default, at 5,000,000,000 units a second): counts, the same on every node |
-| Copies | a share of the packages (the sampling rate, 0.05 by default) is solved on two machines; a dispute on three more |
+| Copies | a share of the packages (the sampling rate, 0.05 by default) is solved on two machines; a problem whose package lost one of its two copies, or that has no answer, goes out again to two machines; a dispute on three more |
 | Checks | every `sat` model is evaluated against the problem on the server, by code that shares nothing with the solver |
 | Documents | results (JSON lines), report, provenance, integrity (JSON), each with a schema |
 | Machines | no document names one: a row says how many machines answered and whether they agreed |
@@ -52,7 +53,7 @@ Three queries: `check` (is the problem satisfiable, by which model or which valu
 |---|---|---|
 | `SmtRun` | `Blob:problems`, `SmtOptions:opts` | the blobs `results`, `report`, `provenance`, `integrity` |
 | `SmtPreflight` | `Blob:problems`, `SmtOptions:opts` | `result`: an `SmtPreflight`; nothing is sent to a node |
-| `SmtRuntimeDiagnostics` | none | `result`: an `SmtRuntimeDiagnostics`; `capabilities`: a JSON blob (the profile, the defaults and ceilings, the pool as totals) |
+| `SmtRuntimeDiagnostics` | none | `result`: an `SmtRuntimeDiagnostics`; `capabilities`: a JSON blob (the profile, the defaults and ceilings, the least memory of a node's machine, the pool as totals) |
 
 The problem set and every document travel as blobs; the job's variables carry references and a
 few numbers.
@@ -111,7 +112,7 @@ One JSON line a row of the set, in the set's order, refused rows included.
 | `model`, `values` | a check's model and the values it asked for; a proof's counterexample |
 | `model_truncated` | the texts above are the solver's own and are shown up to 64 KB a row, whole texts only; past that they are null and this is true. The full models stay in the run's ledger, the server's own blob |
 | `validation`, `validation_reason`, `validation_detail` | what the server's evaluator said of every model: `validated`, `partial` (with the reason), `failed` (with the assertion), or `none` when there is no model |
-| `copies`, `agreed`, `settled_by` | how many machines answered, whether all gave one digest, and how the answer was settled: `one_copy`, `copies`, `dispute`, `agreement` |
+| `copies`, `agreed`, `settled_by` | how many answers the problem was ruled on, whether all gave one digest, and how the answer was settled: `one_copy` (it rests on one machine), `copies` (two machines of one fan-out at least), `dispute`, `agreement` |
 | `digest`, `stats` | the digest of the settled row (the same on every honest machine), its resource count, fuel and checks |
 | `tags` | passed through |
 
@@ -164,7 +165,12 @@ What holds:
 - **A node's word is a claim.** A result is taken only under a ticket its round gave out, as an
   answer to a problem of its package, from this controller version, with the words, counts and
   digest of a row; anything else fails its package and is counted. A package a node could not
-  work on, and a problem whose session a node could not end, go out once more.
+  work on, and a problem whose session a node could not end, go out once more, to two machines.
+- **The sampling asked for is restored.** A problem of a package asked for twice that came back
+  with one answer (the other copy refused by its node, refused by the server, or a fault of the
+  node) goes out again to two machines, and the integrity document counts it as `copies_short`.
+  The run's `sampling` is `as_asked` when every such problem ends with two answers of one fan-out,
+  and `short` when the repair pair lost a copy again.
 - **No machine is named.** The documents name no machine, no user, no folder and no ticket.
 
 What it does not claim:
@@ -180,7 +186,15 @@ What it does not claim:
 - **Duplicate models of an enumeration are not looked for.** The count is the solver's.
 - **Copies on different machines are the platform's.** The server sees results, not machines:
   counting answers as machines rests on Grid keeping one value for each return variable a node's
-  tasks asked for (Grid 1.3.0 and later).
+  tasks asked for (Grid 1.3.0 and later), and Grid keeps the copies of one fan-out apart and
+  guarantees nothing across fan-outs. So two answers count as two machines only when they come
+  from one fan-out: an answer of the first round and an answer of the repair round with the same
+  digest are `one_copy`.
+- **A package asked for twice is known by its results.** Which packages a rate falls on is the
+  platform's choice and the server never learns it: it knows a package was asked for twice when
+  two results came back under it, whatever they say, or when the rate asks for every package. A
+  package asked for twice of which at most one result came back cannot be found, is not sent
+  again, and leaves the sampling `short`.
 
 ## 7. Limits
 
@@ -192,6 +206,7 @@ What it does not claim:
 | A session's output | 16 MiB; past it the row is `output_exceeded` and keeps its verdict |
 | What a lab sees of a row's models | 64 KB |
 | Memory of one session on a node | twice the host's cap of the solver's memory and 192 MiB: 2,752 MiB under the defaults |
+| Memory of a node's machine | 7,680 MiB at least as the node reports it (a machine sold as 8 GB; `node.min_ram_mb` of the capabilities); the sessions may claim three quarters of what it has available |
 | Duration | none is estimated; the upper bound is the taken problems times the hard cap |
 
 ## 8. Scale and delivery

@@ -1,12 +1,16 @@
+using System.Text.Json;
 using OutWit.Controller.AI.Smt.Model;
+using OutWit.Controller.AI.Smt.Tests.Docs;
 using OutWit.Controller.AI.Smt.Tests.Mock;
+using OutWit.Controller.AI.Smt.Tests.Run;
 
 namespace OutWit.Controller.AI.Smt.Tests.Sandbox;
 
 /// <summary>
 /// How many sessions a package runs at once: the cores, a cap of 16, and what three quarters of
 /// the available memory holds at twice the host's cap of the solver's linear memory and a margin a
-/// session. The machines are numbers given to the rule, so every machine is any machine here.
+/// session; and the least memory of a machine the planner sends a package to. The machines are
+/// numbers given to the rule, so every machine is any machine here.
 /// </summary>
 [TestFixture]
 public sealed class SmtDegreeTests
@@ -95,6 +99,34 @@ public sealed class SmtDegreeTests
             var session = 3 * GIGABYTE;
             Assert.That(SmtNodeRig.Degree(4, 4 * GIGABYTE, session), Is.EqualTo((1, "memory")));
             Assert.That(SmtNodeRig.Degree(4, 4 * GIGABYTE - 1, session), Is.EqualTo((0, "no_memory")));
+        });
+    }
+
+    #endregion
+
+    #region Requirement Tests
+
+    [Test]
+    public void TheActivityThatSolvesAPackageAsksForMachinesOfEightGigabytesTest()
+    {
+        // The server's planner reads the requirement off the activity; the capabilities document
+        // states the same number.
+        var capabilities = JsonDocument.Parse(SmtDiagnosticsRig.Capabilities(new SmtRuntimeDiagnosticsData { ModulePresent = true })).RootElement;
+        var session = SmtNodeRig.SessionBytes(new SmtOptionsData());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(SmtNodeRig.SolvePackageMinRamMb(), Is.EqualTo(new[] { SmtNodeRig.MinRamMb }), "one RequiresResources, its MinRamMb the constant");
+            Assert.That(SmtNodeRig.MinRamMb, Is.EqualTo(7_680), "machines sold as 8 GB, which report a little less than 8,192 MiB");
+            Assert.That(capabilities.GetProperty("node").GetProperty("min_ram_mb").GetInt64(), Is.EqualTo(SmtNodeRig.MinRamMb), "the capabilities document carries it");
+            Assert.That(SmtSchemaCheck.IsValid(SmtRunChecks.Schema("smt-capabilities.schema.json"), capabilities), Is.True, "and holds to its schema");
+
+            // Why: a machine sold as 8 GB passes and a 6 GB one (about 5,900 MiB) does not; one
+            // session at the defaults needs less than half of such a machine available, and a
+            // machine with 2 GiB available (a 6 GB machine with its client running) holds none.
+            Assert.That(SmtNodeRig.MinRamMb, Is.InRange(6 * 1_024 + 1, 8 * 1_024 - 1));
+            Assert.That(session / SmtNodeRig.RamHeadroom, Is.LessThan(SmtNodeRig.MinRamMb * MEGABYTE / 2));
+            Assert.That(SmtNodeRig.Degree(4, 2 * GIGABYTE, session), Is.EqualTo((0, "no_memory")));
         });
     }
 

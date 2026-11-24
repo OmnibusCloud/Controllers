@@ -8,10 +8,10 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// <param name="Check">What the host's evaluator said of the accepted row's models.</param>
 /// <param name="HostStatus">For a problem without an answer, <see cref="SmtRunWords.NO_RESULT"/> or <see cref="SmtRunWords.DISPUTED"/>; empty otherwise.</param>
 /// <param name="Reason">For a problem without an answer, the code that says why; empty otherwise.</param>
-/// <param name="Copies">The answers the problem was ruled on: of its first round and of the dispute round.</param>
+/// <param name="Copies">The answers the problem was ruled on: of the first fan-out, of the repair round for a problem it answered, and of the dispute round.</param>
 /// <param name="Agreed">Whether all of them gave one digest.</param>
 /// <param name="SettledBy">How the answer was settled (<see cref="SmtRunWords.SETTLED_BY"/>); empty without one.</param>
-/// <param name="Repaired">Whether the problem was first ruled on in the repair round.</param>
+/// <param name="Repaired">Whether the repair round's answers are among those the problem was first ruled on (for a problem without any answer: always).</param>
 /// <param name="Dispute">The record of the problem's dispute, or null when it had none.</param>
 /// <param name="Lies">The answers that differ from the settled answer of the others.</param>
 internal sealed record SmtRuling(int Index, SmtCopy? Accepted, SmtModelCheck Check, string HostStatus, string Reason, int Copies, bool Agreed, string SettledBy,
@@ -26,7 +26,7 @@ internal sealed record SmtRuling(int Index, SmtCopy? Accepted, SmtModelCheck Che
     /// <param name="copies">The answers it was ruled on.</param>
     /// <param name="agreed">Whether they all gave one digest.</param>
     /// <param name="settledBy">How.</param>
-    /// <param name="repaired">Whether it was first ruled on in the repair round.</param>
+    /// <param name="repaired">Whether the repair round's answers are among those it was first ruled on.</param>
     /// <param name="dispute">Its dispute, or null.</param>
     /// <param name="lies">The answers that differ from the settled one.</param>
     /// <returns>The ruling.</returns>
@@ -48,7 +48,7 @@ internal sealed record SmtRuling(int Index, SmtCopy? Accepted, SmtModelCheck Che
     /// <param name="index">The problem.</param>
     /// <param name="dispute">The dispute.</param>
     /// <param name="copies">The answers it was ruled on.</param>
-    /// <param name="repaired">Whether it was first ruled on in the repair round.</param>
+    /// <param name="repaired">Whether the repair round's answers are among those it was first ruled on.</param>
     /// <returns>The ruling.</returns>
     public static SmtRuling Disputed(int index, SmtDisputeRecord dispute, int copies, bool repaired)
     {

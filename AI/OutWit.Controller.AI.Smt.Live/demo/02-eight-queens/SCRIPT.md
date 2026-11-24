@@ -28,7 +28,8 @@ bin/Release/net10.0/smt-live run demo/02-eight-queens/problems.jsonl --rate 1 --
 ```
 
 The default budget is far more than either problem needs. `--rate 1` sends the one package to two
-machines (a fleet of one machine answers it once, and the run says the sampling was `short`).
+machines of 8 GB or more (a copy a machine refuses goes out again, to two machines; a fleet of
+one such machine answers it on that machine alone, and the run says the sampling was `short`).
 
 ## What to look at
 

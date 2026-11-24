@@ -7,11 +7,17 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// between two copies by what a node says of itself, and compares copies by their digests only:
 /// <list type="bullet">
 /// <item>a problem without an answer from the first fan-out (no taken row, or only rows of a fault
-/// of the node) is sent out once more, under the sampling of the first; if it still has none, it
-/// has no result, with the code of what the nodes said last;</item>
+/// of the node) is sent out once more, and so is a problem of a package the first fan-out asked
+/// for twice that came back with fewer than two answers (<see cref="NeedsRepair"/>): the repair
+/// round asks two machines for each of its packages. A problem that still has no answer has no
+/// result, with the code of what the nodes said last;</item>
 /// <item>copies that give one digest are one answer, and so is the one copy of a problem that was
-/// not sampled (it rests on one machine, and the documents say so). The answer's every model is
-/// checked by the host's evaluator;</item>
+/// not sampled (it rests on one machine, and the documents say so). Two answers rest on two
+/// machines only when they come from one fan-out: Grid keeps the copies of one fan-out on
+/// different machines and guarantees nothing across fan-outs, so the lone answer of the first
+/// fan-out and a lone answer of the repair round may be one machine's
+/// (<see cref="SmtFirstAnswers.TwoMachines"/>). The lone answer is still compared with the repair
+/// round's by digest. The answer's every model is checked by the host's evaluator;</item>
 /// <item>copies whose digests differ, and an answer whose model the evaluator calls failed, are a
 /// dispute: the problem goes to three more machines, and the answer is the digest the most of them
 /// give, two at least, with no tie;</item>
@@ -27,6 +33,9 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// tasks asked for (Grid 1.3.0 and later); held to it, a node that answers one package of a round
 /// twice has left another package of that round short, so in a dispute round an answer counts
 /// towards "two machines" only as far as it cannot be such a second answer (<see cref="Borrowable"/>).
+/// Which packages a rate falls on is the platform's choice too, and the host never learns it: a
+/// package is known to have been asked for twice by the results that came back under its ticket
+/// (<see cref="Sampled"/>).
 /// </para>
 /// </summary>
 internal static class SmtRulings
@@ -36,40 +45,88 @@ internal static class SmtRulings
     /// <summary>The copies a dispute asks for.</summary>
     public const int DISPUTE_COPIES = 3;
 
-    /// <summary>The copies the first fan-out asks for of a sampled package.</summary>
+    /// <summary>The copies the first fan-out asks for of a sampled package, and the repair round of every package.</summary>
     public const int SAMPLE_COPIES = 2;
 
     /// <summary>The fewest copies that must give an answer for it to settle a dispute.</summary>
     public const int MAJORITY = 2;
 
+    /// <summary>
+    /// The reason of a repair (the integrity document's <c>repairs_by_reason</c>): the problem's
+    /// package was asked for twice and fewer than two answers to it came back from the first fan-out.
+    /// </summary>
+    public const string COPIES_SHORT = "copies_short";
+
     #endregion
 
     #region Functions
 
-    /// <summary>Whether a problem has no answer from the first fan-out and goes out once more.</summary>
+    /// <summary>
+    /// The tickets of the packages the first fan-out is known to have asked for twice: those under
+    /// which two results or more came back, whatever they say (an answer, a node's fault code, a
+    /// result the host refused), and every package when the rate asks for every one. A package of
+    /// which fewer than two results came back cannot be told from one asked for once.
+    /// </summary>
     /// <param name="main">The first fan-out.</param>
-    /// <param name="index">The problem.</param>
-    /// <returns>True when no taken copy of it is an answer.</returns>
-    public static bool NeedsRepair(SmtRound main, int index)
+    /// <param name="rate">The sampling rate the fan-out ran under, or null when the script does not say.</param>
+    /// <returns>The tickets.</returns>
+    public static HashSet<string> Sampled(SmtRound main, double? rate)
     {
-        return main.Answers(index).Count == 0;
+        var every = rate is { } share && main.Issued.Count > 0 && SmtSampling.Selected(main.Issued.Count, SmtSampling.Clamp(share)) >= main.Issued.Count;
+
+        return main.Issued
+            .Where(unit => every || main.Returned.GetValueOrDefault(unit.Ticket) >= SAMPLE_COPIES)
+            .Select(unit => unit.Ticket)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>
-    /// Why the answers of a problem in a fan-out that samples (the first one, or a repair round run
-    /// under the same options) cannot settle it, or null when they can.
+    /// Whether a problem goes out once more: it has no answer from the first fan-out, or its
+    /// package was asked for twice and fewer than two answers to it came back.
     /// </summary>
-    /// <param name="round">The fan-out.</param>
+    /// <param name="main">The first fan-out.</param>
     /// <param name="index">The problem.</param>
+    /// <param name="sampled">Whether the problem's package is known to have been asked for twice (<see cref="Sampled"/>).</param>
+    /// <returns>True when the repair round sends it.</returns>
+    public static bool NeedsRepair(SmtRound main, int index, bool sampled)
+    {
+        var answers = main.Answers(index).Count;
+        return answers == 0 || (sampled && answers < SAMPLE_COPIES);
+    }
+
+    /// <summary>
+    /// The answers a problem is first ruled on: the first fan-out's; for a problem the repair round
+    /// answered, the first fan-out's with the repair round's after them. A ticket's surplus counts
+    /// only for a round that gave the problem an answer.
+    /// </summary>
+    /// <param name="index">The problem.</param>
+    /// <param name="main">The first fan-out.</param>
+    /// <param name="repair">The repair round, or null when the script ran none.</param>
+    /// <returns>The answers.</returns>
+    public static SmtFirstAnswers First(int index, SmtRound main, SmtRound? repair)
+    {
+        var answers = main.Answers(index);
+        var again = repair?.Answers(index) ?? [];
+        if (repair == null || again.Count == 0)
+            return new SmtFirstAnswers(answers, main, answers.Count >= SAMPLE_COPIES, answers.Count > 0 && IsSurplus(main, index), false);
+
+        return new SmtFirstAnswers([.. answers, .. again], repair,
+            answers.Count >= SAMPLE_COPIES || again.Count >= SAMPLE_COPIES,
+            (answers.Count > 0 && IsSurplus(main, index)) || IsSurplus(repair, index),
+            true);
+    }
+
+    /// <summary>Why the answers a problem is first ruled on cannot settle it, or null when they can.</summary>
+    /// <param name="first">The answers (<see cref="First"/>).</param>
     /// <param name="check">The evaluator's check of a copy.</param>
     /// <returns>A cause of <see cref="SmtRunWords.DISPUTE_CAUSES"/>, or null.</returns>
-    public static string? Cause(SmtRound round, int index, Func<SmtCopy, SmtModelCheck> check)
+    public static string? Cause(SmtFirstAnswers first, Func<SmtCopy, SmtModelCheck> check)
     {
-        var answers = round.Answers(index);
+        var answers = first.Answers;
         if (answers.Count == 0)
             return null;
 
-        if (round.UnitOf.TryGetValue(index, out var unit) && round.Surplus.Contains(unit.Ticket))
+        if (first.Surplus)
             return SmtRunWords.SURPLUS;
 
         if (answers.Any(answer => answer.Digest != answers[0].Digest))
@@ -108,30 +165,28 @@ internal static class SmtRulings
     public static SmtRuling Rule(int index, SmtRound main, SmtRound? repair, SmtRound? dispute, IReadOnlyDictionary<string, int> borrowable,
         Func<SmtCopy, SmtModelCheck> check, Func<string> reason)
     {
-        var round = main;
-        var first = main.Answers(index);
-        var repaired = false;
+        var first = First(index, main, repair);
+        if (first.Answers.Count == 0)
+            return SmtRuling.Without(index, reason());
 
-        if (first.Count == 0)
+        var cause = Cause(first, check);
+        if (cause == null)
         {
-            if (repair == null || repair.Answers(index).Count == 0)
-                return SmtRuling.Without(index, reason());
-
-            round = repair;
-            first = repair.Answers(index);
-            repaired = true;
+            var answer = first.Answers[0];
+            return SmtRuling.Accept(index, answer, check(answer), first.Answers.Count, agreed: true, first.TwoMachines ? SmtRunWords.COPIES : SmtRunWords.ONE_COPY, first.Repaired);
         }
 
-        var cause = Cause(round, index, check);
-        if (cause == null)
-            return SmtRuling.Accept(index, first[0], check(first[0]), first.Count, agreed: true, first.Count >= SAMPLE_COPIES ? SmtRunWords.COPIES : SmtRunWords.ONE_COPY, repaired);
-
-        return Settle(index, cause, first, dispute, borrowable, check, repaired);
+        return Settle(index, cause, first.Answers, dispute, borrowable, check, first.Repaired);
     }
 
     #endregion
 
     #region Tools
+
+    private static bool IsSurplus(SmtRound round, int index)
+    {
+        return round.UnitOf.TryGetValue(index, out var unit) && round.Surplus.Contains(unit.Ticket);
+    }
 
     private static SmtRuling Settle(int index, string cause, List<SmtCopy> first, SmtRound? dispute, IReadOnlyDictionary<string, int> borrowable,
         Func<SmtCopy, SmtModelCheck> check, bool repaired)

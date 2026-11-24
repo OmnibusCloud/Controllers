@@ -8,8 +8,10 @@ namespace OutWit.Controller.AI.Smt.Diagnostics;
 
 /// <summary>
 /// Asks the host which nodes would take Smt work and adds them up. The host answers for the
-/// submitter's own scope, so the totals are those of the pool a run submitted now would be
-/// planned on.
+/// submitter's own scope and for the activity that solves a package, with the requirements it
+/// declares applied (a machine below <see cref="SmtSandboxDegree.MIN_RAM_MB"/> is not counted; a
+/// node that has reported no capabilities is, as the planner admits it), so the totals are those
+/// of the pool a run submitted now would be planned on.
 /// </summary>
 internal static class SmtPoolProbe
 {

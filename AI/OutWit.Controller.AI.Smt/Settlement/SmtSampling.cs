@@ -6,8 +6,10 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// What a run asked for when it asked for a share of its packages to be solved twice, and
 /// whether it got it. The share is the run's sampling rate; which packages it falls on is the
 /// platform's choice, made inside the fan-out, and the host never learns it. What the host can
-/// count is how many packages a rate asks for and how many came back with their two answers, and
-/// that is what the documents state: a run whose checking did not happen says so.
+/// count is how many packages a rate asks for, which packages it knows were asked for twice (two
+/// results came back under their tickets, or the rate asks for every package), and whether every
+/// problem of those ended with two answers of one fan-out, the first or the repair round that
+/// sent it out again; that is what the documents state: a run whose checking did not happen says so.
 /// </summary>
 internal static class SmtSampling
 {
@@ -19,10 +21,19 @@ internal static class SmtSampling
     /// <summary>The run asked for no package to be solved twice.</summary>
     public const string NONE = "none";
 
-    /// <summary>As many packages came back with two taken answers as the rate asks for, in the first fan-out and in the repair round.</summary>
+    /// <summary>
+    /// Every problem with an answer of the packages asked for twice ended with two answers of one
+    /// fan-out (the first, or the repair round that sent it out again), and the host knows of as
+    /// many such packages as the rate asks for.
+    /// </summary>
     public const string AS_ASKED = "as_asked";
 
-    /// <summary>Fewer packages came back with two taken answers than the rate asks for.</summary>
+    /// <summary>
+    /// A problem of a package asked for twice rests on fewer than two answers of one fan-out (the
+    /// repair round lost a copy again), or fewer packages came back from the first fan-out with two
+    /// results than the rate asks for (a package asked for twice that left at most one result cannot
+    /// be found to be sent again).
+    /// </summary>
     public const string SHORT = "short";
 
     /// <summary>Every state, in the order the documents list them.</summary>
@@ -60,11 +71,13 @@ internal static class SmtSampling
         return Math.Clamp(selected, 1, packages);
     }
 
-    /// <summary>The state of a run's sampling, from what its fan-outs were asked and what came back. A dispute round is not sampling.</summary>
+    /// <summary>The state of a run's sampling, from what the first fan-out was asked and what the problems of its packages ended with. A dispute round is not sampling.</summary>
     /// <param name="rate">The rate the script stated, or null when it stated none.</param>
-    /// <param name="fanOuts">The run's fan-outs.</param>
+    /// <param name="selected">The packages of the first fan-out the rate asks for twice (<see cref="Selected"/>).</param>
+    /// <param name="known">The packages the host knows were asked for twice: two results or more came back under their tickets, or the rate asks for every package.</param>
+    /// <param name="shortProblems">The problems with an answer of those packages that ended without two answers of one fan-out.</param>
     /// <returns>One of <see cref="STATES"/>.</returns>
-    public static string State(double? rate, IEnumerable<SmtFanOutRecord> fanOuts)
+    public static string State(double? rate, int selected, int known, int shortProblems)
     {
         if (rate == null)
             return NOT_STATED;
@@ -72,7 +85,7 @@ internal static class SmtSampling
         if (!(rate > 0))
             return NONE;
 
-        return fanOuts.Any(fanOut => fanOut.Round != SmtRound.DISPUTE && fanOut.IsShort) ? SHORT : AS_ASKED;
+        return known < selected || shortProblems > 0 ? SHORT : AS_ASKED;
     }
 
     /// <summary>Writes the rate (null when the script did not state it), the state in a fixed word, and the packages nothing answered.</summary>

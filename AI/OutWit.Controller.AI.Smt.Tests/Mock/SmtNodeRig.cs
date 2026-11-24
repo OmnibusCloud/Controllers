@@ -1,10 +1,13 @@
 using System.IO.Compression;
+using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
+using OutWit.Controller.AI.Smt.Activities;
 using OutWit.Controller.AI.Smt.Delivery;
 using OutWit.Controller.AI.Smt.Model;
 using OutWit.Controller.AI.Smt.Profiles;
 using OutWit.Controller.AI.Smt.Sandbox;
 using OutWit.Controller.AI.Smt.Solver;
+using OutWit.Engine.Data.Attributes;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Smt.Tests.Mock;
@@ -329,6 +332,16 @@ internal static class SmtNodeRig
         return SmtSandboxDegree.SessionBytes(options);
     }
 
+    /// <summary>
+    /// The least memory of a machine the activity that solves a package declares, read off its
+    /// requirement attributes as the server's planner reads them.
+    /// </summary>
+    /// <returns>Its <c>RequiresResources.MinRamMb</c>, every such attribute of it; empty when it declares none.</returns>
+    public static List<long> SolvePackageMinRamMb()
+    {
+        return typeof(WitActivitySmtSolvePackage).GetTypeInfo().GetCustomAttributes().OfType<RequiresResourcesAttribute>().Select(requirement => requirement.MinRamMb).ToList();
+    }
+
     /// <summary>The host's cap of the solver's linear memory for a memory option.</summary>
     /// <param name="megabytes">The option.</param>
     /// <returns>Bytes.</returns>
@@ -339,6 +352,9 @@ internal static class SmtNodeRig
 
     /// <summary>The margin of a session beside its two caps.</summary>
     public static long SessionMarginBytes => SmtSandboxDegree.SESSION_MARGIN_BYTES;
+
+    /// <summary>The least memory of a machine for the planner to send it a package, MiB.</summary>
+    public static long MinRamMb => SmtSandboxDegree.MIN_RAM_MB;
 
     /// <summary>The most sessions at once.</summary>
     public static int MaxDegree => SmtSandboxDegree.MAX_DEGREE;

@@ -7,8 +7,9 @@ namespace OutWit.Controller.AI.Smt.Tests;
 /// The scripts package (<c>OutWit.Controller.AI.Smt.Scripts</c>): it packs the bundled scripts the
 /// controller's folder holds, and its compatibility marker, written and commented out while no
 /// controller is on nuget.org, holds the release it waits for. The first public release of a
-/// product is 1.0.0 at the earliest, so a range that ends at 1.0.0 (the next major of 0.3.0, the
-/// first version whose activities the scripts call) would refuse the very release it waits for.
+/// product is 1.0.0 at the earliest, so a range that ends at 1.0.0 (the next major of 0.4.0, the
+/// first version whose activities the scripts call: Smt.Repairs takes the rate since then) would
+/// refuse the very release it waits for.
 /// </summary>
 [TestFixture]
 public sealed class SmtScriptsPackageTests
@@ -20,7 +21,7 @@ public sealed class SmtScriptsPackageTests
     private const string CONTROLLER_PACKAGE = "OutWit.Controller.AI.Smt";
 
     private static readonly Version FIRST_PUBLIC = new(1, 0, 0);
-    private static readonly Version ACTIVITIES_SINCE = new(0, 3, 0);
+    private static readonly Version ACTIVITIES_SINCE = new(0, 4, 0);
     private static readonly string[] SCRIPTS = ["SmtPreflight.wit", "SmtRun.wit", "SmtRuntimeDiagnostics.wit"];
 
     #endregion

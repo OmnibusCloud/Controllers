@@ -12,9 +12,9 @@ namespace OutWit.Controller.AI.Smt.Activities;
 /// from, becomes the settled run as one ledger blob. Every result package is taken or refused
 /// here, under its ticket; every problem is ruled on here, and every <c>sat</c> answer is checked
 /// here by the host's evaluator; the documents (results, report, provenance, integrity) are written
-/// here, once. The last argument, when a script gives it, is the sampling rate its fan-outs ran
-/// under: the repair round is then taken in as a sampled one, and the documents state the rate and
-/// whether it was met.
+/// here, once. The repair round is taken in as one that asked two machines for every package. The
+/// last argument, when a script gives it, is the sampling rate the first fan-out ran under: the
+/// documents then state the rate and whether it was met.
 /// </summary>
 [Activity("Smt.Settle")]
 [MemoryPackable]

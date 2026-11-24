@@ -11,8 +11,10 @@ namespace OutWit.Controller.AI.Smt.Activities;
 /// Host-side: the problems that go to three more machines are stored as packages: those whose
 /// copies' digests differ, whose package came back more often than it was asked for, and whose
 /// answer's model the host's evaluator calls failed (a failed model accuses nobody: the machines
-/// settle it). A script that hands over its repair round ran it under the sampling of the first
-/// fan-out, and the problems it answered are looked at the same way.
+/// settle it). A script that hands over its repair round asked two machines for each of its
+/// packages; a problem the repair round answered is looked at with every answer it has, the lone
+/// answer of the first fan-out among them, so an answer that differs from the repair round's is a
+/// dispute too.
 /// </summary>
 [Activity("Smt.Disputes")]
 [MemoryPackable]

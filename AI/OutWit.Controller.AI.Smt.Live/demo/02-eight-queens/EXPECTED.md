@@ -29,7 +29,7 @@ machine; 1 package of at most 16 problems.
 | Expected | agree 2 |
 | The evaluator's classes | validated 2 (all 93 models), partial 0, failed 0 |
 | Enumerate | exactly one 1, two or more 1, no model 0, undecided 0; kept 1, dropped 0 |
-| Copies (`--rate 1`, a fleet of two machines or more) | sampling `as_asked`; 2 problems answered by two machines, both agreeing |
+| Copies (`--rate 1`, a fleet of two machines of 8 GB or more) | sampling `as_asked`; 2 problems answered by two machines, both agreeing |
 | Integrity | lies 0, evaluator/solver disagreements 0, no result 0, disputes 0 |
 | `smt-live run` | exit 0, `result   : OK` |
 

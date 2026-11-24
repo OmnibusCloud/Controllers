@@ -5,14 +5,15 @@ runs as a WebAssembly module inside the controller's own wasm sandbox, under bud
 counts and not clocks, so the same problem gives the same verdict, the same model and the same
 cost on every machine.
 
-**Status: 0.3.0, in development; nothing is published.** This version holds the solver (the
+**Status: 0.4.0, in development; nothing is published.** This version holds the solver (the
 profile, the sandbox, one session per problem), the node's side of a run (packages of problems
-solved with a pool of sessions, packages of rows returned, the node measured for the allocator)
-and the host's side: a lab's problem set cut into packages, solved with copies on different
-machines, repaired, disputed, settled by the digests of the rows, every `sat` model checked on the
-server by the model evaluator, and written out as results, a report, provenance and integrity,
-all through blobs (`SmtRun`). The solver module is a data asset of the controller. What a lab can
-rely on, and the limits, are [`docs/capabilities.md`](docs/capabilities.md). The language layer and
+solved with a pool of sessions on machines of 8 GB at least, packages of rows returned, the node
+measured for the allocator) and the host's side: a lab's problem set cut into packages, solved
+with copies on different machines, repaired (the copies the sampling asked for restored),
+disputed, settled by the digests of the rows, every `sat` model checked on the server by the model
+evaluator, and written out as results, a report, provenance and integrity, all through blobs
+(`SmtRun`). The solver module is a data asset of the controller. What a lab can rely on, and the
+limits, are [`docs/capabilities.md`](docs/capabilities.md). The language layer and
 the wire types (the reader, the sanitizer, the model evaluator, the problem set, the options, the
 packages and their rows, the preflight, the words of the documents) are
 [`OutWit.Controller.AI.Smt.Model`](../OutWit.Controller.AI.Smt.Model/README.md); the scripts travel
@@ -23,7 +24,7 @@ in [`OutWit.Controller.AI.Smt.Scripts`](../OutWit.Controller.AI.Smt.Scripts/READ
 | `Smt.SolvePackage` | node | an `SmtTaskPackage` (a reference to a blob of problems), an `SmtResultPackage` (a reference to a blob of rows) |
 | `Smt.Split` | host | the problem set (`Blob`) and the options (`SmtOptions`), an `SmtTaskPackageCollection` |
 | `Smt.SamplingRate` | host | the options, a `Double`: the share of the packages solved on two machines |
-| `Smt.Repairs` | host | the first fan-out's packages and results, the packages of the problems without an answer |
+| `Smt.Repairs` | host | the first fan-out's packages and results (and the rate), the packages of the problems without an answer or short of the copies asked for |
 | `Smt.Disputes` | host | the first fan-out's and the repair round's packages and results, the packages of the problems that go to three more machines |
 | `Smt.Settle` | host | the set, the options, every round's packages and results, and the rate; the ledger (`Blob`) |
 | `Smt.CollectResults`, `Smt.Collect`, `Smt.Provenance`, `Smt.Integrity` | host | the ledger; the results ([`docs/smt-results.schema.json`](docs/smt-results.schema.json)), the report ([`docs/smt-report.schema.json`](docs/smt-report.schema.json)), the provenance ([`docs/smt-provenance.schema.json`](docs/smt-provenance.schema.json)), the integrity document ([`docs/smt-integrity.schema.json`](docs/smt-integrity.schema.json)) |
@@ -167,7 +168,23 @@ as the sanitizer took it, the row being written, the guest's stack); the session
 quarters of the memory the machine has available as the runtime sees it. Under the default
 options a session counts 2,752 MiB: a machine with 4 GiB available runs one, with 16 GiB four,
 with 64 GiB sixteen (seventeen fit). A machine where not one session fits refuses the package
-(`memory_insufficient`).
+(`memory_insufficient`), and the repair round sends its problems out again.
+
+### The machines a package goes to
+
+Smt needs machines of 8 GB at least. `Smt.SolvePackage` declares
+`[RequiresResources(MinRamMb = 7680)]` (`SmtSandboxDegree.MIN_RAM_MB`), and the server's planner
+sends a package only to a node whose reported memory meets it. One session under the default
+options needs 3,670 MiB available (2,752 MiB at three quarters): an 8 GB machine has that with the
+node's client and its system running; a 6 GB machine has about 2 GB available then, and refuses
+every package. A node reports the memory its system sees, and a machine sold as 8 GB sees
+somewhat less than 8,192 MiB (Windows leaves out what the firmware and the graphics reserve,
+Linux reports its `MemTotal`): 7,680 MiB (7.5 GiB) lets such machines in and keeps the 6 GB ones
+(about 5,900 MiB) out. Where one session does not fit at a given moment, the node's own check
+stays: it refuses the package, and the repair round sends its problems out again, to two
+machines; so does a node that has reported no capabilities, which the planner admits unchecked.
+The capabilities document states the number (`node.min_ram_mb`), and its pool counts only the
+nodes the planner would send a package to.
 
 ### Cancel
 
@@ -198,8 +215,9 @@ the platform, and the degree a package would get, with what decided it. Asking c
 `Smt.Capabilities` writes what a lab can know before a run as a JSON document
 ([`docs/smt-capabilities.schema.json`](docs/smt-capabilities.schema.json)): the profile, the
 queries, the defaults and ceilings of the options and of a problem, the words of a row and the
-codes of a node's refusal, the size of a package, the degree rule, the benchmark's unit, the
-platforms and the pool as totals. Nothing in either names a machine.
+codes of a node's refusal, the size of a package, the degree rule and the least memory of a
+machine, the benchmark's unit, the platforms and the pool as totals. Nothing in either names a
+machine.
 
 The benchmark of `Smt.SolvePackage` gives the allocator a rate: thirty small problems written for
 it (every query; linear integers and reals, bit-vectors, uninterpreted functions, arrays,
@@ -216,14 +234,15 @@ memory for one session reports the default (unranked) score.
 
 ```
 Smt.Split -> Smt.SamplingRate -> Grid.Replicas(2, rate) -> Grid.ForEach => Smt.SolvePackage
-          -> Smt.Repairs -> Grid.ForEach (the same sampling) => Smt.SolvePackage
+          -> Smt.Repairs -> Grid.Replicas(2) -> Grid.ForEach => Smt.SolvePackage
           -> Smt.Disputes -> Grid.Replicas(3) -> Grid.ForEach => Smt.SolvePackage
           -> Smt.Settle -> Smt.CollectResults, Smt.Collect, Smt.Provenance, Smt.Integrity
 ```
 
 The work is split once and sent once; the repair round and the dispute round are the only second
-sends. Nothing names, avoids or steers to a machine: copies on different machines are
-`Grid.Replicas`' only.
+sends, and both cost traffic on the fault path only. Nothing names, avoids or steers to a machine:
+copies on different machines are `Grid.Replicas`' only, within one fan-out; Grid guarantees
+nothing across fan-outs.
 
 **Split.** The set is read a row at a time by the model package's reader, the taken problems wait
 in a working file of the host's until the run knows how many it has, and are cut into packages
@@ -246,11 +265,24 @@ memory.
 
 **Settling** (`SmtRulings`), problem by problem in the set's order:
 
-- The first round's answers are ruled on (a row of a fault of the node is no answer). A problem
-  with none is sent once more, under the same sampling, and ruled on by the repair round; with
-  none there either it is `no_result`, with the code of what the nodes said last.
-- Copies are compared by their digests and by nothing else. Answers of one digest are one answer
-  (`one_copy` for one machine, `copies` for two or more).
+- The first round's answers are ruled on (a row of a fault of the node is no answer). Two kinds of
+  problem go out once more, in the repair round, which asks two machines for every package
+  (`Grid.Replicas(2)`): a problem with no answer, and a problem of a package the first round asked
+  for twice that came back with fewer than two answers (a copy a node refused with its fault code,
+  a copy whose result package was refused, a row of a fault of the node; `copies_short` in the
+  integrity document's `repairs_by_reason`). A package is known to have been asked for twice by
+  the two results that came back under its ticket, whatever they say, or by a rate that asks for
+  every package; one of which at most one result came back cannot be told from a package asked
+  for once, and leaves the sampling `short`. A problem with no answer whose package was not
+  sampled gets two copies in the repair round as well: the fault path pays for it. A problem
+  with no answer after the repair round is `no_result`, with the code of what the nodes said last.
+- Copies are compared by their digests and by nothing else. Answers of one digest are one answer:
+  `copies` when two of them come from one fan-out (the first, or the repair round), whose copies
+  Grid keeps on different machines; `one_copy` otherwise. The lone answer of the first round and a
+  lone answer of the repair round are never counted as two machines: two fan-outs may place them
+  on one. The lone answer is still compared with the repair round's answers, and a difference is a
+  dispute. The sampling is `as_asked` when every problem with an answer of a package asked for
+  twice ends with two answers of one fan-out, and `short` when a repair pair lost a copy again.
 - Every answer that says `sat` is checked by the model evaluator (`SmtHostEvaluator`) against the
   problem as the host's own sanitizer takes it: a check's model with the values it asked for,
   every model of an enumeration with its projected values, the counterexample of a proof against

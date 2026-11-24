@@ -9,9 +9,12 @@ namespace OutWit.Controller.AI.Smt.Activities;
 
 /// <summary>
 /// Host-side: what the first fan-out returned is taken in under its tickets, and the problems
-/// without an answer the host takes (a package that came back with a node's fault code, without
-/// an answer, refused, or whose rows are all faults of the node) are stored as packages to send out
-/// once more.
+/// that go out once more are stored as packages: those without an answer the host takes (a
+/// package that came back with a node's fault code, without an answer, refused, or whose rows are
+/// all faults of the node), and those of a package the fan-out asked for twice that came back with
+/// fewer than two answers. The last argument, when a script gives it, is the sampling rate the
+/// fan-out ran under: a rate that asks for every package tells the host that every package was
+/// asked for twice, even one of which a single result came back.
 /// </summary>
 [Activity("Smt.Repairs")]
 [MemoryPackable]
@@ -23,7 +26,7 @@ public sealed partial class WitActivitySmtRepairs : WitActivityFunction
     /// <returns>The references it is given.</returns>
     protected override string InnerString()
     {
-        return string.Join(", ", new object?[] { Packages, Results }.OfType<object>());
+        return string.Join(", ", new object?[] { Packages, Results, Rate }.OfType<object>());
     }
 
     #endregion
@@ -41,7 +44,8 @@ public sealed partial class WitActivitySmtRepairs : WitActivityFunction
 
         return base.Is(activity, tolerance)
                && Packages.Check(activity.Packages)
-               && Results.Check(activity.Results);
+               && Results.Check(activity.Results)
+               && Rate.Check(activity.Rate);
     }
 
     /// <summary>Deep copy of the activity's own part.</summary>
@@ -51,7 +55,8 @@ public sealed partial class WitActivitySmtRepairs : WitActivityFunction
         return new WitActivitySmtRepairs
         {
             Packages = Packages?.Clone() as IWitReference,
-            Results = Results?.Clone() as IWitReference
+            Results = Results?.Clone() as IWitReference,
+            Rate = Rate?.Clone() as IWitReference
         };
     }
 
@@ -66,6 +71,10 @@ public sealed partial class WitActivitySmtRepairs : WitActivityFunction
     /// <summary>Reference to the 'Results' argument of the activity: what it returned.</summary>
     [MemoryPackAllowSerialize]
     public IWitReference? Results { get; init; }
+
+    /// <summary>Reference to the 'Rate' argument of the activity: the sampling rate the first fan-out ran under (may be absent).</summary>
+    [MemoryPackAllowSerialize]
+    public IWitReference? Rate { get; init; }
 
     #endregion
 }

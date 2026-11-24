@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json;
 using OutWit.Controller.AI.Smt.Model;
-using OutWit.Controller.AI.Smt.Tests.Docs;
 using OutWit.Controller.AI.Smt.Tests.Mock;
 using OutWit.Controller.AI.Smt.Tests.Run;
 
@@ -421,17 +420,7 @@ public sealed class SmtSettlementTests
 
     private static void AssertSchemas(SmtSettledDocuments run)
     {
-        var results = SmtRunChecks.Schema("smt-results.schema.json");
-
-        Assert.Multiple(() =>
-        {
-            foreach (var line in run.Results.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                Assert.That(SmtSchemaCheck.IsValid(results, JsonDocument.Parse(line).RootElement), Is.True, $"a row of the results is not what its schema says: {line[..Math.Min(400, line.Length)]}");
-
-            Assert.That(SmtSchemaCheck.IsValid(SmtRunChecks.Schema("smt-report.schema.json"), JsonDocument.Parse(run.Report).RootElement), Is.True, "the report");
-            Assert.That(SmtSchemaCheck.IsValid(SmtRunChecks.Schema("smt-integrity.schema.json"), JsonDocument.Parse(run.Integrity).RootElement), Is.True, "the integrity document");
-            Assert.That(SmtSchemaCheck.IsValid(SmtRunChecks.Schema("smt-provenance.schema.json"), JsonDocument.Parse(run.Provenance).RootElement), Is.True, "the provenance");
-        });
+        SmtRunChecks.AssertSchemas(run);
     }
 
     /// <summary>A problem settled by agreement on the failed model A over copies of B: failed, listed loudly, and no liar.</summary>

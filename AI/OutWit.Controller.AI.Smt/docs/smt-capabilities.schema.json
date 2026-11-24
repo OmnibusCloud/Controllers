@@ -140,10 +140,11 @@
     },
     "node": {
       "type": "object",
-      "description": "What a node runs a package with: one session a core, at most max_degree, as many as ram_headroom of its available memory holds at session_bytes a session (twice the host's cap of the solver's linear memory under the default options, and session_margin_bytes), at the priority below normal.",
+      "description": "What a node runs a package with: one session a core, at most max_degree, as many as ram_headroom of its available memory holds at session_bytes a session (twice the host's cap of the solver's linear memory under the default options, and session_margin_bytes), at the priority below normal; and the least memory a machine has for the planner to send it a package (min_ram_mb).",
       "required": ["max_degree", "ram_headroom", "session_margin_bytes", "session_bytes", "priority"],
       "additionalProperties": false,
       "properties": {
+        "min_ram_mb": { "type": "integer", "minimum": 1, "description": "The least memory of a machine, in MiB of the total its node reports, for the planner to send it a package: the requirement the activity that solves a package declares. It stands for a machine sold as 8 GB, which reports a little less than 8,192 MiB of the memory its system sees. A 6 GB machine, below it, does not hold one session at the default options in ram_headroom of what it has available while its client and its system run. The planner admits a node that has reported no capabilities; such a node refuses a package it has no memory for (memory_insufficient), and the repair round sends its problems out again. Written since controller 0.4.0; absent in the documents of earlier versions." },
         "max_degree": { "type": "integer", "minimum": 1 },
         "ram_headroom": { "type": "number", "minimum": 0, "maximum": 1 },
         "session_margin_bytes": { "type": "integer", "minimum": 0 },
@@ -160,11 +161,11 @@
     },
     "pool": {
       "type": "object",
-      "description": "The pool a run submitted now would be planned on, as totals; absent when the host cannot say. No node is named.",
+      "description": "The pool a run submitted now would be planned on, as totals; absent when the host cannot say. The nodes are those the server would plan the activity that solves a package on, with its requirements applied: a machine below node.min_ram_mb is not counted, a node that has reported no capabilities is (the planner admits it). No node is named.",
       "required": ["nodes", "measured", "rate"],
       "additionalProperties": false,
       "properties": {
-        "nodes": { "type": "integer", "minimum": 0 },
+        "nodes": { "type": "integer", "minimum": 0, "description": "Nodes that hold the controller and meet the requirements of the activity that solves a package, for this submitter now." },
         "measured": { "type": "integer", "minimum": 0 },
         "workers": { "type": "integer", "minimum": 0, "description": "Sessions at once of the measured nodes, added up; absent when the host does not carry every measured node's degree." },
         "rate": { "type": "number", "minimum": 0 }
