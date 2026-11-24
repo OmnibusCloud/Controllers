@@ -24,12 +24,13 @@ internal sealed class SmtLiveJobFake : ISmtLiveJob
 
     #region Functions
 
-    /// <summary>A job that completed.</summary>
+    /// <summary>A job that completed: the server took it at noon, started it 2 s later and ended it 3 s after that.</summary>
     /// <param name="values">The values of its variables.</param>
     /// <returns>The job.</returns>
     public static SmtLiveJobFake Completed(IReadOnlyDictionary<string, object?> values)
     {
-        return new SmtLiveJobFake(new SmtLiveJobEnd(true, "Completed", null, TimeSpan.FromSeconds(3)), values);
+        var submitted = new DateTime(2026, 11, 24, 12, 0, 0, DateTimeKind.Utc);
+        return new SmtLiveJobFake(new SmtLiveJobEnd(true, "Completed", null, TimeSpan.FromSeconds(3), submitted, submitted.AddSeconds(2), submitted.AddSeconds(5)), values);
     }
 
     /// <summary>A job that failed.</summary>
