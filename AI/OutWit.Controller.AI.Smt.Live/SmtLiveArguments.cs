@@ -40,10 +40,17 @@ internal sealed class SmtLiveArguments
     /// <summary><c>max_models</c>.</summary>
     public const string MAX_MODELS = "--max-models";
 
+    /// <summary>For <c>local</c>: the sessions at once, in place of the node's rule.</summary>
+    public const string DEGREE = "--degree";
+
+    /// <summary>For <c>comparative</c>: the folder of a fleet run of a small set, which measures the fixed cost of a fleet run.</summary>
+    public const string FIXED = "--fixed";
+
     private const string OPTION_PREFIX = "--";
 
     private static readonly string[] HELP = ["-h", "--help"];
     private static readonly string[] RUN_OPTIONS = [QUERY, RATE, RLIMIT, HARD_CAP, MEMORY, SEED, MAX_MODELS];
+    private static readonly string[] LOCAL_OPTIONS = [QUERY, RLIMIT, HARD_CAP, MEMORY, SEED, MAX_MODELS, DEGREE, OUT];
 
     private static readonly IReadOnlyDictionary<string, (SmtLiveVerb Verb, int Inputs, string[] Options)> VERBS =
         new Dictionary<string, (SmtLiveVerb Verb, int Inputs, string[] Options)>(StringComparer.Ordinal)
@@ -52,20 +59,24 @@ internal sealed class SmtLiveArguments
             ["preflight"] = (SmtLiveVerb.Preflight, 1, RUN_OPTIONS),
             ["run"] = (SmtLiveVerb.Run, 1, [.. RUN_OPTIONS, OUT]),
             ["compare"] = (SmtLiveVerb.Compare, 2, []),
-            ["pack"] = (SmtLiveVerb.Pack, 1, [QUERY, OUT])
+            ["pack"] = (SmtLiveVerb.Pack, 1, [QUERY, OUT]),
+            ["local"] = (SmtLiveVerb.Local, 1, LOCAL_OPTIONS),
+            ["comparative"] = (SmtLiveVerb.Comparative, 2, [FIXED])
         };
 
     #endregion
 
     #region Constructors
 
-    private SmtLiveArguments(SmtLiveVerb verb, IReadOnlyList<string> inputs, string? output, SmtOptionsData options, SmtQuery? query)
+    private SmtLiveArguments(SmtLiveVerb verb, IReadOnlyList<string> inputs, string? output, SmtOptionsData options, SmtQuery? query, int? degree, string? fixedRun)
     {
         Verb = verb;
         Inputs = inputs;
         Output = output;
         Options = options;
         Query = query;
+        Degree = degree;
+        Fixed = fixedRun;
     }
 
     #endregion
@@ -146,7 +157,10 @@ internal sealed class SmtLiveArguments
         if (!TryOptions(values, out var options, out var query, out error))
             return null;
 
-        return new SmtLiveArguments(verb.Verb, inputs, values.GetValueOrDefault(OUT), options, query);
+        if (!TryDegree(values, out var degree, out error))
+            return null;
+
+        return new SmtLiveArguments(verb.Verb, inputs, values.GetValueOrDefault(OUT), options, query, degree, values.GetValueOrDefault(FIXED));
     }
 
     /// <summary>
@@ -233,6 +247,23 @@ internal sealed class SmtLiveArguments
         return true;
     }
 
+    private static bool TryDegree(IReadOnlyDictionary<string, string> values, out int? degree, out string? error)
+    {
+        degree = null;
+        error = null;
+        if (!values.TryGetValue(DEGREE, out var text))
+            return true;
+
+        if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var sessions) && sessions is >= 1 and <= Commands.SmtLiveLocal.MAX_DEGREE)
+        {
+            degree = sessions;
+            return true;
+        }
+
+        error = $"{DEGREE} must be a whole number of sessions from 1 to {Commands.SmtLiveLocal.MAX_DEGREE}, not '{text}'";
+        return false;
+    }
+
     private static bool TryLong(IReadOnlyDictionary<string, string> values, string name, out long number, ref string? error)
     {
         number = 0;
@@ -266,7 +297,7 @@ internal sealed class SmtLiveArguments
     /// <summary>What the tool is asked to do.</summary>
     public SmtLiveVerb Verb { get; }
 
-    /// <summary>The positional arguments: the problem set, the two folders of <c>compare</c>, the folder of <c>pack</c>.</summary>
+    /// <summary>The positional arguments: the problem set, the two folders of <c>compare</c> and of <c>comparative</c>, the folder of <c>pack</c>.</summary>
     public IReadOnlyList<string> Inputs { get; }
 
     /// <summary>The value of <c>--out</c>; null when it was not given.</summary>
@@ -277,6 +308,12 @@ internal sealed class SmtLiveArguments
 
     /// <summary>The query <c>--query</c> names; null when it was not given.</summary>
     public SmtQuery? Query { get; }
+
+    /// <summary>The sessions at once <c>--degree</c> gives a local run; null for the node's rule.</summary>
+    public int? Degree { get; }
+
+    /// <summary>The folder <c>--fixed</c> names: a fleet run of a small set; null when it was not given.</summary>
+    public string? Fixed { get; }
 
     #endregion
 }

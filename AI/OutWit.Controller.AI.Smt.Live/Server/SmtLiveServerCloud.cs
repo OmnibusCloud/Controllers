@@ -13,7 +13,8 @@ internal sealed class SmtLiveServerCloud : ISmtLiveServer, IAsyncDisposable
     #region Constants
 
     /// <summary>How often a job's status is asked for.</summary>
-    private static readonly TimeSpan POLL_INTERVAL = TimeSpan.FromSeconds(3);
+    /// <summary>How often the status of a job is asked for: the error of a job's time as the tool measures it.</summary>
+    public static readonly TimeSpan POLL_INTERVAL = TimeSpan.FromSeconds(3);
 
     #endregion
 

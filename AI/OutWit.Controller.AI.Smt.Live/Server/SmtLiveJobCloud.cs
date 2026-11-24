@@ -76,7 +76,8 @@ internal sealed class SmtLiveJobCloud : ISmtLiveJob
 
             progress?.Report(job.OverallProgress);
             if (job.Status is ProcessingJobStatus.Completed or ProcessingJobStatus.Failed or ProcessingJobStatus.Cancelled)
-                return new SmtLiveJobEnd(job.Status == ProcessingJobStatus.Completed, job.Status.ToString(), job.ErrorMessage, DateTime.UtcNow - started);
+                return new SmtLiveJobEnd(job.Status == ProcessingJobStatus.Completed, job.Status.ToString(), job.ErrorMessage, DateTime.UtcNow - started,
+                    Utc(job.SubmittedAtUtc), Utc(job.StartedAtUtc), Utc(job.CompletedAtUtc));
         }
     }
 
@@ -94,6 +95,16 @@ internal sealed class SmtLiveJobCloud : ISmtLiveJob
                 await Task.Delay(m_interval, ct);
             }
         }
+    }
+
+    #endregion
+
+    #region Tools
+
+    /// <summary>A time of the server's that it set; null for one it left at its default.</summary>
+    private static DateTime? Utc(DateTime? time)
+    {
+        return time is { } value && value > DateTime.MinValue ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : null;
     }
 
     #endregion
