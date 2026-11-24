@@ -7,7 +7,8 @@ The run folder is the one `smt-live run` wrote (results.jsonl, report.json, inte
 provenance.json). Held:
 
 - every one of the 469 problems of the list (AI/OutWit.Controller.AI.Smt.Tests/Slice/
-  fetch-list.tsv) has its row, answered ok, with the list's verdict;
+  fetch-list.tsv) has its row, answered (ok, or output_exceeded: the model is more than a
+  session may write, the verdict stands), with the list's verdict;
 - the evaluator's classes of the satisfiable problems' models, by logic, are the ones the
   slice test of the solver pins (the table CLASSES of Solver/SmtSolverSliceTests.cs, read
   from that file), and none is failed;
