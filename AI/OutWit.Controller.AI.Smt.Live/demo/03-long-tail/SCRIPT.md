@@ -41,8 +41,9 @@ inferred from all the competitions' answers contradicts.
 the release lays its archives out (`non-incremental/<logic>/<folder>/<path>`); the catalog of 2025
 describes the release of 2025, so a problem renamed by an earlier release is already under its
 2025 name there. `make_list.py` holds each candidate to the release's archive anyway: the file
-must be there, of the size the catalog gives, declaring the same `:status`. Every candidate matched: QF_LIA 1,954 of 1,954, QF_BV 4,151 of 4,151; none was missing,
-of another size or of another status.
+must be there, of the size the catalog gives, declaring the same `:status`. Every candidate
+matched: QF_LIA 1,954 of 1,954, QF_BV 4,151 of 4,151; none was missing, of another size or of
+another status.
 
 ## The selection
 
@@ -58,8 +59,8 @@ give the same list byte for byte):
   An eighth of the reader's limit is far inside all of them, keeps the set near a quarter of a
   gigabyte, which a lab uploads once and the fleet's packages carry again (twice for a sampled
   one), and is the cap of the controller's slice of the same release. Larger files exist: QF_BV
-  has problems of hundreds of megabytes, and 1,738 of its problems in the band (QF_LIA: 278) are above
-  512 KiB;
+  has problems of hundreds of megabytes, and 1,738 of its problems in the band (QF_LIA: 278) are
+  above 512 KiB;
 - **at most 200 problems of one family** (a tenth of the kit): a family is one generator or one
   application, and QF_LIA's candidates are two thirds one family (`nec-smt`);
 - spread: each logic is filled in rounds, and every round takes one more problem, in a fixed
@@ -67,12 +68,12 @@ give the same list byte for byte):
   band) that has one left, while the family is under its cap. Every family gives its share before
   a large one gives more, both statuses within a family, every band of 1-2, 2-5, 5-10, 10-20, 20-40
   and 40-60 seconds;
-- QF_LIA takes up to 1,000, QF_BV fills the kit up to 2,000. The kit is 1,960, not 2,000, and QF_LIA is 41 % of it, because the caps
-  bind: QF_LIA's 1,954 candidates are 1,343 of `nec-smt` and 611 of twenty other families, so
-  it gives 811; QF_BV's 4,151 are four large families (`Sage2` 1,985, `spear` 1,259, `sage` 344,
-  `bruttomesso` 214, each capped at 200) and 349 of twenty-two others, so it gives 1,149. Problems
-  that take Z3 1-60 seconds in QF_LIA are mostly of one family; a looser cap would make the kit
-  larger and that family a third of it.
+- QF_LIA takes up to 1,000, QF_BV fills the kit up to 2,000. The kit is 1,960, not 2,000, and
+  QF_LIA is 41 % of it, because the caps bind: QF_LIA's 1,954 candidates are 1,343 of `nec-smt`
+  and 611 of twenty other families, so it gives 811; QF_BV's 4,151 are four large families
+  (`Sage2` 1,985, `spear` 1,259, `sage` 344, `bruttomesso` 214, each capped at 200) and 349 of
+  twenty-two others, so it gives 1,149. Problems that take Z3 1-60 seconds in QF_LIA are mostly of
+  one family; a looser cap would make the kit larger and that family a third of it.
 
 The list marks ten problems of each logic and status, at evenly spaced places of their times, as
 the sample that the build server solves (`SmtLongTailSampleTests`, workflow "AI Smt long tail").
@@ -115,16 +116,17 @@ bin/Release/net10.0/smt-live compare demo-out/long-tail/run-1 demo-out/long-tail
 
 ## The options
 
-`--rlimit 4294967295 --hard-cap 300 --memory 1024 --rate 0.05`, each within the controller's ceilings (resource limit 4,294,967,295,
-hard cap 600 s, memory 4,096 MB):
+`--rlimit 4294967295 --hard-cap 300 --memory 1024 --rate 0.05`, each within the controller's
+ceilings (resource limit 4,294,967,295, hard cap 600 s, memory 4,096 MB):
 
 - **`--hard-cap 300`**: three hundred seconds of the reference machine, 1.5 x 10^12 fuel. The hard
   cap is the budget that ends what does not finish, and it is a count: a problem it stops is
   stopped at the same instruction on every machine, so two runs still compare. The times of the
   list are Z3 4.7 to 4.8 on the competitions' 2.4 GHz machines; the controller runs Z3 5.4.1 in
   wasm, which costs 1.6 to 2.0 times Z3's native build on the same machine, on today's machines.
-  The build server's sample measured what that comes to (40 problems, ten of each logic and
-  status, spread over the times): all 40 decided; the reference seconds a problem took against
+  The sample measured what that comes to (40 problems, ten of each logic and status, spread over
+  the times, solved in the controller's sandbox on a workstation and on the build server): all 40
+  decided; the reference seconds a problem took against
   its seconds at the competition have the median 0.54 and the most 7.2 (Z3 5.4.1 is far faster on
   some problems and up to seven times slower on others); the costliest took 98 s (`lia0555`, 20 s
   at the competition). Three hundred is three times that and five times the top of the band: a
@@ -151,7 +153,7 @@ python -I make_list.py <smtlib2025.sqlite> <work folder>
 ```
 
 The catalog comes from `https://zenodo.org/records/16290040/files/SMT-LIB-Catalog-2025.tar.zst`
-(unpack it with `zstd -dc ... | tar -x`; about 7 GB unpacked); the script holds the database to its
+(unpack it with `zstd -dc ... | tar -x`; 5.8 GB unpacked); the script holds the database to its
 SHA-256 first. It streams the two archives once and keeps a table of the candidates' sizes, hashes
 and statuses in the work folder (`QF_LIA-members.tsv`, `QF_BV-members.tsv`), which a second run
 reads instead of streaming again; `--archive QF_BV=<path>` reads a local copy of an archive. It
