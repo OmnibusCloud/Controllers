@@ -67,7 +67,7 @@ public sealed partial class SmtResultPackageData : ModelBase
     [MemoryPackOrder(0)]
     public Guid ResultsBlobId { get; set; }
 
-    /// <summary>SHA-256 of the blob's bytes, lower-case hex; the host checks it before it reads a row.</summary>
+    /// <summary>SHA-256 of the blob's bytes, lower-case hex; empty when the node could not work on the package. The host checks it before it reads a row.</summary>
     [MemoryPackOrder(1)]
     public string Sha256 { get; set; } = "";
 
@@ -94,7 +94,12 @@ public sealed partial class SmtResultPackageData : ModelBase
     [MemoryPackOrder(5)]
     public string FaultCode { get; set; } = "";
 
-    /// <summary>The sentence that goes with <see cref="FaultCode"/>, in fixed words: versions, sizes, hashes, never a path or a name of the machine.</summary>
+    /// <summary>
+    /// The sentence that goes with <see cref="FaultCode"/>, in fixed words: versions, sizes, hashes,
+    /// never a path or a name of the machine; at most <see cref="SmtResultWords.MAX_MESSAGE_CHARACTERS"/>
+    /// characters, and empty when the node worked on the package. A host takes a reference only in
+    /// that form.
+    /// </summary>
     [MemoryPackOrder(6)]
     public string FaultMessage { get; set; } = "";
 

@@ -572,6 +572,12 @@ SHA-256 of its UTF-8 bytes in lower-case hexadecimal. A problem sent again in an
 its digest. Copies of a problem solved on two machines are compared by it; a host recomputes it
 from the row it received rather than trusting the one the row carries (`Holds`).
 
+The bytes that are hashed are the row's own characters and never a stand-in for one. A text with
+half of a surrogate pair alone is not valid UTF-16 and has no UTF-8; a row that holds one has no
+digest: `Of` gives the empty text (`SmtResultDigest.NONE`), `Holds` is false whatever the row
+carries, and neither throws. A node's session never writes such a text, so every row a node made
+has its digest.
+
 ### The codes of a node's refusal
 
 | Code | When |

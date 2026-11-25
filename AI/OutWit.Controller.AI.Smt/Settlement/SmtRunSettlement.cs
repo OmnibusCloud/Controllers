@@ -16,7 +16,9 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// takes it (<see cref="SmtHostEvaluator"/>), and the row of the results is written. The rows are
 /// kept in a spool file while the documents are written, and every document goes to a file as it
 /// is written: the host's memory holds a record a copy and a few numbers a problem, never a model
-/// of more than the problem at hand, and never a document.
+/// of more than the problem at hand, and never a document. What the host's disk holds of a run has
+/// bounds (<see cref="SmtSettlementBounds"/>): the rows in the spool, and the full models in the
+/// ledger; a run past either is not settled, and the failure names the bound.
 /// </summary>
 internal static class SmtRunSettlement
 {
@@ -43,14 +45,17 @@ internal static class SmtRunSettlement
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="workFolder">A folder of the host's own for the working files.</param>
     /// <param name="samplingRate">The share of the packages the script asked to solve twice, or null when it does not say.</param>
+    /// <param name="bounds">What the host keeps of the run at the most; null for a host's bounds (<see cref="SmtSettlementBounds.DEFAULT"/>).</param>
     /// <returns>The ledger file (the caller stores and deletes it) and the integrity facts.</returns>
+    /// <exception cref="SmtSettlementBoundException">The rows the nodes returned, or the full models of the settled rows, pass what the host keeps of one run.</exception>
     public static async Task<(string LedgerPath, SmtIntegrityFacts Facts)> SettleAsync(string problemsPath, SmtOptionsData options,
         (IReadOnlyList<SmtTaskPackageData> Issued, IEnumerable<SmtResultPackageData?> Returned) fanOut,
         (IReadOnlyList<SmtTaskPackageData> Issued, IEnumerable<SmtResultPackageData?> Returned)? repair,
         (IReadOnlyList<SmtTaskPackageData> Issued, IEnumerable<SmtResultPackageData?> Returned)? dispute,
-        IWitBlobService blobs, string workFolder, double? samplingRate)
+        IWitBlobService blobs, string workFolder, double? samplingRate, SmtSettlementBounds? bounds = null)
     {
-        using var spool = new SmtSpool(workFolder);
+        bounds ??= SmtSettlementBounds.DEFAULT;
+        using var spool = new SmtSpool(workFolder, bounds.RowsBytes);
 
         var rate = samplingRate is { } stated ? SmtSampling.Clamp(stated) : (double?)null;
 
@@ -111,6 +116,10 @@ internal static class SmtRunSettlement
                     var accepted = ruling.Accepted == null ? null : spool.Read(ruling.Accepted);
                     SmtResultsWriter.WriteTaken(results, models, row.Data, row.Problem, ruling, accepted);
                     report.CountTaken(row.Data, row.Problem, ruling, accepted);
+
+                    // Looked at after each row: the section passes its bound by one row's models at the most.
+                    if (models.Length > bounds.ModelsBytes)
+                        throw new SmtSettlementBoundException(SmtSettlementBoundException.MODELS, bounds.ModelsBytes, "the full models of the settled rows");
                 }
 
                 set = reader.Summary;
