@@ -202,6 +202,10 @@ internal static class SmtStrings
         if (text.Length == 0)
             return Number(NOT_FOUND);
 
+        // Every character is looked at, and copied, before the digits are read as a number, and
+        // a string that is no number is looked at for nothing: the look is paid for as reading
+        // the digits of a numeral is, before it is made.
+        meter.Charge(text.Length / SmtLiterals.WORD_DIGITS);
         var digits = new char[text.Length];
         for (var index = 0; index < digits.Length; index++)
         {

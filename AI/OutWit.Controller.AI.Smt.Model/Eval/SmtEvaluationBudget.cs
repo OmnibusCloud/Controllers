@@ -15,12 +15,15 @@ public sealed class SmtEvaluationBudget : ModelBase
     #region Constants
 
     /// <summary>
-    /// The default step budget. A step is one term evaluated, and an operation on a large value
-    /// counts as many steps as the machine words it touches, so the budget bounds the time and
-    /// the memory of a validation together. Of 224 models that a solver printed for problems
-    /// of the SMT-LIB benchmark library (up to half a megabyte of problem and seven megabytes
-    /// of model), the costliest took 0.42 million steps; the budget is about fifty times that.
-    /// A runaway evaluation uses it up in about half a second of an optimized build.
+    /// The default step budget. A step is one term evaluated; an operation on a large value
+    /// counts as many steps as the machine words it touches, and a name, a list or a literal
+    /// that is longer than a term counts by its length, so the budget bounds the time and the
+    /// memory of a validation together. Of 224 models that a solver printed for problems of
+    /// the SMT-LIB benchmark library (up to half a megabyte of problem and seven megabytes of
+    /// model), the costliest took 0.42 million steps; the budget is about fifty times that. A
+    /// runaway evaluation uses it up in about half a second of an optimized build; the dearest
+    /// model found for a step, a let of a hundred thousand variables evaluated again and
+    /// again, in under three seconds.
     /// </summary>
     public const long DEFAULT_STEPS = 20_000_000;
 
