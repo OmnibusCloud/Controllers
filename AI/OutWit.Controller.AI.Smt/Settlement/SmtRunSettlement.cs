@@ -43,14 +43,17 @@ internal static class SmtRunSettlement
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="workFolder">A folder of the host's own for the working files.</param>
     /// <param name="samplingRate">The share of the packages the script asked to solve twice, or null when it does not say.</param>
+    /// <param name="bounds">What the host keeps of the run at the most; null for a host's bounds (<see cref="SmtSettlementBounds.DEFAULT"/>).</param>
     /// <returns>The ledger file (the caller stores and deletes it) and the integrity facts.</returns>
+    /// <exception cref="SmtSettlementBoundException">The rows the nodes returned, or the full models of the settled rows, pass what the host keeps of one run.</exception>
     public static async Task<(string LedgerPath, SmtIntegrityFacts Facts)> SettleAsync(string problemsPath, SmtOptionsData options,
         (IReadOnlyList<SmtTaskPackageData> Issued, IEnumerable<SmtResultPackageData?> Returned) fanOut,
         (IReadOnlyList<SmtTaskPackageData> Issued, IEnumerable<SmtResultPackageData?> Returned)? repair,
         (IReadOnlyList<SmtTaskPackageData> Issued, IEnumerable<SmtResultPackageData?> Returned)? dispute,
-        IWitBlobService blobs, string workFolder, double? samplingRate)
+        IWitBlobService blobs, string workFolder, double? samplingRate, SmtSettlementBounds? bounds = null)
     {
-        using var spool = new SmtSpool(workFolder);
+        bounds ??= SmtSettlementBounds.DEFAULT;
+        using var spool = new SmtSpool(workFolder, bounds.RowsBytes);
 
         var rate = samplingRate is { } stated ? SmtSampling.Clamp(stated) : (double?)null;
 

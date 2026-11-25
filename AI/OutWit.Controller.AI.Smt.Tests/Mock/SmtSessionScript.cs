@@ -46,6 +46,35 @@ internal static class SmtSessionScript
     public static SmtScripted Hold(SmtProblemData problem, SmtOptionsData options, IReadOnlyList<string> answers, SmtScriptedEnd? end = null,
         Action<int>? beforeAsk = null, CancellationToken cancellationToken = default)
     {
+        var (outcome, sent, ended) = Run(problem, options, answers, end, beforeAsk, cancellationToken);
+        return new SmtScripted(SmtSolverRig.Take(outcome), sent, ended);
+    }
+
+    /// <summary>
+    /// Holds a session with a scripted solver as <see cref="Hold"/> does and gives the controller's
+    /// own outcome, as an object: for a rig that makes more of it (a row), inside a method body.
+    /// </summary>
+    /// <param name="problem">The problem as it travels.</param>
+    /// <param name="options">The run's options, each in its range.</param>
+    /// <param name="answers">What the solver writes after each thing the session sends, in order.</param>
+    /// <param name="end">How the run ended; null for a solver that ended by itself with status 0.</param>
+    /// <param name="beforeAsk">Called before each time the session is asked, with the number of times it has sent something so far; null for nothing.</param>
+    /// <param name="cancellationToken">The session's cancellation.</param>
+    /// <returns>The controller's outcome.</returns>
+    /// <exception cref="InvalidOperationException">The problem is refused: a session needs one that is taken.</exception>
+    public static object Outcome(SmtProblemData problem, SmtOptionsData options, IReadOnlyList<string> answers, SmtScriptedEnd? end = null,
+        Action<int>? beforeAsk = null, CancellationToken cancellationToken = default)
+    {
+        return Run(problem, options, answers, end, beforeAsk, cancellationToken).Outcome;
+    }
+
+    #endregion
+
+    #region Tools
+
+    private static (object Outcome, List<string> Sent, bool Ended) Run(SmtProblemData problem, SmtOptionsData options, IReadOnlyList<string> answers, SmtScriptedEnd? end,
+        Action<int>? beforeAsk, CancellationToken cancellationToken)
+    {
         end ??= new SmtScriptedEnd();
 
         var envelope = SmtProfile.Envelope(options);
@@ -93,7 +122,7 @@ internal static class SmtSessionScript
             end.EngineError == null ? null : new WasmtimeException(end.EngineError),
             TEXT.GetByteCount(stdout.ToString()));
 
-        return new SmtScripted(SmtSolverRig.Take(session.Finish(run)), sent, ended);
+        return (session.Finish(run), sent, ended);
     }
 
     #endregion
