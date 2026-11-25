@@ -314,14 +314,22 @@ memory.
   dispute. The sampling is `as_asked` when every problem with an answer of a package asked for
   twice ends with two answers of one fan-out, and `short` when a repair pair lost a copy again.
 - Every answer that says `sat` is checked by the model evaluator (`SmtHostEvaluator`) against the
-  problem as the host's own sanitizer takes it: a check's model with the values it asked for,
-  every model of an enumeration with its projected values, the counterexample of a proof against
-  the problem and the negated goal. A model that did not fit the session's output is `partial`
-  (`output_exceeded`); a row's class is the worst of its models.
+  problem as the host's own sanitizer takes it: a check's model, every model of an enumeration,
+  the counterexample of a proof against the problem and the negated goal. A model is checked as
+  the model, by its own definitions. The values a row gives are a claim like its model, never a
+  source: the host knows the terms the row asked the values of (they travel with the problem,
+  `SmtAskedTerms`) and holds the node's text to them (as many pairs, each of its term) and to
+  the model (each value the value its term has under the model; each model of an enumeration
+  with the values of its projected constants). A value that is another fails the row
+  (`value_mismatch`); values that are not those asked, or that the evaluator does not decide,
+  leave it `partial`; no values text is dropped unread. A model that did not fit the session's
+  output is `partial` (`output_exceeded`), and so is a `sat` under a status that gives no
+  verdict; a row's class is the worst of its models. Whatever checking one row throws is that
+  row's `partial` class (`evaluator_error`), and the settlement goes on.
 - Answers of more than one digest, a package with more answers than were asked for, and an answer
-  whose model is `failed` go to three more machines. The answer is the digest the most of them
-  give, two at least, with no tie, and two machines' worth once the answers that may be one
-  machine's second are left out (`dispute`); otherwise the problem is `disputed`.
+  whose model or values are `failed` go to three more machines. The answer is the digest the most
+  of them give, two at least, with no tie, and two machines' worth once the answers that may be
+  one machine's second are left out (`dispute`); otherwise the problem is `disputed`.
 - A failed model accuses nobody by itself: a copy is a lie only when it differs from the settled
   answer of the others. When the settled answer's model is still `failed`, the machines agree and
   the evaluator does not: the row says `validation: failed`, `settled_by: agreement`, and the

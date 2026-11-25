@@ -196,14 +196,6 @@ public class SmtModelValidatorScopeTests
     }
 
     [Test]
-    public void ValueOfGetValueStandsOverTheDefinitionOfGetModelTest()
-    {
-        var validation = SmtCheck.Validate("(declare-const x Int)(assert (= x 5))", "((define-fun x () Int 9))", "((x 5))");
-
-        Assert.That(validation.Class, Is.EqualTo(SmtValidationClass.Validated));
-    }
-
-    [Test]
     public void ModelThatDefinesItsValuesInACircleIsPartialTest()
     {
         var validation = SmtCheck.Validate("(declare-const x Int)(declare-const y Int)(assert (= x y))", "((define-fun x () Int (+ y 1)) (define-fun y () Int (+ x 1)))");

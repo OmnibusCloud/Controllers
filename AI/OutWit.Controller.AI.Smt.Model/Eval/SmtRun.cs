@@ -18,10 +18,15 @@ internal sealed class SmtRun
     /// <param name="problem">The problem.</param>
     /// <param name="model">The model, readable.</param>
     /// <param name="budget">What the validation may spend.</param>
-    public SmtRun(SmtEvaluationProblem problem, SmtModel model, SmtEvaluationBudget budget)
+    /// <param name="takesValues">
+    /// Whether the answer of <c>get-value</c> that came with the model is taken: false when it
+    /// is not the answer of what was asked, and then no value of it completes the model.
+    /// </param>
+    public SmtRun(SmtEvaluationProblem problem, SmtModel model, SmtEvaluationBudget budget, bool takesValues = true)
     {
         Problem = problem;
         Model = model;
+        TakesValues = takesValues;
         Meter = new SmtMeter(budget);
         Sorts = new SmtSortTable(problem.Sorts);
 
@@ -57,6 +62,9 @@ internal sealed class SmtRun
 
     /// <summary>The model.</summary>
     public SmtModel Model { get; }
+
+    /// <summary>Whether a value the answer of <c>get-value</c> reports for a constant the model leaves out is that constant's value.</summary>
+    public bool TakesValues { get; }
 
     /// <summary>The validation's accounting.</summary>
     public SmtMeter Meter { get; }

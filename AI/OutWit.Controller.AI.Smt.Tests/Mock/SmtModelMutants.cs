@@ -68,8 +68,8 @@ internal sealed class SmtModelMutants
         var mutants = new List<(string, string?, string?)>();
         foreach (var name in Names())
         {
-            // The symbol's value is changed in both answers, the same way: the value of
-            // get-value stands over the definition of get-model.
+            // The symbol's value is changed in both answers, the same way: a mutant is what a
+            // solver could have printed, and its values say what its model says.
             var changed = false;
             var model = m_model.ToArray();
             for (var index = 0; index < model.Length; index++)
@@ -98,6 +98,17 @@ internal sealed class SmtModelMutants
         }
 
         return mutants;
+    }
+
+    /// <summary>
+    /// Changes one value, as the solver spelled it, into another value of the same sort.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <param name="changed">The other value.</param>
+    /// <returns>False when the value has no spelling this class can change.</returns>
+    public bool TryChange(SmtExpression value, out SmtExpression changed)
+    {
+        return TryMutate(value, out changed);
     }
 
     private IEnumerable<string> Names()

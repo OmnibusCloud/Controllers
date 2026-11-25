@@ -302,12 +302,13 @@ made with others.
 ## Checking a model
 
 A `sat` answer comes with a model, and a model can be checked: every assertion of the problem is
-evaluated under it. The evaluator is plain .NET code that shares nothing with a solver, so an
-answer it validates needs no trust in whoever gave it.
+evaluated under it. An answer may also carry the values of terms (the answer of `get-value`), and
+those are a claim about the model that is checked too. The evaluator is plain .NET code that
+shares nothing with a solver, so an answer it validates needs no trust in whoever gave it.
 
 | Type | Role |
 |---|---|
-| `SmtModelValidator` | built once from a problem (the `SmtProblem` the sanitizer took, or a list of its commands); checks any number of models, from any number of threads |
+| `SmtModelValidator` | built once from a problem (the `SmtProblem` the sanitizer took, or a list of its commands); checks any number of models, each with the values that came with it, from any number of threads |
 | `SmtModel` | what the solver printed after `sat`: the answer of `(get-model)`, of `(get-value (...))`, or both |
 | `SmtValidation` | the outcome: class, reason, detail, and the counts behind them |
 | `SmtValidationClass` | `Validated`, `Partial`, `Failed` |
@@ -321,25 +322,38 @@ using OutWit.Controller.AI.Smt.Model.Lang;
 
 var problem = SmtSanitizer.Sanitize(problemText).Problem!;  // the problem as the sanitizer took it
 var validator = new SmtModelValidator(problem);
-var model = SmtModel.Read(modelText, valuesText, limits);   // never throws: a text that is no model is an unreadable model
-var validation = validator.Validate(model, SmtEvaluationBudget.Default);
+
+// Never throws: a text that is no model is an unreadable model. The limits say how much of a
+// text the reader takes: SmtReaderLimits.Unbounded for a text whose size is bounded already (a
+// row of a results document), limits of your own for a text from anywhere else.
+var model = SmtModel.Read(modelText, valuesText, SmtReaderLimits.Unbounded);
+
+// The terms the row asked the values of (its "values"; for an enumeration its "project"), in
+// the row's order; an empty list when it asked for none.
+var asked = askedTexts.Select(text => SmtSanitizer.SanitizeTerm(text).Term!).ToList();
+var validation = validator.Validate(model, asked, SmtEvaluationBudget.Default);
 
 Console.WriteLine($"{validation.Class} {validation.Reason} {validation.Detail}");
 ```
+
+The one call checks both: the model against the problem, and the values against the terms asked
+and against the model. `Validate(model, budget)`, without the terms, is for a caller that does
+not know what was asked: each pair of the values is then held to the term it names itself. In
+neither call is a values text read and left unchecked.
 
 ### The three classes
 
 | Class | Means |
 |---|---|
-| `Validated` | every assertion evaluated to true. The model, with a default value for each symbol it leaves out, is a witness: the problem is satisfiable |
-| `Failed` | an assertion evaluated to false with nothing guessed. The model does not satisfy the problem: the answer is wrong |
+| `Validated` | every assertion evaluated to true, and every reported value is the value its term has under the model. The model, with a default value for each symbol it leaves out, is a witness: the problem is satisfiable |
+| `Failed` | an assertion evaluated to false, or a reported value is another than its term's, with nothing guessed. The model does not satisfy the problem, or does not give the values that came with it: the answer is wrong |
 | `Partial` | neither. The answer rests on other checks |
 
 `Failed` is an accusation, so it is given only when it is certain: no symbol the model left out
-stands behind the false assertion, no construct the evaluator does not compute to the end, no
-budget. `Validated` is given only for a real witness: every value the model gives a symbol is
-checked against the sort the problem declares for it, wherever it is used. A model that sets an
-`Int` to a half satisfies nothing.
+stands behind the false assertion or the other value, no construct the evaluator does not
+compute to the end, no budget. `Validated` is given only for a real witness: every value the
+model gives a symbol is checked against the sort the problem declares for it, wherever it is
+used. A model that sets an `Int` to a half satisfies nothing.
 
 A validation never throws for what the problem or the model holds, never runs past its budget,
 and gives the same answer for the same input on every machine.
@@ -348,6 +362,41 @@ The evaluator is open code, so its agreement with the solver is shown by volume,
 reading: its tests hold it to the pinned solver on thousands of closed terms generated for every
 theory below, and on the models of real problems written back into their problems (the closed
 script). Wherever the evaluator gives a value, the solver agrees with it.
+
+### The values of terms
+
+The answer of `get-value` is a list of pairs, a term and its value. It is a claim about the
+model, never a second model: the assertions are evaluated under the definitions of `get-model`,
+and no value stands in for a definition. Then every pair is checked.
+
+- The answer must be the answer of what was asked: as many pairs as terms, each pair's term
+  written as the term asked at its place. A solver echoes a term as it was written to it (the
+  pinned Z3 does, character for character), so an honest answer always reads so. An answer that
+  does not (unreadable, another number of pairs, another term, values where none were asked or
+  none where some were) is used for nothing, and the validation is `Partial` at best, with
+  `unreadable_values`.
+- The term is evaluated under the model, the value is read, and the two are compared as values,
+  not as texts: `#x0f`, `#b00001111` and `(_ bv15 8)` are one value, as are `0.5` and
+  `(/ 1.0 2.0)`, and two orders of the stores of an array.
+- Another value, with nothing guessed, is `Failed` with `value_mismatch`; the detail is the
+  1-based index of the value among those reported.
+- A term or a value the evaluator does not compute (the reasons below), a comparison it does not
+  decide (`array_comparison`), a term that rests on a symbol the model leaves out
+  (`completed_symbol`): `Partial`. A value is never validated unread, and an answer is never
+  failed for what the evaluator cannot decide.
+- A value is written with nothing of the problem. One that reads a symbol the problem declares
+  or defines, itself or through a name the model wrote with one ("the value of `x` is `x`"), may
+  be true and says nothing: `Partial`, with `unreadable_values`. A value may name what the model
+  itself gives a value: an element of a sort, the function behind an array.
+
+One kind of pair adds to the model. A solver that is asked for the value of a constant its model
+leaves open completes the model there, so the first value of a constant the problem declares and
+the answer of `get-model` does not define is that constant's value, and the assertions are
+evaluated with it. This is also what makes an answer of `get-value` alone a model by itself:
+`SmtModel.Read(null, valuesText, limits)`. The pinned Z3 prints every symbol a problem declares
+in its model, so its own answers hold no such pair.
+
+The values are checked after the assertions, from the same budget.
 
 ### What is evaluated
 
@@ -402,16 +451,19 @@ matched to the problem's by the name alone.
 | `ill_formed_command` | a command that is no declaration, definition or assertion, or one that cannot be read |
 | `ambiguous_symbol` | a name the problem gives two meanings: declared twice, or the name of an operator |
 | `unreadable_model` | a text that is not what a solver prints as a model |
+| `unreadable_values` | a text that is not the answer of `get-value` for the terms asked: no list of pairs, another number of pairs, another term, or a value written with a symbol of the problem |
 | `budget_steps`, `budget_depth`, `budget_size` | the budget ended the evaluation |
 | `evaluator_error` | a defect of the evaluator itself; the tests hold it to zero occurrences |
 
-`Failed` has one reason, `assertion_false`, with the 1-based index of the first false assertion
-as its detail. A reason is a fixed code: nothing of the problem or of the model is ever in it.
+`Failed` has two reasons: `assertion_false`, with the 1-based index of the first false assertion
+as its detail, and `value_mismatch`, with the 1-based index of the first reported value that is
+another than its term's. A false assertion is reported before a value. A reason is a fixed code:
+nothing of the problem or of the model is ever in it.
 
 ### The budget
 
-A validation counts what it spends and stops, as `Partial`, when the count passes the budget.
-Nothing is timed.
+A validation counts what it spends, for the assertions and the reported values together, and
+stops, as `Partial`, when the count passes the budget. Nothing is timed.
 
 | Budget | Default | Counts |
 |---|---|---|

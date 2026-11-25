@@ -54,14 +54,25 @@ public class SmtModelTests
     }
 
     [Test]
-    public void ReadTakesTheAnswerOfGetValueTest()
+    public void ReadTakesEveryPairOfTheAnswerOfGetValueTest()
     {
-        var model = SmtModel.Read(null, "((x 1)\n (|a b| (- 2))\n ((f 1) 3)\n ((select a 0) 4))", SmtReaderLimits.Problem);
+        var model = SmtModel.Read(null, "((x 1)\n (|a b| (- 2))\n ((f 1) 3)\n ((select a 0) 4)\n (x 1))", SmtReaderLimits.Problem);
 
-        // A pair whose term is no constant defines no symbol.
+        // Every pair is a claim the validator checks, whatever its term is and however often it comes.
         Assert.That(model.IsReadable, Is.True);
-        Assert.That(model.Values, Is.EqualTo(2));
+        Assert.That(model.Values, Is.EqualTo(5));
         Assert.That(model.Definitions, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void ReadKeepsTheDefinitionsOfAModelWhoseValuesAreUnreadableTest()
+    {
+        // The answer of get-value is no list of pairs: the model beside it is still a model.
+        var model = SmtModel.Read("((define-fun x () Int 1) (define-fun y () Int 2))", "((x 1) (y))", SmtReaderLimits.Problem);
+
+        Assert.That(model.IsReadable, Is.False);
+        Assert.That(model.Definitions, Is.EqualTo(2));
+        Assert.That(model.Values, Is.EqualTo(0), "no pair of an unreadable answer is kept");
     }
 
     [TestCase(null, null)]
@@ -110,7 +121,6 @@ public class SmtModelTests
 
     [TestCase("x 1")]
     [TestCase("(x 1)")]
-    [TestCase("((x 1) (x 2))")]
     [TestCase("((x))")]
     [TestCase("((x 1 2))")]
     [TestCase("((x 1)) ((y 2))")]

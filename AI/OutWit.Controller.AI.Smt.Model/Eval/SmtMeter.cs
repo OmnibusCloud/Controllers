@@ -234,6 +234,15 @@ internal sealed class SmtMeter
         Completions++;
     }
 
+    /// <summary>
+    /// Records that a symbol the problem declares or defines was read: what is being evaluated
+    /// rests on what the problem and the model say of that symbol.
+    /// </summary>
+    public void Refer()
+    {
+        References++;
+    }
+
     private SmtPartialException TooLarge()
     {
         return new SmtPartialException(SmtPartialKind.Terminal, SmtValidationReasons.BUDGET_SIZE, null, m_depth);
@@ -256,6 +265,13 @@ internal sealed class SmtMeter
     /// on such a symbol exactly when the count moved while it ran.
     /// </summary>
     public long Completions { get; private set; }
+
+    /// <summary>
+    /// How many times a symbol the problem declares or defines was read. It only grows: a term
+    /// is a value by itself, written with nothing of the problem, exactly when the count did not
+    /// move while it was evaluated.
+    /// </summary>
+    public long References { get; private set; }
 
     #endregion
 }

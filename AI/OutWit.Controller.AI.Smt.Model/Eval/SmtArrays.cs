@@ -29,7 +29,7 @@ internal sealed class SmtArrays
     private readonly SmtRun m_run;
     private readonly SmtMeter m_meter;
     private readonly SmtArrayFunctions m_functions;
-    private readonly Dictionary<string, (SmtValue Value, bool Completed)> m_ofFunctions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (SmtValue Value, bool Completed, bool Referred)> m_ofFunctions = new(StringComparer.Ordinal);
 
     #endregion
 
@@ -134,6 +134,10 @@ internal sealed class SmtArrays
             if (known.Completed)
                 m_meter.Complete();
 
+            // What the function's body read of the problem's symbols when the array was made, it reads for every later reader too.
+            if (known.Referred)
+                m_meter.Refer();
+
             return known.Value;
         }
 
@@ -142,8 +146,9 @@ internal sealed class SmtArrays
             throw m_meter.Undecided(SmtValidationReasons.UNSUPPORTED_SORT);
 
         var before = m_meter.Completions;
+        var references = m_meter.References;
         var value = m_functions.ToArray(function, depth);
-        m_ofFunctions[name] = (value, m_meter.Completions != before);
+        m_ofFunctions[name] = (value, m_meter.Completions != before, m_meter.References != references);
         return value;
     }
 

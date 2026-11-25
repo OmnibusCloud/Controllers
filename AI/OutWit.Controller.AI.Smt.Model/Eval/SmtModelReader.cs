@@ -6,8 +6,14 @@ namespace OutWit.Controller.AI.Smt.Model.Eval;
 /// Reads the two answers a solver prints after <c>sat</c> into a model. It is strict: each
 /// answer is one list, every item of the answer of <c>get-model</c> is a <c>define-fun</c>, an
 /// element of a universe, or the cardinality constraint the solver prints after the elements,
-/// and no name is defined twice. Anything else is not what a solver prints, and the model is
-/// unreadable.
+/// and no name is defined twice; every item of the answer of <c>get-value</c> is a pair of a
+/// term and a value. Anything else is not what a solver prints, and that answer is unreadable.
+/// <para>
+/// The two answers are read apart. An answer of <c>get-model</c> that is unreadable leaves
+/// nothing to check. An answer of <c>get-value</c> that is unreadable does not hide the model:
+/// the definitions stay, no value is reported, and the model says so
+/// (<see cref="SmtModel.ValuesReadable"/>).
+/// </para>
 /// </summary>
 internal sealed class SmtModelReader
 {
@@ -23,7 +29,8 @@ internal sealed class SmtModelReader
 
     private readonly Dictionary<string, SmtModelFunction> m_functions = new(StringComparer.Ordinal);
     private readonly List<SmtModelFunction> m_functionsInOrder = [];
-    private readonly Dictionary<string, SmtExpression> m_constants = new(StringComparer.Ordinal);
+    private readonly List<(SmtExpression Term, SmtExpression Value)> m_reported = [];
+    private readonly Dictionary<string, SmtExpression> m_completions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SmtExpression> m_elements = new(StringComparer.Ordinal);
     private readonly List<SmtExpression> m_elementsInOrder = [];
 
@@ -41,10 +48,10 @@ internal sealed class SmtModelReader
     public static SmtModel Read(string? model, string? values, SmtReaderLimits limits)
     {
         var reader = new SmtModelReader();
-        if (!reader.TryReadDefinitions(model, limits) || !reader.TryReadValues(values, limits))
-            return new SmtModel(false, new SmtModelReader());
+        if (!reader.TryReadDefinitions(model, limits))
+            return new SmtModel(false, false, new SmtModelReader());
 
-        return new SmtModel(true, reader);
+        return new SmtModel(true, reader.TryReadValues(values, limits), reader);
     }
 
     private bool TryReadDefinitions(string? text, SmtReaderLimits limits)
@@ -87,6 +94,11 @@ internal sealed class SmtModelReader
         }
     }
 
+    /// <summary>
+    /// Reads the answer of <c>get-value</c>: every pair is kept, whatever its term is, since
+    /// every pair is a claim the validator checks. A list with an item that is no pair reports
+    /// nothing at all.
+    /// </summary>
     private bool TryReadValues(string? text, SmtReaderLimits limits)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -98,11 +110,18 @@ internal sealed class SmtModelReader
         foreach (var pair in pairs)
         {
             if (!pair.IsList || pair.Items.Count != 2)
+            {
+                m_reported.Clear();
+                m_completions.Clear();
                 return false;
+            }
 
-            // The value of a term that is no constant defines no symbol.
-            if (SmtTerms.IsSymbol(pair.Items[0]) && !m_constants.TryAdd(pair.Items[0].Text, pair.Items[1]))
-                return false;
+            m_reported.Add((pair.Items[0], pair.Items[1]));
+
+            // The first value reported for a symbol is the one that may complete the model; a
+            // later pair of the same symbol is a claim like any other.
+            if (SmtTerms.IsSymbol(pair.Items[0]))
+                m_completions.TryAdd(pair.Items[0].Text, pair.Items[1]);
         }
 
         return true;
@@ -161,8 +180,11 @@ internal sealed class SmtModelReader
     /// <summary>The definitions, in the order printed.</summary>
     public IReadOnlyList<SmtModelFunction> FunctionsInOrder => m_functionsInOrder;
 
-    /// <summary>The answer of <c>get-value</c>: a constant's name and its value as printed.</summary>
-    public IReadOnlyDictionary<string, SmtExpression> Constants => m_constants;
+    /// <summary>The answer of <c>get-value</c>: every pair, in the order printed.</summary>
+    public IReadOnlyList<(SmtExpression Term, SmtExpression Value)> Reported => m_reported;
+
+    /// <summary>The first value the answer of <c>get-value</c> reports for each term that is one symbol, by the symbol's name.</summary>
+    public IReadOnlyDictionary<string, SmtExpression> Completions => m_completions;
 
     /// <summary>The elements of the universes, each as its declaration, by name.</summary>
     public IReadOnlyDictionary<string, SmtExpression> Elements => m_elements;

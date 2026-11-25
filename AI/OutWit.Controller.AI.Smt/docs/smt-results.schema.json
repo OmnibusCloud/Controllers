@@ -28,7 +28,7 @@
     "limit_reached": { "type": "boolean", "description": "enumerate: as many models were found as were asked for." },
     "proof": { "type": "string", "enum": ["proved", "counterexample", "none"], "description": "prove: unsat of the problem with the negated goal is proved; sat is a counterexample, with its model." },
     "model": { "type": ["string", "null"], "description": "check and prove: the answer of (get-model) as the solver printed it; null without one or when it did not fit the row." },
-    "values": { "type": ["string", "null"], "description": "check: the answer of (get-value ...) for the terms the row asked for; null without them or when it did not fit." },
+    "values": { "type": ["string", "null"], "description": "check: the answer of (get-value ...) for the terms the row asked for; null without them or when it did not fit. The host's evaluator holds it to those terms and to the model (validation)." },
     "models": {
       "type": "array",
       "maxItems": 1000,
@@ -47,10 +47,10 @@
     "validation": {
       "type": "string",
       "enum": ["validated", "partial", "failed", "none"],
-      "description": "What the host's model evaluator said of every model of a sat answer, checked against the problem as the host sanitized it (the counterexample of a proof against the problem and the negated goal): validated, every assertion true; failed, an assertion false with nothing guessed; partial, neither (the reason says why). The worst of an enumeration's models. none: no model to check."
+      "description": "What the host's model evaluator said of every model of a sat answer and of the values that came with it, checked against the problem as the host sanitized it (the counterexample of a proof against the problem and the negated goal): validated, every assertion true and every value the row reports the value its term has under the model; failed, an assertion false or a reported value another than its term's, with nothing guessed; partial, neither (the reason says why: also values that are not those of the terms the row asked for). The worst of an enumeration's models. none: no model to check."
     },
-    "validation_reason": { "type": "string", "description": "The evaluator's reason code of a partial or failed class (output_exceeded for a model that did not come whole); empty otherwise." },
-    "validation_detail": { "type": "string", "description": "For a failed class: which assertion (and which model of an enumeration)." },
+    "validation_reason": { "type": "string", "description": "The evaluator's reason code of a partial or failed class (assertion_false or value_mismatch for failed; output_exceeded for a model that did not come whole); empty otherwise." },
+    "validation_detail": { "type": "string", "description": "For a failed class: which assertion, or for value_mismatch which of the values asked, by its place from 1 (and which model of an enumeration)." },
     "copies": { "type": "integer", "minimum": 0, "description": "How many answers the problem was ruled on: the first fan-out's, the repair round's for a problem it sent out again, and the dispute round's. Answers of different fan-outs may be one machine's; settled_by says what the answer rests on. Never which machines." },
     "agreed": { "type": "boolean", "description": "Whether all of them gave one digest." },
     "settled_by": {

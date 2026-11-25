@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using OutWit.Controller.AI.Smt.Model.Eval;
 using OutWit.Controller.AI.Smt.Model.Lang;
 using OutWit.Controller.AI.Smt.Tests.Mock;
@@ -15,8 +14,9 @@ namespace OutWit.Controller.AI.Smt.Tests.Differential;
 /// counted and the solver is not asked. The evaluator is open code that a dishonest node can
 /// study, so its agreement with the solver is shown on terms nobody chose by hand.
 /// <para>
-/// The number of terms of each theory is <see cref="COUNT_VARIABLE"/> when it is set (the build
-/// server runs a few thousand in all), <see cref="LOCAL_TERMS"/> otherwise. The totals of each
+/// The number of terms of each theory is <see cref="SmtDifferentialTerms.COUNT_VARIABLE"/> when it
+/// is set (the build server runs a few thousand in all), <see cref="SmtDifferentialTerms.LOCAL_TERMS"/>
+/// otherwise (<see cref="SmtDifferentialTerms"/> makes the terms). The totals of each
 /// theory are written to the log: decided and agreed, partial by reason, disagreements. Needs
 /// the solver module; without it the tests are ignored, with the reason, and on the build
 /// server they fail.
@@ -28,14 +28,6 @@ namespace OutWit.Controller.AI.Smt.Tests.Differential;
 public sealed class SmtDifferentialTests
 {
     #region Constants
-
-    /// <summary>The variable that sets the number of terms of each theory.</summary>
-    public const string COUNT_VARIABLE = "SMT_DIFFERENTIAL_TERMS";
-
-    /// <summary>The number of terms of each theory when the variable is not set.</summary>
-    public const int LOCAL_TERMS = 40;
-
-    private const int SEED = 20261123;
 
     /// <summary>
     /// The least share of a theory's terms, in percent, that the evaluator gives a value for:
@@ -67,15 +59,8 @@ public sealed class SmtDifferentialTests
         var compile = SmtSolverRig.Warm();
         Assert.That(SmtSolverRig.Unavailable(), Is.Null, "this process has a sandbox for the solver");
 
-        var count = Environment.GetEnvironmentVariable(COUNT_VARIABLE) is { Length: > 0 } text ? int.Parse(text, CultureInfo.InvariantCulture) : LOCAL_TERMS;
-        var terms = new List<SmtGeneratedTerm>();
-        foreach (var theory in Enum.GetValues<SmtDifferentialTheory>())
-        {
-            // A generator of its own for each theory: its terms do not depend on how many the others have.
-            var generator = new SmtTermGenerator(SEED + (int)theory * 7_919);
-            for (var number = 0; number < count; number++)
-                terms.Add(generator.Next(theory, number));
-        }
+        var count = SmtDifferentialTerms.Count();
+        var terms = SmtDifferentialTerms.Generate(count);
 
         var outcomes = new SmtDifferentialOutcome[terms.Count];
         var watch = Stopwatch.StartNew();
@@ -186,7 +171,7 @@ public sealed class SmtDifferentialTests
     {
         var lines = new List<string>
         {
-            $"the evaluator against the solver: {m_outcomes.Count} terms, {count} of each theory, seed {SEED}; the module compiled in {compileMs} ms; both ran in {elapsedMs} ms",
+            $"the evaluator against the solver: {m_outcomes.Count} terms, {count} of each theory, seed {SmtDifferentialTerms.SEED}; the module compiled in {compileMs} ms; both ran in {elapsedMs} ms",
             $"  {"theory",-14} {"terms",6} {"decided",8} {"agreed",7} {"disagreed",10} {"no answer",10} {"faults",7}  partial by reason"
         };
 

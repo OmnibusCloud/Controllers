@@ -2,8 +2,9 @@ namespace OutWit.Controller.AI.Smt.Model.Eval;
 
 /// <summary>
 /// The reasons a validation gives: fixed codes, never text of the problem or of the model.
-/// <see cref="ASSERTION_FALSE"/> goes with <see cref="SmtValidationClass.Failed"/>; every other
-/// code goes with <see cref="SmtValidationClass.Partial"/>.
+/// <see cref="ASSERTION_FALSE"/> and <see cref="VALUE_MISMATCH"/> go with
+/// <see cref="SmtValidationClass.Failed"/>; every other code goes with
+/// <see cref="SmtValidationClass.Partial"/>.
 /// </summary>
 public static class SmtValidationReasons
 {
@@ -11,6 +12,13 @@ public static class SmtValidationReasons
 
     /// <summary>An assertion evaluated to false with nothing guessed; the detail is its 1-based index.</summary>
     public const string ASSERTION_FALSE = "assertion_false";
+
+    /// <summary>
+    /// A value the answer of <c>get-value</c> reports is not the value its term has under the
+    /// model, with nothing guessed; the detail is the 1-based index of the value among those
+    /// reported.
+    /// </summary>
+    public const string VALUE_MISMATCH = "value_mismatch";
 
     /// <summary>An assertion is false only with a symbol the model left out, which was given its sort's default value.</summary>
     public const string COMPLETED_SYMBOL = "completed_symbol";
@@ -69,6 +77,13 @@ public static class SmtValidationReasons
     /// <summary>The text is not a model a solver prints.</summary>
     public const string UNREADABLE_MODEL = "unreadable_model";
 
+    /// <summary>
+    /// The text is not the answer of <c>get-value</c> for the terms that were asked: it is no
+    /// list of pairs of a term and a value, it holds another number of pairs, a pair names
+    /// another term, or a value is written with a symbol the problem declares or defines.
+    /// </summary>
+    public const string UNREADABLE_VALUES = "unreadable_values";
+
     /// <summary>The step budget ended the evaluation.</summary>
     public const string BUDGET_STEPS = "budget_steps";
 
@@ -83,10 +98,10 @@ public static class SmtValidationReasons
 
     private static readonly string[] ALL_CODES =
     [
-        ASSERTION_FALSE, COMPLETED_SYMBOL, QUANTIFIER, ALGEBRAIC_NUMBER, DIVISION_BY_ZERO, REGULAR_EXPRESSION,
-        FLOATING_POINT, SELECTOR_OF_OTHER_CONSTRUCTOR, UNSUPPORTED_OPERATOR, UNSUPPORTED_SORT, ARRAY_COMPARISON,
-        STRING_LITERAL, ILL_FORMED_TERM, UNKNOWN_SYMBOL, ILL_FORMED_COMMAND, AMBIGUOUS_SYMBOL, UNREADABLE_MODEL,
-        BUDGET_STEPS, BUDGET_DEPTH, BUDGET_SIZE, EVALUATOR_ERROR
+        ASSERTION_FALSE, VALUE_MISMATCH, COMPLETED_SYMBOL, QUANTIFIER, ALGEBRAIC_NUMBER, DIVISION_BY_ZERO,
+        REGULAR_EXPRESSION, FLOATING_POINT, SELECTOR_OF_OTHER_CONSTRUCTOR, UNSUPPORTED_OPERATOR, UNSUPPORTED_SORT,
+        ARRAY_COMPARISON, STRING_LITERAL, ILL_FORMED_TERM, UNKNOWN_SYMBOL, ILL_FORMED_COMMAND, AMBIGUOUS_SYMBOL,
+        UNREADABLE_MODEL, UNREADABLE_VALUES, BUDGET_STEPS, BUDGET_DEPTH, BUDGET_SIZE, EVALUATOR_ERROR
     ];
 
     #endregion

@@ -5,8 +5,9 @@ using OutWit.Common.Values;
 namespace OutWit.Controller.AI.Smt.Model.Eval;
 
 /// <summary>
-/// What checking one model against one problem gave: the class, why, and the counts behind it.
-/// Nothing in it is text of the problem or of the model.
+/// What checking one model against one problem gave, the values reported with the model
+/// included: the class, why, and the counts behind it. Nothing in it is text of the problem or
+/// of the model.
 /// </summary>
 public sealed class SmtValidation : ModelBase
 {
@@ -60,15 +61,18 @@ public sealed class SmtValidation : ModelBase
 
     /// <summary>
     /// A code of <see cref="SmtValidationReasons"/>: why the class is partial or failed (the
-    /// first reason met, in the order of the assertions); null for validated.
+    /// first reason met: values that are not the answer of what was asked, then the assertions
+    /// in their order, then the reported values in theirs); null for validated.
     /// </summary>
     [ToString]
     public string? Reason { get; init; }
 
     /// <summary>
     /// For <see cref="SmtValidationReasons.ASSERTION_FALSE"/> the 1-based index of the first
-    /// false assertion; for <see cref="SmtValidationReasons.UNSUPPORTED_OPERATOR"/> the
-    /// operator's name; otherwise null.
+    /// false assertion; for <see cref="SmtValidationReasons.VALUE_MISMATCH"/> the 1-based index,
+    /// among the reported values, of the first that is another than its term's; for
+    /// <see cref="SmtValidationReasons.UNSUPPORTED_OPERATOR"/> the operator's name; otherwise
+    /// null.
     /// </summary>
     [ToString]
     public string? Detail { get; init; }
@@ -81,11 +85,11 @@ public sealed class SmtValidation : ModelBase
     [ToString]
     public int True { get; init; }
 
-    /// <summary>How many of the symbols the problem declares the model defines.</summary>
+    /// <summary>How many of the symbols the problem declares the model defines, a constant the definitions leave out and a reported value completes among them.</summary>
     [ToString]
     public int Defined { get; init; }
 
-    /// <summary>How many steps of the budget the evaluation used.</summary>
+    /// <summary>How many steps of the budget the evaluation used, for the assertions and the reported values together.</summary>
     [ToString]
     public long Steps { get; init; }
 
