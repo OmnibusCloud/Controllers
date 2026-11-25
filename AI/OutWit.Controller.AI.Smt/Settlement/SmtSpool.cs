@@ -53,6 +53,8 @@ internal sealed class SmtSpool : IDisposable
     {
         var image = MemoryPackSerializer.Serialize(row);
         var offset = m_file.Length;
+        if (offset + image.Length > m_maxBytes)
+            throw new SmtSettlementBoundException(SmtSettlementBoundException.ROWS, m_maxBytes, "the rows the nodes returned");
 
         m_file.Seek(offset, SeekOrigin.Begin);
         m_file.Write(image);

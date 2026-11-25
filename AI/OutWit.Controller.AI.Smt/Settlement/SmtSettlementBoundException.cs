@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace OutWit.Controller.AI.Smt.Settlement;
 
 /// <summary>
@@ -26,7 +28,7 @@ internal sealed class SmtSettlementBoundException : Exception
     /// <param name="bound">The bound, bytes.</param>
     /// <param name="what">What passed it, in fixed words.</param>
     public SmtSettlementBoundException(string name, long bound, string what)
-        : base($"Smt: {name}: {what} pass the {bound} bytes the settlement of one run keeps; the run is not settled.")
+        : base(string.Create(CultureInfo.InvariantCulture, $"Smt: {name}: {what} pass the {bound} bytes the settlement of one run keeps of them; the run is not settled."))
     {
         Name = name;
         Bound = bound;

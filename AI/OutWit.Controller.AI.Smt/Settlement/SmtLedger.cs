@@ -30,7 +30,7 @@ internal static class SmtLedger
     /// <summary>The integrity document.</summary>
     public const int INTEGRITY = 3;
 
-    /// <summary>The full models of the rows whose models the results cut short: one JSON line such a row. The host's; no activity hands it to a lab.</summary>
+    /// <summary>The full models of the rows whose models the results cut short: one JSON line such a row. The host's; no activity hands it to a lab. Bounded for a run (<see cref="SmtSettlementBounds.MAX_MODELS_BYTES"/>).</summary>
     public const int MODELS = 4;
 
     private const int SECTIONS = 5;

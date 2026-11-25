@@ -26,7 +26,7 @@ public sealed class SmtRowChecksTests
 
     #endregion
 
-    #region Word Tests
+    #region Row Tests
 
     [TestCaseSource(nameof(WordsThatDoNotGoTogether))]
     public void ARowWhoseWordsNoSessionGivesTogetherIsRefusedTest(string shape, Action<SmtResultData> change)

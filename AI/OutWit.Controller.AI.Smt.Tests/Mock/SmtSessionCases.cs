@@ -165,8 +165,11 @@ internal static class SmtSessionCases
         Add("enumerate-memory-after-its-word", enumerate, "ok sat memout 1 incomplete", [.. one, SILENT, UNKNOWN, COUNTED, Reason("\"memout\"")], new SmtScriptedEnd { ExitCode = 101 });
 
         // enumerate: errors, crashes, the output cap and faults, with and without a model kept.
+        Add("enumerate-error-in-the-values", enumerate, "input_error", [SILENT, SAT, COUNTED, ERROR]);
+        Add("enumerate-error-in-the-model", enumerate, "input_error", [SILENT, SAT, COUNTED, X7, ERROR]);
         Add("enumerate-error-in-the-block", enumerate, "input_error", [.. one, ERROR]);
         Add("enumerate-values-unreadable", enumerate, "engine_crash unreadable_answer", [SILENT, SAT, COUNTED, "((y 3))\n"]);
+        Add("enumerate-model-empty", enumerate, "engine_crash unreadable_answer", [SILENT, SAT, COUNTED, X7, SILENT]);
         Add("enumerate-trap-with-a-model", enumerate, "engine_crash trap", [.. one, SILENT], new SmtScriptedEnd { Verdict = "Trap", ExitCode = -1 });
         Add("enumerate-output-in-the-check", enumerate, "output_exceeded", [SILENT], Ended("OutputLimit"));
         Add("enumerate-output-after-unsat", enumerate, "output_exceeded", [SILENT, UNSAT], Ended("OutputLimit"));

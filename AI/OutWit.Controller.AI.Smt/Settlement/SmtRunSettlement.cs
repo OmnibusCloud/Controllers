@@ -16,7 +16,9 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// takes it (<see cref="SmtHostEvaluator"/>), and the row of the results is written. The rows are
 /// kept in a spool file while the documents are written, and every document goes to a file as it
 /// is written: the host's memory holds a record a copy and a few numbers a problem, never a model
-/// of more than the problem at hand, and never a document.
+/// of more than the problem at hand, and never a document. What the host's disk holds of a run has
+/// bounds (<see cref="SmtSettlementBounds"/>): the rows in the spool, and the full models in the
+/// ledger; a run past either is not settled, and the failure names the bound.
 /// </summary>
 internal static class SmtRunSettlement
 {
@@ -114,6 +116,10 @@ internal static class SmtRunSettlement
                     var accepted = ruling.Accepted == null ? null : spool.Read(ruling.Accepted);
                     SmtResultsWriter.WriteTaken(results, models, row.Data, row.Problem, ruling, accepted);
                     report.CountTaken(row.Data, row.Problem, ruling, accepted);
+
+                    // Looked at after each row: the section passes its bound by one row's models at the most.
+                    if (models.Length > bounds.ModelsBytes)
+                        throw new SmtSettlementBoundException(SmtSettlementBoundException.MODELS, bounds.ModelsBytes, "the full models of the settled rows");
                 }
 
                 set = reader.Summary;
