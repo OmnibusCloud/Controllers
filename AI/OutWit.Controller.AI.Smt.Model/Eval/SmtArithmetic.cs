@@ -156,6 +156,11 @@ internal static class SmtArithmetic
         return known == SmtOperator.Add ? left + right : left - right;
     }
 
+    /// <summary>
+    /// <c>(- a)</c>: the same number under the other sign. It is the one operation here that
+    /// pays nothing: an integer and a rational in lowest terms change their sign without any
+    /// of their digits being read.
+    /// </summary>
     private static SmtValue Negate(SmtValue value)
     {
         return value is SmtIntValue whole ? new SmtIntValue(-whole.Value) : new SmtRealValue(-((SmtRealValue)value).Value);

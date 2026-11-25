@@ -129,12 +129,16 @@ internal readonly struct SmtRational : IComparable<SmtRational>, IEquatable<SmtR
         return new SmtRational(left.Numerator * right.Denominator - right.Numerator * left.Denominator, left.Denominator * right.Denominator);
     }
 
-    /// <summary>The negation of a rational.</summary>
+    /// <summary>
+    /// The negation of a rational. A fraction in lowest terms is in lowest terms under the
+    /// other sign too, so nothing is reduced again: the negation costs nothing of the number's
+    /// size, and nobody pays for it.
+    /// </summary>
     /// <param name="value">The rational.</param>
     /// <returns>The same number with the other sign.</returns>
     public static SmtRational operator -(SmtRational value)
     {
-        return new SmtRational(-value.Numerator, value.Denominator);
+        return OfLowestTerms(-value.Numerator, value.Denominator);
     }
 
     /// <summary>The product of two rationals.</summary>
@@ -156,15 +160,25 @@ internal readonly struct SmtRational : IComparable<SmtRational>, IEquatable<SmtR
         return new SmtRational(left.Numerator * right.Denominator, left.Denominator * right.Numerator);
     }
 
+    /// <summary>
+    /// The rational of parts that are known to be in lowest terms, the denominator positive:
+    /// taken as they are. The constructor would look for a common divisor that is not there,
+    /// at the price of a division of the two.
+    /// </summary>
+    private static SmtRational OfLowestTerms(BigInteger numerator, BigInteger denominator)
+    {
+        return new SmtRational { Numerator = numerator, Denominator = denominator };
+    }
+
     #endregion
 
     #region Properties
 
     /// <summary>The numerator; it carries the sign.</summary>
-    public BigInteger Numerator { get; }
+    public BigInteger Numerator { get; private init; }
 
     /// <summary>The denominator: positive, and 1 for an integer.</summary>
-    public BigInteger Denominator { get; }
+    public BigInteger Denominator { get; private init; }
 
     /// <summary>Whether the rational is an integer.</summary>
     public bool IsInteger => Denominator.IsOne;
