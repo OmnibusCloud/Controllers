@@ -5,14 +5,14 @@ runs as a WebAssembly module inside the controller's own wasm sandbox, under bud
 counts and not clocks, so the same problem gives the same verdict, the same model and the same
 cost on every machine.
 
-**Status: 0.4.0, in development; nothing is published.** This version holds the solver (the
+**Status: 0.5.0, in development; nothing is published.** This version holds the solver (the
 profile, the sandbox, one session per problem), the node's side of a run (packages of problems
-solved with a pool of sessions on machines of 8 GB at least, packages of rows returned, the node
-measured for the allocator) and the host's side: a lab's problem set cut into packages, solved
-with copies on different machines, repaired (the copies the sampling asked for restored),
-disputed, settled by the digests of the rows, every `sat` model checked on the server by the model
-evaluator, and written out as results, a report, provenance and integrity, all through blobs
-(`SmtRun`). The solver module is a data asset of the controller. What a lab can rely on, and the
+solved on machines of 8 GB at least, the packages of a node's share on one budget of sessions,
+packages of rows returned, the node measured for the allocator) and the host's side: a lab's
+problem set cut into packages, solved with copies on different machines, repaired (the copies
+the sampling asked for restored), disputed, settled by the digests of the rows, every `sat`
+model checked on the server by the model evaluator, and written out as results, a report,
+provenance and integrity, all through blobs (`SmtRun`). The solver module is a data asset of the controller. What a lab can rely on, and the
 limits, are [`docs/capabilities.md`](docs/capabilities.md). The language layer and
 the wire types (the reader, the sanitizer, the model evaluator, the problem set, the options, the
 packages and their rows, the preflight, the words of the documents) are
@@ -131,15 +131,17 @@ report it carry references only. `Smt.SolvePackage` is given an `SmtTaskPackageD
    for about five minutes; a few downloads of a share at once, the first transfer of all alone);
 3. holds the blob to its reference: its size, its SHA-256, and that it holds exactly the problems
    the reference names (their number and the digest of their indices);
-4. makes the process's sandbox (the module is compiled at the first package of a process) and
-   the degree (below);
-5. solves the problems with the pool and writes each row to the package of results as its
-   session ends, in the order the sessions end;
+4. waits for its turn on the node's budget of sessions (below), then makes the process's
+   sandbox (the module is compiled at the first package of a process, before any session starts)
+   and reads the degree its options get;
+5. solves its problems on the budget's sessions, beside the problems of the other packages of
+   the process, and writes each row to its own package of results as its session ends, in the
+   order the sessions end;
 6. uploads the rows and returns an `SmtResultPackageData`: the blob, its SHA-256 and size, the
    number of rows and the package's ticket.
 
-One package is solved at a time in a process; the other packages of a share wait with their
-blobs downloaded. A problem that fails on its own (a refusal, an error of the solver's, a
+The client starts every package of a node's share at once; their problems share the node's
+sessions (below). A problem that fails on its own (a refusal, an error of the solver's, a
 crash, a budget) is a row with its status, never a failed package. A package the node cannot work
 on at all comes back without a blob and with the code of why (`SmtNodeFaults`): another version,
 a reference that is not one, a ticket that is none, a blob too large, of another hash, unreadable
@@ -157,10 +159,10 @@ before it holds it (128 MiB a problem, 64 MiB a row), a package to the number of
 reference names and to the bytes it may unpack to (256 MiB a package of problems), and grows a
 frame's buffer with the bytes that arrive, never with the length a frame claims.
 
-### The pool and the degree
+### The budget of sessions and the degree
 
-The sessions of a package run on threads of their own below normal priority, each with a stack
-that holds a guest's. The degree is `min(logical cores, 16, sessions the memory holds)`. One
+The sessions run on threads of their own below normal priority, each with a stack that holds a
+guest's. The degree is `min(logical cores, 16, sessions the memory holds)`. One
 session may take twice the host's cap of the solver's linear memory (the heap of the solver's
 exception objects is capped apart from the linear memory and may take as much again) and a
 margin of 192 MiB for the host's part of a session (its output, its answers as text, the problem
@@ -169,6 +171,33 @@ quarters of the memory the machine has available as the runtime sees it. Under t
 options a session counts 2,752 MiB: a machine with 4 GiB available runs one, with 16 GiB four,
 with 64 GiB sixteen (seventeen fit). A machine where not one session fits refuses the package
 (`memory_insufficient`), and the repair round sends its problems out again.
+
+A process keeps one budget of sessions for every package it solves (`SmtSessionBudget`), so a
+package's slowest problem does not hold the node: a session that ends goes to the next problem
+waiting, of the same package or of the next one.
+
+- **Sessions and memory.** At most `min(logical cores, 16)` sessions run at once, and together they
+  claim at most three quarters of the memory the machine had available, each counted at its
+  package's session size. For packages of one size that is the degree above to the session.
+  Packages of different sizes (of different jobs on one node) share the same bytes: a large
+  session takes the room of several small ones, and no mix of them claims more than the memory
+  holds.
+- **Order.** Problems are handed out in the order their packages were let in, a package's own in
+  its order; the first problem waiting goes first and nothing overtakes it, so a large session
+  waiting for room is not starved by small ones behind it.
+- **Open packages.** A package waits for its turn with its blob downloaded, and is let in (its blob
+  checked again, read a problem at a time, its result package written) only when the packages
+  open have handed out all of their problems: the next package is ready while the last problems
+  of the others run. Every open package but the newest has a session running, so no more are
+  open than the sessions running and one, and at most 16. A package's blob is closed with its
+  last problem; its result package (a Brotli encoder, about 11 MiB) stays open until its last row.
+- **The machine.** The cores and the available memory are read when a package is let in and no
+  other package is open (the first package of a share, after the module is compiled); while
+  packages are open the reading stands, since what the machine has available then counts the
+  sessions running.
+
+A row does not depend on any of that: every problem has a session of its own, and its fuel is a
+count. A package returns exactly its own rows, under its own ticket, whatever ran beside it.
 
 ### The machines a package goes to
 
@@ -221,8 +250,9 @@ machine.
 
 The benchmark of `Smt.SolvePackage` gives the allocator a rate: thirty small problems written for
 it (every query; linear integers and reals, bit-vectors, uninterpreted functions, arrays,
-datatypes, strings), the same on every node, solved by the pool at the node's degree as a
-package is, the set given often enough that each session gets about four problems a run. A
+datatypes, strings), the same on every node, solved by one pool at the node's degree, as the
+budget runs the problems of a share, the set given often enough that each session gets about
+four problems a run. A
 warm-up run, then timed runs; the rate is problems a second of the median run, in the unit
 `smt-problem@ref-v1`. Every problem is held to its outcome and its fuel, the same on every
 machine, so a node that computes otherwise cannot score; a node without a sandbox or without

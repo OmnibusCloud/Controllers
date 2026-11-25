@@ -11,7 +11,8 @@ namespace OutWit.Controller.AI.Smt.Live.Local;
 /// Solves every problem of a local run's packages with one pool of sessions, as one machine with
 /// a queue of files would: the problems are handed out in the set's order across the packages, so
 /// no session waits for the slowest problem of a package before the next package starts (a node
-/// solves one package at a time, and its pool waits for each package's slowest problem). Each
+/// shares its sessions across the packages of its share in the same way, a few packages open at a
+/// time, <see cref="SmtSessionBudget"/>). Each
 /// package is first checked as a node checks it (<see cref="SmtPackageRunner.EnsureAcceptable"/>,
 /// <see cref="SmtPackageRunner.EnsureBlob"/>); every problem is solved by the node's session code
 /// (<see cref="SmtSolver.Solve(SmtProblemData, SmtOptionsData, SmtSandbox?, string?, CancellationToken)"/>)

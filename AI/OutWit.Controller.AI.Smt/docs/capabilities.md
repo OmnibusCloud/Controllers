@@ -4,7 +4,7 @@ A reference for building on the Smt controller: what goes into a run and what co
 is checked and what is not, and where the edges are. The [README](../README.md) explains how
 things work inside; the schemas beside this page are the contract of the documents.
 
-Version described: **Smt 0.4.0** (with Smt.Model 0.3.0 and Smt.Scripts 0.2.0). In development;
+Version described: **Smt 0.5.0** (with Smt.Model 0.3.0 and Smt.Scripts 0.2.0). In development;
 nothing is published.
 
 ## Contents
@@ -207,6 +207,7 @@ What it does not claim:
 | What a lab sees of a row's models | 64 KB |
 | Memory of one session on a node | twice the host's cap of the solver's memory and 192 MiB: 2,752 MiB under the defaults |
 | Memory of a node's machine | 7,680 MiB at least as the node reports it (a machine sold as 8 GB; `node.min_ram_mb` of the capabilities); the sessions may claim three quarters of what it has available |
+| Sessions at once on a node | `min(logical cores, 16)`, and as many as three quarters of its available memory holds; shared by the problems of every package the node has, at most 16 packages open at once |
 | Duration | none is estimated; the upper bound is the taken problems times the hard cap |
 
 ## 8. Scale and delivery
@@ -215,7 +216,9 @@ The set is read a row at a time and its taken problems wait in a working file of
 until they are cut into packages; packages, rows and documents travel as blobs and never sit
 whole in the server's memory, which holds a small record a copy and a few numbers a problem. The
 work is split once and sent once by the nodes' rates; the repair round and the dispute round are
-the only second sends. The load test of the build server runs ten thousand problems through
+the only second sends. A node solves the packages of its share on one budget of sessions: a
+session that ends goes to the next problem waiting, of the same package or of the next one, so a
+package's slowest problem does not hold the node's other sessions. The load test of the build server runs ten thousand problems through
 `SmtRun` on three in-process nodes with the memory and every message measured: a request carries
 one package reference, an answer one result reference.
 

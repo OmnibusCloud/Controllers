@@ -126,6 +126,63 @@ public sealed class SmtSolvePackageTests
     }
 
     [Test]
+    public async Task PackagesOfAShareStartedTogetherReturnEachItsOwnRowsTest()
+    {
+        // Three packages started at once, as the client starts a share: their problems share the
+        // node's budget of sessions, a package's last problems running beside the next one's.
+        // Each package returns its own rows under its own ticket, and every row is the one a
+        // session of its problem gives on its own.
+        var options = new SmtOptionsData();
+        var share = new List<(SmtTaskPackageData Package, List<SmtProblemData> Problems)>();
+        for (var package = 0; package < 3; package++)
+        {
+            var problems = new List<SmtProblemData>
+            {
+                SmtGoldenPackages.Indexed(SmtSolverProblems.Enumerate($"queens-{package}", SmtSolverProblems.Queens(6), 10, SmtSolverProblems.QueenNames(6)), 10 * package)
+            };
+            for (var index = 1; index < 6; index++)
+                problems.Add(SmtGoldenPackages.Indexed(SmtSolverProblems.Check($"p{package}-{index}", $"(set-logic QF_LIA)(declare-const x Int)(assert (> x {10 * package + index}))", "x"), 10 * package + index));
+
+            share.Add((await SmtNodeRig.PublishAsync(problems, options, m_blobs, m_folder), problems));
+        }
+
+        var node = SmtBudgetRig.Node();
+        var manager = new SmtTestProcessingManager();
+        var runs = await Task.WhenAll(share.Select(entry => RunAsync(entry.Package, manager)));
+        var counts = SmtBudgetRig.Counts(node);
+        TestContext.Out.WriteLine($"the node's budget: at most {counts.PeakRunning} session(s) and {counts.PeakOpen} package(s) open at once");
+
+        for (var index = 0; index < share.Count; index++)
+        {
+            var (package, problems) = share[index];
+            var (status, result) = runs[index];
+            Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
+            Assert.That(result, Is.Not.Null);
+
+            var rows = SmtNodeRig.ReadRows(await m_blobs.GetLocalPathAsync(result!.ResultsBlobId), package.ProblemCount);
+            Assert.Multiple(() =>
+            {
+                Assert.That(result.FaultCode, Is.Empty);
+                Assert.That(result.Ticket, Is.EqualTo(package.Ticket), "the result answers its own package");
+                Assert.That(result.ResultCount, Is.EqualTo(problems.Count));
+                Assert.That(rows.Select(row => row.Id), Is.EquivalentTo(problems.Select(problem => problem.Id)), "its own problems, each once");
+                Assert.That(rows.Select(row => row.Ticket), Has.All.EqualTo(package.Ticket));
+
+                foreach (var problem in problems)
+                    Assert.That(rows.Single(row => row.Id == problem.Id).Digest, Is.EqualTo(SmtNodeRig.Row(problem, options).Digest), problem.Id);
+            });
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(counts.Running, Is.Zero, "the node's budget ends idle");
+            Assert.That(counts.Open, Is.Zero);
+            Assert.That(counts.Waiting, Is.Zero);
+            Assert.That(counts.PeakOpen, Is.InRange(1, SmtBudgetRig.MaxOpenPackages));
+        });
+    }
+
+    [Test]
     public async Task TheShareReportsItsProblemsAsTheyAreSolvedTest()
     {
         var problems = Enumerable.Range(0, 6)

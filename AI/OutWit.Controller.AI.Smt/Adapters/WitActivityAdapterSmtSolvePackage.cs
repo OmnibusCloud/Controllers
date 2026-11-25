@@ -14,10 +14,12 @@ namespace OutWit.Controller.AI.Smt.Adapters;
 
 /// <summary>
 /// <c>Smt.SolvePackage</c> on a node: the package's reference is checked, its blob is fetched,
-/// checked and read, its problems are solved by a pool of sessions (<see cref="SmtPackageRunner"/>),
-/// and the rows go back as a blob. A package the node cannot work on at all comes back with the code
-/// of why and no blob (<see cref="SmtResultPackageData.FaultCode"/>); a cancelled package returns
-/// nothing; a failure of the node's own that has no code is reported in fixed words.
+/// checked and read, its problems are solved on the node's budget of sessions beside the problems
+/// of the other packages of the process (<see cref="SmtSessionBudget.Node"/>,
+/// <see cref="SmtPackageRunner"/>), and the rows go back as a blob. A package the node cannot work
+/// on at all comes back with the code of why and no blob (<see cref="SmtResultPackageData.FaultCode"/>);
+/// a cancelled package returns nothing; a failure of the node's own that has no code is reported in
+/// fixed words.
 /// </summary>
 internal sealed class WitActivityAdapterSmtSolvePackage : WitActivityAdapterFunction<WitActivitySmtSolvePackage>
 {
@@ -32,16 +34,6 @@ internal sealed class WitActivityAdapterSmtSolvePackage : WitActivityAdapterFunc
     private const string WORK_LABEL = "smt-package";
 
     private const string SANDBOX_MISSING = "this process has no sandbox for the solver";
-
-    #endregion
-
-    #region Fields
-
-    /// <summary>
-    /// One package is solved at a time in this process: its sessions already take the node's
-    /// cores. The other packages of the share wait here with their blobs downloaded.
-    /// </summary>
-    private static readonly SemaphoreSlim EXECUTION = new(1, 1);
 
     #endregion
 
@@ -169,8 +161,11 @@ internal sealed class WitActivityAdapterSmtSolvePackage : WitActivityAdapterFunc
             progress.Received(package);
             received = true;
 
+            // The package waits here with its blob downloaded until the packages open on this node
+            // have handed out all of their problems; its turn is its place until its solve stage
+            // is over, and the upload goes on without it.
             SmtWrittenResults written;
-            await EXECUTION.WaitAsync(cancellationToken);
+            var turn = await SmtSessionBudget.Node.EnterAsync(cancellationToken);
             try
             {
                 // The blob cache may have dropped the file while the package waited for its turn.
@@ -180,24 +175,23 @@ internal sealed class WitActivityAdapterSmtSolvePackage : WitActivityAdapterFunc
                 SmtPackageRunner.EnsureBlob(package, path);
 
                 // The module is compiled here at the first package of a process (tens of seconds),
-                // before any session's budget starts.
+                // before any session's budget starts: no other package is let in meanwhile.
                 var sandbox = SmtSandboxHost.Get(out var unavailable);
-                var degree = SmtPackageRunner.Prepare(package, sandbox == null ? unavailable ?? SANDBOX_MISSING : null, SmtSandboxDegree.ForCurrentMachine);
+                var degree = SmtPackageRunner.Prepare(package, sandbox == null ? unavailable ?? SANDBOX_MISSING : null, turn.Degree);
 
-                Logger.LogInformation("Smt: {Problems} problem(s), {Degree} session(s) at once ({Reason})", package.ProblemCount, degree.Degree, degree.Reason);
+                Logger.LogInformation("Smt: {Problems} problem(s), up to {Degree} session(s) of theirs at once ({Reason}), on this node's budget beside {Open} other package(s) open",
+                    package.ProblemCount, degree.Degree, degree.Reason, SmtSessionBudget.Node.Open - 1);
 
                 var resultsPath = Path.Combine(work.Path, SmtPackageCodec.RESULTS_FILE_NAME);
-                written = await Task.Run(
-                    () => SmtPackageRunner.Run(package, path, sandbox!, degree.Degree, resultsPath, () =>
-                    {
-                        Interlocked.Increment(ref solved);
-                        progress.ProblemDone();
-                    }, Logger, cancellationToken),
-                    cancellationToken);
+                written = await SmtPackageRunner.RunAsync(turn, package, path, SmtPackageRunner.Solver(sandbox!), resultsPath, () =>
+                {
+                    Interlocked.Increment(ref solved);
+                    progress.ProblemDone();
+                }, Logger, cancellationToken);
             }
             finally
             {
-                EXECUTION.Release();
+                turn.Dispose();
             }
 
             return await SmtPackageTransfer.UploadResultsAsync(BlobService, written.Path, package.Ticket, written.Rows, Logger, cancellationToken);
