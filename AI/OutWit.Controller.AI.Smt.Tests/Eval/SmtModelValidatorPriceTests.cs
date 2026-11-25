@@ -33,6 +33,21 @@ public class SmtModelValidatorPriceTests
 
     private const int NEGATIONS = 8_000;
 
+    /// <summary>The variables of the lambda no array is made of: two megabytes of text.</summary>
+    private const int LAMBDA_VARIABLES = 200_000;
+
+    /// <summary>The depth of the recursion that reads the lambda: 16,383 of its 32,767 calls read it.</summary>
+    private const int LAMBDA_DEPTH = 14;
+
+    /// <summary>Twenty times the 0.5 s the twenty-five readings the budget pays for take.</summary>
+    private const double LAMBDA_BOUND_SECONDS = 10;
+
+    /// <summary>The steps of reading an array a lambda of one variable stands for, as they were before lists were paid for.</summary>
+    private const int LAMBDA_READ_STEPS = 22;
+
+    /// <summary>The steps of comparing the finite map a lambda of one variable stands for, as they were before lists were paid for.</summary>
+    private const int LAMBDA_MAP_STEPS = 41;
+
     #endregion
 
     #region Negation Tests
@@ -75,7 +90,83 @@ public class SmtModelValidatorPriceTests
 
     #endregion
 
+    #region Lambda Tests
+
+    [Test]
+    public void LambdaOfManyVariablesReadAtEveryCallEndsAtTheStepBudgetTest()
+    {
+        // A model's own function whose body holds a lambda of 200,000 variables. Such a lambda
+        // is no value, but its list is read to the end before the evaluator says so, to tell a
+        // list that is not well-formed from an array of many indices: 15 to 20 ms a reading.
+        // Read for the one step of its term, the list was read at 16,383 calls inside the
+        // budget, and the model validated after 240 to 320 s. Paid for variable by variable,
+        // the budget ends the evaluation at the twenty-fifth reading, in 0.5 s.
+        var (validation, elapsed) = SmtTimed.Validate("(declare-const x Bool)(assert x)", Lambdas(LAMBDA_VARIABLES, LAMBDA_DEPTH));
+
+        Assert.That(validation.Class, Is.EqualTo(SmtValidationClass.Partial), validation.ToString());
+        Assert.That(validation.Reason, Is.EqualTo(SmtValidationReasons.BUDGET_STEPS));
+        Assert.That(validation.Steps, Is.EqualTo(SmtEvaluationBudget.DEFAULT_STEPS));
+        Assert.That(elapsed.TotalSeconds, Is.LessThan(LAMBDA_BOUND_SECONDS), $"the budget was used up in {elapsed.TotalSeconds:F2} s");
+    }
+
+    [Test]
+    public void LambdaOfManyVariablesPaysForEveryVariableTest()
+    {
+        var two = SmtCheck.Holds($"(or (lambda ({Variables(2)}) 0) true)");
+        var thousand = SmtCheck.Holds($"(or (lambda ({Variables(1000)}) 0) true)");
+
+        // The disjunct beside it decides: the lambda is only a term the evaluator has no value for.
+        Assert.That(two.Class, Is.EqualTo(SmtValidationClass.Validated), two.ToString());
+        Assert.That(thousand.Class, Is.EqualTo(SmtValidationClass.Validated), thousand.ToString());
+        Assert.That(thousand.Steps - two.Steps, Is.EqualTo(998 * SmtTerms.VARIABLE_STEPS));
+    }
+
+    [Test]
+    public void LambdaOfOneVariableCostsWhatItDidTest()
+    {
+        // The only lambda that is a value, and the only one a solver prints, pays nothing new:
+        // these are the steps of the evaluator before any list was paid for.
+        Assert.That(SmtCheck.Holds("(= (select (lambda ((i Int)) (* i i)) 7) 49)").Steps, Is.EqualTo(LAMBDA_READ_STEPS));
+        Assert.That(SmtCheck.Holds("(= (lambda ((i Int)) (ite (= i 1) 5 0)) (store ((as const (Array Int Int)) 0) 1 5))").Steps, Is.EqualTo(LAMBDA_MAP_STEPS));
+    }
+
+    [TestCase("(or (lambda ((x Int) (x Int)) 0) true)")]
+    [TestCase("(or (lambda ((x Int) (true Int)) 0) true)")]
+    [TestCase("(or (lambda ((x Int) y) 0) true)")]
+    [TestCase("(or (lambda () 0) true)")]
+    public void LambdaWhoseVariablesAreNotWellFormedIsStillATermThatFitsNoReadingTest(string assertion)
+    {
+        // Not passed by the disjunction, as before: the list is still read to the end.
+        var validation = SmtCheck.Holds(assertion);
+
+        Assert.That(validation.Class, Is.EqualTo(SmtValidationClass.Partial));
+        Assert.That(validation.Reason, Is.EqualTo(SmtValidationReasons.ILL_FORMED_TERM));
+    }
+
+    #endregion
+
     #region Tools
+
+    /// <summary>
+    /// The model whose own function calls itself twice a level, down from a depth, and reads a
+    /// lambda of so many variables at every call that calls on.
+    /// </summary>
+    private static string Lambdas(int variables, int depth)
+    {
+        return $"((define-fun g!1 ((n Int)) Bool (ite (<= n 0) true (or (lambda ({Variables(variables)}) 0) (and (g!1 (- n 1)) (g!1 (- n 1)))))) (define-fun x () Bool (g!1 {depth})))";
+    }
+
+    /// <summary>
+    /// So many sorted variables, each of a name of its own.
+    /// </summary>
+    private static string Variables(int count)
+    {
+        var variables = new StringBuilder();
+        for (var index = 0; index < count; index++)
+            variables.Append("(v").Append(index).Append(" Int)");
+
+        return variables.ToString();
+    }
 
     /// <summary>
     /// The model that gives <c>x</c> a rational of two large numerals, negated so many times in

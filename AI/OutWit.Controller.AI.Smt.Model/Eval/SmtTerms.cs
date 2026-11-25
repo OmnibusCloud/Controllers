@@ -18,6 +18,14 @@ internal static class SmtTerms
     /// </summary>
     public const int BINDER_READS = 2;
 
+    /// <summary>
+    /// The steps one variable costs where a list of variables is paid for as a whole, before
+    /// it is read: its name is checked, kept, and told apart from the others in a set. Reading
+    /// a variable was measured at the time of three to seven steps, the more the longer the
+    /// list.
+    /// </summary>
+    public const int VARIABLE_STEPS = 4;
+
     /// <summary>The longest numeral read as an index: no index of the standard needs more digits than an int has.</summary>
     private const int MAX_INDEX_DIGITS = 10;
 

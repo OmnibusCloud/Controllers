@@ -95,9 +95,10 @@ internal sealed class SmtArrayFunctions
         if (map != null)
             return map;
 
-        // The body is kept with a copy of the names around it: it is evaluated when the array is read.
+        // The body is kept with a copy of the names around it: it is evaluated when the array
+        // is read. The copy is paid for by the names it holds, before it is made.
+        m_meter.Charge(1 + (scope?.Count ?? 0));
         var captured = scope?.Capture() ?? new SmtScope(false);
-        m_meter.Charge(1 + captured.Count);
         return new SmtArrayValue(indexSort, null, new SmtArraySource(names[0], items[2], captured), SmtArrayValue.NO_ENTRIES);
     }
 
@@ -228,13 +229,20 @@ internal sealed class SmtArrayFunctions
     }
 
     /// <summary>
-    /// Pays for reading the names of a lambda's variables, before they are read: each is checked
-    /// and told apart from the others as text.
+    /// Pays for reading the variables of a lambda, before they are read. Only a lambda of one
+    /// variable is a value. A longer list is read to the end all the same, to tell a list that
+    /// is not well-formed from an array of several indices: it pays for every variable
+    /// (<see cref="SmtTerms.VARIABLE_STEPS"/>), or a lambda inside a recursion would have its
+    /// whole list read at every call for the one step of its term. Each name is checked and
+    /// told apart from the others as text, and pays for that by its length.
     /// </summary>
     private void PayForVariables(SmtExpression variables)
     {
         if (!variables.IsList)
             return;
+
+        if (variables.Items.Count > 1)
+            m_meter.Charge((long)variables.Items.Count * SmtTerms.VARIABLE_STEPS);
 
         foreach (var variable in variables.Items)
         {
