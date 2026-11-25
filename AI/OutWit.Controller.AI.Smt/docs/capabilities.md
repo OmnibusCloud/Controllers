@@ -171,9 +171,13 @@ What holds:
   (`settled_by: agreement`) and the integrity document lists the problem; no machine is taken for
   a liar.
 - **A node's word is a claim.** A result is taken only under a ticket its round gave out, as an
-  answer to a problem of its package, from this controller version, with the words, counts and
-  digest of a row; anything else fails its package and is counted. A package a node could not
-  work on, and a problem whose session a node could not end, go out once more, to two machines.
+  answer to a problem of its package, from this controller version, and only as a row a session
+  of the controller could have written: its words and its counts together as a session's outcome
+  has them (a verdict only where a session claims one, a `sat` with its model, the code of its
+  status and no other word), its numbers within the envelope of the run's options (fuel, memory,
+  checks), its texts within what a session writes, and a digest of its own; anything else fails
+  its package and is counted. A package a node could not work on, and a problem whose session a
+  node could not end, go out once more, to two machines.
 - **The sampling asked for is restored.** A problem of a package asked for twice that came back
   with one answer (the other copy refused by its node, refused by the server, or a fault of the
   node) goes out again to two machines, and the integrity document counts it as `copies_short`.
@@ -214,7 +218,9 @@ What it does not claim:
 | A problem | 4,194,304 characters, 2,000,000 tokens, nesting 100,000 (the model package's ceilings) |
 | A package | 16 to 256 problems, about 1,024 packages once a run is large, at most 32 Mi characters of text; a node takes at most 256 problems and 257 MiB |
 | A session's output | 16 MiB; past it the row is `output_exceeded` and keeps its verdict |
+| A row a node returns | its models and values within the session's output (16 Mi characters together); 48 MiB and 64 KiB as bytes in its package (`packages.max_result_frame_bytes` of the capabilities) |
 | What a lab sees of a row's models | 64 KB |
+| What the server keeps of one run while it settles it | 128 GiB of the nodes' rows, 2 GiB of the full models of the rows whose models were cut; a run past either is not settled, and the job fails with `smt_rows_bound` or `smt_models_bound` |
 | Memory of one session on a node | twice the host's cap of the solver's memory and 192 MiB: 2,752 MiB under the defaults |
 | Memory of a node's machine | 7,680 MiB at least as the node reports it (a machine sold as 8 GB; `node.min_ram_mb` of the capabilities); the sessions may claim three quarters of what it has available |
 | Sessions at once on a node | `min(logical cores, 16)`, and as many as three quarters of its available memory holds; shared by the problems of every package the node has, at most 16 packages open at once |

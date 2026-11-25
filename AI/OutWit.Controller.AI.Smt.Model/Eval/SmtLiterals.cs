@@ -13,8 +13,19 @@ internal static class SmtLiterals
 {
     #region Constants
 
-    /// <summary>A number of fewer digits than this fits a machine word, and is read as one.</summary>
-    private const int WORD_DIGITS = 18;
+    /// <summary>
+    /// A number of fewer digits than this fits a machine word, and is read as one. Looking at
+    /// so many characters of digits costs a step.
+    /// </summary>
+    public const int WORD_DIGITS = 18;
+
+    /// <summary>
+    /// The steps 64 digits of a binary literal cost. A binary literal is read a character a
+    /// bit, where a hexadecimal one is read a character for four bits: reading 64 binary
+    /// digits was measured at the time of about eight steps. A literal of fewer than 64 digits
+    /// pays the one step it always did.
+    /// </summary>
+    private const int BINARY_WORD_STEPS = 8;
 
     private const int HEXADECIMAL_DIGIT_BITS = 4;
     private const int PREFIX_LENGTH = 2;
@@ -124,7 +135,7 @@ internal static class SmtLiterals
         }
 
         meter.CheckBitVectorBits(digits.Length);
-        meter.ChargeBits(digits.Length);
+        meter.Charge(1 + (long)(digits.Length / SmtMeter.WORD_BITS) * BINARY_WORD_STEPS);
         var value = BigInteger.Parse(string.Concat("0", digits), NumberStyles.AllowBinarySpecifier, CultureInfo.InvariantCulture);
         return new SmtBitVectorValue(value, digits.Length);
     }

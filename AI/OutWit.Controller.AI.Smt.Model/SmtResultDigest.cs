@@ -19,6 +19,13 @@ namespace OutWit.Controller.AI.Smt.Model;
 /// are the machine's; the controller version, which is the job's; the ticket, which is the
 /// package's (a problem sent again in another package keeps its digest); and the digest itself.
 /// </para>
+/// <para>
+/// What is hashed is the UTF-8 of the canonical form, and only of a form that has one: a text
+/// with half of a surrogate pair alone is no text, and no character is ever put in its place (the
+/// row would then share its digest with the row that holds that character there). Such a row has
+/// no digest: <see cref="Of"/> gives <see cref="NONE"/> and <see cref="Holds"/> is false, without
+/// an exception. A node's session never writes such a text, so a row a node made has its digest.
+/// </para>
 /// </summary>
 public static class SmtResultDigest
 {
@@ -27,9 +34,13 @@ public static class SmtResultDigest
     /// <summary>The first line of the canonical form: its version.</summary>
     public const string FORMAT = "smt-result/1";
 
+    /// <summary>What <see cref="Of"/> gives for a row that has no digest: the empty text, which is no SHA-256.</summary>
+    public const string NONE = "";
+
     private const char LINE_FEED = '\n';
 
-    private static readonly UTF8Encoding TEXT = new(encoderShouldEmitUTF8Identifier: false);
+    // Strict: a character that has no UTF-8 is refused, never replaced by another.
+    private static readonly UTF8Encoding TEXT = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     #endregion
 
@@ -39,22 +50,32 @@ public static class SmtResultDigest
     /// The SHA-256 of a row's canonical form.
     /// </summary>
     /// <param name="row">The row.</param>
-    /// <returns>Lower-case hex.</returns>
+    /// <returns>Lower-case hex; <see cref="NONE"/> for a row one of whose texts is not valid UTF-16 (half of a surrogate pair alone), which has no digest.</returns>
     /// <exception cref="ArgumentNullException">There is no row.</exception>
     public static string Of(SmtResultData row)
     {
-        return Convert.ToHexStringLower(SHA256.HashData(TEXT.GetBytes(Canonical(row))));
+        var canonical = Canonical(row);
+
+        try
+        {
+            return Convert.ToHexStringLower(SHA256.HashData(TEXT.GetBytes(canonical)));
+        }
+        catch (EncoderFallbackException)
+        {
+            return NONE;
+        }
     }
 
     /// <summary>
     /// Whether a row carries the digest of its own values.
     /// </summary>
     /// <param name="row">The row.</param>
-    /// <returns>True when <see cref="SmtResultData.Digest"/> is the digest of the row's canonical form.</returns>
+    /// <returns>True when <see cref="SmtResultData.Digest"/> is the digest of the row's canonical form; false for a row that has no digest, whatever it carries.</returns>
     /// <exception cref="ArgumentNullException">There is no row.</exception>
     public static bool Holds(SmtResultData row)
     {
-        return string.Equals(row.Digest, Of(row), StringComparison.Ordinal);
+        var digest = Of(row);
+        return digest.Length > 0 && string.Equals(row.Digest, digest, StringComparison.Ordinal);
     }
 
     /// <summary>

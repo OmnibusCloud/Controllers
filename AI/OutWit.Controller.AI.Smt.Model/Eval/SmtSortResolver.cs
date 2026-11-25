@@ -34,6 +34,12 @@ internal sealed class SmtSortResolver
     private const char ALIAS_TAG = 'L';
     private const char FIELDS_TAG = 'F';
 
+    /// <summary>
+    /// How many times the name of a sort is read as text when the sort is found by it: the two
+    /// lists of sorts without values, the aliases, the datatypes and the declared sorts.
+    /// </summary>
+    private const int NAME_READS = 5;
+
     private static readonly HashSet<string> REGULAR_EXPRESSION_SORTS = new(StringComparer.Ordinal) { "RegLan", "RegEx" };
 
     private static readonly HashSet<string> FLOATING_POINT_SORTS = new(StringComparer.Ordinal)
@@ -162,8 +168,12 @@ internal sealed class SmtSortResolver
 
         if (expression.Kind == SmtExpressionKind.Symbol)
         {
-            if (parameters != null && parameters.TryGetValue(expression.Text, out var bound))
-                return bound;
+            if (parameters != null)
+            {
+                meter?.ChargeName(expression.Text);
+                if (parameters.TryGetValue(expression.Text, out var bound))
+                    return bound;
+            }
 
             return Named(expression.Text, NO_SORTS, table, meter, nesting);
         }
@@ -201,6 +211,8 @@ internal sealed class SmtSortResolver
                 return table.Array(arguments[0], arguments[1]);
         }
 
+        // Each of the tables below reads the whole name: paid for by its length, before they are asked.
+        meter?.ChargeName(name, NAME_READS);
         if (REGULAR_EXPRESSION_SORTS.Contains(name))
             return table.Unsupported(SmtValidationReasons.REGULAR_EXPRESSION);
 

@@ -1,15 +1,18 @@
 using OutWit.Controller.AI.Smt.Delivery;
 using OutWit.Controller.AI.Smt.Model;
+using OutWit.Controller.AI.Smt.Profiles;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Smt.Settlement;
 
 /// <summary>
 /// What a row of a package may say of its problem, read from the host's own package of problems:
-/// the problem's id, the hash of its text, its query and the most models an enumeration of it may
-/// find. A row that names a problem the package does not hold, or that says another id, hash or
-/// query than the package gave, is no answer to it. The problems' texts are read and let go: what
-/// is kept is a few words a problem.
+/// the problem's id, the hash of its text, its query, the most models an enumeration of it may
+/// find and whether a check of it asks for values; and the envelope every session of the package
+/// ran in, made of the package's options as a node makes it (<see cref="SmtProfile.Envelope"/>).
+/// A row that names a problem the package does not hold, or that says another id, hash or query
+/// than the package gave, is no answer to it. The problems' texts are read and let go: what is
+/// kept is a few words a problem.
 /// </summary>
 internal sealed class SmtTaskBounds
 {
@@ -21,9 +24,10 @@ internal sealed class SmtTaskBounds
 
     #region Constructors
 
-    private SmtTaskBounds(string ticket, Dictionary<int, SmtTaskBound> bounds)
+    private SmtTaskBounds(string ticket, SmtEnvelope envelope, Dictionary<int, SmtTaskBound> bounds)
     {
         Ticket = ticket;
+        Envelope = envelope;
         m_bounds = bounds;
     }
 
@@ -41,24 +45,39 @@ internal sealed class SmtTaskBounds
     public static async Task<SmtTaskBounds> LoadAsync(SmtTaskPackageData unit, IWitBlobService blobs)
     {
         var path = await blobs.GetLocalPathAsync(unit.ProblemsBlobId);
-        var options = SmtOptionsRules.Resolve(unit.Options ?? new SmtOptionsData());
-        var bounds = new Dictionary<int, SmtTaskBound>(unit.ProblemCount);
 
         try
         {
             using var reader = new SmtTaskPackageReader(path, unit.ProblemCount);
-            while (reader.TryRead(out var problem))
-            {
-                var models = problem!.Query == SmtQuery.Enumerate ? problem.MaxModels > 0 ? problem.MaxModels : options.MaxModels : 0;
-                bounds[problem.Index] = new SmtTaskBound(problem.Id, problem.Hash, problem.Query, models);
-            }
+            return Of(unit.Ticket, unit.Options, Problems(reader));
         }
         catch (SmtPackageException exception)
         {
             throw new InvalidOperationException($"A package of problems this host made cannot be read: {exception.Message}");
         }
+    }
 
-        return new SmtTaskBounds(unit.Ticket, bounds);
+    /// <summary>
+    /// Makes the bounds of a package of its problems and its options.
+    /// </summary>
+    /// <param name="ticket">The package's ticket.</param>
+    /// <param name="options">The package's options, as its reference carries them; null for the defaults.</param>
+    /// <param name="problems">The package's problems, each looked at once and let go.</param>
+    /// <returns>The bounds.</returns>
+    public static SmtTaskBounds Of(string ticket, SmtOptionsData? options, IEnumerable<SmtProblemData> problems)
+    {
+        var envelope = SmtProfile.Envelope(options ?? new SmtOptionsData());
+        var bounds = new Dictionary<int, SmtTaskBound>();
+
+        foreach (var problem in problems)
+        {
+            // The number of models as a node's plan takes it: the problem's own, or the options'.
+            var models = problem.Query == SmtQuery.Enumerate ? problem.MaxModels > 0 ? problem.MaxModels : envelope.MaxModels : 0;
+            var values = problem.Query == SmtQuery.Check && problem.Values is { Count: > 0 };
+            bounds[problem.Index] = new SmtTaskBound(problem.Id, problem.Hash, problem.Query, models, values);
+        }
+
+        return new SmtTaskBounds(ticket, envelope, bounds);
     }
 
     /// <summary>The bound of a problem of the package.</summary>
@@ -72,10 +91,23 @@ internal sealed class SmtTaskBounds
 
     #endregion
 
+    #region Tools
+
+    private static IEnumerable<SmtProblemData> Problems(SmtTaskPackageReader reader)
+    {
+        while (reader.TryRead(out var problem))
+            yield return problem!;
+    }
+
+    #endregion
+
     #region Properties
 
     /// <summary>The ticket of the package.</summary>
     public string Ticket { get; }
+
+    /// <summary>The envelope a session of the package runs in: the ceilings of what a row may say it cost.</summary>
+    public SmtEnvelope Envelope { get; }
 
     /// <summary>The indices of the package's problems.</summary>
     public IEnumerable<int> Indices => m_bounds.Keys;

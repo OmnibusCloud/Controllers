@@ -248,6 +248,45 @@ public sealed class SmtPackageCodecTests
         });
     }
 
+    [Test]
+    public void ARowsFrameHoldsTheMostASessionWritesAndNoMoreTest()
+    {
+        // The largest row a session can make, as bytes: a thousand models and their values that
+        // fill the session's output cap, every character of them three bytes long, and every
+        // other text of the row at its own length in such characters too.
+        const char THREE_BYTES = (char)0x20AC;
+        const int MODELS = 1_000;
+
+        var cap = SmtRowCheckRig.OutputLimit;
+        var each = cap / (2 * MODELS);
+        var largest = Row(0);
+        largest.Models = Enumerable.Range(0, MODELS).Select(_ => new string(THREE_BYTES, each)).ToList();
+        largest.Values = Enumerable.Range(0, MODELS).Select(_ => new string(THREE_BYTES, each)).ToList();
+        largest.Values[0] = new string(THREE_BYTES, cap - (2 * MODELS - 1) * each);
+        largest.Message = new string(THREE_BYTES, SmtResultWords.MAX_MESSAGE_CHARACTERS);
+        largest.ReasonText = new string(THREE_BYTES, SmtRowCheckRig.ReasonCharacters);
+        largest.Transcript = new string('t', SmtRowCheckRig.TranscriptLimit);
+        largest.Id = new string('i', 64);
+        largest.Digest = new string('d', 64);
+
+        var past = Row(1);
+        past.Models = [new string(THREE_BYTES, cap + MEGABYTE)];
+
+        var fits = File("largest.wsp");
+        var over = File("past.wsp");
+        SmtNodeRig.WriteRows(fits, [largest]);
+        SmtNodeRig.WriteRows(over, [past]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(largest.Models.Sum(model => (long)model.Length) + largest.Values.Sum(value => (long)value.Length), Is.EqualTo(cap), "the session's whole output");
+            Assert.That(SmtRowCheckRig.MaxResultFrameBytes, Is.EqualTo(3 * cap + 64 * 1024), "a session's output at three bytes a character, and the rest of a row");
+            Assert.That(MemoryPackSerializer.Serialize(largest).Length, Is.InRange(3 * cap, SmtRowCheckRig.MaxResultFrameBytes), "the largest row is within its frame");
+            Assert.That(SmtNodeRig.ReadRows(fits, 1).Single().Is(largest), Is.True, "and is read back as it was written");
+            Assert.Throws<InvalidDataException>(() => SmtNodeRig.ReadRows(over, 1), "a row of more bytes than a session writes is refused at its frame");
+        });
+    }
+
     #endregion
 
     #region Ticket Tests

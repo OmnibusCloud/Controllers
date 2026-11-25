@@ -8,6 +8,19 @@ namespace OutWit.Controller.AI.Smt.Model.Eval;
 /// </summary>
 internal sealed class SmtScope
 {
+    #region Constants
+
+    /// <summary>
+    /// How many times the name of a variable is read as text from its binding to the end of
+    /// its binder: looked up for what it hides and written when it is bound
+    /// (<see cref="Bind"/>), written again or taken out when it is taken back
+    /// (<see cref="Unwind"/>). Whoever binds a name pays for these by its length
+    /// (<see cref="SmtMeter.ChargeName"/>).
+    /// </summary>
+    public const int BIND_READS = 3;
+
+    #endregion
+
     #region Fields
 
     private readonly Dictionary<string, SmtValue> m_values;

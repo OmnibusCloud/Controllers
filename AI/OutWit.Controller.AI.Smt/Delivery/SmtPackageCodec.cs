@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using OutWit.Controller.AI.Smt.Profiles;
 
 namespace OutWit.Controller.AI.Smt.Delivery;
 
@@ -65,10 +66,23 @@ internal static class SmtPackageCodec
     public const long MAX_PROBLEMS_BLOB_BYTES = MAX_PROBLEMS_IMAGE_BYTES + (1L << 20);
 
     /// <summary>
-    /// The most bytes one row's frame may hold: everything a session may write (its output cap)
-    /// at three bytes a character, and room for the rest of the row.
+    /// The most bytes of a row's frame that are not its models and values, with room: its
+    /// message of 1,024 characters and the solver's word of 512 at three bytes a character
+    /// (4,608), its transcript (8,192), the eight bytes that stand before each of its texts, a
+    /// thousand models and a thousand values among them (16,112), the problem's id and hash, the
+    /// ticket, the digest, the version, the words and the numbers (under 600): under 30,000 bytes.
     /// </summary>
-    public const int MAX_RESULT_FRAME_BYTES = 64 << 20;
+    public const int RESULT_FRAME_ROOM_BYTES = 64 << 10;
+
+    /// <summary>
+    /// The most bytes one row's frame may hold: 48 MiB and 64 KiB. The models and the values of
+    /// a row are parts of its session's output, which ends at the output cap of 16 MiB, and a
+    /// character of them is a byte of that output at the least; as a frame holds a text, a
+    /// character is three bytes at the most. So they take 3 x 16 MiB at the most, and the rest of
+    /// the row <see cref="RESULT_FRAME_ROOM_BYTES"/>. A host holds the row itself to the output
+    /// cap again, in characters (<see cref="Settlement.SmtRowTexts"/>).
+    /// </summary>
+    public const int MAX_RESULT_FRAME_BYTES = 3 * SmtProfile.OUTPUT_LIMIT_BYTES + RESULT_FRAME_ROOM_BYTES;
 
     private const int FIRST_FRAME_BUFFER_BYTES = 64 * 1024;
 

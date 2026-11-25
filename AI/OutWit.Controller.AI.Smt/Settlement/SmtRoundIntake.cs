@@ -9,19 +9,28 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// is taken only when
 /// <list type="bullet">
 /// <item>its ticket is one this round gave out;</item>
-/// <item>it is a package of rows (a package with a fault code is the node's word that it could
-/// not work on the package: one of the node's codes, without a blob, and counted so);</item>
+/// <item>its reference is one a node returns: the words of a fault only beside a fault code, and
+/// then a code of the node's list, a sentence no longer than a node writes, and no blob (the
+/// node's word that it could not work on the package, counted so); for an answer a SHA-256 that
+/// is one, and no word of a fault;</item>
 /// <item>its blob is the bytes its reference names and is a package of results of this version,
 /// read frame by frame within the bounds of the codec;</item>
 /// <item>it holds exactly the rows of the package it answers, each once, and every row is one a
-/// node may give of its problem (<see cref="SmtRowChecks"/>): its ticket, its problem's id, hash
-/// and query, this controller version, the words and counts of a row, a digest that is its
-/// own.</item>
+/// session could have written of its problem (<see cref="SmtRowChecks"/>).</item>
 /// </list>
 /// Anything else is refused and counted by reason; the same blob returned twice counts once. A
 /// refused package fails that package and nothing else: its problems are simply without an
-/// answer from it. Whatever goes wrong while a package is read, of whatever type, makes that
-/// package unreadable and never ends the run.
+/// answer from it, and none of its rows stays in the host's spool.
+/// <para>
+/// <b>Whose fault a failure is.</b> Whatever goes wrong while a node's blob is fetched, read and
+/// judged, of whatever type, makes that package unreadable and never ends the run: a node chose
+/// the blob and every byte of it. That includes a failure of the blob service for that blob,
+/// which the host cannot tell from the node's doing: the service gives a file or throws, and
+/// nothing in what it throws says whether the blob was never there or the store failed. What the
+/// host reads and writes of its own is another matter: its package of problems
+/// (<see cref="SmtTaskBounds"/>) and its spool. A failure there is the server's, is counted
+/// against no package, and ends the activity, which can be run again.
+/// </para>
 /// </summary>
 internal static class SmtRoundIntake
 {
@@ -33,10 +42,10 @@ internal static class SmtRoundIntake
     /// <summary>The same blob returned again.</summary>
     public const string DUPLICATE = "duplicate";
 
-    /// <summary>Not a package of results this version reads, not the bytes its reference names, or damaged.</summary>
+    /// <summary>Not a package of results this version reads, not the bytes its reference names (a reference whose SHA-256 is none names no bytes), or damaged.</summary>
     public const string UNREADABLE = "unreadable";
 
-    /// <summary>Does not hold exactly the rows of its package, or holds a row a node may not give.</summary>
+    /// <summary>Does not hold exactly the rows of its package, holds a row no session could have written, or is a reference with words of a fault that no node writes.</summary>
     public const string CONTENT = "content";
 
     /// <summary>More results under one ticket than copies were asked for.</summary>
@@ -61,6 +70,9 @@ internal static class SmtRoundIntake
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="spool">Where whole rows are kept, or null when only the comparison is needed.</param>
     /// <returns>The round as taken.</returns>
+    /// <exception cref="InvalidOperationException">A package of problems this host made cannot be read: the run cannot be settled.</exception>
+    /// <exception cref="SmtSettlementBoundException">The rows taken pass what the spool holds of one run.</exception>
+    /// <exception cref="IOException">The host's own spool could not be written.</exception>
     public static async Task<SmtRound> ReadAsync(string name, IReadOnlyList<SmtTaskPackageData> issued, IEnumerable<SmtResultPackageData?> returned,
         int copiesAsked, bool surplusIsSuspect, IWitBlobService blobs, SmtSpool? spool)
     {
@@ -86,7 +98,8 @@ internal static class SmtRoundIntake
 
         foreach (var reference in ordered)
         {
-            if (!units.TryGetValue(reference.Ticket ?? "", out var unit))
+            // A text that is no ticket is none this round gave out, however long it is.
+            if (!SmtTickets.IsWellFormed(reference.Ticket) || !units.TryGetValue(reference.Ticket, out var unit))
             {
                 Reject(round, null, UNKNOWN_TICKET);
                 continue;
@@ -94,10 +107,10 @@ internal static class SmtRoundIntake
 
             round.Returned[unit.Ticket] = round.Returned.GetValueOrDefault(unit.Ticket) + 1;
 
-            // The node's word that it could not work on the package: one of its codes, and no blob.
+            // The node's word that it could not work on the package: one of its codes, its sentence, and no blob.
             if (!string.IsNullOrEmpty(reference.FaultCode))
             {
-                if (reference.ResultsBlobId == Guid.Empty && SmtNodeFaults.ALL.Contains(reference.FaultCode, StringComparer.Ordinal))
+                if (IsFault(reference))
                 {
                     round.Faults[reference.FaultCode] = round.Faults.GetValueOrDefault(reference.FaultCode) + 1;
                     round.Fates[unit.Ticket] = reference.FaultCode;
@@ -107,6 +120,20 @@ internal static class SmtRoundIntake
                     Reject(round, unit.Ticket, CONTENT);
                 }
 
+                continue;
+            }
+
+            // An answer carries no word of a fault: a node leaves both empty, and never without a text.
+            if (reference.FaultCode == null || reference.FaultMessage is not { Length: 0 })
+            {
+                Reject(round, unit.Ticket, CONTENT);
+                continue;
+            }
+
+            // A text that is no SHA-256 names no bytes: nothing is fetched for it.
+            if (!SmtDigestKey.TryParse(reference.Sha256, out _))
+            {
+                Reject(round, unit.Ticket, UNREADABLE);
                 continue;
             }
 
@@ -165,9 +192,26 @@ internal static class SmtRoundIntake
     #region Tools
 
     /// <summary>
+    /// Whether a reference with a fault code is the one a node returns for a package it could not
+    /// work on: no blob and no hash of one, a code of the node's list, and a sentence that is text
+    /// and no longer than a node cuts it to. Nobody reads the sentence; it is held to its form so
+    /// that nothing a node would not have written is taken for a node's word.
+    /// </summary>
+    private static bool IsFault(SmtResultPackageData reference)
+    {
+        return reference.ResultsBlobId == Guid.Empty
+               && SmtNodeFaults.ALL.Contains(reference.FaultCode, StringComparer.Ordinal)
+               && reference.Sha256 is { Length: 0 }
+               && reference.FaultMessage is { Length: <= SmtResultWords.MAX_MESSAGE_CHARACTERS } sentence
+               && SmtRowTexts.IsText(sentence);
+    }
+
+    /// <summary>
     /// The local file of a result blob, when the blob is there, is no larger than a package of
     /// results of its package may be and is the bytes its reference names; null otherwise,
-    /// whatever failed.
+    /// whatever failed. A failure of the blob service is taken as the blob's here: it is asked for
+    /// a blob a node named and stored, and nothing in what it throws tells the store's own
+    /// failure from a blob that was never there.
     /// </summary>
     private static async Task<string?> LocateAsync(SmtResultPackageData reference, SmtTaskPackageData unit, IWitBlobService blobs)
     {
@@ -189,45 +233,74 @@ internal static class SmtRoundIntake
         }
     }
 
+    /// <summary>
+    /// Takes one package of results in, or says why not. Its rows go to the spool as they are
+    /// read, a row at a time, and stay there only when the whole package holds: a package that is
+    /// refused, at whichever row, leaves the spool as long as it was before it.
+    /// </summary>
     private static (SmtAcceptedPackage? Accepted, string? Reason) ReadPackage(SmtTaskPackageData unit, SmtResultPackageData reference, string path, SmtTaskBounds bounds, SmtSpool? spool)
     {
         var copies = new List<SmtCopy>(unit.ProblemCount);
+        var mark = spool?.Length ?? 0;
 
-        try
-        {
-            foreach (var row in SmtResultPackageReader.Read(path, unit.ProblemCount))
-            {
-                if (!SmtRowChecks.Holds(row, unit.Ticket, bounds) || !SmtDigestKey.TryParse(row.Digest, out var digest))
-                    return (null, CONTENT);
-
-                var (offset, length) = spool?.Append(row) ?? (-1, 0);
-                copies.Add(new SmtCopy
-                {
-                    Index = row.Index,
-                    Digest = digest,
-                    Status = Word(row.Status, SmtResultWords.STATUSES),
-                    Verdict = Word(row.Verdict, SmtResultWords.VERDICTS),
-                    Code = row.Status == SmtResultWords.NODE_FAULT ? row.Code : "",
-                    ResourceCount = row.ResourceCount,
-                    Fuel = row.Fuel,
-                    Ticket = unit.Ticket,
-                    SpoolOffset = offset,
-                    SpoolLength = length
-                });
-            }
-        }
-        catch (Exception exception) when (IsOfThePackage(exception))
-        {
-            // Not only the reader's own refusals: anything a node's bytes can make the reading
-            // throw is that package's, and the run goes on without it.
-            return (null, UNREADABLE);
-        }
+        var reason = ReadRows(unit, path, bounds, spool, copies);
 
         // Exactly the package's problems: none missing, none of another package, none twice.
-        if (copies.Count != unit.ProblemCount || !string.Equals(SmtTickets.IndexDigest(copies.Select(copy => copy.Index)), unit.IndexDigest, StringComparison.Ordinal))
-            return (null, CONTENT);
+        if (reason == null && (copies.Count != unit.ProblemCount || !string.Equals(SmtTickets.IndexDigest(copies.Select(copy => copy.Index)), unit.IndexDigest, StringComparison.Ordinal)))
+            reason = CONTENT;
 
-        return (new SmtAcceptedPackage(unit, reference.Sha256, copies), null);
+        if (reason == null)
+            return (new SmtAcceptedPackage(unit, reference.Sha256, copies), null);
+
+        spool?.Rewind(mark);
+        return (null, reason);
+    }
+
+    /// <summary>
+    /// Reads the rows of a package, each judged before it is kept. What a node's bytes make the
+    /// reading or the judging throw is that package's, whatever its type, and the run goes on
+    /// without it. The spool is the host's own file and stands outside that: what it throws (its
+    /// bound, a disk that is full) says nothing about the package and is not caught.
+    /// </summary>
+    /// <returns>Null when every row was taken; else the reason the package is refused for.</returns>
+    private static string? ReadRows(SmtTaskPackageData unit, string path, SmtTaskBounds bounds, SmtSpool? spool, List<SmtCopy> copies)
+    {
+        using var rows = SmtResultPackageReader.Read(path, unit.ProblemCount).GetEnumerator();
+
+        while (true)
+        {
+            SmtResultData row;
+            SmtDigestKey digest;
+
+            try
+            {
+                if (!rows.MoveNext())
+                    return null;
+
+                row = rows.Current;
+                if (!SmtRowChecks.Holds(row, unit.Ticket, bounds) || !SmtDigestKey.TryParse(row.Digest, out digest))
+                    return CONTENT;
+            }
+            catch (Exception exception) when (IsOfThePackage(exception))
+            {
+                return UNREADABLE;
+            }
+
+            var (offset, length) = spool?.Append(row) ?? (-1, 0);
+            copies.Add(new SmtCopy
+            {
+                Index = row.Index,
+                Digest = digest,
+                Status = Word(row.Status, SmtResultWords.STATUSES),
+                Verdict = Word(row.Verdict, SmtResultWords.VERDICTS),
+                Code = row.Status == SmtResultWords.NODE_FAULT ? row.Code : "",
+                ResourceCount = row.ResourceCount,
+                Fuel = row.Fuel,
+                Ticket = unit.Ticket,
+                SpoolOffset = offset,
+                SpoolLength = length
+            });
+        }
     }
 
     /// <summary>The list's own instance of a word a row was checked to hold.</summary>
@@ -243,8 +316,8 @@ internal static class SmtRoundIntake
     }
 
     /// <summary>
-    /// Whether an exception met while a result package is read is taken as that package's fault:
-    /// every one but the two that say the process itself is out of room.
+    /// Whether an exception met while a node's blob is fetched, read or judged is taken as that
+    /// package's fault: every one but the two that say the process itself is out of room.
     /// </summary>
     private static bool IsOfThePackage(Exception exception)
     {
