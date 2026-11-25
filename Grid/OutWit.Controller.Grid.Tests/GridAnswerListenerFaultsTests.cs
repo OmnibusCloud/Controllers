@@ -154,6 +154,30 @@ namespace OutWit.Controller.Grid.Tests
 
         [TestCase(BALANCED)]
         [TestCase(QUEUED)]
+        public async Task ACancellationTheMethodThrowsDoesNotEndTheCallTest(string strategy)
+        {
+            // The call's own cancellation comes through its token. An OperationCanceledException out
+            // of the controller's method is the method's trouble, as any other exception is.
+            var warnings = new List<string>();
+            var collection = new MockAskingCollection<object?>(RESULTS)
+            {
+                Throws = (item, _) => Equals(item, 1) ? new OperationCanceledException() : null
+            };
+
+            GridValueRule rule = GridValueRule.ForCollection(collection, Items(4), warnings.Add);
+
+            var results = await GridTestRuns.RunAsync(strategy, Honest(), new[] { Node(10) }, MakeTasks(4), rule, warnings);
+
+            rule.WarnOfUntold(warnings.Add);
+
+            Assert.That(results, Has.Count.EqualTo(4));
+            Assert.That(collection.Told.Select(pair => pair.Item), Is.EqualTo(new[] { 0, 2, 3 }));
+            Assert.That(About(warnings), Has.Count.EqualTo(1));
+            Assert.That(warnings[0], Does.Contain(nameof(OperationCanceledException)));
+        }
+
+        [TestCase(BALANCED)]
+        [TestCase(QUEUED)]
         public void AnOutOfMemoryExceptionIsNotHeldBackTest(string strategy)
         {
             var collection = new MockAskingCollection<object?>(RESULTS)

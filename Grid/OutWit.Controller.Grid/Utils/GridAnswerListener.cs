@@ -36,7 +36,7 @@ internal sealed class GridAnswerListener
 
     private const string WARNING_OTHER_SIGNATURE = "Grid.ForEach: the return collection '{0}' ({1}) has a public method " + METHOD_NAME + " that is not 'public void " + METHOD_NAME + "(object item, object value)'; the collection is not told which item each value answers.";
 
-    private const string WARNING_THREW = "Grid.ForEach: " + METHOD_NAME + " of the return collection '{0}' threw for {1} value(s) of the call (the first exception was a {2}); the value(s) are kept, and the collection was not told of them.";
+    private const string WARNING_THREW = "Grid.ForEach: " + METHOD_NAME + " of the return collection '{0}' threw for {1} value(s) of the call (first exception: {2}); the value(s) are kept, and the collection was not told of them.";
 
     #endregion
 
@@ -100,8 +100,10 @@ internal sealed class GridAnswerListener
     /// <summary>
     /// Tells the collection of a value that is kept: the item of the slot the value came under, and
     /// the value. A slot the call has no item for is not told. The method may throw: the value is
-    /// kept all the same, the throw is counted for <see cref="WarnOfUntold"/>, and only an
-    /// <see cref="OutOfMemoryException"/> goes on.
+    /// kept all the same and the throw is counted for <see cref="WarnOfUntold"/>. Only an
+    /// <see cref="OutOfMemoryException"/> goes on. A cancellation the method throws is held back
+    /// like any other exception: the call's own cancellation does not come through this method, and
+    /// a controller's method must not be able to end the call.
     /// </summary>
     /// <param name="slot">The name the value came under.</param>
     /// <param name="value">The value, as it joins the results.</param>

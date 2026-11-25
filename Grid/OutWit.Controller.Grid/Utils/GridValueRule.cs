@@ -125,6 +125,16 @@ public sealed class GridValueRule
     }
 
     /// <summary>
+    /// Describes a value for a warning: that it is null, or its type.
+    /// </summary>
+    /// <param name="value">A value a node returned.</param>
+    /// <returns>The description.</returns>
+    public static string Describe(object? value)
+    {
+        return value == null ? "null" : $"of type {value.GetType().Name}";
+    }
+
+    /// <summary>
     /// Tells the return collection, when it asked, of a value that is kept: the item of the return
     /// slot the value came under, and the value. Under the Queued strategy this runs in the loop of
     /// the node that answered, so the collection may be called from several threads at once.
@@ -134,16 +144,6 @@ public sealed class GridValueRule
     internal void Tell(string slot, object? value)
     {
         m_listener?.Tell(slot, value);
-    }
-
-    /// <summary>
-    /// Describes a value for a warning: that it is null, or its type.
-    /// </summary>
-    /// <param name="value">A value a node returned.</param>
-    /// <returns>The description.</returns>
-    public static string Describe(object? value)
-    {
-        return value == null ? "null" : $"of type {value.GetType().Name}";
     }
 
     #endregion
