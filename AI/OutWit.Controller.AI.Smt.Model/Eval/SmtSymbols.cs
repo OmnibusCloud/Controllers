@@ -24,6 +24,20 @@ internal sealed class SmtSymbols
 {
     #region Constants
 
+    /// <summary>
+    /// How many times the name of a constant is read as text when its value is computed and
+    /// remembered: the model's definitions, the reported values or the model's elements, the
+    /// name itself where it is taken for an element nobody lists, and the table that keeps the
+    /// value.
+    /// </summary>
+    private const int FIRST_READS = 5;
+
+    /// <summary>
+    /// How many times the name of a function is read as text when the model's definition of it
+    /// is found and remembered: the model's definitions, and the table that keeps the function.
+    /// </summary>
+    private const int FUNCTION_READS = 2;
+
     private static readonly string[] NO_NAMES = [];
 
     #endregion
@@ -65,12 +79,19 @@ internal sealed class SmtSymbols
     /// <exception cref="SmtPartialException">The name has no value the evaluator computes.</exception>
     public SmtValue Constant(string name, SmtScope? scope, int depth)
     {
-        if (scope != null && scope.TryGet(name, out var local))
-            return local;
+        // Every table the name is looked up in reads the whole name: each lookup is paid for
+        // by the name's length before it is made, here and in what this calls.
+        if (scope != null)
+        {
+            m_meter.ChargeName(name);
+            if (scope.TryGet(name, out var local))
+                return local;
+        }
 
         if (SmtVocabulary.IsTruthValue(name))
             return SmtBoolValue.Of(string.Equals(name, SmtVocabulary.TRUE, StringComparison.Ordinal));
 
+        m_meter.ChargeName(name);
         if (m_run.Problem.Symbols.TryGetValue(name, out var symbol))
         {
             if (symbol.Kind is SmtSymbolKind.Declared or SmtSymbolKind.Defined)
@@ -93,6 +114,7 @@ internal sealed class SmtSymbols
     /// <exception cref="SmtPartialException">The application is not evaluated to a value.</exception>
     public SmtValue Apply(string name, SmtValue[] arguments, bool inModel, int depth)
     {
+        m_meter.ChargeName(name);
         if (!m_run.Problem.Symbols.TryGetValue(name, out var symbol))
             return inModel && TryGetModelFunction(name, out var added) ? m_run.Evaluator.Call(added, arguments, depth) : throw Unknown(name);
 
@@ -124,6 +146,7 @@ internal sealed class SmtSymbols
     /// <exception cref="SmtPartialException">The name is no constructor, or the value is of another datatype.</exception>
     public SmtValue Test(string constructor, SmtValue value)
     {
+        m_meter.ChargeName(constructor);
         if (!m_run.Problem.Symbols.TryGetValue(constructor, out var symbol) || symbol.Kind != SmtSymbolKind.Constructor)
             throw m_meter.Doubt();
 
@@ -138,10 +161,11 @@ internal sealed class SmtSymbols
     /// <param name="inModel">Whether the name stands in the model's text.</param>
     /// <param name="function">The function.</param>
     /// <returns>True when the name stands for such a function.</returns>
-    /// <exception cref="SmtPartialException">The model's definition does not fit the declaration.</exception>
+    /// <exception cref="SmtPartialException">The model's definition does not fit the declaration, or the step budget is used up.</exception>
     public bool TryGetFunction(string name, bool inModel, out SmtFunction function)
     {
         function = null!;
+        m_meter.ChargeName(name);
         if (!m_run.Problem.Symbols.TryGetValue(name, out var symbol))
             return inModel && TryGetModelFunction(name, out function);
 
@@ -161,6 +185,7 @@ internal sealed class SmtSymbols
     /// </summary>
     private SmtValue Recall(Dictionary<string, (SmtValue? Value, bool Completed, bool Referred, SmtPartialException? Failure)> known, string name, SmtSymbol? symbol, int depth)
     {
+        m_meter.ChargeName(name);
         if (known.TryGetValue(name, out var entry))
         {
             if (entry.Failure != null)
@@ -175,6 +200,7 @@ internal sealed class SmtSymbols
             return entry.Value!;
         }
 
+        m_meter.ChargeName(name, FIRST_READS);
         var before = m_meter.Completions;
         var references = m_meter.References;
         try
@@ -267,9 +293,11 @@ internal sealed class SmtSymbols
     /// </summary>
     private SmtFunction Interpretation(string name, SmtSymbol symbol)
     {
+        m_meter.ChargeName(name);
         if (m_interpretations.TryGetValue(name, out var known))
             return known;
 
+        m_meter.ChargeName(name, FUNCTION_READS);
         var sorts = symbol.ParameterSorts!;
         SmtFunction function;
         if (!m_run.Model.Functions.TryGetValue(name, out var defined))
@@ -297,9 +325,11 @@ internal sealed class SmtSymbols
 
     private bool TryGetModelFunction(string name, out SmtFunction function)
     {
+        m_meter.ChargeName(name);
         if (m_modelFunctions.TryGetValue(name, out function!))
             return true;
 
+        m_meter.ChargeName(name, FUNCTION_READS);
         if (!m_run.Model.Functions.TryGetValue(name, out var defined) || defined.Parameters.Count == 0)
             return false;
 

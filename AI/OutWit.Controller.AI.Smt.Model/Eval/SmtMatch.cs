@@ -87,6 +87,10 @@ internal sealed class SmtMatch
             if (IsWildcard(variable))
                 continue;
 
+            // The name is read as text when it is checked and told apart from the pattern's other names.
+            if (SmtTerms.IsSymbol(variable))
+                m_meter.ChargeName(variable.Text, SmtTerms.BINDER_READS);
+
             if (!SmtTerms.CanBind(variable))
                 throw m_meter.Doubt();
 
@@ -112,7 +116,11 @@ internal sealed class SmtMatch
     private bool TryConstructor(SmtExpression name, SmtDatatypeValue value, out SmtConstructor constructor)
     {
         constructor = value.Constructor;
-        if (name.Kind != SmtExpressionKind.Symbol || !m_run.Problem.Symbols.TryGetValue(name.Text, out var symbol) || symbol.Kind != SmtSymbolKind.Constructor)
+        if (name.Kind != SmtExpressionKind.Symbol)
+            return false;
+
+        m_meter.ChargeName(name.Text);
+        if (!m_run.Problem.Symbols.TryGetValue(name.Text, out var symbol) || symbol.Kind != SmtSymbolKind.Constructor)
             return false;
 
         constructor = symbol.Constructor!;
@@ -126,6 +134,10 @@ internal sealed class SmtMatch
     {
         if (IsWildcard(variable))
             return;
+
+        // The name is read as text when it is checked, bound, and taken back at the end of the case.
+        if (SmtTerms.IsSymbol(variable))
+            m_meter.ChargeName(variable.Text, 1 + SmtScope.BIND_READS);
 
         if (!SmtTerms.CanBind(variable))
             throw m_meter.Doubt();

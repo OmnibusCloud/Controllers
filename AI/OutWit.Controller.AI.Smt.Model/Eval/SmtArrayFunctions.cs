@@ -76,7 +76,11 @@ internal sealed class SmtArrayFunctions
     /// <exception cref="SmtPartialException">The lambda is not well-formed, or has several variables.</exception>
     public SmtArrayValue OfLambda(IReadOnlyList<SmtExpression> items, SmtScope? scope, int depth)
     {
-        if (items.Count != 3 || !SmtTerms.TrySortedVariables(items[1], out var names, out var sorts) || names.Length == 0)
+        if (items.Count != 3)
+            throw m_meter.Doubt();
+
+        PayForVariables(items[1]);
+        if (!SmtTerms.TrySortedVariables(items[1], out var names, out var sorts) || names.Length == 0)
             throw m_meter.Doubt();
 
         // An array of several indices is a sort the evaluator has no values for.
@@ -116,9 +120,11 @@ internal sealed class SmtArrayFunctions
         else
         {
             // The lambda's own names are borrowed for one evaluation and left as they were,
-            // whatever becomes of it: the array is read again later.
+            // whatever becomes of it: the array is read again later. The variable is bound and
+            // taken back under its name at every read, which is paid for by the name's length.
             var scope = source.Scope!;
             var mark = scope.Mark;
+            m_meter.ChargeName(source.Parameter!, SmtScope.BIND_READS);
             scope.Bind(source.Parameter!, key);
             try
             {
@@ -149,9 +155,9 @@ internal sealed class SmtArrayFunctions
                 return null;
 
             SmtExpression index;
-            if (condition.Items[1].IsSymbol(parameter))
+            if (IsNamed(condition.Items[1], parameter))
                 index = condition.Items[2];
-            else if (condition.Items[2].IsSymbol(parameter))
+            else if (IsNamed(condition.Items[2], parameter))
                 index = condition.Items[1];
             else
                 return null;
@@ -188,7 +194,7 @@ internal sealed class SmtArrayFunctions
     private bool Mentions(SmtExpression term, string name)
     {
         if (!term.IsList)
-            return term.IsSymbol(name);
+            return IsNamed(term, name);
 
         var pending = new Stack<SmtExpression>();
         pending.Push(term);
@@ -200,12 +206,41 @@ internal sealed class SmtArrayFunctions
             {
                 if (item.IsList)
                     pending.Push(item);
-                else if (item.IsSymbol(name))
+                else if (IsNamed(item, name))
                     return true;
             }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Whether a term is the symbol of a name. Names of two lengths are told apart at once; two
+    /// names of one length are compared character by character, which is paid for by the length.
+    /// </summary>
+    private bool IsNamed(SmtExpression term, string name)
+    {
+        if (term.Kind != SmtExpressionKind.Symbol || term.Text.Length != name.Length)
+            return false;
+
+        m_meter.ChargeName(name);
+        return string.Equals(term.Text, name, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Pays for reading the names of a lambda's variables, before they are read: each is checked
+    /// and told apart from the others as text.
+    /// </summary>
+    private void PayForVariables(SmtExpression variables)
+    {
+        if (!variables.IsList)
+            return;
+
+        foreach (var variable in variables.Items)
+        {
+            if (variable.IsList && variable.Items.Count > 0)
+                m_meter.ChargeName(variable.Items[0].Text, SmtTerms.BINDER_READS);
+        }
     }
 
     #endregion

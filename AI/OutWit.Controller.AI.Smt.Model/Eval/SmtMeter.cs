@@ -31,6 +31,15 @@ internal sealed class SmtMeter
     /// </summary>
     public const int UNWIND_STEPS = 32;
 
+    /// <summary>
+    /// The characters of a name one step pays for, each time the name is read from end to end:
+    /// found in a table, which hashes the whole name on every lookup and compares it on a hit,
+    /// or compared with another name. Hashing 64 characters was measured at the time of about
+    /// a step. A shorter name pays nothing of its own: reading it is part of the step its term
+    /// pays.
+    /// </summary>
+    public const int NAME_CHARACTERS = 64;
+
     #endregion
 
     #region Fields
@@ -102,6 +111,21 @@ internal sealed class SmtMeter
     public void ChargeProduct(long leftBits, long rightBits)
     {
         Charge(Product(1 + leftBits / WORD_BITS, 1 + rightBits / WORD_BITS));
+    }
+
+    /// <summary>
+    /// Pays for reading a name as text, before it is read: a step for every
+    /// <see cref="NAME_CHARACTERS"/> characters, each time. A name is no number the evaluator
+    /// keeps: it is found by its characters wherever it stands, so a long name costs its length
+    /// at every table it is looked up in.
+    /// </summary>
+    /// <param name="name">The name.</param>
+    /// <param name="reads">How many times the name is hashed or compared from end to end.</param>
+    /// <exception cref="SmtPartialException">The step budget is used up.</exception>
+    public void ChargeName(string name, int reads = 1)
+    {
+        if (name.Length >= NAME_CHARACTERS)
+            Charge((long)(name.Length / NAME_CHARACTERS) * reads);
     }
 
     /// <summary>

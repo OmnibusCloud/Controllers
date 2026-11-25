@@ -10,6 +10,14 @@ internal static class SmtTerms
 {
     #region Constants
 
+    /// <summary>
+    /// How many times the name of a variable is read as text before a binder binds it: when it
+    /// is checked to be a name a binder may bind (<see cref="CanBind"/>), and when it is told
+    /// apart from the binder's other names (<see cref="AreDistinct"/>). Whoever reads a
+    /// binder's names pays for these by each name's length (<see cref="SmtMeter.ChargeName"/>).
+    /// </summary>
+    public const int BINDER_READS = 2;
+
     /// <summary>The longest numeral read as an index: no index of the standard needs more digits than an int has.</summary>
     private const int MAX_INDEX_DIGITS = 10;
 

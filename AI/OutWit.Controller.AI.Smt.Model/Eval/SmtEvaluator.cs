@@ -142,9 +142,13 @@ internal sealed class SmtEvaluator
             return m_run.Conformance.Default(function.ResultSort!, depth);
         }
 
+        // A parameter is written into the scope under its name: that reads the whole name, and is paid for by its length.
         var scope = new SmtScope(function.IsModel);
         for (var index = 0; index < arguments.Length; index++)
+        {
+            m_meter.ChargeName(function.Parameters[index]);
             scope.Define(function.Parameters[index], arguments[index]);
+        }
 
         var value = Eval(function.Body, scope, depth + CALL_LEVELS);
         return function.ResultSort == null ? value : m_run.Conformance.Conform(value, function.ResultSort, depth);
@@ -271,7 +275,13 @@ internal sealed class SmtEvaluator
         for (var index = 0; index < bindings.Count; index++)
         {
             var binding = bindings[index];
-            if (!binding.IsList || binding.Items.Count != 2 || !SmtTerms.CanBind(binding.Items[0]))
+            if (!binding.IsList || binding.Items.Count != 2 || !SmtTerms.IsSymbol(binding.Items[0]))
+                throw m_meter.Doubt();
+
+            // The name is read as text when it is checked and told apart from the other names
+            // of the let, and again when it is bound and taken back: paid for by its length.
+            m_meter.ChargeName(binding.Items[0].Text, SmtTerms.BINDER_READS + SmtScope.BIND_READS);
+            if (!SmtTerms.CanBind(binding.Items[0]))
                 throw m_meter.Doubt();
 
             names[index] = binding.Items[0].Text;

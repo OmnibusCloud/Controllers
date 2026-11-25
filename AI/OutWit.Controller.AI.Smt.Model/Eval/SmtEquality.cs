@@ -125,12 +125,29 @@ internal sealed class SmtEquality
                 m_meter.Charge(Math.Min(left.Weight, right.Weight));
                 return ((SmtStringValue)left).CodePoints.AsSpan().SequenceEqual(text.CodePoints);
             case SmtValueKind.Element when right is SmtElementValue element && ReferenceEquals(element.Sort, ((SmtElementValue)left).Sort):
-                return string.Equals(((SmtElementValue)left).Name, element.Name, StringComparison.Ordinal);
+                return SameName(((SmtElementValue)left).Name, element.Name);
             case SmtValueKind.Array when right is SmtArrayValue array:
                 return m_run.Arrays.Same((SmtArrayValue)left, array, depth);
             default:
                 throw m_meter.Doubt();
         }
+    }
+
+    /// <summary>
+    /// Whether two elements have the same name. One name read twice is one text, and names of
+    /// two lengths are told apart at once; two texts of one length are compared character by
+    /// character, which is paid for by the length.
+    /// </summary>
+    private bool SameName(string left, string right)
+    {
+        if (ReferenceEquals(left, right))
+            return true;
+
+        if (left.Length != right.Length)
+            return false;
+
+        m_meter.ChargeName(left);
+        return string.Equals(left, right, StringComparison.Ordinal);
     }
 
     /// <summary>

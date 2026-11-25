@@ -49,7 +49,10 @@ internal sealed class SmtIdentifiers
         if (items.Count < 3 || !SmtTerms.IsSymbol(items[1]))
             throw m_meter.Doubt();
 
+        // The name may be a value written in digits, which are looked at one by one before the
+        // value is read: paid for by the name's length.
         var name = items[1].Text;
+        m_meter.ChargeName(name);
         if (items.Count == 3 && string.Equals(name, SmtVocabulary.AS_ARRAY, StringComparison.Ordinal) && SmtTerms.IsSymbol(items[2]))
             return m_run.Arrays.OfFunction(items[2].Text, scope?.IsModel ?? false, depth);
 
