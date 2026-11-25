@@ -90,11 +90,21 @@ name their source in `:source`, the 112 that do not are named by their path.
 | `check.py` | `held: everything` |
 | `compare` of two runs | `result   : the same settled answers and the same provenance` |
 
-How many problems a budget stops is not written here as a number a run must show: the kit has not
-been run whole yet (the build server solves its sample, below). Fuel is a count, so whatever the
-first run shows, every later run of the same set under the same options must show again, on any
-fleet: the same problems decided, the same ones stopped, the same fuel each; `compare` holds two
-runs to that.
+Fuel is a count, so what the first whole run showed, every later run of the same set under the
+same options must show again, on any fleet: the same problems decided, the same ones stopped, the
+same fuel each; `compare` holds two runs to that. The kit has been run whole twice, on one Apple
+silicon machine and on the test fleet's Windows x64 nodes, and every one of the 1,960 rows had the
+same digest on both (below). So these are the set's numbers under these options:
+
+| | Must be |
+|---|---|
+| Statuses | `ok` 1,945, `output_exceeded` 15 (all QF_BV: the session wrote more than its 16 MiB) |
+| Verdicts | sat 1,054, unsat 863, unknown 43; every unknown by `fuel`, each at the full 1,500,000,000,000 |
+| Expected | agree 1,917, disagree 0, not applicable 43 |
+| The evaluator's classes | validated 1,039, partial 15 (the `output_exceeded` rows), failed 0: 98.6 % of the `sat` rows |
+| Decided / unknown by band (`check.py`) | 1-2 s 504/5, 2-5 s 373/0, 5-10 s 421/5, 10-20 s 221/6, 20-40 s 277/14, 40-60 s 121/13 |
+| Fuel | 164,617,359,224,432 in all; the most of a decided problem 1,386,370,518,330 (`bv0166`, `sat`) |
+| Reference seconds per competition second (`check.py`) | median 0.59, p10 0.02, p90 2.66 |
 
 ## The sample on the build server
 
@@ -116,19 +126,22 @@ here); the solver's memory peaked at 203 MiB.
 
 ## Measured on the test fleet
 
-The first real run of `SCRIPT.md`, twice in a row. To be filled in after it.
+The first whole run of `SCRIPT.md` on the test fleet, and beside it the one-machine side of the
+comparative test ([`../04-comparative`](../04-comparative/SCRIPT.md)) on the same set and options.
+The second fleet run of `SCRIPT.md`, and `compare` of the two, are not done yet; `comparative`
+held every row of the two sides below to the same digest.
 
-| | Run 1 | Run 2 |
+| | The fleet | One machine (`smt-live local`) |
 |---|---|---|
-| Date, controller version | | |
-| Nodes and their platforms | | |
-| Wall time (`completed in`) | | |
-| Verdicts: sat / unsat / unknown (by reason) | | |
-| The evaluator's classes: validated / partial / failed | | |
-| Decided by band (`check.py`): 1-2, 2-5, 5-10, 10-20, 20-40, 40-60 s | | |
-| Fan-outs (main / repair / dispute): packages, complete, unanswered | | |
-| Copies: compared, agreed; unsat on one machine | | |
-| Fuel in all, the most of one problem (`check.py`) | | |
-| Reference seconds per competition second, median (`check.py`) | | |
-| `check.py` | | |
-| `compare` | | |
+| Date, controller version | 2026-11-25, 0.5.0 | 2026-11-24, 0.4.0 (the same session code) |
+| Nodes and their platforms | three Windows x64 nodes took the work; three Linux x64 nodes online took none (under the 7,680 MiB a node needs) | one osx-arm64 machine, 18 cores, 48 GiB, 18 sessions at once |
+| Wall time, end to end | 01:13:02 (the upload 52 s, the job 01:12:06) | 00:21:03 (the solve 00:20:41) |
+| Verdicts: sat / unsat / unknown (by reason) | 1,054 / 863 / 43 (fuel 43) | 1,054 / 863 / 43 (fuel 43) |
+| The evaluator's classes: validated / partial / failed | 1,039 / 15 / 0 | 1,039 / 15 / 0 |
+| Decided by band (`check.py`): 1-2, 2-5, 5-10, 10-20, 20-40, 40-60 s | 504, 373, 421, 221, 277, 121 | the same |
+| Fan-outs (main / repair / dispute): packages, complete, unanswered | main 123 packages (7 asked for two answers, 7 complete), 0 unanswered; repair 0; dispute 0 | none (one machine makes no copies) |
+| Copies: compared, agreed; unsat on one machine | 112 compared, 112 agreed; 828 | none; 863 |
+| Fuel in all, the most of one problem (`check.py`) | 164,617,359,224,432; 1,386,370,518,330 | the same |
+| Reference seconds per competition second, median (`check.py`) | 0.59 | 0.59 |
+| `check.py` | `held: everything` | `held: everything` |
+| `comparative` | 1,960 of 1,960 digests equal, 0 flips; the one machine finishes first at every size (the fleet 13.6 s fixed + 2.229 s a problem, the one machine 4.888 s + 0.642 s) | |
