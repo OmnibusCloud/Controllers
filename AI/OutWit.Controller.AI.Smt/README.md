@@ -8,11 +8,11 @@ cost on every machine.
 **Status: 0.5.0, in development; nothing is published.** This version holds the solver (the
 profile, the sandbox, one session per problem), the node's side of a run (packages of problems
 solved on machines of 8 GB at least, the packages of a node's share on one budget of sessions,
-packages of rows returned, the node measured for the allocator) and the host's side: a lab's problem set cut into packages, solved
-with copies on different machines, repaired (the copies the sampling asked for restored),
-disputed, settled by the digests of the rows, every `sat` model checked on the server by the model
-evaluator, and written out as results, a report, provenance and integrity, all through blobs
-(`SmtRun`). The solver module is a data asset of the controller. What a lab can rely on, and the
+packages of rows returned, the node measured for the allocator) and the host's side: a lab's
+problem set cut into packages, solved with copies on different machines, repaired (the copies
+the sampling asked for restored), disputed, settled by the digests of the rows, every `sat`
+model checked on the server by the model evaluator, and written out as results, a report,
+provenance and integrity, all through blobs (`SmtRun`). The solver module is a data asset of the controller. What a lab can rely on, and the
 limits, are [`docs/capabilities.md`](docs/capabilities.md). The language layer and
 the wire types (the reader, the sanitizer, the model evaluator, the problem set, the options, the
 packages and their rows, the preflight, the words of the documents) are
