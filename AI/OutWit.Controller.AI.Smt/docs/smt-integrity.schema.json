@@ -31,7 +31,7 @@
           "type": "object",
           "required": ["digests_differ", "model_failed", "surplus"],
           "additionalProperties": false,
-          "description": "Why the disputes went: the copies' digests differed; the evaluator called the model of the copies failed; more answers to the problem's package came back than were asked for.",
+          "description": "Why the disputes went: the copies' digests differed; the evaluator called the model of the copies, or a value reported with it, failed; more answers to the problem's package came back than were asked for.",
           "properties": { "digests_differ": { "type": "integer" }, "model_failed": { "type": "integer" }, "surplus": { "type": "integer" } }
         },
         "dispute_outcomes": {
@@ -42,7 +42,7 @@
         },
         "lies": { "type": "integer", "minimum": 0, "description": "Answers that differ from the settled answer of the others: a lie was found in each." },
         "problems_with_lies": { "type": "integer", "minimum": 0, "description": "Problems a lie was found in." },
-        "failed_models": { "type": "integer", "minimum": 0, "description": "Answers, every round together, whose model the evaluator called failed." },
+        "failed_models": { "type": "integer", "minimum": 0, "description": "Answers, every round together, whose model, or a value reported with it, the evaluator called failed." },
         "evaluator_solver_disagreements": { "type": "integer", "minimum": 0, "description": "Problems the machines agree on and the evaluator calls failed (settled_by agreement). No machine is counted as lying for them. Each is listed below by its index." },
         "repairs": { "type": "integer", "minimum": 0, "description": "Problems the repair round sent out once more, every package of it to two machines: those without an answer from the first fan-out (sampled or not), and those of a package the first fan-out asked for twice that came back with fewer than two answers." },
         "repairs_by_reason": { "type": "object", "description": "The repairs by what the first fan-out said of the problem: for a problem without an answer, a node's fault code of its package, the code of a row of a fault of the node, the reason its package's result was refused, or no_answer; copies_short for a problem of a package asked for twice that came back with one answer." },

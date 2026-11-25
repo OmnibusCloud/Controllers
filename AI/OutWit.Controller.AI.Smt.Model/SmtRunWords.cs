@@ -36,13 +36,13 @@ public static class SmtRunWords
     /// </summary>
     public const string AGREEMENT = "agreement";
 
-    /// <summary>Validation: every assertion of the problem is true under the model.</summary>
+    /// <summary>Validation: every assertion of the problem is true under the model, and every value the row reports is the value its term has under the model.</summary>
     public const string VALIDATED = "validated";
 
-    /// <summary>Validation: the evaluator could not decide every assertion; the answer rests on the copies.</summary>
+    /// <summary>Validation: the evaluator could not decide every assertion or every reported value, or the values are not those of the terms the row asked for; the answer rests on the copies.</summary>
     public const string PARTIAL = "partial";
 
-    /// <summary>Validation: an assertion is false under the model with nothing guessed.</summary>
+    /// <summary>Validation: an assertion is false under the model, or a reported value is another than its term's, with nothing guessed.</summary>
     public const string FAILED = "failed";
 
     /// <summary>Validation: the row has no model to check (a verdict other than <c>sat</c>, or no verdict).</summary>
@@ -66,7 +66,7 @@ public static class SmtRunWords
     /// <summary>A dispute's cause: the copies' digests differ.</summary>
     public const string DIGESTS_DIFFER = "digests_differ";
 
-    /// <summary>A dispute's cause: the evaluator called the model of the copies failed.</summary>
+    /// <summary>A dispute's cause: the evaluator called the model of the copies, or a value reported with it, failed.</summary>
     public const string MODEL_FAILED = "model_failed";
 
     /// <summary>A dispute's cause: more copies of the problem's package came back than were asked for.</summary>

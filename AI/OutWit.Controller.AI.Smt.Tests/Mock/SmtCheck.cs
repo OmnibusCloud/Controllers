@@ -45,6 +45,21 @@ internal static class SmtCheck
     }
 
     /// <summary>
+    /// Checks a model against a problem, and the values that came with it against the terms
+    /// that were asked.
+    /// </summary>
+    /// <param name="problem">The problem's text.</param>
+    /// <param name="model">The answer of <c>(get-model)</c>, or null.</param>
+    /// <param name="values">The answer of <c>(get-value (...))</c>, or null.</param>
+    /// <param name="asked">The terms whose values were asked, in order.</param>
+    /// <returns>The validation.</returns>
+    public static SmtValidation ValidateAsked(string problem, string? model, string? values, params string[] asked)
+    {
+        var terms = asked.Select(term => Commands(term).Single()).ToList();
+        return new SmtModelValidator(Commands(problem)).Validate(Model(model, values), terms, SmtEvaluationBudget.Default);
+    }
+
+    /// <summary>
     /// Checks the values of a <c>get-value</c> answer against a problem.
     /// </summary>
     /// <param name="problem">The problem's text.</param>

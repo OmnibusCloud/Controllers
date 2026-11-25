@@ -1,5 +1,8 @@
 using OutWit.Controller.AI.Smt.Model;
+using OutWit.Controller.AI.Smt.Model.Lang;
+using OutWit.Controller.AI.Smt.Profiles;
 using OutWit.Controller.AI.Smt.Settlement;
+using OutWit.Controller.AI.Smt.Solver;
 
 namespace OutWit.Controller.AI.Smt.Tests.Mock;
 
@@ -34,6 +37,30 @@ internal static class SmtHostChecks
         var evaluator = SmtHostEvaluator.Of(problem) ?? throw new InvalidOperationException("the host's sanitizer does not take the problem");
         var check = evaluator.Check(row);
         return (check.Class, check.Reason, check.Detail);
+    }
+
+    /// <summary>
+    /// The terms a node's session asks the values of for a problem, as the session writes them
+    /// into its command: what the solver's answer echoes.
+    /// </summary>
+    /// <param name="problem">The problem as it travels.</param>
+    /// <returns>The terms as text, in order; null for a problem a node refuses.</returns>
+    public static List<string>? AskedByASession(SmtProblemData problem)
+    {
+        var plan = SmtSolvePlan.Prepare(problem, SmtProfile.Envelope(new SmtOptionsData()), out _);
+        if (plan == null)
+            return null;
+
+        return (problem.Query == SmtQuery.Enumerate ? plan.Projection : plan.Values).Select(term => term.ToString()).ToList();
+    }
+
+    /// <summary>The terms the host's evaluator holds a row's values to for a problem.</summary>
+    /// <param name="problem">The problem as it travels.</param>
+    /// <returns>The terms as text, in order; null when the host cannot make them.</returns>
+    public static List<string>? AskedByTheHost(SmtProblemData problem)
+    {
+        var sanitized = SmtSanitizer.Sanitize(problem.Text);
+        return sanitized.Problem == null ? null : SmtAskedTerms.Of(sanitized.Problem, problem)?.Select(term => term.ToString()).ToList();
     }
 
     #endregion

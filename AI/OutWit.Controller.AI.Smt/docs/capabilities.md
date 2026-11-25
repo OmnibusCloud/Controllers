@@ -111,7 +111,7 @@ One JSON line a row of the set, in the set's order, refused rows included.
 | `proof` | a proof: `proved` or `counterexample` |
 | `model`, `values` | a check's model and the values it asked for; a proof's counterexample |
 | `model_truncated` | the texts above are the solver's own and are shown up to 64 KB a row, whole texts only; past that they are null and this is true. The full models stay in the run's ledger, the server's own blob |
-| `validation`, `validation_reason`, `validation_detail` | what the server's evaluator said of every model: `validated`, `partial` (with the reason), `failed` (with the assertion), or `none` when there is no model |
+| `validation`, `validation_reason`, `validation_detail` | what the server's evaluator said of every model and of the values that came with it: `validated`, `partial` (with the reason), `failed` (`assertion_false` with the assertion, or `value_mismatch` with the value), or `none` when there is no model |
 | `copies`, `agreed`, `settled_by` | how many answers the problem was ruled on, whether all gave one digest, and how the answer was settled: `one_copy` (it rests on one machine), `copies` (two machines of one fan-out at least), `dispute`, `agreement` |
 | `digest`, `stats` | the digest of the settled row (the same on every honest machine), its resource count, fuel and checks |
 | `tags` | passed through |
@@ -150,15 +150,22 @@ resolved, the sampling rate, and the problem set's SHA-256, size and rows.
 What holds:
 
 - **Every `sat` is checked.** Each model of an answer that says `sat` is evaluated against the
-  problem as the server's own sanitizer takes it: a check's model with the values it asked for,
-  every model of an enumeration, the counterexample of a proof against the problem and the negated
-  goal. `validated` means every assertion is true under the model: the problem is satisfiable
-  whoever said so.
+  problem as the server's own sanitizer takes it: a check's model, every model of an enumeration,
+  the counterexample of a proof against the problem and the negated goal. `validated` means every
+  assertion is true under the model: the problem is satisfiable whoever said so.
+- **The values asked are checked against the model.** The server knows the terms a row asked the
+  values of, and takes no machine's word for them. A machine's answer must hold as many values as
+  terms were asked, each of its term, and each value must be the value the term has under the
+  row's model (the projected constants of an enumeration under each of its models). A value that
+  is another fails the row (`value_mismatch`, with the value's place among those asked) and sends
+  the problem to three more machines; values that are not those asked leave it `partial`
+  (`unreadable_values`). A model is checked by its own text: a value never mends a model that
+  breaks the problem.
 - **Copies are compared by digest.** A row's digest covers every value but the wall time, the
   platform, the controller version and the ticket; two honest machines give the same digest.
   Copies that differ go to three more machines, and the answer is the digest two of them at least
   give, with no tie.
-- **A failed model accuses nobody by itself.** It sends the problem to three more machines. A copy
+- **A failed model, or a failed value, accuses nobody by itself.** It sends the problem to three more machines. A copy
   is a lie only when it differs from the settled answer of the others. When the machines agree and
   the evaluator still says `failed`, the row says so (`settled_by: agreement`) and the integrity
   document lists the problem; no machine is taken for a liar.
@@ -181,8 +188,10 @@ What it does not claim:
 - **`partial` is not checked to the end.** Quantifiers, algebraic numbers, regular expressions,
   floating point and the other reasons of the model package's evaluator leave a model partial: it
   rests on the copies too. A model past the session's output cap is partial (`output_exceeded`).
-- **The values asked are checked only as far as they name constants.** The value of a term that
-  is no constant is shown as the solver printed it.
+- **A value the evaluator does not compute is not vouched for.** A row that asks for the value of
+  a term the evaluator leaves open (a division by zero, a selector of another constructor, a
+  quantified term, the reasons above) is `partial` with that reason, whatever its model is: the
+  value is shown as the solver printed it and rests on the copies.
 - **Duplicate models of an enumeration are not looked for.** The count is the solver's.
 - **Copies on different machines are the platform's.** The server sees results, not machines:
   counting answers as machines rests on Grid keeping one value for each return variable a node's

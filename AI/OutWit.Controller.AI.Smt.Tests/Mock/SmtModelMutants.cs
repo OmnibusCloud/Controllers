@@ -100,6 +100,17 @@ internal sealed class SmtModelMutants
         return mutants;
     }
 
+    /// <summary>
+    /// Changes one value, as the solver spelled it, into another value of the same sort.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <param name="changed">The other value.</param>
+    /// <returns>False when the value has no spelling this class can change.</returns>
+    public bool TryChange(SmtExpression value, out SmtExpression changed)
+    {
+        return TryMutate(value, out changed);
+    }
+
     private IEnumerable<string> Names()
     {
         var defined = m_model.Where(item => item.IsApplication(DEFINE_FUN) && item.Items.Count == 5).Select(item => item.Items[1].Text);
