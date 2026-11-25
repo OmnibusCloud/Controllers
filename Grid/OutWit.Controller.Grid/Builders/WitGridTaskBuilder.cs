@@ -21,13 +21,24 @@ internal static class WitGridTaskBuilder
 
     #endregion
 
-    public static IReadOnlyList<WitGridTask> BuildTasks(this IWitControllerManager me, IEnumerable collection, IWitActivity activity, IWitVariablesCollection pool ,string iterationVariableName )
+    /// <summary>
+    /// Builds the tasks of a call: one task an item, with its own return slot when the transformer
+    /// returns a value.
+    /// </summary>
+    /// <param name="me">The controller manager that estimates the work.</param>
+    /// <param name="collection">The items of the call.</param>
+    /// <param name="activity">The transformer activity.</param>
+    /// <param name="pool">The outer variables.</param>
+    /// <param name="iterationVariableName">The name of the iteration variable.</param>
+    /// <param name="slotItems">Where the item of every return slot is written, by slot name, for a return collection that asked to be told; null when nobody asked. It stays on the host: nothing of it goes into a task.</param>
+    /// <returns>One task per item, longest first.</returns>
+    public static IReadOnlyList<WitGridTask> BuildTasks(this IWitControllerManager me, IEnumerable collection, IWitActivity activity, IWitVariablesCollection pool, string iterationVariableName, IDictionary<string, object?>? slotItems = null)
     {
         var tasks = new List<WitGridTask>();
 
         int index = 0;
         foreach (var value in collection)
-            tasks.Add(me.BuildIterationTask(value, null, ref index, activity, pool, iterationVariableName));
+            tasks.Add(me.BuildIterationTask(value, null, ref index, activity, pool, iterationVariableName, slotItems));
 
         return tasks.OrderByDescending(task => task.Work).ToList();
     }
@@ -42,8 +53,9 @@ internal static class WitGridTaskBuilder
     /// <param name="activity">The transformer activity.</param>
     /// <param name="pool">The outer variables.</param>
     /// <param name="iterationVariableName">The name of the iteration variable.</param>
+    /// <param name="slotItems">Where the item of every return slot is written, by slot name, for a return collection that asked to be told; null when nobody asked. Every copy of an item has its own slot and the same item. It stays on the host: nothing of it goes into a task.</param>
     /// <returns>One task per execution, longest first.</returns>
-    public static IReadOnlyList<WitGridTask> BuildTasks(this IWitControllerManager me, IReadOnlyList<object> items, IReadOnlyList<int> slots, IWitActivity activity, IWitVariablesCollection pool, string iterationVariableName)
+    public static IReadOnlyList<WitGridTask> BuildTasks(this IWitControllerManager me, IReadOnlyList<object> items, IReadOnlyList<int> slots, IWitActivity activity, IWitVariablesCollection pool, string iterationVariableName, IDictionary<string, object?>? slotItems = null)
     {
         var executions = slots.GroupBy(slot => slot).ToDictionary(group => group.Key, group => group.Count());
 
@@ -51,12 +63,12 @@ internal static class WitGridTaskBuilder
 
         int index = 0;
         foreach (int slot in slots)
-            tasks.Add(me.BuildIterationTask(items[slot], executions[slot] > 1 ? slot : null, ref index, activity, pool, iterationVariableName));
+            tasks.Add(me.BuildIterationTask(items[slot], executions[slot] > 1 ? slot : null, ref index, activity, pool, iterationVariableName, slotItems));
 
         return tasks.OrderByDescending(task => task.Work).ToList();
     }
 
-    private static WitGridTask BuildIterationTask(this IWitControllerManager me, object value, int? replicaOf, ref int index, IWitActivity activity, IWitVariablesCollection pool, string iterationVariableName)
+    private static WitGridTask BuildIterationTask(this IWitControllerManager me, object value, int? replicaOf, ref int index, IWitActivity activity, IWitVariablesCollection pool, string iterationVariableName, IDictionary<string, object?>? slotItems)
     {
         string? returnVariableName = null;
         var taskActivity = (IWitActivity)activity.Clone();
@@ -65,6 +77,10 @@ internal static class WitGridTaskBuilder
         {
             returnVariableName = $"{RETURN_VARIABLE_NAME}{index++}";
             function.SetReturnReference(returnVariableName);
+
+            // The slot is numbered once a call, so its name stands for this task's item alone.
+            if (slotItems != null)
+                slotItems[returnVariableName] = value;
         }
 
         var variables = BuildVariables(pool, iterationVariableName, returnVariableName, value, taskActivity);

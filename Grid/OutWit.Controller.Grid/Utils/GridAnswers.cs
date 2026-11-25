@@ -15,6 +15,10 @@ namespace OutWit.Controller.Grid.Utils;
 /// A task asks for one value: the return slot Grid gave its activity. A value is kept when it comes
 /// under a name the tasks asked for, as many times as they asked for it, and when the return
 /// collection of the call would take it. Anything else is left out, and the rest of the answer stands.
+///
+/// The point where a value is kept is also where a return collection that asked for it is told which
+/// item the value answers: the item of the slot the value came under. A value that is left out is
+/// not told.
 /// </summary>
 internal static class GridAnswers
 {
@@ -87,11 +91,13 @@ internal static class GridAnswers
     /// order the node returned them. A name is good for as many values as tasks asked for it. The
     /// first value under an asked name is that task's answer: when the collection would refuse it,
     /// the task has no answer, and a later value under the same name does not stand in for it. The
-    /// list itself comes back when nothing is left out.
+    /// list itself comes back when nothing is left out. A return collection that asked to be told
+    /// is told of every value as it is kept, before the value joins the results: under the Queued
+    /// strategy from the loop of the node that answered.
     /// </summary>
     /// <param name="tasks">The tasks the node was given.</param>
     /// <param name="variables">What the node returned for them.</param>
-    /// <param name="values">What the return collection takes; null when every value is taken.</param>
+    /// <param name="values">What the return collection takes, and whether it is told; null when every value is taken and nobody is told.</param>
     /// <param name="unasked">How many values came under no name the tasks asked for, or once too often.</param>
     /// <param name="refused">The values that were asked for and that the collection would refuse.</param>
     /// <returns>The values that are kept.</returns>
@@ -113,6 +119,7 @@ internal static class GridAnswers
 
         List<IWitVariable>? kept = null;
         List<object?>? refusedValues = null;
+        bool tells = values != null && values.Tells;
 
         for (int index = 0; index < variables.Count; index++)
         {
@@ -125,6 +132,9 @@ internal static class GridAnswers
                 object? value = variable.Value;
                 if (values == null || values.Accepts(value))
                 {
+                    if (tells)
+                        values!.Tell(name, value);
+
                     kept?.Add(variable);
                     continue;
                 }
