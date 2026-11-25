@@ -207,6 +207,30 @@ public class SmtModelValidatorValuesTests
         Assert.That(validation.Reason, Is.EqualTo(SmtValidationReasons.UNREADABLE_VALUES));
     }
 
+    [Test]
+    public void ValueThatNamesWhatTheModelWroteWithASymbolOfTheProblemIsNoValueTest()
+    {
+        // The model adds a name of its own for a term of the problem, and the assertions have
+        // already read it by the time the values are checked: a value that is that name still
+        // rests on the problem's symbols, read now or remembered.
+        const string problem = "(declare-const x Int)(declare-const y Int)(declare-const z Int)(declare-const a (Array Int Int))(assert (= z (+ x y)))(assert (= (select a 1) x))";
+        const string own = "((define-fun x () Int 4) (define-fun y () Int 6) (define-fun h!1 () Int (+ x y)) (define-fun z () Int h!1)"
+                           + " (define-fun k!9 ((i!0 Int)) Int (ite (= i!0 1) x 0)) (define-fun a () (Array Int Int) (_ as-array k!9)))";
+        const string closed = "((define-fun x () Int 4) (define-fun y () Int 6) (define-fun h!1 () Int 10) (define-fun z () Int h!1)"
+                              + " (define-fun k!9 ((i!0 Int)) Int (ite (= i!0 1) 4 0)) (define-fun a () (Array Int Int) (_ as-array k!9)))";
+
+        var constant = SmtCheck.Validate(problem, own, "(((+ x y) h!1))");
+        var array = SmtCheck.Validate(problem, own, "((a (_ as-array k!9)))");
+        var names = SmtCheck.Validate(problem, closed, "(((+ x y) h!1) (a (_ as-array k!9)))");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That((constant.Class, constant.Reason), Is.EqualTo((SmtValidationClass.Partial, SmtValidationReasons.UNREADABLE_VALUES)), constant.ToString());
+            Assert.That((array.Class, array.Reason), Is.EqualTo((SmtValidationClass.Partial, SmtValidationReasons.UNREADABLE_VALUES)), array.ToString());
+            Assert.That(names.Class, Is.EqualTo(SmtValidationClass.Validated), "a value may name what the model itself wrote as a value: a solver prints an array so");
+        });
+    }
+
     #endregion
 
     #region Unreadable Tests

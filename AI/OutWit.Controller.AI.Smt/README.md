@@ -327,9 +327,9 @@ memory.
   verdict; a row's class is the worst of its models. Whatever checking one row throws is that
   row's `partial` class (`evaluator_error`), and the settlement goes on.
 - Answers of more than one digest, a package with more answers than were asked for, and an answer
-  whose model or values are `failed` go to three more machines. The answer is the digest the most of them
-  give, two at least, with no tie, and two machines' worth once the answers that may be one
-  machine's second are left out (`dispute`); otherwise the problem is `disputed`.
+  whose model or values are `failed` go to three more machines. The answer is the digest the most
+  of them give, two at least, with no tie, and two machines' worth once the answers that may be
+  one machine's second are left out (`dispute`); otherwise the problem is `disputed`.
 - A failed model accuses nobody by itself: a copy is a lie only when it differs from the settled
   answer of the others. When the settled answer's model is still `failed`, the machines agree and
   the evaluator does not: the row says `validation: failed`, `settled_by: agreement`, and the

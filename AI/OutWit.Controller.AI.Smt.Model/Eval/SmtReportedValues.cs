@@ -23,11 +23,15 @@ namespace OutWit.Controller.AI.Smt.Model.Eval;
 /// out leave the validation partial, each with its reason: a value is never validated unread,
 /// and an answer is never failed for what the evaluator cannot decide.</item>
 /// <item>A value is written with nothing of the problem. One that reads a symbol the problem
-/// declares or defines ("the value of <c>x</c> is <c>x</c>") may be true and says nothing: it is
-/// partial (<see cref="SmtValidationReasons.UNREADABLE_VALUES"/>).</item>
+/// declares or defines, itself or through a name the model wrote with one ("the value of
+/// <c>x</c> is <c>x</c>"), may be true and says nothing: it is partial
+/// (<see cref="SmtValidationReasons.UNREADABLE_VALUES"/>). The reads are counted while the value
+/// is evaluated and compared (<see cref="SmtMeter.References"/>). A value may name what the
+/// model itself gives a value: an element of a sort, the function behind an array.</item>
 /// <item>The first value of a constant the problem declares and the model leaves out is that
 /// constant's value (<see cref="SmtModel.Completions"/>): there is nothing to compare it with.
-/// The constant is still evaluated, so that a value of another sort shows.</item>
+/// The constant is still evaluated, so that a value of another sort shows, and the value is
+/// still read by itself, so that one written with a symbol of the problem shows.</item>
 /// </list>
 /// The checks spend from the budget of the validation they belong to.
 /// </summary>

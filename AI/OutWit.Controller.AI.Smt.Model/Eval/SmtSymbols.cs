@@ -16,7 +16,8 @@ namespace OutWit.Controller.AI.Smt.Model.Eval;
 /// </para>
 /// <para>
 /// Every read of a symbol the problem declares or defines is counted
-/// (<see cref="SmtMeter.Refer"/>): a value a solver reports is written without them.
+/// (<see cref="SmtMeter.Refer"/>), also where a value that was written with one is read again
+/// from memory: a value a solver reports is written without them.
 /// </para>
 /// </summary>
 internal sealed class SmtSymbols
@@ -31,8 +32,8 @@ internal sealed class SmtSymbols
 
     private readonly SmtRun m_run;
     private readonly SmtMeter m_meter;
-    private readonly Dictionary<string, (SmtValue? Value, bool Completed, SmtPartialException? Failure)> m_constants = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, (SmtValue? Value, bool Completed, SmtPartialException? Failure)> m_modelConstants = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (SmtValue? Value, bool Completed, bool Referred, SmtPartialException? Failure)> m_constants = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (SmtValue? Value, bool Completed, bool Referred, SmtPartialException? Failure)> m_modelConstants = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SmtFunction> m_interpretations = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SmtFunction> m_modelFunctions = new(StringComparer.Ordinal);
 
@@ -154,11 +155,11 @@ internal sealed class SmtSymbols
 
     /// <summary>
     /// The value of a name of the problem, or of a name the model added, computed once. The
-    /// value is remembered with whether it rests on a symbol the model left out, so that every
-    /// later reader of it is known to rest on that symbol too; a name that is not evaluated is
-    /// remembered with the reason.
+    /// value is remembered with whether it rests on a symbol the model left out, and with
+    /// whether it was written with a symbol of the problem, so that every later reader of it is
+    /// known to rest on the same; a name that is not evaluated is remembered with the reason.
     /// </summary>
-    private SmtValue Recall(Dictionary<string, (SmtValue? Value, bool Completed, SmtPartialException? Failure)> known, string name, SmtSymbol? symbol, int depth)
+    private SmtValue Recall(Dictionary<string, (SmtValue? Value, bool Completed, bool Referred, SmtPartialException? Failure)> known, string name, SmtSymbol? symbol, int depth)
     {
         if (known.TryGetValue(name, out var entry))
         {
@@ -168,19 +169,23 @@ internal sealed class SmtSymbols
             if (entry.Completed)
                 m_meter.Complete();
 
+            if (entry.Referred)
+                m_meter.Refer();
+
             return entry.Value!;
         }
 
         var before = m_meter.Completions;
+        var references = m_meter.References;
         try
         {
             var value = symbol != null ? OfProblem(name, symbol, depth) : OfModel(name, depth);
-            known[name] = (value, m_meter.Completions != before, null);
+            known[name] = (value, m_meter.Completions != before, m_meter.References != references, null);
             return value;
         }
         catch (SmtPartialException exception) when (exception.Kind != SmtPartialKind.Terminal)
         {
-            known[name] = (null, false, exception);
+            known[name] = (null, false, false, exception);
             throw;
         }
     }

@@ -385,8 +385,9 @@ and no value stands in for a definition. Then every pair is checked.
   (`completed_symbol`): `Partial`. A value is never validated unread, and an answer is never
   failed for what the evaluator cannot decide.
 - A value is written with nothing of the problem. One that reads a symbol the problem declares
-  or defines ("the value of `x` is `x`") may be true and says nothing: `Partial`, with
-  `unreadable_values`.
+  or defines, itself or through a name the model wrote with one ("the value of `x` is `x`"), may
+  be true and says nothing: `Partial`, with `unreadable_values`. A value may name what the model
+  itself gives a value: an element of a sort, the function behind an array.
 
 One kind of pair adds to the model. A solver that is asked for the value of a constant its model
 leaves open completes the model there, so the first value of a constant the problem declares and

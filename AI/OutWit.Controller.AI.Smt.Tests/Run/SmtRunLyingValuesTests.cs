@@ -18,7 +18,8 @@ public sealed class SmtRunLyingValuesTests : SmtRunTestBase
 {
     #region Constants
 
-    private const int PROBLEMS = 24;
+    /// <summary>As many as the other lying-node tests run on: three packages for the three nodes, one of which lies.</summary>
+    private const int PROBLEMS = 40;
 
     #endregion
 

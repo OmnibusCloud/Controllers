@@ -165,10 +165,11 @@ What holds:
   platform, the controller version and the ticket; two honest machines give the same digest.
   Copies that differ go to three more machines, and the answer is the digest two of them at least
   give, with no tie.
-- **A failed model, or a failed value, accuses nobody by itself.** It sends the problem to three more machines. A copy
-  is a lie only when it differs from the settled answer of the others. When the machines agree and
-  the evaluator still says `failed`, the row says so (`settled_by: agreement`) and the integrity
-  document lists the problem; no machine is taken for a liar.
+- **A failed model, or a failed value, accuses nobody by itself.** It sends the problem to three
+  more machines. A copy is a lie only when it differs from the settled answer of the others. When
+  the machines agree and the evaluator still says `failed`, the row says so
+  (`settled_by: agreement`) and the integrity document lists the problem; no machine is taken for
+  a liar.
 - **A node's word is a claim.** A result is taken only under a ticket its round gave out, as an
   answer to a problem of its package, from this controller version, with the words, counts and
   digest of a row; anything else fails its package and is counted. A package a node could not
