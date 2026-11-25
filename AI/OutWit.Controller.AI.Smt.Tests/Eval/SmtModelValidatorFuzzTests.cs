@@ -146,12 +146,13 @@ public class SmtModelValidatorFuzzTests
                 Assert.That(validation.True, Is.EqualTo(validation.Assertions), context);
                 break;
             case SmtValidationClass.Failed:
-                Assert.That(validation.Reason, Is.EqualTo(SmtValidationReasons.ASSERTION_FALSE), context);
-                Assert.That(int.Parse(validation.Detail!), Is.InRange(1, validation.Assertions), context);
+                // A false assertion by its index among the assertions, a value that is not its term's by its index among the values.
+                Assert.That(validation.Reason, Is.EqualTo(SmtValidationReasons.ASSERTION_FALSE).Or.EqualTo(SmtValidationReasons.VALUE_MISMATCH), context);
+                Assert.That(int.Parse(validation.Detail!), validation.Reason == SmtValidationReasons.ASSERTION_FALSE ? Is.InRange(1, validation.Assertions) : Is.GreaterThanOrEqualTo(1), context);
                 break;
             case SmtValidationClass.Partial:
                 Assert.That(SmtValidationReasons.All, Does.Contain(validation.Reason), context);
-                Assert.That(validation.Reason, Is.Not.EqualTo(SmtValidationReasons.EVALUATOR_ERROR).And.Not.EqualTo(SmtValidationReasons.ASSERTION_FALSE), context);
+                Assert.That(validation.Reason, Is.Not.EqualTo(SmtValidationReasons.EVALUATOR_ERROR).And.Not.EqualTo(SmtValidationReasons.ASSERTION_FALSE).And.Not.EqualTo(SmtValidationReasons.VALUE_MISMATCH), context);
                 break;
             default:
                 Assert.Fail(context);

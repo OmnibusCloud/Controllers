@@ -158,11 +158,14 @@ public class SmtClosedScriptTests
     }
 
     [Test]
-    public void BuildTakesTheValueOfGetValueOverTheDefinitionOfGetModelTest()
+    public void BuildTakesTheDefinitionOfGetModelAndAValueOfGetValueOnlyWhereThereIsNoneTest()
     {
-        var script = SmtClosedScript.Build(SmtCheck.Commands("(declare-const x Int)(assert (> x 0))"), SmtCheck.Model("((define-fun x () Int 9))", "((x 5))"));
+        // The model is what its own text says: a value beside it never stands in for a
+        // definition, and gives a value only to a constant the definitions leave out.
+        var script = SmtClosedScript.Build(SmtCheck.Commands("(declare-const x Int)(declare-const y Int)(assert (> x y))"), SmtCheck.Model("((define-fun x () Int 9))", "((x 5) (y 2))"));
 
-        Assert.That(Lines(script)[0], Is.EqualTo("(define-fun x () Int 5)"));
+        Assert.That(Lines(script), Is.EqualTo(new[] { "(define-fun x () Int 9)", "(define-fun y () Int 2)", "(assert (> x y))", "(check-sat)" }));
+        Assert.That(script.Free, Is.Zero);
     }
 
     [Test]
