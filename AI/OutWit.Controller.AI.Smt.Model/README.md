@@ -467,12 +467,35 @@ stops, as `Partial`, when the count passes the budget. Nothing is timed.
 
 | Budget | Default | Counts |
 |---|---|---|
-| Steps | 20,000,000 | one for each term evaluated; an operation on a large value pays for the machine words it touches, a value for the memory it takes |
+| Steps | 20,000,000 | one for each term evaluated, and more for whatever costs more than a term (below) |
 | Nesting | 32,768 | a term in a term, a call (two levels), a value in a value; a budget may ask for up to 131,072 |
 | Bits of an integer | 1,048,576 | also the numerator and the denominator of a rational together |
 | Bits of a bit-vector | 1,048,576 | |
 | Characters of a string | 1,048,576 | |
 | Stored indices of an array | 1,048,576 | |
+
+A step is one term evaluated. Whatever costs more than a term pays for its work before the work
+is done, so the steps bound the time and the memory of a validation, not only its terms:
+
+- an operation on a large value pays for the machine words it touches (a product or a quotient
+  for the product of the two sizes), and a value for the memory it takes;
+- a name pays a step for every 64 characters each time it is read as text: looked up in a
+  table, bound, compared with another name. A name of fewer than 64 characters pays nothing of
+  its own, so the names problems are written with cost what a term costs. A longer name is
+  taken like any other, and pays;
+- a list that is read whole before anything comes of it pays for its items: four steps a
+  variable for the variables of a pattern and of a `lambda` of more than one variable, a step
+  an index for more indices than any operator takes;
+- a literal pays for its digits and a string for its characters, where they are made and where
+  an operator looks at all of them.
+
+Measured on the machine the evaluator was written on, in an optimized build: a recursion that
+never ends uses the default budget up in 0.3 s. The models written to cost as much time as they
+can for a step (a name of a quarter of a million characters, a `lambda` or a pattern of tens of
+thousands of variables, numbers and bit-vectors of a million bits, a string of a million
+characters) use it up in 0.25 to 0.55 s. The dearest shape found is a `let` of a hundred
+thousand variables evaluated again and again, where each variable pays only for its value: the
+budget lasts 2.7 s there.
 
 Terms are walked by calls, on a thread the validation makes for itself with a stack sized for
 the nesting ceiling: an eighth of a gigabyte is reserved for the default ceiling, and only what
