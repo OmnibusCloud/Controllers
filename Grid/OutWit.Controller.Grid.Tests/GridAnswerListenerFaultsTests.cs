@@ -35,17 +35,22 @@ namespace OutWit.Controller.Grid.Tests
         /// Collections whose public method of the name is not the one Grid calls, each with the way
         /// to read how often the method was called.
         /// </summary>
-        private static readonly object[] OTHER_SIGNATURES =
+        private static readonly TestCaseData[] OTHER_SIGNATURES =
         {
-            new object[] { new MockOneArgumentCollection(RESULTS), (Func<IWitVariable, int>)(collection => ((MockOneArgumentCollection)collection).Calls) },
-            new object[] { new MockTypedArgumentsCollection(RESULTS), (Func<IWitVariable, int>)(collection => ((MockTypedArgumentsCollection)collection).Calls) },
-            new object[] { new MockAnsweringBackCollection(RESULTS), (Func<IWitVariable, int>)(collection => ((MockAnsweringBackCollection)collection).Calls) },
-            new object[] { new MockStaticMethodCollection(RESULTS), (Func<IWitVariable, int>)(_ => MockStaticMethodCollection.Calls) }
+            Mistake("one argument", new MockOneArgumentCollection(RESULTS), collection => ((MockOneArgumentCollection)collection).Calls),
+            Mistake("typed arguments", new MockTypedArgumentsCollection(RESULTS), collection => ((MockTypedArgumentsCollection)collection).Calls),
+            Mistake("a return value", new MockAnsweringBackCollection(RESULTS), collection => ((MockAnsweringBackCollection)collection).Calls),
+            Mistake("a static method", new MockStaticMethodCollection(RESULTS), _ => MockStaticMethodCollection.Calls)
         };
 
         #endregion
 
         #region Tools
+
+        private static TestCaseData Mistake(string name, IWitVariable collection, Func<IWitVariable, int> calls)
+        {
+            return new TestCaseData(collection, calls).SetArgDisplayNames(name);
+        }
 
         private static List<WitGridTask> MakeTasks(int count)
         {

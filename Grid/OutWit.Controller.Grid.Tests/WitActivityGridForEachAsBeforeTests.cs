@@ -36,14 +36,14 @@ namespace OutWit.Controller.Grid.Tests
         /// under the name of the iteration variable, an item that is a list travels as its members,
         /// and of the variables of the script a task carries the ones its transformer names.
         /// </summary>
-        private static readonly object[] CALLS =
+        private static readonly TestCaseData[] CALLS =
         {
-            new object[] { BALANCED, "item in [10, 11, 12], opts) => Int(item)", "Int(item)", new[] { "item=10", "item=11", "item=12" } },
-            new object[] { QUEUED, "item in [10, 11, 12], opts) => Int(item)", "Int(item)", new[] { "item=10", "item=11", "item=12" } },
-            new object[] { BALANCED, "item in [10, 11], opts) => Int(offset)", "Int(offset)", new[] { "item=10, offset=7", "item=11, offset=7" } },
-            new object[] { QUEUED, "item in [10, 11], opts) => Int(offset)", "Int(offset)", new[] { "item=10, offset=7", "item=11, offset=7" } },
-            new object[] { BALANCED, "pair in pairs, opts) => Int(pair.Item2)", "Int(pair.Item2)", new[] { "pair.Item1=1, pair.Item2=4", "pair.Item1=2, pair.Item2=5", "pair.Item1=3, pair.Item2=6" } },
-            new object[] { QUEUED, "pair in pairs, opts) => Int(pair.Item2)", "Int(pair.Item2)", new[] { "pair.Item1=1, pair.Item2=4", "pair.Item1=2, pair.Item2=5", "pair.Item1=3, pair.Item2=6" } }
+            Call(BALANCED, "item in [10, 11, 12], opts) => Int(item)", "Int(item)", "item=10", "item=11", "item=12"),
+            Call(QUEUED, "item in [10, 11, 12], opts) => Int(item)", "Int(item)", "item=10", "item=11", "item=12"),
+            Call(BALANCED, "item in [10, 11], opts) => Int(offset)", "Int(offset)", "item=10, offset=7", "item=11, offset=7"),
+            Call(QUEUED, "item in [10, 11], opts) => Int(offset)", "Int(offset)", "item=10, offset=7", "item=11, offset=7"),
+            Call(BALANCED, "pair in pairs, opts) => Int(pair.Item2)", "Int(pair.Item2)", "pair.Item1=1, pair.Item2=4", "pair.Item1=2, pair.Item2=5", "pair.Item1=3, pair.Item2=6"),
+            Call(QUEUED, "pair in pairs, opts) => Int(pair.Item2)", "Int(pair.Item2)", "pair.Item1=1, pair.Item2=4", "pair.Item1=2, pair.Item2=5", "pair.Item1=3, pair.Item2=6")
         };
 
         #endregion
@@ -75,6 +75,11 @@ namespace OutWit.Controller.Grid.Tests
         #endregion
 
         #region Tools
+
+        private static TestCaseData Call(string strategy, string call, string transformer, params string[] variables)
+        {
+            return new TestCaseData(strategy, call, transformer, variables).SetArgDisplayNames(strategy, call);
+        }
 
         /// <summary>
         /// The nodes of a call: the three machines under Balanced, one under Queued, where the tasks
