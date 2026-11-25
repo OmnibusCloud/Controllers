@@ -34,24 +34,10 @@
        code, every problem is solved by the node's session code in the controller's own sandbox
        (the module and the native engine library held to their pins by the controller), and the
        run is settled and its documents written by the host's code. That code is internal to the
-       controller, which names only its tests as a friend, and the controller is not changed for
-       a developer tool (a change of its bytes is a new version and a test-server gate). So the
-       tool is compiled against a copy of the controller's assembly whose members are public
-       (Krafs.Publicizer, a build-time package: nothing of it ships) and declares that it ignores
-       the access checks to that assembly, which the runtime honours: at run time the tool calls
-       the very assembly a node loads. The compiler is given the implementation assembly, not the
-       reference assembly, which has no internal members. -->
-  <PropertyGroup>
-    <CompileUsingReferenceAssemblies>false</CompileUsingReferenceAssemblies>
-  </PropertyGroup>
-
+       controller, which names the tool as a friend (InternalsVisibleTo("smt-live")): at run time
+       the tool calls the very assembly a node loads. -->
   <ItemGroup>
     <ProjectReference Include="..\OutWit.Controller.AI.Smt\OutWit.Controller.AI.Smt.csproj" />
-    <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <Publicize Include="OutWit.Controller.AI.Smt" />
   </ItemGroup>
 
   <!-- The wasmtime binding without its package's native library (48.0.2): the controller's

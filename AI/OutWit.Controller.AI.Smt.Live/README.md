@@ -41,13 +41,9 @@ dotnet build -c Release -p:SmtLiveAssets=true
 bin/Release/net10.0/smt-live local demo/02-eight-queens/problems.jsonl
 ```
 
-The controller's types `local` calls are internal to it; the controller names only its tests as a
-friend, and it is not changed for a developer tool (a change of its bytes is a new version and a
-test-server gate). So the tool is compiled against a copy of the controller's assembly whose
-members are public (`Krafs.Publicizer`, a build-time package of which nothing ships) and declares
-that it ignores the access checks to that assembly, which the .NET runtime honours: at run time
-the tool calls the very assembly a node loads. When the controller next changes, one line of it
-(`InternalsVisibleTo("smt-live")`) can take the publicizer's place; the tool's code stays as it is.
+The controller's types `local` calls are internal to it; the controller names the tool as a
+friend (`InternalsVisibleTo("smt-live")`, since controller 0.5.0), so at run time the tool calls
+the very assembly a node loads.
 
 ### A build for another machine
 
@@ -233,8 +229,13 @@ four documents on disk; nothing is sent anywhere:
 4. **The solve**: each package checked as a node checks it; every problem solved by the node's
    session code on the node's worker threads (below normal priority), its row made and its digest
    computed by the node's code, and written to its package's result package. One pool goes over
-   the whole set in its order, as a queue of files would on one machine: a node solves one
-   package at a time and waits for each package's slowest problem; here no session waits.
+   the whole set in its order, as a queue of files would on one machine. A node since controller
+   0.5.0 does the same with the packages of its share: they share one budget of sessions, and a
+   session that ends goes to the next problem waiting, of the same package or of the next one
+   (before, a node solved one package at a time and waited for each package's slowest problem).
+   What is left between the two is a node's view of its share a few packages at a time: its
+   packages are let in as the open ones have handed out all of their problems, at most sixteen
+   open at once.
 5. **The settlement and the documents**: by the code `Smt.Settle` and the documents' activities
    run on the server: every `sat` model checked by the host's evaluator, the four documents
    written by the host's writers and held to their schemas, and the summary printed as `run`
