@@ -48,6 +48,23 @@ public class SmtModelValidatorPriceTests
     /// <summary>The steps of comparing the finite map a lambda of one variable stands for, as they were before lists were paid for.</summary>
     private const int LAMBDA_MAP_STEPS = 41;
 
+    private const int SHIFTS = 240;
+
+    /// <summary>
+    /// The steps of one shift in its chain: 32,769 for the shift and as many for the bvor (a
+    /// step for every 64 bits of the two operands), 16,385 for the shift amount written at the
+    /// width, and seven terms and literals.
+    /// </summary>
+    private const int SHIFT_STEPS = 81_930;
+
+    private const int CONVERSIONS = 1_000;
+
+    /// <summary>
+    /// The steps of one conversion in its chain: 17,409 for the conversion (a step for every 64
+    /// bits of the integer and of the width), 2,049 for the bvor, and five terms.
+    /// </summary>
+    private const int CONVERSION_STEPS = 19_463;
+
     #endregion
 
     #region Negation Tests
@@ -145,7 +162,72 @@ public class SmtModelValidatorPriceTests
 
     #endregion
 
+    #region Bit-vector Tests
+
+    [Test]
+    public void ShiftOfAWideBitVectorPaysForItsWordsAndEndsInTimeTest()
+    {
+        // (bvshl v k) of a million bits by half a million, 240 times: all the budget pays for.
+        // What is shifted out is cut off by keeping the low bits. Measured: 0.1 s; cut off by a
+        // division, 2 ms a shift, 0.5 s. This one never ran past the half second the budget
+        // stands for: the test holds the bound and the steps, which the cut does not change.
+        const string problem = "(declare-const x (_ BitVec 1048576))(assert (= x x))";
+        var alone = SmtCheck.Validate(problem, Shifts(0));
+
+        var (chain, elapsed) = SmtTimed.Validate(problem, Shifts(SHIFTS));
+
+        Assert.That(chain.Class, Is.EqualTo(SmtValidationClass.Validated), chain.ToString());
+        Assert.That(chain.Steps - alone.Steps, Is.EqualTo((long)SHIFT_STEPS * SHIFTS));
+        Assert.That(elapsed.TotalSeconds, Is.LessThan(LEAST_BOUND_SECONDS), $"{SHIFTS} shifts took {elapsed.TotalSeconds:F2} s");
+    }
+
+    [Test]
+    public void IntegerIntoANarrowBitVectorPaysForItsWordsAndEndsInTimeTest()
+    {
+        // ((_ int2bv 65536) n) of an integer of a million bits, a thousand times: all the budget
+        // pays for, at the width where a division cost most for the steps charged. Measured:
+        // 0.08 s; by a division, 1.4 ms each, 1.4 s, three times the half second the budget
+        // stands for and still inside the bound here: what tells the two apart is the test of
+        // the reduction itself, which times it against keeping the low bits.
+        const string problem = "(declare-const x (_ BitVec 65536))(assert (= x x))";
+        var alone = SmtCheck.Validate(problem, Conversions(0));
+
+        var (chain, elapsed) = SmtTimed.Validate(problem, Conversions(CONVERSIONS));
+
+        Assert.That(chain.Class, Is.EqualTo(SmtValidationClass.Validated), chain.ToString());
+        Assert.That(chain.Steps - alone.Steps, Is.EqualTo((long)CONVERSION_STEPS * CONVERSIONS));
+        Assert.That(elapsed.TotalSeconds, Is.LessThan(LEAST_BOUND_SECONDS), $"{CONVERSIONS} conversions took {elapsed.TotalSeconds:F2} s");
+    }
+
+    #endregion
+
     #region Tools
+
+    /// <summary>
+    /// The model that gives <c>x</c> a bit-vector of a million bits, shifted left by half a
+    /// million so many times in a chain of <c>let</c>.
+    /// </summary>
+    private static string Shifts(int count)
+    {
+        var model = new StringBuilder("((define-fun x () (_ BitVec 1048576) (let ((v ((_ repeat 16384) #xffffffffffffffff))) (let ((w v)) ");
+        for (var index = 0; index < count; index++)
+            model.Append("(let ((w (bvor (bvshl v (_ bv524288 1048576)) w))) ");
+
+        return model.Append('w').Append(')', count + 2).Append("))").ToString();
+    }
+
+    /// <summary>
+    /// The model that gives <c>x</c> the low 65,536 bits of an integer of a million bits, taken
+    /// so many times in a chain of <c>let</c>.
+    /// </summary>
+    private static string Conversions(int count)
+    {
+        var model = new StringBuilder("((define-fun x () (_ BitVec 65536) (let ((n (bv2nat ((_ repeat 16384) #xffffffffffffffff)))) (let ((w ((_ int2bv 65536) n))) ");
+        for (var index = 0; index < count; index++)
+            model.Append("(let ((w (bvor ((_ int2bv 65536) n) w))) ");
+
+        return model.Append('w').Append(')', count + 2).Append("))").ToString();
+    }
 
     /// <summary>
     /// The model whose own function calls itself twice a level, down from a depth, and reads a

@@ -32,15 +32,19 @@ internal sealed class SmtBitVectorValue : SmtValue
     /// <returns>The bit-vector.</returns>
     public static SmtBitVectorValue Wrap(BigInteger value, int width)
     {
+        // Two to the width is a power of two: the remainder of a division by it is the low
+        // bits of the number, which cost one pass over the number to keep. A division costs
+        // many times that for a number much wider than the width (a shift to the left, an
+        // integer made a bit-vector), and whoever calls pays for a pass.
         var modulus = BigInteger.One << width;
-        if (value.Sign < 0 || value >= modulus)
-        {
-            value %= modulus;
-            if (value.Sign < 0)
-                value += modulus;
-        }
+        if (value.Sign >= 0)
+            return new SmtBitVectorValue(value < modulus ? value : value & (modulus - BigInteger.One), width);
 
-        return new SmtBitVectorValue(value, width);
+        // A negative number: the low bits of its magnitude, taken from two to the width. A
+        // magnitude that is a multiple of two to the width leaves two to the width itself,
+        // which is zero.
+        var mask = modulus - BigInteger.One;
+        return new SmtBitVectorValue((modulus - (-value & mask)) & mask, width);
     }
 
     #endregion
