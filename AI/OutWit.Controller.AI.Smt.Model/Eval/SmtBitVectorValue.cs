@@ -44,7 +44,7 @@ internal sealed class SmtBitVectorValue : SmtValue
         // magnitude that is a multiple of two to the width leaves two to the width itself,
         // which is zero.
         var mask = modulus - BigInteger.One;
-        return new SmtBitVectorValue((modulus - (-value & mask)) & mask, width);
+        return new SmtBitVectorValue((modulus - ((-value) & mask)) & mask, width);
     }
 
     #endregion

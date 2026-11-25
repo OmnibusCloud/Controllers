@@ -129,7 +129,8 @@ internal sealed class SmtArrays
         if (!m_run.Symbols.TryGetFunction(name, inModel, out var function))
             throw m_meter.Doubt(SmtValidationReasons.UNKNOWN_SYMBOL);
 
-        // The arrays made so far are kept by the function's name: finding one reads the name.
+        // The arrays made so far are kept by the function's name: finding one reads the name,
+        // and so does keeping a new one below.
         m_meter.ChargeName(name);
         if (m_ofFunctions.TryGetValue(name, out var known))
         {
