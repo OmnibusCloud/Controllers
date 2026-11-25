@@ -106,13 +106,15 @@ public sealed class SmtSessionBudgetTests : SmtSessionBudgetTestBase
     [CancelAfter(120_000)]
     public async Task ALongTailEndsNearItsWorkOverTheDegreeTest()
     {
-        // Four sessions; six packages of eight problems, one of 1.2 s and seven of 0.15 s each.
-        // One package at a time (the budget let one package open at once, as a node of 0.4.0 ran a
-        // share) ends near the sum of the slowest problems, 7.2 s; the shared budget near the work
-        // over the degree, 3.4 s.
+        // Four sessions; six packages of eight problems, one of 2 s and seven of 0.25 s each. One
+        // package at a time (the budget let one package open at once, as a node of 0.4.0 ran a
+        // share) ends near the sum of the slowest problems, 12 s; the shared budget near the work
+        // over the degree, 5.6 s (its schedule on exact clocks is 6.25 s: the last package's slowest
+        // problem starts when that package is let in). A runner's clocks and threads add to both
+        // alike, so the two are held to each other, and the shared one to the work loosely.
         const int SESSIONS = 4;
-        const int SLOW_MS = 1_200;
-        const int QUICK_MS = 150;
+        const int SLOW_MS = 2_000;
+        const int QUICK_MS = 250;
         const int PACKAGES = 6;
         const int PROBLEMS = 8;
 
@@ -128,7 +130,7 @@ public sealed class SmtSessionBudgetTests : SmtSessionBudgetTestBase
         Assert.Multiple(() =>
         {
             Assert.That(shared, Is.GreaterThanOrEqualTo(ideal * 0.95), "no faster than the work allows");
-            Assert.That(shared, Is.LessThan(ideal * 1.4), "near the work over the degree");
+            Assert.That(shared, Is.LessThan(ideal * 1.5), "near the work over the degree");
             Assert.That(oneAtATime, Is.GreaterThanOrEqualTo(sumOfSlowest * 0.95), "one package at a time waits for each slowest problem");
             Assert.That(shared, Is.LessThan(oneAtATime * 0.7), "the shared budget does not");
         });

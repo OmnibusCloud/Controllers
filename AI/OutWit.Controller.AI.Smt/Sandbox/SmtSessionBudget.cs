@@ -197,6 +197,10 @@ internal sealed class SmtSessionBudget
             if (turn.State != SmtSessionBudgetTurnState.Open || turn.Body != null)
                 throw new InvalidOperationException("a package runs once, in the turn it was given");
 
+            // A package that did not ask for its degree: the machine is read all the same.
+            if (m_read != null && !m_hasReading)
+                Read();
+
             turn.Start(count, sessionBytes, body, cancellationToken);
             if (!TryComplete(turn))
             {
@@ -314,7 +318,19 @@ internal sealed class SmtSessionBudget
             }
 
             if (!Fits(candidate.SessionBytes))
-                break;
+            {
+                if (m_running > 0)
+                    break;
+
+                // Nothing runs and its session still does not fit: it never will. A package asks
+                // for its degree first and is refused so (memory_insufficient); this is the
+                // budget's own guard against a wait without end.
+                candidate.Fail(new InvalidOperationException("not one session of the package fits in the budget"));
+                if (TryComplete(candidate))
+                    position--;
+
+                continue;
+            }
 
             index = candidate.Take();
             m_running++;
