@@ -155,7 +155,8 @@ fixed words, and the node's log says which.
 An eight-byte header (`WSPK`, the kind, the version, two zero bytes) and a Brotli stream of
 frames, each the length of a MemoryPack image and the image: one frame a problem in a package of
 problems, one frame a row in a package of results. A reader holds every frame to its bound
-before it holds it (128 MiB a problem, 64 MiB a row), a package to the number of frames its
+before it holds it (128 MiB a problem; 48 MiB and 64 KiB a row: the 16 MiB a session may write at
+three bytes a character, and the rest of a row), a package to the number of frames its
 reference names and to the bytes it may unpack to (256 MiB a package of problems), and grows a
 frame's buffer with the bytes that arrive, never with the length a frame claims.
 
@@ -283,15 +284,36 @@ of range and a profile the controller does not have are refused; a set whose eve
 refused gives no package, and its results say why for each row.
 
 **Intake.** A node's result package is a claim. It is taken only under a ticket its round gave
-out. A package with a fault code is the node's word that it could not work on the package (one of
-`SmtNodeFaults`, no blob), and is counted so. Otherwise its blob must be the bytes its reference
-names, a package of rows of this format, holding exactly the rows of its package, each once, each
-one a node may give (`SmtRowChecks`): its ticket, its problem's id, hash and query, this
-controller version, a platform the controller ships for, the words of a row, the counts of models
-and values a session of its query gives, texts within what a session writes, and a digest that
-is its own. Anything else fails that package and is counted by reason (`unknown_ticket`,
-`duplicate`, `unreadable`, `content`, `surplus`). Rows wait in a spool file, never together in
-memory.
+out, and only when its reference is one a node returns. A reference with a fault code is the
+node's word that it could not work on the package (one of `SmtNodeFaults`, no blob, a sentence no
+longer than a node writes), and is counted so. Otherwise it carries no word of a fault and a
+SHA-256, and its blob must be the bytes it names, a package of rows of this format, holding
+exactly the rows of its package, each once, each one a session could have written
+(`SmtRowChecks`):
+
+- its ticket, its problem's id, hash and query, this controller version, a platform the
+  controller ships for;
+- words that go together as a session's outcome has them: a verdict only where a session claims
+  one (`ok`, and `output_exceeded` after an answered check); for a check and a proof the one model
+  of a `sat`, the values exactly when the check asked for them, nothing beside `unsat` and
+  `unknown`; for an enumeration the verdict that follows from its count and its end, `complete`
+  only below its number of models and `limit_reached` only at it; a reason exactly for an
+  `unknown` and for an enumeration that stopped early; the code of its status and no other word;
+- numbers within the envelope the package's options give a session: no more fuel than the hard
+  cap's, no more memory than the host's cap of it, no more checks than its query sends, no model
+  and no verdict without a check;
+- texts that are text (no half of a surrogate pair alone) and within what a session writes: the
+  models and the values together within the output cap of 16 MiB, the message, the solver's word
+  and the transcript within their own lengths;
+- and a digest that is its own.
+
+Anything else fails that package and is counted by reason (`unknown_ticket`, `duplicate`,
+`unreadable`, `content`, `surplus`). Rows wait in a spool file, never together in memory, and the
+rows of a refused package are taken out of it again. What the host keeps of one run on its disk
+is bounded: 128 GiB of rows, and 2 GiB of full models in the ledger. A run past either is not
+settled: the activity fails with the bound's name (`smt_rows_bound`, `smt_models_bound`). A
+failure of the host's own files while a round is taken in ends the activity as well, and is never
+counted as a node's unreadable result.
 
 **Settling** (`SmtRulings`), problem by problem in the set's order:
 

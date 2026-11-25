@@ -28,7 +28,7 @@
     "proofs": ["proved", "counterexample", "none"],
     "node_faults": ["version_mismatch", "package_invalid", "ticket_invalid"]
   },
-  "packages": { "max_problems": 256, "max_bytes": 269484032, "max_problem_frame_bytes": 134217728, "max_result_frame_bytes": 67108864 },
+  "packages": { "max_problems": 256, "max_bytes": 269484032, "max_problem_frame_bytes": 134217728, "max_result_frame_bytes": 50397184 },
   "node": { "min_ram_mb": 7680, "max_degree": 16, "ram_headroom": 0.75, "session_margin_bytes": 201326592, "session_bytes": 2885681152, "priority": "below_normal" },
   "benchmark_unit": "smt-problem@ref-v1",
   "platforms": ["win-x64", "linux-x64", "osx-arm64"],

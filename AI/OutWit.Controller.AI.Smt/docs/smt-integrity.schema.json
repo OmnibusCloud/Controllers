@@ -57,8 +57,8 @@
           "properties": {
             "unknown_ticket": { "type": "integer", "description": "A result under a ticket the fan-out did not give out." },
             "duplicate": { "type": "integer", "description": "The same result blob returned again." },
-            "unreadable": { "type": "integer", "description": "Not a package of results this version reads, not the bytes its reference names, or damaged." },
-            "content": { "type": "integer", "description": "Does not hold exactly the rows of its package (one missing, foreign or twice), or holds a row a node may not give: another ticket, another problem's id, hash or query, another controller version or platform, a word no row has, counts of models or values a session does not give, or a digest that is not its own." },
+            "unreadable": { "type": "integer", "description": "Not a package of results this version reads, not the bytes its reference names (a reference whose SHA-256 is none names no bytes), larger than its rows may be, or damaged." },
+            "content": { "type": "integer", "description": "Does not hold exactly the rows of its package (one missing, foreign or twice), or holds a row no session of the controller could have written: another ticket, another problem's id, hash or query, another controller version or platform, a word no row has, words that do not go together (a verdict under a status that claims none, models or values a session of the query does not give, a reason without an unknown, a code that is not its status's), a number past the envelope of the run's options (fuel, memory, checks), a text longer than a session writes or one that is not text, or a digest that is not its own. Also a result whose reference carries words of a fault that no node writes." },
             "surplus": { "type": "integer", "description": "More results under one ticket than copies were asked for, in the dispute round: which is the answer cannot be told, so none is taken. (In the first fan-out and the repair round such a ticket is kept, and its problems go to a dispute.)" }
           }
         },
