@@ -36,6 +36,13 @@ namespace OutWit.Controller.Grid.Utils;
 /// asked for, so a controller that compares the copies of an item can count each value as one
 /// machine's.
 ///
+/// A value is held to the slot it came under, not to what it says: Grid cannot look into a value. A
+/// node that holds a task of item A and a task of item B may return a result of A under both slots,
+/// and both are kept. So a return collection that asks is told, for every value that is kept, which
+/// item the value was returned for (<see cref="GridAnswerListener"/>): once, when the value is kept,
+/// also for a task that moved after its node failed. Whether the value answers that item is for the
+/// controller to see.
+///
 /// A value the return collection would refuse is an answer not given. A typed collection takes a list
 /// whole or not at all, so one null or one value of another type would cost the call every value of
 /// every node. Such a value is left out like an unasked one (with a warning that says how many and
@@ -98,7 +105,7 @@ public static class GridReassignment
     /// <param name="tasks">The tasks of the call.</param>
     /// <param name="processGroup">Runs one node's batch.</param>
     /// <param name="logWarning">Where warnings go; null when nobody listens.</param>
-    /// <param name="values">What the return collection takes; null when it takes every value.</param>
+    /// <param name="values">What the return collection takes; null when it takes every value. The rule of a collection that asks to be told which item each value answers tells it of every value as it is kept.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
     /// <returns>The values that were kept, the statuses of the batches that completed, and whether the work failed.</returns>
     /// <exception cref="OperationCanceledException">The call was cancelled.</exception>

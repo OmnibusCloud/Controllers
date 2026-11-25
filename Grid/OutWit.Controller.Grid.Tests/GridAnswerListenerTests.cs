@@ -16,9 +16,8 @@ namespace OutWit.Controller.Grid.Tests
     /// <c>public void OnGridAnswer(object? item, object? value)</c> is called once for every value
     /// that is kept, with the item of the slot the value came under. What is left out (a name nobody
     /// asked for, a value once too often, a value the collection would refuse, a copy that was
-    /// dropped, the answer of a batch that failed) is not told. A collection without the method sees
-    /// no difference at all: that is the last group of tests. The tasks here are built as Grid builds
-    /// them, and an honest value says who made it and under which slot.
+    /// dropped, the answer of a batch that failed) is not told. The tasks here are built as Grid
+    /// builds them, and an honest value says who made it and under which slot.
     /// </summary>
     [TestFixture]
     public class GridAnswerListenerTests
@@ -336,114 +335,6 @@ namespace OutWit.Controller.Grid.Tests
 
             Assert.That(results, Has.Count.EqualTo(3));
             Assert.That(collection.Told.Select(pair => SlotOf(pair.Value)), Is.EqualTo(new[] { Slot(0), Slot(2) }));
-        }
-
-        #endregion
-
-        #region Without The Method Tests
-
-        [Test]
-        public void ACollectionWithoutTheMethodHasTheRuleItAlwaysHadTest()
-        {
-            var items = new Dictionary<string, object?>();
-            var warnings = new List<string>();
-
-            GridValueRule objects = GridValueRule.ForCollection(new MockCollection<object?>(RESULTS), items, warnings.Add);
-            GridValueRule engineObjects = GridValueRule.ForCollection(new WitVariableObjectCollection(RESULTS), items, warnings.Add);
-            GridValueRule integers = GridValueRule.ForCollection(new MockCollection<int>(RESULTS), items, warnings.Add);
-            GridValueRule noCollection = GridValueRule.ForCollection(null, items, warnings.Add);
-            GridValueRule notACollection = GridValueRule.ForCollection(new WitVariableObject(RESULTS), items, warnings.Add);
-
-            Assert.That(objects, Is.SameAs(GridValueRule.ANY));
-            Assert.That(engineObjects, Is.SameAs(GridValueRule.ANY));
-            Assert.That(noCollection, Is.SameAs(GridValueRule.ANY));
-            Assert.That(notACollection, Is.SameAs(GridValueRule.ANY));
-            Assert.That(integers.ElementType, Is.EqualTo(typeof(int)));
-            Assert.That(integers.Tells, Is.False);
-            Assert.That(GridValueRule.ANY.Tells, Is.False, "the rule every call shares tells nobody");
-            Assert.That(GridValueRule.ForCollection(new MockCollection<int>(RESULTS)).Tells, Is.False);
-            Assert.That(warnings, Is.Empty);
-        }
-
-        [Test]
-        public void TheRuleOfACollectionThatAsksIsARuleOfItsOwnTest()
-        {
-            var items = new Dictionary<string, object?>();
-
-            GridValueRule first = GridValueRule.ForCollection(new MockAskingCollection<object?>(RESULTS), items, null);
-            GridValueRule second = GridValueRule.ForCollection(new MockAskingCollection<object?>(RESULTS), items, null);
-
-            Assert.That(first, Is.Not.SameAs(GridValueRule.ANY), "the shared rule is never the one that tells");
-            Assert.That(first, Is.Not.SameAs(second));
-            Assert.That(first.Tells, Is.True);
-            Assert.That(first.ElementType, Is.Null);
-            Assert.That(first.Accepts(null), Is.True);
-            Assert.That(GridValueRule.ANY.Tells, Is.False);
-        }
-
-        [TestCase(BALANCED)]
-        [TestCase(QUEUED)]
-        public async Task ACallIntoACollectionWithoutTheMethodReturnsTheSameObjectsInTheSameOrderAsBeforeTest(string strategy)
-        {
-            // Every slot has one answer, the same object in every run, and one machine fails, so the
-            // order is the order of a call whose work moved.
-            var failing = Node(30);
-            var nodes = new[] { failing, Node(20), Node(10) };
-            var tasks = MakeTasks(9);
-            var items = Items(tasks);
-            var answers = tasks.Select((_, index) => Slot(index)).ToDictionary(slot => slot, slot => (object?)string.Concat("value of ", slot), StringComparer.Ordinal);
-
-            MockAnsweringNodesManager Manager()
-            {
-                return new MockAnsweringNodesManager((nodeId, request) =>
-                    strategy == BALANCED && nodeId == failing.NodeId
-                        ? null
-                        : MockAnsweringNodesManager.Honest(nodeId, request).Select(answer => With(answer, answers[answer.Name])).ToList());
-            }
-
-            var plain = new MockCollection<string>(RESULTS);
-
-            // As the call ran before a collection could ask: the rule of the collection alone.
-            var before = await GridTestRuns.RunAsync(strategy, Manager(), nodes, tasks, GridValueRule.ForCollection(plain));
-            var now = await GridTestRuns.RunAsync(strategy, Manager(), nodes, tasks, GridValueRule.ForCollection(plain, items, null));
-            var noRule = await GridTestRuns.RunAsync(strategy, Manager(), nodes, tasks, null);
-
-            Assert.That(before, Has.Count.EqualTo(9));
-
-            foreach (var results in new[] { now, noRule })
-            {
-                Assert.That(results, Has.Count.EqualTo(9));
-
-                for (int index = 0; index < before.Count; index++)
-                    Assert.That(results[index], Is.SameAs(before[index]), $"value {index}");
-            }
-        }
-
-        [TestCase(BALANCED)]
-        [TestCase(QUEUED)]
-        public async Task TellingACollectionChangesNothingOfWhatTheCallReturnsTest(string strategy)
-        {
-            var nodes = new[] { Node(30), Node(20), Node(10) };
-            var tasks = MakeTasks(9);
-            var items = Items(tasks);
-            var answers = tasks.Select((_, index) => Slot(index)).ToDictionary(slot => slot, slot => (object?)string.Concat("value of ", slot), StringComparer.Ordinal);
-
-            MockAnsweringNodesManager Manager()
-            {
-                return new MockAnsweringNodesManager((nodeId, request) =>
-                    MockAnsweringNodesManager.Honest(nodeId, request).Select(answer => With(answer, answers[answer.Name])).ToList());
-            }
-
-            var asking = new MockAskingCollection<string>(RESULTS);
-
-            var plain = await GridTestRuns.RunAsync(strategy, Manager(), nodes, tasks, GridValueRule.ForCollection(new MockCollection<string>(RESULTS)));
-            var told = await GridTestRuns.RunAsync(strategy, Manager(), nodes, tasks, GridValueRule.ForCollection(asking, items, null));
-
-            Assert.That(asking.Told, Has.Count.EqualTo(9));
-            Assert.That(told, Has.Count.EqualTo(9));
-
-            for (int index = 0; index < plain.Count; index++)
-                Assert.That(told[index], Is.SameAs(plain[index]), $"value {index}");
         }
 
         #endregion

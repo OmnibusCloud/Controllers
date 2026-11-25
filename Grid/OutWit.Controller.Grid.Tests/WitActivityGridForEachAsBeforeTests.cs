@@ -16,7 +16,8 @@ namespace OutWit.Controller.Grid.Tests
     /// down to the object: the results are the very objects the nodes returned, in the order the
     /// answers were taken, and a node is sent a task, its variables and the one name it is asked for,
     /// and nothing else. These tests state it by name, with a real engine and in-process nodes, so
-    /// that a change to how answers are kept or tasks are built has to keep both.
+    /// that a change to how answers are kept or tasks are built has to keep both. The last test holds
+    /// a call whose return collection asks to be told to the same tasks, letter for letter.
     /// </summary>
     [TestFixture]
     public class WitActivityGridForEachAsBeforeTests
@@ -200,6 +201,28 @@ namespace OutWit.Controller.Grid.Tests
             var status = Run(job);
 
             Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
+            Assert.That(nodes.Sent.OrderBy(line => line, StringComparer.Ordinal), Is.EqualTo(Sent(strategy, transformer, variables)));
+        }
+
+        [TestCaseSource(nameof(CALLS))]
+        public void ANodeIsSentTheSameWhenTheReturnCollectionAsksToBeToldTest(string strategy, string call, string transformer, string[] variables)
+        {
+            // For a collection that asks, Grid writes down which item every return slot was built
+            // for. That stays on the host: the tasks are, to the letter, the tasks of the test above.
+            var nodes = new MockRecordingNodesManager { CompatibleNodes = Fleet(strategy) };
+
+            WitEngineSdk.Instance.Reload(Guid.NewGuid(), nodes, false, null, m_controllersPath);
+
+            var job = WitEngineSdk.Instance.Compile(Script(strategy, "IntCollection", call));
+            var asking = new MockAskingCollection<int>(RESULTS);
+
+            Assert.That(job.Variables.TryRemove(RESULTS), Is.True);
+            job.Variables.Merge(new IWitVariable[] { asking });
+
+            var status = Run(job);
+
+            Assert.That(status.Result, Is.EqualTo(WitProcessingResult.Completed), status.Message);
+            Assert.That(asking.Told, Has.Count.EqualTo(variables.Length), "the collection did ask, and was told");
             Assert.That(nodes.Sent.OrderBy(line => line, StringComparer.Ordinal), Is.EqualTo(Sent(strategy, transformer, variables)));
         }
 
