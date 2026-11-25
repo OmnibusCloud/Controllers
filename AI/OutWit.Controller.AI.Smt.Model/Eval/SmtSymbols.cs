@@ -9,8 +9,14 @@ namespace OutWit.Controller.AI.Smt.Model.Eval;
 /// functions behind its arrays. A term of the problem never sees the model's own names.
 /// <para>
 /// A symbol the problem declares takes its value from the model, checked against the declared
-/// sort; one the model leaves out takes the default value of its sort, and the validation
-/// remembers that it did (<see cref="SmtMeter.Complete"/>).
+/// sort. A constant the model leaves out takes the value the answer of <c>get-value</c> reports
+/// for it, when there is one and that answer is taken; any other symbol the model leaves out
+/// takes the default value of its sort, and the validation remembers that it did
+/// (<see cref="SmtMeter.Complete"/>).
+/// </para>
+/// <para>
+/// Every read of a symbol the problem declares or defines is counted
+/// (<see cref="SmtMeter.Refer"/>): a value a solver reports is written without them.
 /// </para>
 /// </summary>
 internal sealed class SmtSymbols
@@ -65,7 +71,12 @@ internal sealed class SmtSymbols
             return SmtBoolValue.Of(string.Equals(name, SmtVocabulary.TRUE, StringComparison.Ordinal));
 
         if (m_run.Problem.Symbols.TryGetValue(name, out var symbol))
+        {
+            if (symbol.Kind is SmtSymbolKind.Declared or SmtSymbolKind.Defined)
+                m_meter.Refer();
+
             return Recall(m_constants, name, symbol, depth);
+        }
 
         return scope is { IsModel: true } ? Recall(m_modelConstants, name, null, depth) : throw Unknown(name);
     }
@@ -87,8 +98,10 @@ internal sealed class SmtSymbols
         switch (symbol.Kind)
         {
             case SmtSymbolKind.Defined:
+                m_meter.Refer();
                 return m_run.Evaluator.Call(symbol.Function!, arguments, depth);
             case SmtSymbolKind.Declared:
+                m_meter.Refer();
                 return m_run.Evaluator.Call(Interpretation(name, symbol), arguments, depth);
             case SmtSymbolKind.Constructor:
                 return Construct(symbol.Constructor!, arguments, depth);
@@ -134,6 +147,7 @@ internal sealed class SmtSymbols
         if (symbol.Kind != SmtSymbolKind.Declared || symbol.ParameterSorts!.Count == 0)
             return false;
 
+        m_meter.Refer();
         function = Interpretation(name, symbol);
         return true;
     }
@@ -189,12 +203,20 @@ internal sealed class SmtSymbols
 
     private SmtValue OfDeclared(string name, SmtSort sort, int depth)
     {
-        if (m_run.Model.TryGetConstant(name, out var term))
-            return m_run.Conformance.Conform(m_run.Evaluator.Eval(term, new SmtScope(true), depth + SmtEvaluator.CALL_LEVELS), sort, depth);
+        if (m_run.Model.Functions.TryGetValue(name, out var defined))
+        {
+            // Defined with parameters where the problem declares a constant: not what a solver prints.
+            if (defined.Parameters.Count != 0)
+                throw m_meter.Doubt();
 
-        // Defined with parameters where the problem declares a constant: not what a solver prints.
-        if (m_run.Model.Functions.ContainsKey(name))
-            throw m_meter.Doubt();
+            return m_run.Conformance.Conform(m_run.Evaluator.Eval(defined.Body, new SmtScope(true), depth + SmtEvaluator.CALL_LEVELS), sort, depth);
+        }
+
+        // The model's own text comes first: a reported value never stands in for a definition.
+        // Where the model leaves the constant out, the solver completed its model when it was
+        // asked for the value, and that value is the constant's.
+        if (m_run.TakesValues && m_run.Model.Completions.TryGetValue(name, out var reported))
+            return m_run.Conformance.Conform(m_run.Evaluator.Eval(reported, new SmtScope(true), depth + SmtEvaluator.CALL_LEVELS), sort, depth);
 
         m_meter.Complete();
         return m_run.Conformance.Default(sort, depth);
