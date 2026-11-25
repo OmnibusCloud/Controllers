@@ -42,6 +42,9 @@ internal static class SmtSessionCases
 
     private const long SMALL_RESOURCE_LIMIT = 100;
 
+    private const char HIGH_HALF = (char)0xD83D;
+    private const char LOW_HALF = (char)0xDE00;
+
     private static readonly Lazy<IReadOnlyList<SmtSessionCase>> ALL = new(Build);
 
     #endregion
@@ -92,6 +95,11 @@ internal static class SmtSessionCases
         Add("check-unknown-memout", check, "ok unknown memout", [SILENT, UNKNOWN, COUNTED, Reason("\"memout\"")]);
         Add("check-unknown-other", check, "ok unknown other", [SILENT, UNKNOWN, COUNTED, Reason("\"timeout\"")]);
         Add("check-unknown-reason-list", check, "ok unknown incomplete", [SILENT, UNKNOWN, COUNTED, Reason("(incomplete (theory arithmetic))")]);
+
+        // A model of surrogate pairs, longer than the transcript keeps: where a count of
+        // characters cuts it, the cut falls inside a pair, and the transcript a row carries still
+        // starts at a whole character.
+        Add("check-sat-model-of-pairs", check, "ok sat", [SILENT, SAT, COUNTED, "(" + string.Concat(Enumerable.Repeat(HIGH_HALF.ToString() + LOW_HALF, 9_000)) + ")"]);
 
         // check: a budget ended the session.
         Add("check-fuel-before-the-check", check, "ok unknown fuel", [], Ended("OutOfFuel"));

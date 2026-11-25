@@ -28,6 +28,11 @@ public sealed class SmtRowChecksOutcomeTests
     // a sandbox is made, and differs from it by that word alone.
     private const string HOST_FAULT = "host_fault";
 
+    private const int SEED = 20261125;
+    private const int CONVERSATIONS = 20_000;
+    private const int SHOWN = 10;
+    private const int SHOWN_CHARACTERS = 24;
+
     #endregion
 
     #region Session Tests
@@ -72,6 +77,53 @@ public sealed class SmtRowChecksOutcomeTests
             Assert.That(rows.Count(row => row.Status != SmtResultWords.OK && row.Models.Count > 0), Is.GreaterThanOrEqualTo(8));
             Assert.That(rows.Where(row => row.Verdict != SmtResultWords.NONE).Select(row => row.Status).Distinct(),
                 Is.EquivalentTo(new[] { SmtResultWords.OK, SmtResultWords.OUTPUT_EXCEEDED }), "the two statuses that claim a verdict");
+        });
+    }
+
+    [Test]
+    public void TheRowOfAnyConversationASolverCouldHoldIsTakenTest()
+    {
+        var generator = new SmtSessionCaseGenerator(SEED);
+        var statuses = new Dictionary<string, int>(StringComparer.Ordinal);
+        var answered = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var refused = new List<string>();
+        var keptModels = 0;
+
+        for (var number = 0; number < CONVERSATIONS; number++)
+        {
+            var one = generator.Next(number);
+            var row = SmtRowCheckRig.Row(one);
+
+            statuses[row.Status] = statuses.GetValueOrDefault(row.Status) + 1;
+            if (row.Status == SmtResultWords.OK)
+                answered[SmtNodeRig.Words(row)] = answered.GetValueOrDefault(SmtNodeRig.Words(row)) + 1;
+            else if (row.Models.Count > 0)
+                keptModels++;
+
+            if (!SmtRowCheckRig.Holds(row, one.Problem, one.Options) && refused.Count < SHOWN)
+                refused.Add($"{one.Id}: {Describe(row)}; answers {string.Join(" | ", one.Answers.Select(Shown))}; end {one.End?.Verdict ?? "Exited"} {one.End?.ExitCode ?? 0}; cancel {one.CancelAfter}");
+        }
+
+        TestContext.Out.WriteLine(string.Join(", ", statuses.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{pair.Key} {pair.Value}")));
+        TestContext.Out.WriteLine($"answered: {string.Join(", ", answered.Select(pair => $"{pair.Key} x{pair.Value}"))}");
+        TestContext.Out.WriteLine($"unanswered with models kept: {keptModels}");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(refused, Is.Empty, "a row a session made and the host refuses");
+
+            // The conversations reach the ends they are made for: every status a session ends in,
+            // every kind of answer of every query, and sessions that ended with models in hand.
+            Assert.That(statuses.Keys, Is.EquivalentTo(SmtResultWords.STATUSES.Where(status => status != SmtResultWords.REFUSED)));
+            Assert.That(statuses.Values, Has.All.GreaterThan(CONVERSATIONS / 100));
+            Assert.That(answered.Keys, Is.SupersetOf(new[]
+            {
+                "ok sat", "ok unsat", "ok unknown fuel", "ok unknown memout", "ok unknown rlimit", "ok unknown incomplete", "ok unknown other",
+                "ok sat counterexample", "ok unsat proved",
+                "ok unsat 0 complete", "ok sat 1 complete", "ok sat 2 complete", "ok sat 1 limit", "ok sat 2 limit", "ok sat 3 limit", "ok sat 4 limit",
+                "ok unknown fuel 0 incomplete", "ok sat fuel 1 incomplete", "ok sat memout 2 incomplete", "ok sat incomplete 1 incomplete", "ok sat rlimit 1 incomplete"
+            }));
+            Assert.That(keptModels, Is.GreaterThan(CONVERSATIONS / 20));
         });
     }
 
@@ -149,6 +201,13 @@ public sealed class SmtRowChecksOutcomeTests
     #endregion
 
     #region Tools
+
+    /// <summary>An answer of a conversation as a failure shows it: its start, on one line.</summary>
+    private static string Shown(string answer)
+    {
+        var start = answer.Length > SHOWN_CHARACTERS ? answer[..SHOWN_CHARACTERS] + "..." : answer;
+        return start.Replace("\n", " ", StringComparison.Ordinal);
+    }
 
     private static string Describe(SmtResultData row)
     {
