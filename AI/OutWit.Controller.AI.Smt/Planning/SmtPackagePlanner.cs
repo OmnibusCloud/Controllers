@@ -5,10 +5,10 @@ namespace OutWit.Controller.AI.Smt.Planning;
 
 /// <summary>
 /// How a run's problems are cut into the packages Grid.ForEach places on nodes. A package travels
-/// as one blob and is solved by one node's pool of sessions, so it should not be tiny (a transfer
-/// for a handful of problems, and a pool with nothing to share) and it must not be coarse (the
-/// split between nodes is only as fine as the packages, and the long tail of a package waits for
-/// its slowest problem). The rule: <see cref="MIN_PACKAGE_PROBLEMS"/> problems a package while the
+/// as one blob and is solved on one node, its problems on the node's sessions beside those of the
+/// other packages of its share, so it should not be tiny (a transfer for a handful of problems)
+/// and it must not be coarse (the split between nodes is only as fine as the packages, and a
+/// package's result goes back only with its slowest problem). The rule: <see cref="MIN_PACKAGE_PROBLEMS"/> problems a package while the
 /// run is small, and about <see cref="TARGET_PACKAGES"/> packages once it is large, never more than
 /// a node takes (<see cref="SmtPackageCodec.MAX_PACKAGE_PROBLEMS"/>); a package also ends before
 /// its problems' text passes <see cref="MAX_PACKAGE_CHARACTERS"/>. The cut depends on the problems
@@ -22,7 +22,7 @@ internal static class SmtPackagePlanner
     /// <summary>The number of packages a large run is cut into: fine enough for a split by rate over hundreds of nodes.</summary>
     public const int TARGET_PACKAGES = 1024;
 
-    /// <summary>The fewest problems a package holds while there are that many left: a pool of sessions has something to share.</summary>
+    /// <summary>The fewest problems a package holds while there are that many left: a transfer and a check carry enough work.</summary>
     public const int MIN_PACKAGE_PROBLEMS = 16;
 
     /// <summary>The most characters of text the problems of one package carry together (their texts and the terms beside them).</summary>

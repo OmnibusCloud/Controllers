@@ -52,42 +52,42 @@ internal static class SmtBudgetRig
     public static async Task<SmtBudgetRun> SolveAsync(object budget, SmtTaskPackageData package, string problemsPath, string resultsPath,
         SmtScriptedSolver solver, CancellationToken cancellationToken)
     {
-        SmtSessionBudgetTurn turn;
+        // What is awaited here is a task as a plain task, never as a task of a controller type: its
+        // awaiter would be a field of this method's state machine, a value type of the tests. The
+        // result is read in a method body once the task has ended.
+        var entering = EnterAsync(budget, cancellationToken);
         try
         {
-            turn = await ((SmtSessionBudget)budget).EnterAsync(cancellationToken);
+            await entering;
         }
         catch (OperationCanceledException)
         {
             return new SmtBudgetRun { Cancelled = true };
         }
 
+        var turn = ResultOf(entering);
+
         try
         {
-            var degree = SmtPackageRunner.Prepare(package, null, turn.Degree);
-            var sessionBytes = SmtSandboxDegree.SessionBytes(package.Options!);
+            var (degree, reason, fault) = Prepare(turn, package);
+            if (fault != null)
+                return new SmtBudgetRun { Fault = fault };
 
-            var written = await SmtPackageRunner.RunAsync(turn, package, problemsPath, (problem, _, token) =>
-            {
-                var (milliseconds, cancelled) = solver.Session(package.Ticket, problem.Id, sessionBytes, token);
-                return cancelled
-                    ? new SmtSolveOutcome { Status = SmtSolveStatus.NodeFault, Code = SmtSolveCodes.CANCELLED, Message = "the session was cancelled", Query = problem.Query }
-                    : new SmtSolveOutcome { Status = SmtSolveStatus.Ok, Query = problem.Query, Verdict = SmtVerdict.Sat, Fuel = milliseconds, WallMs = milliseconds };
-            }, resultsPath, null, NullLogger.Instance, cancellationToken);
-
-            return new SmtBudgetRun { Rows = SmtNodeRig.ReadRows(written.Path, package.ProblemCount), Degree = degree.Degree, Reason = degree.Reason };
-        }
-        catch (SmtPackageException refused)
-        {
-            return new SmtBudgetRun { Fault = refused.Code };
+            var running = RunAsync(turn, package, problemsPath, resultsPath, solver, cancellationToken);
+            await running;
+            return new SmtBudgetRun { Rows = SmtNodeRig.ReadRows(WrittenPath(running), package.ProblemCount), Degree = degree, Reason = reason };
         }
         catch (OperationCanceledException)
         {
             return new SmtBudgetRun { Cancelled = true, ResultsLeft = File.Exists(resultsPath) };
         }
+        catch (Exception exception) when (RefusalCode(exception) is not null)
+        {
+            return new SmtBudgetRun { Fault = RefusalCode(exception) };
+        }
         finally
         {
-            turn.Dispose();
+            ((IDisposable)turn).Dispose();
         }
     }
 
@@ -107,6 +107,51 @@ internal static class SmtBudgetRig
     {
         SmtSessionBudget.Node.ResetPeaks();
         return SmtSessionBudget.Node;
+    }
+
+    private static Task EnterAsync(object budget, CancellationToken cancellationToken)
+    {
+        return ((SmtSessionBudget)budget).EnterAsync(cancellationToken);
+    }
+
+    private static object ResultOf(Task entering)
+    {
+        return ((Task<SmtSessionBudgetTurn>)entering).Result;
+    }
+
+    private static string WrittenPath(Task running)
+    {
+        return ((Task<SmtWrittenResults>)running).Result.Path;
+    }
+
+    private static (int Degree, string Reason, string? Fault) Prepare(object turn, SmtTaskPackageData package)
+    {
+        try
+        {
+            var degree = SmtPackageRunner.Prepare(package, null, ((SmtSessionBudgetTurn)turn).Degree);
+            return (degree.Degree, degree.Reason, null);
+        }
+        catch (SmtPackageException refused)
+        {
+            return (0, "", refused.Code);
+        }
+    }
+
+    private static Task RunAsync(object turn, SmtTaskPackageData package, string problemsPath, string resultsPath, SmtScriptedSolver solver, CancellationToken cancellationToken)
+    {
+        var sessionBytes = SmtSandboxDegree.SessionBytes(package.Options!);
+        return SmtPackageRunner.RunAsync((SmtSessionBudgetTurn)turn, package, problemsPath, (problem, _, token) =>
+            {
+                var (milliseconds, cancelled) = solver.Session(package.Ticket, problem.Id, sessionBytes, token);
+                return cancelled
+                    ? new SmtSolveOutcome { Status = SmtSolveStatus.NodeFault, Code = SmtSolveCodes.CANCELLED, Message = "the session was cancelled", Query = problem.Query }
+                    : new SmtSolveOutcome { Status = SmtSolveStatus.Ok, Query = problem.Query, Verdict = SmtVerdict.Sat, Fuel = milliseconds, WallMs = milliseconds };
+            }, resultsPath, null, NullLogger.Instance, cancellationToken);
+    }
+
+    private static string? RefusalCode(Exception exception)
+    {
+        return exception is SmtPackageException refused ? refused.Code : null;
     }
 
     #endregion
