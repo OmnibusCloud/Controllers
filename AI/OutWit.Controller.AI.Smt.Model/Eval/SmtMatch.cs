@@ -79,6 +79,12 @@ internal sealed class SmtMatch
         if (!pattern.IsList || pattern.Items.Count < 2 || !TryConstructor(pattern.Items[0], value, out var constructor) || constructor.Arity != pattern.Items.Count - 1)
             throw m_meter.Doubt();
 
+        // Every variable of the pattern is checked and told apart from the others, whichever
+        // constructor the value has, and a constructor has as many fields as its declaration
+        // gives it: the variables are paid for before the pattern is read, beside the one step
+        // of the case.
+        m_meter.Charge((long)constructor.Arity * SmtTerms.VARIABLE_STEPS);
+
         // Two wildcards are no repeated name: nothing is bound for either.
         var names = new List<string>(constructor.Arity);
         for (var index = 1; index < pattern.Items.Count; index++)

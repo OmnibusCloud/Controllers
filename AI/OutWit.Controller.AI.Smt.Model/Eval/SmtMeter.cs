@@ -8,8 +8,11 @@ namespace OutWit.Controller.AI.Smt.Model.Eval;
 /// before it works, so a validation ends within its budget whatever the input is.
 /// <para>
 /// A step is one term evaluated; an operation on a large value pays as many steps as the
-/// machine words it touches, and a value pays for the memory it takes when it is made. The
-/// steps therefore bound the time and the memory of a validation together.
+/// machine words it touches, and a value pays for the memory it takes when it is made. What a
+/// term carries that is longer than a term pays by its length as well: a name each time it is
+/// read as text (<see cref="ChargeName"/>), a list that is read whole, the digits of a literal
+/// and the characters of a string. The steps therefore bound the time and the memory of a
+/// validation together.
 /// </para>
 /// </summary>
 internal sealed class SmtMeter

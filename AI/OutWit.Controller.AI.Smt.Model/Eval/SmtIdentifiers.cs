@@ -10,6 +10,13 @@ namespace OutWit.Controller.AI.Smt.Model.Eval;
 /// </summary>
 internal sealed class SmtIdentifiers
 {
+    #region Constants
+
+    /// <summary>The most indices an operator takes: the two positions of <c>extract</c>.</summary>
+    private const int MAX_INDICES = 2;
+
+    #endregion
+
     #region Fields
 
     private readonly SmtRun m_run;
@@ -118,6 +125,12 @@ internal sealed class SmtIdentifiers
 
         if (!SmtVocabulary.TryGetIndexedOperator(name, out var known))
             throw Unknown(name);
+
+        // No operator takes more indices than MAX_INDICES. A longer list is read to the end all
+        // the same, to find an index that is no numeral: it pays a step an index for that,
+        // before it is read.
+        if (head.Count - 2 > MAX_INDICES)
+            m_meter.Charge(head.Count - 2);
 
         var indices = new int[head.Count - 2];
         for (var index = 0; index < indices.Length; index++)
