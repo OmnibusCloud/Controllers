@@ -14,8 +14,9 @@ namespace OutWit.Controller.AI.Smt.Activities;
 /// of sessions of the pinned solver, writes a row of each to a blob and returns the reference to it
 /// (<c>SmtResultPackage</c>). A function of its input: the same package gives the same rows on
 /// every node, so a retry or a copy elsewhere is safe. A node starts every package of its share
-/// together so that the blobs arrive ahead of the work; one package is solved at a time in a
-/// process, since its sessions take the node's cores. The planner sends it to machines of
+/// together so that the blobs arrive ahead of the work; the problems of its packages share one
+/// budget of sessions in the process (the node's cores and memory), a session that ends going to
+/// the next problem waiting, of the same package or of the next one. The planner sends it to machines of
 /// <see cref="SmtSandboxDegree.MIN_RAM_MB"/> at least: below that one session at the default
 /// options does not fit in what a machine has available.
 /// </summary>

@@ -4,12 +4,14 @@ using OutWit.Controller.AI.Wasm;
 namespace OutWit.Controller.AI.Smt.Sandbox;
 
 /// <summary>
-/// Runs the sessions of a package on dedicated worker threads below normal priority: a node is
-/// often somebody's desktop, and a package would otherwise take every core at normal priority for
-/// its whole wall time. Dedicated threads rather than the thread pool, so that the priority is ours
-/// to set and the degree is exact; each is made to hold a guest's stack
-/// (<see cref="WasmHostGuestThread"/>). Windows honours thread priorities; Linux ignores them for
-/// ordinary threads, where the degree cap is what protects the desktop.
+/// Runs a fixed set of sessions (the benchmark's runs, a local run of smt-live) on dedicated worker
+/// threads below normal priority: a node is often somebody's desktop, and the sessions would
+/// otherwise take every core at normal priority for their whole wall time. Dedicated threads rather
+/// than the thread pool, so that the priority is ours to set and the degree is exact; each is made
+/// to hold a guest's stack (<see cref="WasmHostGuestThread"/>). Windows honours thread priorities;
+/// Linux ignores them for ordinary threads, where the degree cap is what protects the desktop. The
+/// packages of a node share the sessions of its budget instead (<see cref="SmtSessionBudget"/>),
+/// on threads of the same kind.
 /// </summary>
 internal static class SmtWorkerPool
 {

@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Smt</ControllerName>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Description>SMT problems solved on anonymous nodes by a pinned Z3 that runs as a WebAssembly module in a wasm sandbox: check, enumerate and prove under a deterministic budget, so the same problem gives the same answer, the same model and the same cost on every machine.</Description>
     <PackageTags>smt;smt-lib;z3;solver;wasm;wasmtime;witengine;witcloud;controller</PackageTags>
     <ControllerFeatures>smt-solve</ControllerFeatures>
