@@ -71,6 +71,8 @@ internal sealed class SmtSessionBudget
 
     private readonly Func<(int Cores, long AvailableBytes)>? m_read;
 
+    private readonly Func<Action, Thread> m_makeThread;
+
     private readonly int m_maxOpen;
 
     private readonly LinkedList<SmtSessionBudgetTurn> m_waiting = new();
@@ -110,10 +112,12 @@ internal sealed class SmtSessionBudget
     /// <summary>The budget of a machine that is read (<see cref="Node"/> on a node).</summary>
     /// <param name="read">Reads the machine's logical cores and its available memory (0 or less when it cannot say).</param>
     /// <param name="maxOpen">The most packages open at once.</param>
-    public SmtSessionBudget(Func<(int Cores, long AvailableBytes)> read, int maxOpen = MAX_OPEN_PACKAGES)
+    /// <param name="makeThread">Makes the thread a session runs on, not started; null for a thread that holds a guest's stack (<see cref="WasmHostGuestThread.Create"/>).</param>
+    public SmtSessionBudget(Func<(int Cores, long AvailableBytes)> read, int maxOpen = MAX_OPEN_PACKAGES, Func<Action, Thread>? makeThread = null)
     {
         m_read = read ?? throw new ArgumentNullException(nameof(read));
         m_maxOpen = Math.Max(1, maxOpen);
+        m_makeThread = makeThread ?? WasmHostGuestThread.Create;
     }
 
     /// <summary>A budget of a number of sessions whatever the machine, the memory not counted: one package's pool of a given degree.</summary>
@@ -121,6 +125,7 @@ internal sealed class SmtSessionBudget
     public SmtSessionBudget(int sessions)
     {
         m_maxOpen = MAX_OPEN_PACKAGES;
+        m_makeThread = WasmHostGuestThread.Create;
         m_hasReading = true;
         m_cores = Math.Max(1, sessions);
         m_sessionCap = m_cores;
@@ -361,7 +366,7 @@ internal sealed class SmtSessionBudget
 
     private void StartWorker(SmtSessionBudgetTurn turn, int index)
     {
-        var thread = WasmHostGuestThread.Create(() => Work(turn, index));
+        var thread = m_makeThread(() => Work(turn, index));
         thread.IsBackground = true;
         thread.Name = $"{WORKER_NAME}-{m_threads++}";
         thread.Priority = SmtWorkerPool.WORKER_PRIORITY;

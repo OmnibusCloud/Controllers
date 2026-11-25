@@ -38,6 +38,21 @@ internal static class SmtWorkerPool
     /// <exception cref="Exception">The first exception a worker threw, rethrown after every worker stopped.</exception>
     public static void Run(int count, int degree, Action<int> body, CancellationToken cancellationToken = default)
     {
+        Run(count, degree, body, WasmHostGuestThread.Create, cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="body"/> as <see cref="Run(int, int, Action{int}, CancellationToken)"/> does, on threads made as told.
+    /// </summary>
+    /// <param name="count">Number of work items.</param>
+    /// <param name="degree">Upper bound on concurrent workers; clamped to <c>[1, count]</c>.</param>
+    /// <param name="body">The work for one index; may run concurrently with itself.</param>
+    /// <param name="makeThread">Makes a worker's thread, not started.</param>
+    /// <param name="cancellationToken">Once cancelled, no further index starts; the indices already running finish, then the call throws.</param>
+    /// <exception cref="OperationCanceledException">The token was cancelled before every index ran.</exception>
+    /// <exception cref="Exception">The first exception a worker threw, rethrown after every worker stopped.</exception>
+    public static void Run(int count, int degree, Action<int> body, Func<Action, Thread> makeThread, CancellationToken cancellationToken = default)
+    {
         if (count <= 0)
             return;
 
@@ -48,7 +63,7 @@ internal static class SmtWorkerPool
         var threads = new Thread[workers];
         for (var worker = 0; worker < workers; worker++)
         {
-            var thread = WasmHostGuestThread.Create(() =>
+            var thread = makeThread(() =>
             {
                 while (true)
                 {

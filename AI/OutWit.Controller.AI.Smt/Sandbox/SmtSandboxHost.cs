@@ -68,11 +68,23 @@ internal static class SmtSandboxHost
             if (m_instance != null)
                 return m_instance;
 
-            var storage = Volatile.Read(ref m_tempStorage);
-            m_instance = Create(SmtModuleLocator.Locate(), storage?.CreateScope(SCOPE_LABEL), out problem);
+            m_instance = Make(SmtModuleLocator.Locate(), Volatile.Read(ref m_tempStorage), out problem);
             Volatile.Write(ref m_lastProblem, problem);
             return m_instance;
         }
+    }
+
+    /// <summary>
+    /// Makes a sandbox whose own files of a run live in a scope of a temp storage, or says in fixed
+    /// words why there is none.
+    /// </summary>
+    /// <param name="modulePath">The module file, or null when none was found.</param>
+    /// <param name="storage">The host's temp storage, or null for a folder in the operating system's temp path.</param>
+    /// <param name="problem">Why no sandbox was made; null when one was.</param>
+    /// <returns>The sandbox, or null.</returns>
+    public static SmtSandbox? Make(string? modulePath, IWitTempStorage? storage, out string? problem)
+    {
+        return Create(modulePath, storage?.CreateScope(SCOPE_LABEL), out problem);
     }
 
     /// <summary>
