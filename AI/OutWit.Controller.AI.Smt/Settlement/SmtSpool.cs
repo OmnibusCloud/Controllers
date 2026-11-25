@@ -66,7 +66,7 @@ internal sealed class SmtSpool : IDisposable
     /// never been written.
     /// </summary>
     /// <param name="length">The length to go back to, as <see cref="Length"/> gave it.</param>
-    /// <exception cref="ArgumentOutOfRangeException">The spool was never that long, or the length is below zero.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The spool is shorter than that, or the length is below zero.</exception>
     public void Rewind(long length)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(length);
