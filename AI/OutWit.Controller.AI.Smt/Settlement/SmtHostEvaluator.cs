@@ -30,8 +30,10 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// </para>
 /// <para>
 /// <b>What a check may cost.</b> A model's text is read under limits of the reader's own
-/// (<see cref="LIMITS"/>), each at what the evaluator could use at the most: a text past one is
-/// no model the evaluator could check, and is unreadable before it is held. A model is checked
+/// (<see cref="LIMITS"/>): its nesting, numbers, literals and strings at what the evaluator could
+/// use at the most, its names at what a problem holds, its tokens above the largest model the
+/// controller's sets and kits hold. A text past one is no model the host checks, and is
+/// unreadable before it is held. A model is checked
 /// under the evaluator's budget, and the models of one result package under the package's
 /// (<see cref="SmtPackageBudget"/>): a row whose package has no steps left is not checked further
 /// and is partial (<see cref="SmtRunWords.BUDGET_PACKAGE"/>).
@@ -51,8 +53,14 @@ internal sealed class SmtHostEvaluator
     /// <summary>The most characters of a model or of an answer of values the host reads: twice what a session may write in all.</summary>
     public const int MAX_MODEL_CHARACTERS = 2 * SmtProfile.OUTPUT_LIMIT_BYTES;
 
-    /// <summary>The most tokens of a model or of an answer of values the host reads, every atom and every parenthesis one.</summary>
-    public const int MAX_MODEL_TOKENS = 4 * 1024 * 1024;
+    /// <summary>
+    /// The most tokens of a model or of an answer of values the host reads, every atom and every
+    /// parenthesis one: 5 Mi. The largest model of the controller's sets and kits, a solver's
+    /// definitions of 15.9 million characters that nearly fill a session's output, has 3,376,297;
+    /// the limit is a half above it, and a text of one-letter atoms that fills a session's output
+    /// is refused five eighths of the way into it.
+    /// </summary>
+    public const int MAX_MODEL_TOKENS = 5 * 1024 * 1024;
 
     /// <summary>
     /// The most digits of a numeral or a decimal of a model: a numeral of more is wider than the
@@ -63,8 +71,11 @@ internal sealed class SmtHostEvaluator
 
     /// <summary>
     /// How a model is read: within its characters, its tokens, the evaluator's highest nesting
-    /// ceiling (deeper nesting can only end the check at that ceiling), the evaluator's ceilings of
-    /// a number, a bit-vector and a string, and names no longer than the longest a problem can hold.
+    /// ceiling (the deepest model of the sets and kits nests 83 lists deep; a term nested deeper
+    /// ends a check at that ceiling, and a chain of definitions' conditionals nested deeper, which
+    /// the evaluator would walk without nesting, is refused all the same), the evaluator's ceilings
+    /// of a number, a bit-vector and a string, and names no longer than the longest a problem can
+    /// hold.
     /// </summary>
     public static readonly SmtReaderLimits LIMITS = new()
     {

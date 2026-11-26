@@ -20,7 +20,7 @@ application that prepares a run, the host that splits it, the node that solves i
 | `SmtReader` | reads SMT-LIB 2.6 text into s-expressions: a script, a term, a model a solver printed |
 | `SmtExpression` | one s-expression: a list, or an atom with its text; written back, it is one line of single-spaced tokens that reads as the same s-expression |
 | `SmtExpressionKind` | list, symbol, keyword, numeral, decimal, hexadecimal, binary, string |
-| `SmtReaderLimits` | how much the reader takes before it refuses: characters, tokens, nesting, digits of a number, bits of a literal, characters of a string; `SmtReaderLimits.Problem` holds the ceilings of a submitted problem |
+| `SmtReaderLimits` | how much the reader takes before it refuses: characters, tokens, nesting, digits of a number, bits of a literal, characters of a string, characters of a name; `SmtReaderLimits.Problem` holds the ceilings of a submitted problem (its names are bounded by its characters) |
 | `SmtSyntaxException` / `SmtSyntaxFault` | a refusal: what is wrong, the line and the column, a sentence without the text itself |
 | `SmtReservedWords` | the reserved words of the standard: the general ones and the command names |
 | `SmtLexicon` | the character classes the reader and the writer share: blanks, delimiters, the characters of a simple symbol |
@@ -251,7 +251,12 @@ Around the row: a line is at most 16 MiB (16,777,216 bytes), its line end not co
 longer one is refused and passed over without being held in memory; a line that is empty or only
 blanks is no row; a line ends with a line feed, with or without a carriage return before it; a
 byte order mark at the very start is skipped. A set has at most 1,000,000 rows: the row after
-that is refused once, and reading ends. A refused row does not stop the reading.
+that is refused once, and reading ends. A set has at most 4 GiB (4,294,967,296 bytes), every byte
+counted as it arrives, blank lines, line ends and the mark among them: the line that would pass
+it is refused once, nothing of it or after it is read, and the stream is not read on. A refused
+row does not stop the reading. Lines are numbered in the set's order, blank lines counted; a
+`Row` is an `int`, and a line past the largest one (only a set of more than two gigabytes of
+blank lines has one) is numbered as that one.
 
 ### The codes of a row
 
@@ -273,6 +278,7 @@ characters, never more of the row.
 | `field_not_allowed` | the row holds a name that is no field of a row (a misspelt field is one), or a field of another query than the row's |
 | `unknown_constant` | a name of `project` is not a constant the problem declares |
 | `too_many_problems` | the set has more than 1,000,000 rows; this row and what follows it were not read |
+| `set_too_large` | the set has more than 4 GiB; this line, which passes the bound, and what follows it were not read |
 
 What is looked at, in this order: the line is a row and every field that was given reads (the
 first fault in the order of the line); the row has its id, and no earlier row has it; it has its
@@ -629,7 +635,7 @@ with the same vocabulary the controller writes them in.
 |---|---|
 | `SmtPreflightData` | what a problem set and a run's options come to before anything is sent (`Smt.Preflight`): the set counted (rows, taken, refused by code with the first 100 refusals in full, by logic, by query, by expected verdict, the stripped commands, the licences), the SHA-256 of the set, the options checked by name, the budget of a problem as numbers (the resource limit, the hard cap and its fuel, the memory, the models of an enumeration, the seed, the sampling rate), the memory a node needs for one session, the upper bound "taken problems times the hard cap" (a bound, never an estimate of a duration), and the packages a run would cut the set into |
 | `SmtCountData` | one count of a table of the preflight: a name and how many times it was met |
-| `SmtRunWords` | the words a run's documents add to a node's row: the host's statuses `no_result` and `disputed`; the reasons of a repair or a problem without a result the host gives itself (`no_answer`, `node_refused`); how an answer was settled (`one_copy`, `copies`, `dispute`, `agreement`); the evaluator's classes as a row writes them (`validated`, `partial`, `failed`, `none`); the agreement with the expected verdict (`agree`, `disagree`, `n/a`); the causes of a dispute (`digests_differ`, `model_failed`, `surplus`) and its outcomes (`resolved`, `no_majority`, `too_few_copies`, `surplus_copies`); whether the platform told the host which package each result came back for (`bound`, `unbound`, `mixed`, `none`) |
+| `SmtRunWords` | the words a run's documents add to a node's row: the host's statuses `no_result` and `disputed`; the reasons of a repair or a problem without a result the host gives itself (`no_answer`, `node_refused`); how an answer was settled (`one_copy`, `copies`, `dispute`, `agreement`); the evaluator's classes as a row writes them (`validated`, `partial`, `failed`, `none`) and the host's own reasons of a `partial` row (`output_exceeded`: the model did not fit the session's output; `budget_package`: the row's result package had used up what the host's evaluator spends on one package); the agreement with the expected verdict (`agree`, `disagree`, `n/a`); the causes of a dispute (`digests_differ`, `model_failed`, `surplus`) and its outcomes (`resolved`, `no_majority`, `too_few_copies`, `surplus_copies`); whether the platform told the host which package each result came back for (`bound`, `unbound`, `mixed`, `none`) |
 
 A preflight is `Runnable` when its options are in range, its profile is the controller's and the
 set has a row. Options out of range are said, one sentence an option, and the set is still read

@@ -93,7 +93,9 @@ of the model package): `id`, `smt2`, and the fields of the row's query (`values`
 reader, the sanitizer and their refusal codes are the model package's
 ([README](../../OutWit.Controller.AI.Smt.Model/README.md)): the same code reads a set in an
 application, on the server and on the node. A refused row costs nothing and has its row in the
-results.
+results. A set has at most 1,000,000 rows and 4 GiB, every byte counted (blank lines and line
+ends among them): the row past the first and the line past the second are refused once
+(`too_many_problems`, `set_too_large`), and the run goes on with the rows before them.
 
 An enumeration tells the solver a found model's values back to rule the model out. The pinned
 solver takes back every value but the elements of a sort a problem only declares
@@ -118,7 +120,7 @@ One JSON line a row of the set, in the set's order, refused rows included.
 | `proof` | a proof: `proved` or `counterexample` |
 | `model`, `values` | a check's model and the values it asked for; a proof's counterexample |
 | `model_truncated` | the texts above are the solver's own and are shown up to 64 KB a row, whole texts only; past that they are null and this is true. The full models stay in the run's ledger, the server's own blob |
-| `validation`, `validation_reason`, `validation_detail` | what the server's evaluator said of every model and of the values that came with it: `validated`, `partial` (with the reason), `failed` (`assertion_false` with the assertion, or `value_mismatch` with the value), or `none` when there is no model |
+| `validation`, `validation_reason`, `validation_detail` | what the server's evaluator said of every model and of the values that came with it: `validated`, `partial` (with the reason: the evaluator's, `output_exceeded`, or `budget_package` when the row's result package had used up what the server spends on one package), `failed` (`assertion_false` with the assertion, or `value_mismatch` with the value), or `none` when there is no model |
 | `copies`, `agreed`, `settled_by` | how many answers the problem was ruled on, whether all gave one digest, and how the answer was settled: `one_copy` (it rests on one machine), `copies` (two machines of one fan-out at least: two answers the platform said came back for two tasks of the problem's package), `dispute`, `agreement` |
 | `digest`, `stats` | the digest of the settled row (the same on every honest machine), its resource count, fuel and checks |
 | `tags` | passed through |
@@ -219,6 +221,27 @@ What it does not claim:
 - **`partial` is not checked to the end.** Quantifiers, algebraic numbers, regular expressions,
   floating point and the other reasons of the model package's evaluator leave a model partial: it
   rests on the copies too. A model past the session's output cap is partial (`output_exceeded`).
+- **What a node can make the server spend is bounded, and a node can spend it.** One model's check
+  has the evaluator's budget (20,000,000 steps, about half a second); the models of one result
+  package have 3,000,000,000 steps together (about a minute of a desktop machine), a model paying
+  its steps, four steps a character of its text and 10,000 for its check's setting up. A package
+  spends only on its own rows, in their order: once it has spent its budget, its later rows are
+  `partial` (`budget_package`) and rest on the copies, and the rows of every other package are
+  checked as before. So the server's evaluator spends on a run at most its result packages times
+  that budget, in `Smt.Disputes` and again in `Smt.Settle`, whatever the nodes return; a node that
+  returns models made to use the budget up costs the server about a minute for every package it
+  answers, and leaves the rows of those packages unchecked past their budget. The budget binds
+  where a row may hold many models (an enumeration of up to 1,000) or a package many rows (up to
+  256); a package of 16 rows of one model each costs less than it at the most. The dearest honest
+  package of the controller's test sets and kits (one of the long-tail kit's, eight models of up
+  to 15.9 million characters) costs 192,176,798 steps, and 272,433,418 when that kit is cut into
+  packages of 256 problems: the budget is fifteen and eleven times that. A model is also read
+  under limits of its own before anything is evaluated (32 Mi characters, 5,242,880 tokens,
+  nesting 131,072, the evaluator's ceilings of a number, a literal and a string, a name of at
+  most what a problem can hold): a model past one is `partial` (`unreadable_model`, or
+  `unreadable_values` for the values). The tokens are half as many again as the largest model of
+  the sets and kits has (3,376,297 in 15.9 million characters); a model of more, near a session's
+  output cap, is not checked.
 - **A value the evaluator does not compute is not vouched for.** A row that asks for the value of
   a term the evaluator leaves open (a division by zero, a selector of another constructor, a
   quantified term, the reasons above) is `partial` with that reason, whatever its model is: the
@@ -246,12 +269,14 @@ What it does not claim:
 
 | | |
 |---|---|
-| Problems in a set | 1,000,000 rows |
+| Problems in a set | 1,000,000 rows, 4 GiB (every byte); past either the reading ends with one refusal |
 | A problem | 4,194,304 characters, 2,000,000 tokens, nesting 100,000 (the model package's ceilings) |
 | A package | 16 to 256 problems, about 1,024 packages once a run is large, at most 32 Mi characters of text; a node takes at most 256 problems and 257 MiB |
 | A session's output | 16 MiB; past it the row is `output_exceeded` and keeps its verdict |
 | A row a node returns | its models and values within the session's output (16 Mi characters together); 48 MiB and 64 KiB as bytes in its package (`packages.max_result_frame_bytes` of the capabilities) |
 | What a lab sees of a row's models | 64 KB |
+| A model the server reads | 32 Mi characters, 5,242,880 tokens, nesting 131,072, 325,059 digits of a number, a literal of 1,048,576 bits, a string of 1,048,576 characters, a name of 4,194,304 characters; past one it is `unreadable_model` |
+| What the server's evaluator spends | 20,000,000 steps a model (the evaluator's budget), 3,000,000,000 steps the models of one result package together (a model's text paying four steps a character, its check's setting up 10,000); past it a package's rows are `budget_package` |
 | What the server keeps of one run while it settles it | 128 GiB of the nodes' rows, 2 GiB of the full models of the rows whose models were cut; a run past either is not settled, and the job fails with `smt_rows_bound` or `smt_models_bound` |
 | Memory of one session on a node | twice the host's cap of the solver's memory and 192 MiB: 2,752 MiB under the defaults |
 | Memory of a node's machine | 7,680 MiB at least as the node reports it (a machine sold as 8 GB; `node.min_ram_mb` of the capabilities); the sessions may claim three quarters of what it has available |
@@ -266,7 +291,9 @@ whole in the server's memory, which holds a small record a copy and a few number
 work is split once and sent once by the nodes' rates; the repair round and the dispute round are
 the only second sends. A node solves the packages of its share on one budget of sessions: a
 session that ends goes to the next problem waiting, of the same package or of the next one, so a
-package's slowest problem does not hold the node's other sessions. The load test of the build server runs ten thousand problems through
+package's slowest problem does not hold the node's other sessions. The server's activities look at
+the job's cancellation before every package, row and model they read: a cancelled job ends them
+at the next one, and their working files go with them. The load test of the build server runs ten thousand problems through
 `SmtRun` on three in-process nodes with the memory and every message measured: a request carries
 one package reference, an answer one result reference.
 

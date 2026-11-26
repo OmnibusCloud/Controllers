@@ -23,14 +23,30 @@ internal sealed class SmtPackageBudget
 {
     #region Constants
 
-    /// <summary>The steps the models of one result package may cost the host together.</summary>
-    public const long DEFAULT_STEPS = 1_000_000_000;
+    /// <summary>
+    /// The steps the models of one result package may cost the host together: 3,000,000,000, about
+    /// a minute of a desktop machine. The dearest honest package of the controller's sets and kits,
+    /// one of the long-tail kit's with eight models of up to 15.9 million characters, costs
+    /// 192,176,798 as the planner cuts that kit; cut into packages of 256 problems, the most a
+    /// package holds, its dearest costs 272,433,418. The budget is fifteen times the one and eleven
+    /// times the other.
+    /// </summary>
+    public const long DEFAULT_STEPS = 3_000_000_000;
 
-    /// <summary>What one model pays besides its steps: the thread its check runs on, the model's reading, the check's setting up.</summary>
+    /// <summary>
+    /// What one model pays besides its steps and its text: the thread its check runs on and the
+    /// check's setting up. Checking a model of one definition was measured at the time of about
+    /// 7,500 steps; it is priced higher.
+    /// </summary>
     public const long MODEL_STEPS = 10_000;
 
-    /// <summary>The characters of a model's text, and of the values beside it, that one step pays for reading.</summary>
-    public const int CHARACTERS_PER_STEP = 1;
+    /// <summary>
+    /// What a character of a model's text, or of the values beside it, pays for its reading, done
+    /// before a step is counted. Reading a solver's definitions was measured at the time of about
+    /// two steps a character, a text of one-letter atoms at four (an object a token); it is priced
+    /// at the dearer one.
+    /// </summary>
+    public const int STEPS_PER_CHARACTER = 4;
 
     #endregion
 
@@ -51,7 +67,7 @@ internal sealed class SmtPackageBudget
         // A check that threw, or that ended in a fault of the evaluator, may have spent its whole
         // budget before it did: it pays the whole budget.
         var steps = validation == null || validation.Reason == SmtValidationReasons.EVALUATOR_ERROR ? SmtEvaluationBudget.DEFAULT_STEPS : Math.Max(0, validation.Steps);
-        return MODEL_STEPS + Math.Max(0, characters) / CHARACTERS_PER_STEP + steps;
+        return MODEL_STEPS + Math.Max(0, characters) * STEPS_PER_CHARACTER + steps;
     }
 
     /// <summary>Whether the package has steps left under a budget.</summary>

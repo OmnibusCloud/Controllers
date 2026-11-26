@@ -168,6 +168,30 @@ public sealed class SmtPackageBudgetTests
 
     #endregion
 
+    #region Number Tests
+
+    [Test]
+    public void BudgetIsTheNumberTheDocumentsStateTest()
+    {
+        var readme = File.ReadAllText(Path.Combine(Root(), "AI", "OutWit.Controller.AI.Smt", "README.md")).Replace("\r\n", " ").Replace("\n", " ");
+        var capabilities = File.ReadAllText(Path.Combine(Root(), "AI", "OutWit.Controller.AI.Smt", "docs", "capabilities.md")).Replace("\r\n", " ").Replace("\n", " ");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That((SmtPackageBudget.DEFAULT_STEPS, SmtPackageBudget.MODEL_STEPS, SmtPackageBudget.STEPS_PER_CHARACTER), Is.EqualTo((3_000_000_000L, 10_000L, 4)));
+            Assert.That(SmtSettlementBounds.DEFAULT.PackageSteps, Is.EqualTo(SmtPackageBudget.DEFAULT_STEPS));
+            foreach (var (name, document) in new[] { ("README", readme), ("capabilities", capabilities) })
+            {
+                Assert.That(document, Does.Contain("3,000,000,000 steps"), name);
+                Assert.That(document, Does.Contain("four steps a character"), name);
+                Assert.That(document, Does.Contain("10,000"), name);
+                Assert.That(document, Does.Contain("`budget_package`"), name);
+            }
+        });
+    }
+
+    #endregion
+
     #region Walk Tests
 
     [Test]
@@ -197,9 +221,9 @@ public sealed class SmtPackageBudgetTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(SmtPackageBudget.Price(fault, 10), Is.EqualTo(SmtPackageBudget.MODEL_STEPS + 10 / SmtPackageBudget.CHARACTERS_PER_STEP + SmtEvaluationBudget.DEFAULT_STEPS));
+            Assert.That(SmtPackageBudget.Price(fault, 10), Is.EqualTo(SmtPackageBudget.MODEL_STEPS + 10 * SmtPackageBudget.STEPS_PER_CHARACTER + SmtEvaluationBudget.DEFAULT_STEPS));
             Assert.That(SmtPackageBudget.Price(null, 10), Is.EqualTo(SmtPackageBudget.Price(fault, 10)), "a check that threw");
-            Assert.That(SmtPackageBudget.Price(cheap, 10), Is.EqualTo(SmtPackageBudget.MODEL_STEPS + 10 / SmtPackageBudget.CHARACTERS_PER_STEP + 7));
+            Assert.That(SmtPackageBudget.Price(cheap, 10), Is.EqualTo(SmtPackageBudget.MODEL_STEPS + 10 * SmtPackageBudget.STEPS_PER_CHARACTER + 7));
         });
     }
 
@@ -218,6 +242,16 @@ public sealed class SmtPackageBudgetTests
 
     #region Tools
 
+    private static string Root()
+    {
+        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "OutWit.slnx")))
+            directory = directory.Parent;
+
+        Assert.That(directory, Is.Not.Null, "the solution root (OutWit.slnx) was not found above the test folder");
+        return directory!.FullName;
+    }
+
     /// <summary>A budget of a package the tests' burning models pass at their third.</summary>
     private static long Budget()
     {
@@ -227,7 +261,7 @@ public sealed class SmtPackageBudgetTests
     /// <summary>What checking a model that uses up a check's budget costs a package.</summary>
     private static long Price(string model)
     {
-        return SmtPackageBudget.MODEL_STEPS + model.Length / SmtPackageBudget.CHARACTERS_PER_STEP + SmtEvaluationBudget.DEFAULT_STEPS;
+        return SmtPackageBudget.MODEL_STEPS + (long)model.Length * SmtPackageBudget.STEPS_PER_CHARACTER + SmtEvaluationBudget.DEFAULT_STEPS;
     }
 
     /// <summary>A set of problems of one text, each its own row, read with options of a rate, and its one package.</summary>

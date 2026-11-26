@@ -10,11 +10,12 @@ using OutWit.Controller.AI.Smt.Tests.Mock;
 namespace OutWit.Controller.AI.Smt.Tests.Settlement;
 
 /// <summary>
-/// The host reads a node's model under limits of the reader's own, each at what the evaluator
-/// could use at the most: tokens, nesting, the length of a name, the digits of a number, the bits
-/// of a literal, the characters of a string. A model past one is unreadable before it is held, and
-/// the reading of it costs no more than the part read up to the limit. Every limit stands just
-/// where it says: a text at it is read, a text one past it is not.
+/// The host reads a node's model under limits of the reader's own: its tokens, its nesting, the
+/// digits of a number, the bits of a literal and the characters of a string (these four at what the
+/// evaluator could use at the most), and the length of a name (at what a problem holds). A model
+/// past one is unreadable before it is held, and the reading of it costs no more than the part read
+/// up to the limit. Every limit stands just where it says: a text at it is read, a text one past it
+/// is not.
 /// </summary>
 [TestFixture]
 public sealed class SmtHostEvaluatorLimitsTests
@@ -27,10 +28,10 @@ public sealed class SmtHostEvaluatorLimitsTests
     // Sixteen megabytes of one-letter atoms in one list, as a node may write a model.
     private const int ATOMS = 8_000_000;
 
-    // What reading such a model may cost before it is refused: measured at about 0.3 s and 300 MB
-    // of allocations on a desktop machine (the reader stops at its limit of tokens); without the
-    // limit it read all eight million atoms.
-    private const long ATOMS_MAX_ALLOCATED_BYTES = 450L * 1024 * 1024;
+    // What reading such a model may cost before it is refused: measured at about 0.9 s and 490 MiB
+    // of allocations on a desktop machine, the reader stopping at its limit of tokens five eighths
+    // of the way into the text. Without the limit it read all eight million atoms: 680 MiB.
+    private const long ATOMS_MAX_ALLOCATED_BYTES = 600L * 1024 * 1024;
     private const int ATOMS_MAX_SECONDS = 5;
 
     #endregion
@@ -68,14 +69,14 @@ public sealed class SmtHostEvaluatorLimitsTests
     #region Limit Tests
 
     [Test]
-    public void LimitsAreWhatTheEvaluatorCouldUseTest()
+    public void ReaderLimitsOfAModelAreTheStatedNumbersTest()
     {
         var limits = SmtHostEvaluator.LIMITS;
 
         Assert.Multiple(() =>
         {
             Assert.That(limits.MaxCharacters, Is.EqualTo(2 * 16 * 1024 * 1024));
-            Assert.That(limits.MaxTokens, Is.EqualTo(SmtHostEvaluator.MAX_MODEL_TOKENS));
+            Assert.That(limits.MaxTokens, Is.EqualTo(5 * 1024 * 1024), "half as many again as the largest model of the sets and kits has (3,376,297)");
             Assert.That(limits.MaxDepth, Is.EqualTo(SmtEvaluationBudget.DEPTH_CEILING));
             Assert.That(limits.MaxLiteralBits, Is.EqualTo(SmtEvaluationBudget.DEFAULT_BIT_VECTOR_BITS));
             Assert.That(limits.MaxStringCharacters, Is.EqualTo(SmtEvaluationBudget.DEFAULT_STRING_CHARACTERS));

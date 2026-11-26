@@ -303,7 +303,11 @@ in a working file of the host's until the run knows how many it has, and are cut
 is large, never more than the 256 a node takes, and a package ends before its problems' text
 passes 32 Mi characters. The cut depends on the problems alone. A set without a row, options out
 of range and a profile the controller does not have are refused; a set whose every row is
-refused gives no package, and its results say why for each row.
+refused gives no package, and its results say why for each row. A set is read up to 4 GiB, every
+byte counted (blank lines and line ends among them): the line that would pass it is refused
+once (`set_too_large`), as the row after the 1,000,000th is (`too_many_problems`), and the run
+goes on with the rows before it. The preflight, the split and the settlement each read the set
+whole, and a few minutes a pass is what the bound costs the server.
 
 **Intake.** A node's result package is a claim. It is taken only under a ticket its round gave
 out, only when the platform, if it said which package's task the result came back for, said the
@@ -342,6 +346,13 @@ is bounded: 128 GiB of rows, and 2 GiB of full models in the ledger. A run past 
 settled: the activity fails with the bound's name (`smt_rows_bound`, `smt_models_bound`). A
 failure of the host's own files while a round is taken in ends the activity as well, and is never
 counted as a node's unreadable result.
+
+**Cancel.** `Smt.Preflight`, `Smt.Split`, `Smt.Repairs`, `Smt.Disputes` and `Smt.Settle` take the
+job's cancellation and look at it before every package, row and model they read: once the job is
+cancelled, the activity ends cancelled at the next of them (the check of one model, or the read
+of one package, at the most: a settle cancelled among its rows stopped within 0.4 s on the build
+server's three platforms), and its spool, its working files and its working folder go with it.
+Nothing is returned and nothing is stored.
 
 **Settling** (`SmtRulings`), problem by problem in the set's order:
 
@@ -384,6 +395,27 @@ counted as a node's unreadable result.
   output is `partial` (`output_exceeded`), and so is a `sat` under a status that gives no
   verdict; a row's class is the worst of its models. Whatever checking one row throws is that
   row's `partial` class (`evaluator_error`), and the settlement goes on.
+- What a check may cost the host is bounded twice. A model is read under limits of the reader's
+  own (32 Mi characters, 5,242,880 tokens, nesting 131,072, 325,059 digits of a number, a literal
+  of 1,048,576 bits, a string of 1,048,576 characters, a name of 4,194,304 characters): the
+  nesting, the digits, the bits and the characters of a string are the evaluator's highest
+  ceilings, a name is no longer than a problem may hold, and the tokens are half as many again as
+  the largest model of the controller's sets and kits has (3,376,297, a solver's definitions of
+  15.9 million characters). A text past one is `unreadable_model` (or `unreadable_values`) before
+  it is held. And the models of one result package have one budget of the evaluator's steps
+  together (`SmtPackageBudget`, 3,000,000,000 steps, about a minute of a desktop machine): a model
+  pays its steps, four steps a character of its text, and 10,000 steps for its check's setting
+  up; a package spends only on its own rows, in their order, and the model that takes it past
+  its budget is the last one checked. Its later rows are `partial` (`budget_package`), their
+  answers rest on the copies. `Smt.Disputes` checks every `sat` answer of its rounds as
+  `Smt.Settle` does, so the two see the same checks; copies of one digest are checked once, each
+  copy's package pays, and a row is as checked as the copy that went furthest: a package that ran
+  out does not leave a row unchecked that another package checked to its end. So what a node can
+  make the host's evaluator spend is its packages times the budget, in each of the two
+  activities. The dearest honest package of the test sets and kits (one of the long-tail kit's,
+  eight models of up to 15.9 million characters) costs 192,176,798 as the planner cuts that kit,
+  and 272,433,418 when it is cut into packages of 256 problems: the budget is fifteen and eleven
+  times that.
 - Answers of more than one digest, a package with more answers than were asked for, and an answer
   whose model or values are `failed` go to three more machines. The answer is the digest the most
   of them give, two at least, with no tie, and two machines' worth once the answers that may be

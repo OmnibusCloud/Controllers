@@ -32,7 +32,11 @@ public sealed class SmtProblemSetBytesTests
     [Test]
     public void BoundIsTheNumberOfTheContractTest()
     {
+        var schema = File.ReadAllText(Path.Combine(Root(), "AI", "OutWit.Controller.AI.Smt.Model", "docs", "smt-problems.schema.json"));
+
         Assert.That(SmtProblemSetLimits.MAX_SET_BYTES, Is.EqualTo(4L * 1024 * MEBIBYTE));
+        Assert.That(schema, Does.Contain($"a set has at most {SmtProblemSetLimits.MAX_SET_BYTES} bytes (4 GiB)"), "the schema states the bound");
+        Assert.That(schema, Does.Contain(SmtRefusalCodes.SET_TOO_LARGE), "and its code");
     }
 
     [Test]
@@ -150,6 +154,16 @@ public sealed class SmtProblemSetBytesTests
     #endregion
 
     #region Tools
+
+    private static string Root()
+    {
+        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "OutWit.slnx")))
+            directory = directory.Parent;
+
+        Assert.That(directory, Is.Not.Null, "the solution root (OutWit.slnx) was not found above the test folder");
+        return directory!.FullName;
+    }
 
     private static List<SmtProblemSetRow> Read(string text, long maxSetBytes, out SmtProblemSetSummary summary)
     {
