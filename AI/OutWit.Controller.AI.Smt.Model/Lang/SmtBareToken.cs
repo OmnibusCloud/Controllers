@@ -37,13 +37,21 @@ internal static class SmtBareToken
         var first = token[0];
 
         if (first == COLON)
+        {
+            if (token.Length - 1 > limits.MaxSymbolCharacters)
+                throw TooLong(limits, line, column);
+
             return Keyword(token, line, column);
+        }
 
         if (first == HASH)
             return Literal(token, limits, line, column);
 
         if (char.IsAsciiDigit(first))
             return Number(token, limits, line, column);
+
+        if (token.Length > limits.MaxSymbolCharacters)
+            throw TooLong(limits, line, column);
 
         if (!SmtLexicon.IsSimpleSymbol(token))
         {
@@ -102,6 +110,11 @@ internal static class SmtBareToken
             throw new SmtSyntaxException(SmtSyntaxFault.NumeralTooLong, line, column, $"a number has more than the {limits.MaxNumeralDigits} digits allowed");
 
         return SmtExpression.Token(dot < 0 ? SmtExpressionKind.Numeral : SmtExpressionKind.Decimal, token.ToString(), line);
+    }
+
+    private static SmtSyntaxException TooLong(SmtReaderLimits limits, int line, int column)
+    {
+        return new SmtSyntaxException(SmtSyntaxFault.SymbolTooLong, line, column, $"a symbol is longer than the {limits.MaxSymbolCharacters} characters allowed");
     }
 
     private static SmtSyntaxException TooWide(SmtReaderLimits limits, int line, int column)

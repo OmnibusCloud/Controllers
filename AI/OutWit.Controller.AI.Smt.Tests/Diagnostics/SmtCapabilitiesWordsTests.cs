@@ -112,7 +112,7 @@ public sealed class SmtCapabilitiesWordsTests
             Assert.That(Words(capabilities, "/results/expected"), Is.EqualTo(new[] { "sat", "unsat", "none" }));
             Assert.That(Words(capabilities, "/results/expected_agreements"), Is.EqualTo(SmtRunWords.EXPECTATIONS));
             Assert.That(Words(capabilities, "/results/validations"), Is.EqualTo(SmtRunWords.VALIDATIONS));
-            Assert.That(Words(capabilities, "/results/validation_reasons"), Is.EqualTo(SmtValidationReasons.All.Append(SmtRunWords.OUTPUT_EXCEEDED)));
+            Assert.That(Words(capabilities, "/results/validation_reasons"), Is.EqualTo(SmtValidationReasons.All.Append(SmtRunWords.OUTPUT_EXCEEDED).Append(SmtRunWords.BUDGET_PACKAGE)));
             Assert.That(Words(capabilities, "/results/settled_by"), Is.EqualTo(SmtRunWords.SETTLED_BY));
             Assert.That(Words(capabilities, "/results/node_faults"), Is.EqualTo(SmtNodeFaults.ALL));
             Assert.That(Words(capabilities, "/run/sampling"), Is.EqualTo(new[] { "not_stated", "none", "as_asked", "short" }));

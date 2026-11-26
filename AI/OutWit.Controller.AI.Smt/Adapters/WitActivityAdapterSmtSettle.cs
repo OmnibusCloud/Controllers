@@ -9,7 +9,11 @@ using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Smt.Adapters;
 
-/// <summary><c>Smt.Settle</c> on the host: the run is settled and its documents are written into one ledger blob (<see cref="SmtRunSettlement"/>).</summary>
+/// <summary>
+/// <c>Smt.Settle</c> on the host: the run is settled and its documents are written into one ledger
+/// blob (<see cref="SmtRunSettlement"/>). A cancelled job ends it at the next package or row, cancelled,
+/// and its spool and working folder go with it.
+/// </summary>
 internal sealed class WitActivityAdapterSmtSettle : WitActivityAdapterFunction<WitActivitySmtSettle>
 {
     #region Constants
@@ -69,7 +73,8 @@ internal sealed class WitActivityAdapterSmtSettle : WitActivityAdapterFunction<W
         }
 
         using var work = new SmtWorkFolder(Services, WORK_LABEL);
-        var (ledgerPath, facts) = await SmtRunSettlement.SettleAsync(problemsPath, options, fanOut, repair, dispute, BlobService, work.Path, samplingRate);
+        var (ledgerPath, facts) = await SmtRunSettlement.SettleAsync(problemsPath, options, fanOut, repair, dispute, BlobService, work.Path, samplingRate,
+            cancellation: ProcessingManager.CancellationToken(status.JobId));
         try
         {
             Logger.LogInformation(

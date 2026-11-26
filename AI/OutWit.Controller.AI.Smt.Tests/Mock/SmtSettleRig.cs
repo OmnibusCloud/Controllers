@@ -223,14 +223,37 @@ internal sealed class SmtSettleRig : IDisposable
     /// <param name="returned">What came back.</param>
     /// <param name="repairs">The packages of the repair round.</param>
     /// <param name="repaired">What came back of them.</param>
+    /// <param name="packageSteps">What the host's evaluator spends on one result package; null for the host's own number.</param>
     /// <returns>The packages of the dispute round.</returns>
     public List<SmtTaskPackageData> Disputes(IReadOnlyList<SmtTaskPackageData> issued, IReadOnlyList<SmtResultPackageData> returned,
-        IReadOnlyList<SmtTaskPackageData> repairs, IReadOnlyList<SmtResultPackageData> repaired)
+        IReadOnlyList<SmtTaskPackageData> repairs, IReadOnlyList<SmtResultPackageData> repaired, long? packageSteps = null)
     {
         using var spool = new SmtSpool(Path.Combine(Work, "spool"));
         var main = SmtSettlement.ReadMainAsync(issued, returned, Blobs, spool).GetAwaiter().GetResult();
         var repair = SmtSettlement.ReadRepairAsync(repairs, repaired, Blobs, spool).GetAwaiter().GetResult();
-        return SmtSettlement.PublishDisputesAsync(main, repair, spool, Blobs, Path.Combine(Work, "disputes")).GetAwaiter().GetResult().Packages;
+        return SmtSettlement.PublishDisputesAsync(main, repair, spool, Blobs, Path.Combine(Work, "disputes"), packageSteps ?? SmtPackageBudget.DEFAULT_STEPS).GetAwaiter().GetResult().Packages;
+    }
+
+    /// <summary>
+    /// What the host's evaluator spends on each result package of a first fan-out when it checks
+    /// every row that says sat, as Smt.Disputes checks them.
+    /// </summary>
+    /// <param name="issued">The packages it gave out.</param>
+    /// <param name="returned">What came back.</param>
+    /// <param name="packageSteps">What the host's evaluator spends on one result package at the most.</param>
+    /// <returns>The steps each result package spent, in the order the host took them in.</returns>
+    public List<long> Spent(IReadOnlyList<SmtTaskPackageData> issued, IReadOnlyList<SmtResultPackageData> returned, long packageSteps)
+    {
+        using var spool = new SmtSpool(Path.Combine(Work, "spool"));
+        var main = SmtSettlement.ReadMainAsync(issued, returned, Blobs, spool).GetAwaiter().GetResult();
+        SmtSettlement.CheckAsync([main], spool, Blobs, packageSteps, CancellationToken.None).GetAwaiter().GetResult();
+
+        // A loop, not a lambda: a lambda over a controller type puts the type into the shape of a closure of the rig's.
+        var spent = new List<long>();
+        foreach (var package in main.Accepted)
+            spent.Add(package.Rows[0].Budget.Spent);
+
+        return spent;
     }
 
     /// <summary>What Smt.Settle writes of a run: its four documents and the ledger's section of full models.</summary>
@@ -243,18 +266,20 @@ internal sealed class SmtSettleRig : IDisposable
     /// <param name="disputes">The packages of the dispute round, or null for a script that ran none.</param>
     /// <param name="settled">What came back of them.</param>
     /// <param name="rate">The sampling rate the script stated, or null.</param>
+    /// <param name="packageSteps">What the host's evaluator spends on one result package; null for the host's own number.</param>
     /// <returns>The documents' texts.</returns>
     public SmtSettledDocuments Settle(string set, SmtOptionsData options,
         IReadOnlyList<SmtTaskPackageData> issued, IReadOnlyList<SmtResultPackageData> returned,
         IReadOnlyList<SmtTaskPackageData> repairs, IReadOnlyList<SmtResultPackageData> repaired,
-        IReadOnlyList<SmtTaskPackageData>? disputes, IReadOnlyList<SmtResultPackageData>? settled, double? rate)
+        IReadOnlyList<SmtTaskPackageData>? disputes, IReadOnlyList<SmtResultPackageData>? settled, double? rate, long? packageSteps = null)
     {
         var path = StoreSet(set);
         var folder = Path.Combine(Work, $"settle-{Guid.NewGuid():N}");
         Directory.CreateDirectory(folder);
 
         (IReadOnlyList<SmtTaskPackageData> Issued, IEnumerable<SmtResultPackageData?> Returned)? dispute = disputes == null ? null : (disputes, settled ?? []);
-        var ledger = SmtRunSettlement.SettleAsync(path, options, (issued, returned), (repairs, repaired), dispute, Blobs, folder, rate).GetAwaiter().GetResult().LedgerPath;
+        var bounds = SmtSettlementBounds.DEFAULT with { PackageSteps = packageSteps ?? SmtPackageBudget.DEFAULT_STEPS };
+        var ledger = SmtRunSettlement.SettleAsync(path, options, (issued, returned), (repairs, repaired), dispute, Blobs, folder, rate, bounds).GetAwaiter().GetResult().LedgerPath;
 
         return new SmtSettledDocuments(Section(ledger, SmtLedger.RESULTS), Section(ledger, SmtLedger.REPORT), Section(ledger, SmtLedger.INTEGRITY),
             Section(ledger, SmtLedger.PROVENANCE), Section(ledger, SmtLedger.MODELS));

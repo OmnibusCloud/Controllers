@@ -85,12 +85,14 @@ internal static class SmtRoundIntake
     /// </param>
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="spool">Where whole rows are kept, or null when only the comparison is needed.</param>
+    /// <param name="cancellation">The job's cancellation, looked at before every result package is read.</param>
     /// <returns>The round as taken.</returns>
     /// <exception cref="InvalidOperationException">A package of problems this host made cannot be read: the run cannot be settled.</exception>
     /// <exception cref="SmtSettlementBoundException">The rows taken pass what the spool holds of one run.</exception>
     /// <exception cref="IOException">The host's own spool could not be written.</exception>
+    /// <exception cref="OperationCanceledException">The job was cancelled.</exception>
     public static async Task<SmtRound> ReadAsync(string name, IReadOnlyList<SmtTaskPackageData> issued, IEnumerable<SmtResultPackageData?> returned,
-        int copiesAsked, bool surplusIsSuspect, IWitBlobService blobs, SmtSpool? spool)
+        int copiesAsked, bool surplusIsSuspect, IWitBlobService blobs, SmtSpool? spool, CancellationToken cancellation = default)
     {
         var round = new SmtRound { Name = name, Issued = issued };
         var units = new Dictionary<string, SmtTaskPackageData>(StringComparer.Ordinal);
@@ -114,6 +116,8 @@ internal static class SmtRoundIntake
 
         foreach (var reference in ordered)
         {
+            cancellation.ThrowIfCancellationRequested();
+
             // The package whose task the result came back for: the platform's word when it gave
             // one, the result's own otherwise. The result counts for that package, taken or refused.
             var bound = SmtResultBindings.TicketOf(reference);
@@ -281,7 +285,8 @@ internal static class SmtRoundIntake
     /// <summary>
     /// Takes one package of results in, or says why not. Its rows go to the spool as they are
     /// read, a row at a time, and stay there only when the whole package holds: a package that is
-    /// refused, at whichever row, leaves the spool as long as it was before it.
+    /// refused, at whichever row, leaves the spool as long as it was before it. Its rows share one
+    /// budget of the host's evaluator, the package's own (<see cref="SmtPackageBudget"/>).
     /// </summary>
     private static bool TryReadPackage(SmtTaskPackageData unit, string path, SmtTaskBounds bounds, SmtSpool? spool, bool bound,
         [NotNullWhen(true)] out SmtAcceptedPackage? accepted, [NotNullWhen(false)] out string? reason)
@@ -290,7 +295,7 @@ internal static class SmtRoundIntake
         var copies = new List<SmtCopy>(unit.ProblemCount);
         var mark = spool?.Length ?? 0;
 
-        reason = ReadRows(unit, path, bounds, spool, copies, bound);
+        reason = ReadRows(unit, path, bounds, spool, copies, bound, new SmtPackageBudget());
 
         // Exactly the package's problems: none missing, none of another package, none twice.
         if (reason == null && (copies.Count != unit.ProblemCount || !string.Equals(SmtTickets.IndexDigest(copies.Select(copy => copy.Index)), unit.IndexDigest, StringComparison.Ordinal)))
@@ -313,7 +318,7 @@ internal static class SmtRoundIntake
     /// bound, a disk that is full) says nothing about the package and is not caught.
     /// </summary>
     /// <returns>Null when every row was taken; else the reason the package is refused for.</returns>
-    private static string? ReadRows(SmtTaskPackageData unit, string path, SmtTaskBounds bounds, SmtSpool? spool, List<SmtCopy> copies, bool bound)
+    private static string? ReadRows(SmtTaskPackageData unit, string path, SmtTaskBounds bounds, SmtSpool? spool, List<SmtCopy> copies, bool bound, SmtPackageBudget budget)
     {
         using var rows = SmtResultPackageReader.Read(path, unit.ProblemCount).GetEnumerator();
 
@@ -349,7 +354,8 @@ internal static class SmtRoundIntake
                 Ticket = unit.Ticket,
                 Bound = bound,
                 SpoolOffset = offset,
-                SpoolLength = length
+                SpoolLength = length,
+                Budget = budget
             });
         }
     }
@@ -368,11 +374,12 @@ internal static class SmtRoundIntake
 
     /// <summary>
     /// Whether an exception met while a node's blob is fetched, read or judged is taken as that
-    /// package's fault: every one but the two that say the process itself is out of room.
+    /// package's fault: every one but the two that say the process itself is out of room, and a
+    /// cancellation, which is the job's.
     /// </summary>
     private static bool IsOfThePackage(Exception exception)
     {
-        return exception is not (OutOfMemoryException or InsufficientExecutionStackException);
+        return exception is not (OutOfMemoryException or InsufficientExecutionStackException or OperationCanceledException);
     }
 
     private static void DropOrMarkSurplus(SmtRound round, int copiesAsked, bool surplusIsSuspect)

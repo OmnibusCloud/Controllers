@@ -67,5 +67,11 @@ public sealed class SmtReaderLimits
     /// <summary>The longest string literal, in characters of its content.</summary>
     public int MaxStringCharacters { get; init; } = int.MaxValue;
 
+    /// <summary>
+    /// The longest symbol, simple or between bars, or keyword, in characters (the bars not
+    /// counted). A problem is read without a limit of its own here: its characters bound its names.
+    /// </summary>
+    public int MaxSymbolCharacters { get; init; } = int.MaxValue;
+
     #endregion
 }

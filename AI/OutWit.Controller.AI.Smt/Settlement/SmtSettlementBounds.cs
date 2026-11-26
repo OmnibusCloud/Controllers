@@ -5,7 +5,9 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// nodes returned (the spool, <see cref="SmtSpool"/>) and the full models of the rows whose models
 /// the results cut short (the ledger's section of them, <see cref="SmtLedger.MODELS"/>). A run that
 /// passes either is not settled: the activity fails by name
-/// (<see cref="SmtSettlementBoundException"/>) instead of filling the disk.
+/// (<see cref="SmtSettlementBoundException"/>) instead of filling the disk. Beside them, what the
+/// host's evaluator spends on the models of one result package (<see cref="PackageSteps"/>):
+/// a bound of time, not of disk, which leaves the rows past it partial and fails nothing.
 /// </summary>
 /// <param name="RowsBytes">The most bytes of rows the spool holds.</param>
 /// <param name="ModelsBytes">The most bytes the ledger's section of full models holds.</param>
@@ -33,6 +35,13 @@ internal sealed record SmtSettlementBounds(long RowsBytes, long ModelsBytes)
 
     /// <summary>The bounds of a run on a host.</summary>
     public static readonly SmtSettlementBounds DEFAULT = new(MAX_ROWS_BYTES, MAX_MODELS_BYTES);
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>The steps the host's evaluator spends on the models of one result package at the most (<see cref="SmtPackageBudget"/>).</summary>
+    public long PackageSteps { get; init; } = SmtPackageBudget.DEFAULT_STEPS;
 
     #endregion
 }

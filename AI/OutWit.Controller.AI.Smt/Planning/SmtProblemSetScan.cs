@@ -35,8 +35,10 @@ internal sealed class SmtProblemSetScan
     /// <param name="path">The set's local file.</param>
     /// <param name="options">The run's options, in range (<see cref="SmtOptionsRules.Check"/>).</param>
     /// <param name="spool">Where the taken problems are kept, or null when only the counts are needed.</param>
+    /// <param name="cancellation">The job's cancellation, looked at before every row.</param>
     /// <returns>The scan.</returns>
-    public static SmtProblemSetScan Read(string path, SmtOptionsData options, SmtProblemSpool? spool)
+    /// <exception cref="OperationCanceledException">The job was cancelled.</exception>
+    public static SmtProblemSetScan Read(string path, SmtOptionsData options, SmtProblemSpool? spool, CancellationToken cancellation = default)
     {
         var characters = new List<long>();
         SmtProblemSetSummary summary;
@@ -46,6 +48,7 @@ internal sealed class SmtProblemSetScan
             var reader = new SmtProblemSetReader(stream, options);
             while (reader.TryRead(out var row))
             {
+                cancellation.ThrowIfCancellationRequested();
                 if (!row.IsAccepted)
                     continue;
 

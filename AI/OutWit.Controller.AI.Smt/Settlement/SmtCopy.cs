@@ -50,6 +50,12 @@ internal sealed class SmtCopy
     public int SpoolLength { get; init; }
 
     /// <summary>
+    /// What the host's evaluator has spent on the models of the result package the row came in:
+    /// one budget for the rows of a package, shared by them and by nothing else.
+    /// </summary>
+    public required SmtPackageBudget Budget { get; init; }
+
+    /// <summary>
     /// Whether the row is a node's refusal of the problem. A node refuses only for what the host
     /// checked with the same code before it made the package (the sanitizer, the hash, the terms
     /// beside the problem, the options), so an honest node never refuses a problem the host took:

@@ -32,8 +32,10 @@ internal static class SmtPreflightReport
     /// <summary>Reads a set and makes its preflight.</summary>
     /// <param name="path">The set's local file.</param>
     /// <param name="options">The run's options as given; null for the defaults.</param>
+    /// <param name="cancellation">The job's cancellation, looked at before every row.</param>
     /// <returns>The preflight.</returns>
-    public static SmtPreflightData Of(string path, SmtOptionsData? options)
+    /// <exception cref="OperationCanceledException">The job was cancelled.</exception>
+    public static SmtPreflightData Of(string path, SmtOptionsData? options, CancellationToken cancellation = default)
     {
         options ??= new SmtOptionsData();
 
@@ -42,7 +44,7 @@ internal static class SmtPreflightReport
             problems.Add($"'profile' names a profile this controller does not have; it has '{SmtProfile.ID}'");
 
         var readable = SmtOptionsRules.Readable(options);
-        var scan = SmtProblemSetScan.Read(path, readable, null);
+        var scan = SmtProblemSetScan.Read(path, readable, null, cancellation);
         return Of(scan, readable, problems);
     }
 

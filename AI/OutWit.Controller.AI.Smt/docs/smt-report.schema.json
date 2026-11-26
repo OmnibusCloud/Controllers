@@ -94,7 +94,7 @@
           "properties": { "validated": { "type": "integer" }, "partial": { "type": "integer" }, "failed": { "type": "integer" } }
         },
         "by_logic": { "type": "object", "description": "The same by logic: each logic an object of validated, partial and failed; 64 logics at most, the rest under (other)." },
-        "partial_by_reason": { "type": "object", "description": "Partial classes by the evaluator's reason code." }
+        "partial_by_reason": { "type": "object", "description": "Partial classes by the evaluator's reason code, or the server's own: output_exceeded, budget_package." }
       }
     },
     "copies": {

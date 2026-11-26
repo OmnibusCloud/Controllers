@@ -138,7 +138,7 @@
         "expected": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "expected: the verdict the row or the problem's :status expects." },
         "expected_agreements": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "expected_agreement (also the keys of the report's expected)." },
         "validations": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "validation: what the server's evaluator said of the row's models and values." },
-        "validation_reasons": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "validation_reason of a partial or a failed class (also the keys of the report's partial_by_reason): the evaluator's codes, and output_exceeded for a model that did not come whole." },
+        "validation_reasons": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "validation_reason of a partial or a failed class (also the keys of the report's partial_by_reason): the evaluator's codes, output_exceeded for a model that did not come whole, and budget_package for a row whose result package had used up what the server's evaluator spends on one package." },
         "settled_by": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "settled_by: how the answer was settled." },
         "node_faults": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true, "description": "The codes of a package a node could not work on at all (the keys of the integrity document's node_faults_by_code)." }
       }

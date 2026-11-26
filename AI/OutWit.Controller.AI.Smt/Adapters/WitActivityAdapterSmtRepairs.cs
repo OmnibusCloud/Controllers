@@ -59,9 +59,11 @@ internal sealed class WitActivityAdapterSmtRepairs : WitActivityAdapterFunction<
             rate = SmtSampling.Clamp(stated);
         }
 
+        // A cancelled job ends the activity at the next package or problem, and its working folder goes with it.
+        var cancellation = ProcessingManager.CancellationToken(status.JobId);
         using var work = new SmtWorkFolder(Services, WORK_LABEL);
-        var main = await SmtSettlement.ReadMainAsync(issued, returned, BlobService);
-        var packages = await SmtSettlement.PublishRepairsAsync(main, rate, BlobService, work.Path);
+        var main = await SmtSettlement.ReadMainAsync(issued, returned, BlobService, cancellation: cancellation);
+        var packages = await SmtSettlement.PublishRepairsAsync(main, rate, BlobService, work.Path, cancellation);
 
         Logger.LogInformation("Smt.Repairs: {Problems} problem(s) without an answer or short of the copies asked for go out once more, to two machines, in {Packages} package(s); {Rejected} of {Returned} result package(s) refused, {Faults} came back with a node's fault code",
             packages.Sum(package => (long)package.ProblemCount), packages.Count, main.RejectedTotal, returned.Count, main.Faults.Values.Sum());

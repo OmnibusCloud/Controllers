@@ -55,6 +55,13 @@ public static class SmtRunWords
     /// <summary>The reason of a partial validation of a row whose session wrote more than its output cap: its model did not come whole.</summary>
     public const string OUTPUT_EXCEEDED = SmtResultWords.OUTPUT_EXCEEDED;
 
+    /// <summary>
+    /// The reason of a partial validation of a row whose models the host's evaluator did not check
+    /// to the end: the result package the row came in had used up the steps the host gives the
+    /// models of one package. The answer rests on the copies.
+    /// </summary>
+    public const string BUDGET_PACKAGE = "budget_package";
+
     /// <summary>Expected: the verdict is the one the row or the problem's <c>:status</c> expects.</summary>
     public const string AGREE = "agree";
 

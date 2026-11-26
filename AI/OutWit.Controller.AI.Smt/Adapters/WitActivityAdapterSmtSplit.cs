@@ -56,17 +56,23 @@ internal sealed class WitActivityAdapterSmtSplit : WitActivityAdapterFunction<Wi
         SmtAdapterTools.EnsureRunnable(options);
 
         // The set is read a row at a time and its taken problems wait in a working file of the
-        // host's own until the run knows how many it has: memory holds a row and a package.
+        // host's own until the run knows how many it has: memory holds a row and a package. A
+        // cancelled job ends the split at the next row or problem, and the working folder goes
+        // with it.
+        var cancellation = ProcessingManager.CancellationToken(status.JobId);
         using var work = new SmtWorkFolder(Services, WORK_LABEL);
         using var spool = new SmtProblemSpool(Path.Combine(work.Path, SPOOL_FOLDER));
 
-        var scan = SmtProblemSetScan.Read(problemsPath, options, spool);
+        var scan = SmtProblemSetScan.Read(problemsPath, options, spool, cancellation);
         if (scan.Summary.Rows == 0)
             throw new InvalidOperationException("The problem set has no row.");
 
         var publisher = new SmtPackagePublisher(spool.Count, SmtOptionsRules.Resolve(options), BlobService, Path.Combine(work.Path, PACKAGES_FOLDER));
         foreach (var problem in spool.ReadAll())
+        {
+            cancellation.ThrowIfCancellationRequested();
             await publisher.AddAsync(problem);
+        }
 
         var packages = await publisher.CompleteAsync();
 

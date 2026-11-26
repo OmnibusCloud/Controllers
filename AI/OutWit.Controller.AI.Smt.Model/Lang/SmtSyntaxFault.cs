@@ -33,5 +33,12 @@ public enum SmtSyntaxFault
     LiteralTooWide = 8,
 
     /// <summary>A string literal longer than the limit.</summary>
-    StringTooLong = 9
+    StringTooLong = 9,
+
+    /// <summary>
+    /// A symbol or a keyword longer than the limit. Only a reader told to limit names meets it (the
+    /// host's reader of a model); a problem's names are bounded by its characters, and no refusal
+    /// of a problem carries this fault.
+    /// </summary>
+    SymbolTooLong = 10
 }
