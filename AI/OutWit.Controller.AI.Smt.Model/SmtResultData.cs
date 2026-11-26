@@ -227,7 +227,11 @@ public sealed partial class SmtResultData : ModelBase
     [MemoryPackOrder(23)]
     public string Platform { get; set; } = "";
 
-    /// <summary>The wall time of the session, milliseconds: a measurement of the machine, never part of what is compared.</summary>
+    /// <summary>
+    /// The wall time of the session, milliseconds: a measurement of the machine, part of no digest
+    /// and no document. A node of this controller writes 0 here, since the time of a problem tells
+    /// a fast machine from a slow one; the member keeps its place on the wire.
+    /// </summary>
     [MemoryPackOrder(24)]
     public int WallMs { get; set; }
 

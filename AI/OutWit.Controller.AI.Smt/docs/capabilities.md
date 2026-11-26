@@ -133,7 +133,7 @@ One JSON line a row of the set, in the set's order, refused rows included.
 | `count`, `complete`, `limit_reached`, `models` | an enumeration: the models found, whether the count is exact, whether the number asked for was reached, and each model with the values of the projected constants |
 | `proof` | a proof: `proved` or `counterexample` |
 | `model`, `values` | a check's model and the values it asked for; a proof's counterexample |
-| `model_truncated` | the texts above are the solver's own and are shown up to 64 KB a row, whole texts only; past that they are null and this is true. The full models stay in the run's ledger, the server's own blob |
+| `model_truncated` | the texts above are the solver's own and are shown up to 64 KB a row, whole texts only; past that they are null and this is true. The full models stay in the run's ledger, the blob the job's variable `ledger` names, in a format of the controller's own |
 | `validation`, `validation_reason`, `validation_detail` | what the server's evaluator said of every model and of the values that came with it: `validated`, `partial` (with the reason), `failed` (`assertion_false` with the assertion, or `value_mismatch` with the value), or `none` when there is no model |
 | `copies`, `agreed`, `settled_by` | how many answers the problem was ruled on, whether all gave one digest, and how the answer was settled: `one_copy` (it rests on one machine), `copies` (two machines of one fan-out at least: two answers the platform said came back for two tasks of the problem's package), `dispute`, `agreement` |
 | `digest`, `stats` | the digest of the settled row (the same on every honest machine), its resource count, fuel and checks |
@@ -220,7 +220,12 @@ What holds:
   node) goes out again to two machines, and the integrity document counts it as `copies_short`.
   The run's `sampling` is `as_asked` when every such problem ends with two answers of one fan-out,
   and `short` when the repair pair lost a copy again.
-- **No machine is named.** The documents name no machine, no user, no folder and no ticket.
+- **No machine is named.** The documents name no machine, no user, no folder and no ticket. Nor
+  does what a finished run leaves in its job: the variables that held what the fan-outs returned
+  (`solved`, `repaired`, `settled`: the results in the order the platform kept them, one node's
+  after another's, each with its package's ticket) are emptied once the documents are written,
+  and a node writes no wall time into a row (its `WallMs` is 0). What stays is the packages the
+  run gave out, in the run's own order, the four documents and the ledger.
 
 What it does not claim:
 
@@ -257,6 +262,12 @@ What it does not claim:
   came back for, an unbound one under the ticket it names), or when the rate asks for every
   package. A package asked for twice of which at most one result came back cannot be found, is
   not sent again, and leaves the sampling `short`.
+- **What a running job shows is the platform's.** The platform shows a job's variables to its
+  submitter while the job runs, and keeps the last of them in a job that fails. Until the
+  documents are written, `solved`, `repaired` and `settled` hold what the fan-outs returned in the
+  platform's order, one node's results after another's, with the tickets of the packages; and the
+  rows of a result say the platform of the node that wrote them, and nothing else of it. The run
+  empties the three at its end; it cannot hide them before.
 
 ## 7. Limits
 

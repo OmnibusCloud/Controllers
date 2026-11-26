@@ -563,7 +563,7 @@ These are the types of both ends; the package format of the blobs is the control
 |---|---|
 | `SmtTaskPackageData` | what a node is handed: the blob of the problems (`ProblemsBlobId`, `Sha256`, `SizeBytes`), how many (`ProblemCount`), the package's `Ticket`, the controller version the job runs on (`RequiredControllerVersion`), the digest of the problems' indices (`IndexDigest`), the run's `Options`, resolved |
 | `SmtResultPackageData` | what a node returns: the blob of the rows (`ResultsBlobId`, `Sha256`, `SizeBytes`), how many (`ResultCount`), the ticket it answers, and a `FaultCode` with its `FaultMessage` when the node could not work on the package at all |
-| `SmtResultData` | one problem's row: the problem (`Index`, `Id`, the `Hash` of the text the node was given), the `Ticket`, how its session ended and what it came to, every model and value as the solver printed it, what it cost, the `ControllerVersion`, the `Platform`, the `WallMs`, and its `Digest` |
+| `SmtResultData` | one problem's row: the problem (`Index`, `Id`, the `Hash` of the text the node was given), the `Ticket`, how its session ended and what it came to, every model and value as the solver printed it, what it cost, the `ControllerVersion`, the `Platform`, the `WallMs` (0: the controller's node does not write the session's wall time), and its `Digest` |
 | `SmtResultDigest` | the canonical form of a row and its SHA-256: `Of(row)`, `Holds(row)`, `Canonical(row)` |
 | `SmtResultWords` | the words of a row: statuses, verdicts, reasons, proofs |
 | `SmtNodeFaults` | the codes of a package a node could not work on |

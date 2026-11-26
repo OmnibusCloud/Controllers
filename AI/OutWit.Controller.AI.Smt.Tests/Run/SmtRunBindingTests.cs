@@ -58,8 +58,10 @@ public sealed class SmtRunBindingTests : SmtRunTestBase
     public async Task EveryResultTheActivitiesReadIsBoundToThePackageItNamesTest()
     {
         // The variables the activities of the job read their rounds from, after the job: every
-        // result of every fan-out is the object Grid told, bound to the package it names.
-        var run = await RunAsync(m_set, new SmtOptionsData { SamplingRate = 1 });
+        // result of every fan-out is the object Grid told, bound to the package it names. SmtRun
+        // empties those variables once its documents are written, so the run here leaves out its
+        // last statements and keeps them as the activities read them.
+        var run = await RunAsync(m_set, new SmtOptionsData { SamplingRate = 1 }, ScriptKeepingResults());
         var results = FAN_OUTS.SelectMany(name => Results(run, name)).ToList();
 
         Assert.Multiple(() =>

@@ -16,7 +16,8 @@
        The scripts need the activities the controller has since 0.4.0 (Smt.Split,
        Smt.SamplingRate, Smt.Repairs with the sampling rate, Smt.Disputes, Smt.Settle with the
        problem set and the sampling rate, Smt.Collect, Smt.CollectResults, Smt.Provenance,
-       Smt.Integrity, Smt.Preflight). Its lower bound is the first controller version that feed will have
+       Smt.Integrity, Smt.Preflight), and Smt.Forget, which it has since the version that
+       follows 0.5.0. Its lower bound is the first controller version that feed will have
        (the decision record: a lower bound no feed has is noise at every restore), which is
        1.0.0 at the earliest: a product release is never 0.x. Its upper bound is the next major,
        exclusive. When the first published version is a later one, the lower bound moves to it
