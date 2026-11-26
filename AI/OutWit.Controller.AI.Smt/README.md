@@ -13,13 +13,13 @@ problem set cut into packages, solved with copies on different machines, repaire
 the sampling asked for restored), disputed, settled by the digests of the rows, every `sat`
 model checked on the server by the model evaluator, and written out as results, a report,
 provenance and integrity, all through blobs (`SmtRun`). The solver module is a data asset of the controller. An application
-starts from [`docs/application.md`](docs/application.md): the call, the options, what comes
+starts from [`docs/application.md`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/application.md): the call, the options, what comes
 back and what to do with it, what is promised. What a lab can rely on, and the limits, are
-[`docs/capabilities.md`](docs/capabilities.md). The language layer and
+[`docs/capabilities.md`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/capabilities.md). The language layer and
 the wire types (the reader, the sanitizer, the model evaluator, the problem set, the options, the
 packages and their rows, the preflight, the words of the documents) are
-[`OutWit.Controller.AI.Smt.Model`](../OutWit.Controller.AI.Smt.Model/README.md); the scripts travel
-in [`OutWit.Controller.AI.Smt.Scripts`](../OutWit.Controller.AI.Smt.Scripts/README.md).
+[`OutWit.Controller.AI.Smt.Model`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt.Model/README.md); the scripts travel
+in [`OutWit.Controller.AI.Smt.Scripts`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt.Scripts/README.md).
 
 | Activity | Where | In, out |
 |---|---|---|
@@ -29,11 +29,11 @@ in [`OutWit.Controller.AI.Smt.Scripts`](../OutWit.Controller.AI.Smt.Scripts/READ
 | `Smt.Repairs` | host | the first fan-out's packages and results (and the rate), the packages of the problems without an answer or short of the copies asked for |
 | `Smt.Disputes` | host | the first fan-out's and the repair round's packages and results, the packages of the problems that go to three more machines |
 | `Smt.Settle` | host | the set, the options, every round's packages and results, and the rate; the ledger (`Blob`) |
-| `Smt.CollectResults`, `Smt.Collect`, `Smt.Provenance`, `Smt.Integrity` | host | the ledger; the results ([`docs/smt-results.schema.json`](docs/smt-results.schema.json)), the report ([`docs/smt-report.schema.json`](docs/smt-report.schema.json)), the provenance ([`docs/smt-provenance.schema.json`](docs/smt-provenance.schema.json)), the integrity document ([`docs/smt-integrity.schema.json`](docs/smt-integrity.schema.json)) |
+| `Smt.CollectResults`, `Smt.Collect`, `Smt.Provenance`, `Smt.Integrity` | host | the ledger; the results ([`docs/smt-results.schema.json`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/smt-results.schema.json)), the report ([`docs/smt-report.schema.json`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/smt-report.schema.json)), the provenance ([`docs/smt-provenance.schema.json`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/smt-provenance.schema.json)), the integrity document ([`docs/smt-integrity.schema.json`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/smt-integrity.schema.json)) |
 | `Smt.Forget` | host | an `SmtResultPackageCollection`, assigned back to it: the same collection, empty (the run's last statements: what the fan-outs returned is not left in the finished job) |
 | `Smt.Preflight` | host | the set and the options, an `SmtPreflight` |
 | `Smt.RuntimeDiagnostics` | host | nothing, an `SmtRuntimeDiagnostics` |
-| `Smt.Capabilities` | host | nothing, a `Blob` of JSON ([`docs/smt-capabilities.schema.json`](docs/smt-capabilities.schema.json)) |
+| `Smt.Capabilities` | host | nothing, a `Blob` of JSON ([`docs/smt-capabilities.schema.json`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/smt-capabilities.schema.json)) |
 
 The variables `SmtTaskPackage`, `SmtResultPackage`, `SmtRuntimeDiagnostics`, `SmtOptions`,
 `SmtPreflight` and the collections `SmtTaskPackageCollection`, `SmtResultPackageCollection` are
@@ -41,6 +41,12 @@ registered with them. The module depends on the Variables controller; the script
 or later (the manifest names both; Grid is host-only, so the module itself declares only
 Variables). `SmtResultPackageCollection` asks Grid which package each result was returned for
 (`OnGridAnswer`): see *Intake* below.
+
+The schemas of the documents and the two pages of `docs/` are packed under `docs/` beside this
+README, as they lie in the repository; the links of this README and of those pages are the
+repository's addresses. A schema's `$id` is
+`https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Smt/docs/` and its file name:
+the schema's name, not an address that answers. The file it names is the one under `docs/`.
 
 ## The profile
 
@@ -50,7 +56,7 @@ One solver, pinned (`SmtProfile`):
 |---|---|
 | Id | `z3-5.4.1` |
 | Solver | Z3 5.4.1 built for `wasm32-wasip1`, single-threaded, with C++ exceptions as WebAssembly exceptions |
-| Module | `wasm/z3-5.4.1.wasm`, 30,204,160 bytes, SHA-256 `9b8a67e85542b5d62d30b40060dd237fcef07f794ea235483afc83eef47a1364`; built from pinned sources by the workflow "AI Smt toolchain" ([`toolchain/`](../OutWit.Controller.AI.Smt.Assets/toolchain)), two builds compared byte for byte; a data asset of the controller: the archive `smt-z3-wasm.zip` of the release `smt-z3-v5.4.1` (30,314,801 bytes, SHA-256 `3c3f67877e4e193dc64070023fbf64addb4b01520de4b9fa79b673b77d48cc02`, with Z3's licence and notices), extracted at the module's root |
+| Module | `wasm/z3-5.4.1.wasm`, 30,204,160 bytes, SHA-256 `9b8a67e85542b5d62d30b40060dd237fcef07f794ea235483afc83eef47a1364`; built from pinned sources by the workflow "AI Smt toolchain" ([`toolchain/`](https://github.com/OmnibusCloud/Controllers/tree/main/AI/OutWit.Controller.AI.Smt.Assets/toolchain)), two builds compared byte for byte; a data asset of the controller: the archive `smt-z3-wasm.zip` of the release `smt-z3-v5.4.1` (30,314,801 bytes, SHA-256 `3c3f67877e4e193dc64070023fbf64addb4b01520de4b9fa79b673b77d48cc02`, with Z3's licence and notices), extracted at the module's root |
 | Resource limit of one check | 150,000,000 units of the solver's own counter, when the options name none; at most 4,294,967,295 |
 | Hard cap | seconds of a reference machine, turned into fuel at 5,000,000,000 units a second: 60 s are 3·10¹¹ units, counted from the solver's first instruction |
 | Memory | the option's megabytes are the solver's own ceiling; the sandbox's cap of its linear memory is a quarter above it, and 16 MiB above it at the least (at most what a wasm32 program can address), so the solver meets its own ceiling first and ends cleanly. Under a ceiling too small for it to start in, it still starts, and ends by that ceiling at once |
@@ -267,7 +273,7 @@ its version and profile, the module's pin and whether the process has it and has
 (with the compile time), the engine library's pin and whether it is the one loaded, the trap mode,
 the platform, and the degree a package would get, with what decided it. Asking compiles nothing.
 `Smt.Capabilities` writes what a lab can know before a run as a JSON document
-([`docs/smt-capabilities.schema.json`](docs/smt-capabilities.schema.json)): the profile, the
+([`docs/smt-capabilities.schema.json`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/smt-capabilities.schema.json)): the profile, the
 queries, the defaults and ceilings of the options and of a problem, the words of every document
 of a run (each list the one the documents are written with: a row's statuses, codes, verdicts,
 reasons, classes and how it was settled, the codes of a node's refusal, and the words of the
@@ -455,7 +461,7 @@ one machine's word in `enumerate.kept_one_copy`); the integrity document counts 
 and the integrity document say whether the platform told the host
 which package each result came back for (`binding`: `bound`, `unbound`, `mixed`, or `none` when
 no result came back), and the integrity document counts the results of each kind
-(`results_bound`, `results_unbound`). Their fields are in [`docs/capabilities.md`](docs/capabilities.md) and their
+(`results_bound`, `results_unbound`). Their fields are in [`docs/capabilities.md`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/capabilities.md) and their
 schemas beside it.
 
 **What the job keeps.** The submitter of a job can read its variables, of a finished job and of

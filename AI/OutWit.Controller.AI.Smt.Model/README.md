@@ -227,9 +227,11 @@ Console.WriteLine($"{reader.Summary.Accepted} taken, {reader.Summary.Refused} re
 {"id": "vc-17", "query": "prove", "smt2": "(declare-const x Int)(assert (> x 1))", "goal": "(> (* x x) x)"}
 ```
 
-The schema of a row is [`docs/smt-problems.schema.json`](docs/smt-problems.schema.json), packed
-with the package. A row is taken exactly when the schema allows it, wherever a schema can state
-the rule; a row it would not take is refused, by the field's name.
+The schema of a row is [`docs/smt-problems.schema.json`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt.Model/docs/smt-problems.schema.json), packed
+with the package under `docs/`. Its `$id`
+(`https://github.com/OmnibusCloud/Controllers/AI/OutWit.Controller.AI.Smt.Model/docs/smt-problems.schema.json`)
+is the schema's name, not an address that answers. A row is taken exactly when the schema allows
+it, wherever a schema can state the rule; a row it would not take is refused, by the field's name.
 
 | Field | Rule |
 |---|---|

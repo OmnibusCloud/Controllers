@@ -2,9 +2,9 @@
 
 A reference for building on the Smt controller: what goes into a run and what comes out, what
 is checked and what is not, and where the edges are. An application starts from
-[application.md](application.md): the call through the SDK, the options, the preflight, every word
+[application.md](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/application.md): the call through the SDK, the options, the preflight, every word
 of the documents explained, what makes a run alarming, examples written by the code. The
-[README](../README.md) explains how things work inside; the schemas beside this page are the
+[README](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/README.md) explains how things work inside; the schemas beside this page are the
 contract of the documents.
 
 Version described: **Smt 0.5.0** (with Smt.Model 0.3.0 and Smt.Scripts 0.2.0). In development;
@@ -65,7 +65,7 @@ few numbers.
 
 `profile`, `query`, `max_models`, `seed`, `rlimit`, `hard_cap_s`, `memory_mb` and `sampling_rate`:
 their table, with the least value of each, what 0 means, the default, the greatest and the
-sentence each is refused with, is [application.md, *The options*](application.md#the-options).
+sentence each is refused with, is [application.md, *The options*](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/application.md#the-options).
 
 A run whose options are out of range, or name a profile the controller does not have, is
 refused before anything is sent. The documents state every option as the number the run used,
@@ -90,11 +90,11 @@ duration is estimated: how long an SMT problem takes cannot be told from its tex
 
 ## 4. The problem set
 
-JSON lines, one problem a line ([`smt-problems.schema.json`](../../OutWit.Controller.AI.Smt.Model/docs/smt-problems.schema.json)
+JSON lines, one problem a line ([`smt-problems.schema.json`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt.Model/docs/smt-problems.schema.json)
 of the model package): `id`, `smt2`, and the fields of the row's query (`values` for a check,
 `project` and `max_models` for an enumeration, `goal` for a proof), `expected` and `tags`. The
 reader, the sanitizer and their refusal codes are the model package's
-([README](../../OutWit.Controller.AI.Smt.Model/README.md)): the same code reads a set in an
+([README](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt.Model/README.md)): the same code reads a set in an
 application, on the server and on the node. A refused row costs nothing and has its row in the
 results. A set has at most 1,000,000 rows and 4 GiB, every byte counted (blank lines and line
 ends among them): the row past the first and the line past the second are refused once
@@ -119,7 +119,7 @@ binding, the rounds, the reasons of a repair, why a result was refused, the caus
 outcomes of a dispute, the budgets of the long tail). A legend or a filter built from them meets
 no word it does not list; the empty word is the documents' own for "none" where a schema allows it.
 
-### The results ([`smt-results.schema.json`](smt-results.schema.json))
+### The results ([`smt-results.schema.json`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/smt-results.schema.json))
 
 One JSON line a row of the set, in the set's order, refused rows included.
 
@@ -138,7 +138,7 @@ One JSON line a row of the set, in the set's order, refused rows included.
 | `digest`, `stats` | the digest of the settled row (the same on every honest machine), its resource count, fuel and checks |
 | `tags` | passed through |
 
-### The report ([`smt-report.schema.json`](smt-report.schema.json))
+### The report ([`smt-report.schema.json`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/smt-report.schema.json))
 
 What the run ran with in short (profile, module SHA-256, controller version, sampling rate and
 whether it was met, whether the platform said which package each result came back for
@@ -153,7 +153,7 @@ it and the budget); the attribution from the problems' `:source` and `:license`;
 with enumerations, the problems with exactly one model (kept; those of them on one machine's word
 in `kept_one_copy`) and those with two or more (dropped).
 
-### The integrity document ([`smt-integrity.schema.json`](smt-integrity.schema.json))
+### The integrity document ([`smt-integrity.schema.json`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/smt-integrity.schema.json))
 
 Counts only, and records by problem index: the answers taken, the problems compared and how they
 compared, the problems that rest on one machine (and of them the `unsat` ones and the complete
@@ -165,7 +165,7 @@ packages refused by reason, the packages nodes said they could not work on by co
 fan-out was asked for and what came back, and how many results came back bound and unbound, with
 the run's `binding` (`bound`, `unbound`, `mixed`, or `none` when no result came back).
 
-### The provenance ([`smt-provenance.schema.json`](smt-provenance.schema.json))
+### The provenance ([`smt-provenance.schema.json`](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/smt-provenance.schema.json))
 
 The profile and the module's SHA-256 and size, the engine's version and the SHA-256 of its native
 library for each platform, the controller's version and its model package's, the options as
