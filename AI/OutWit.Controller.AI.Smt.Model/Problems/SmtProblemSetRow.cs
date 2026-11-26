@@ -17,6 +17,7 @@ public sealed class SmtProblemSetRow
         Index = index;
         Data = data;
         Problem = problem;
+        IsAccepted = true;
     }
 
     internal SmtProblemSetRow(int line, int index, SmtRefusalData refusal)
@@ -48,9 +49,10 @@ public sealed class SmtProblemSetRow
     /// <summary>Why the row was refused; null when it was taken.</summary>
     public SmtRefusalData? Refusal { get; }
 
-    /// <summary>Whether the row was taken.</summary>
+    /// <summary>Whether the row was taken: then the problem is there, both as it travels and as the sanitizer took it, else the refusal (the constructors make it so).</summary>
     [MemberNotNullWhen(true, nameof(Data), nameof(Problem))]
-    public bool IsAccepted => Data != null && Problem != null;
+    [MemberNotNullWhen(false, nameof(Refusal))]
+    public bool IsAccepted { get; }
 
     #endregion
 }

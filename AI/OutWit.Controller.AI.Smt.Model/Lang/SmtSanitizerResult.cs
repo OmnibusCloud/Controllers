@@ -13,6 +13,7 @@ public sealed class SmtSanitizerResult
     internal SmtSanitizerResult(SmtProblem problem)
     {
         Problem = problem;
+        IsAccepted = true;
     }
 
     internal SmtSanitizerResult(SmtRefusalData refusal)
@@ -30,9 +31,10 @@ public sealed class SmtSanitizerResult
     /// <summary>Why the text was refused; null when it was taken.</summary>
     public SmtRefusalData? Refusal { get; }
 
-    /// <summary>Whether the text was taken.</summary>
+    /// <summary>Whether the text was taken: then the problem is there, else the refusal (the constructors make it so).</summary>
     [MemberNotNullWhen(true, nameof(Problem))]
-    public bool IsAccepted => Problem != null;
+    [MemberNotNullWhen(false, nameof(Refusal))]
+    public bool IsAccepted { get; }
 
     #endregion
 }

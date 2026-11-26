@@ -14,15 +14,12 @@ internal sealed class SmtLiveMeasured
 {
     #region Constructors
 
-    private SmtLiveMeasured(bool local, long taken, double wall, double? startup, IReadOnlyList<(string Name, double Seconds)> parts,
-        string setSha256, string description)
+    private SmtLiveMeasured(long taken, double wall, double? startup, IReadOnlyList<(string Name, double Seconds)> parts, string description)
     {
-        IsLocal = local;
         Taken = taken;
         Wall = wall;
         Startup = startup;
         Parts = parts;
-        SetSha256 = setSha256;
         Description = description;
     }
 
@@ -54,8 +51,7 @@ internal sealed class SmtLiveMeasured
 
         var description = $"1 machine: {Text(machine, "platform")}, {Integer(machine, "cores")} cores, {Integer(machine, "memory_bytes") / (1024.0 * 1024 * 1024):0.0} GiB; " +
                           $"{Integer(degree, "sessions")} session(s) at once ({Text(degree, "decided_by")})";
-        return new SmtLiveMeasured(true, Integer(Object(root, "problem_set"), "taken"), Number(seconds, "wall"), Number(seconds, "startup"), parts,
-            Text(Object(root, "problem_set"), "sha256"), description);
+        return new SmtLiveMeasured(Integer(Object(root, "problem_set"), "taken"), Number(seconds, "wall"), Number(seconds, "startup"), parts, description);
     }
 
     /// <summary>
@@ -88,8 +84,7 @@ internal sealed class SmtLiveMeasured
                 parts.Add(("of the job: run", ran));
         }
 
-        return new SmtLiveMeasured(false, Integer(Object(root, "problem_set"), "taken"), Number(seconds, "wall"), null, parts,
-            Text(Object(root, "problem_set"), "sha256"), description);
+        return new SmtLiveMeasured(Integer(Object(root, "problem_set"), "taken"), Number(seconds, "wall"), null, parts, description);
     }
 
     /// <summary>Whether a folder holds a measurement of the side asked for.</summary>
@@ -153,9 +148,6 @@ internal sealed class SmtLiveMeasured
 
     #region Properties
 
-    /// <summary>Whether this is a local run's measurement.</summary>
-    public bool IsLocal { get; }
-
     /// <summary>The problems the run took.</summary>
     public long Taken { get; }
 
@@ -167,9 +159,6 @@ internal sealed class SmtLiveMeasured
 
     /// <summary>The parts of the wall time, in order, seconds.</summary>
     public IReadOnlyList<(string Name, double Seconds)> Parts { get; }
-
-    /// <summary>The set's SHA-256 as the measuring command hashed it.</summary>
-    public string SetSha256 { get; }
 
     /// <summary>The machines, in short.</summary>
     public string Description { get; }

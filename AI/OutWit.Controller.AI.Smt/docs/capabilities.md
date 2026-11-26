@@ -53,7 +53,7 @@ Three queries: `check` (is the problem satisfiable, by which model or which valu
 |---|---|---|
 | `SmtRun` | `Blob:problems`, `SmtOptions:opts` | the blobs `results`, `report`, `provenance`, `integrity` |
 | `SmtPreflight` | `Blob:problems`, `SmtOptions:opts` | `result`: an `SmtPreflight`; nothing is sent to a node |
-| `SmtRuntimeDiagnostics` | none | `result`: an `SmtRuntimeDiagnostics`; `capabilities`: a JSON blob (the profile, the defaults and ceilings, the least memory of a node's machine, the pool as totals) |
+| `SmtRuntimeDiagnostics` | none | `result`: an `SmtRuntimeDiagnostics`; `capabilities`: a JSON blob (the profile, the defaults and ceilings, the words of the documents of a run, the least memory of a node's machine, the pool as totals) |
 
 The problem set and every document travel as blobs; the job's variables carry references and a
 few numbers.
@@ -73,6 +73,12 @@ few numbers.
 A run whose options are out of range, or name a profile the controller does not have, is
 refused before anything is sent. The documents state every option as the number the run used,
 never the word "default".
+
+The sampling rate is a share of the packages, not of the problems, rounded up to a whole
+package: any rate above 0 solves one package twice at least, so a small set has more of its
+problems twice than the rate says, and a set of one package (up to a package's size) is solved
+twice whole. Two copies need two machines: on a pool of one, nothing is solved twice and the
+documents say the sampling came out `short`.
 
 ### Before a run
 
@@ -106,6 +112,16 @@ holds one: an answer with the models it found, `complete` false, for the reason 
 
 ## 5. What comes back
 
+Every word the documents below say is listed in the capabilities document, from the lists the
+controller writes them with: under `results` the words of a row (the statuses; the codes of a
+refused row, of a crash, of a problem without a result and of a dispute that stands; the
+verdicts, the reasons, the proofs, the expected verdicts and the agreement with them, the
+evaluator's classes and reasons, how an answer was settled, the codes of a package a node could
+not work on), under `run` those of the report and the integrity document (the sampling, the
+binding, the rounds, the reasons of a repair, why a result was refused, the causes and the
+outcomes of a dispute, the budgets of the long tail). A legend or a filter built from them meets
+no word it does not list; the empty word is the documents' own for "none" where a schema allows it.
+
 ### The results ([`smt-results.schema.json`](smt-results.schema.json))
 
 One JSON line a row of the set, in the set's order, refused rows included.
@@ -119,7 +135,7 @@ One JSON line a row of the set, in the set's order, refused rows included.
 | `count`, `complete`, `limit_reached`, `models` | an enumeration: the models found, whether the count is exact, whether the number asked for was reached, and each model with the values of the projected constants |
 | `proof` | a proof: `proved` or `counterexample` |
 | `model`, `values` | a check's model and the values it asked for; a proof's counterexample |
-| `model_truncated` | the texts above are the solver's own and are shown up to 64 KB a row, whole texts only; past that they are null and this is true. The full models stay in the run's ledger, the server's own blob |
+| `model_truncated` | the texts above are the solver's own and are shown up to 64 KB a row, whole texts only; past that they are null and this is true. The full models stay in the run's ledger, the blob the job's variable `ledger` names, in a format of the controller's own |
 | `validation`, `validation_reason`, `validation_detail` | what the server's evaluator said of every model and of the values that came with it: `validated`, `partial` (with the reason: the evaluator's, `output_exceeded`, or `budget_package` when the row's result package had used up what the server spends on one package), `failed` (`assertion_false` with the assertion, or `value_mismatch` with the value), or `none` when there is no model |
 | `copies`, `agreed`, `settled_by` | how many answers the problem was ruled on, whether all gave one digest, and how the answer was settled: `one_copy` (it rests on one machine), `copies` (two machines of one fan-out at least: two answers the platform said came back for two tasks of the problem's package), `dispute`, `agreement` |
 | `digest`, `stats` | the digest of the settled row (the same on every honest machine), its resource count, fuel and checks |
@@ -206,7 +222,12 @@ What holds:
   node) goes out again to two machines, and the integrity document counts it as `copies_short`.
   The run's `sampling` is `as_asked` when every such problem ends with two answers of one fan-out,
   and `short` when the repair pair lost a copy again.
-- **No machine is named.** The documents name no machine, no user, no folder and no ticket.
+- **No machine is named.** The documents name no machine, no user, no folder and no ticket. Nor
+  does what a finished run leaves in its job: the variables that held what the fan-outs returned
+  (`solved`, `repaired`, `settled`: the results in the order the platform kept them, one node's
+  after another's, each with its package's ticket) are emptied once the documents are written,
+  and a node writes no wall time into a row (its `WallMs` is 0). What stays is the packages the
+  run gave out, in the run's own order, the four documents and the ledger.
 
 What it does not claim:
 
@@ -264,6 +285,12 @@ What it does not claim:
   came back for, an unbound one under the ticket it names), or when the rate asks for every
   package. A package asked for twice of which at most one result came back cannot be found, is
   not sent again, and leaves the sampling `short`.
+- **What a running job shows is the platform's.** The platform shows a job's variables to its
+  submitter while the job runs, and keeps the last of them in a job that fails. Until the
+  documents are written, `solved`, `repaired` and `settled` hold what the fan-outs returned in the
+  platform's order, one node's results after another's, with the tickets of the packages; and the
+  rows of a result say the platform of the node that wrote them, and nothing else of it. The run
+  empties the three at its end; it cannot hide them before.
 
 ## 7. Limits
 

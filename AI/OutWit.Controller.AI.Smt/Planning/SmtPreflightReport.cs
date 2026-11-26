@@ -43,7 +43,7 @@ internal static class SmtPreflightReport
         if (!SmtProfile.Is(options.Profile))
             problems.Add($"'profile' names a profile this controller does not have; it has '{SmtProfile.ID}'");
 
-        var readable = SmtProblemSetScan.Readable(options);
+        var readable = SmtOptionsRules.Readable(options);
         var scan = SmtProblemSetScan.Read(path, readable, null, cancellation);
         return Of(scan, readable, problems);
     }

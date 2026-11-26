@@ -3,6 +3,7 @@ using OutWit.Controller.AI.Smt.Documents;
 using OutWit.Controller.AI.Smt.Model;
 using OutWit.Controller.AI.Smt.Model.Problems;
 using OutWit.Controller.AI.Smt.Planning;
+using OutWit.Controller.AI.Smt.Solver;
 using OutWit.Engine.Interfaces;
 
 namespace OutWit.Controller.AI.Smt.Settlement;
@@ -25,6 +26,20 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 internal static class SmtRunSettlement
 {
     #region Constants
+
+    /// <summary>
+    /// Every word of a problem left without a result (its row's code, and the integrity
+    /// document's <c>no_result_by_reason</c>), as <see cref="ReasonIn"/> gives them: a node's
+    /// refusal of the problem, the kind of a fault of the node its row names, a node's fault code
+    /// of its package, the reason its package's result was refused, or no answer at all.
+    /// </summary>
+    public static readonly IReadOnlyList<string> NO_RESULT_REASONS =
+    [
+        .. new[] { SmtRunWords.NODE_REFUSED }.Concat(SmtSolveCodes.FAULTS).Concat(SmtNodeFaults.ALL).Concat(SmtRoundIntake.REASONS).Append(SmtRunWords.NO_ANSWER).Distinct(StringComparer.Ordinal)
+    ];
+
+    /// <summary>Every word of a repair (the integrity document's <c>repairs_by_reason</c>): those of a problem without an answer, and <see cref="SmtRulings.COPIES_SHORT"/>.</summary>
+    public static readonly IReadOnlyList<string> REPAIR_REASONS = [.. NO_RESULT_REASONS, SmtRulings.COPIES_SHORT];
 
     private const string RESULTS_EXTENSION = ".results";
     private const string REPORT_EXTENSION = ".report";
@@ -51,6 +66,8 @@ internal static class SmtRunSettlement
     /// <param name="cancellation">The job's cancellation, looked at before every package and every row.</param>
     /// <returns>The ledger file (the caller stores and deletes it) and the integrity facts.</returns>
     /// <exception cref="SmtSettlementBoundException">The rows the nodes returned, or the full models of the settled rows, pass what the host keeps of one run.</exception>
+    /// <exception cref="InvalidOperationException">A package of problems this host made cannot be read: the run cannot be settled.</exception>
+    /// <exception cref="IOException">The host's own working files could not be written or read.</exception>
     /// <exception cref="OperationCanceledException">The job was cancelled: no ledger is left.</exception>
     public static async Task<(string LedgerPath, SmtIntegrityFacts Facts)> SettleAsync(string problemsPath, SmtOptionsData options,
         (IReadOnlyList<SmtTaskPackageData> Issued, IEnumerable<SmtResultPackageData?> Returned) fanOut,
@@ -94,7 +111,7 @@ internal static class SmtRunSettlement
 
                     if (!row.IsAccepted)
                     {
-                        SmtResultsWriter.WriteRefused(results, row.Index, row.Refusal!);
+                        SmtResultsWriter.WriteRefused(results, row.Index, row.Refusal);
                         report.CountRefused();
                         continue;
                     }
@@ -180,19 +197,18 @@ internal static class SmtRunSettlement
     /// <summary>
     /// What a round said of a problem it gave no answer for: when it took copies that are no
     /// answers, <see cref="SmtRunWords.NODE_REFUSED"/> for a node's refusal and the code of its
-    /// node's fault for a fault (the copy first in the order of their digests); else what became of
-    /// its package (a node's fault code, the reason a result was refused, or no answer at all).
+    /// node's fault for a fault (the copy first in the order of their digests: the row check takes
+    /// a row of a node's fault only with one of the kinds of <see cref="SmtSolveCodes.FAULTS"/>);
+    /// else what became of its package (a node's fault code, the reason a result was refused, or no
+    /// answer at all). A round knows the package of a problem only from the copies it took.
     /// </summary>
     private static string ReasonIn(SmtRound round, int index, IReadOnlyDictionary<int, string> unanswered)
     {
         var faults = round.Of(index);
         if (faults.Count > 0)
-            return faults[0].IsRefusal ? SmtRunWords.NODE_REFUSED : faults[0].Code.Length > 0 ? faults[0].Code : SmtResultWords.NODE_FAULT;
+            return faults[0].IsRefusal ? SmtRunWords.NODE_REFUSED : faults[0].Code;
 
-        if (round.UnitOf.TryGetValue(index, out var unit))
-            return round.FateOf(unit.Ticket) is { Length: > 0 } fate ? fate : SmtRunWords.NO_ANSWER;
-
-        return unanswered.TryGetValue(index, out var ticket) ? round.FateOf(ticket) is { Length: > 0 } fateOf ? fateOf : SmtRunWords.NO_ANSWER : SmtRunWords.NO_ANSWER;
+        return unanswered.TryGetValue(index, out var ticket) && round.FateOf(ticket) is { Length: > 0 } fate ? fate : SmtRunWords.NO_ANSWER;
     }
 
     private static void Count(SmtIntegrityFacts facts, int index, SmtRuling ruling, IReadOnlyList<SmtRound> rounds, Func<SmtCopy, SmtModelCheck> check)

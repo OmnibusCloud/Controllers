@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using MemoryPack;
 using OutWit.Controller.AI.Smt.Model;
@@ -68,7 +69,7 @@ internal sealed class SmtTaskPackageReader : IDisposable
     /// <param name="problem">The problem; null at the end of the package.</param>
     /// <returns>False at the end of the package.</returns>
     /// <exception cref="SmtPackageException">The package is damaged, too large, or holds more problems than it may.</exception>
-    public bool TryRead(out SmtProblemData? problem)
+    public bool TryRead([NotNullWhen(true)] out SmtProblemData? problem)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
         problem = null;
@@ -112,7 +113,7 @@ internal sealed class SmtTaskPackageReader : IDisposable
         using var reader = new SmtTaskPackageReader(path, package.ProblemCount, maxImageBytes);
         var indices = new List<int>(package.ProblemCount);
         while (reader.TryRead(out var problem))
-            indices.Add(problem!.Index);
+            indices.Add(problem.Index);
 
         if (indices.Count != package.ProblemCount)
             throw new SmtPackageException(SmtNodeFaults.PACKAGE_MISMATCH, $"the package holds {indices.Count} problems, its reference names {package.ProblemCount}");

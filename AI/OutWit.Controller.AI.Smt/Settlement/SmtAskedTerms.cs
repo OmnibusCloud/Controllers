@@ -1,5 +1,6 @@
 using OutWit.Controller.AI.Smt.Model;
 using OutWit.Controller.AI.Smt.Model.Lang;
+using OutWit.Controller.AI.Smt.Model.Problems;
 
 namespace OutWit.Controller.AI.Smt.Settlement;
 
@@ -51,24 +52,14 @@ internal static class SmtAskedTerms
         return terms;
     }
 
-    /// <summary>The constants of a projection, each written as the problem's declaration writes its name.</summary>
+    /// <summary>
+    /// The constants of a projection, each written as the problem's declaration writes its name:
+    /// by the one reading of a projection the reader of a set and the node share
+    /// (<see cref="SmtProjection"/>), so that the host takes the projections they take and no other.
+    /// </summary>
     private static IReadOnlyList<SmtExpression>? Constants(SmtProblem problem, IReadOnlyList<string> texts)
     {
-        var declared = new Dictionary<string, SmtDeclaredConstant>(StringComparer.Ordinal);
-        foreach (var constant in problem.Constants)
-            declared.TryAdd(constant.Name, constant);
-
-        var constants = new List<SmtExpression>(texts.Count);
-        foreach (var text in texts)
-        {
-            var term = SmtSanitizer.SanitizeTerm(text ?? "");
-            if (!term.IsAccepted || term.Term.Kind != SmtExpressionKind.Symbol || !declared.TryGetValue(term.Term.Text, out var constant))
-                return null;
-
-            constants.Add(constant.Symbol);
-        }
-
-        return constants;
+        return SmtProjection.Take(problem, texts, out var constants) == null ? [.. constants.Select(constant => constant.Symbol)] : null;
     }
 
     #endregion

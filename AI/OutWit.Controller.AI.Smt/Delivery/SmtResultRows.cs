@@ -8,7 +8,9 @@ namespace OutWit.Controller.AI.Smt.Delivery;
 /// Makes the row a node returns for one problem (<see cref="SmtResultData"/>) of the session's
 /// outcome: the problem it answers, the ticket of its package, every value of the outcome in the
 /// words of a result, the controller's version and the platform, and the digest of the row
-/// (<see cref="SmtResultDigest"/>). Nothing else of the machine goes in.
+/// (<see cref="SmtResultDigest"/>). Nothing else of the machine goes in: not the session's wall
+/// time either, which no digest and no document reads and which would tell a fast machine from a
+/// slow one (the row's member stays, at 0).
 /// </summary>
 internal static class SmtResultRows
 {
@@ -49,7 +51,7 @@ internal static class SmtResultRows
             Transcript = outcome.Transcript,
             ControllerVersion = ControllerBuildInfo.VERSION,
             Platform = Platform,
-            WallMs = outcome.WallMs
+            WallMs = 0
         };
 
         row.Digest = SmtResultDigest.Of(row);

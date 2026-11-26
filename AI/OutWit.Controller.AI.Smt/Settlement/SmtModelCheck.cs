@@ -1,10 +1,11 @@
 using OutWit.Controller.AI.Smt.Model;
+using OutWit.Controller.AI.Smt.Model.Eval;
 
 namespace OutWit.Controller.AI.Smt.Settlement;
 
 /// <summary>What the host's evaluator said of a row's models and of the values that came with them: the class, in the word a row writes, and the reason when the class is not validated.</summary>
 /// <param name="Class">One of <see cref="SmtRunWords.VALIDATIONS"/>.</param>
-/// <param name="Reason">The evaluator's reason code (or <see cref="SmtRunWords.OUTPUT_EXCEEDED"/>); empty for validated and for no check.</param>
+/// <param name="Reason">The evaluator's reason code (or <see cref="SmtRunWords.OUTPUT_EXCEEDED"/>, or <see cref="SmtRunWords.BUDGET_PACKAGE"/>); empty for validated and for no check.</param>
 /// <param name="Detail">The evaluator's detail: for a failed class, which model of an enumeration, and which assertion or which of the reported values (the reason says which of the two); empty otherwise.</param>
 internal sealed record SmtModelCheck(string Class, string Reason, string Detail)
 {
@@ -12,6 +13,13 @@ internal sealed record SmtModelCheck(string Class, string Reason, string Detail)
 
     /// <summary>A row with no model to check.</summary>
     public static readonly SmtModelCheck NONE = new(SmtRunWords.NOT_CHECKED, "", "");
+
+    /// <summary>
+    /// Every reason a check gives: the evaluator's codes, <see cref="SmtRunWords.OUTPUT_EXCEEDED"/>
+    /// for a model that did not come whole, and <see cref="SmtRunWords.BUDGET_PACKAGE"/> for a row
+    /// whose result package had used up what the host's evaluator spends on one package.
+    /// </summary>
+    public static readonly IReadOnlyList<string> REASONS = [.. SmtValidationReasons.All, SmtRunWords.OUTPUT_EXCEEDED, SmtRunWords.BUDGET_PACKAGE];
 
     #endregion
 

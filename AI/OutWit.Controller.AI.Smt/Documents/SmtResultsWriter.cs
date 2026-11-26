@@ -199,7 +199,7 @@ internal static class SmtResultsWriter
     {
         var models = row?.Models ?? [];
         var values = row?.Values ?? [];
-        var budget = new Budget();
+        var budget = new SmtResultsBudget();
 
         switch (query)
         {
@@ -227,7 +227,7 @@ internal static class SmtResultsWriter
         return budget.Cut;
     }
 
-    private static void WriteText(Utf8JsonWriter writer, string name, string? text, Budget budget)
+    private static void WriteText(Utf8JsonWriter writer, string name, string? text, SmtResultsBudget budget)
     {
         if (text == null)
         {
@@ -264,18 +264,6 @@ internal static class SmtResultsWriter
         }
 
         models.WriteByte(LINE_FEED);
-    }
-
-    #endregion
-
-    #region Nested Types
-
-    /// <summary>What a row has spent of its budget of models, and whether it was cut.</summary>
-    private sealed class Budget
-    {
-        public long Spent { get; set; }
-
-        public bool Cut { get; set; }
     }
 
     #endregion

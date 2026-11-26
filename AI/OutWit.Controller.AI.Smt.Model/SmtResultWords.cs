@@ -66,7 +66,11 @@ public static class SmtResultWords
     /// <summary>The most characters of a row's <see cref="SmtResultData.Message"/>.</summary>
     public const int MAX_MESSAGE_CHARACTERS = 1_024;
 
-    /// <summary>Every status, in the order a report lists them.</summary>
+    /// <summary>
+    /// Every status of a node's row: the words a host holds a row a node returns to. A row of the
+    /// results of a run says <see cref="SmtRunWords.STATUSES"/> instead: never <see cref="NODE_FAULT"/>,
+    /// and the host's own <c>no_result</c> and <c>disputed</c> beside the others.
+    /// </summary>
     public static readonly IReadOnlyList<string> STATUSES = [OK, REFUSED, INPUT_ERROR, OUTPUT_EXCEEDED, ENGINE_CRASH, NODE_FAULT];
 
     /// <summary>Every verdict.</summary>

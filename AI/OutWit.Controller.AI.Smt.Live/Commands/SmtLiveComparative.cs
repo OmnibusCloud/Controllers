@@ -27,6 +27,9 @@ internal sealed class SmtLiveComparative
     private const int COLUMN = 24;
     private const string NOT_MEASURED = "not measured";
 
+    // The most differences of the two runs' options a comparison names.
+    private const int MAX_DIFFERENCES_SHOWN = 10;
+
     #endregion
 
     #region Fields
@@ -128,7 +131,7 @@ internal sealed class SmtLiveComparative
             : $"{SmtLiveRunSummary.LOUD}set       : NOT THE SAME: local sha256 {setA}, fleet sha256 {setB}");
 
         var differences = new List<string>();
-        Differences(Without(At(local.Provenance, "options"), "sampling_rate"), Without(At(fleet.Provenance, "options"), "sampling_rate"), "options", differences, 10);
+        Differences(Without(At(local.Provenance, "options"), "sampling_rate"), Without(At(fleet.Provenance, "options"), "sampling_rate"), "options", differences, MAX_DIFFERENCES_SHOWN);
         m_output.WriteLine(differences.Count == 0
             ? $"options   : the same but the sampling rate (local {Text(local.Provenance, "sampling_rate")}, fleet {Text(fleet.Provenance, "sampling_rate")})"
             : $"{SmtLiveRunSummary.LOUD}options   : DIFFER: {string.Join("; ", differences)}");

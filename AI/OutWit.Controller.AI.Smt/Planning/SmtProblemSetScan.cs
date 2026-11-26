@@ -70,42 +70,6 @@ internal sealed class SmtProblemSetScan
         return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, READ_BUFFER_BYTES, FileOptions.SequentialScan);
     }
 
-    /// <summary>
-    /// Options a reader takes: the options as they are when they are in range, else each one that
-    /// is out of range at its default (a preflight still reads the set and says what is wrong).
-    /// </summary>
-    /// <param name="options">The options.</param>
-    /// <returns>Options in range.</returns>
-    public static SmtOptionsData Readable(SmtOptionsData options)
-    {
-        if (SmtOptionsRules.Check(options).Count == 0)
-            return options;
-
-        var readable = options.Clone();
-        if (!Enum.IsDefined(readable.Query))
-            readable.Query = SmtQuery.Check;
-
-        if (readable.MaxModels is < 0 or > SmtOptionsRules.MAX_MODELS)
-            readable.MaxModels = 0;
-
-        if (readable.Seed < 0)
-            readable.Seed = 0;
-
-        if (readable.ResourceLimit is < 0 or > SmtOptionsRules.MAX_RESOURCE_LIMIT)
-            readable.ResourceLimit = 0;
-
-        if (readable.HardCapSeconds is < 0 or > SmtOptionsRules.MAX_HARD_CAP_SECONDS)
-            readable.HardCapSeconds = 0;
-
-        if (readable.MemoryMegabytes is < 0 or > SmtOptionsRules.MAX_MEMORY_MEGABYTES)
-            readable.MemoryMegabytes = 0;
-
-        if (!(readable.SamplingRate >= SmtOptionsRules.MIN_SAMPLING_RATE && readable.SamplingRate <= SmtOptionsRules.MAX_SAMPLING_RATE))
-            readable.SamplingRate = SmtOptionsRules.DEFAULT_SAMPLING_RATE;
-
-        return readable;
-    }
-
     #endregion
 
     #region Properties

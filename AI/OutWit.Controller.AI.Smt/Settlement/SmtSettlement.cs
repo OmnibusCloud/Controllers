@@ -26,6 +26,10 @@ internal static class SmtSettlement
     /// <param name="spool">Where whole rows are kept, or null when only the comparison is needed.</param>
     /// <param name="cancellation">The job's cancellation.</param>
     /// <returns>The round as taken.</returns>
+    /// <exception cref="InvalidOperationException">A package of problems this host made cannot be read: the run cannot be settled.</exception>
+    /// <exception cref="SmtSettlementBoundException">The rows taken pass what the spool holds of one run.</exception>
+    /// <exception cref="IOException">The host's own spool could not be written.</exception>
+    /// <exception cref="OperationCanceledException">The job was cancelled.</exception>
     public static Task<SmtRound> ReadMainAsync(IReadOnlyList<SmtTaskPackageData> issued, IEnumerable<SmtResultPackageData?> returned, IWitBlobService blobs, SmtSpool? spool = null,
         CancellationToken cancellation = default)
     {
@@ -39,6 +43,10 @@ internal static class SmtSettlement
     /// <param name="spool">Where whole rows are kept, or null.</param>
     /// <param name="cancellation">The job's cancellation.</param>
     /// <returns>The round as taken.</returns>
+    /// <exception cref="InvalidOperationException">A package of problems this host made cannot be read: the run cannot be settled.</exception>
+    /// <exception cref="SmtSettlementBoundException">The rows taken pass what the spool holds of one run.</exception>
+    /// <exception cref="IOException">The host's own spool could not be written.</exception>
+    /// <exception cref="OperationCanceledException">The job was cancelled.</exception>
     public static Task<SmtRound> ReadRepairAsync(IReadOnlyList<SmtTaskPackageData> issued, IEnumerable<SmtResultPackageData?> returned, IWitBlobService blobs, SmtSpool? spool = null,
         CancellationToken cancellation = default)
     {
@@ -52,6 +60,10 @@ internal static class SmtSettlement
     /// <param name="spool">Where whole rows are kept, or null.</param>
     /// <param name="cancellation">The job's cancellation.</param>
     /// <returns>The round as taken.</returns>
+    /// <exception cref="InvalidOperationException">A package of problems this host made cannot be read: the run cannot be settled.</exception>
+    /// <exception cref="SmtSettlementBoundException">The rows taken pass what the spool holds of one run.</exception>
+    /// <exception cref="IOException">The host's own spool could not be written.</exception>
+    /// <exception cref="OperationCanceledException">The job was cancelled.</exception>
     public static Task<SmtRound> ReadDisputeAsync(IReadOnlyList<SmtTaskPackageData> issued, IEnumerable<SmtResultPackageData?> returned, IWitBlobService blobs, SmtSpool? spool = null,
         CancellationToken cancellation = default)
     {
@@ -70,6 +82,9 @@ internal static class SmtSettlement
     /// <param name="folder">A folder of the host's own for the package files.</param>
     /// <param name="cancellation">The job's cancellation.</param>
     /// <returns>The references; empty when every problem has the answers it was asked for.</returns>
+    /// <exception cref="SmtPackageException">A package of problems this host made cannot be read again: the run cannot go on.</exception>
+    /// <exception cref="IOException">The host's own files could not be read or written.</exception>
+    /// <exception cref="OperationCanceledException">The job was cancelled.</exception>
     public static Task<List<SmtTaskPackageData>> PublishRepairsAsync(SmtRound main, double? rate, IWitBlobService blobs, string folder, CancellationToken cancellation = default)
     {
         var sampled = SmtRulings.Sampled(main, rate);
@@ -104,6 +119,9 @@ internal static class SmtSettlement
     /// <param name="packageSteps">What the host's evaluator spends on the models of one result package at the most.</param>
     /// <param name="cancellation">The job's cancellation.</param>
     /// <returns>The references, and how many problems went for each cause.</returns>
+    /// <exception cref="SmtPackageException">A package of problems this host made cannot be read again: the run cannot go on.</exception>
+    /// <exception cref="IOException">The host's own files could not be read or written.</exception>
+    /// <exception cref="OperationCanceledException">The job was cancelled.</exception>
     public static async Task<(List<SmtTaskPackageData> Packages, SortedDictionary<string, int> Causes)> PublishDisputesAsync(SmtRound main, SmtRound? repair, SmtSpool spool,
         IWitBlobService blobs, string folder, long packageSteps = SmtPackageBudget.DEFAULT_STEPS, CancellationToken cancellation = default)
     {
@@ -151,6 +169,8 @@ internal static class SmtSettlement
     /// <param name="packageSteps">What the host's evaluator spends on the models of one result package at the most.</param>
     /// <param name="cancellation">The job's cancellation, looked at before every package, problem and model.</param>
     /// <returns>By problem and digest, the walk that says the most of the copies of that digest in the rounds.</returns>
+    /// <exception cref="SmtPackageException">A package of problems this host made cannot be read again: the run cannot go on.</exception>
+    /// <exception cref="IOException">The host's own files could not be read or written.</exception>
     /// <exception cref="OperationCanceledException">The job was cancelled.</exception>
     public static async Task<Dictionary<(int Index, SmtDigestKey Digest), SmtWalk>> CheckAsync(IReadOnlyList<SmtRound> rounds, SmtSpool spool, IWitBlobService blobs,
         long packageSteps, CancellationToken cancellation)
@@ -182,7 +202,7 @@ internal static class SmtSettlement
                 using var reader = new SmtTaskPackageReader(await blobs.GetLocalPathAsync(unit.ProblemsBlobId), unit.ProblemCount);
                 while (reader.TryRead(out var problem))
                 {
-                    if (!indices.Contains(problem!.Index))
+                    if (!indices.Contains(problem.Index))
                         continue;
 
                     cancellation.ThrowIfCancellationRequested();
@@ -259,8 +279,8 @@ internal static class SmtSettlement
             while (reader.TryRead(out var problem))
             {
                 cancellation.ThrowIfCancellationRequested();
-                if (indices == null || indices.Contains(problem!.Index))
-                    await publisher.AddAsync(problem!);
+                if (indices == null || indices.Contains(problem.Index))
+                    await publisher.AddAsync(problem);
             }
         }
 

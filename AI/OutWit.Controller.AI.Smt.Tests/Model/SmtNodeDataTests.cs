@@ -4,10 +4,11 @@ using OutWit.Controller.AI.Smt.Model;
 namespace OutWit.Controller.AI.Smt.Tests.Model;
 
 /// <summary>
-/// The wire types of a package as values: a package of problems, a row, a package of results and
-/// the diagnostics travel through MemoryPack whole, compare by every member and copy deep; a row's
-/// digest covers every value that is a function of the problem and leaves the machine's out; the
-/// words and the codes are fixed lists.
+/// The wire types of a package as values: a package of problems, a row and a package of results
+/// travel through MemoryPack whole, compare by every member and copy deep (every member of every
+/// wire type is held so by <see cref="SmtWireTypeValueTests"/>); a row's digest covers every value
+/// that is a function of the problem and leaves the machine's out; the words and the codes are
+/// fixed lists.
 /// </summary>
 [TestFixture]
 public sealed class SmtNodeDataTests
@@ -207,33 +208,6 @@ public sealed class SmtNodeDataTests
             Assert.That(SmtResultWords.PROOFS, Is.EqualTo(new[] { "proved", "counterexample", "none" }));
             Assert.That(SmtNodeFaults.ALL, Is.Unique);
             Assert.That(SmtNodeFaults.ALL, Has.All.Match("^[a-z_]+$"));
-        });
-    }
-
-    #endregion
-
-    #region Diagnostics Tests
-
-    [Test]
-    public void DiagnosticsRoundTripAndCompareEveryMemberTest()
-    {
-        var diagnostics = new SmtRuntimeDiagnosticsData
-        {
-            ControllerVersion = "0.2.0", ProfileId = "z3-5.4.1", SolverVersion = "5.4.1", ModuleFile = "wasm/z3-5.4.1.wasm", ModuleSha256 = new string('a', 64),
-            ModuleSize = 30_204_160, ModulePresent = true, ModuleCompiled = true, CompileMs = 13_000, SandboxProblem = "", WasmtimeBinding = "48.0.2.0",
-            NativesVersion = "48.0.8", NativesSha256 = new string('b', 64), NativesPinned = true, TrapMode = "signals", Platform = "linux-x64",
-            LogicalCores = 8, AvailableMemoryBytes = 16L << 30, SessionMemoryBytes = 2_818_572_288, Degree = 4, DegreeReason = "memory"
-        };
-
-        var back = MemoryPackSerializer.Deserialize<SmtRuntimeDiagnosticsData>(MemoryPackSerializer.Serialize(diagnostics))!;
-        var other = diagnostics.Clone();
-        other.Degree = 3;
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(back.Is(diagnostics), Is.True);
-            Assert.That(diagnostics.Clone().Is(diagnostics), Is.True);
-            Assert.That(other.Is(diagnostics), Is.False);
         });
     }
 

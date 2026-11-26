@@ -1,10 +1,12 @@
 using System.Text.Json;
 using OutWit.Controller.AI.Smt.Delivery;
+using OutWit.Controller.AI.Smt.Documents;
 using OutWit.Controller.AI.Smt.Model;
 using OutWit.Controller.AI.Smt.Model.Lang;
 using OutWit.Controller.AI.Smt.Model.Problems;
 using OutWit.Controller.AI.Smt.Profiles;
 using OutWit.Controller.AI.Smt.Sandbox;
+using OutWit.Controller.AI.Smt.Settlement;
 using OutWit.Controller.AI.Smt.Solver;
 using OutWit.Controller.AI.Wasm;
 
@@ -13,12 +15,15 @@ namespace OutWit.Controller.AI.Smt.Diagnostics;
 /// <summary>
 /// The capabilities document: what a lab can know before a run. The controller's version and its
 /// solver profile, the queries, the defaults and ceilings of a run's options, the ceilings of a
-/// problem and of a problem set, the words a row may say and the codes of a package a node could
-/// not work on, the size of a package, what a node runs a package with and the least memory it
-/// must have, the benchmark's unit, the platforms, and the pool as totals. Nodes run the same module as the host (a node on another
-/// version refuses the work), so what is said here is the pool's. A JSON document, so an
-/// application reads it without the controller's types and reads its limits here instead of
-/// carrying copies of them; its schema is <c>docs/smt-capabilities.schema.json</c>.
+/// problem and of a problem set, the words of the documents of a run (those a row of the results
+/// may say, the codes of a package a node could not work on among them, and those of the report
+/// and the integrity document), the size of a package, what a node runs a package with and the
+/// least memory it must have, the benchmark's unit, the platforms, and the pool as totals. Nodes
+/// run the same module as the host (a node on another version refuses the work), so what is said
+/// here is the pool's. A JSON document, so an application reads it without the controller's types
+/// and reads its limits and its words here instead of carrying copies of them; its schema is
+/// <c>docs/smt-capabilities.schema.json</c>. Every list of words is the code's own list, the one
+/// the documents are written with.
 /// </summary>
 internal static class SmtCapabilitiesWriter
 {
@@ -30,7 +35,17 @@ internal static class SmtCapabilitiesWriter
     /// <summary>The platforms a node runs the controller on.</summary>
     public static readonly IReadOnlyList<string> PLATFORMS = ["win-x64", "linux-x64", "osx-arm64"];
 
-    private static readonly IReadOnlyList<string> QUERIES = ["check", "enumerate", "prove"];
+    /// <summary>The queries, in the words the documents write them in.</summary>
+    public static readonly IReadOnlyList<string> QUERIES = [.. Enum.GetValues<SmtQuery>().Select(SmtResultsWriter.Query)];
+
+    /// <summary>The words of a row's expected verdict, as the results write them; <c>none</c> last.</summary>
+    public static readonly IReadOnlyList<string> EXPECTED =
+    [
+        .. Enum.GetValues<SmtProblemStatus>().Select(SmtResultsWriter.Expected).Distinct(StringComparer.Ordinal).OrderBy(word => word == SmtResultWords.NONE)
+    ];
+
+    /// <summary>The codes of a refused row (and the keys of the report's <c>refused_by_code</c>), in ordinal order.</summary>
+    public static readonly IReadOnlyList<string> REFUSAL_CODES = [.. SmtRefusalCodes.All.Order(StringComparer.Ordinal)];
 
     #endregion
 
@@ -118,12 +133,38 @@ internal static class SmtCapabilitiesWriter
             writer.WriteNumber("max_tags_characters", SmtProblemSetLimits.MAX_TAGS_CHARACTERS);
             writer.WriteEndObject();
 
+            // The words of a row of the results: the statuses of the results (a node's fault is
+            // never one of them; the server's no_result and disputed are), the code of a row by its
+            // status, and every other word a row writes.
             writer.WriteStartObject("results");
-            WriteWords(writer, "statuses", SmtResultWords.STATUSES);
+            WriteWords(writer, "statuses", SmtRunWords.STATUSES);
+            writer.WriteStartObject("codes");
+            WriteWords(writer, SmtResultWords.REFUSED, REFUSAL_CODES);
+            WriteWords(writer, SmtResultWords.ENGINE_CRASH, SmtSolveCodes.CRASHES);
+            WriteWords(writer, SmtRunWords.NO_RESULT, SmtRunSettlement.NO_RESULT_REASONS);
+            WriteWords(writer, SmtRunWords.DISPUTED, SmtRunWords.DISPUTE_OUTCOMES);
+            writer.WriteEndObject();
             WriteWords(writer, "verdicts", SmtResultWords.VERDICTS);
             WriteWords(writer, "reasons", SmtResultWords.REASONS);
             WriteWords(writer, "proofs", SmtResultWords.PROOFS);
+            WriteWords(writer, "expected", EXPECTED);
+            WriteWords(writer, "expected_agreements", SmtRunWords.EXPECTATIONS);
+            WriteWords(writer, "validations", SmtRunWords.VALIDATIONS);
+            WriteWords(writer, "validation_reasons", SmtModelCheck.REASONS);
+            WriteWords(writer, "settled_by", SmtRunWords.SETTLED_BY);
             WriteWords(writer, "node_faults", SmtNodeFaults.ALL);
+            writer.WriteEndObject();
+
+            // The words of the report and the integrity document beside a row's.
+            writer.WriteStartObject("run");
+            WriteWords(writer, "sampling", SmtSampling.STATES);
+            WriteWords(writer, "bindings", SmtRunWords.BINDINGS);
+            WriteWords(writer, "rounds", SmtRound.NAMES);
+            WriteWords(writer, "repair_reasons", SmtRunSettlement.REPAIR_REASONS);
+            WriteWords(writer, "rejected", SmtRoundIntake.REASONS);
+            WriteWords(writer, "dispute_causes", SmtRunWords.DISPUTE_CAUSES);
+            WriteWords(writer, "dispute_outcomes", SmtRunWords.DISPUTE_OUTCOMES);
+            WriteWords(writer, "stopped_by", SmtReportFacts.BUDGETS);
             writer.WriteEndObject();
 
             writer.WriteStartObject("packages");

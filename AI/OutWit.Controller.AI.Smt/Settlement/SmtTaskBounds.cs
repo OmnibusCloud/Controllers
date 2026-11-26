@@ -96,7 +96,7 @@ internal sealed class SmtTaskBounds
     private static IEnumerable<SmtProblemData> Problems(SmtTaskPackageReader reader)
     {
         while (reader.TryRead(out var problem))
-            yield return problem!;
+            yield return problem;
     }
 
     #endregion

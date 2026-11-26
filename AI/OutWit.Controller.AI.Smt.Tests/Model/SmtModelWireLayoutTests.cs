@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using MemoryPack;
 using OutWit.Controller.AI.Smt.Model;
@@ -6,11 +7,15 @@ namespace OutWit.Controller.AI.Smt.Tests.Model;
 
 /// <summary>
 /// Holds the wire layout of every MemoryPack type of the Model, member by member: the order, the
-/// name, the type and the default of each. A failing case means a member was inserted, reordered,
-/// renamed, retyped, removed, or given another default: a wire break for a deployed fleet and for
-/// every application built against the package. New members go at the END with the next order
-/// value, and start at their type's default: a member the sender does not have arrives as its
-/// type's default, not as the property's initializer.
+/// name, the type and the default of each. A failing case means a member was inserted, appended,
+/// reordered, renamed, retyped, removed, or given another default: a wire change for a deployed
+/// fleet and for every application built against the package. No such change is compatible on its
+/// own, appending included: MemoryPack in its default mode reads a payload of fewer members than
+/// its reader knows (the missing ones arrive as their type's default: null for a text or a list,
+/// never the property's initializer) and throws on a payload of more. A published layout changes
+/// only behind a version fence, so that no reader of the old layout is ever handed the new one;
+/// and a member a sender may not have starts at its type's default and, when it is a reference,
+/// is declared nullable.
 /// </summary>
 [TestFixture]
 public sealed class SmtModelWireLayoutTests
@@ -21,13 +26,23 @@ public sealed class SmtModelWireLayoutTests
     private const string WRITE_BASELINE_VARIABLE = "WITAI_SMT_WRITE_WIRE_BASELINE";
 
     /// <summary>
-    /// The members whose initializer is not their type's default, by type: each a member of its
-    /// type's first layout. The sampling rate of a run's options is one: 0 is a rate of its own
-    /// (no re-execution), so "not set" cannot be 0 there, and a new instance holds the default.
+    /// How many members each type has in its first layout: every sender has those, so they may
+    /// start at anything (the sampling rate of a run's options starts at the default rate: 0 is a
+    /// rate of its own, so "not set" cannot be 0 there). A member past them is one a sender may
+    /// not have. Until the package is first published, its first layout is the layout as it
+    /// stands, and a member added before then moves the count.
     /// </summary>
-    private static readonly IReadOnlyDictionary<string, string[]> FIRST_LAYOUT_DEFAULTS = new Dictionary<string, string[]>(StringComparer.Ordinal)
+    private static readonly IReadOnlyDictionary<string, int> FIRST_LAYOUT_MEMBERS = new Dictionary<string, int>(StringComparer.Ordinal)
     {
-        [nameof(SmtOptionsData)] = [nameof(SmtOptionsData.SamplingRate)]
+        [nameof(SmtCountData)] = 2,
+        [nameof(SmtOptionsData)] = 8,
+        [nameof(SmtPreflightData)] = 29,
+        [nameof(SmtProblemData)] = 11,
+        [nameof(SmtRefusalData)] = 6,
+        [nameof(SmtResultData)] = 26,
+        [nameof(SmtResultPackageData)] = 7,
+        [nameof(SmtRuntimeDiagnosticsData)] = 21,
+        [nameof(SmtTaskPackageData)] = 8
     };
 
     #endregion
@@ -55,7 +70,7 @@ public sealed class SmtModelWireLayoutTests
             foreach (var (type, members) in actual)
             {
                 if (expected.TryGetValue(type, out var pinned))
-                    Assert.That(members, Is.EqualTo(pinned), $"{type}: a member's order, name, type or default differs from the baseline. Append only; then update wire-layout.baseline.json in the same commit. The current layout:\n{current}");
+                    Assert.That(members, Is.EqualTo(pinned), $"{type}: a member's order, name, type or default differs from the baseline, or a member was added. A published layout changes only behind a version fence (appending is no compatible change: an older reader throws on the newer payload); then update wire-layout.baseline.json in the same commit. The current layout:\n{current}");
             }
         });
     }
@@ -99,24 +114,89 @@ public sealed class SmtModelWireLayoutTests
     }
 
     [Test]
-    public void AMembersInitializerIsItsTypesDefaultTest()
+    public void AMemberASenderMayNotHaveStartsAtItsTypesDefaultTest()
     {
-        // What a reader gets for a member its sender does not have is the type's default. A
-        // value member with another initializer would read differently from an older sender
-        // than from a new instance: only a member of a type's first layout, which every sender
-        // has, may start at something else.
+        // What a reader gets for a member its sender does not have is the member's type's
+        // default: 0 or false for a value, null for a text, a list or a model, never the
+        // property's initializer. A member past its type's first layout starts there on a new
+        // instance too, so that it reads the same from an older sender as from a new instance,
+        // and a reference member is declared nullable, so that its readers handle the null.
+        var nullability = new NullabilityInfoContext();
+
         Assert.Multiple(() =>
         {
             foreach (var type in SmtModelWireLayout.Types())
             {
-                var allowed = FIRST_LAYOUT_DEFAULTS.GetValueOrDefault(type.Name) ?? [];
-                var other = SmtModelWireLayout.Members(type)
-                    .Where(member => member.Type is "Boolean" or "Int32" or "Int64" or "Double" && member.Default is not ("false" or "0"))
-                    .Select(member => member.Name);
+                if (!FIRST_LAYOUT_MEMBERS.TryGetValue(type.Name, out var first))
+                {
+                    Assert.Fail($"{type.Name}: a wire type without the member count of its first layout");
+                    continue;
+                }
 
-                Assert.That(other, Is.EquivalentTo(allowed), $"{type.Name}: a value member starts at something else than its type's default");
+                Assert.That(SmtModelWireLayout.Members(type), Has.Count.GreaterThanOrEqualTo(first), $"{type.Name}: a member of its first layout was removed");
+
+                var instance = Activator.CreateInstance(type)!;
+                foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (property.GetCustomAttribute<MemoryPackOrderAttribute>() is not { } order || order.Order < first)
+                        continue;
+
+                    var value = property.GetValue(instance);
+                    if (property.PropertyType.IsValueType)
+                    {
+                        Assert.That(value, Is.EqualTo(Activator.CreateInstance(property.PropertyType)), $"{type.Name}.{property.Name}: a member a sender may not have starts at its type's default");
+                        continue;
+                    }
+
+                    Assert.That(value, Is.Null, $"{type.Name}.{property.Name}: a member a sender may not have arrives null from that sender, so it starts null");
+                    Assert.That(nullability.Create(property).ReadState, Is.EqualTo(NullabilityState.Nullable), $"{type.Name}.{property.Name}: a reference member a sender may not have is declared nullable");
+                }
             }
         });
+    }
+
+    #endregion
+
+    #region Evolution Tests
+
+    [Test]
+    public void AnOlderSendersPayloadLeavesTheMemberItLacksAtItsTypesDefaultTest()
+    {
+        // The payload of a sender whose row had no digest yet: the same bytes, one member fewer
+        // in the header and without the last member's. MemoryPack reads it, and the member the
+        // sender did not have arrives null, not as the property's initializer: the text a row
+        // is declared to always have.
+        var bytes = MemoryPackSerializer.Serialize(new SmtResultData { Id = "cage-1", Transcript = "> (check-sat)\nsat\n", Digest = "" });
+        var members = SmtModelWireLayout.Members(typeof(SmtResultData)).Count;
+
+        Assert.That(bytes[0], Is.EqualTo(members), "a payload starts with its count of members");
+        Assert.That(bytes[^4..], Is.EqualTo(new byte[4]), "and here ends with the empty text of the last member");
+
+        var older = bytes[..^4];
+        older[0] = (byte)(members - 1);
+        var back = MemoryPackSerializer.Deserialize<SmtResultData>(older)!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(back.Digest, Is.Null, "the member the sender did not have");
+            Assert.That(back.Id, Is.EqualTo("cage-1"));
+            Assert.That(back.Transcript, Is.EqualTo("> (check-sat)\nsat\n"));
+        });
+    }
+
+    [Test]
+    public void ANewerSendersPayloadIsRefusedTest()
+    {
+        // The payload of a sender whose row has one member more (an empty text appended): a
+        // reader of this layout throws instead of reading the members it knows. Appending a
+        // member to a published type is no compatible change.
+        var bytes = MemoryPackSerializer.Serialize(new SmtResultData());
+        var members = SmtModelWireLayout.Members(typeof(SmtResultData)).Count;
+
+        var newer = bytes.Concat(new byte[4]).ToArray();
+        newer[0] = (byte)(members + 1);
+
+        Assert.Throws<MemoryPackSerializationException>(() => MemoryPackSerializer.Deserialize<SmtResultData>(newer));
     }
 
     #endregion

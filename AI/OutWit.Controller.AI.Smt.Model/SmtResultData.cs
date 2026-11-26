@@ -27,7 +27,11 @@ namespace OutWit.Controller.AI.Smt.Model;
 /// </para>
 /// </summary>
 [MemoryPackable]
-// Explicit MemoryPackOrder pins the wire layout to the declaration order: append new members at the END only.
+// Explicit MemoryPackOrder pins the wire layout to the declaration order. A published layout
+// changes only behind a version fence, so that no reader of the old layout is ever handed the
+// new one: MemoryPack throws on a payload of more members than its reader knows, and a member a
+// sender may not have arrives as its type's default (null for a text or a list), never as its
+// initializer; such a member starts at that default, and a reference one is declared nullable.
 public sealed partial class SmtResultData : ModelBase
 {
     #region Model Base
@@ -223,7 +227,11 @@ public sealed partial class SmtResultData : ModelBase
     [MemoryPackOrder(23)]
     public string Platform { get; set; } = "";
 
-    /// <summary>The wall time of the session, milliseconds: a measurement of the machine, never part of what is compared.</summary>
+    /// <summary>
+    /// The wall time of the session, milliseconds: a measurement of the machine, part of no digest
+    /// and no document. A node of this controller writes 0 here, since the time of a problem tells
+    /// a fast machine from a slow one; the member keeps its place on the wire.
+    /// </summary>
     [MemoryPackOrder(24)]
     public int WallMs { get; set; }
 

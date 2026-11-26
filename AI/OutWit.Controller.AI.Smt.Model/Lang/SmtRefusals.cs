@@ -1,7 +1,9 @@
+using System.Globalization;
+
 namespace OutWit.Controller.AI.Smt.Model.Lang;
 
 /// <summary>
-/// Makes refusals, and holds what a refusal may show of a text: one token, cut short.
+/// Makes refusals, and holds what a refusal may show of a text: one token, cut short, on one line.
 /// </summary>
 internal static class SmtRefusals
 {
@@ -12,7 +14,6 @@ internal static class SmtRefusals
 
     private const string CUT_MARK = "...";
     private const char SPACE = ' ';
-    private const char DELETE = (char)127;
 
     #endregion
 
@@ -55,7 +56,11 @@ internal static class SmtRefusals
 
     /// <summary>
     /// What a refusal shows of a token: the token when it is short, its start and a mark when it
-    /// is long, with a blank in place of every tab and line break.
+    /// is long, on one line that reads as it is written. A blank stands in place of every control
+    /// character (a tab, a line break, the C1 controls), every line and paragraph separator, every
+    /// format character (the marks and overrides that turn the direction of a text among them, and
+    /// the invisible ones), and every half of a surrogate pair that stands alone: a lab's
+    /// documents and screens show the refusal as one plain line.
     /// </summary>
     /// <param name="text">A token of the text: a symbol's name, a numeral.</param>
     /// <returns>At most <see cref="TOKEN_CHARACTERS"/> characters.</returns>
@@ -76,9 +81,9 @@ internal static class SmtRefusals
 
     private static bool NeedsBlanks(string text)
     {
-        foreach (var character in text)
+        for (var index = 0; index < text.Length; index++)
         {
-            if (character < SPACE || character == DELETE)
+            if (IsBlanked(text, index))
                 return true;
         }
 
@@ -88,7 +93,28 @@ internal static class SmtRefusals
     private static void Blank(Span<char> target, string source)
     {
         for (var index = 0; index < source.Length; index++)
-            target[index] = source[index] < SPACE || source[index] == DELETE ? SPACE : source[index];
+            target[index] = IsBlanked(source, index) ? SPACE : source[index];
+    }
+
+    /// <summary>
+    /// Whether a character of a text is shown as a blank. Each half of a whole surrogate pair is
+    /// judged by the character the pair makes, so that both halves go or both stay.
+    /// </summary>
+    private static bool IsBlanked(string text, int index)
+    {
+        var character = text[index];
+        if (char.IsHighSurrogate(character))
+            return index + 1 >= text.Length || !char.IsLowSurrogate(text[index + 1]) || IsHidden(CharUnicodeInfo.GetUnicodeCategory(text, index));
+
+        if (char.IsLowSurrogate(character))
+            return index == 0 || !char.IsHighSurrogate(text[index - 1]) || IsHidden(CharUnicodeInfo.GetUnicodeCategory(text, index - 1));
+
+        return IsHidden(CharUnicodeInfo.GetUnicodeCategory(character));
+    }
+
+    private static bool IsHidden(UnicodeCategory category)
+    {
+        return category is UnicodeCategory.Control or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator or UnicodeCategory.Format;
     }
 
     #endregion

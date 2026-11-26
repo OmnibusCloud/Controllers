@@ -35,8 +35,9 @@ internal sealed class SmtFuzzer
         SmtExpression.List(SmtExpression.Symbol("-"), SmtExpression.Atom(SmtExpressionKind.Numeral, "1")),
         SmtExpression.List(SmtExpression.Symbol("_"), SmtExpression.Symbol("bv3"), SmtExpression.Atom(SmtExpressionKind.Numeral, "8")),
         SmtExpression.List(SmtExpression.Symbol("div"), SmtExpression.Atom(SmtExpressionKind.Numeral, "1"), SmtExpression.Atom(SmtExpressionKind.Numeral, "0")),
-        SmtExpression.Atom(SmtExpressionKind.Numeral, "007"), SmtExpression.Atom(SmtExpressionKind.Hexadecimal, "#xzz"),
-        SmtExpression.Atom(SmtExpressionKind.Decimal, "1.2.3"), SmtExpression.QuotedSymbol("let"), SmtExpression.QuotedSymbol("")
+        // Tokens no reader takes, written as they are: made without the check a program's atom gets.
+        SmtExpression.Token(SmtExpressionKind.Numeral, "007", 0), SmtExpression.Token(SmtExpressionKind.Hexadecimal, "#xzz", 0),
+        SmtExpression.Token(SmtExpressionKind.Decimal, "1.2.3", 0), SmtExpression.QuotedSymbol("let"), SmtExpression.QuotedSymbol("")
     ];
 
     private const int DAMAGES = 9;

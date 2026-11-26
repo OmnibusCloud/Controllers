@@ -28,6 +28,7 @@ in [`OutWit.Controller.AI.Smt.Scripts`](../OutWit.Controller.AI.Smt.Scripts/READ
 | `Smt.Disputes` | host | the first fan-out's and the repair round's packages and results, the packages of the problems that go to three more machines |
 | `Smt.Settle` | host | the set, the options, every round's packages and results, and the rate; the ledger (`Blob`) |
 | `Smt.CollectResults`, `Smt.Collect`, `Smt.Provenance`, `Smt.Integrity` | host | the ledger; the results ([`docs/smt-results.schema.json`](docs/smt-results.schema.json)), the report ([`docs/smt-report.schema.json`](docs/smt-report.schema.json)), the provenance ([`docs/smt-provenance.schema.json`](docs/smt-provenance.schema.json)), the integrity document ([`docs/smt-integrity.schema.json`](docs/smt-integrity.schema.json)) |
+| `Smt.Forget` | host | an `SmtResultPackageCollection`, assigned back to it: the same collection, empty (the run's last statements: what the fan-outs returned is not left in the finished job) |
 | `Smt.Preflight` | host | the set and the options, an `SmtPreflight` |
 | `Smt.RuntimeDiagnostics` | host | nothing, an `SmtRuntimeDiagnostics` |
 | `Smt.Capabilities` | host | nothing, a `Blob` of JSON ([`docs/smt-capabilities.schema.json`](docs/smt-capabilities.schema.json)) |
@@ -249,10 +250,11 @@ hard cap (660 s by default, 6,060 s at most). A check whose resource counter doe
 ### Rows and their digest
 
 Each row (`SmtResultData`) carries the problem's index, id and the hash of the text the node was
-given, the ticket, every value of the session's outcome in the words of a result, all the models,
-the controller version and the platform (`win-x64`, `linux-x64`, `osx-arm64`), the wall time, and
-the digest of its canonical form, which leaves the wall time, the platform, the version and the
-ticket out. Two honest machines give the same digest for a problem: the tests hold the rows of
+given, the ticket, every value of the session's outcome in the words of a result but the wall
+time (the row's `WallMs` is 0: the time of a problem would tell a fast machine from a slow one,
+and nothing reads it), all the models, the controller version and the platform (`win-x64`,
+`linux-x64`, `osx-arm64`), and the digest of its canonical form, which leaves the wall time, the
+platform, the version and the ticket out. Two honest machines give the same digest for a problem: the tests hold the rows of
 the forty-one problems to one committed file of digests on the three platforms, in both trap
 modes, twice in a row, at eight sessions at once, and solved through the engine on two nodes.
 
@@ -264,10 +266,13 @@ its version and profile, the module's pin and whether the process has it and has
 the platform, and the degree a package would get, with what decided it. Asking compiles nothing.
 `Smt.Capabilities` writes what a lab can know before a run as a JSON document
 ([`docs/smt-capabilities.schema.json`](docs/smt-capabilities.schema.json)): the profile, the
-queries, the defaults and ceilings of the options and of a problem, the words of a row and the
-codes of a node's refusal, the size of a package, the degree rule and the least memory of a
-machine, the benchmark's unit, the platforms and the pool as totals. Nothing in either names a
-machine.
+queries, the defaults and ceilings of the options and of a problem, the words of every document
+of a run (each list the one the documents are written with: a row's statuses, codes, verdicts,
+reasons, classes and how it was settled, the codes of a node's refusal, and the words of the
+report and the integrity document), the size of a package, the degree rule and the least memory
+of a machine, the benchmark's unit, the platforms and the pool as totals. A test holds every
+enum of the documents' schemas, and every table of them keyed by words, to a list of it. Nothing
+in either names a machine.
 
 The benchmark of `Smt.SolvePackage` gives the allocator a rate: thirty small problems written for
 it (every query; linear integers and reals, bit-vectors, uninterpreted functions, arrays,
@@ -288,6 +293,7 @@ Smt.Split -> Smt.SamplingRate -> Grid.Replicas(2, rate) -> Grid.ForEach => Smt.S
           -> Smt.Repairs -> Grid.Replicas(2) -> Grid.ForEach => Smt.SolvePackage
           -> Smt.Disputes -> Grid.Replicas(3) -> Grid.ForEach => Smt.SolvePackage
           -> Smt.Settle -> Smt.CollectResults, Smt.Collect, Smt.Provenance, Smt.Integrity
+          -> Smt.Forget (what each fan-out returned)
 ```
 
 The work is split once and sent once; the repair round and the dispute round are the only second
@@ -441,6 +447,16 @@ which package each result came back for (`binding`: `bound`, `unbound`, `mixed`,
 no result came back), and the integrity document counts the results of each kind
 (`results_bound`, `results_unbound`). Their fields are in [`docs/capabilities.md`](docs/capabilities.md) and their
 schemas beside it.
+
+**What the job keeps.** The submitter of a job can read its variables, of a finished job and of
+a running one. What a fan-out returned (`solved`, `repaired`, `settled`) is held in the order the
+platform kept it, one node's results after another's, each with its package's ticket and its
+blob's id; and a result's blob holds its rows with the platform of the node. So the script's last
+statements empty those three (`Smt.Forget`) once the documents are written, and a node writes no
+wall time into a row. What stays in a finished job is the packages the run gave out (in the
+run's own order), the documents and the ledger, which name no machine. While the job runs, and
+in a job that failed before its end, the three hold the results: that the platform shows its
+variables then is the platform's to change (see `docs/capabilities.md`).
 
 **Preflight.** `Smt.Preflight` reads the set the same way, sends nothing, and gives an
 `SmtPreflight`: the set counted, the options checked by name, the budget as numbers, the upper
