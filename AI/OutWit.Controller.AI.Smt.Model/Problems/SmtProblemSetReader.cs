@@ -25,6 +25,7 @@ public sealed class SmtProblemSetReader
 
     private readonly SmtProblemSetLines m_lines;
     private readonly SmtProblemSetRowBuilder m_rows;
+    private readonly long m_maxSetBytes;
     private bool m_ended;
 
     #endregion
@@ -39,6 +40,20 @@ public sealed class SmtProblemSetReader
     /// <exception cref="ArgumentNullException">There is no stream, or there are no options.</exception>
     /// <exception cref="ArgumentException">An option is out of its range (<see cref="SmtOptionsRules.Check"/>): options are checked before a set is read with them.</exception>
     public SmtProblemSetReader(Stream stream, SmtOptionsData options)
+        : this(stream, options, SmtProblemSetLimits.MAX_SET_BYTES)
+    {
+    }
+
+    /// <summary>
+    /// Creates a reader of a problem set held to a bound of bytes of the caller's own: the tests
+    /// meet the set's bound without making gigabytes.
+    /// </summary>
+    /// <param name="stream">The set, at its start; the caller owns the stream.</param>
+    /// <param name="options">The run's options.</param>
+    /// <param name="maxSetBytes">The most bytes of the set.</param>
+    /// <exception cref="ArgumentNullException">There is no stream, or there are no options.</exception>
+    /// <exception cref="ArgumentException">An option is out of its range.</exception>
+    internal SmtProblemSetReader(Stream stream, SmtOptionsData options, long maxSetBytes)
     {
         ArgumentNullException.ThrowIfNull(stream);
         ArgumentNullException.ThrowIfNull(options);
@@ -47,7 +62,8 @@ public sealed class SmtProblemSetReader
         if (problems.Count > 0)
             throw new ArgumentException(problems[0], nameof(options));
 
-        m_lines = new SmtProblemSetLines(stream, SmtProblemSetLimits.MAX_LINE_BYTES);
+        m_maxSetBytes = maxSetBytes;
+        m_lines = new SmtProblemSetLines(stream, SmtProblemSetLimits.MAX_LINE_BYTES, maxSetBytes);
         m_rows = new SmtProblemSetRowBuilder(SmtOptionsRules.Resolve(options));
     }
 
@@ -74,10 +90,20 @@ public sealed class SmtProblemSetReader
             return false;
         }
 
-        var line = m_lines.Number;
+        // A row's line is an int of the documents. Only a set of more than two gigabytes of blank
+        // lines has a line past the largest one: such a line is numbered as that one, never as a
+        // number that wrapped.
+        var line = (int)Math.Min(m_lines.Number, int.MaxValue);
         var index = Summary.Rows;
 
-        if (index >= SmtProblemSetLimits.MAX_ROWS)
+        if (m_lines.PastBound)
+        {
+            // Said once, at the line that would take the set past its bound; nothing of it or after it is read.
+            m_ended = true;
+            row = SmtProblemSetRowBuilder.Refused(SmtRefusals.OfRow(SmtRefusalCodes.SET_TOO_LARGE,
+                $"a problem set has at most {m_maxSetBytes} bytes; this line and what follows it were not read"), line, index);
+        }
+        else if (index >= SmtProblemSetLimits.MAX_ROWS)
         {
             // Said once, by the first row that is too many; nothing after it is read.
             m_ended = true;

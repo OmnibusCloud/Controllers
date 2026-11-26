@@ -14,6 +14,15 @@ public static class SmtProblemSetLimits
     /// <summary>The most rows of one set. The row after that is refused, and reading ends.</summary>
     public const int MAX_ROWS = 1_000_000;
 
+    /// <summary>
+    /// The most bytes of one set, every byte counted: its lines, their line ends, blank lines and
+    /// a byte order mark. The line that would take the set past it is refused, once, and reading
+    /// ends there. A server reads a set whole several times (the preflight, the split and the
+    /// settlement each read it and sanitize every problem again): 4 GiB is a few minutes of that a
+    /// pass, and under what the platform's blob store takes by default.
+    /// </summary>
+    public const long MAX_SET_BYTES = 4L * 1024 * 1024 * 1024;
+
     /// <summary>The most characters of an id.</summary>
     public const int MAX_ID_CHARACTERS = 64;
 

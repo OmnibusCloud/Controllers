@@ -7,6 +7,12 @@ namespace OutWit.Controller.AI.Smt.Model.Problems;
 /// over (it still counts in the numbering), a byte order mark before the first line is not part
 /// of it, and a line longer than a line may be is passed over without being kept and reported
 /// as too long.
+/// <para>
+/// The set has a bound in bytes, every byte counted as it arrives: the mark, the line ends and
+/// the blank lines among them. The line that would take the set past it is not read, nor
+/// anything after it: the reader stops there and says so once (<see cref="PastBound"/>). Lines
+/// are numbered in a number that cannot wrap, however many blank lines a set holds.
+/// </para>
 /// </summary>
 internal sealed class SmtProblemSetLines
 {
@@ -25,6 +31,7 @@ internal sealed class SmtProblemSetLines
 
     private readonly Stream m_stream;
     private readonly int m_maxLineBytes;
+    private readonly long m_maxSetBytes;
     private readonly byte[] m_buffer = new byte[READ_BUFFER_BYTES];
     private byte[] m_line = new byte[FIRST_LINE_BYTES];
     private int m_buffered;
@@ -42,10 +49,12 @@ internal sealed class SmtProblemSetLines
     /// </summary>
     /// <param name="stream">The set, at its start; the caller owns it.</param>
     /// <param name="maxLineBytes">The most bytes a line may have, its line end not counted.</param>
-    public SmtProblemSetLines(Stream stream, int maxLineBytes)
+    /// <param name="maxSetBytes">The most bytes the set may have, every byte counted.</param>
+    public SmtProblemSetLines(Stream stream, int maxLineBytes, long maxSetBytes)
     {
         m_stream = stream;
         m_maxLineBytes = maxLineBytes;
+        m_maxSetBytes = maxSetBytes;
     }
 
     #endregion
@@ -53,7 +62,7 @@ internal sealed class SmtProblemSetLines
     #region Functions
 
     /// <summary>
-    /// Moves to the next line that is not blank.
+    /// Moves to the next line that is not blank, or to the line at which the set passes its bound.
     /// </summary>
     /// <returns>False when the set has no more lines.</returns>
     public bool MoveNext()
@@ -61,7 +70,7 @@ internal sealed class SmtProblemSetLines
         while (!m_ended)
         {
             ReadLine();
-            if (TooLong || !IsBlank())
+            if (PastBound || TooLong || !IsBlank())
                 return true;
         }
 
@@ -85,10 +94,22 @@ internal sealed class SmtProblemSetLines
             var chunk = m_buffer.AsSpan(m_position, m_buffered - m_position);
             var end = chunk.IndexOf(LINE_FEED);
             var taken = end < 0 ? chunk.Length : end;
+            var consumed = end < 0 ? taken : taken + 1;
+
+            // The set passes its bound inside this line: nothing more of it is read, and nothing
+            // of this line is a row.
+            if (consumed > m_maxSetBytes - BytesRead)
+            {
+                PastBound = true;
+                m_ended = true;
+                m_lineLength = 0;
+                TooLong = false;
+                return;
+            }
 
             Keep(chunk[..taken]);
-            m_position += end < 0 ? taken : taken + 1;
-            BytesRead += end < 0 ? taken : taken + 1;
+            m_position += consumed;
+            BytesRead += consumed;
 
             if (end >= 0)
                 break;
@@ -183,15 +204,21 @@ internal sealed class SmtProblemSetLines
     #region Properties
 
     /// <summary>The number of the current line, from 1, blank lines counted.</summary>
-    public int Number { get; private set; }
+    public long Number { get; private set; }
 
     /// <summary>Whether the current line is longer than a line may be; its bytes were not kept.</summary>
     public bool TooLong { get; private set; }
 
+    /// <summary>
+    /// Whether the set passed its bound in bytes inside the current line: the line was not read,
+    /// and the set has no more lines.
+    /// </summary>
+    public bool PastBound { get; private set; }
+
     /// <summary>The current line's bytes without its line end, valid until the next move.</summary>
     public ReadOnlySpan<byte> Line => m_line.AsSpan(0, m_lineLength);
 
-    /// <summary>The bytes of the stream passed so far: every line up to the current one with its line end, and the byte order mark.</summary>
+    /// <summary>The bytes of the stream passed so far: every line up to the current one with its line end, and the byte order mark. Never more than the set's bound.</summary>
     public long BytesRead { get; private set; }
 
     #endregion
