@@ -105,7 +105,7 @@ public sealed class SmtCapabilitiesWordsTests
             Assert.That(Words(capabilities, "/results/codes/refused"), Is.Ordered.Using((IComparer<string>)StringComparer.Ordinal), "in an order of their own, whatever the set's");
             Assert.That(Words(capabilities, "/results/codes/engine_crash"), Is.EqualTo(new[] { "trap", "exit", "engine_error", "unreadable_answer" }));
             Assert.That(Words(capabilities, "/results/codes/no_result"), Is.EqualTo(SmtRunSettlement.NO_RESULT_REASONS));
-            Assert.That(Words(capabilities, "/results/codes/disputed"), Is.EqualTo(SmtRunWords.DISPUTE_OUTCOMES));
+            Assert.That(Words(capabilities, "/results/codes/disputed"), Is.EqualTo(SmtRunWords.DISPUTED_CODES));
             Assert.That(Words(capabilities, "/results/verdicts"), Is.EqualTo(SmtResultWords.VERDICTS));
             Assert.That(Words(capabilities, "/results/reasons"), Is.EqualTo(SmtResultWords.REASONS));
             Assert.That(Words(capabilities, "/results/proofs"), Is.EqualTo(SmtResultWords.PROOFS));
@@ -123,6 +123,22 @@ public sealed class SmtCapabilitiesWordsTests
             Assert.That(Words(capabilities, "/run/dispute_causes"), Is.EqualTo(SmtRunWords.DISPUTE_CAUSES));
             Assert.That(Words(capabilities, "/run/dispute_outcomes"), Is.EqualTo(SmtRunWords.DISPUTE_OUTCOMES));
             Assert.That(Words(capabilities, "/run/stopped_by"), Is.EqualTo(new[] { "rlimit", "fuel", "memout" }));
+        });
+    }
+
+    [Test]
+    public void TheCodesOfADisputedRowAreTheOutcomesOfADisputeThatStandsTest()
+    {
+        // A dispute that three more machines resolved is settled, and its row is no disputed row:
+        // the code of a disputed row is the outcome of a dispute that stands.
+        var codes = Words(Capabilities(), "/results/codes/disputed");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(codes, Is.EqualTo(new[] { "no_majority", "too_few_copies", "surplus_copies" }));
+            Assert.That(codes, Does.Not.Contain(SmtRunWords.RESOLVED));
+            Assert.That(codes, Is.EqualTo(SmtRunWords.DISPUTE_OUTCOMES.Where(outcome => outcome != SmtRunWords.RESOLVED)), "every other outcome of a dispute");
+            Assert.That(Words(Capabilities(), "/run/dispute_outcomes"), Does.Contain(SmtRunWords.RESOLVED), "an outcome of a dispute all the same");
         });
     }
 

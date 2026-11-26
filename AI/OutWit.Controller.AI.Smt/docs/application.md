@@ -386,7 +386,7 @@ version, without a pool:
       "refused": ["ambiguous_token", "builtin_name", "command_after_end", "command_malformed", "command_not_allowed", "field_invalid", "field_missing", "field_not_allowed", "id_duplicate", "id_invalid", "index_too_large", "literal_too_wide", "nesting_too_deep", "non_ascii_string", "not_a_command", "not_a_term", "numeral_too_long", "reserved_prefix", "reserved_symbol", "row_malformed", "row_too_long", "set_too_large", "string_too_long", "syntax_error", "text_too_long", "too_many_problems", "too_many_symbols", "too_many_tokens", "unknown_constant"],
       "engine_crash": ["trap", "exit", "engine_error", "unreadable_answer"],
       "no_result": ["node_refused", "sandbox_unavailable", "backstop", "cancelled", "not_instantiated", "host_fault", "version_mismatch", "package_invalid", "ticket_invalid", "package_too_large", "package_hash_mismatch", "package_unreadable", "package_mismatch", "memory_insufficient", "download_failed", "upload_failed", "unknown_ticket", "duplicate", "unreadable", "content", "surplus", "other_package", "no_answer"],
-      "disputed": ["resolved", "no_majority", "too_few_copies", "surplus_copies"]
+      "disputed": ["no_majority", "too_few_copies", "surplus_copies"]
     },
     "verdicts": ["sat", "unsat", "unknown", "none"],
     "reasons": ["rlimit", "fuel", "memout", "incomplete", "other", "none"],
@@ -541,7 +541,6 @@ controller version and the platform: none of them is in the results.
 | `no_result` | `surplus` | more results came for the package than were asked for |
 | `no_result` | `other_package` | the last result came back for another package's task |
 | `no_result` | `no_answer` | no answer came back for the problem at all |
-| `disputed` | `resolved` | never the code of a row: a dispute three more machines settled is no longer `disputed` (the list is the outcomes of a dispute) |
 | `disputed` | `no_majority` | no answer was given by more machines than any other, and by two at least |
 | `disputed` | `too_few_copies` | fewer than two of the three more machines answered |
 | `disputed` | `surplus_copies` | the leading answer does not lead by two machines once the answers that may be one machine's second are left out |
