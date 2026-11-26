@@ -54,6 +54,13 @@ public sealed class SmtSolverProjectionTests
     /// <summary>What the solver says when the value of that constant is said back to it.</summary>
     private const string DECLARED_SORT_WORDS = "line 12 column 18: unknown constant U!val!0";
 
+    /// <summary>
+    /// The digest of the row a node returns for that enumeration (the problem at index 0): the
+    /// solver's words are part of what the digest covers, and the row is the same on Windows,
+    /// Linux and macOS.
+    /// </summary>
+    private const string DECLARED_SORT_ROW = "3a907c8ebc8f09281079f9f8aa9bf79b56d126d6a3fced831d281f00429a1f61";
+
     private const string ONE_AT_THE_LIMIT = "ok sat 1 limit";
     private const string ONE_AND_NO_OTHER = "ok sat 1 complete";
     private const string NONE = "ok unsat 0 complete";
@@ -184,6 +191,7 @@ public sealed class SmtSolverProjectionTests
             Assert.That(row.ReasonText, Is.EqualTo(DECLARED_SORT_WORDS));
             Assert.That(row.Count, Is.EqualTo(1));
             Assert.That(SmtResultDigest.Holds(row), Is.True);
+            Assert.That(row.Digest, Is.EqualTo(DECLARED_SORT_ROW), "the same row on every platform, the solver's words included");
             Assert.That(SmtRowCheckRig.Holds(row, problem, new SmtOptionsData()), Is.True, "the host takes the row");
             Assert.That(validation, Is.EqualTo(SmtRunWords.VALIDATED), "and its evaluator finds the model to be one");
         });
