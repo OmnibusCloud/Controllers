@@ -16,17 +16,17 @@ namespace OutWit.Controller.AI.Smt.Model.Problems;
 /// <item>it is one symbol;</item>
 /// <item>the problem declares a constant of that name (by <c>declare-const</c>, or by a
 /// <c>declare-fun</c> of no arguments);</item>
-/// <item>no name before it is the same constant;</item>
-/// <item>the solver can be told the constant's values back: they hold no element of a sort the
-/// problem only declares (<see cref="SmtRefusalCodes.PROJECT_SORT_UNSUPPORTED"/>).</item>
+/// <item>no name before it is the same constant.</item>
 /// </list>
 /// <para>
-/// The last rule is what an enumeration rests on. After each model it tells the solver that not
-/// all of the projected constants have the values they had, and asks again. The solver names the
-/// elements of a sort the problem leaves to it (<c>declare-sort</c>) by names of its own, inside
-/// one model (<c>U!val!0</c>), and takes none of them in a later command: such a model cannot be
-/// ruled out, so it would be found again and again. Every other sort the pinned solver prints in
-/// terms it reads back (<see cref="SmtUninterpretedSorts"/> says which sorts hold such elements).
+/// The sort of a constant is not looked at. An enumeration tells the solver each found model's
+/// values back before it asks for the next, and there are values the solver does not take back:
+/// it names the elements of a sort the problem only declares (<c>declare-sort</c>) by names of
+/// its own, inside one model (<c>U!val!0</c>). An enumeration that meets such a value ends there,
+/// not complete, with the models it found (the node's session says so, by the reason
+/// <see cref="SmtResultWords.OTHER"/>). No rule of sorts stands before that, since the rows over
+/// such a sort that end well would fall to it too: one model asked for, a problem with no model,
+/// values that hold no such element.
 /// </para>
 /// </summary>
 public static class SmtProjection
@@ -58,24 +58,11 @@ public static class SmtProjection
         foreach (var constant in problem.Constants)
             declared.TryAdd(constant.Name, constant);
 
-        // Every name is read first, so that the sorts of the constants they name are looked at
-        // in one pass over the problem, and only for those constants.
-        var terms = new SmtSanitizerTermResult[names.Count];
-        var asked = new HashSet<string>(StringComparer.Ordinal);
-        for (var index = 0; index < terms.Length; index++)
-        {
-            terms[index] = SmtSanitizer.SanitizeTerm(names[index] ?? "");
-            if (terms[index].Term is { Kind: SmtExpressionKind.Symbol } symbol && declared.ContainsKey(symbol.Text))
-                asked.Add(symbol.Text);
-        }
-
-        var uninterpreted = SmtUninterpretedSorts.Held(problem, asked);
-
         var named = new HashSet<string>(StringComparer.Ordinal);
-        var taken = new List<SmtDeclaredConstant>(terms.Length);
-        for (var index = 0; index < terms.Length; index++)
+        var taken = new List<SmtDeclaredConstant>(names.Count);
+        for (var index = 0; index < names.Count; index++)
         {
-            var refusal = Check(terms[index], index, declared, named, uninterpreted, out var constant);
+            var refusal = Check(SmtSanitizer.SanitizeTerm(names[index] ?? ""), index, declared, named, out var constant);
             if (refusal != null)
                 return refusal;
 
@@ -90,8 +77,7 @@ public static class SmtProjection
 
     #region Tools
 
-    private static SmtRefusalData? Check(SmtSanitizerTermResult term, int index, Dictionary<string, SmtDeclaredConstant> declared, HashSet<string> named,
-        IReadOnlyDictionary<string, string> uninterpreted, out SmtDeclaredConstant? constant)
+    private static SmtRefusalData? Check(SmtSanitizerTermResult term, int index, Dictionary<string, SmtDeclaredConstant> declared, HashSet<string> named, out SmtDeclaredConstant? constant)
     {
         constant = null;
 
@@ -111,13 +97,6 @@ public static class SmtProjection
 
         if (!named.Add(name))
             return SmtRefusals.OfRow(SmtRefusalCodes.FIELD_INVALID, $"'project[{index}]' names '{SmtRefusals.Token(name)}' again: a constant is named once");
-
-        if (uninterpreted.TryGetValue(name, out var sort))
-        {
-            return SmtRefusals.OfRow(SmtRefusalCodes.PROJECT_SORT_UNSUPPORTED,
-                $"'project[{index}]' names '{SmtRefusals.Token(name)}', whose values hold elements of the sort '{SmtRefusals.Token(sort)}'. The problem only declares that sort (declare-sort): "
-                + "the solver names its elements by names of its own that it takes in no later command, so an enumeration cannot tell it which models it has found");
-        }
 
         return null;
     }

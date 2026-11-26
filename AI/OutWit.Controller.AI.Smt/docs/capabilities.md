@@ -95,13 +95,12 @@ reader, the sanitizer and their refusal codes are the model package's
 application, on the server and on the node. A refused row costs nothing and has its row in the
 results.
 
-An enumeration tells the solver a found model's values back to rule the model out, so a row is
-projected only on constants whose values the solver takes back. The pinned solver takes back
-every value but the elements of a sort a problem only declares (`declare-sort`), which it names
-itself inside one model: a row projected on a constant whose values can hold such an element (the
-sort itself, or an array, a sequence, an alias or a datatype that has it where a value goes) is
-refused with `project_sort_unsupported` when the set is read, so the preflight says so before
-anything is sent.
+An enumeration tells the solver a found model's values back to rule the model out. The pinned
+solver takes back every value but the elements of a sort a problem only declares
+(`declare-sort`), which it names itself inside one model (`U!val!0`). A row projected on a
+constant whose values hold such an element (the sort itself, or an array, a sequence or a
+datatype over it) is taken like any other, and its enumeration ends at the first model that
+holds one: an answer with the models it found, `complete` false, for the reason `other`.
 
 ## 5. What comes back
 
@@ -254,11 +253,15 @@ one package reference, an answer one result reference.
   on a slow machine, by the node's wall-clock backstop, which makes it a fault of the node and
   sends it once more.
 - The report lists every problem of the long tail: its size grows with the set.
-- An enumeration cannot be projected on a constant whose values hold elements of a sort the
-  problem only declares: the row is refused when the set is read (`project_sort_unsupported`).
-- An enumeration ends early where the solver prints a value in a form it does not read back
-  under the problem's logic: the row is `ok`, `sat`, with the models found, `complete` false and
-  the reason `other`. One such form is known for the pinned solver: an array that is the identity
-  is printed as a function (`(lambda ((x!1 Bool)) x!1)`), which a logic without quantifiers does
-  not take; without a logic, or under one with quantifiers, it is read back and the enumeration
-  goes on.
+- An enumeration ends early where the solver prints a value in a form it does not take back:
+  the row is `ok`, `sat`, with the models found, `complete` false and the reason `other`. What
+  is not known then is whether there are more models. Two such forms are known for the pinned
+  solver. An element of a sort the problem only declares (`declare-sort`) is named by the solver
+  itself (`U!val!0`) and taken in no later command: an enumeration projected on a constant of
+  such a sort ends after its first model, and one over an array, a sequence or a datatype of
+  such a sort at the first model whose value holds an element. And an array that is the
+  identity is printed as a function (`(lambda ((x!1 Bool)) x!1)`), which a logic without
+  quantifiers does not take; without a logic, or under one with quantifiers, it is read back
+  and the enumeration goes on. An enumeration that never has to rule such a model out is not
+  touched by this: one model asked for, a problem with no model, values that hold no such
+  element.

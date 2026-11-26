@@ -12,7 +12,7 @@ namespace OutWit.Controller.AI.Smt.Model.Problems;
 /// <item>the row has a problem;</item>
 /// <item>every field belongs to the row's query (the row's own, else the run's), and the query has the fields it needs;</item>
 /// <item>the problem is one the sanitizer takes;</item>
-/// <item>the terms and the names beside it are terms the sanitizer takes, and the names are constants the problem declares, of sorts whose values the solver can be told back (<see cref="SmtProjection"/>).</item>
+/// <item>the terms and the names beside it are terms the sanitizer takes, and the names are constants the problem declares (<see cref="SmtProjection"/>).</item>
 /// </list>
 /// The first row with an id keeps it, whatever becomes of the row: a later row with the same id
 /// is a duplicate even when the first was refused.
@@ -210,8 +210,7 @@ internal sealed class SmtProblemSetRowBuilder
     /// <summary>
     /// The constants an enumeration is projected on, by the check a node makes of them again
     /// (<see cref="SmtProjection"/>): each a symbol that names a constant the problem declares,
-    /// none twice, each of a sort whose values the solver can be told back. A name is kept as the
-    /// problem declares it.
+    /// none twice. A name is kept as the problem declares it.
     /// </summary>
     private SmtRefusalData? Names(SmtProblemSetRowDraft draft, SmtProblem problem, SmtProblemData data)
     {

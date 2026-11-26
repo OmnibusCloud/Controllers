@@ -4,13 +4,14 @@ using OutWit.Controller.AI.Smt.Tests.Mock;
 namespace OutWit.Controller.AI.Smt.Tests.Run;
 
 /// <summary>
-/// The sort of a projected constant through the bundled scripts, on the in-process nodes: what a
-/// lab sees of it. A row projected on values the solver cannot be told back is refused when the
-/// set is read: the preflight says so before anything is sent, and in a run the row is refused in
-/// the results and no node is given its problem. An enumeration that ends where the solver does
-/// not read a found model's value back (the identity array under a logic without quantifiers) is
-/// answered on two machines with one digest: its row is taken and settled, with the models it
-/// found, not complete, for the reason <c>other</c>.
+/// An enumeration over values the solver does not take back, through the bundled scripts on the
+/// in-process nodes: what a lab sees of it. No row is refused for the sort of its projected
+/// constant, so the preflight takes every row. In a run, an enumeration projected on a constant
+/// of a sort the problem only declares is answered on two machines with one digest: its row is
+/// taken and settled as an answer with the one model it found, not complete, for the reason
+/// <c>other</c>, and the host's evaluator finds that model to be one. So is the enumeration that
+/// ends at an array the solver prints as a function (the identity array under a logic without
+/// quantifiers), with its four models.
 /// </summary>
 [TestFixture]
 [Category("Solver")]
@@ -19,12 +20,11 @@ public sealed class SmtRunProjectionTests : SmtRunTestBase
 {
     #region Constants
 
-    // The words as a lab reads them: public words of the contract, written out here.
-    private const string PROJECT_SORT_UNSUPPORTED = "project_sort_unsupported";
+    // The word as a lab reads it: a public word of the contract, written out here.
     private const string OTHER = "other";
 
-    private const string REFUSED = "uninterpreted";
-    private const string TAKEN = "uninterpreted-for-an-unused-parameter";
+    private const string DECLARED_SORT = "uninterpreted";
+    private const string NO_VALUE_OF_IT = "uninterpreted-for-an-unused-parameter";
     private const string IDENTITY_ARRAYS = "identity-arrays";
 
     private const string IDENTITY_ARRAYS_PROBLEM = "(set-logic QF_ABV)(declare-const a (Array (_ BitVec 1) (_ BitVec 1)))";
@@ -34,7 +34,7 @@ public sealed class SmtRunProjectionTests : SmtRunTestBase
     #region Tests
 
     [Test]
-    public async Task ThePreflightSaysWhichRowIsProjectedOnValuesTheSolverCannotBeToldBackTest()
+    public async Task ThePreflightTakesARowProjectedOnValuesTheSolverNamesItselfTest()
     {
         var job = Engine.Compile(Script("SmtPreflight.wit"));
         var status = await Engine.ScheduleAndWaitAsync(job, await UploadAsync(Set(), "problems.jsonl"), new SmtOptionsData());
@@ -46,34 +46,41 @@ public sealed class SmtRunProjectionTests : SmtRunTestBase
         {
             Assert.That(preflight.Runnable, Is.True);
             Assert.That(preflight.Rows, Is.EqualTo(3));
-            Assert.That(preflight.Accepted, Is.EqualTo(2));
-            Assert.That(preflight.Refused, Is.EqualTo(1));
-            Assert.That(preflight.RefusalCodes.Select(count => (count.Name, count.Count)), Is.EqualTo(new[] { (PROJECT_SORT_UNSUPPORTED, 1) }));
-            Assert.That(preflight.Refusals.Select(refusal => (refusal.Row, refusal.File, refusal.Code)), Is.EqualTo(new[] { (2, REFUSED, PROJECT_SORT_UNSUPPORTED) }), "the row, by its line and its id");
-            Assert.That(preflight.Refusals.Select(refusal => refusal.Reason), Has.All.StartsWith("'project[0]' names 'x', whose values hold elements of the sort 'U'. "));
+            Assert.That(preflight.Accepted, Is.EqualTo(3), "the sort of a projected constant is no ground for a refusal");
+            Assert.That(preflight.Refused, Is.Zero);
+            Assert.That(preflight.RefusalCodes, Is.Empty);
+            Assert.That(preflight.Refusals, Is.Empty);
         });
     }
 
     [Test]
-    public async Task ARunRefusesThatRowAndSettlesTheEnumerationTheSolverCouldNotGoOnWithTest()
+    public async Task ARunSettlesTheEnumerationsTheSolverCouldNotGoOnWithTest()
     {
         var run = await RunAsync(Set(), new SmtOptionsData { SamplingRate = 1 });
         var arrays = run.Row(0);
-        var refused = run.Row(1);
-        var taken = run.Row(2);
+        var declared = run.Row(1);
+        var whole = run.Row(2);
 
         Assert.Multiple(() =>
         {
-            Assert.That(run.Rows.Select(row => row.GetProperty("id").GetString()), Is.EqualTo(new[] { IDENTITY_ARRAYS, REFUSED, TAKEN }));
+            Assert.That(run.Rows.Select(row => row.GetProperty("id").GetString()), Is.EqualTo(new[] { IDENTITY_ARRAYS, DECLARED_SORT, NO_VALUE_OF_IT }));
 
-            // The row the set refused: no node was given its problem.
-            Assert.That(refused.GetProperty("status").GetString(), Is.EqualTo(SmtRunWords.REFUSED));
-            Assert.That(refused.GetProperty("code").GetString(), Is.EqualTo(PROJECT_SORT_UNSUPPORTED));
-            Assert.That(refused.GetProperty("message").GetString(), Does.StartWith("'project[0]' names 'x', whose values hold elements of the sort 'U'. "));
-            Assert.That(refused.GetProperty("copies").GetInt32(), Is.Zero);
-            Assert.That(refused.TryGetProperty("digest", out _), Is.False, "no node answered it");
+            // The constant of a sort the problem only declares: the first model is found, and its
+            // value is a name of the solver's own that it does not take back. An answer, with
+            // that model.
+            Assert.That(SmtRunChecks.Words(declared), Is.EqualTo("ok sat other 1 incomplete"));
+            Assert.That(declared.GetProperty("reason").GetString(), Is.EqualTo(OTHER));
+            Assert.That(declared.GetProperty("message").GetString(), Is.Empty);
+            Assert.That(declared.GetProperty("count").GetInt32(), Is.EqualTo(1));
+            Assert.That(declared.GetProperty("complete").GetBoolean(), Is.False);
+            Assert.That(declared.GetProperty("limit_reached").GetBoolean(), Is.False);
+            Assert.That(declared.GetProperty("models").GetArrayLength(), Is.EqualTo(1));
+            Assert.That(declared.GetProperty("copies").GetInt32(), Is.EqualTo(2), "two machines answered");
+            Assert.That(declared.GetProperty("agreed").GetBoolean(), Is.True, "with one digest");
+            Assert.That(declared.GetProperty("settled_by").GetString(), Is.EqualTo(SmtRunWords.COPIES));
+            Assert.That(declared.GetProperty("validation").GetString(), Is.EqualTo(SmtRunWords.VALIDATED), "the host's evaluator finds the model to be one");
 
-            // The enumeration that ended at a value the solver did not read back: an answer, with what it found.
+            // The enumeration that ended at an array printed as a function: an answer, with what it found.
             Assert.That(SmtRunChecks.Words(arrays), Is.EqualTo("ok sat other 4 incomplete"));
             Assert.That(arrays.GetProperty("reason").GetString(), Is.EqualTo(OTHER));
             Assert.That(arrays.GetProperty("message").GetString(), Is.Empty);
@@ -86,8 +93,8 @@ public sealed class SmtRunProjectionTests : SmtRunTestBase
             Assert.That(arrays.GetProperty("settled_by").GetString(), Is.EqualTo(SmtRunWords.COPIES));
             Assert.That(arrays.GetProperty("validation").GetString(), Is.Not.EqualTo(SmtRunWords.FAILED));
 
-            // And a projection that only names an uninterpreted sort where no value goes enumerates to its end.
-            Assert.That(SmtRunChecks.Words(taken), Is.EqualTo("ok sat 2 complete"));
+            // And a projection that only names such a sort where no value goes enumerates to its end.
+            Assert.That(SmtRunChecks.Words(whole), Is.EqualTo("ok sat 2 complete"));
 
             Assert.That(run.IntegrityCount("disputes") + run.IntegrityCount("lies") + run.IntegrityCount("repairs") + run.IntegrityCount("rejected_results"), Is.Zero, "nothing to report: every row a node gave was taken");
         });
@@ -104,8 +111,8 @@ public sealed class SmtRunProjectionTests : SmtRunTestBase
     {
         return SmtSets.Of([
             new SmtProjectionCase(IDENTITY_ARRAYS, IDENTITY_ARRAYS_PROBLEM, 8, ["a"], "").Row(),
-            SmtProjectionCases.Of(REFUSED).Row(),
-            SmtProjectionCases.Of(TAKEN).Row()
+            SmtProjectionCases.Of(DECLARED_SORT).Row(),
+            SmtProjectionCases.Of(NO_VALUE_OF_IT).Row()
         ]);
     }
 

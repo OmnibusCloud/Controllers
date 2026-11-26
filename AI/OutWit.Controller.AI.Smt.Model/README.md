@@ -237,7 +237,7 @@ the rule; a row it would not take is refused, by the field's name.
 | `smt2` | required; the text of the problem, sanitized as above |
 | `query` | optional: `check`, `enumerate` or `prove`; without it the query of the run's options |
 | `values` | `check` only; optional; 1 to 256 strings, each one term whose value is asked |
-| `project` | `enumerate` only, and required there; 1 to 256 strings, each the name of a constant the problem declares (by `declare-const`, or by a `declare-fun` of no arguments), none named twice, each of a sort whose values the solver can be told back (see `project_sort_unsupported` below) |
+| `project` | `enumerate` only, and required there; 1 to 256 strings, each the name of a constant the problem declares (by `declare-const`, or by a `declare-fun` of no arguments), none named twice. The sort of a constant is no rule (see "Values the solver does not take back" below) |
 | `max_models` | `enumerate` only; optional; an integer from 1 to 1,000; without it the number of the run's options, and without that 2 |
 | `goal` | `prove` only, and required there; one term |
 | `expected` | `check` and `enumerate` only; optional; `sat` or `unsat`; it holds over the problem's `:status`. A `prove` row expects nothing |
@@ -272,51 +272,36 @@ characters, never more of the row.
 | `field_invalid` | a field's value is of another type (null included), outside its range, none of the words the field takes, or not valid Unicode text; an array is empty or too long; a name of `project` is no symbol, or names a constant twice |
 | `field_not_allowed` | the row holds a name that is no field of a row (a misspelt field is one), or a field of another query than the row's |
 | `unknown_constant` | a name of `project` is not a constant the problem declares |
-| `project_sort_unsupported` | a name of `project` is a constant whose values hold elements of a sort the problem only declares (`declare-sort`): the reason names the entry, the constant and that sort |
 | `too_many_problems` | the set has more than 1,000,000 rows; this row and what follows it were not read |
 
 What is looked at, in this order: the line is a row and every field that was given reads (the
 first fault in the order of the line); the row has its id, and no earlier row has it; it has its
 problem; every field belongs to the row's query and the query has the fields it needs; the
-sanitizer takes the problem; it takes the terms, and the names are declared constants, each of a
-sort whose values the solver can be told back. Of the names of `project` the first that breaks a
-rule is the one named, in the order of the row.
+sanitizer takes the problem; it takes the terms, and the names are declared constants. Of the
+names of `project` the first that breaks a rule is the one named, in the order of the row.
 
-#### The sort of a projected constant
+#### Values the solver does not take back
 
 An enumeration rules a found model out by telling the solver that not all of the projected
 constants have the values they had, and asks again. That works for a value the solver prints in
-a term it reads back. The pinned solver names the elements of a sort the problem only declares
-(`declare-sort`) by names of its own, inside one model (`U!val!0`), and takes none of them in a
-later command: a model with such a value cannot be ruled out. So a row is refused
-(`project_sort_unsupported`) when the values of a projected constant can hold an element of such
-a sort:
+a term it reads back, which is so for the numbers (irrational reals included), bit-vectors,
+strings, sequences, characters, floating point, arrays and the problem's own datatypes over
+them. Two kinds of value the pinned solver does not take back:
 
-- its sort is one, with or without arguments;
-- its sort is a sort of the theories (an array, a sequence, a function sort) with such a sort
-  for an argument: `(Array U Int)`, `(Seq U)`;
-- its sort is an alias (`define-sort`) of such a sort, or a datatype with such a sort in a field,
-  the parameters replaced by the arguments: `(Opt U)` where a constructor of `Opt` has a field of
-  its parameter.
+- an element of a sort the problem only declares (`declare-sort`). The solver names such
+  elements by names of its own, inside one model (`U!val!0`), and takes none of them in a later
+  command. So an enumeration projected on a constant whose values hold such an element (the sort
+  itself, or an array, a sequence or a datatype over it) ends at the first model that holds one:
+  for a constant of such a sort, after its first model;
+- an array that is the identity (`(Array Bool Bool)` mapping each index to itself), which is
+  printed as a function, under a logic without quantifiers, which does not take a function.
 
-An argument counts only where a value has it: a datatype or an alias that never uses its
-parameter is taken whatever the argument is. The problem is read as the solver reads it, a name
-being what was declared before its use. Every other sort is taken: the numbers (irrational reals
-included), bit-vectors, strings, sequences, characters, floating point, arrays and the
-problem's own datatypes over them. A `check` and a `prove` row are not held to this: only an
-enumeration says values back.
-
-The rule reads the sort, not the answer. Such a row is refused whatever number of models it asks
-for and whatever models its problem has, also where no model would have had to be ruled out: one
-model asked for (`max_models` 1), a problem with no model, values that hold no element of the
-sort (a constant array over such an index, the empty sequence). One model of such a problem is
-what a `check` row with `values` gives.
-
-A value the pinned solver prints in a form it does not read back under the problem's logic is
-not refused by its sort (no sort always prints so): the enumeration ends at that model with the
-models it found (`SmtResultData.Reason` `other`, not complete). One such form is known: an array
-that is the identity (`(Array Bool Bool)` mapping each index to itself) is printed as a function,
-which a logic without quantifiers does not take.
+No row is refused for this. The enumeration ends at that model with the models it found, which
+are whole and true, and says that it is not complete: `SmtResultData.Reason` is `other`,
+`Complete` is false, and `ReasonText` holds what the solver said. What is not known is whether
+there are more models. An enumeration that never has to rule such a model out ends as any
+other: one model asked for (`max_models` 1), a problem with no model, values that hold no such
+element.
 
 ### The options of a run
 

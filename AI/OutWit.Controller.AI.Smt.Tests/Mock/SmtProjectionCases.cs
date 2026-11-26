@@ -8,13 +8,15 @@ namespace OutWit.Controller.AI.Smt.Tests.Mock;
 /// the pinned solver printed for it and whether it read it back was looked at case by case, and
 /// the words here are what came of it.
 /// <para>
-/// The projections that are taken (<see cref="Taken"/>) enumerate, each to the words written
-/// beside it. The ones that are refused (<see cref="Refused"/>) are exactly those whose values
-/// hold an element of a sort the problem leaves to the solver (<c>declare-sort</c>): the solver
-/// prints such an element as <c>U!val!0</c> and answers <c>unknown constant U!val!0</c> when it
-/// is said back. Among the taken ones are the cases that tell the rule from a cruder one: a sort
-/// that only names an uninterpreted sort where no value goes (a parameter no field uses, an
-/// alias that drops its parameter) still enumerates.
+/// Every one of them is a row a reader of a set takes and a problem a node's plan takes: the
+/// sort of a projected constant is no ground for a refusal. The ones whose values the solver
+/// reads back (<see cref="ReadBack"/>) enumerate, each to the words written beside it. The others
+/// (<see cref="NotReadBack"/>) are those whose values hold an element of a sort the problem
+/// leaves to the solver (<c>declare-sort</c>): the solver prints such an element as
+/// <c>U!val!0</c> and answers <c>unknown constant U!val!0</c> when it is said back, so the
+/// enumeration ends at that model, not complete, with what it found. Among the first are the
+/// cases that tell the two apart: a sort that only names such a sort where no value goes (a
+/// parameter no field uses, an alias that drops its parameter) enumerates to its end.
 /// </para>
 /// <para>
 /// Written for these tests; none is a benchmark file.
@@ -53,9 +55,9 @@ internal static class SmtProjectionCases
             cases.Add(new SmtProjectionCase(id, text, maxModels, project, words));
         }
 
-        void Refuse(string id, string text, string sort, params string[] project)
+        void Stop(string id, string text, string sort, params string[] project)
         {
-            cases.Add(new SmtProjectionCase(id, text, 3, project, "refused project_sort_unsupported") { Uninterpreted = sort });
+            cases.Add(new SmtProjectionCase(id, text, 3, project, "") { Declared = sort });
         }
 
         // The core and the numbers.
@@ -117,40 +119,40 @@ internal static class SmtProjectionCases
         Take("alias", "(define-sort Word () (_ BitVec 2))(declare-const w Word)", 6, "ok sat 4 complete", "w");
         Take("alias-with-parameters", "(define-sort Map (K V) (Array K V))(declare-const m (Map Bool Bool))", 6, "ok sat 4 complete", "m");
 
-        // An uninterpreted sort that is named where no value goes: these enumerate, and are taken.
+        // A sort the problem only declares, named where no value goes: these enumerate to their end.
         Take("uninterpreted-beside", U + "(declare-const x U)(declare-const n Int)(assert (and (>= n 0) (<= n 1)))", 5, "ok sat 2 complete", "n");
         Take("uninterpreted-for-an-unused-parameter", U + PHANTOM + "(declare-const p (Ph U))", 5, "ok sat 2 complete", "p");
         Take("uninterpreted-array-for-an-unused-parameter", U + PHANTOM + "(declare-const p (Ph (Array Int U)))", 5, "ok sat 2 complete", "p");
         Take("uninterpreted-with-arguments-for-an-unused-parameter", "(declare-sort P 1)" + PHANTOM + "(declare-const p (Ph (P Int)))", 5, "ok sat 2 complete", "p");
         Take("uninterpreted-for-a-parameter-an-alias-drops", U + "(define-sort K (T) Int)(declare-const x (K U))(assert (and (>= x 0) (<= x 1)))", 5, "ok sat 2 complete", "x");
 
-        // The uninterpreted sort itself, however it is named.
-        Refuse("uninterpreted", "(set-logic QF_UF)" + U + "(declare-const x U)(declare-const y U)(assert (distinct x y))", "U", "x");
-        Refuse("uninterpreted-declare-fun", U + "(declare-fun x () U)(declare-fun y () U)(assert (distinct x y))", "U", "x");
-        Refuse("uninterpreted-with-arguments", "(declare-sort P 1)(declare-const x (P Int))(declare-const y (P Int))(assert (distinct x y))", "P", "x");
-        Refuse("uninterpreted-quoted-name", "(declare-sort |my sort| 0)(declare-const x |my sort|)(declare-const y |my sort|)(assert (distinct x y))", "my sort", "x");
-        Refuse("uninterpreted-by-an-alias", U + "(define-sort V () U)(declare-const x V)(declare-const y V)(assert (distinct x y))", "U", "x");
-        Refuse("uninterpreted-by-an-alias-parameter", U + "(define-sort Id (T) T)(declare-const x (Id U))(declare-const y (Id U))(assert (distinct x y))", "U", "x");
-        Refuse("uninterpreted-of-one-element", U + "(declare-const x U)(assert (forall ((y U)) (= x y)))", "U", "x");
+        // The declared sort itself, however it is named: the first model's value is not taken back.
+        Stop("uninterpreted", "(set-logic QF_UF)" + U + "(declare-const x U)(declare-const y U)(assert (distinct x y))", "U", "x");
+        Stop("uninterpreted-declare-fun", U + "(declare-fun x () U)(declare-fun y () U)(assert (distinct x y))", "U", "x");
+        Stop("uninterpreted-with-arguments", "(declare-sort P 1)(declare-const x (P Int))(declare-const y (P Int))(assert (distinct x y))", "P", "x");
+        Stop("uninterpreted-quoted-name", "(declare-sort |my sort| 0)(declare-const x |my sort|)(declare-const y |my sort|)(assert (distinct x y))", "my sort", "x");
+        Stop("uninterpreted-by-an-alias", U + "(define-sort V () U)(declare-const x V)(declare-const y V)(assert (distinct x y))", "U", "x");
+        Stop("uninterpreted-by-an-alias-parameter", U + "(define-sort Id (T) T)(declare-const x (Id U))(declare-const y (Id U))(assert (distinct x y))", "U", "x");
+        Stop("uninterpreted-of-one-element", U + "(declare-const x U)(assert (forall ((y U)) (= x y)))", "U", "x");
 
         // Sorts of the theories over it.
-        Refuse("uninterpreted-array-index", U + "(declare-const a (Array U Int))(declare-const x U)(assert (= (select a x) 1))", "U", "a");
-        Refuse("uninterpreted-array-element", U + "(declare-const a (Array Int U))", "U", "a");
-        Refuse("uninterpreted-sequence", U + "(declare-const q (Seq U))(assert (= (seq.len q) 1))", "U", "q");
-        Refuse("uninterpreted-array-of-sequences", U + "(declare-const a (Array Int (Seq U)))(assert (= (seq.len (select a 0)) 1))", "U", "a");
-        Refuse("uninterpreted-function-sort", U + "(declare-const h (-> Int U))", "U", "h");
-        Refuse("uninterpreted-set", U + "(declare-const s (Set U))(declare-const e U)(assert (select s e))", "U", "s");
+        Stop("uninterpreted-array-index", U + "(declare-const a (Array U Int))(declare-const x U)(assert (= (select a x) 1))", "U", "a");
+        Stop("uninterpreted-array-element", U + "(declare-const a (Array Int U))", "U", "a");
+        Stop("uninterpreted-sequence", U + "(declare-const q (Seq U))(assert (= (seq.len q) 1))", "U", "q");
+        Stop("uninterpreted-array-of-sequences", U + "(declare-const a (Array Int (Seq U)))(assert (= (seq.len (select a 0)) 1))", "U", "a");
+        Stop("uninterpreted-function-sort", U + "(declare-const h (-> Int U))", "U", "h");
+        Stop("uninterpreted-set", U + "(declare-const s (Set U))(declare-const e U)(assert (select s e))", "U", "s");
 
         // Datatypes with a field of it, directly, by a parameter, by another datatype.
-        Refuse("uninterpreted-field", U + "(declare-datatype D ((mk (u U) (n Int))))(declare-const d D)(assert (= (n d) 1))", "U", "d");
-        Refuse("uninterpreted-option", U + OPTION + "(declare-const o (Opt U))", "U", "o");
-        Refuse("uninterpreted-pair", U + PAIR + "(declare-const p (Pr U Int))(assert (= (snd p) 1))", "U", "p");
-        Refuse("uninterpreted-list-of-records", U + "(declare-datatype D ((mk (u U))))" + LIST + "(declare-const l (Lst D))(assert (not (= l (as nl (Lst D)))))", "U", "l");
-        Refuse("uninterpreted-mutual", U + "(declare-datatypes ((T 0) (F 0)) (((leaf) (node (kids F))) ((none) (more (first U) (rest F)))))(declare-const t T)(assert (not (= t leaf)))(assert (not (= (kids t) none)))", "U", "t");
-        Refuse("uninterpreted-under-a-parameter-of-its-name", U + "(declare-datatype Box (par (U) ((box (get U)))))(declare-const b (Box Bool))", "U", "b");
+        Stop("uninterpreted-field", U + "(declare-datatype D ((mk (u U) (n Int))))(declare-const d D)(assert (= (n d) 1))", "U", "d");
+        Stop("uninterpreted-option", U + OPTION + "(declare-const o (Opt U))", "U", "o");
+        Stop("uninterpreted-pair", U + PAIR + "(declare-const p (Pr U Int))(assert (= (snd p) 1))", "U", "p");
+        Stop("uninterpreted-list-of-records", U + "(declare-datatype D ((mk (u U))))" + LIST + "(declare-const l (Lst D))(assert (not (= l (as nl (Lst D)))))", "U", "l");
+        Stop("uninterpreted-mutual", U + "(declare-datatypes ((T 0) (F 0)) (((leaf) (node (kids F))) ((none) (more (first U) (rest F)))))(declare-const t T)(assert (not (= t leaf)))(assert (not (= (kids t) none)))", "U", "t");
+        Stop("uninterpreted-under-a-parameter-of-its-name", U + "(declare-datatype Box (par (U) ((box (get U)))))(declare-const b (Box Bool))", "U", "b");
 
-        // The entry the refusal names is the one of the constant, wherever it stands.
-        cases.Add(new SmtProjectionCase("uninterpreted-second-entry", U + "(declare-const n Int)(declare-const x U)(assert (and (>= n 0) (<= n 1)))", 3, ["n", "x"], "refused project_sort_unsupported") { Uninterpreted = "U", Entry = 1 });
+        // Beside a constant whose values are read back: the model is ruled out as a whole or not at all.
+        Stop("uninterpreted-second-entry", U + "(declare-const n Int)(declare-const x U)(assert (and (>= n 0) (<= n 1)))", "U", "n", "x");
 
         return cases;
     }
@@ -162,11 +164,14 @@ internal static class SmtProjectionCases
     /// <summary>Every case.</summary>
     public static IReadOnlyList<SmtProjectionCase> All => ALL.Value;
 
-    /// <summary>The names of the projections that are taken, for a test that takes one a case.</summary>
-    public static IEnumerable<string> Taken => ALL.Value.Where(one => !one.IsRefused).Select(one => one.Id);
+    /// <summary>The names of all the cases, for a test that takes one a case.</summary>
+    public static IEnumerable<string> Ids => ALL.Value.Select(one => one.Id);
 
-    /// <summary>The names of the projections that are refused, for a test that takes one a case.</summary>
-    public static IEnumerable<string> Refused => ALL.Value.Where(one => one.IsRefused).Select(one => one.Id);
+    /// <summary>The names of the enumerations whose values the solver reads back, for a test that takes one a case.</summary>
+    public static IEnumerable<string> ReadBack => ALL.Value.Where(one => !one.EndsAtAValueNotReadBack).Select(one => one.Id);
+
+    /// <summary>The names of the enumerations that end at a value the solver does not take back, for a test that takes one a case.</summary>
+    public static IEnumerable<string> NotReadBack => ALL.Value.Where(one => one.EndsAtAValueNotReadBack).Select(one => one.Id);
 
     #endregion
 }

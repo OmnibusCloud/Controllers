@@ -89,19 +89,21 @@ one outcome. It throws for nothing a problem or the solver holds.
 
 No `set-info` of a problem reaches the solver, and no command of the problem's own asks it to act.
 
-An enumeration says a found model's values back to the solver, so it is projected only on
-constants whose values the solver takes back: the model package's `SmtProjection` refuses a
-projection on a constant whose values hold elements of a sort the problem only declares
-(`project_sort_unsupported`; its README says which sorts those are). The reader of a problem set
-makes that check when the set is read, and a node makes the same check of what travelled to it:
-a node refuses no projection the host took.
+The names of a projection are held to the problem by one check, the model package's
+`SmtProjection`: the reader of a problem set makes it when the set is read, and a node makes it
+again of what travelled to it, so a node refuses no projection the host took. The sort of a
+projected constant is no ground for a refusal. An enumeration says a found model's values back
+to the solver, and the solver does not take every value back: it names the elements of a sort
+the problem only declares (`declare-sort`) by names of its own. An enumeration over such values
+ends at the first model that holds one, not complete, with the models it found (the model
+package's README says so in full).
 
 ## The outcome
 
 | Status | When |
 |---|---|
 | `ok` | the query was answered: `sat`, `unsat`, or `unknown` with its reason |
-| `refused` | the options or the problem were not taken; no solver ran. The code is the sanitizer's or a row's (`project_sort_unsupported` for a projection the solver cannot be told back), or `hash_mismatch`, `profile_unknown`, `options_invalid` |
+| `refused` | the options or the problem were not taken; no solver ran. The code is the sanitizer's or a row's, or `hash_mismatch`, `profile_unknown`, `options_invalid` |
 | `input_error` | the solver reported an error in what it was given, or said anything at all to a statement of the problem's (a logic it does not know); its message is kept, cut to 512 characters |
 | `output_exceeded` | the session wrote more than its output cap. The verdict of a check the solver had answered by then stands: it said `sat`, and it is the model that did not fit |
 | `engine_crash` | a trap, an exit status that is no answer, an answer that cannot be read |
@@ -113,7 +115,7 @@ a node refuses no projection the host took.
 | `fuel` | the session's fuel ran out |
 | `memout` | the solver was refused memory: its exit status 101 with its line `(error "out of memory")`, or the sandbox's cap of the heap its exceptions live in |
 | `incomplete` | the solver's own word |
-| `other` | any other word of the solver's, which the outcome keeps. Also the reason of an enumeration that ended, its models kept and not complete, because the solver did not take a found model's values back: the word kept is what the solver said to the assertion (the pinned solver prints an array that is the identity as a function, which a logic without quantifiers does not read) |
+| `other` | any other word of the solver's, which the outcome keeps. Also the reason of an enumeration that ended, its models kept and not complete, because the solver did not take a found model's values back: the word kept is what the solver said to the assertion (the pinned solver names the elements of a sort a problem only declares by names of its own, and prints an array that is the identity as a function, which a logic without quantifiers does not read) |
 
 Beside them the outcome holds, for an enumeration, the count and whether it is complete; for a
 proof, proved or counterexample; the models and the values as the solver printed them, for the

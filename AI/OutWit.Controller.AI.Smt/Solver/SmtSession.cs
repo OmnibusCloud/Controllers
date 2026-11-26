@@ -281,9 +281,9 @@ internal sealed class SmtSession
 
     /// <summary>
     /// The answer to the assertion that rules the found model out: nothing, and the next check.
-    /// Anything else is the solver not taking a value back as it printed it (a form it writes and
-    /// does not read under the problem's logic; the projections whose sort always prints so are
-    /// refused before a session starts). The assertion is the controller's, so this is no error
+    /// Anything else is the solver not taking a value back as it printed it (its own name for an
+    /// element of a sort the problem only declares, or a form it writes and does not read under
+    /// the problem's logic). The assertion is the controller's, so this is no error
     /// in what the problem's author gave: the models found are whole and true, and what cannot be
     /// known is whether there are more, since the next check would find the last one again. The
     /// enumeration ends here, incomplete, with the solver's answer for its reason.

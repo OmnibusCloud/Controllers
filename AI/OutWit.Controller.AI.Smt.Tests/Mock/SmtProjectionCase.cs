@@ -12,8 +12,9 @@ namespace OutWit.Controller.AI.Smt.Tests.Mock;
 /// <param name="MaxModels">The most models to look for.</param>
 /// <param name="Project">The constants the models are told apart by.</param>
 /// <param name="Words">
-/// What the real solver's outcome says in a few words (<see cref="SmtSolved.Words"/>) when the
-/// projection is taken; ignored when it is refused.
+/// What the real solver's outcome says in a few words (<see cref="SmtSolved.Words"/>) for an
+/// enumeration whose values the solver reads back; empty for one that ends at a value it does
+/// not (<see cref="Declared"/>), which is held to what such an end is, not to a number of models.
 /// </param>
 internal sealed record SmtProjectionCase(string Id, string Text, int MaxModels, IReadOnlyList<string> Project, string Words)
 {
@@ -52,16 +53,15 @@ internal sealed record SmtProjectionCase(string Id, string Text, int MaxModels, 
     #region Properties
 
     /// <summary>
-    /// The uninterpreted sort whose elements the values of a projected constant hold: the
-    /// projection is refused, and the refusal names this sort. Null for a projection that is taken.
+    /// The sort the problem only declares (<c>declare-sort</c>) whose elements stand in the values
+    /// of a projected constant. The solver names such an element by a name of its own and does not
+    /// take it back, so the enumeration ends at the first model that holds one, with the models it
+    /// found. Null for an enumeration whose values the solver reads back.
     /// </summary>
-    public string? Uninterpreted { get; init; }
+    public string? Declared { get; init; }
 
-    /// <summary>The place of the entry of <see cref="Project"/> the refusal names, from 0.</summary>
-    public int Entry { get; init; }
-
-    /// <summary>Whether the projection is refused.</summary>
-    public bool IsRefused => Uninterpreted != null;
+    /// <summary>Whether the enumeration ends at a model whose values the solver does not take back.</summary>
+    public bool EndsAtAValueNotReadBack => Declared != null;
 
     #endregion
 }

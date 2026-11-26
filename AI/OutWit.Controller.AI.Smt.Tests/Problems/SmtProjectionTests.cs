@@ -10,6 +10,8 @@ namespace OutWit.Controller.AI.Smt.Tests.Problems;
 /// node can meet, since a row's own shape keeps them from a reader (no name at all, more names
 /// than a row may hold, a name that is not there). The rules a row can break are held through
 /// the reader (<see cref="SmtProblemSetQueryTests"/>, <see cref="SmtProblemSetProjectionTests"/>).
+/// The sort of a constant is no rule of it: every case of <see cref="SmtProjectionCases"/> is
+/// taken, also the ones over a sort the problem only declares.
 /// </summary>
 [TestFixture]
 public sealed class SmtProjectionTests
@@ -114,24 +116,8 @@ public sealed class SmtProjectionTests
 
     #region Case Tests
 
-    [TestCaseSource(typeof(SmtProjectionCases), nameof(SmtProjectionCases.Refused))]
-    public void ARefusedCaseIsRefusedForTheEntryOfItsConstantTest(string id)
-    {
-        var one = SmtProjectionCases.Of(id);
-        var problem = SmtSanitizer.Sanitize(one.Text).Problem!;
-
-        var refusal = SmtProjection.Take(problem, [.. one.Project], out var constants);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(refusal?.Code, Is.EqualTo(SmtRefusalCodes.PROJECT_SORT_UNSUPPORTED));
-            Assert.That(refusal?.Reason, Does.StartWith($"'project[{one.Entry}]' names '{one.Project[one.Entry]}', whose values hold elements of the sort '{one.Uninterpreted}'. "));
-            Assert.That(constants, Is.Empty);
-        });
-    }
-
-    [TestCaseSource(typeof(SmtProjectionCases), nameof(SmtProjectionCases.Taken))]
-    public void ATakenCaseGivesItsConstantsTest(string id)
+    [TestCaseSource(typeof(SmtProjectionCases), nameof(SmtProjectionCases.Ids))]
+    public void ACaseGivesItsConstantsWhateverTheirSortTest(string id)
     {
         var one = SmtProjectionCases.Of(id);
         var problem = SmtSanitizer.Sanitize(one.Text).Problem!;
