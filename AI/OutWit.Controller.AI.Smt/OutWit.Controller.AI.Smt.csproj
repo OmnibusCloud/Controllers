@@ -27,8 +27,8 @@
   </ItemGroup>
 
   <!-- The schemas of the documents a lab reads (the capabilities, and the results, the report,
-       the provenance and the integrity of a run) and what a lab can rely on: the contract,
-       packed under docs/, beside the README that names them. -->
+       the provenance and the integrity of a run), what a lab can rely on (the contract) and the
+       page an application starts from, packed under docs/, beside the README that names them. -->
   <ItemGroup>
     <None Update="docs\smt-capabilities.schema.json" Pack="true" PackagePath="docs\smt-capabilities.schema.json" />
     <None Update="docs\smt-results.schema.json" Pack="true" PackagePath="docs\smt-results.schema.json" />
@@ -36,6 +36,7 @@
     <None Update="docs\smt-provenance.schema.json" Pack="true" PackagePath="docs\smt-provenance.schema.json" />
     <None Update="docs\smt-integrity.schema.json" Pack="true" PackagePath="docs\smt-integrity.schema.json" />
     <None Update="docs\capabilities.md" Pack="true" PackagePath="docs\capabilities.md" />
+    <None Update="docspplication.md" Pack="true" PackagePath="docspplication.md" />
   </ItemGroup>
 
   <!-- The solver's sandbox: the Wasmtime.Dotnet managed binding over the native wasmtime

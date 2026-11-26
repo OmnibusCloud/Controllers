@@ -12,8 +12,10 @@ packages of rows returned, the node measured for the allocator) and the host's s
 problem set cut into packages, solved with copies on different machines, repaired (the copies
 the sampling asked for restored), disputed, settled by the digests of the rows, every `sat`
 model checked on the server by the model evaluator, and written out as results, a report,
-provenance and integrity, all through blobs (`SmtRun`). The solver module is a data asset of the controller. What a lab can rely on, and the
-limits, are [`docs/capabilities.md`](docs/capabilities.md). The language layer and
+provenance and integrity, all through blobs (`SmtRun`). The solver module is a data asset of the controller. An application
+starts from [`docs/application.md`](docs/application.md): the call, the options, what comes
+back and what to do with it, what is promised. What a lab can rely on, and the limits, are
+[`docs/capabilities.md`](docs/capabilities.md). The language layer and
 the wire types (the reader, the sanitizer, the model evaluator, the problem set, the options, the
 packages and their rows, the preflight, the words of the documents) are
 [`OutWit.Controller.AI.Smt.Model`](../OutWit.Controller.AI.Smt.Model/README.md); the scripts travel

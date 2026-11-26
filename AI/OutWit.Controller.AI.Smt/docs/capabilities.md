@@ -1,8 +1,11 @@
 # Smt: what the controller can do
 
 A reference for building on the Smt controller: what goes into a run and what comes out, what
-is checked and what is not, and where the edges are. The [README](../README.md) explains how
-things work inside; the schemas beside this page are the contract of the documents.
+is checked and what is not, and where the edges are. An application starts from
+[application.md](application.md): the call through the SDK, the options, the preflight, every word
+of the documents explained, what makes a run alarming, examples written by the code. The
+[README](../README.md) explains how things work inside; the schemas beside this page are the
+contract of the documents.
 
 Version described: **Smt 0.5.0** (with Smt.Model 0.3.0 and Smt.Scripts 0.2.0). In development;
 nothing is published.
