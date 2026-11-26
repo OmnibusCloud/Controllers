@@ -350,8 +350,8 @@ counted as a node's unreadable result.
 **Cancel.** `Smt.Preflight`, `Smt.Split`, `Smt.Repairs`, `Smt.Disputes` and `Smt.Settle` take the
 job's cancellation and look at it before every package, row and model they read: once the job is
 cancelled, the activity ends cancelled at the next of them (the check of one model, or the read
-of one package, at the most: a settle cancelled among its rows stopped within 0.4 s on the build
-server's three platforms), and its spool, its working files and its working folder go with it.
+of one package, at the most: a settle cancelled among its rows stopped within half a second on
+the build server's three platforms), and its spool, its working files and its working folder go with it.
 Nothing is returned and nothing is stored.
 
 **Settling** (`SmtRulings`), problem by problem in the set's order:
