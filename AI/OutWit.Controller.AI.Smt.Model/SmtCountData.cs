@@ -1,4 +1,5 @@
 using MemoryPack;
+using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
 using OutWit.Common.Attributes;
 using OutWit.Common.Values;
@@ -9,7 +10,12 @@ namespace OutWit.Controller.AI.Smt.Model;
 /// One count of a summary: a name (a logic, a refusal code, a query, a stripped command, a
 /// licence) and how many times it was met. A list of these is a summary's table, in the order
 /// the summary gives it.
+/// <para>
+/// Published into the platform's job document vocabulary as <c>smt.count@1</c>, as a part of the
+/// preflight's document.
+/// </para>
 /// </summary>
+[JobDocumentContract("smt.count@1")]
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order. A published layout
 // changes only behind a version fence, so that no reader of the old layout is ever handed the

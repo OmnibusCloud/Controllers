@@ -142,7 +142,7 @@ internal static class SmtCapabilitiesWriter
             WriteWords(writer, SmtResultWords.REFUSED, REFUSAL_CODES);
             WriteWords(writer, SmtResultWords.ENGINE_CRASH, SmtSolveCodes.CRASHES);
             WriteWords(writer, SmtRunWords.NO_RESULT, SmtRunSettlement.NO_RESULT_REASONS);
-            WriteWords(writer, SmtRunWords.DISPUTED, SmtRunWords.DISPUTE_OUTCOMES);
+            WriteWords(writer, SmtRunWords.DISPUTED, SmtRunWords.DISPUTED_CODES);
             writer.WriteEndObject();
             WriteWords(writer, "verdicts", SmtResultWords.VERDICTS);
             WriteWords(writer, "reasons", SmtResultWords.REASONS);

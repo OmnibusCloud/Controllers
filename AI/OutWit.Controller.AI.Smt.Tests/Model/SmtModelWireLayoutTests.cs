@@ -29,8 +29,10 @@ public sealed class SmtModelWireLayoutTests
     /// How many members each type has in its first layout: every sender has those, so they may
     /// start at anything (the sampling rate of a run's options starts at the default rate: 0 is a
     /// rate of its own, so "not set" cannot be 0 there). A member past them is one a sender may
-    /// not have. Until the package is first published, its first layout is the layout as it
-    /// stands, and a member added before then moves the count.
+    /// not have. The counts are frozen at the layout of 1.0.0, the package's first release: from
+    /// that release on, a member past them comes only behind a version fence (a new controller and
+    /// model version, whose payloads no reader of the old layout is ever handed), and it starts at
+    /// its type's default.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, int> FIRST_LAYOUT_MEMBERS = new Dictionary<string, int>(StringComparer.Ordinal)
     {

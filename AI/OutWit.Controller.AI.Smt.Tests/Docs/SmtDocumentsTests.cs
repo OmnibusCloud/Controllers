@@ -89,9 +89,13 @@ public sealed class SmtDocumentsTests
             .Select(match => $"`{match.Groups["name"].Value}` {match.Groups["version"].Value}").ToList();
         var page = Flat(SmtMarkdown.Read(APPLICATION));
 
+        // A reference of the project's own is a build-time one (the generator of the document
+        // vocabulary): it is no dependency of the package.
+        var own = Regex.Matches(SmtMarkdown.Read(MODEL_PROJECT), "<PackageReference [^>]*>").Select(match => match.Value).ToList();
+
         Assert.Multiple(() =>
         {
-            Assert.That(SmtMarkdown.Read(MODEL_PROJECT), Does.Not.Contain("<PackageReference"), "the model package depends on what the shared props give it, and on nothing else");
+            Assert.That(own, Has.All.Contain("PrivateAssets=\"all\""), "the model package depends on what the shared props give it, and on nothing else");
             Assert.That(references, Has.Count.EqualTo(2), "the dependencies of a model package that the page names");
             Assert.That(page, Does.Contain($"The package is built for `{framework}` and depends on {string.Join(" and ", references)}."));
         });

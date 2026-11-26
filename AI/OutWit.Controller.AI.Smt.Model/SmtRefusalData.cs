@@ -1,4 +1,5 @@
 using MemoryPack;
+using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
 using OutWit.Common.Attributes;
 using OutWit.Common.Values;
@@ -15,7 +16,12 @@ namespace OutWit.Controller.AI.Smt.Model;
 /// and <see cref="Line"/> the line inside the problem's text (0 when the refusal is about the
 /// row itself).
 /// </para>
+/// <para>
+/// Published into the platform's job document vocabulary as <c>smt.refusal@1</c>, as a part of the
+/// preflight's document.
+/// </para>
 /// </summary>
+[JobDocumentContract("smt.refusal@1")]
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order. A published layout
 // changes only behind a version fence, so that no reader of the old layout is ever handed the

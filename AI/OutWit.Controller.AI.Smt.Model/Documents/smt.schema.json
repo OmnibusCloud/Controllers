@@ -1,0 +1,539 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:omnibuscloud:documents:smt",
+  "title": "OmnibusCloud job document vocabulary: smt",
+  "description": "Published document types of one controller component. Each $defs entry keyed by a type id (<component>.<name>@<major>) is the value shape carried by a job request parameter of kind \"document\" and by the value document of a job variable; each entry keyed by a plain name is an enum referenced by those shapes. Wire convention: camelCase properties, enum member names as strings, null properties omitted.",
+  "x-oc-vocabulary": {
+    "schemaVersion": 1,
+    "component": "smt",
+    "types": [
+      "smt.count@1",
+      "smt.diagnostics@1",
+      "smt.options@1",
+      "smt.preflight@1",
+      "smt.refusal@1"
+    ],
+    "source": {
+      "assembly": "OutWit.Controller.AI.Smt.Model",
+      "version": "1.0.0"
+    },
+    "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
+  },
+  "$defs": {
+    "smt.count@1": {
+      "type": "object",
+      "title": "SmtCount",
+      "description": "One count of a summary: a name (a logic, a refusal code, a query, a stripped command, a licence) and how many times it was met. A list of these is a summary's table, in the order the summary gives it. Published into the platform's job document vocabulary as smt.count@1, as a part of the preflight's document.",
+      "x-oc-type-id": "smt.count@1",
+      "x-oc-binding-name": "SmtCount",
+      "x-oc-clr": "OutWit.Controller.AI.Smt.Model.SmtCountData, OutWit.Controller.AI.Smt.Model",
+      "properties": {
+        "name": {
+          "description": "What is counted.",
+          "x-oc-clr-name": "Name",
+          "type": "string"
+        },
+        "count": {
+          "description": "How many times it was met.",
+          "x-oc-clr-name": "Count",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      }
+    },
+    "smt.diagnostics@1": {
+      "type": "object",
+      "title": "SmtDiagnostics",
+      "description": "What the Smt controller of the process that answers carries and can do: its version and its profile, the solver module's pin and whether this process has the module and has compiled it, the engine library's pin and whether it is the one loaded, the trap mode, and how many sessions it would run at once, with why. A plain script function runs on the host, so through a diagnostics script this describes the host's module. Nothing here names the machine: the platform is a runtime identifier, the cores and the memory are numbers, and a reason is in fixed words without a path. Published into the platform's job document vocabulary as smt.diagnostics@1: an application that is not .NET reads the diagnostics as a document of this type.",
+      "x-oc-type-id": "smt.diagnostics@1",
+      "x-oc-binding-name": "SmtDiagnostics",
+      "x-oc-clr": "OutWit.Controller.AI.Smt.Model.SmtRuntimeDiagnosticsData, OutWit.Controller.AI.Smt.Model",
+      "properties": {
+        "controllerVersion": {
+          "description": "The controller's version.",
+          "x-oc-clr-name": "ControllerVersion",
+          "type": "string"
+        },
+        "profileId": {
+          "description": "The id of the controller's one solver profile, as a run's options name it.",
+          "x-oc-clr-name": "ProfileId",
+          "type": "string"
+        },
+        "solverVersion": {
+          "description": "The solver's version.",
+          "x-oc-clr-name": "SolverVersion",
+          "type": "string"
+        },
+        "moduleFile": {
+          "description": "Where the solver module is looked for, relative to the controller's folder.",
+          "x-oc-clr-name": "ModuleFile",
+          "type": "string"
+        },
+        "moduleSha256": {
+          "description": "The solver module's pinned SHA-256, lower-case hex.",
+          "x-oc-clr-name": "ModuleSha256",
+          "type": "string"
+        },
+        "moduleSize": {
+          "description": "The solver module's pinned size, bytes.",
+          "x-oc-clr-name": "ModuleSize",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "modulePresent": {
+          "description": "Whether this process has the solver module, with the pinned size and SHA-256.",
+          "x-oc-clr-name": "ModulePresent",
+          "type": "boolean"
+        },
+        "moduleCompiled": {
+          "description": "Whether this process has compiled the module (its sandbox exists).",
+          "x-oc-clr-name": "ModuleCompiled",
+          "type": "boolean"
+        },
+        "compileMs": {
+          "description": "How long the compile took in this process, milliseconds; 0 when it has not compiled the module.",
+          "x-oc-clr-name": "CompileMs",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "sandboxProblem": {
+          "description": "Why this process has no sandbox, in fixed words without a path; empty when it has one or has not tried to make one.",
+          "x-oc-clr-name": "SandboxProblem",
+          "type": "string"
+        },
+        "wasmtimeBinding": {
+          "description": "The version of the wasmtime .NET binding loaded in this process; empty when none could be loaded.",
+          "x-oc-clr-name": "WasmtimeBinding",
+          "type": "string"
+        },
+        "nativesVersion": {
+          "description": "The version of the native engine library the controller ships.",
+          "x-oc-clr-name": "NativesVersion",
+          "type": "string"
+        },
+        "nativesSha256": {
+          "description": "The SHA-256 of the native engine library the controller ships for this platform; empty when it ships none for it.",
+          "x-oc-clr-name": "NativesSha256",
+          "type": "string"
+        },
+        "nativesPinned": {
+          "description": "Whether the native engine library of this process is the pinned one.",
+          "x-oc-clr-name": "NativesPinned",
+          "type": "boolean"
+        },
+        "trapMode": {
+          "description": "How the solver's traps are taken: explicit (checks in the compiled code, as a host with hardware stack protection needs) or signals.",
+          "x-oc-clr-name": "TrapMode",
+          "type": "string"
+        },
+        "platform": {
+          "description": "The platform: win-x64, linux-x64, osx-arm64.",
+          "x-oc-clr-name": "Platform",
+          "type": "string"
+        },
+        "logicalCores": {
+          "description": "The logical cores of the machine.",
+          "x-oc-clr-name": "LogicalCores",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "availableMemoryBytes": {
+          "description": "The memory the machine has available as the runtime sees it, bytes; 0 when it cannot say.",
+          "x-oc-clr-name": "AvailableMemoryBytes",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "sessionMemoryBytes": {
+          "description": "The memory one session may take under the default options, bytes.",
+          "x-oc-clr-name": "SessionMemoryBytes",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "degree": {
+          "description": "How many sessions a package under the default options would run at once here; 0 when not one fits.",
+          "x-oc-clr-name": "Degree",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "degreeReason": {
+          "description": "What decided Degree: cores, cap, memory, or no_memory when not one session fits.",
+          "x-oc-clr-name": "DegreeReason",
+          "type": "string"
+        }
+      }
+    },
+    "smt.options@1": {
+      "type": "object",
+      "title": "SmtOptions",
+      "description": "The options of a run. A number that is 0, and a text that is empty, means \"not set: the default\" (SmtOptionsRules holds the defaults and the ceilings). The one exception is SamplingRate, where 0 is a value of its own: a new instance holds the default there. Published into the platform's job document vocabulary as smt.options@1: an application that is not .NET sends the options of a run as a document of this type, each member by its name in camel case, a member left out at its default. A member the options do not have (the documents' name of an option, a misspelt name) is refused there, never passed over: passed over, it would leave its option at the default without a word, and the run would run under other options than its lab asked for.",
+      "x-oc-type-id": "smt.options@1",
+      "x-oc-binding-name": "SmtOptions",
+      "x-oc-clr": "OutWit.Controller.AI.Smt.Model.SmtOptionsData, OutWit.Controller.AI.Smt.Model",
+      "properties": {
+        "profile": {
+          "description": "profile: the id of the solver profile (the solver's build and its settings); empty = the controller's default.",
+          "x-oc-clr-name": "Profile",
+          "type": "string"
+        },
+        "query": {
+          "description": "query: the query of a row that names none.",
+          "x-oc-clr-name": "Query",
+          "$ref": "#/$defs/SmtQuery"
+        },
+        "maxModels": {
+          "description": "max_models: the most models an enumeration looks for when its row names no number; 0 = the default.",
+          "x-oc-clr-name": "MaxModels",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "seed": {
+          "description": "seed: the seed of the solver's random choices, 0 or more.",
+          "x-oc-clr-name": "Seed",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "resourceLimit": {
+          "description": "rlimit: the solver's own counter of work for one check; 0 = the profile's default.",
+          "x-oc-clr-name": "ResourceLimit",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "hardCapSeconds": {
+          "description": "hard_cap_s: the most seconds of a reference machine one problem may take; 0 = the default. The controller turns the seconds into a budget of the solver's work that is the same on every node; this type only carries the number.",
+          "x-oc-clr-name": "HardCapSeconds",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "memoryMegabytes": {
+          "description": "memory_mb: the most memory one problem may take, in megabytes; 0 = the default.",
+          "x-oc-clr-name": "MemoryMegabytes",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "samplingRate": {
+          "description": "sampling_rate: the share of the packages that are solved on two machines, 0 to 1. 0 turns re-execution off and 1 solves every package twice, so \"not set\" has no number of its own here: a new instance holds the default. The share is rounded up to a whole package, so any rate above 0 solves one package twice at least: a small set has more of its problems twice than the rate says, and a set of one package (up to a package's size) is solved twice whole, wherever the pool has two machines.",
+          "x-oc-clr-name": "SamplingRate",
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "smt.preflight@1": {
+      "type": "object",
+      "title": "SmtPreflight",
+      "description": "What a problem set and a run's options come to before anything is sent to a node (Smt.Preflight): the set counted the way a run reads it, the options checked by name, the budget of a problem as numbers, the upper bound of the work (problems times the hard cap: a bound, never an estimate of how long a run takes), the memory a node needs for one session, and the packages a run would be cut into. Small whatever the set: the refusals are counted by code and the first MAX_REFUSALS of them are kept in full. Published into the platform's job document vocabulary as smt.preflight@1: an application that is not .NET reads a preflight as a document of this type.",
+      "x-oc-type-id": "smt.preflight@1",
+      "x-oc-binding-name": "SmtPreflight",
+      "x-oc-clr": "OutWit.Controller.AI.Smt.Model.SmtPreflightData, OutWit.Controller.AI.Smt.Model",
+      "properties": {
+        "runnable": {
+          "description": "Whether a run would start: the options are in range, the profile is the controller's, and the set has a row. A set whose every row is refused still runs: its results say why for each.",
+          "x-oc-clr-name": "Runnable",
+          "type": "boolean"
+        },
+        "rows": {
+          "description": "The rows of the set, taken and refused (blank lines are no rows).",
+          "x-oc-clr-name": "Rows",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "accepted": {
+          "description": "The rows taken: the problems a run sends to nodes.",
+          "x-oc-clr-name": "Accepted",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "refused": {
+          "description": "The rows refused.",
+          "x-oc-clr-name": "Refused",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "bytesRead": {
+          "description": "The bytes of the set read.",
+          "x-oc-clr-name": "BytesRead",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "sha256": {
+          "description": "The SHA-256 of the set's bytes, lower-case hex: the name the provenance of a run gives it.",
+          "x-oc-clr-name": "Sha256",
+          "type": "string"
+        },
+        "refusalCodes": {
+          "description": "The refused rows by code, in the order the codes were first met.",
+          "x-oc-clr-name": "RefusalCodes",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/smt.count@1"
+          }
+        },
+        "refusals": {
+          "description": "The first refusals in full, at most MAX_REFUSALS: the row, the id, the line in the problem, the command, the code and the reason (never the text).",
+          "x-oc-clr-name": "Refusals",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/smt.refusal@1"
+          }
+        },
+        "logics": {
+          "description": "The taken problems by logic (the name a problem's set-logic gives, empty for none).",
+          "x-oc-clr-name": "Logics",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/smt.count@1"
+          }
+        },
+        "otherLogics": {
+          "description": "The taken problems of logics past the 64 a summary names one by one.",
+          "x-oc-clr-name": "OtherLogics",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "queries": {
+          "description": "The taken problems by query: check, enumerate, prove.",
+          "x-oc-clr-name": "Queries",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/smt.count@1"
+          }
+        },
+        "expected": {
+          "description": "The taken problems by expected verdict: sat, unsat, none.",
+          "x-oc-clr-name": "Expected",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/smt.count@1"
+          }
+        },
+        "stripped": {
+          "description": "The commands the sanitizer left out of the taken problems (the query decides what runs), by name.",
+          "x-oc-clr-name": "Stripped",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/smt.count@1"
+          }
+        },
+        "licenses": {
+          "description": "The taken problems by the licence their :license names (empty for none).",
+          "x-oc-clr-name": "Licenses",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/smt.count@1"
+          }
+        },
+        "otherLicenses": {
+          "description": "The taken problems of licences past the 64 a summary names one by one.",
+          "x-oc-clr-name": "OtherLicenses",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "optionProblems": {
+          "description": "What is wrong with the options, one sentence an option, each named as a run's specification names it; empty when nothing is.",
+          "x-oc-clr-name": "OptionProblems",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "profile": {
+          "description": "The solver profile a run would use.",
+          "x-oc-clr-name": "Profile",
+          "type": "string"
+        },
+        "resourceLimit": {
+          "description": "The resource limit of one check, as a number (the profile's when the options name none).",
+          "x-oc-clr-name": "ResourceLimit",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "hardCapSeconds": {
+          "description": "The hard cap of one problem in seconds of the reference machine.",
+          "x-oc-clr-name": "HardCapSeconds",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "fuel": {
+          "description": "The fuel of one problem: the hard cap as the count the sandbox stops at.",
+          "x-oc-clr-name": "Fuel",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "memoryMegabytes": {
+          "description": "The most memory of one problem, megabytes.",
+          "x-oc-clr-name": "MemoryMegabytes",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "maxModels": {
+          "description": "The models an enumeration whose row names no number looks for.",
+          "x-oc-clr-name": "MaxModels",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "seed": {
+          "description": "The seed of the solver's random choices.",
+          "x-oc-clr-name": "Seed",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "samplingRate": {
+          "description": "The share of the packages a run asks to solve on two machines, 0 to 1.",
+          "x-oc-clr-name": "SamplingRate",
+          "type": "number",
+          "format": "double"
+        },
+        "sessionMemoryBytes": {
+          "description": "The memory a node needs for one session under the options, bytes: a node with less available refuses the work.",
+          "x-oc-clr-name": "SessionMemoryBytes",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "upperBoundSeconds": {
+          "description": "The upper bound of the work: the taken problems times the hard cap, seconds of the reference machine. A bound, not an estimate.",
+          "x-oc-clr-name": "UpperBoundSeconds",
+          "type": "integer",
+          "format": "int64",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "packages": {
+          "description": "The packages a run would cut the taken problems into (before any copy).",
+          "x-oc-clr-name": "Packages",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "problemsPerPackage": {
+          "description": "The most problems a package of the run holds.",
+          "x-oc-clr-name": "ProblemsPerPackage",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "messages": {
+          "description": "What else a lab should know before it runs the set, one sentence each.",
+          "x-oc-clr-name": "Messages",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "smt.refusal@1": {
+      "type": "object",
+      "title": "SmtRefusal",
+      "description": "Why a problem, a term beside it, or a row of a problem set was not taken: where, which command, a fixed code and a sentence a person can act on. It never carries the problem's text or the row: of them it holds a command name and, in the reason, the name of a field or at most one token cut to 64 characters. In a problem set Row is the line of the set, File the row's id and Line the line inside the problem's text (0 when the refusal is about the row itself). Published into the platform's job document vocabulary as smt.refusal@1, as a part of the preflight's document.",
+      "x-oc-type-id": "smt.refusal@1",
+      "x-oc-binding-name": "SmtRefusal",
+      "x-oc-clr": "OutWit.Controller.AI.Smt.Model.SmtRefusalData, OutWit.Controller.AI.Smt.Model",
+      "properties": {
+        "file": {
+          "description": "What the problem is called: in a problem set the row's id (empty when the row has no readable id), elsewhere the file the problem came from as whoever read it names it, or empty.",
+          "x-oc-clr-name": "File",
+          "type": "string"
+        },
+        "line": {
+          "description": "The line of the problem's text, or of a term's, the refusal is about (1-based): where the token or the command it names starts; 1 when it is about the text as a whole. 0 when the refusal is about a row of a problem set and not about a text in it.",
+          "x-oc-clr-name": "Line",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "command": {
+          "description": "The name of the command the refusal is about, or empty: never more of the text than that.",
+          "x-oc-clr-name": "Command",
+          "type": "string"
+        },
+        "code": {
+          "description": "The fixed code of the refusal (command_not_allowed, syntax_error, ...).",
+          "x-oc-clr-name": "Code",
+          "type": "string"
+        },
+        "reason": {
+          "description": "What is wrong, in a sentence a person can act on.",
+          "x-oc-clr-name": "Reason",
+          "type": "string"
+        },
+        "row": {
+          "description": "The line of the problem set the refusal belongs to (1-based); 0 outside a problem set.",
+          "x-oc-clr-name": "Row",
+          "type": "integer",
+          "format": "int32",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      }
+    },
+    "SmtQuery": {
+      "type": "string",
+      "title": "SmtQuery",
+      "description": "What is asked of a problem. The values are the names a problem set and a run's options use, in lower case: check, enumerate, prove, and the same words name them in a document of the options (smt.options@1).",
+      "x-oc-clr": "OutWit.Controller.AI.Smt.Model.SmtQuery",
+      "enum": [
+        "check",
+        "enumerate",
+        "prove"
+      ],
+      "x-oc-member-descriptions": {
+        "check": "Is the problem satisfiable, and when it is, by which model or which values.",
+        "enumerate": "The models of the problem, told apart by the values of the constants it is projected on, up to a number.",
+        "prove": "Does a goal follow from the problem."
+      }
+    }
+  }
+}

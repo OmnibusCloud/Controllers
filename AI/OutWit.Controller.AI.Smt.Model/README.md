@@ -3,12 +3,12 @@
 The language layer and the data types of the OutWit Smt controller: SMT problems solved by a
 pinned solver on anonymous nodes, with every answer checked.
 
-This page describes **0.3.0**: the reader, the sanitizer with the canonical form of a problem and
+This page describes **1.0.0**: the reader, the sanitizer with the canonical form of a problem and
 the script builders, the problem set (its rows, its reader, its schema, the options of a run),
 the model evaluator that checks a `sat` answer, the wire types of a node's work (a package of
 problems, a row, a package of rows, the diagnostics), and the types of a run on the host (its
-preflight and the words of its documents). The controller is in development; nothing is
-published.
+preflight and the words of its documents), and the documents an application that is not .NET
+sends and reads. The first release: on GitHub Packages and the test server, not on nuget.org.
 
 ## Reading SMT-LIB
 
@@ -652,8 +652,34 @@ with the same vocabulary the controller writes them in.
 |---|---|
 | `SmtPreflightData` | what a problem set and a run's options come to before anything is sent (`Smt.Preflight`): the set counted (rows, taken, refused by code with the first 100 refusals in full, by logic, by query, by expected verdict, the stripped commands, the licences), the SHA-256 of the set, the options checked by name, the budget of a problem as numbers (the resource limit, the hard cap and its fuel, the memory, the models of an enumeration, the seed, the sampling rate), the memory a node needs for one session, the upper bound "taken problems times the hard cap" (a bound, never an estimate of a duration), and the packages a run would cut the set into |
 | `SmtCountData` | one count of a table of the preflight: a name and how many times it was met |
-| `SmtRunWords` | the words a run's documents add to a node's row: the host's statuses `no_result` and `disputed`; the reasons of a repair or a problem without a result the host gives itself (`no_answer`, `node_refused`); how an answer was settled (`one_copy`, `copies`, `dispute`, `agreement`); the evaluator's classes as a row writes them (`validated`, `partial`, `failed`, `none`) and the host's own reasons of a `partial` row (`output_exceeded`: the model did not fit the session's output; `budget_package`: the row's result package had used up what the host's evaluator spends on one package); the agreement with the expected verdict (`agree`, `disagree`, `n/a`); the causes of a dispute (`digests_differ`, `model_failed`, `surplus`) and its outcomes (`resolved`, `no_majority`, `too_few_copies`, `surplus_copies`); whether the platform told the host which package each result came back for (`bound`, `unbound`, `mixed`, `none`) |
+| `SmtRunWords` | the words a run's documents add to a node's row: the host's statuses `no_result` and `disputed`; the reasons of a repair or a problem without a result the host gives itself (`no_answer`, `node_refused`); how an answer was settled (`one_copy`, `copies`, `dispute`, `agreement`); the evaluator's classes as a row writes them (`validated`, `partial`, `failed`, `none`) and the host's own reasons of a `partial` row (`output_exceeded`: the model did not fit the session's output; `budget_package`: the row's result package had used up what the host's evaluator spends on one package); the agreement with the expected verdict (`agree`, `disagree`, `n/a`); the causes of a dispute (`digests_differ`, `model_failed`, `surplus`) and its outcomes (`resolved`, `no_majority`, `too_few_copies`, `surplus_copies`), of which the code of a `disputed` row is one that stands (`no_majority`, `too_few_copies`, `surplus_copies`: a resolved dispute is settled); whether the platform told the host which package each result came back for (`bound`, `unbound`, `mixed`, `none`) |
 
 A preflight is `Runnable` when its options are in range, its profile is the controller's and the
 set has a row. Options out of range are said, one sentence an option, and the set is still read
 with each such option at its default.
+
+### Documents for an application that is not .NET
+
+The options of a run, the preflight and the diagnostics are published into the platform's job
+document vocabulary (`[JobDocumentContract]`), so that an application without .NET (a command
+line, an MCP server, a web page) sends and reads them as JSON:
+
+| Type id | Type |
+|---|---|
+| `smt.options@1` | `SmtOptionsData`, the options a request document gives `SmtRun` and `SmtPreflight` |
+| `smt.preflight@1` | `SmtPreflightData`, the `result` of `SmtPreflight` |
+| `smt.diagnostics@1` | `SmtRuntimeDiagnosticsData`, the `result` of `SmtRuntimeDiagnostics` |
+| `smt.count@1` | `SmtCountData`, a count of the preflight |
+| `smt.refusal@1` | `SmtRefusalData`, a refusal of the preflight |
+
+A member is named by its name in the type in camel case (`hardCapSeconds`, `samplingRate`), a
+query by its word (`check`, `enumerate`, `prove`), and a member a document leaves out is its
+default. The server refuses a document of the options with a member they do not have, so that a
+misspelt name never leaves an option at its default without a word. The package carries under
+`documents/` what an application needs without .NET: `smt.schema.json`, the JSON Schema of the five
+types, and `smt_documents.py` and `smt_documents.hpp`, bindings for Python and C++; they are
+written from these types by the build (`OutWit.Cloud.Documents.Generator`, a build-time package and
+no dependency of this one). The request with its options, and what the server refuses, are the
+controller's
+[application page, *The request as a document*](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/docs/application.md#the-request-as-a-document).
+A type id keeps its members; a type whose members change is published under the next major (`@2`).

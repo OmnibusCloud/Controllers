@@ -9,7 +9,7 @@ states the guarantees and the limits, the schemas beside it are the contract of 
 and the model package's [README](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt.Model/README.md)
 is the problem set, the reader, the sanitizer and the evaluator.
 
-Written for **Smt 0.5.0** (with Smt.Model 0.3.0 and Smt.Scripts 0.2.0). The examples on this
+Written for **Smt 1.0.0** (with Smt.Model 1.0.0 and Smt.Scripts 1.0.0). The examples on this
 page are written by the controller's own code: a test runs them and holds the page to what the
 code writes.
 
@@ -104,7 +104,7 @@ gives the same sentences in the application before anything is sent.
 
 A host that is not .NET submits through the platform's job request document (the SDK's
 `SubmitDocumentAsync`, the native SDK): the script by name and its parameters by kind. The problem
-set is the blob's id; the options are `null`, which is the defaults:
+set is the blob's id, and the options a document of their type. This is the run of the call above:
 
 <!-- example: request -->
 ```json
@@ -113,18 +113,31 @@ set is the blob's id; the options are `null`, which is the defaults:
   "script": "SmtRun",
   "parameters": [
     { "kind": "uuid", "value": "7b0c0f2d-5d3e-4c7a-9f1e-2a6b8c4d0e13" },
-    { "kind": "null" }
+    { "kind": "document", "type": "smt.options@1", "value": { "hardCapSeconds": 30, "samplingRate": 0.25 } }
   ]
 }
 ```
 
-Options other than the defaults cannot travel in a request document: the model package publishes
-no document type for `SmtOptionsData` (a controller publishes one with `[JobDocumentContract]`),
-so the server's door refuses a `document` parameter for them, and a run with other options is
-submitted through the typed SDK. The same holds for reading: the documents' variables (`results`,
-`report`, `provenance`, `integrity`, `ledger`, and `capabilities` of the diagnostics) are blob ids
-and read as `uuid` values, while the `result` of `SmtPreflight` and of `SmtRuntimeDiagnostics` is a
-type of the model package and is read through the typed SDK only.
+The model package publishes five types into the platform's document vocabulary:
+`smt.options@1` (`SmtOptionsData`), `smt.preflight@1` (`SmtPreflightData`), `smt.diagnostics@1`
+(`SmtRuntimeDiagnosticsData`), and the two the preflight is made of, `smt.count@1` (`SmtCountData`)
+and `smt.refusal@1` (`SmtRefusalData`). A document names a member by the type's name for it in
+camel case (`profile`, `query`, `maxModels`, `seed`, `resourceLimit`, `hardCapSeconds`,
+`memoryMegabytes`, `samplingRate`), not by the documents' names of the option table; `query` is
+`check`, `enumerate` or `prove`. A member left out is its default, as in a new `SmtOptionsData`
+(the sampling rate's is 0.05), and `{ "kind": "null" }` in place of the document is the defaults
+all. The server's door refuses a document with a member the options do not have (`hard_cap_s`, a
+misspelt name) or a value of another type (`"30"` for a number) as a request of the wrong shape,
+and no job starts; a number out of its range passes the door, and the job fails with the
+sentence of the option table (*How a job ends*).
+
+The documents' variables (`results`, `report`, `provenance`, `integrity`, `ledger`, and
+`capabilities` of the diagnostics) are blob ids and read as `uuid` values. The `result` of
+`SmtPreflight` and of `SmtRuntimeDiagnostics` reads as a value document of `smt.preflight@1` and of
+`smt.diagnostics@1` (the SDK's `GetVariableDocumentAsync`), its members named as above. The model
+package carries the vocabulary for a host without .NET under `documents/`: `smt.schema.json`, a
+JSON Schema of the five types, and `smt_documents.py` and `smt_documents.hpp`, bindings for Python
+and C++ that write a request's document and read a value document.
 
 ### Limits of a job
 
@@ -225,8 +238,9 @@ carries the problem's text. The messages are these sentences and no other:
 - `Every row of the problem set is refused: a run would send nothing to a node, and its results would say why for each row.`
 - `The upper bound is the taken problems times the hard cap, in seconds of the reference machine: a bound, not an estimate. How long an SMT problem takes cannot be told from its text.` (always)
 
-The preflight of the example set of part 3, under the example's options, printed as JSON here for
-reading (it is a MemoryPack object of the model package, not a JSON document):
+The preflight of the example set of part 3, under the example's options, printed here with the
+members' names of the type (as a value document of `smt.preflight@1` the same members are named in
+camel case):
 
 <details><summary>The preflight of the example set</summary>
 
@@ -326,7 +340,7 @@ version, without a pool:
 ```json
 {
   "schema": "smt-capabilities/1",
-  "controller": "0.5.0",
+  "controller": "1.0.0",
   "profile": {
     "id": "z3-5.4.1",
     "solver": "z3",
@@ -386,7 +400,7 @@ version, without a pool:
       "refused": ["ambiguous_token", "builtin_name", "command_after_end", "command_malformed", "command_not_allowed", "field_invalid", "field_missing", "field_not_allowed", "id_duplicate", "id_invalid", "index_too_large", "literal_too_wide", "nesting_too_deep", "non_ascii_string", "not_a_command", "not_a_term", "numeral_too_long", "reserved_prefix", "reserved_symbol", "row_malformed", "row_too_long", "set_too_large", "string_too_long", "syntax_error", "text_too_long", "too_many_problems", "too_many_symbols", "too_many_tokens", "unknown_constant"],
       "engine_crash": ["trap", "exit", "engine_error", "unreadable_answer"],
       "no_result": ["node_refused", "sandbox_unavailable", "backstop", "cancelled", "not_instantiated", "host_fault", "version_mismatch", "package_invalid", "ticket_invalid", "package_too_large", "package_hash_mismatch", "package_unreadable", "package_mismatch", "memory_insufficient", "download_failed", "upload_failed", "unknown_ticket", "duplicate", "unreadable", "content", "surplus", "other_package", "no_answer"],
-      "disputed": ["resolved", "no_majority", "too_few_copies", "surplus_copies"]
+      "disputed": ["no_majority", "too_few_copies", "surplus_copies"]
     },
     "verdicts": ["sat", "unsat", "unknown", "none"],
     "reasons": ["rlimit", "fuel", "memout", "incomplete", "other", "none"],
@@ -541,7 +555,6 @@ controller version and the platform: none of them is in the results.
 | `no_result` | `surplus` | more results came for the package than were asked for |
 | `no_result` | `other_package` | the last result came back for another package's task |
 | `no_result` | `no_answer` | no answer came back for the problem at all |
-| `disputed` | `resolved` | never the code of a row: a dispute three more machines settled is no longer `disputed` (the list is the outcomes of a dispute) |
 | `disputed` | `no_majority` | no answer was given by more machines than any other, and by two at least |
 | `disputed` | `too_few_copies` | fewer than two of the three more machines answered |
 | `disputed` | `surplus_copies` | the leading answer does not lead by two machines once the answers that may be one machine's second are left out |
@@ -672,7 +685,7 @@ defaults, on three machines:
   "run": {
     "profile": "z3-5.4.1",
     "module_sha256": "9b8a67e85542b5d62d30b40060dd237fcef07f794ea235483afc83eef47a1364",
-    "controller": "0.5.0",
+    "controller": "1.0.0",
     "sampling_rate": 1,
     "sampling": "as_asked",
     "unanswered_packages": 0,
@@ -868,6 +881,10 @@ may be made clearer under the same name. A controller writes one name of each do
 application reads the `schema` field first and says plainly when it meets a name it does not know.
 The schemas' `$id` is a name, not an address: the files are under `docs/` in the repository and
 in the package.
+
+The document types of part 1 are held the same way: `smt.options@1`, `smt.preflight@1`,
+`smt.diagnostics@1`, `smt.count@1` and `smt.refusal@1` keep their members under their ids, and a
+type whose members change is published under the next major (`@2`).
 
 ### Determinism
 

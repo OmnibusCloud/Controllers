@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using MemoryPack;
+using OutWit.Cloud.Documents;
 using OutWit.Common.Abstract;
 using OutWit.Common.Attributes;
 using OutWit.Common.Values;
@@ -10,7 +12,17 @@ namespace OutWit.Controller.AI.Smt.Model;
 /// default" (<see cref="SmtOptionsRules"/> holds the defaults and the ceilings). The one
 /// exception is <see cref="SamplingRate"/>, where 0 is a value of its own: a new instance holds
 /// the default there.
+/// <para>
+/// Published into the platform's job document vocabulary as <c>smt.options@1</c>: an application
+/// that is not .NET sends the options of a run as a document of this type, each member by its name
+/// in camel case, a member left out at its default. A member the options do not have (the
+/// documents' name of an option, a misspelt name) is refused there, never passed over: passed
+/// over, it would leave its option at the default without a word, and the run would run under
+/// other options than its lab asked for.
+/// </para>
 /// </summary>
+[JobDocumentContract("smt.options@1")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 [MemoryPackable]
 // Explicit MemoryPackOrder pins the wire layout to the declaration order. A published layout
 // changes only behind a version fence, so that no reader of the old layout is ever handed the

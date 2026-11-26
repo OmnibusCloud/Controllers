@@ -12,8 +12,9 @@ namespace OutWit.Controller.AI.Smt.Tests.Docs;
 /// bundled scripts), and the page's preflight, results, report and integrity document are held to
 /// what the run gives, its capabilities document to what the controller writes. With the variable
 /// <see cref="WRITE_VARIABLE"/> set to 1 the test writes the examples into the page instead, after
-/// a change of the code that changes them. What the page says of a job's failures and of the
-/// options a request document can carry (null, the defaults) is held here too, through the engine.
+/// a change of the code that changes them. What the page says of a job's failures and of null
+/// options (what a request document gives for <c>{ "kind": "null" }</c>: the defaults) is held
+/// here too, through the engine.
 /// </summary>
 [TestFixture]
 [Category("Solver")]
@@ -100,7 +101,7 @@ public sealed class SmtApplicationExamplesTests : SmtRunTestBase
     [Test]
     public async Task NullOptionsAreTheDefaultsTest()
     {
-        // The options a request document carries for SmtRun: null.
+        // The options a request document gives SmtRun for { "kind": "null" }: null.
         var set = SmtMarkdown.Block(SmtMarkdown.Read(APPLICATION), "set") + "\n";
         var defaults = SmtOptionsRules.Resolve(new SmtOptionsData());
 

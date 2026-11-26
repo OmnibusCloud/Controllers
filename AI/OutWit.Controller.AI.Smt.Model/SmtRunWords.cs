@@ -144,6 +144,12 @@ public static class SmtRunWords
     /// <summary>Every outcome of a dispute.</summary>
     public static readonly IReadOnlyList<string> DISPUTE_OUTCOMES = [RESOLVED, NO_MAJORITY, TOO_FEW_COPIES, SURPLUS_COPIES];
 
+    /// <summary>
+    /// Every code of a <see cref="DISPUTED"/> row: the outcome of a dispute that stands. A
+    /// dispute that three more machines resolved is settled, and its row is no disputed row.
+    /// </summary>
+    public static readonly IReadOnlyList<string> DISPUTED_CODES = [NO_MAJORITY, TOO_FEW_COPIES, SURPLUS_COPIES];
+
     /// <summary>Every word of a run's binding: whether the platform told the host which package each result was returned for.</summary>
     public static readonly IReadOnlyList<string> BINDINGS = [BOUND, UNBOUND, MIXED, NO_RESULTS];
 

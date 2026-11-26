@@ -303,7 +303,7 @@ public sealed class SmtRunMixedSetTests : SmtRunTestBase
             Assert.That(provenance.GetProperty("profile").GetProperty("module_sha256").GetString(), Is.EqualTo(SmtSolverModule.SHA256));
             Assert.That(provenance.GetProperty("engine").GetProperty("natives_sha256").EnumerateObject().Select(pair => pair.Name), Is.EquivalentTo(new[] { "linux-x64", "osx-arm64", "win-x64" }));
             Assert.That(provenance.GetProperty("controller").GetString(), Is.EqualTo(SmtNodeRig.ControllerVersion));
-            Assert.That(provenance.GetProperty("model").GetString(), Is.EqualTo("0.3.0"));
+            Assert.That(provenance.GetProperty("model").GetString(), Is.EqualTo("1.0.0"));
             Assert.That(provenance.GetProperty("options").GetProperty("memory_mb").GetInt32(), Is.EqualTo(64));
             Assert.That(provenance.GetProperty("options").GetProperty("hard_cap_s").GetInt32(), Is.EqualTo(HARD_CAP_SECONDS));
             Assert.That(provenance.GetProperty("problem_set").GetProperty("sha256").GetString(), Is.EqualTo(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(m_set)))));
