@@ -36,7 +36,7 @@
     <None Update="docs\smt-provenance.schema.json" Pack="true" PackagePath="docs\smt-provenance.schema.json" />
     <None Update="docs\smt-integrity.schema.json" Pack="true" PackagePath="docs\smt-integrity.schema.json" />
     <None Update="docs\capabilities.md" Pack="true" PackagePath="docs\capabilities.md" />
-    <None Update="docspplication.md" Pack="true" PackagePath="docspplication.md" />
+    <None Update="docs\application.md" Pack="true" PackagePath="docs\application.md" />
   </ItemGroup>
 
   <!-- The solver's sandbox: the Wasmtime.Dotnet managed binding over the native wasmtime

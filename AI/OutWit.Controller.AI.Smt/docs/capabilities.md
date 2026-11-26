@@ -63,15 +63,9 @@ few numbers.
 
 ### The options (`SmtOptionsData`)
 
-| Option | Default | Ceiling | |
-|---|---|---|---|
-| `query` | `check` | | the query of a row that names none |
-| `max_models` | 2 | 1,000 | the models of an enumeration whose row names no number |
-| `seed` | 0 | 2,147,483,647 | the seed of the solver's random choices |
-| `rlimit` | 150,000,000 | 4,294,967,295 | the solver's own counter of work for one check |
-| `hard_cap_s` | 60 | 600 | seconds of the reference machine for one problem, as fuel |
-| `memory_mb` | 1,024 | 4,096 | the most memory of one problem |
-| `sampling_rate` | 0.05 | 1 | the share of the packages solved on two machines; 0 none, 1 all |
+`profile`, `query`, `max_models`, `seed`, `rlimit`, `hard_cap_s`, `memory_mb` and `sampling_rate`:
+their table, with the least value of each, what 0 means, the default, the greatest and the
+sentence each is refused with, is [application.md, *The options*](application.md#the-options).
 
 A run whose options are out of range, or name a profile the controller does not have, is
 refused before anything is sent. The documents state every option as the number the run used,
@@ -138,7 +132,7 @@ One JSON line a row of the set, in the set's order, refused rows included.
 | `count`, `complete`, `limit_reached`, `models` | an enumeration: the models found, whether the count is exact, whether the number asked for was reached, and each model with the values of the projected constants |
 | `proof` | a proof: `proved` or `counterexample` |
 | `model`, `values` | a check's model and the values it asked for; a proof's counterexample |
-| `model_truncated` | the texts above are the solver's own and are shown up to 64 KB a row, whole texts only; past that they are null and this is true. The full models stay in the run's ledger, the blob the job's variable `ledger` names, in a format of the controller's own |
+| `model_truncated` | the texts above are the solver's own and are shown up to 65,536 bytes (64 KiB) of UTF-8 a row, whole texts only; past that they are null and this is true. The full models stay in the run's ledger, the blob the job's variable `ledger` names, in a format of the controller's own |
 | `validation`, `validation_reason`, `validation_detail` | what the server's evaluator said of every model and of the values that came with it: `validated`, `partial` (with the reason: the evaluator's, `output_exceeded`, or `budget_package` when the row's result package had used up what the server spends on one package), `failed` (`assertion_false` with the assertion, or `value_mismatch` with the value), or `none` when there is no model |
 | `copies`, `agreed`, `settled_by` | how many answers the problem was ruled on, whether all gave one digest, and how the answer was settled: `one_copy` (it rests on one machine), `copies` (two machines of one fan-out at least: two answers the platform said came back for two tasks of the problem's package), `dispute`, `agreement` |
 | `digest`, `stats` | the digest of the settled row (the same on every honest machine), its resource count, fuel and checks |
@@ -304,7 +298,7 @@ What it does not claim:
 | A package | 16 to 256 problems, about 1,024 packages once a run is large, at most 32 Mi characters of text; a node takes at most 256 problems and 257 MiB |
 | A session's output | 16 MiB; past it the row is `output_exceeded` and keeps its verdict |
 | A row a node returns | its models and values within the session's output (16 Mi characters together); 48 MiB and 64 KiB as bytes in its package (`packages.max_result_frame_bytes` of the capabilities) |
-| What a lab sees of a row's models | 64 KB |
+| What a lab sees of a row's models | 65,536 bytes (64 KiB) of UTF-8 a row, whole texts only |
 | A model the server reads | 32 Mi characters, 8,388,608 tokens (a token every two characters a session may print) and the nesting they allow, 325,059 digits of a number, a literal of 1,048,576 bits, a string of 1,048,576 characters, a name of 4,194,304 characters; past one it is `unreadable_model` |
 | What the server's evaluator spends | 20,000,000 steps a model (the evaluator's budget), 3,000,000,000 steps the models of one result package together (a model's text paying four steps a character, its check's setting up 10,000); past it a package's rows are `budget_package` |
 | What the server keeps of one run while it settles it | 128 GiB of the nodes' rows, 2 GiB of the full models of the rows whose models were cut; a run past either is not settled, and the job fails with `smt_rows_bound` or `smt_models_bound` |

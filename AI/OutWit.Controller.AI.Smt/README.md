@@ -447,7 +447,7 @@ Nothing is returned and nothing is stored.
 
 **Documents.** `Smt.Settle` writes the results, the report, the provenance and the integrity
 document into one ledger blob of the host's own, with the full models of the rows whose models
-the results cut at 64 KB; the other activities hand a document out of it as it is. No document
+the results cut at 64 KiB; the other activities hand a document out of it as it is. No document
 names a machine. The report lists the claims that rest on one machine and that nothing but it
 vouches for: every `unsat` (`unsat_one_copy`) and every enumeration that found models and says
 there is no other (`complete_one_copy`; of the enumerations kept as exactly one model, those on
