@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <ControllerName>Smt</ControllerName>
-    <Version>0.2.0</Version>
+    <Version>1.0.0</Version>
     <Description>Bundled .wit scripts for the OutWit Smt controller: SmtRun (a problem set solved on anonymous nodes with sampled copies on different machines, a repair round on two machines that restores the copies, a dispute round, every sat model checked by the server's evaluator, and the results, report, provenance and integrity documents), SmtPreflight and SmtRuntimeDiagnostics.</Description>
     <PackageTags>smt;smt-lib;z3;solver;scripts;witengine;witcloud;controller</PackageTags>
   </PropertyGroup>
@@ -16,8 +16,7 @@
        The scripts need the activities the controller has since 0.4.0 (Smt.Split,
        Smt.SamplingRate, Smt.Repairs with the sampling rate, Smt.Disputes, Smt.Settle with the
        problem set and the sampling rate, Smt.Collect, Smt.CollectResults, Smt.Provenance,
-       Smt.Integrity, Smt.Preflight), and Smt.Forget, which it has since the version that
-       follows 0.5.0. Its lower bound is the first controller version that feed will have
+       Smt.Integrity, Smt.Preflight), and Smt.Forget, which it has since 1.0.0. Its lower bound is the first controller version that feed will have
        (the decision record: a lower bound no feed has is noise at every restore), which is
        1.0.0 at the earliest: a product release is never 0.x. Its upper bound is the next major,
        exclusive. When the first published version is a later one, the lower bound moves to it

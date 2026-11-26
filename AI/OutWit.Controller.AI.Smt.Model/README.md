@@ -3,12 +3,12 @@
 The language layer and the data types of the OutWit Smt controller: SMT problems solved by a
 pinned solver on anonymous nodes, with every answer checked.
 
-This page describes **0.3.0**: the reader, the sanitizer with the canonical form of a problem and
+This page describes **1.0.0**: the reader, the sanitizer with the canonical form of a problem and
 the script builders, the problem set (its rows, its reader, its schema, the options of a run),
 the model evaluator that checks a `sat` answer, the wire types of a node's work (a package of
 problems, a row, a package of rows, the diagnostics), and the types of a run on the host (its
-preflight and the words of its documents). The controller is in development; nothing is
-published.
+preflight and the words of its documents), and the documents an application that is not .NET
+sends and reads. The first release: on GitHub Packages and the test server, not on nuget.org.
 
 ## Reading SMT-LIB
 

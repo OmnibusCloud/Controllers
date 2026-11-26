@@ -7,8 +7,8 @@ of the documents explained, what makes a run alarming, examples written by the c
 [README](https://github.com/OmnibusCloud/Controllers/blob/main/AI/OutWit.Controller.AI.Smt/README.md) explains how things work inside; the schemas beside this page are the
 contract of the documents.
 
-Version described: **Smt 0.5.0** (with Smt.Model 0.3.0 and Smt.Scripts 0.2.0). In development;
-nothing is published.
+Version described: **Smt 1.0.0** (with Smt.Model 1.0.0 and Smt.Scripts 1.0.0), the first release:
+on GitHub Packages and the test server, not on nuget.org.
 
 ## Contents
 

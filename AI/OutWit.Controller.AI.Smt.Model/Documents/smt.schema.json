@@ -15,7 +15,7 @@
     ],
     "source": {
       "assembly": "OutWit.Controller.AI.Smt.Model",
-      "version": "0.3.0"
+      "version": "1.0.0"
     },
     "generator": "OutWit.Cloud.Documents.Generator 1.0.0"
   },

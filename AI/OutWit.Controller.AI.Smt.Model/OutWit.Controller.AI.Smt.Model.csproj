@@ -5,7 +5,7 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <ControllerName>Smt</ControllerName>
-    <Version>0.3.0</Version>
+    <Version>1.0.0</Version>
     <Description>The language layer and data types of the OutWit Smt controller: a strict SMT-LIB 2.6 reader with shape limits, shared by everything that reads a problem before a solver does, and the wire types of the packages a node solves and returns. The options of a run, the preflight and the diagnostics are published as job documents (smt.options@1, smt.preflight@1, smt.diagnostics@1) for applications that are not .NET, with the schema and the Python and C++ bindings under documents/.</Description>
     <PackageTags>smt;smt-lib;z3;witengine;witcloud;controller;data-types;job-documents</PackageTags>
   </PropertyGroup>
