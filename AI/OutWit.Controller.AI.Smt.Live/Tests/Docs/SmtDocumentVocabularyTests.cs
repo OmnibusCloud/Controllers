@@ -121,12 +121,15 @@ public sealed class SmtDocumentVocabularyTests
     {
         var none = Options("{}");
         var one = Options("{\"hardCapSeconds\": 30}");
+        var nullProfile = Options("{\"profile\": null}");
 
         Assert.Multiple(() =>
         {
             Assert.That(none.Is(new SmtOptionsData()), Is.True, "an empty document is a new SmtOptionsData: the defaults, the sampling rate's among them");
             Assert.That(none.SamplingRate, Is.EqualTo(SmtOptionsRules.DEFAULT_SAMPLING_RATE));
             Assert.That(one.Is(new SmtOptionsData { HardCapSeconds = 30 }), Is.True);
+            Assert.That(nullProfile.Profile, Is.Null.Or.Empty, "a profile of null is no profile: the controller's, as an empty one is");
+            Assert.That(SmtOptionsRules.Check(nullProfile), Is.Empty);
         });
     }
 
