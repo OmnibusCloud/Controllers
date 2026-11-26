@@ -250,6 +250,9 @@ public sealed class SmtReader
                 throw Refuse(SmtSyntaxFault.BadCharacter, "a backslash in a quoted symbol");
 
             TakeLiteralCharacter();
+
+            if (m_position - start > m_limits.MaxSymbolCharacters)
+                throw new SmtSyntaxException(SmtSyntaxFault.SymbolTooLong, line, column, $"a symbol is longer than the {m_limits.MaxSymbolCharacters} characters allowed");
         }
     }
 

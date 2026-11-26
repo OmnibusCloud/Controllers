@@ -43,7 +43,9 @@ internal sealed class WitActivityAdapterSmtPreflight : WitActivityAdapterFunctio
         var problemsPath = await BlobService.GetLocalPathAsync(SmtAdapterTools.Blob(pool, activity.Problems, "Problems"));
         var options = SmtAdapterTools.Options(pool, activity.Options);
 
-        var report = await Task.Run(() => SmtPreflightReport.Of(problemsPath, options));
+        // A cancelled job ends the reading at the next row.
+        var cancellation = ProcessingManager.CancellationToken(status.JobId);
+        var report = await Task.Run(() => SmtPreflightReport.Of(problemsPath, options, cancellation), cancellation);
 
         if (!pool.TrySetValue(activity.ReturnReference, report))
             throw new InvalidOperationException($"Failed to set return value '{activity.ReturnReference}'.");

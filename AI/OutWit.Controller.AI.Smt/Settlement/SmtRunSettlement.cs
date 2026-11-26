@@ -13,12 +13,14 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// (<see cref="SmtRoundIntake"/>); then the problem set is read once more, a row at a time, and
 /// every row is ruled on in the set's order (<see cref="SmtRulings"/>): every answer that says
 /// <c>sat</c> is checked by the host's evaluator against the problem as the host's own sanitizer
-/// takes it (<see cref="SmtHostEvaluator"/>), and the row of the results is written. The rows are
+/// takes it (<see cref="SmtHostEvaluator"/>), each copy under the budget of the result package it
+/// came in (<see cref="SmtPackageBudget"/>), and the row of the results is written. The rows are
 /// kept in a spool file while the documents are written, and every document goes to a file as it
 /// is written: the host's memory holds a record a copy and a few numbers a problem, never a model
 /// of more than the problem at hand, and never a document. What the host's disk holds of a run has
 /// bounds (<see cref="SmtSettlementBounds"/>): the rows in the spool, and the full models in the
-/// ledger; a run past either is not settled, and the failure names the bound.
+/// ledger; a run past either is not settled, and the failure names the bound. A cancelled job
+/// ends the settlement at the next package or row, and every working file goes with it.
 /// </summary>
 internal static class SmtRunSettlement
 {
@@ -45,27 +47,29 @@ internal static class SmtRunSettlement
     /// <param name="blobs">The host's blob service.</param>
     /// <param name="workFolder">A folder of the host's own for the working files.</param>
     /// <param name="samplingRate">The share of the packages the script asked to solve twice, or null when it does not say.</param>
-    /// <param name="bounds">What the host keeps of the run at the most; null for a host's bounds (<see cref="SmtSettlementBounds.DEFAULT"/>).</param>
+    /// <param name="bounds">What the host keeps of the run at the most, and what its evaluator spends on a package; null for a host's bounds (<see cref="SmtSettlementBounds.DEFAULT"/>).</param>
+    /// <param name="cancellation">The job's cancellation, looked at before every package and every row.</param>
     /// <returns>The ledger file (the caller stores and deletes it) and the integrity facts.</returns>
     /// <exception cref="SmtSettlementBoundException">The rows the nodes returned, or the full models of the settled rows, pass what the host keeps of one run.</exception>
+    /// <exception cref="OperationCanceledException">The job was cancelled: no ledger is left.</exception>
     public static async Task<(string LedgerPath, SmtIntegrityFacts Facts)> SettleAsync(string problemsPath, SmtOptionsData options,
         (IReadOnlyList<SmtTaskPackageData> Issued, IEnumerable<SmtResultPackageData?> Returned) fanOut,
         (IReadOnlyList<SmtTaskPackageData> Issued, IEnumerable<SmtResultPackageData?> Returned)? repair,
         (IReadOnlyList<SmtTaskPackageData> Issued, IEnumerable<SmtResultPackageData?> Returned)? dispute,
-        IWitBlobService blobs, string workFolder, double? samplingRate, SmtSettlementBounds? bounds = null)
+        IWitBlobService blobs, string workFolder, double? samplingRate, SmtSettlementBounds? bounds = null, CancellationToken cancellation = default)
     {
         bounds ??= SmtSettlementBounds.DEFAULT;
         using var spool = new SmtSpool(workFolder, bounds.RowsBytes);
 
         var rate = samplingRate is { } stated ? SmtSampling.Clamp(stated) : (double?)null;
 
-        var main = await SmtSettlement.ReadMainAsync(fanOut.Issued, fanOut.Returned, blobs, spool);
-        var repaired = repair is { } again ? await SmtSettlement.ReadRepairAsync(again.Issued, again.Returned, blobs, spool) : null;
-        var settled = dispute is { } thrice ? await SmtSettlement.ReadDisputeAsync(thrice.Issued, thrice.Returned, blobs, spool) : null;
+        var main = await SmtSettlement.ReadMainAsync(fanOut.Issued, fanOut.Returned, blobs, spool, cancellation);
+        var repaired = repair is { } again ? await SmtSettlement.ReadRepairAsync(again.Issued, again.Returned, blobs, spool, cancellation) : null;
+        var settled = dispute is { } thrice ? await SmtSettlement.ReadDisputeAsync(thrice.Issued, thrice.Returned, blobs, spool, cancellation) : null;
 
         var borrowable = settled == null ? new Dictionary<string, int>(StringComparer.Ordinal) : SmtRulings.Borrowable(settled);
-        var mainTickets = await TicketsOfUnansweredAsync(main, blobs);
-        var repairTickets = repaired == null ? new Dictionary<int, string>() : await TicketsOfUnansweredAsync(repaired, blobs);
+        var mainTickets = await TicketsOfUnansweredAsync(main, blobs, cancellation);
+        var repairTickets = repaired == null ? new Dictionary<int, string>() : await TicketsOfUnansweredAsync(repaired, blobs, cancellation);
         var sampled = SmtRulings.Sampled(main, rate);
 
         var facts = new SmtIntegrityFacts { SamplingRate = rate };
@@ -86,6 +90,8 @@ internal static class SmtRunSettlement
                 var reader = new SmtProblemSetReader(stream, options);
                 while (reader.TryRead(out var row))
                 {
+                    cancellation.ThrowIfCancellationRequested();
+
                     if (!row.IsAccepted)
                     {
                         SmtResultsWriter.WriteRefused(results, row.Index, row.Refusal!);
@@ -93,24 +99,16 @@ internal static class SmtRunSettlement
                         continue;
                     }
 
-                    var evaluator = new SmtHostEvaluator(row.Problem, row.Data);
-                    var checks = new Dictionary<SmtDigestKey, SmtModelCheck>();
-                    SmtModelCheck Check(SmtCopy copy)
-                    {
-                        if (!copy.ClaimsSat)
-                            return SmtModelCheck.NONE;
-
-                        if (!checks.TryGetValue(copy.Digest, out var check))
-                            checks[copy.Digest] = check = evaluator.Check(spool.Read(copy));
-
-                        return check;
-                    }
-
+                    // Every copy of the problem in every round, each under its package's budget. The
+                    // ruling and the counts below ask for every copy that says sat, so every
+                    // package spends its budget on its rows in the set's order.
                     var index = row.Index;
-                    var ruling = SmtRulings.Rule(index, main, repaired, settled, borrowable, Check,
+                    var checks = new SmtProblemChecks(new SmtHostEvaluator(row.Problem, row.Data), rounds.SelectMany(round => round.Of(index)), spool, bounds.PackageSteps, cancellation);
+
+                    var ruling = SmtRulings.Rule(index, main, repaired, settled, borrowable, checks.Check,
                         () => ReasonIn(repaired ?? main, index, repaired == null ? mainTickets : repairTickets));
 
-                    Count(facts, index, ruling, rounds, Check);
+                    Count(facts, index, ruling, rounds, checks.Check);
                     CountRepair(facts, index, main, repaired, mainTickets, repairTickets, sampled);
 
                     var accepted = ruling.Accepted == null ? null : spool.Read(ruling.Accepted);
@@ -166,11 +164,12 @@ internal static class SmtRunSettlement
     /// The package of every problem of a round whose package no taken result answers: read from
     /// the host's own packages, the indices only.
     /// </summary>
-    private static async Task<Dictionary<int, string>> TicketsOfUnansweredAsync(SmtRound round, IWitBlobService blobs)
+    private static async Task<Dictionary<int, string>> TicketsOfUnansweredAsync(SmtRound round, IWitBlobService blobs, CancellationToken cancellation)
     {
         var tickets = new Dictionary<int, string>();
         foreach (var unit in round.Unanswered)
         {
+            cancellation.ThrowIfCancellationRequested();
             foreach (var index in (await SmtTaskBounds.LoadAsync(unit, blobs)).Indices)
                 tickets[index] = unit.Ticket;
         }

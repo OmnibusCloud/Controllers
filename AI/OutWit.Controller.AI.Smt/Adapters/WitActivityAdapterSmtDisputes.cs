@@ -10,7 +10,8 @@ namespace OutWit.Controller.AI.Smt.Adapters;
 
 /// <summary>
 /// <c>Smt.Disputes</c> on the host: copies that disagree are not chosen between, and a model the
-/// evaluator calls failed accuses nobody: the problem goes to three more machines.
+/// evaluator calls failed accuses nobody: the problem goes to three more machines. A cancelled job
+/// ends it at the next package, problem or model, cancelled, and its working folder goes with it.
 /// </summary>
 internal sealed class WitActivityAdapterSmtDisputes : WitActivityAdapterFunction<WitActivitySmtDisputes>
 {
@@ -49,16 +50,17 @@ internal sealed class WitActivityAdapterSmtDisputes : WitActivityAdapterFunction
         var issued = SmtAdapterTools.TaskPackages(pool, activity.Packages, "Packages");
         var returned = SmtAdapterTools.ResultPackages(pool, activity.Results, "Results");
 
+        var cancellation = ProcessingManager.CancellationToken(status.JobId);
         using var work = new SmtWorkFolder(Services, WORK_LABEL);
         using var spool = new SmtSpool(work.Path);
 
-        var main = await SmtSettlement.ReadMainAsync(issued, returned, BlobService, spool);
+        var main = await SmtSettlement.ReadMainAsync(issued, returned, BlobService, spool, cancellation);
         var repair = activity.Repairs == null
             ? null
             : await SmtSettlement.ReadRepairAsync(SmtAdapterTools.TaskPackages(pool, activity.Repairs, "Repairs"), SmtAdapterTools.ResultPackages(pool, activity.Repaired, "Repaired"),
-                BlobService, spool);
+                BlobService, spool, cancellation);
 
-        var (packages, causes) = await SmtSettlement.PublishDisputesAsync(main, repair, spool, BlobService, work.Path);
+        var (packages, causes) = await SmtSettlement.PublishDisputesAsync(main, repair, spool, BlobService, work.Path, cancellation: cancellation);
 
         Logger.LogInformation("Smt.Disputes: {Problems} problem(s) go to three more machines in {Packages} package(s) ({Causes})",
             packages.Sum(package => (long)package.ProblemCount), packages.Count, string.Join(", ", causes.Select(pair => $"{pair.Key} {pair.Value}")));
