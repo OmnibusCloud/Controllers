@@ -306,6 +306,12 @@ included), bit-vectors, strings, sequences, characters, floating point, arrays a
 problem's own datatypes over them. A `check` and a `prove` row are not held to this: only an
 enumeration says values back.
 
+The rule reads the sort, not the answer. Such a row is refused whatever number of models it asks
+for and whatever models its problem has, also where no model would have had to be ruled out: one
+model asked for (`max_models` 1), a problem with no model, values that hold no element of the
+sort (a constant array over such an index, the empty sequence). One model of such a problem is
+what a `check` row with `values` gives.
+
 A value the pinned solver prints in a form it does not read back under the problem's logic is
 not refused by its sort (no sort always prints so): the enumeration ends at that model with the
 models it found (`SmtResultData.Reason` `other`, not complete). One such form is known: an array
