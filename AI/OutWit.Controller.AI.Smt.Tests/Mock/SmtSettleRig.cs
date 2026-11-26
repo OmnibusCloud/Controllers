@@ -247,7 +247,13 @@ internal sealed class SmtSettleRig : IDisposable
         using var spool = new SmtSpool(Path.Combine(Work, "spool"));
         var main = SmtSettlement.ReadMainAsync(issued, returned, Blobs, spool).GetAwaiter().GetResult();
         SmtSettlement.CheckAsync([main], spool, Blobs, packageSteps, CancellationToken.None).GetAwaiter().GetResult();
-        return main.Accepted.Select(package => package.Rows[0].Budget.Spent).ToList();
+
+        // A loop, not a lambda: a lambda over a controller type puts the type into the shape of a closure of the rig's.
+        var spent = new List<long>();
+        foreach (var package in main.Accepted)
+            spent.Add(package.Rows[0].Budget.Spent);
+
+        return spent;
     }
 
     /// <summary>What Smt.Settle writes of a run: its four documents and the ledger's section of full models.</summary>
