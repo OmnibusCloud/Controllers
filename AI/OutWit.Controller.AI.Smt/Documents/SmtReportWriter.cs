@@ -7,10 +7,12 @@ using OutWit.Controller.AI.Smt.Settlement;
 namespace OutWit.Controller.AI.Smt.Documents;
 
 /// <summary>
-/// Writes the report of a run (<c>docs/smt-report.schema.json</c>): what it ran with in short,
+/// Writes the report of a run (<c>docs/smt-report.schema.json</c>): what it ran with in short
+/// (whether the platform told the host which package each result was returned for among it),
 /// the problem set as it was read, the verdicts and the unknowns by reason, the agreement with the
 /// expected verdicts, the evaluator's classes by logic, the copies and how the disputes ended, the
-/// problems answered <c>unsat</c> by one machine only, the long tail with the budget, the
+/// problems answered <c>unsat</c> by one machine only and the enumerations whose completeness rests
+/// on one machine, the long tail with the budget, the
 /// attribution from the problems' <c>:source</c> and <c>:license</c>, and for enumerations the
 /// problems with exactly one model and those with two or more. It names no machine.
 /// </summary>
@@ -34,7 +36,8 @@ internal static class SmtReportWriter
     /// <param name="facts">What was counted.</param>
     /// <param name="sampling">The state of the sampling, one of <see cref="SmtSampling.STATES"/>.</param>
     /// <param name="unanswered">The packages of problems no taken answer came back for, every fan-out together.</param>
-    public static void Write(Stream stream, SmtRunProvenance provenance, SmtProblemSetSummary set, SmtReportFacts facts, string sampling, int unanswered)
+    /// <param name="binding">Whether the platform told the host which package each result was returned for, one of <see cref="SmtRunWords.BINDINGS"/>.</param>
+    public static void Write(Stream stream, SmtRunProvenance provenance, SmtProblemSetSummary set, SmtReportFacts facts, string sampling, int unanswered, string binding)
     {
         using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false });
 
@@ -46,6 +49,7 @@ internal static class SmtReportWriter
         writer.WriteString("module_sha256", SmtProfile.MODULE_SHA256);
         writer.WriteString("controller", ControllerBuildInfo.VERSION);
         SmtSampling.Write(writer, provenance.SamplingRate, sampling, unanswered);
+        writer.WriteString("binding", binding);
         provenance.WriteOptions(writer);
         writer.WriteEndObject();
 
@@ -78,6 +82,11 @@ internal static class SmtReportWriter
         WriteIndices(writer, "indices", facts.UnsatOneCopy);
         writer.WriteEndObject();
 
+        writer.WriteStartObject("complete_one_copy");
+        writer.WriteNumber("count", facts.CompleteOneCopy.Count);
+        WriteIndices(writer, "indices", facts.CompleteOneCopy);
+        writer.WriteEndObject();
+
         WriteTail(writer, provenance, facts);
         WriteAttribution(writer, facts);
 
@@ -89,6 +98,7 @@ internal static class SmtReportWriter
             writer.WriteNumber("no_model", facts.NoModel);
             writer.WriteNumber("undecided", facts.Undecided);
             WriteIndices(writer, "kept", facts.ExactlyOne);
+            WriteIndices(writer, "kept_one_copy", facts.KeptOneCopy);
             WriteIndices(writer, "dropped", facts.TwoOrMore);
             writer.WriteEndObject();
         }

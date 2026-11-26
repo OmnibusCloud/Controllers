@@ -244,8 +244,8 @@ four documents on disk; nothing is sent anywhere:
 One machine makes no copies, so the fields only a fleet has say what is true here: the sampling
 rate is 0 (`--rate` is not an option of `local`; the report says `sampling none`), every answer
 rests on one copy (`copies` 1, `agreed` true, `settled_by` `one_copy`; every `unsat` is in
-`unsat_one_copy`), and there is no repair or dispute round (a problem without an answer stays
-without one). A row's digest and its stats do not depend on any of that: they are the same as a
+`unsat_one_copy`, every complete enumeration that found models in `complete_one_copy`), no platform says which package a result came back for (`binding` `unbound`),
+and there is no repair or dispute round (a problem without an answer stays without one). A row's digest and its stats do not depend on any of that: they are the same as a
 fleet's for the same set, options and module.
 
 The folder (`smt-local-` and the start's time when `--out` is not given) gets the four documents

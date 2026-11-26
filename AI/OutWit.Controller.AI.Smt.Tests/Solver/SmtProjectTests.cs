@@ -89,7 +89,7 @@ public sealed class SmtProjectTests
     public void TheModuleIsNamedSmtAndRegistersItsActivitiesAndVariablesTest()
     {
         var manifest = typeof(WitControllerSmtModule).GetCustomAttribute<WitPluginManifestAttribute>();
-        var dependency = typeof(WitControllerSmtModule).GetCustomAttribute<WitPluginDependencyAttribute>();
+        var dependencies = typeof(WitControllerSmtModule).GetCustomAttributes<WitPluginDependencyAttribute>().Select(dependency => dependency.PluginName).ToList();
         var services = new ServiceCollection();
 
         new WitControllerSmtModule().Initialize(services);
@@ -104,8 +104,9 @@ public sealed class SmtProjectTests
         {
             Assert.That(manifest?.Name, Is.EqualTo("Smt"));
             Assert.That(manifest?.Version, Is.EqualTo((string?)Project(SMT).Descendants("Version").Single()));
-            Assert.That(dependency?.PluginName, Is.EqualTo("Variables"), "the scripts take the blobs and collections of the Variables controller");
-            Assert.That(Project(SMT).Descendants("ControllerDependency").Select(item => (string?)item.Attribute("Include")), Is.EqualTo(new[] { "Variables" }), "and the manifest says so");
+            Assert.That(dependencies, Is.EqualTo(new[] { "Variables" }), "the scripts take the blobs and collections of the Variables controller; Grid is host-only, and a module's dependency is enforced on the nodes too");
+            Assert.That(Project(SMT).Descendants("ControllerDependency").Select(item => ((string?)item.Attribute("Include"), (string?)item.Attribute("MinimumVersion"))), Is.EqualTo(new[] { ("Variables", "1.0.0"), ("Grid", "1.4.0") }),
+                "and the manifest says so, with Grid from the version that tells a fan-out's return collection which package each result was returned for");
             Assert.That(registered, Is.EqualTo(new[]
             {
                 "WitActivityAdapterSmtCapabilities", "WitActivityAdapterSmtCollect", "WitActivityAdapterSmtCollectResults", "WitActivityAdapterSmtDisputes",

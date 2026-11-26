@@ -10,7 +10,7 @@ namespace OutWit.Controller.AI.Smt.Tests;
 /// package's own targets ask for it. These tests hold the links of that chain: the project
 /// declares the assets, the manifest the build stages carries every one of them with the project's
 /// pins, the staged module carries what the controller needs beside itself and names its
-/// dependency, and the capabilities schema is packed beside the README. The module-load proof
+/// dependencies, and the capabilities schema is packed beside the README. The module-load proof
 /// (<see cref="SmtModuleLoadTests"/>) then runs on an asset resolved that way.
 /// </summary>
 [TestFixture]
@@ -48,7 +48,7 @@ public sealed class SmtPackageLayoutTests
     }
 
     [Test]
-    public void TheStagedManifestCarriesEveryAssetTheProjectDeclaresAndTheDependencyTest()
+    public void TheStagedManifestCarriesEveryAssetTheProjectDeclaresAndTheDependenciesTest()
     {
         var module = StagedModule();
         using var manifest = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(module, MANIFEST)));
@@ -56,7 +56,8 @@ public sealed class SmtPackageLayoutTests
         Assert.Multiple(() =>
         {
             Assert.That(SmtPackagedAssets.Declared(module), Is.EquivalentTo(SmtPackagedAssets.Project(ProjectPath())), "the manifest a package is made from names every asset, with the project's own pins");
-            Assert.That(manifest.RootElement.GetProperty("dependencies").GetProperty("Variables").GetString(), Is.EqualTo("1.0.0"), "and the controller it depends on");
+            Assert.That(Dependencies(manifest), Is.EquivalentTo(new Dictionary<string, string> { ["Variables"] = "1.0.0", ["Grid"] = "1.4.0" }),
+                "and the controllers it depends on: Grid from the version that tells a fan-out's return collection which package each result was returned for");
             Assert.That(manifest.RootElement.GetProperty("version").GetString(), Is.EqualTo(SmtNodeRig.ControllerVersion));
         });
     }
@@ -100,6 +101,11 @@ public sealed class SmtPackageLayoutTests
             SmtRigModules.Missing("the solution root was not found");
 
         return Path.Combine(root!, "AI", "OutWit.Controller.AI.Smt", PROJECT);
+    }
+
+    private static Dictionary<string, string> Dependencies(JsonDocument manifest)
+    {
+        return manifest.RootElement.GetProperty("dependencies").EnumerateObject().ToDictionary(dependency => dependency.Name, dependency => dependency.Value.GetString()!);
     }
 
     private static string StagedModule()

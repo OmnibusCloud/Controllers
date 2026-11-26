@@ -53,6 +53,12 @@ node's batch, under `Queued` it is one task.
   same holds for a node that returns fewer values than it had tasks. Results carry no item index, so a
   transformer has to return something that identifies its item, and a script that needs every item
   has to compare what came back with what it sent and run the rest again.
+- **Which item a value answers.** A slot is a name, and Grid cannot look into the value under it. A
+  node that was given item A and item B may return a result of A under A's slot and a second result
+  of A under B's slot: each came under a slot the node was asked for, once, so both are kept. Grid
+  knows which item every slot was built for, and a return collection may ask to be told (see *A
+  return collection that asks which item a value answers* below). A collection that does not ask
+  sees no difference.
 - **The loud failure.** After the values are stored, the collection is read back. If it does not hold
   them, the activity fails with a message that names the transformer, the collection, the number of
   values and the element type. With the rules above that should not happen; it is there so that a
@@ -66,6 +72,107 @@ node's batch, under `Queued` it is one task.
 A warning names the node by the status that came back with the answer. Without copies the server
 may give a batch to another node than the one it was planned for; when the status does not say who
 ran it, the warning names the planned node and says so.
+
+#### A return collection that asks which item a value answers
+
+A controller that compares the copies of an item (`Grid.Replicas`) counts the results of an item as
+the answers of different machines. That holds only when every result it counts for item A was
+returned for a task of item A. Grid cannot check that: it would have to look into the value. A node
+that holds a task of A and a task of B can return two results of A, one under each slot, and the
+controller would count one machine twice. So Grid tells the controller what it does know: the item
+each kept value was returned for.
+
+**The convention.** When the variable a `Grid.ForEach` call returns into has a public instance
+method
+
+```csharp
+public void OnGridAnswer(object? item, object? value)
+```
+
+Grid calls it once for every value it keeps, before the value joins the results.
+
+- `item` is the element of the call's collection that the task was built from: the same object (a
+  value type comes boxed). An item that is a list reaches its task as `item.Item1`, `item.Item2`,
+  ...; the collection is told the list itself. Every copy of an item has a slot of its own and is
+  told with the same item.
+- `value` is the value as it joins the results: the same object.
+
+Grid does nothing with the call, and the method returns nothing. What the controller makes of the
+pair is the controller's: it can remember it and, when it reads its results, refuse a value that
+answers another item than the one it was returned for.
+
+**When the method is called, and when not.**
+
+- It is called for a value that is kept: the value came under a slot the answer's tasks asked for,
+  not once too often, and the collection would take it.
+- It is not called for a value that is left out (a name nobody asked for, a second value under a
+  slot, a value the collection would refuse), nor for a copy that was dropped.
+- Nothing a failed batch returned is told. Its tasks are sent to other nodes and keep their slots,
+  so the value that finally comes for a task is told then, once, with the same item.
+- Being told is not being stored. A value is told when it is kept; a call that fails afterwards
+  may store nothing.
+- A collection without such a method is not asked, and its call runs exactly as before. `Grid.Delegate`
+  has no items and tells nobody.
+
+**How the method is found.** By reflection, by its name and its exact signature, once a call. There
+is no interface to implement, and that is on purpose: Grid is a host-only module, while a
+controller's variable classes are loaded on the nodes too. A type of Grid's on such a class would not
+load on a node, where Grid is not installed. A public method named `OnGridAnswer` with any other
+signature (other parameter types, another number of them, a return value, a static method) is taken
+for a mistake: one warning a call, and the method is not called. A method that is not public is not
+looked at.
+
+**When the method throws.** It is the controller's code, and it may throw. The value is kept all
+the same and the other values are still told. One warning a call says how many times the method
+threw and names the type of the first exception. A value the method threw for was not told, so a
+controller that needs every pair must not throw. An `OutOfMemoryException` is the one exception Grid
+does not hold back.
+
+**Threads.** Under `Balanced` the calls come one after another. Under `Queued` an answer is held in
+the loop of the node that gave it, so the method may be called from several threads at once. Grid
+puts no lock around it: the method has to be safe for that itself.
+
+**Where the items are kept.** On the host, beside the tasks, and only for a collection that asks.
+Nothing of them is sent to a node: a task is built and sent exactly as for any other collection.
+
+**What a controller can conclude, and what it cannot.** A controller that counts a value for item
+A only when the value was told with item A, and itself finds that the value speaks of A, knows that
+the values it counts for A were returned for different tasks of A. Grid keeps the tasks of one
+item on different machines (see `Grid.Replicas`), so those values came from different machines. It
+does not learn which machine returned a value. A machine is still what the platform knows as a node:
+different machines are not necessarily different owners. And being told says nothing about whether
+a value is right.
+
+```csharp
+[Variable("AnswerCollection")]
+public sealed class WitVariableAnswerCollection : WitCollection<Answer>
+{
+    // The item each answer was returned for. Answers are told apart by reference: two equal
+    // answers of two machines are two entries.
+    private readonly ConcurrentDictionary<Answer, object?> m_items = new(ReferenceEqualityComparer.Instance);
+
+    // Grid: once for every value it keeps; under Queued from several threads at once.
+    public void OnGridAnswer(object? item, object? value)
+    {
+        if (value is Answer answer)
+            m_items[answer] = item;
+    }
+
+    // The controller, when it compares the copies of a question: an answer counts for the
+    // question only when it names the question and was returned for a task of that question.
+    public bool CountsFor(Answer answer, Question question)
+    {
+        return answer.QuestionId == question.Id
+               && m_items.TryGetValue(answer, out object? item)
+               && ReferenceEquals(item, question);
+    }
+
+    // Clone() and the rest of a collection variable, as for any other.
+}
+```
+
+What the collection remembers is its own state, on the variable the script's pool holds: a copy of
+the variable carries it only when the class copies it.
 
 ### Grid.Delegate
 
@@ -120,7 +227,7 @@ results = Grid.ForEach(item in items, checked) => Transformer(item);
 - An execution whose value is left out (see *What a node's answer is held to*) is not run again. Its machine still counts as holding the item, because it has run it, so no other copy of that item is placed there. The item then comes back with fewer results than it had copies, or with none: the controller that compares the copies has to treat that as it treats a missing answer.
 
 **What it does not do:**
-- It does not compare results. `results` is a flat list with one entry per execution, in no particular order, so the transformer has to return something that identifies its item. The controller compares; the platform does not vote.
+- It does not compare results. `results` is a flat list with one entry per execution, in no particular order, so the transformer has to return something that identifies its item. The controller compares; the platform does not vote. What the platform can add is which item each entry was returned for: a return collection may ask to be told (see *A return collection that asks which item a value answers*), and without that a node that holds two items can pass a second result of one as the result of the other.
 - It does not speed anything up: the copies are extra work.
 
 Only the `Balanced` strategy supports copies; `Queued` reports an error. Copies are set in a script, because these options are not sent through SDK job parameters. A call with copies uses this cloud's own nodes only.
@@ -212,7 +319,7 @@ OutWit.Controller.Grid/
   Interfaces/          - Internal marker interface shared with adapters
   Utils/               - GridReassignment (Balanced: allocate, run, reassign a failed node's tasks), ProcessingUtils (Queued, node requests),
                          GridAnswers (what a task asks for, what is kept of an answer), GridValueRule (what the return collection takes),
-                         exception-message helpers
+                         GridAnswerListener (a return collection that asks which item a value answers), exception-message helpers
   Properties/          - Localized error strings (Resources.resx)
   build/               - Consumer-side MSBuild .targets shipped inside the nupkg
   WitControllerGridModule.cs - Plugin entry point (DI registrations)

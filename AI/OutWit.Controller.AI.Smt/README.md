@@ -34,7 +34,10 @@ in [`OutWit.Controller.AI.Smt.Scripts`](../OutWit.Controller.AI.Smt.Scripts/READ
 
 The variables `SmtTaskPackage`, `SmtResultPackage`, `SmtRuntimeDiagnostics`, `SmtOptions`,
 `SmtPreflight` and the collections `SmtTaskPackageCollection`, `SmtResultPackageCollection` are
-registered with them. The module depends on the Variables controller; the scripts use Grid.
+registered with them. The module depends on the Variables controller; the scripts use Grid, 1.4.0
+or later (the manifest names both; Grid is host-only, so the module itself declares only
+Variables). `SmtResultPackageCollection` asks Grid which package each result was returned for
+(`OnGridAnswer`): see *Intake* below.
 
 ## The profile
 
@@ -290,7 +293,9 @@ Smt.Split -> Smt.SamplingRate -> Grid.Replicas(2, rate) -> Grid.ForEach => Smt.S
 The work is split once and sent once; the repair round and the dispute round are the only second
 sends, and both cost traffic on the fault path only. Nothing names, avoids or steers to a machine:
 copies on different machines are `Grid.Replicas`' only, within one fan-out; Grid guarantees
-nothing across fan-outs.
+nothing across fan-outs. Grid also tells the return collection of every fan-out which package's
+task each result came back for (Grid 1.4.0 and later); the host remembers it for the result
+object, never on the wire, so a node cannot say it of itself.
 
 **Split.** The set is read a row at a time by the model package's reader, the taken problems wait
 in a working file of the host's until the run knows how many it has, and are cut into packages
@@ -301,7 +306,12 @@ of range and a profile the controller does not have are refused; a set whose eve
 refused gives no package, and its results say why for each row.
 
 **Intake.** A node's result package is a claim. It is taken only under a ticket its round gave
-out, and only when its reference is one a node returns. A reference with a fault code is the
+out, only when the platform, if it said which package's task the result came back for, said the
+package the ticket names (a node given packages A and B that returns a result of A for each of
+its two tasks has its second result refused as `other_package`, and B goes out again as a package
+without an answer), and only when its reference is one a node returns. A result the platform said
+nothing of (a Grid older than 1.4.0) is unbound: it is taken as before, but never counted as a
+second machine (below). A reference with a fault code is the
 node's word that it could not work on the package (one of `SmtNodeFaults`, no blob, a sentence no
 longer than a node writes), and is counted so. Otherwise it carries no word of a fault and a
 SHA-256, and its blob must be the bytes it names, a package of rows of this format, holding
@@ -325,7 +335,8 @@ exactly the rows of its package, each once, each one a session could have writte
 - and a digest that is its own.
 
 Anything else fails that package and is counted by reason (`unknown_ticket`, `duplicate`,
-`unreadable`, `content`, `surplus`). Rows wait in a spool file, never together in memory, and the
+`unreadable`, `content`, `surplus`, `other_package`). A bound result counts for the package whose
+task it came back for, taken or refused; an unbound one for the package it names. Rows wait in a spool file, never together in memory, and the
 rows of a refused package are taken out of it again. What the host keeps of one run on its disk
 is bounded: 128 GiB of rows, and 2 GiB of full models in the ledger. A run past either is not
 settled: the activity fails with the bound's name (`smt_rows_bound`, `smt_models_bound`). A
@@ -334,20 +345,28 @@ counted as a node's unreadable result.
 
 **Settling** (`SmtRulings`), problem by problem in the set's order:
 
-- The first round's answers are ruled on (a row of a fault of the node is no answer). Two kinds of
+- The first round's answers are ruled on (a row of a fault of the node is no answer, and nor is a
+  node's refusal: a node refuses only what the host checked with the same code before it made the
+  package, so an honest node never refuses a problem the host took; such a problem goes out again
+  under `node_refused`, and one every node refused is `no_result` with that code). Two kinds of
   problem go out once more, in the repair round, which asks two machines for every package
   (`Grid.Replicas(2)`): a problem with no answer, and a problem of a package the first round asked
   for twice that came back with fewer than two answers (a copy a node refused with its fault code,
   a copy whose result package was refused, a row of a fault of the node; `copies_short` in the
   integrity document's `repairs_by_reason`). A package is known to have been asked for twice by
-  the two results that came back under its ticket, whatever they say, or by a rate that asks for
-  every package; one of which at most one result came back cannot be told from a package asked
-  for once, and leaves the sampling `short`. A problem with no answer whose package was not
+  the two results that came back for it, whatever they say, or by a rate that asks for every
+  package; one of which at most one result came back cannot be told from a package asked
+  for once, and leaves the sampling `short`. A result counts for the package whose task it came
+  back for when the platform said so, and for the package it names otherwise: two unbound results
+  under a ticket may be one node's answer given twice, and the package is taken as asked for twice
+  all the same, which can only send more of it out again. A problem with no answer whose package was not
   sampled gets two copies in the repair round as well: the fault path pays for it. A problem
   with no answer after the repair round is `no_result`, with the code of what the nodes said last.
 - Copies are compared by their digests and by nothing else. Answers of one digest are one answer:
-  `copies` when two of them come from one fan-out (the first, or the repair round), whose copies
-  Grid keeps on different machines; `one_copy` otherwise. The lone answer of the first round and a
+  `copies` when two of them are bound answers of one fan-out (the first, or the repair round),
+  returned for two of its tasks, which Grid keeps on different machines; `one_copy` otherwise.
+  Unbound answers are one machine's word together, however many they are: on a Grid older than
+  1.4.0 no problem is settled `copies`, and the documents say `binding: unbound`. The lone answer of the first round and a
   lone answer of the repair round are never counted as two machines: two fan-outs may place them
   on one. The lone answer is still compared with the repair round's answers, and a difference is a
   dispute. The sampling is `as_asked` when every problem with an answer of a package asked for
@@ -368,7 +387,10 @@ counted as a node's unreadable result.
 - Answers of more than one digest, a package with more answers than were asked for, and an answer
   whose model or values are `failed` go to three more machines. The answer is the digest the most
   of them give, two at least, with no tie, and two machines' worth once the answers that may be
-  one machine's second are left out (`dispute`); otherwise the problem is `disputed`.
+  one machine's second are left out (`dispute`); otherwise the problem is `disputed`. Only an
+  unbound answer may be such a second answer (as many of them as the round's other packages are
+  short of answers): a bound one returned for another package's task is refused, so with every
+  answer bound two machines that agree settle a dispute on a pool of two machines.
 - A failed model accuses nobody by itself: a copy is a lie only when it differs from the settled
   answer of the others. When the settled answer's model is still `failed`, the machines agree and
   the evaluator does not: the row says `validation: failed`, `settled_by: agreement`, and the
@@ -378,7 +400,14 @@ counted as a node's unreadable result.
 **Documents.** `Smt.Settle` writes the results, the report, the provenance and the integrity
 document into one ledger blob of the host's own, with the full models of the rows whose models
 the results cut at 64 KB; the other activities hand a document out of it as it is. No document
-names a machine. Their fields are in [`docs/capabilities.md`](docs/capabilities.md) and their
+names a machine. The report lists the claims that rest on one machine and that nothing but it
+vouches for: every `unsat` (`unsat_one_copy`) and every enumeration that found models and says
+there is no other (`complete_one_copy`; of the enumerations kept as exactly one model, those on
+one machine's word in `enumerate.kept_one_copy`); the integrity document counts both. The report
+and the integrity document say whether the platform told the host
+which package each result came back for (`binding`: `bound`, `unbound`, `mixed`, or `none` when
+no result came back), and the integrity document counts the results of each kind
+(`results_bound`, `results_unbound`). Their fields are in [`docs/capabilities.md`](docs/capabilities.md) and their
 schemas beside it.
 
 **Preflight.** `Smt.Preflight` reads the set the same way, sends nothing, and gives an

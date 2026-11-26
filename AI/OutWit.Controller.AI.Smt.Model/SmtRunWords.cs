@@ -4,8 +4,9 @@ namespace OutWit.Controller.AI.Smt.Model;
 /// The words of a run's documents that a node's row does not have: the statuses the host gives
 /// a problem (refused by the problem set, without a result, disputed), how a problem's answer was
 /// settled, what the host's evaluator said of a model, how a verdict stands against the expected
-/// one, and the words of the repair and the dispute rounds. A document names no machine: these
-/// words say how many copies there were and how they compared, never where they ran.
+/// one, the words of the repair and the dispute rounds, and whether the platform told the host
+/// which package each result was returned for. A document names no machine: these words say how
+/// many copies there were and how they compared, never where they ran.
 /// </summary>
 public static class SmtRunWords
 {
@@ -23,7 +24,10 @@ public static class SmtRunWords
     /// <summary>Settled by: one copy, which nothing contradicted and the evaluator did not call failed.</summary>
     public const string ONE_COPY = "one_copy";
 
-    /// <summary>Settled by: two or more copies with one digest, which the evaluator did not call failed.</summary>
+    /// <summary>
+    /// Settled by: two or more copies with one digest, which the evaluator did not call failed, two
+    /// of them returned for two tasks of one fan-out as the platform told the host (<see cref="BOUND"/>).
+    /// </summary>
     public const string COPIES = "copies";
 
     /// <summary>Settled by: the majority of three more copies, after the first ones disagreed or the evaluator called a model failed.</summary>
@@ -63,6 +67,13 @@ public static class SmtRunWords
     /// <summary>The reason of a problem without a result whose package no accepted answer came back for.</summary>
     public const string NO_ANSWER = "no_answer";
 
+    /// <summary>
+    /// The reason of a repair, and of a problem left without a result, whose copies were a node's
+    /// refusal of it: a node refused a problem the host had taken. A node refuses only for what the
+    /// host checks with the same code before it makes a package, so a refusal is no answer.
+    /// </summary>
+    public const string NODE_REFUSED = "node_refused";
+
     /// <summary>A dispute's cause: the copies' digests differ.</summary>
     public const string DIGESTS_DIFFER = "digests_differ";
 
@@ -83,9 +94,30 @@ public static class SmtRunWords
 
     /// <summary>
     /// A dispute's outcome: the leading answer does not lead by two machines once the answers
-    /// that may be one machine's second are left out (other packages of the round are short of answers).
+    /// that may be one machine's second are left out (as many of its unbound answers as other
+    /// packages of the round are short of answers).
     /// </summary>
     public const string SURPLUS_COPIES = "surplus_copies";
+
+    /// <summary>
+    /// Binding: every result that came back was told by the platform (Grid 1.4.0 and later) to have
+    /// been returned for a task of a package, and the host held it to the package it names. Two
+    /// such answers of one package in one fan-out are two machines.
+    /// </summary>
+    public const string BOUND = "bound";
+
+    /// <summary>
+    /// Binding: no result that came back was told (a Grid older than 1.4.0, or a run that did not
+    /// fan out through it): copies are still compared by digest, and no answer is ever counted as
+    /// a second machine.
+    /// </summary>
+    public const string UNBOUND = "unbound";
+
+    /// <summary>Binding: some results that came back were told and some were not; only the bound ones count as machines.</summary>
+    public const string MIXED = "mixed";
+
+    /// <summary>Binding: no result came back at all.</summary>
+    public const string NO_RESULTS = "none";
 
     /// <summary>Every status a row of the results can have, the node's and the host's, in the order a report lists them.</summary>
     public static readonly IReadOnlyList<string> STATUSES = [.. SmtResultWords.STATUSES.Where(status => status != SmtResultWords.NODE_FAULT), NO_RESULT, DISPUTED];
@@ -104,6 +136,9 @@ public static class SmtRunWords
 
     /// <summary>Every outcome of a dispute.</summary>
     public static readonly IReadOnlyList<string> DISPUTE_OUTCOMES = [RESOLVED, NO_MAJORITY, TOO_FEW_COPIES, SURPLUS_COPIES];
+
+    /// <summary>Every word of a run's binding: whether the platform told the host which package each result was returned for.</summary>
+    public static readonly IReadOnlyList<string> BINDINGS = [BOUND, UNBOUND, MIXED, NO_RESULTS];
 
     #endregion
 }

@@ -7,7 +7,7 @@ namespace OutWit.Controller.AI.Smt.Settlement;
 /// whether it got it. The share is the run's sampling rate; which packages it falls on is the
 /// platform's choice, made inside the fan-out, and the host never learns it. What the host can
 /// count is how many packages a rate asks for, which packages it knows were asked for twice (two
-/// results came back under their tickets, or the rate asks for every package), and whether every
+/// results came back for them, or the rate asks for every package), and whether every
 /// problem of those ended with two answers of one fan-out, the first or the repair round that
 /// sent it out again; that is what the documents state: a run whose checking did not happen says so.
 /// </summary>
@@ -74,7 +74,7 @@ internal static class SmtSampling
     /// <summary>The state of a run's sampling, from what the first fan-out was asked and what the problems of its packages ended with. A dispute round is not sampling.</summary>
     /// <param name="rate">The rate the script stated, or null when it stated none.</param>
     /// <param name="selected">The packages of the first fan-out the rate asks for twice (<see cref="Selected"/>).</param>
-    /// <param name="known">The packages the host knows were asked for twice: two results or more came back under their tickets, or the rate asks for every package.</param>
+    /// <param name="known">The packages the host knows were asked for twice: two results or more came back for them, or the rate asks for every package.</param>
     /// <param name="shortProblems">The problems with an answer of those packages that ended without two answers of one fan-out.</param>
     /// <returns>One of <see cref="STATES"/>.</returns>
     public static string State(double? rate, int selected, int known, int shortProblems)

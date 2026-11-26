@@ -11,10 +11,13 @@ namespace OutWit.Controller.AI.Smt.Tests.Mock;
 /// The host's side of a run without nodes and without the solver: a problem set is read as a run
 /// reads it, its problems are stored as packages, rows are made up for them as a node would write
 /// them (each with its own digest, unless a test breaks it), and the host's rounds and settlement
-/// run on them as the activities run them. What the tests see are the model package's types and
-/// the documents' texts; the controller's types are met inside method bodies only, and the rig's
-/// methods wait for the controller's tasks themselves: an awaited task of a controller type would
-/// put that type into the shape of a test's state machine.
+/// run on them as the activities run them. Every result the rig makes is told to the host as
+/// returned for the package it answers, as Grid 1.4.0 tells the return collection of a fan-out,
+/// unless a test says it was returned for another package or turns the telling off
+/// (<see cref="Binds"/>: a round filled as an older Grid fills it). What the tests see are the
+/// model package's types and the documents' texts; the controller's types are met inside method
+/// bodies only, and the rig's methods wait for the controller's tasks themselves: an awaited task
+/// of a controller type would put that type into the shape of a test's state machine.
 /// </summary>
 internal sealed class SmtSettleRig : IDisposable
 {
@@ -82,13 +85,16 @@ internal sealed class SmtSettleRig : IDisposable
     /// <summary>
     /// A node's answer to a package: the package's problems read from its blob, a row made of each
     /// by a function (the ticket, the problem, the version, the platform and the digest are put in
-    /// by the rig unless the function's row breaks them on purpose), written and stored.
+    /// by the rig unless the function's row breaks them on purpose), written and stored. The host
+    /// is told that the result was returned for a task of the package, or of the one given, as
+    /// Grid tells it (while <see cref="Binds"/> holds).
     /// </summary>
     /// <param name="package">The package.</param>
     /// <param name="answer">The row of a problem: its status, verdict, models and the rest.</param>
     /// <param name="seal">Whether the rig puts the row's own digest in; false leaves the function's.</param>
+    /// <param name="returnedFor">The package whose task the result came back for; null for the package it answers.</param>
     /// <returns>The result package's reference.</returns>
-    public SmtResultPackageData Answer(SmtTaskPackageData package, Func<SmtProblemData, SmtResultData> answer, bool seal = true)
+    public SmtResultPackageData Answer(SmtTaskPackageData package, Func<SmtProblemData, SmtResultData> answer, bool seal = true, SmtTaskPackageData? returnedFor = null)
     {
         var rows = new List<SmtResultData>();
         var problems = Blobs.GetLocalPathAsync(package.ProblemsBlobId).GetAwaiter().GetResult();
@@ -120,7 +126,11 @@ internal sealed class SmtSettleRig : IDisposable
             writer.Complete();
         }
 
-        return SmtPackageTransfer.UploadResultsAsync(Blobs, path, package.Ticket, rows.Count, NullLogger.Instance, CancellationToken.None).GetAwaiter().GetResult();
+        var result = SmtPackageTransfer.UploadResultsAsync(Blobs, path, package.Ticket, rows.Count, NullLogger.Instance, CancellationToken.None).GetAwaiter().GetResult();
+        if (Binds)
+            SmtRunRig.Bind(returnedFor ?? package, result);
+
+        return result;
     }
 
     /// <summary>A row that answers sat with a model (and the values asked, when given).</summary>
@@ -146,6 +156,21 @@ internal sealed class SmtSettleRig : IDisposable
         var row = Row(SmtResultWords.NODE_FAULT, SmtResultWords.NONE, SmtResultWords.NONE, [], []);
         row.Code = "backstop";
         row.Message = "the session ran past the wall-clock backstop";
+        return row;
+    }
+
+    /// <summary>A row of a node that refused the problem before a session started: a code of the refusals, and nothing run.</summary>
+    /// <param name="code">The refusal's code.</param>
+    /// <returns>The row, without its problem and digest.</returns>
+    public static SmtResultData Refusal(string code)
+    {
+        var row = Row(SmtResultWords.REFUSED, SmtResultWords.NONE, SmtResultWords.NONE, [], []);
+        row.Code = code;
+        row.Message = "the node refused the problem";
+        row.Checks = 0;
+        row.ResourceCount = 0;
+        row.Fuel = 0;
+        row.PeakMemoryBytes = 0;
         return row;
     }
 
@@ -260,6 +285,13 @@ internal sealed class SmtSettleRig : IDisposable
 
     /// <summary>The rig's blob store.</summary>
     public SmtTestBlobService Blobs { get; }
+
+    /// <summary>
+    /// Whether the host is told which package each result the rig makes was returned for, as Grid
+    /// 1.4.0 tells it; false fills the rounds as an older Grid does, or a script that fills the
+    /// collections another way. True unless a test turns it off.
+    /// </summary>
+    public bool Binds { get; set; } = true;
 
     private string Work => Path.Combine(m_folder, "work");
 

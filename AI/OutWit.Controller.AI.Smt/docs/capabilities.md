@@ -40,7 +40,7 @@ Three queries: `check` (is the problem satisfiable, by which model or which valu
 | Platforms of the nodes | Windows x64, Linux x64, macOS arm64 |
 | Machines of the nodes | 8 GB of memory at least (7,680 MiB as a node reports it: a machine sold as 8 GB reports a little less than 8,192 MiB): the planner sends no package to a smaller one |
 | Budget of a problem | the solver's resource limit of a check (150,000,000 by default) and the hard cap as fuel (60 s of a reference machine by default, at 5,000,000,000 units a second): counts, the same on every node |
-| Copies | a share of the packages (the sampling rate, 0.05 by default) is solved on two machines; a problem whose package lost one of its two copies, or that has no answer, goes out again to two machines; a dispute on three more |
+| Copies | a share of the packages (the sampling rate, 0.05 by default) is solved on two machines; a problem whose package lost one of its two copies, or that has no answer, goes out again to two machines; a dispute on three more. Two answers are two machines only when the platform says they came back for two tasks of one fan-out (Grid 1.4.0 and later) |
 | Checks | every `sat` model is evaluated against the problem on the server, by code that shares nothing with the solver |
 | Documents | results (JSON lines), report, provenance, integrity (JSON), each with a schema |
 | Machines | no document names one: a row says how many machines answered and whether they agreed |
@@ -111,7 +111,7 @@ One JSON line a row of the set, in the set's order, refused rows included.
 | Field | |
 |---|---|
 | `index`, `id`, `query`, `logic` | the row; `query` and `logic` for a taken problem only |
-| `status`, `code`, `message` | `ok`, `refused`, `input_error`, `output_exceeded`, `engine_crash`, or the server's `no_result` (no node answered, after the repair round either; `code` says what the nodes said last) and `disputed` (copies disagreed and three more did not settle it; `code` is the dispute's outcome) |
+| `status`, `code`, `message` | `ok`, `refused` (by the set or the server's sanitizer), `input_error`, `output_exceeded`, `engine_crash`, or the server's `no_result` (no node answered, after the repair round either; `code` says what the nodes said last, `node_refused` when every node refused the problem) and `disputed` (copies disagreed and three more did not settle it; `code` is the dispute's outcome) |
 | `verdict`, `reason` | `sat`, `unsat`, `unknown` (with `rlimit`, `fuel`, `memout`, `incomplete` or `other`), `none`. An enumeration that is neither complete nor at its number of models has the reason it stopped for, beside `sat` when it found a model; `other` there also says that the solver did not take a found model's values back (see "Known limits") |
 | `expected`, `expected_agreement` | the verdict the row or the problem's `:status` expects, and `agree`, `disagree` or `n/a` |
 | `count`, `complete`, `limit_reached`, `models` | an enumeration: the models found, whether the count is exact, whether the number asked for was reached, and each model with the values of the projected constants |
@@ -119,32 +119,36 @@ One JSON line a row of the set, in the set's order, refused rows included.
 | `model`, `values` | a check's model and the values it asked for; a proof's counterexample |
 | `model_truncated` | the texts above are the solver's own and are shown up to 64 KB a row, whole texts only; past that they are null and this is true. The full models stay in the run's ledger, the server's own blob |
 | `validation`, `validation_reason`, `validation_detail` | what the server's evaluator said of every model and of the values that came with it: `validated`, `partial` (with the reason), `failed` (`assertion_false` with the assertion, or `value_mismatch` with the value), or `none` when there is no model |
-| `copies`, `agreed`, `settled_by` | how many answers the problem was ruled on, whether all gave one digest, and how the answer was settled: `one_copy` (it rests on one machine), `copies` (two machines of one fan-out at least), `dispute`, `agreement` |
+| `copies`, `agreed`, `settled_by` | how many answers the problem was ruled on, whether all gave one digest, and how the answer was settled: `one_copy` (it rests on one machine), `copies` (two machines of one fan-out at least: two answers the platform said came back for two tasks of the problem's package), `dispute`, `agreement` |
 | `digest`, `stats` | the digest of the settled row (the same on every honest machine), its resource count, fuel and checks |
 | `tags` | passed through |
 
 ### The report ([`smt-report.schema.json`](smt-report.schema.json))
 
 What the run ran with in short (profile, module SHA-256, controller version, sampling rate and
-whether it was met, the options as numbers); the set as it was read (rows, taken, refused by code,
+whether it was met, whether the platform said which package each result came back for
+(`binding`), the options as numbers); the set as it was read (rows, taken, refused by code,
 by logic, by query); the rows by status; the verdicts; the unknowns by reason; the agreement with
 the expected verdicts; the evaluator's classes, by logic, and the partial ones by reason; the
 copies (problems answered by two machines or more, how many agreed, the disputes and how they
 ended, the answers by how they were settled); the problems answered `unsat` by one machine only,
-by index; the long tail (every problem with a settled row, the most fuel first, with what stopped
+by index (`unsat_one_copy`), and the enumerations that found models and say there is no other by
+one machine only (`complete_one_copy`); the long tail (every problem with a settled row, the most fuel first, with what stopped
 it and the budget); the attribution from the problems' `:source` and `:license`; and for a run
-with enumerations, the problems with exactly one model (kept) and those with two or more
-(dropped).
+with enumerations, the problems with exactly one model (kept; those of them on one machine's word
+in `kept_one_copy`) and those with two or more (dropped).
 
 ### The integrity document ([`smt-integrity.schema.json`](smt-integrity.schema.json))
 
 Counts only, and records by problem index: the answers taken, the problems compared and how they
-compared, the problems that rest on one machine (and of them the `unsat` ones), the disputes by
+compared, the problems that rest on one machine (and of them the `unsat` ones and the complete
+enumerations that found models), the disputes by
 cause and by outcome, the answers a lie was found in and the problems they are of, the models the
 evaluator called failed, **the problems on which the machines agree and the evaluator does not,
 each by its index**, the repairs and why, the problems left without a result and why, the result
-packages refused by reason, the packages nodes said they could not work on by code, and what every
-fan-out was asked for and what came back.
+packages refused by reason, the packages nodes said they could not work on by code, what every
+fan-out was asked for and what came back, and how many results came back bound and unbound, with
+the run's `binding` (`bound`, `unbound`, `mixed`, or `none` when no result came back).
 
 ### The provenance ([`smt-provenance.schema.json`](smt-provenance.schema.json))
 
@@ -183,8 +187,18 @@ What holds:
   has them (a verdict only where a session claims one, a `sat` with its model, the code of its
   status and no other word), its numbers within the envelope of the run's options (fuel, memory,
   checks), its texts within what a session writes, and a digest of its own; anything else fails
-  its package and is counted. A package a node could not work on, and a problem whose session a
+  its package and is counted. A result the platform says came back for a task of another package
+  than the one its ticket names (a node that answered one of its packages twice, in place of
+  another) is refused (`rejected.other_package`), and the package it came back for goes out again
+  as a package without an answer. A package a node could not work on, and a problem whose session a
   node could not end, go out once more, to two machines.
+- **A node's refusal is no answer.** A node refuses a problem only for what the server has
+  already checked with the same code before it made the package (the sanitizer took the text and
+  gave its hash, the options and the terms beside the problem were held to their rules), so an
+  honest node never refuses a problem the server took. A refusal goes out once more like a
+  problem without an answer (`repairs_by_reason.node_refused`, or `copies_short` beside an answer
+  of a package asked for twice); a problem every node refused has no result, with the code
+  `node_refused`.
 - **The sampling asked for is restored.** A problem of a package asked for twice that came back
   with one answer (the other copy refused by its node, refused by the server, or a fault of the
   node) goes out again to two machines, and the integrity document counts it as `copies_short`.
@@ -197,6 +211,11 @@ What it does not claim:
 - **`unsat` and `unknown` rest on the copies.** Nothing beyond the copies vouches for them; a
   problem whose package was not sampled rests on one machine, and the report lists every `unsat`
   answered by one machine only. Raise the sampling rate to 1 for every problem twice.
+- **The completeness of an enumeration rests on the copies.** The models of an enumeration are
+  checked; that there is no other (`complete: true`) is the solver's last `unsat`, and nothing
+  checks it. The report lists every enumeration that found models and says it is complete on one
+  machine's word (`complete_one_copy`), and of the enumerations kept as exactly one model, those
+  that rest on one machine (`enumerate.kept_one_copy`).
 - **`partial` is not checked to the end.** Quantifiers, algebraic numbers, regular expressions,
   floating point and the other reasons of the model package's evaluator leave a model partial: it
   rests on the copies too. A model past the session's output cap is partial (`output_exceeded`).
@@ -205,17 +224,23 @@ What it does not claim:
   quantified term, the reasons above) is `partial` with that reason, whatever its model is: the
   value is shown as the solver printed it and rests on the copies.
 - **Duplicate models of an enumeration are not looked for.** The count is the solver's.
-- **Copies on different machines are the platform's.** The server sees results, not machines:
-  counting answers as machines rests on Grid keeping one value for each return variable a node's
-  tasks asked for (Grid 1.3.0 and later), and Grid keeps the copies of one fan-out apart and
-  guarantees nothing across fan-outs. So two answers count as two machines only when they come
-  from one fan-out: an answer of the first round and an answer of the repair round with the same
-  digest are `one_copy`.
+- **Copies on different machines are the platform's.** The server sees results, not machines,
+  and a result's ticket is the node's word. `copies` rests on the platform telling the server
+  which package each result came back for: Grid 1.4.0 and later tell the return collection of
+  every fan-out the package of each task, and the server refuses a result returned for another
+  package than the one it names. Two answers count as two machines only when both came back bound
+  in one fan-out, for two tasks of their package, which Grid keeps on different machines; Grid
+  guarantees nothing across fan-outs, so an answer of the first round and an answer of the repair
+  round with the same digest are `one_copy`. On an older Grid no answer is ever counted as a
+  second machine: copies are still compared by digest, nothing is settled `copies`, and the
+  documents say `binding: unbound`. A machine is what the platform knows as a node: two nodes of
+  one owner are two machines to it.
 - **A package asked for twice is known by its results.** Which packages a rate falls on is the
   platform's choice and the server never learns it: it knows a package was asked for twice when
-  two results came back under it, whatever they say, or when the rate asks for every package. A
-  package asked for twice of which at most one result came back cannot be found, is not sent
-  again, and leaves the sampling `short`.
+  two results came back for it, whatever they say (a bound result for the package whose task it
+  came back for, an unbound one under the ticket it names), or when the rate asks for every
+  package. A package asked for twice of which at most one result came back cannot be found, is
+  not sent again, and leaves the sampling `short`.
 
 ## 7. Limits
 

@@ -35,14 +35,30 @@ internal sealed class SmtCopy
     /// <summary>The ticket of the package the row came in.</summary>
     public required string Ticket { get; init; }
 
+    /// <summary>
+    /// Whether the row came in a result the platform told the host was returned for a task of its
+    /// package (<see cref="SmtResultBindings"/>). Bound answers of one package in one fan-out came
+    /// back for different tasks of it, which Grid keeps on different machines; unbound answers may
+    /// all be one machine's.
+    /// </summary>
+    public bool Bound { get; init; }
+
     /// <summary>Where the whole row lies in the spool, or -1 when it was not kept.</summary>
     public long SpoolOffset { get; init; } = -1;
 
     /// <summary>The length of the whole row in the spool.</summary>
     public int SpoolLength { get; init; }
 
-    /// <summary>Whether the row is a statement about the problem: everything but a fault of the node.</summary>
-    public bool IsAnswer => !string.Equals(Status, SmtResultWords.NODE_FAULT, StringComparison.Ordinal);
+    /// <summary>
+    /// Whether the row is a node's refusal of the problem. A node refuses only for what the host
+    /// checked with the same code before it made the package (the sanitizer, the hash, the terms
+    /// beside the problem, the options), so an honest node never refuses a problem the host took:
+    /// a refusal is no answer, and the problem goes out again.
+    /// </summary>
+    public bool IsRefusal => string.Equals(Status, SmtResultWords.REFUSED, StringComparison.Ordinal);
+
+    /// <summary>Whether the row is a statement about the problem: everything but a fault of the node and a node's refusal.</summary>
+    public bool IsAnswer => !string.Equals(Status, SmtResultWords.NODE_FAULT, StringComparison.Ordinal) && !IsRefusal;
 
     /// <summary>Whether the row says <c>sat</c> with what may be a model for the host's evaluator to check.</summary>
     public bool ClaimsSat => IsAnswer && string.Equals(Verdict, SmtResultWords.SAT, StringComparison.Ordinal);
