@@ -18,11 +18,11 @@ application that prepares a run, the host that splits it, the node that solves i
 | Type | Role |
 |---|---|
 | `SmtReader` | reads SMT-LIB 2.6 text into s-expressions: a script, a term, a model a solver printed |
-| `SmtExpression` | one s-expression: a list, or an atom with its text; written back, it is one line of single-spaced tokens that reads as the same s-expression |
+| `SmtExpression` | one s-expression: a list, or an atom with its text; written back, it is one line of single-spaced tokens that reads as the same s-expression (an atom a program makes is refused unless its text is one token of its kind; a string keeps any content) |
 | `SmtExpressionKind` | list, symbol, keyword, numeral, decimal, hexadecimal, binary, string |
 | `SmtReaderLimits` | how much the reader takes before it refuses: characters, tokens, nesting, digits of a number, bits of a literal, characters of a string; `SmtReaderLimits.Problem` holds the ceilings of a submitted problem |
 | `SmtSyntaxException` / `SmtSyntaxFault` | a refusal: what is wrong, the line and the column, a sentence without the text itself |
-| `SmtReservedWords` | the reserved words of the standard: the general ones and the command names |
+| `SmtReservedWords` | the reserved words of the standard: the general ones and the command names, as sets no caller can change |
 | `SmtLexicon` | the character classes the reader and the writer share: blanks, delimiters, the characters of a simple symbol |
 
 ```csharp
@@ -78,8 +78,8 @@ same problem, with the same hash, everywhere.
 |---|---|
 | `SmtSanitizer` | `Sanitize(text)` for a problem, `SanitizeTerm(text)` for a term that stands beside one (a goal to prove, a term whose value is asked, a constant to project on) |
 | `SmtProblem` | the problem as taken: its commands, its two texts and its hash, the logic, the expected verdict, the attribution, the declared constants and functions, what was stripped |
-| `SmtRefusalData` | a refusal: the line, the command, a fixed code, a reason. It never carries the text: at most one token of it, cut to 64 characters |
-| `SmtRefusalCodes` | the codes of a refusal |
+| `SmtRefusalData` | a refusal: the line, the command, a fixed code, a reason. It never carries the text: at most one token of it, cut to 64 characters, on one line (a blank in place of every control character, line or paragraph separator, format character such as a direction override, and half of a surrogate pair that stands alone) |
+| `SmtRefusalCodes` | the codes of a refusal; `All` is a set no caller can change |
 | `SmtScripts` | the commands the controller itself puts around a problem |
 
 ```csharp
@@ -196,7 +196,7 @@ host when a run is split, and wherever a preflight counts what a set holds.
 | `SmtProblemSetSummary` | what was read, counted: rows taken and refused, the taken problems by logic, by query and by expected verdict, the stripped commands, the refusals by code and the first 1,000 of them in full, the licences |
 | `SmtProblemSetLimits` | the numbers below |
 | `SmtProjection` | the check of an enumeration's `project`, made by the reader of a set and made again by a node of what travelled to it: `Take(problem, names, out constants)` gives the constants as the problem declares them, or the refusal |
-| `SmtOptionsData`, `SmtOptionsRules` | the options of a run; their defaults and ceilings, `Check` and `Resolve` |
+| `SmtOptionsData`, `SmtOptionsRules` | the options of a run; their defaults and ceilings, `Check`, `Readable` (each option out of range at the value that means its default, from the same ranges as `Check`) and `Resolve` |
 | `SmtQuery` | `Check`, `Enumerate`, `Prove` |
 
 ```csharp

@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace OutWit.Controller.AI.Smt.Model.Lang;
 
 /// <summary>
@@ -93,13 +95,13 @@ public static class SmtRefusalCodes
     /// <summary>A problem set has more rows than a set may have; reading ended at this row.</summary>
     public const string TOO_MANY_PROBLEMS = "too_many_problems";
 
-    private static readonly HashSet<string> CODES = new(StringComparer.Ordinal)
+    private static readonly FrozenSet<string> CODES = new[]
     {
         SYNTAX_ERROR, TEXT_TOO_LONG, TOO_MANY_TOKENS, NESTING_TOO_DEEP, NUMERAL_TOO_LONG, LITERAL_TOO_WIDE, STRING_TOO_LONG,
         NOT_A_COMMAND, COMMAND_NOT_ALLOWED, COMMAND_AFTER_END, COMMAND_MALFORMED, RESERVED_SYMBOL, AMBIGUOUS_TOKEN, NON_ASCII_STRING,
         INDEX_TOO_LARGE, TOO_MANY_SYMBOLS, RESERVED_PREFIX, NOT_A_TERM, BUILTIN_NAME,
         ROW_MALFORMED, ROW_TOO_LONG, ID_INVALID, ID_DUPLICATE, FIELD_MISSING, FIELD_INVALID, FIELD_NOT_ALLOWED, UNKNOWN_CONSTANT, TOO_MANY_PROBLEMS
-    };
+    }.ToFrozenSet(StringComparer.Ordinal);
 
     #endregion
 
@@ -128,8 +130,8 @@ public static class SmtRefusalCodes
 
     #region Properties
 
-    /// <summary>Every code.</summary>
-    public static IReadOnlyCollection<string> All => CODES;
+    /// <summary>Every code: a set no caller can change.</summary>
+    public static FrozenSet<string> All => CODES;
 
     #endregion
 }

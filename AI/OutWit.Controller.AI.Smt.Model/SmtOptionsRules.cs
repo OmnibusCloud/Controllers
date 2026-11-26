@@ -46,6 +46,26 @@ public static class SmtOptionsRules
     /// <summary>The greatest <c>sampling_rate</c>: every problem is run twice.</summary>
     public const double MAX_SAMPLING_RATE = 1;
 
+    /// <summary>
+    /// The rule of each option, in the order a check names them: whether its value is in range
+    /// (0, where it means "not set", is), the sentence that says it is not, and how a reader that
+    /// reads a set all the same puts the option back at the value that means its default.
+    /// <see cref="Check"/> and <see cref="Readable"/> are both made of these, so a range is
+    /// written once.
+    /// </summary>
+    private static readonly (Func<SmtOptionsData, bool> InRange, string Problem, Action<SmtOptionsData> Reset)[] RULES =
+    [
+        (options => Enum.IsDefined(options.Query), "'query' must be check, enumerate or prove", options => options.Query = SmtQuery.Check),
+        (options => options.MaxModels is >= 0 and <= MAX_MODELS, $"'max_models' must be between 1 and {MAX_MODELS}", options => options.MaxModels = 0),
+        (options => options.Seed >= 0, $"'seed' must be between 0 and {MAX_SEED}", options => options.Seed = 0),
+        (options => options.ResourceLimit is >= 0 and <= MAX_RESOURCE_LIMIT, $"'rlimit' must be between 1 and {MAX_RESOURCE_LIMIT}", options => options.ResourceLimit = 0),
+        (options => options.HardCapSeconds is >= 0 and <= MAX_HARD_CAP_SECONDS, $"'hard_cap_s' must be between 1 and {MAX_HARD_CAP_SECONDS}", options => options.HardCapSeconds = 0),
+        (options => options.MemoryMegabytes is >= 0 and <= MAX_MEMORY_MEGABYTES, $"'memory_mb' must be between 1 and {MAX_MEMORY_MEGABYTES}", options => options.MemoryMegabytes = 0),
+
+        // Written so that a value that is no number at all is out of range too.
+        (options => options.SamplingRate >= MIN_SAMPLING_RATE && options.SamplingRate <= MAX_SAMPLING_RATE, "'sampling_rate' must be between 0 and 1", options => options.SamplingRate = DEFAULT_SAMPLING_RATE)
+    ];
+
     #endregion
 
     #region Functions
@@ -61,31 +81,34 @@ public static class SmtOptionsRules
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var problems = new List<string>();
+        return [.. RULES.Where(rule => !rule.InRange(options)).Select(rule => rule.Problem)];
+    }
 
-        if (!Enum.IsDefined(options.Query))
-            problems.Add("'query' must be check, enumerate or prove");
+    /// <summary>
+    /// The options a reader of a problem set takes: the options themselves when every one is in
+    /// its range, else a copy with each option that is out of range put back at the value that
+    /// means its default (0 for a number, the check query, the default sampling rate), so that a
+    /// preflight still reads the set and says what is wrong. Made of the same rules as
+    /// <see cref="Check"/>: <c>Check(Readable(options))</c> is empty for any options.
+    /// </summary>
+    /// <param name="options">The options.</param>
+    /// <returns>Options in range: the same instance when they were.</returns>
+    /// <exception cref="ArgumentNullException">There are no options.</exception>
+    public static SmtOptionsData Readable(SmtOptionsData options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
 
-        if (options.MaxModels < 0 || options.MaxModels > MAX_MODELS)
-            problems.Add($"'max_models' must be between 1 and {MAX_MODELS}");
+        if (RULES.All(rule => rule.InRange(options)))
+            return options;
 
-        if (options.Seed < 0)
-            problems.Add($"'seed' must be between 0 and {MAX_SEED}");
+        var readable = options.Clone();
+        foreach (var (inRange, _, reset) in RULES)
+        {
+            if (!inRange(readable))
+                reset(readable);
+        }
 
-        if (options.ResourceLimit < 0 || options.ResourceLimit > MAX_RESOURCE_LIMIT)
-            problems.Add($"'rlimit' must be between 1 and {MAX_RESOURCE_LIMIT}");
-
-        if (options.HardCapSeconds < 0 || options.HardCapSeconds > MAX_HARD_CAP_SECONDS)
-            problems.Add($"'hard_cap_s' must be between 1 and {MAX_HARD_CAP_SECONDS}");
-
-        if (options.MemoryMegabytes < 0 || options.MemoryMegabytes > MAX_MEMORY_MEGABYTES)
-            problems.Add($"'memory_mb' must be between 1 and {MAX_MEMORY_MEGABYTES}");
-
-        // Written so that a value that is no number at all is out of range too.
-        if (!(options.SamplingRate >= MIN_SAMPLING_RATE && options.SamplingRate <= MAX_SAMPLING_RATE))
-            problems.Add("'sampling_rate' must be between 0 and 1");
-
-        return problems;
+        return readable;
     }
 
     /// <summary>

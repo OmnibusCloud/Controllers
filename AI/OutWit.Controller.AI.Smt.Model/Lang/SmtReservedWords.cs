@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace OutWit.Controller.AI.Smt.Model.Lang;
 
 /// <summary>
@@ -9,19 +11,19 @@ public static class SmtReservedWords
 {
     #region Constants
 
-    private static readonly HashSet<string> GENERAL = new(StringComparer.Ordinal)
+    private static readonly FrozenSet<string> GENERAL = new[]
     {
         "!", "_", "as", "BINARY", "DECIMAL", "exists", "HEXADECIMAL", "forall", "let", "match", "NUMERAL", "par", "STRING"
-    };
+    }.ToFrozenSet(StringComparer.Ordinal);
 
-    private static readonly HashSet<string> COMMANDS = new(StringComparer.Ordinal)
+    private static readonly FrozenSet<string> COMMANDS = new[]
     {
         "assert", "check-sat", "check-sat-assuming", "declare-const", "declare-datatype", "declare-datatypes",
         "declare-fun", "declare-sort", "define-fun", "define-fun-rec", "define-funs-rec", "define-sort", "echo",
         "exit", "get-assertions", "get-assignment", "get-info", "get-model", "get-option", "get-proof",
         "get-unsat-assumptions", "get-unsat-core", "get-value", "pop", "push", "reset", "reset-assertions",
         "set-info", "set-logic", "set-option"
-    };
+    }.ToFrozenSet(StringComparer.Ordinal);
 
     #endregion
 
@@ -61,11 +63,11 @@ public static class SmtReservedWords
 
     #region Properties
 
-    /// <summary>The general reserved words.</summary>
-    public static IReadOnlyCollection<string> General => GENERAL;
+    /// <summary>The general reserved words: a set no caller can change.</summary>
+    public static FrozenSet<string> General => GENERAL;
 
-    /// <summary>The command names.</summary>
-    public static IReadOnlyCollection<string> Commands => COMMANDS;
+    /// <summary>The command names: a set no caller can change.</summary>
+    public static FrozenSet<string> Commands => COMMANDS;
 
     #endregion
 }
